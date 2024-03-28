@@ -266,7 +266,7 @@ public:
     const NKikimrTxDataShard::TReadTableTransaction &GetReadTableTransaction() const { return Tx.GetReadTableTransaction(); }
 
     ui32 ExtractKeys(bool allowErrors);
-    bool ReValidateKeys();
+    bool ReValidateKeys(const NTable::TScheme& scheme);
 
     ui64 GetTxSize() const { return TxSize; }
     ui32 KeysCount() const { return TxInfo().ReadsCount + TxInfo().WritesCount; }
@@ -468,9 +468,9 @@ public:
         return 0;
     }
 
-    bool ReValidateKeys() {
+    bool ReValidateKeys(const NTable::TScheme& scheme) {
         if (DataTx && (DataTx->ProgramSize() || DataTx->IsKqpDataTx()))
-            return DataTx->ReValidateKeys();
+            return DataTx->ReValidateKeys(scheme);
         return true;
     }
 
@@ -594,6 +594,7 @@ public:
     }
 
     bool OnStopping(TDataShard& self, const TActorContext& ctx) override;
+    void OnCleanup(TDataShard& self, std::vector<std::unique_ptr<IEventHandle>>& replies) override;
 
 private:
     void TrackMemory() const;

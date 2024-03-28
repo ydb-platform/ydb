@@ -57,9 +57,29 @@ struct TEdge {
         }
 
     void BuildCondVectors() {
+        LeftJoinKeys.clear();
+        RightJoinKeys.clear();
+
         for (auto [left, right] : JoinConditions) {
-            LeftJoinKeys.emplace_back(left.AttributeName);
-            RightJoinKeys.emplace_back(right.AttributeName);
+            auto leftKey = left.AttributeName;
+            auto rightKey = right.AttributeName;
+
+            for (size_t i = leftKey.size() - 1; i>0; i--) {
+                if (leftKey[i]=='.') {
+                    leftKey = leftKey.substr(i+1);
+                    break;
+                }
+            }
+
+            for (size_t i = rightKey.size() - 1; i>0; i--) {
+                if (rightKey[i]=='.') {
+                    rightKey = rightKey.substr(i+1);
+                    break;
+                }
+            }
+
+            LeftJoinKeys.emplace_back(leftKey);
+            RightJoinKeys.emplace_back(rightKey);
         }
     }
 
@@ -197,7 +217,7 @@ void TJoinOptimizerNodeInternal::Print(std::stringstream& stream, int ntabs) {
         stream << "\t";
     }
 
-    stream << "Join: (" << JoinType << ") ";
+    stream << "Join: (" << JoinType << "," << ToString(JoinAlgo) << ") ";
     for (auto c : JoinConditions){
         stream << c.first.RelName << "." << c.first.AttributeName
             << "=" << c.second.RelName << "."
@@ -315,20 +335,20 @@ std::shared_ptr<TJoinOptimizerNodeInternal> PickBestJoin(std::shared_ptr<IBaseOp
 /**
  * Iterate over all join algorithms and pick the best join that is applicable
 */
-std::shared_ptr<TJoinOptimizerNode> PickBestNonReorderabeJoin(std::shared_ptr<IBaseOptimizerNode> left,
-    std::shared_ptr<IBaseOptimizerNode> right,
-    const std::set<std::pair<TJoinColumn, TJoinColumn>>& leftJoinConditions,
-    const TVector<TString>& leftJoinKeys,
-    const TVector<TString>& rightJoinKeys,
-    EJoinKind joinKind,
+std::shared_ptr<TJoinOptimizerNode> PickBestNonReorderabeJoin(const std::shared_ptr<TJoinOptimizerNode>& node,
     IProviderContext& ctx) {
 
     EJoinAlgoType bestJoinAlgo;
     bool bestJoinValid = false;
     double bestJoinCost;
+    const auto& left = node->LeftArg;
+    const auto& right = node->RightArg;
+    const auto& joinConditions = node->JoinConditions;
+    const auto& leftJoinKeys = node->LeftJoinKeys;
+    const auto& rightJoinKeys = node->RightJoinKeys;
 
     for ( auto joinAlgo : AllJoinAlgos ) {
-        if (ctx.IsJoinApplicable(left, right, leftJoinConditions, leftJoinKeys, rightJoinKeys, joinAlgo)){
+        if (ctx.IsJoinApplicable(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinAlgo)){
             auto cost = ComputeJoinStats(*right->Stats, *left->Stats,  rightJoinKeys, leftJoinKeys, joinAlgo, ctx).Cost;
             if (bestJoinValid) {
                 if (cost < bestJoinCost) {
@@ -344,7 +364,9 @@ std::shared_ptr<TJoinOptimizerNode> PickBestNonReorderabeJoin(std::shared_ptr<IB
     }
 
     Y_ENSURE(bestJoinValid,"No join was chosen!");
-    return MakeJoin(left, right, leftJoinConditions, leftJoinKeys, rightJoinKeys, joinKind, bestJoinAlgo, true, ctx);
+    node->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*left->Stats, *right->Stats, leftJoinKeys, rightJoinKeys, bestJoinAlgo, ctx));
+    node->JoinAlgo = bestJoinAlgo;
+    return node;
 }
 
 struct pair_hash {
@@ -504,12 +526,19 @@ struct TGraph {
                         AddEdge(TEdge(leftNodeId,rightNodeId,std::make_pair(left, right)));
                     } else {
                         Y_ABORT_UNLESS(maybeEdge1 != Edges.end() && maybeEdge2 != Edges.end());
-                        maybeEdge1->JoinConditions.emplace(left, right);
-                        maybeEdge2->JoinConditions.emplace(right, left);
-                        maybeEdge1->LeftJoinKeys.emplace_back(left.AttributeName);
-                        maybeEdge1->RightJoinKeys.emplace_back(right.AttributeName);
-                        maybeEdge2->LeftJoinKeys.emplace_back(right.AttributeName);
-                        maybeEdge2->RightJoinKeys.emplace_back(left.AttributeName);
+                        auto edge1 = *maybeEdge1;
+                        auto edge2 = *maybeEdge2;
+
+                        edge1.JoinConditions.emplace(left, right);
+                        edge2.JoinConditions.emplace(right, left);
+                        edge1.BuildCondVectors();
+                        edge2.BuildCondVectors();
+
+                        Edges.erase(maybeEdge1);
+                        Edges.erase(maybeEdge2);
+
+                        Edges.emplace(edge1);
+                        Edges.emplace(edge2);
                     }
                 }
             }
@@ -534,6 +563,14 @@ struct TGraph {
                     << p.second.RelName << "."
                     << p.second.AttributeName << "\n";
             }
+            for (auto l : e.LeftJoinKeys) {
+                stream << l << ",";
+            }
+            stream << "=";
+            for (auto r : e.RightJoinKeys) {
+                stream << r << ",";
+            }
+            stream << "\n";
         }
     }
 };
@@ -986,7 +1023,14 @@ TExprBase BuildTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
         rightJoinColumns.push_back(BuildAtom(pair.second.AttributeName, equiJoin.Pos(), ctx));
     }
 
-    TVector<TExprBase> options;
+    auto optionsList = ctx.Builder(equiJoin.Pos())
+        .List()
+            .List(0)
+                .Atom(0, "join_algo")
+                .Atom(1, ToString(reorderResult->JoinAlgo))
+            .Seal()
+        .Seal()
+        .Build();
 
     // Build the final output
     return Build<TCoEquiJoinTuple>(ctx,equiJoin.Pos())
@@ -999,9 +1043,7 @@ TExprBase BuildTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
         .RightKeys()
             .Add(rightJoinColumns)
             .Build()
-        .Options()
-            .Add(options)
-            .Build()
+        .Options(optionsList)
         .Done();
 }
 
@@ -1109,7 +1151,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertToJoinTree(const TCoEquiJoinTuple& jo
             TJoinColumn(rightScope, rightColumn)));
     }
 
-    return std::make_shared<TJoinOptimizerNode>(left, right, joinConds, ConvertToJoinKind(joinTuple.Type().StringValue()), EJoinAlgoType::DictJoin);
+    return std::make_shared<TJoinOptimizerNode>(left, right, joinConds, ConvertToJoinKind(joinTuple.Type().StringValue()), EJoinAlgoType::Undefined);
 }
 
 /**
@@ -1175,7 +1217,7 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
         ComputeStatistics(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), ctx);
     }
     join->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*join->LeftArg->Stats, *join->RightArg->Stats,
-        join->LeftJoinKeys, join->RightJoinKeys, EJoinAlgoType::DictJoin, ctx));
+        join->LeftJoinKeys, join->RightJoinKeys, EJoinAlgoType::GraceJoin, ctx));
 }
 
 /**
@@ -1185,8 +1227,7 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
 */
 std::shared_ptr<TJoinOptimizerNode> OptimizeSubtree(const std::shared_ptr<TJoinOptimizerNode>& joinTree, ui32 maxDPccpDPTableSize, IProviderContext& ctx) {
     if (!joinTree->IsReorderable) {
-        return PickBestNonReorderabeJoin(joinTree->LeftArg, joinTree->RightArg, joinTree->JoinConditions,
-            joinTree->LeftJoinKeys, joinTree->RightJoinKeys, joinTree->JoinType, ctx);
+        return PickBestNonReorderabeJoin(joinTree, ctx);
     }
 
     TVector<std::shared_ptr<IBaseOptimizerNode>> rels;
@@ -1214,7 +1255,7 @@ std::shared_ptr<TJoinOptimizerNode> OptimizeSubtree(const std::shared_ptr<TJoinO
         joinGraph.AddEdge(TEdge(fromNode, toNode, cond));
     }
 
-     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
+     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         std::stringstream str;
         str << "Initial join graph:\n";
         joinGraph.PrintGraph(str);
@@ -1224,7 +1265,7 @@ std::shared_ptr<TJoinOptimizerNode> OptimizeSubtree(const std::shared_ptr<TJoinO
     // make a transitive closure of the graph and reorder the graph via BFS
     joinGraph.ComputeTransitiveClosure(joinConditions);
 
-    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
+    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         std::stringstream str;
         str << "Join graph after transitive closure:\n";
         joinGraph.PrintGraph(str);
@@ -1243,7 +1284,7 @@ std::shared_ptr<TJoinOptimizerNode> OptimizeSubtree(const std::shared_ptr<TJoinO
     // feed the graph to DPccp algorithm
     auto result = solver.Solve();
 
-    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
+    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         std::stringstream str;
         str << "Join tree after cost based optimization:\n";
         result->Print(str);
@@ -1273,7 +1314,7 @@ public:
                 join->RightArg = OptimizeSubtree(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), MaxDPccpDPTableSize, Pctx);
             }
             join->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*join->LeftArg->Stats, *join->RightArg->Stats,
-                join->LeftJoinKeys, join->RightJoinKeys, EJoinAlgoType::DictJoin, Pctx));
+                join->LeftJoinKeys, join->RightJoinKeys, EJoinAlgoType::GraceJoin, Pctx));
         }
 
         // Optimize the root

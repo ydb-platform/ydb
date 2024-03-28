@@ -760,6 +760,18 @@ namespace {
                     case NUdf::TDataType<NUdf::TInterval>::Id:
                         Owner.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TInterval>::TLayout>()));
                         break;
+                    case NUdf::TDataType<NUdf::TDate32>::Id:
+                        Owner.WriteVar32(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TDate32>::TLayout>()));
+                        break;
+                    case NUdf::TDataType<NUdf::TDatetime64>::Id:
+                        Owner.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TDatetime64>::TLayout>()));
+                        break;
+                    case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+                        Owner.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TTimestamp64>::TLayout>()));
+                        break;
+                    case NUdf::TDataType<NUdf::TInterval64>::Id:
+                        Owner.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TInterval64>::TLayout>()));
+                        break;
                     case NUdf::TDataType<NUdf::TUuid>::Id: {
                         const auto v = value.AsStringRef();
                         Owner.WriteMany(v.Data(), v.Size());
@@ -1716,6 +1728,26 @@ namespace {
                 const ui32 tzId = ReadVar32();
                 MKQL_ENSURE(tzId <= Max<ui16>() && IsValidTimezoneId((ui16)tzId), "Unknown timezone: " << tzId);
                 value.SetTimezoneId((ui16)tzId);
+                break;
+            }
+            case NUdf::TDataType<NUdf::TDate32>::Id:
+            {
+                value = NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TDate32>::TLayout>(ZigZagDecode(ReadVar32())));
+                break;
+            }
+            case NUdf::TDataType<NUdf::TDatetime64>::Id:
+            {
+                value = NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TDatetime64>::TLayout>(ZigZagDecode(ReadVar64())));
+                break;
+            }
+            case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+            {
+                value = NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp64>::TLayout>(ZigZagDecode(ReadVar64())));
+                break;
+            }
+            case NUdf::TDataType<NUdf::TInterval64>::Id:
+            {
+                value = NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TInterval64>::TLayout>(ZigZagDecode(ReadVar64())));
                 break;
             }
             case NUdf::TDataType<NUdf::TUuid>::Id:

@@ -21,6 +21,7 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/protos/kesus.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/security/ticket_parser.h>
@@ -53,13 +54,13 @@ namespace Tests {
 
     constexpr const char* TestDomainName = "dc-1";
     const ui32 TestDomain = 1;
-    const ui64 DummyTablet1 = 0x840100;
-    const ui64 DummyTablet2 = 0x840101;
-    const ui64 Coordinator = 0x800001;
-    const ui64 Mediator = 0x810001;
-    const ui64 TxAllocator = 0x820001;
-    const ui64 SchemeRoot = 0x850100;
-    const ui64 Hive = 0xA001;
+    const ui64 DummyTablet1 = MakeTabletID(false, 0x840100);
+    const ui64 DummyTablet2 = MakeTabletID(false, 0x840101);
+    const ui64 Coordinator = MakeTabletID(false, 0x800001);
+    const ui64 Mediator = MakeTabletID(false, 0x810001);
+    const ui64 TxAllocator = MakeTabletID(false, 0x820001);
+    const ui64 SchemeRoot = MakeTabletID(false, 0x850100);
+    const ui64 Hive = MakeTabletID(false, 0xA001);
 
     struct TServerSetup {
         TString IpAddress;
@@ -78,10 +79,17 @@ namespace Tests {
     bool IsServerRedirected();
     TServerSetup GetServerSetup();
 
-    ui64 ChangeDomain(ui64 tabletId, ui32 domainUid);
-    ui64 ChangeStateStorage(ui64 tabletId, ui32 ssUid);
-    NMiniKQL::IFunctionRegistry* DefaultFrFactory(const NScheme::TTypeRegistry& typeRegistry);
+    inline ui64 ChangeDomain(ui64 tabletId, ui32 id) {
+        const ui64 mask = static_cast<ui64>(0xfff) << 44;
+        return (tabletId & ~mask) | static_cast<ui64>(id & 0xfff) << 44;
+    }
 
+    inline ui64 ChangeStateStorage(ui64 tabletId, ui32 id) {
+        const ui64 mask = static_cast<ui64>(0xff) << 56;
+        return (tabletId & ~mask) | static_cast<ui64>(id & 0xff) << 56;
+    }
+
+    NMiniKQL::IFunctionRegistry* DefaultFrFactory(const NScheme::TTypeRegistry& typeRegistry);
 
     struct TServerSettings: public TThrRefBase, public TTestFeatureFlagsHolder<TServerSettings> {
         static constexpr ui64 BOX_ID = 999;
@@ -140,6 +148,8 @@ namespace Tests {
         TString AwsRegion;
         NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+        NMiniKQL::TComputationNodeFactory ComputationFactory;
+        NYql::IYtGateway::TPtr YtGateway;
         bool InitializeFederatedQuerySetupFactory = false;
 
         std::function<IActor*(const NKikimrProto::TAuthConfig&)> CreateTicketParser = NKikimr::CreateTicketParser;
@@ -185,6 +195,8 @@ namespace Tests {
         TServerSettings& SetAwsRegion(const TString& value) { AwsRegion = value; return *this; }
         TServerSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; }
         TServerSettings& SetCredentialsFactory(NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) { CredentialsFactory = std::move(credentialsFactory); return *this; }
+        TServerSettings& SetComputationFactory(NMiniKQL::TComputationNodeFactory computationFactory) { ComputationFactory = std::move(computationFactory); return *this; }
+        TServerSettings& SetYtGateway(NYql::IYtGateway::TPtr ytGateway) { YtGateway = std::move(ytGateway); return *this; }
         TServerSettings& SetInitializeFederatedQuerySetupFactory(bool value) { InitializeFederatedQuerySetupFactory = value; return *this; }
         TServerSettings& SetPersQueueGetReadSessionsInfoWorkerFactory(
             std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> factory
@@ -299,6 +311,7 @@ namespace Tests {
         }
         void SetupDynamicLocalService(ui32 nodeIdx, const TString &tenantName);
         void DestroyDynamicLocalService(ui32 nodeIdx);
+        void WaitFinalization();
 
     protected:
         const TServerSettings::TConstPtr Settings;

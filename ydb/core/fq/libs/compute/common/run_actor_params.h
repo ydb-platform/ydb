@@ -74,7 +74,8 @@ struct TRunActorParams { // TODO2 : Change name
         const TString& executionId,
         const TString& operationId,
         const NFq::NConfig::TYdbStorageConfig& computeConnection,
-        TDuration resultTtl
+        TDuration resultTtl,
+        std::map<TString, Ydb::TypedValue>&& queryParameters
     );
 
     TRunActorParams(const TRunActorParams& params) = default;
@@ -136,6 +137,7 @@ struct TRunActorParams { // TODO2 : Change name
     NYdb::TOperation::TOperationId OperationId;
     NFq::NConfig::TYdbStorageConfig ComputeConnection;
     TDuration ResultTtl;
+    std::map<TString, Ydb::TypedValue> QueryParameters;
 };
 
 } /* NFq */

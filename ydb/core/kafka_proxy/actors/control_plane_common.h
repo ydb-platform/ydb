@@ -30,7 +30,7 @@ struct TRetentionsConversionResult {
 
             TStringBuilder resultErrorMessage;
             resultErrorMessage << ErrorMessages[0];
-            for (ulong i = 1; i < ErrorMessages.size(); i++) {
+            for (ui64 i = 1; i < ErrorMessages.size(); i++) {
                 resultErrorMessage << ' ' << ErrorMessages[i];
             }
             response->Message = resultErrorMessage;
@@ -94,6 +94,20 @@ inline TStringBuilder InputLogMessage(
     stringBuilder << " ]";
     return stringBuilder;
 }
+
+inline std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ValidateTopicConfigName(TString configName) {
+    if (configName == COMPRESSION_TYPE) {
+        auto result = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
+        result->Status = EKafkaErrors::INVALID_REQUEST;
+        result->Message = TStringBuilder()
+            << "Topic-level config '"
+            << COMPRESSION_TYPE
+            << "' is not allowed.";
+        return result;
+    } else {
+        return std::optional<THolder<TEvKafka::TEvTopicModificationResponse>>();
+    }
+} 
 
 template<class T>
 inline std::unordered_set<TString> ExtractDuplicates(
@@ -263,10 +277,6 @@ public:
 
     const TString& GetRequestName() const override {
         return DummyString;
-    };
-
-    void SetDiskQuotaExceeded(bool disk) override {
-        Y_UNUSED(disk);
     };
 
     bool GetDiskQuotaExceeded() const override {

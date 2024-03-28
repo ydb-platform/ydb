@@ -8,17 +8,14 @@ void TNodeWarden::SendToController(std::unique_ptr<IEventBase> ev, ui64 cookie, 
 }
 
 void TNodeWarden::EstablishPipe() {
-    Y_ABORT_UNLESS(AppData() && AppData()->DomainsInfo);
-
-    const ui64 stateStorageGroup = AppData()->DomainsInfo->GetDefaultStateStorageGroup(AvailDomainId);
-    const ui64 controllerId = MakeBSControllerID(stateStorageGroup);
+    const ui64 controllerId = MakeBSControllerID();
 
     PipeClientId = Register(NTabletPipe::CreateClient(SelfId(), controllerId, NTabletPipe::TClientRetryPolicy{
         .MaxRetryTime = TDuration::Seconds(5),
         .DoFirstRetryInstantly = false,
     }));
 
-    STLOG(PRI_DEBUG, BS_NODE, NW21, "EstablishPipe", (AvailDomainId, AvailDomainId), (StateStorageGroup, stateStorageGroup),
+    STLOG(PRI_DEBUG, BS_NODE, NW21, "EstablishPipe", (AvailDomainId, AvailDomainId),
         (PipeClientId, PipeClientId), (ControllerId, controllerId));
 
     SendRegisterNode();

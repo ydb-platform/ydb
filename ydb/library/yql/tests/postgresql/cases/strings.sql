@@ -63,8 +63,21 @@ SELECT E'\\xDe00BeEf'::bytea;
 SELECT E'DeAdBeEf'::bytea;
 SELECT E'De\\000dBeEf'::bytea;
 SELECT E'De\\123dBeEf'::bytea;
+--
+-- test conversions between various string types
+-- E021-10 implicit casting among the character data types
+--
+SELECT CAST(f1 AS text) AS "text(char)" FROM CHAR_TBL;
+SELECT CAST(f1 AS text) AS "text(varchar)" FROM VARCHAR_TBL;
 SELECT CAST(name 'namefield' AS text) AS "text(name)";
+-- since this is an explicit cast, it should truncate w/o error:
+SELECT CAST(f1 AS char(10)) AS "char(text)" FROM TEXT_TBL;
+-- note: implicit-cast case is tested in char.sql
+SELECT CAST(f1 AS char(20)) AS "char(text)" FROM TEXT_TBL;
+SELECT CAST(f1 AS char(10)) AS "char(varchar)" FROM VARCHAR_TBL;
 SELECT CAST(name 'namefield' AS char(10)) AS "char(name)";
+SELECT CAST(f1 AS varchar) AS "varchar(text)" FROM TEXT_TBL;
+SELECT CAST(f1 AS varchar) AS "varchar(char)" FROM CHAR_TBL;
 SELECT CAST(name 'namefield' AS varchar) AS "varchar(name)";
 --
 -- test SQL string functions
@@ -146,3 +159,265 @@ SELECT 'hawkeye' LIKE 'H%' AS "false";
 SELECT 'hawkeye' NOT LIKE 'H%' AS "true";
 SELECT 'hawkeye' LIKE 'indio%' AS "false";
 SELECT 'hawkeye' NOT LIKE 'indio%' AS "true";
+SELECT 'hawkeye' LIKE 'h%eye' AS "true";
+SELECT 'hawkeye' NOT LIKE 'h%eye' AS "false";
+SELECT 'indio' LIKE '_ndio' AS "true";
+SELECT 'indio' NOT LIKE '_ndio' AS "false";
+SELECT 'indio' LIKE 'in__o' AS "true";
+SELECT 'indio' NOT LIKE 'in__o' AS "false";
+SELECT 'indio' LIKE 'in_o' AS "false";
+SELECT 'indio' NOT LIKE 'in_o' AS "true";
+SELECT 'abc'::name LIKE '_b_' AS "true";
+SELECT 'abc'::name NOT LIKE '_b_' AS "false";
+-- unused escape character
+SELECT 'hawkeye' LIKE 'h%' ESCAPE '#' AS "true";
+SELECT 'hawkeye' NOT LIKE 'h%' ESCAPE '#' AS "false";
+SELECT 'indio' LIKE 'ind_o' ESCAPE '$' AS "true";
+SELECT 'indio' NOT LIKE 'ind_o' ESCAPE '$' AS "false";
+SELECT 'h%wkeye' LIKE 'h#%' ESCAPE '#' AS "false";
+SELECT 'h%wkeye' NOT LIKE 'h#%' ESCAPE '#' AS "true";
+SELECT 'indio' LIKE '_ndio' ESCAPE '$' AS "true";
+SELECT 'indio' NOT LIKE '_ndio' ESCAPE '$' AS "false";
+SELECT 'i_dio' LIKE 'i$_nd_o' ESCAPE '$' AS "false";
+SELECT 'i_dio' NOT LIKE 'i$_nd_o' ESCAPE '$' AS "true";
+SELECT 'be_r' LIKE '__e__r' ESCAPE '_' AS "false";
+SELECT 'be_r' NOT LIKE '__e__r' ESCAPE '_' AS "true";
+--
+-- test ILIKE (case-insensitive LIKE)
+-- Be sure to form every test as an ILIKE/NOT ILIKE pair.
+--
+SELECT 'hawkeye' ILIKE 'h%' AS "true";
+SELECT 'hawkeye' NOT ILIKE 'h%' AS "false";
+SELECT 'hawkeye' ILIKE 'H%' AS "true";
+SELECT 'hawkeye' NOT ILIKE 'H%' AS "false";
+SELECT 'hawkeye' ILIKE 'H%Eye' AS "true";
+SELECT 'hawkeye' NOT ILIKE 'H%Eye' AS "false";
+SELECT 'Hawkeye' ILIKE 'h%' AS "true";
+SELECT 'Hawkeye' NOT ILIKE 'h%' AS "false";
+SELECT 'ABC'::name ILIKE '_b_' AS "true";
+SELECT 'ABC'::name NOT ILIKE '_b_' AS "false";
+SELECT 'jack' LIKE '%____%' AS t;
+--
+-- basic tests of LIKE with indexes
+--
+CREATE TABLE texttest (a text PRIMARY KEY, b int);
+SELECT * FROM texttest WHERE a LIKE '%1%';
+CREATE TABLE byteatest (a bytea PRIMARY KEY, b int);
+DROP TABLE texttest, byteatest;
+--
+-- test implicit type conversion
+--
+-- E021-07 character concatenation
+SELECT 'unknown' || ' and unknown' AS "Concat unknown types";
+SELECT text 'text' || ' and unknown' AS "Concat text to unknown type";
+SELECT char(20) 'characters' || ' and text' AS "Concat char to unknown type";
+SELECT text 'text' || char(20) ' and characters' AS "Concat text to char";
+SELECT text 'text' || varchar ' and varchar' AS "Concat text to varchar";
+--
+-- test substr with toasted text values
+--
+CREATE TABLE toasttest(f1 text);
+insert into toasttest values(repeat('1234567890',10000));
+insert into toasttest values(repeat('1234567890',10000));
+insert into toasttest values(repeat('1234567890',10000));
+insert into toasttest values(repeat('1234567890',10000));
+-- If the starting position is zero or less, then return from the start of the string
+-- adjusting the length to be consistent with the "negative start" per SQL.
+SELECT substr(f1, -1, 5) from toasttest;
+-- If the length is less than zero, an ERROR is thrown.
+SELECT substr(f1, 5, -1) from toasttest;
+-- If no third argument (length) is provided, the length to the end of the
+-- string is assumed.
+SELECT substr(f1, 99995) from toasttest;
+-- If start plus length is > string length, the result is truncated to
+-- string length
+SELECT substr(f1, 99995, 10) from toasttest;
+INSERT INTO toasttest values (repeat('1234567890',300));
+INSERT INTO toasttest values (repeat('1234567890',300));
+INSERT INTO toasttest values (repeat('1234567890',300));
+INSERT INTO toasttest values (repeat('1234567890',300));
+INSERT INTO toasttest values (repeat('1234567890',300));
+INSERT INTO toasttest values (repeat('1234567890',300));
+INSERT INTO toasttest values (repeat('1234567890',300));
+INSERT INTO toasttest values (repeat('1234567890',300));
+DROP TABLE toasttest;
+--
+-- test substr with toasted bytea values
+--
+CREATE TABLE toasttest(f1 bytea);
+insert into toasttest values(decode(repeat('1234567890',10000),'escape'));
+insert into toasttest values(decode(repeat('1234567890',10000),'escape'));
+insert into toasttest values(decode(repeat('1234567890',10000),'escape'));
+insert into toasttest values(decode(repeat('1234567890',10000),'escape'));
+-- If the starting position is zero or less, then return from the start of the string
+-- adjusting the length to be consistent with the "negative start" per SQL.
+SELECT substr(f1, -1, 5) from toasttest;
+-- If the length is less than zero, an ERROR is thrown.
+SELECT substr(f1, 5, -1) from toasttest;
+-- If no third argument (length) is provided, the length to the end of the
+-- string is assumed.
+SELECT substr(f1, 99995) from toasttest;
+-- If start plus length is > string length, the result is truncated to
+-- string length
+SELECT substr(f1, 99995, 10) from toasttest;
+DROP TABLE toasttest;
+-- test internally compressing datums
+-- this tests compressing a datum to a very small size which exercises a
+-- corner case in packed-varlena handling: even though small, the compressed
+-- datum must be given a 4-byte header because there are no bits to indicate
+-- compression in a 1-byte header
+CREATE TABLE toasttest (c char(4096));
+INSERT INTO toasttest VALUES('x');
+SELECT length(c), c::text FROM toasttest;
+DROP TABLE toasttest;
+--
+-- test length
+--
+SELECT length('abcdef') AS "length_6";
+--
+-- test strpos
+--
+SELECT strpos('abcdef', 'cd') AS "pos_3";
+SELECT strpos('abcdef', 'xy') AS "pos_0";
+SELECT strpos('abcdef', '') AS "pos_1";
+SELECT strpos('', 'xy') AS "pos_0";
+SELECT strpos('', '') AS "pos_1";
+--
+-- test replace
+--
+SELECT replace('abcdef', 'de', '45') AS "abc45f";
+SELECT replace('yabadabadoo', 'ba', '123') AS "ya123da123doo";
+SELECT replace('yabadoo', 'bad', '') AS "yaoo";
+--
+-- test split_part
+--
+select split_part('','@',1) AS "empty string";
+select split_part('','@',-1) AS "empty string";
+select split_part('joeuser@mydatabase','',1) AS "joeuser@mydatabase";
+select split_part('joeuser@mydatabase','',2) AS "empty string";
+select split_part('joeuser@mydatabase','',-1) AS "joeuser@mydatabase";
+select split_part('joeuser@mydatabase','',-2) AS "empty string";
+select split_part('joeuser@mydatabase','@',0) AS "an error";
+select split_part('joeuser@mydatabase','@@',1) AS "joeuser@mydatabase";
+select split_part('joeuser@mydatabase','@@',2) AS "empty string";
+select split_part('joeuser@mydatabase','@',1) AS "joeuser";
+select split_part('joeuser@mydatabase','@',2) AS "mydatabase";
+select split_part('joeuser@mydatabase','@',3) AS "empty string";
+select split_part('@joeuser@mydatabase@','@',2) AS "joeuser";
+select split_part('joeuser@mydatabase','@',-1) AS "mydatabase";
+select split_part('joeuser@mydatabase','@',-2) AS "joeuser";
+select split_part('joeuser@mydatabase','@',-3) AS "empty string";
+select split_part('@joeuser@mydatabase@','@',-2) AS "mydatabase";
+--
+-- test to_hex
+--
+select to_hex(256*256*256 - 1) AS "ffffff";
+select to_hex(256::bigint*256::bigint*256::bigint*256::bigint - 1) AS "ffffffff";
+--
+-- MD5 test suite - from IETF RFC 1321
+-- (see: ftp://ftp.rfc-editor.org/in-notes/rfc1321.txt)
+--
+select md5('') = 'd41d8cd98f00b204e9800998ecf8427e' AS "TRUE";
+select md5('a') = '0cc175b9c0f1b6a831c399e269772661' AS "TRUE";
+select md5('abc') = '900150983cd24fb0d6963f7d28e17f72' AS "TRUE";
+select md5('message digest') = 'f96b697d7cb7938d525a2f31aaf161d0' AS "TRUE";
+select md5('abcdefghijklmnopqrstuvwxyz') = 'c3fcd3d76192e4007dfb496cca67e13b' AS "TRUE";
+select md5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') = 'd174ab98d277d9f5a5611c2c9f419d9f' AS "TRUE";
+select md5('12345678901234567890123456789012345678901234567890123456789012345678901234567890') = '57edf4a22be3c955ac49da2e2107b67a' AS "TRUE";
+select md5(''::bytea) = 'd41d8cd98f00b204e9800998ecf8427e' AS "TRUE";
+select md5('a'::bytea) = '0cc175b9c0f1b6a831c399e269772661' AS "TRUE";
+select md5('abc'::bytea) = '900150983cd24fb0d6963f7d28e17f72' AS "TRUE";
+select md5('message digest'::bytea) = 'f96b697d7cb7938d525a2f31aaf161d0' AS "TRUE";
+select md5('abcdefghijklmnopqrstuvwxyz'::bytea) = 'c3fcd3d76192e4007dfb496cca67e13b' AS "TRUE";
+select md5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'::bytea) = 'd174ab98d277d9f5a5611c2c9f419d9f' AS "TRUE";
+select md5('12345678901234567890123456789012345678901234567890123456789012345678901234567890'::bytea) = '57edf4a22be3c955ac49da2e2107b67a' AS "TRUE";
+--
+-- SHA-2
+--
+SET bytea_output TO hex;
+SELECT sha224('');
+SELECT sha224('The quick brown fox jumps over the lazy dog.');
+SELECT sha256('');
+SELECT sha256('The quick brown fox jumps over the lazy dog.');
+SELECT sha384('');
+SELECT sha384('The quick brown fox jumps over the lazy dog.');
+SELECT sha512('');
+SELECT sha512('The quick brown fox jumps over the lazy dog.');
+--
+-- encode/decode
+--
+SELECT encode('\x1234567890abcdef00', 'hex');
+SELECT decode('1234567890abcdef00', 'hex');
+SELECT decode(encode(('\x' || repeat('1234567890abcdef0001', 7))::bytea,
+                     'base64'), 'base64');
+SELECT decode(encode('\x1234567890abcdef00', 'escape'), 'escape');
+--
+-- get_bit/set_bit etc
+--
+SELECT get_bit('\x1234567890abcdef00'::bytea, 43);
+SELECT get_bit('\x1234567890abcdef00'::bytea, 99);  -- error
+SELECT set_bit('\x1234567890abcdef00'::bytea, 43, 0);
+SELECT set_bit('\x1234567890abcdef00'::bytea, 99, 0);  -- error
+SELECT get_byte('\x1234567890abcdef00'::bytea, 3);
+SELECT get_byte('\x1234567890abcdef00'::bytea, 99);  -- error
+SELECT set_byte('\x1234567890abcdef00'::bytea, 7, 11);
+SELECT set_byte('\x1234567890abcdef00'::bytea, 99, 11);  -- error
+--
+-- test behavior of escape_string_warning and standard_conforming_strings options
+--
+set escape_string_warning = off;
+set standard_conforming_strings = off;
+set escape_string_warning = on;
+set standard_conforming_strings = on;
+show standard_conforming_strings;
+select 'a\bcd' as f1, 'a\b''cd' as f2, 'a\b''''cd' as f3, 'abcd\'   as f4, 'ab\''cd' as f5, '\\' as f6;
+set standard_conforming_strings = off;
+set escape_string_warning = off;
+set standard_conforming_strings = on;
+select 'a\bcd' as f1, 'a\b''cd' as f2, 'a\b''''cd' as f3, 'abcd\'   as f4, 'ab\''cd' as f5, '\\' as f6;
+set standard_conforming_strings = off;
+reset standard_conforming_strings;
+--
+-- Additional string functions
+--
+SET bytea_output TO escape;
+SELECT initcap('hi THOMAS');
+SELECT lpad('hi', 5, 'xy');
+SELECT lpad('hi', -5, 'xy');
+SELECT lpad('hi', 5, '');
+SELECT rpad('hi', 5, 'xy');
+SELECT rpad('hi', -5, 'xy');
+SELECT rpad('hi', 5, '');
+SELECT ltrim('zzzytrim', 'xyz');
+SELECT translate('', '14', 'ax');
+SELECT translate('12345', '14', 'ax');
+SELECT ascii('x');
+SELECT ascii('');
+SELECT chr(65);
+SELECT chr(0);
+SELECT repeat('Pg', 4);
+SELECT repeat('Pg', -4);
+SELECT SUBSTRING('1234567890'::bytea FROM 3) "34567890";
+SELECT SUBSTRING('1234567890'::bytea FROM 4 FOR 3) AS "456";
+SELECT SUBSTRING('string'::bytea FROM 2 FOR 2147483646) AS "tring";
+SELECT SUBSTRING('string'::bytea FROM -10 FOR 2147483646) AS "string";
+SELECT SUBSTRING('string'::bytea FROM -10 FOR -2147483646) AS "error";
+SELECT trim(E'\\000'::bytea from E'\\000Tom\\000'::bytea);
+SELECT trim(leading E'\\000'::bytea from E'\\000Tom\\000'::bytea);
+SELECT trim(trailing E'\\000'::bytea from E'\\000Tom\\000'::bytea);
+SELECT btrim(E'\\000trim\\000'::bytea, E'\\000'::bytea);
+SELECT btrim(''::bytea, E'\\000'::bytea);
+SELECT btrim(E'\\000trim\\000'::bytea, ''::bytea);
+SELECT bit_count('\x1234567890'::bytea);
+SELECT unistr('\0064at\+0000610');
+SELECT unistr('d\u0061t\U000000610');
+SELECT unistr('a\\b');
+-- errors:
+SELECT unistr('wrong: \db99');
+SELECT unistr('wrong: \db99\0061');
+SELECT unistr('wrong: \+00db99\+000061');
+SELECT unistr('wrong: \+2FFFFF');
+SELECT unistr('wrong: \udb99\u0061');
+SELECT unistr('wrong: \U0000db99\U00000061');
+SELECT unistr('wrong: \U002FFFFF');
+SELECT unistr('wrong: \xyz');

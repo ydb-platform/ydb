@@ -86,10 +86,8 @@ private:
     }
 
     void SubscribeToBoard() {
-        auto domainInfo = AppData()->DomainsInfo->Domains.begin()->second;
         SubscribeActor = RegisterWithSameMailbox(CreateBoardLookupActor(BoardPath,
                                                        SelfId(),
-                                                       domainInfo->DefaultStateStorageGroup,
                                                        EBoardLookupMode::Subscription));
     }
 
@@ -171,14 +169,12 @@ public:
 
     void Bootstrap() {
         LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Starting db metadata cache actor");
-        auto domainInfo = AppData()->DomainsInfo->Domains.begin()->second;
         TInstant now = TActivationContext::Now();
         NKikimrMetadataCache::TDatabaseMetadataCacheInfo info;
         info.SetStartTimestamp(now.MicroSeconds());
         PublishActor = RegisterWithSameMailbox(CreateBoardPublishActor(BoardPath,
                                                         info.SerializeAsString(),
                                                         SelfId(),
-                                                        domainInfo->DefaultStateStorageGroup,
                                                         0,
                                                         true));
         SubscribeToBoard();

@@ -84,7 +84,7 @@ YT_DEFINE_ERROR_ENUM(
     ((NoInSyncReplicas)                       (1736))
     ((CellHasNoAssignedPeers)                 (1737))
     ((TableSchemaIncompatible)                (1738))
-    ((BundleIsBanned)                           (1739))
+    ((BundleIsBanned)                         (1739))
 );
 
 DEFINE_ENUM(EInMemoryMode,
@@ -209,6 +209,7 @@ DEFINE_ENUM(ETabletActionState,
 
 DEFINE_ENUM(ETabletServiceFeatures,
     ((WriteGenerations)         (0))
+    ((SharedWriteLocks)         (1))
 );
 
 DEFINE_ENUM(ESecondaryIndexKind,

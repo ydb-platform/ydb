@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/persqueue/ut/common
     ydb/core/testlib/default
     ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils
+    ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils
     ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils
 
     ydb/core/tx/schemeshard/ut_helpers
@@ -41,7 +42,7 @@ SRCS(
     pqtablet_ut.cpp
     quota_tracker_ut.cpp
     sourceid_ut.cpp
-    splitmerge_ut.cpp
+    autoscaling_ut.cpp
     type_codecs_ut.cpp
     user_info_ut.cpp
     pqrb_describes_ut.cpp

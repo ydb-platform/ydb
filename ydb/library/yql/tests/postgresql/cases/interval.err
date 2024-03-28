@@ -4,11 +4,6 @@
 --
 SET DATESTYLE = 'ISO';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DATESTYLE
-    	--
-	^
 <sql-statement>
 SET IntervalStyle to postgres;
 </sql-statement>
@@ -309,11 +304,6 @@ DROP TABLE INTERVAL_MULDIV_TBL;
 <sql-statement>
 SET DATESTYLE = 'postgres';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DATESTYLE
-    	SET DATESTYLE = 'postgres';
-	^
 <sql-statement>
 SET IntervalStyle to postgres_verbose;
 </sql-statement>
@@ -361,11 +351,6 @@ SELECT justify_interval(interval '1 month -1 hour') as "1 month -1 hour";
 -- test fractional second input, and detection of duplicate units
 SET DATESTYLE = 'ISO';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: DATESTYLE
-    	-- test fractional second input, and detection of duplicate units
-	^
 <sql-statement>
 SET IntervalStyle TO postgres;
 </sql-statement>

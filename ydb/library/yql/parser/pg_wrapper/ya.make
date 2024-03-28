@@ -38,6 +38,7 @@ SRCS(
     cost_mocks.cpp
     syscache.cpp
     pg_utils_wrappers.cpp
+    utils.cpp
 )
 
 IF (ARCH_X86_64)
@@ -60,6 +61,10 @@ USE_LLVM_BC14()
 INCLUDE(pg_bc.all.inc)
 ELSE()
 CFLAGS(-DUSE_SLOW_PG_KERNELS)
+ENDIF()
+
+IF (BUILD_TYPE == "DEBUG")
+CFLAGS(-DDISABLE_COMPLEX_MACRO)
 ENDIF()
 
 PEERDIR(

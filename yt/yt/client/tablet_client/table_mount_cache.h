@@ -128,9 +128,6 @@ struct TTableMountInfo
 
     bool EnableDetailedProfiling = false;
 
-    // COMPAT(ponasenko-rs)
-    bool EnableSharedWriteLocks = false;
-
     bool IsSorted() const;
     bool IsOrdered() const;
     bool IsReplicated() const;

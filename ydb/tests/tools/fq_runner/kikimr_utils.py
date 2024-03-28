@@ -118,28 +118,33 @@ class DefaultConfigExtension(ExtensionPoint):
 
 class YQv2Extension(ExtensionPoint):
 
-    def __init__(self, yq_version):
+    def __init__(self, yq_version, is_replace_if_exists=False):
         YQv2Extension.__init__.__annotations__ = {
             'yq_version': str,
             'return': None
         }
         super().__init__()
         self.yq_version = yq_version
+        self.is_replace_if_exists = is_replace_if_exists
 
     def apply_to_kikimr_conf(self, request, configuration):
+        extra_feature_flags = [
+            'enable_external_data_sources',
+            'enable_script_execution_operations'
+        ]
+        if self.is_replace_if_exists:
+            extra_feature_flags.append('enable_replace_if_exists_for_external_entities')
+
         if isinstance(configuration.node_count, dict):
             configuration.node_count["/compute"].tenant_type = TenantType.YDB
-            configuration.node_count["/compute"].extra_feature_flags = ['enable_external_data_sources', 'enable_script_execution_operations']
+            configuration.node_count["/compute"].extra_feature_flags = extra_feature_flags
             configuration.node_count["/compute"].extra_grpc_services = ['query_service']
         else:
             configuration.node_count = {
                 "/cp": TenantConfig(node_count=1),
                 "/compute": TenantConfig(node_count=1,
                                          tenant_type=TenantType.YDB,
-                                         extra_feature_flags=[
-                                             'enable_external_data_sources',
-                                             'enable_script_execution_operations'
-                                         ],
+                                         extra_feature_flags=extra_feature_flags,
                                          extra_grpc_services=['query_service']),
             }
 
@@ -170,6 +175,9 @@ class YQv2Extension(ExtensionPoint):
                         }
                     }
                 }
+            },
+            "supported_compute_ydb_features": {
+                "replace_if_exists": self.is_replace_if_exists
             }
         }
 
@@ -360,7 +368,10 @@ def start_kikimr(request, kikimr_extensions):
         kikimr.stop_mvp_mock_server()
 
 
-yq_v1 = pytest.mark.yq_version('v1')
-yq_v2 = pytest.mark.yq_version('v2')
-yq_all = pytest.mark.yq_version('v1', 'v2')
-yq_stats_full = pytest.mark.stats_mode('STATS_MODE_FULL')
+YQV1_VERSION_NAME = 'v1'
+YQV2_VERSION_NAME = 'v2'
+YQ_STATS_FULL = 'STATS_MODE_FULL'
+
+yq_v1 = pytest.mark.yq_version(YQV1_VERSION_NAME)
+yq_v2 = pytest.mark.yq_version(YQV2_VERSION_NAME)
+yq_all = pytest.mark.yq_version(YQV1_VERSION_NAME, YQV2_VERSION_NAME)

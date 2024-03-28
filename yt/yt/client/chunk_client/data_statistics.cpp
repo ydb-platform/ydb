@@ -212,9 +212,8 @@ TDuration TCodecStatistics::GetTotalDuration() const
 void FormatValue(TStringBuilderBase* builder, const TCodecStatistics& statistics, TStringBuf /* spec */)
 {
     FormatKeyValueRange(builder, statistics.CodecToDuration(), TDefaultFormatter());
-    if (statistics.ValueDictionaryCompressionDuration()) {
-        builder->AppendString(", ");
-        builder->AppendFormat("ValueDictionaryCompressionDuration: %v",
+    if (statistics.ValueDictionaryCompressionDuration() != TDuration::Zero()) {
+        builder->AppendFormat(", ValueDictionaryCompressionDuration: %v",
             statistics.ValueDictionaryCompressionDuration());
     }
 }

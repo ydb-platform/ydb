@@ -1,14 +1,15 @@
 #pragma once
 #include "compaction.h"
+
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
+
 #include <ydb/core/tx/columnshard/engines/scheme/tier_info.h>
 
 namespace NKikimr::NOlap {
 
 class TTTLColumnEngineChanges: public TChangesWithAppend {
 private:
-    using TPathIdBlobs = THashMap<ui64, THashSet<TUnifiedBlobId>>;
     using TBase = TChangesWithAppend;
-    THashMap<TString, TPathIdBlobs> ExportTierBlobs;
 
     class TPortionForEviction {
     private:
@@ -39,11 +40,11 @@ private:
         }
     };
 
-    std::optional<TPortionInfoWithBlobs> UpdateEvictedPortion(TPortionForEviction& info, THashMap<TBlobRange, TString>& srcBlobs,
+    std::optional<TPortionInfoWithBlobs> UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
         TConstructionContext& context) const;
 
-    std::vector<TPortionForEviction> PortionsToEvict; // {portion, TPortionEvictionFeatures}
-
+    std::vector<TPortionForEviction> PortionsToEvict;
+    const NActualizer::TRWAddress RWAddress;
 protected:
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
@@ -58,6 +59,12 @@ protected:
         }
         return result;
     }
+    virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
+        const auto pred = [](const TPortionForEviction& p) {
+            return p.GetPortionInfo().GetAddress();
+        };
+        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + RWAddress.DebugString() + "::" + GetTaskIdentifier(), PortionsToEvict, pred);
+    }
 public:
     class TMemoryPredictorSimplePolicy: public IMemoryPredictor {
     private:
@@ -65,13 +72,17 @@ public:
         ui64 MaxRawMemory = 0;
     public:
         virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
-            if (MaxRawMemory < portionInfo.GetRawBytes()) {
-                MaxRawMemory = portionInfo.GetRawBytes();
+            if (MaxRawMemory < portionInfo.GetTotalRawBytes()) {
+                MaxRawMemory = portionInfo.GetTotalRawBytes();
             }
-            SumBlobsMemory += portionInfo.GetBlobBytes();
+            SumBlobsMemory += portionInfo.GetTotalBlobBytes();
             return SumBlobsMemory + MaxRawMemory;
         }
     };
+
+    const NActualizer::TRWAddress& GetRWAddress() const {
+        return RWAddress;
+    }
 
     static std::shared_ptr<IMemoryPredictor> BuildMemoryPredictor() {
         return std::make_shared<TMemoryPredictorSimplePolicy>();
@@ -80,16 +91,6 @@ public:
     virtual bool NeedConstruction() const override {
         return PortionsToEvict.size();
     }
-    virtual THashSet<TPortionAddress> GetTouchedPortions() const override {
-        THashSet<TPortionAddress> result = TBase::GetTouchedPortions();
-        for (auto&& info : PortionsToEvict) {
-            result.emplace(info.GetPortionInfo().GetAddress());
-        }
-        return result;
-    }
-
-    THashMap<ui64, NOlap::TTiering> Tiering;
-
     ui32 GetPortionsToEvictCount() const {
         return PortionsToEvict.size();
     }
@@ -108,8 +109,10 @@ public:
         return StaticTypeName();
     }
 
-    TTTLColumnEngineChanges(const TSplitSettings& splitSettings, const TSaverContext& saverContext)
-        : TBase(splitSettings, saverContext, StaticTypeName()) {
+    TTTLColumnEngineChanges(const NActualizer::TRWAddress& address, const TSaverContext& saverContext)
+        : TBase(saverContext, StaticTypeName())
+        , RWAddress(address)
+    {
 
     }
 

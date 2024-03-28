@@ -51,13 +51,9 @@ public:
             return;
         }
 
-        auto dinfo = AppData(ctx)->DomainsInfo;
-        auto domain = dinfo->Domains.begin()->second;
-        ui32 group = dinfo->GetDefaultStateStorageGroup(domain->DomainUid);
-
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
-        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeConsoleID(group), pipeConfig);
+        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeConsoleID(), pipeConfig);
         CmsPipe = ctx.RegisterWithSameMailbox(pipe);
 
         SendRequest(ctx);

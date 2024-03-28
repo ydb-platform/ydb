@@ -43,10 +43,18 @@ def ontest_data(unit, *args):
     ymake.report_configure_error("TEST_DATA is removed in favour of DATA")
 
 
-def prepare_recipes(data):
+def format_recipes(data: str | None) -> str:
+    if not data:
+        return ""
+
     data = data.replace('"USE_RECIPE_DELIM"', "\n")
     data = data.replace("$TEST_RECIPES_VALUE", "")
-    return base64.b64encode(six.ensure_binary(data or ""))
+    return data
+
+
+def prepare_recipes(data: str | None) -> str:
+    formatted = format_recipes(data)
+    return base64.b64encode(six.ensure_binary(formatted))
 
 
 def prepare_env(data):
@@ -656,10 +664,11 @@ def onadd_check(unit, *args):
             extra_test_dart_data['USE_KTLINT_OLD'] = 'yes'
         else:
             data_list = [KTLINT_CURRENT_EDITOR_CONFIG]
-            baseline_path = unit.get('_KTLINT_BASELINE_FILE')
-            if baseline_path:
+            baseline_path_relative = unit.get('_KTLINT_BASELINE_FILE')
+            if baseline_path_relative:
+                baseline_path = unit.resolve_arc_path(baseline_path_relative).replace('$S', 'arcadia')
                 data_list += [baseline_path]
-                extra_test_dart_data['KTLINT_BASELINE_FILE'] = baseline_path
+                extra_test_dart_data['KTLINT_BASELINE_FILE'] = baseline_path_relative
             extra_test_data = serialize_list(data_list)
             extra_test_dart_data['KTLINT_BINARY'] = '$(KTLINT)/run.bat'
     elif check_type == "JAVA_STYLE":

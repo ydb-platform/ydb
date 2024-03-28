@@ -2,12 +2,12 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils/managed_executor.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/write_session.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/write_session.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/ut/fds_mock.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -422,6 +422,61 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         ReadSession->Close(TDuration::MilliSeconds(10));
     }
 
+    Y_UNIT_TEST(FallbackToSingleDbAfterBadRequest) {
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME, false);
+        setup->Start(true, true);
+        TFederationDiscoveryServiceMock fdsMock;
+        ui16 newServicePort = setup->GetPortManager()->GetPort(4285);
+        fdsMock.Port = setup->GetGrpcPort();
+
+        Cerr << "PORTS " << fdsMock.Port << " " << newServicePort << Endl;
+        auto grpcServer = setup->StartGrpcService(newServicePort, &fdsMock);
+
+        // Create topic client.
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
+        cfg.SetDatabase("/Root");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        NYdb::TDriver driver(cfg);
+        auto clientSettings = TFederatedTopicClientSettings();
+        NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver, clientSettings);
+
+        // Create read session.
+        NYdb::NFederatedTopic::TFederatedReadSessionSettings readSettings;
+        readSettings
+            .ConsumerName("shared/user")
+            .MaxMemoryUsageBytes(1_MB)
+            .AppendTopics(setup->GetTestTopic());
+
+        auto ReadSession = topicClient.CreateReadSession(readSettings);
+        Cerr << "Session was created" << Endl;
+
+        ReadSession->WaitEvent().Wait(TDuration::Seconds(1));
+        TMaybe<NYdb::NFederatedTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
+        Y_ASSERT(!event);
+
+        {
+            auto fdsRequest = fdsMock.GetNextPendingRequest();
+            Y_ASSERT(fdsRequest.has_value());
+            Ydb::FederationDiscovery::ListFederationDatabasesResponse response;
+            auto op = response.mutable_operation();
+            op->set_status(Ydb::StatusIds::BAD_REQUEST);
+            response.mutable_operation()->set_ready(true);
+            response.mutable_operation()->set_id("12345");
+            fdsRequest->Result.SetValue({std::move(response), grpc::Status::OK});
+        }
+
+        ReadSession->WaitEvent().Wait();
+        TMaybe<NYdb::NFederatedTopic::TReadSessionEvent::TEvent> event2 = ReadSession->GetEvent(true);
+        Cerr << "Got new read session event: " << DebugString(*event2) << Endl;
+
+        auto* sessionEvent = std::get_if<NYdb::NFederatedTopic::TSessionClosedEvent>(&*event2);
+        // At this point the SDK should connect to Topic API, but in this test we have it on a separate port,
+        // so SDK connects back to FederationDiscovery service and the CLIENT_CALL_UNIMPLEMENTED status is expected.
+        UNIT_ASSERT_EQUAL(sessionEvent->GetStatus(), EStatus::CLIENT_CALL_UNIMPLEMENTED);
+        ReadSession->Close(TDuration::MilliSeconds(10));
+    }
+
     Y_UNIT_TEST(SimpleHandlers) {
         auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME, false);
         setup->Start(true, true);
@@ -702,6 +757,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         // Create write session.
         auto writeSettings = NTopic::TWriteSessionSettings()
+            .DirectWriteToPartition(false)
             .Path(setup->GetTestTopic())
             .MessageGroupId("src_id");
 
@@ -711,7 +767,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteSession->WaitEvent().Wait(TDuration::Seconds(1));
         auto event = WriteSession->GetEvent(false);
         Y_ASSERT(event);
-        Cerr << "Got new read session event: " << DebugString(*event) << Endl;
+        Cerr << "Got new write session event: " << DebugString(*event) << Endl;
         auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
         Y_ASSERT(readyToAcceptEvent);
         WriteSession->Write(std::move(readyToAcceptEvent->ContinuationToken), NTopic::TWriteMessage("hello"));
@@ -719,7 +775,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteSession->WaitEvent().Wait(TDuration::Seconds(1));
         event = WriteSession->GetEvent(false);
         Y_ASSERT(event);
-        Cerr << "Got new read session event: " << DebugString(*event) << Endl;
+        Cerr << "Got new write session event: " << DebugString(*event) << Endl;
 
         readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
         Y_ASSERT(readyToAcceptEvent);
@@ -737,7 +793,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteSession->WaitEvent().Wait(TDuration::Seconds(1));
         event = WriteSession->GetEvent(false);
         Y_ASSERT(event);
-        Cerr << "Got new read session event: " << DebugString(*event) << Endl;
+        Cerr << "Got new write session event: " << DebugString(*event) << Endl;
 
         auto* acksEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*event);
         Y_ASSERT(acksEvent);

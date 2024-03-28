@@ -121,7 +121,6 @@ namespace NKikimr::NDataStreams::V1 {
                 topicRequest.mutable_retention_period()->set_seconds(
                     TDuration::Hours(DEFAULT_STREAM_DAY_RETENTION).Seconds());
         }
-        topicRequest.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
         topicRequest.set_partition_write_speed_bytes_per_second(
             PartitionWriteSpeedInBytesPerSec(GetProtoRequest()->write_quota_kb_per_sec()));
         topicRequest.set_partition_write_burst_bytes(
@@ -240,9 +239,8 @@ namespace NKikimr::NDataStreams::V1 {
 
         const auto& response = ev->Get()->Request.Get()->ResultSet.front();
         const auto& pqGroupDescription = response.PQGroupInfo->Description;
-        const auto& readRules = pqGroupDescription.GetPQTabletConfig().GetReadRules();
 
-        if (readRules.size() > 0 && EnforceDeletion == false) {
+        if (NPQ::ConsumerCount(pqGroupDescription.GetPQTabletConfig()) > 0 && EnforceDeletion == false) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::IN_USE),
                                   TStringBuilder() << "Stream has registered consumers" <<
                                   "and EnforceConsumerDeletion flag is false", ActorContext());
@@ -983,24 +981,25 @@ namespace NKikimr::NDataStreams::V1 {
         ui32 leftToRead{0};
         const auto& response = result->ResultSet.front();
         const auto& pqGroupDescription = response.PQGroupInfo->Description;
-        const auto& streamReadRulesNames = pqGroupDescription.GetPQTabletConfig().GetReadRules();
-        const auto& streamReadRulesReadFromTimestamps = pqGroupDescription.GetPQTabletConfig().GetReadFromTimestampsMs();
+        const auto& streamConsumers = pqGroupDescription.GetPQTabletConfig().GetConsumers();
         const auto alreadyRead = NextToken.GetAlreadyRead();
 
-        if (alreadyRead > (ui32)streamReadRulesNames.size()) {
+        ui32 consumerCount = NPQ::ConsumerCount(pqGroupDescription.GetPQTabletConfig());
+
+        if (alreadyRead > consumerCount) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
                                   TStringBuilder() << "Provided next_token is malformed - " <<
                                   "everything is already read", ActorContext());
         }
 
-        const auto rulesToRead = std::min(streamReadRulesNames.size() - alreadyRead, MaxResults);
+        const auto rulesToRead = std::min(consumerCount - alreadyRead, MaxResults);
         readRules.reserve(rulesToRead);
-        auto itName = streamReadRulesNames.begin() + alreadyRead;
-        auto itTs = streamReadRulesReadFromTimestamps.begin() + alreadyRead;
-        for (auto i = rulesToRead; i > 0; --i, ++itName, ++itTs) {
-            readRules.push_back({*itName, *itTs});
+
+        auto consumer = streamConsumers.begin() + alreadyRead;
+        for (auto i = rulesToRead; i > 0; --i, ++consumer) {
+            readRules.push_back({consumer->GetName(), consumer->GetReadFromTimestampsMs()});
         }
-        leftToRead = streamReadRulesNames.size() - alreadyRead - rulesToRead;
+        leftToRead = consumerCount - alreadyRead - rulesToRead;
 
         SendResponse(ActorContext(), readRules, leftToRead);
     }
@@ -1929,7 +1928,7 @@ namespace NKikimr::NDataStreams::V1 {
                                          : Ydb::DataStreams::V1::StreamDescription::CREATING
         );
         descriptionSummary.set_open_shard_count(PQGroup.GetPartitions().size());
-        descriptionSummary.set_consumer_count(PQGroup.MutablePQTabletConfig()->GetReadRules().size());
+        descriptionSummary.set_consumer_count(NPQ::ConsumerCount(PQGroup.GetPQTabletConfig()));
         descriptionSummary.set_encryption_type(Ydb::DataStreams::V1::EncryptionType::NONE);
 
         Request_->SendResult(result, Ydb::StatusIds::SUCCESS);

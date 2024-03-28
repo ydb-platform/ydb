@@ -29,7 +29,14 @@ DEFINE_REFCOUNTED_TYPE(ISuspendableActionQueue)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ISuspendableActionQueuePtr CreateSuspendableActionQueue(const TString& threadName);
+struct TSuspendableActionQueueOptions
+{
+    std::function<void()> ThreadInitializer;
+};
+
+ISuspendableActionQueuePtr CreateSuspendableActionQueue(
+    TString threadName,
+    TSuspendableActionQueueOptions options = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

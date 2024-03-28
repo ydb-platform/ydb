@@ -32,13 +32,13 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/ycloud/api/access_service.h>
 #include <ydb/library/ycloud/api/iam_token_service.h>
-#include <ydb/library/ycloud/impl/grpc_service_cache.h>
+#include <ydb/library/grpc/actor_client/grpc_service_cache.h>
 #include <ydb/library/ycloud/impl/access_service.h>
 #include <ydb/library/ycloud/impl/iam_token_service.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
 
 #include <ydb/services/datastreams/datastreams_proxy.h>
 #include <ydb/services/datastreams/next_token.h>
@@ -93,7 +93,7 @@ namespace NKikimr::NHttpProxy {
         case NYdb::EStatus::ABORTED:
             return TException("Aborted", HTTP_BAD_REQUEST);
         case NYdb::EStatus::UNAVAILABLE:
-            return TException("Unavailable", HTTP_BAD_REQUEST);
+            return TException("Unavailable", HTTP_SERVICE_UNAVAILABLE);
         case NYdb::EStatus::TIMEOUT:
             return TException("RequestExpired", HTTP_BAD_REQUEST);
         case NYdb::EStatus::BAD_SESSION:
@@ -507,7 +507,7 @@ namespace NKikimr::NHttpProxy {
                     ReplyToHttpContext(ctx);
                 } else {
                     auto retryClass =
-                        NYdb::NPersQueue::GetRetryErrorClass(ev->Get()->Status->GetStatus());
+                        NYdb::NTopic::GetRetryErrorClass(ev->Get()->Status->GetStatus());
 
                     switch (retryClass) {
                     case ERetryErrorClass::ShortRetry:

@@ -2,7 +2,7 @@ import os
 
 import ymake
 import ytest
-from _common import get_norm_unit_path, rootrel_arc_src, to_yesno
+from _common import resolve_common_const, get_norm_unit_path, rootrel_arc_src, to_yesno
 
 
 # 1 is 60 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
@@ -32,7 +32,7 @@ class PluginLogger(object):
                 parts.append(m if isinstance(m, str) else repr(m))
 
         # cyan color (code 36) for messages
-        return "\033[0;32m{}\033[0;49m \033[0;36m{}\033[0;49m".format(self.prefix, " ".join(parts))
+        return "\033[0;32m{}\033[0;49m\n\033[0;36m{}\033[0;49m".format(self.prefix, " ".join(parts))
 
     def info(self, *messages):
         if self.unit:
@@ -78,8 +78,8 @@ def _build_directives(name, flags, paths):
     # type: (str, list[str]|tuple[str], list[str]) -> str
 
     parts = [p for p in [name] + (flags or []) if p]
-
-    expressions = ["${{{parts}:\"{path}\"}}".format(parts=";".join(parts), path=path) for path in paths]
+    parts_str = ";".join(parts)
+    expressions = ['${{{parts}:"{path}"}}'.format(parts=parts_str, path=path) for path in paths]
 
     return " ".join(expressions)
 
@@ -119,6 +119,12 @@ def _create_erm_json(unit):
     path = unit.resolve(unit.resolve_arc_path(erm_packages_path))
 
     return ErmJsonLite.load(path)
+
+
+@_with_report_configure_error
+def on_set_append_with_directive(unit, var_name, dir, *values):
+    wrapped = ['${{{dir}:"{v}"}}'.format(dir=dir, v=v) for v in values]
+    __set_append(unit, var_name, " ".join(wrapped))
 
 
 @_with_report_configure_error
@@ -245,6 +251,7 @@ def on_ts_configure(unit, *tsconfig_paths):
         _filter_inputs_by_rules_from_tsconfig(unit, tsconfig)
 
     _setup_eslint(unit)
+    _setup_tsc_typecheck(unit, tsconfig_paths)
 
 
 def __set_append(unit, var_name, value):
@@ -316,6 +323,7 @@ def _get_test_runner_handlers():
     return {
         "jest": _add_jest_ts_test,
         "hermione": _add_hermione_ts_test,
+        "playwright": _add_playwright_ts_test,
     }
 
 
@@ -344,6 +352,15 @@ def _add_hermione_ts_test(unit, test_runner, test_files, deps, test_record):
     _add_test(unit, test_runner, test_files, deps, test_record)
 
 
+def _add_playwright_ts_test(unit, test_runner, test_files, deps, test_record):
+    test_record.update(
+        {
+            "CONFIG-PATH": _resolve_config_path(unit, test_runner, rel_to="TS_TEST_FOR_PATH"),
+        }
+    )
+    _add_test(unit, test_runner, test_files, deps, test_record)
+
+
 def _setup_eslint(unit):
     if not _is_tests_enabled(unit):
         return
@@ -356,6 +373,8 @@ def _setup_eslint(unit):
         return
 
     unit.on_peerdir_ts_resource("eslint")
+    user_recipes = unit.get("TEST_RECIPES_VALUE")
+    unit.on_setup_extract_node_modules_recipe(unit.get("MODDIR"))
 
     mod_dir = unit.get("MODDIR")
     lint_files = _resolve_module_files(unit, mod_dir, lint_files)
@@ -366,15 +385,54 @@ def _setup_eslint(unit):
     }
 
     _add_test(unit, "eslint", lint_files, deps, test_record, mod_dir)
+    unit.set(["TEST_RECIPES_VALUE", user_recipes])
+
+
+def _setup_tsc_typecheck(unit, tsconfig_paths: list[str]):
+    if not _is_tests_enabled(unit):
+        return
+
+    if unit.get("_TS_TYPECHECK_VALUE") == "none":
+        return
+
+    typecheck_files = ytest.get_values_list(unit, "TS_INPUT_FILES")
+    if not typecheck_files:
+        return
+
+    tsconfig_path = tsconfig_paths[0]
+
+    if len(tsconfig_paths) > 1:
+        tsconfig_path = unit.get("_TS_TYPECHECK_TSCONFIG")
+        if not tsconfig_path:
+            macros = " or ".join([f"TS_TYPECHECK({p})" for p in tsconfig_paths])
+            raise Exception(f"Module uses several tsconfig files, specify which one to use for typecheck: {macros}")
+        abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
+        if not abs_tsconfig_path:
+            raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
+
+    unit.on_peerdir_ts_resource("typescript")
+    user_recipes = unit.get("TEST_RECIPES_VALUE")
+    unit.on_setup_install_node_modules_recipe()
+    unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
+
+    _add_test(
+        unit,
+        test_type="tsc_typecheck",
+        test_files=[resolve_common_const(f) for f in typecheck_files],
+        deps=_create_pm(unit).get_peers_from_package_json(),
+        test_record={"TS_CONFIG_PATH": tsconfig_path},
+        test_cwd=unit.get("MODDIR"),
+    )
+    unit.set(["TEST_RECIPES_VALUE", user_recipes])
 
 
 def _resolve_module_files(unit, mod_dir, file_paths):
+    mod_dir_with_sep_len = len(mod_dir) + 1
     resolved_files = []
 
     for path in file_paths:
         resolved = rootrel_arc_src(path, unit)
         if resolved.startswith(mod_dir):
-            mod_dir_with_sep_len = len(mod_dir) + 1
             resolved = resolved[mod_dir_with_sep_len:]
         resolved_files.append(resolved)
 
@@ -387,23 +445,33 @@ def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd
     def sort_uniq(text):
         return sorted(set(text))
 
+    recipes_lines = ytest.format_recipes(unit.get("TEST_RECIPES_VALUE")).strip().splitlines()
+    if recipes_lines:
+        deps = deps or []
+        deps.extend([os.path.dirname(r.strip().split(" ")[0]) for r in recipes_lines])
+
     if deps:
-        unit.ondepends(sort_uniq(deps))
+        joined_deps = "\n".join(deps)
+        logger.info(f"{test_type} deps: \n{joined_deps}")
+        unit.ondepends(deps)
 
     test_dir = get_norm_unit_path(unit)
     full_test_record = {
+        # Key to discover suite (see devtools/ya/test/explore/__init__.py#gen_suite)
+        "SCRIPT-REL-PATH": test_type,
+        # Test name as shown in PR check, should be unique inside one module
         "TEST-NAME": test_type.lower(),
         "TEST-TIMEOUT": unit.get("TEST_TIMEOUT") or "",
         "TEST-ENV": ytest.prepare_env(unit.get("TEST_ENV_VALUE")),
         "TESTED-PROJECT-NAME": os.path.splitext(unit.filename())[0],
         "TEST-RECIPES": ytest.prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
-        "SCRIPT-REL-PATH": test_type,
         "SOURCE-FOLDER-PATH": test_dir,
         "BUILD-FOLDER-PATH": test_dir,
         "BINARY-PATH": os.path.join(test_dir, unit.filename()),
         "SPLIT-FACTOR": unit.get("TEST_SPLIT_FACTOR") or "",
         "FORK-MODE": unit.get("TEST_FORK_MODE") or "",
         "SIZE": unit.get("TEST_SIZE_NAME") or "",
+        "TEST-DATA": ytest.serialize_list(ytest.get_values_list(unit, "TEST_DATA_VALUE")),
         "TEST-FILES": ytest.serialize_list(test_files),
         "TEST-CWD": test_cwd or "",
         "TAG": ytest.serialize_list(ytest.get_values_list(unit, "TEST_TAGS_VALUE")),
@@ -415,10 +483,6 @@ def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd
 
     if test_record:
         full_test_record.update(test_record)
-
-    for k, v in full_test_record.items():
-        if not isinstance(v, str):
-            logger.warn(k, "expected 'str', got:", type(v))
 
     data = ytest.dump_test(unit, full_test_record)
     if data:
@@ -474,6 +538,28 @@ def _select_matching_version(erm_json, resource_name, range_str, dep_is_required
 
 
 @_with_report_configure_error
+def on_prepare_deps_configure(unit):
+    # Originally this peerdir was in .conf file
+    # but it kept taking default value of NPM_CONTRIBS_PATH
+    # before it was updated by CUSTOM_CONTRIB_TYPESCRIPT()
+    # so I moved it here.
+    unit.onpeerdir(unit.get("NPM_CONTRIBS_PATH"))
+    pm = _create_pm(unit)
+    pj = pm.load_package_json_from_dir(pm.sources_path)
+    has_deps = pj.has_dependencies()
+    ins, outs = pm.calc_prepare_deps_inouts(unit.get("_TARBALLS_STORE"), has_deps)
+
+    if pj.has_dependencies():
+        unit.onpeerdir(pm.get_local_peers_from_package_json())
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("input", ["hide"], sorted(ins)))
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
+
+    else:
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", [], sorted(outs)))
+        unit.set(["_PREPARE_DEPS_CMD", "$_PREPARE_NO_DEPS_CMD"])
+
+
+@_with_report_configure_error
 def on_node_modules_configure(unit):
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
@@ -481,21 +567,11 @@ def on_node_modules_configure(unit):
     if pj.has_dependencies():
         unit.onpeerdir(pm.get_local_peers_from_package_json())
         local_cli = unit.get("TS_LOCAL_CLI") == "yes"
-        errors, ins, outs = pm.calc_node_modules_inouts(local_cli)
+        ins, outs = pm.calc_node_modules_inouts(local_cli)
 
-        if errors:
-            ymake.report_configure_error(
-                "There are some issues with lockfiles.\n"
-                + "Please contact support (https://nda.ya.ru/t/sNoSFsO76ygSXL),\n"
-                + "providing following details:\n"
-                + "\n---\n".join([str(err) for err in errors])
-            )
-        else:
-            unit.on_set_node_modules_ins_outs(["IN"] + sorted(ins) + ["OUT"] + sorted(outs))
-
-            __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives("input", ["hide"], sorted(ins)))
-            if not unit.get("TS_TEST_FOR"):
-                __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
+        __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives("input", ["hide"], sorted(ins)))
+        if not unit.get("TS_TEST_FOR"):
+            __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
 
         if pj.get_use_prebuilder():
             lf = pm.load_lockfile_from_dir(pm.sources_path)
@@ -520,10 +596,6 @@ def on_node_modules_configure(unit):
                 ]
             )
 
-    else:
-        # default "noop" command
-        unit.set(["_NODE_MODULES_CMD", "$TOUCH_UNIT"])
-
 
 @_with_report_configure_error
 def on_ts_test_for_configure(unit, test_runner, default_config, node_modules_filename):
@@ -536,7 +608,7 @@ def on_ts_test_for_configure(unit, test_runner, default_config, node_modules_fil
     for_mod_path = unit.get("TS_TEST_FOR_PATH")
     unit.onpeerdir([for_mod_path])
     unit.on_setup_extract_node_modules_recipe([for_mod_path])
-    unit.on_setup_extract_peer_tars_recipe([for_mod_path])
+    unit.on_setup_extract_output_tars_recipe([for_mod_path])
 
     root = "$B" if test_runner == "hermione" else "$(BUILD_ROOT)"
     unit.set(["TS_TEST_NM", os.path.join(root, for_mod_path, node_modules_filename)])
@@ -607,5 +679,6 @@ def on_ts_files(unit, *files):
 
 @_with_report_configure_error
 def on_depends_on_mod(unit):
-    for_mod_path = unit.get("TS_TEST_FOR_PATH")
-    unit.ondepends([for_mod_path])
+    if unit.get("_TS_TEST_DEPENDS_ON_BUILD"):
+        for_mod_path = unit.get("TS_TEST_FOR_PATH")
+        unit.ondepends([for_mod_path])

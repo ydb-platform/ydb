@@ -203,6 +203,7 @@ private:
         RegisterSystemView<Schema::QueryStats>(TopQueriesByCpuTime1HourName);
         RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1MinuteName);
         RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1HourName);
+        RegisterSystemView<Schema::QuerySessions>(QuerySessions);
 
         RegisterDomainSystemView<Schema::PDisks>(PDisksName);
         RegisterDomainSystemView<Schema::VSlots>(VSlotsName);
@@ -215,7 +216,9 @@ private:
         RegisterSystemView<Schema::QueryMetrics>(QueryMetricsName);
 
         RegisterOlapStoreSystemView<Schema::PrimaryIndexStats>(StorePrimaryIndexStatsName);
+        RegisterOlapStoreSystemView<Schema::PrimaryIndexPortionStats>(StorePrimaryIndexPortionStatsName);
         RegisterColumnTableSystemView<Schema::PrimaryIndexStats>(TablePrimaryIndexStatsName);
+        RegisterColumnTableSystemView<Schema::PrimaryIndexPortionStats>(TablePrimaryIndexPortionStatsName);
 
         RegisterSystemView<Schema::TopPartitions>(TopPartitions1MinuteName);
         RegisterSystemView<Schema::TopPartitions>(TopPartitions1HourName);

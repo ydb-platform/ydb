@@ -1,19 +1,15 @@
 #pragma once
+#include "backtrace.h"
 
 #include <util/generic/string.h>
-#include <util/system/types.h>
+#include <util/generic/vector.h>
 
-struct TDllInfo {
-    TString Path;
-    ui64 BaseAddress;
-};
-
-class IBacktraceSymbolizer {
-public:
-    virtual TString SymbolizeFrame(void* ptr);
-    virtual ~IBacktraceSymbolizer();
-};
-
-class TBacktraceSymbolizer;
-
-std::unique_ptr<IBacktraceSymbolizer> BuildSymbolizer(bool KikimrFormat = true);
+namespace NYql {
+    namespace NBacktrace {
+        struct TStackFrame {
+            const char* File;
+            size_t Address;
+        };
+        void Symbolize(const TStackFrame* frames, size_t count, IOutputStream* out);
+    }
+}

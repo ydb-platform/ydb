@@ -162,7 +162,7 @@ void TYqlServer::Initialize() {
     SetupDomains(app);
     SetupChannelProfiles(app);
 
-    app.AddHive(Settings->Domain, ChangeStateStorage(Hive, Settings->Domain));
+    app.AddHive(ChangeStateStorage(Hive, Settings->Domain));
     app.SetFnRegistry([this](const NKikimr::NScheme::TTypeRegistry& typeRegistry) -> NKikimr::NMiniKQL::IFunctionRegistry* {
             Y_UNUSED(typeRegistry);
             // register test UDFs

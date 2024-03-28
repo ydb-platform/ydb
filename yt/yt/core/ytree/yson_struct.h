@@ -1,7 +1,7 @@
 #pragma once
 
 #include "node.h"
-#include "yson_serialize_common.h"
+#include "yson_struct_enum.h"
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/mpl.h>
@@ -9,6 +9,8 @@
 
 #include <yt/yt/core/yson/public.h>
 #include <yt/yt/library/syncmap/map.h>
+
+#include <library/cpp/yt/misc/enum.h>
 
 #include <util/generic/algorithm.h>
 
@@ -54,6 +56,8 @@ public:
     using TPostprocessor = std::function<void()>;
     using TPreprocessor = std::function<void()>;
 
+    TYsonStructBase();
+
     virtual ~TYsonStructBase() = default;
 
     void Load(
@@ -88,7 +92,7 @@ public:
 
     // TODO(renadeen): remove this methods.
     void SaveParameter(const TString& key, NYson::IYsonConsumer* consumer) const;
-    void LoadParameter(const TString& key, const NYTree::INodePtr& node, EMergeStrategy mergeStrategy);
+    void LoadParameter(const TString& key, const NYTree::INodePtr& node);
     void ResetParameter(const TString& key);
 
     std::vector<TString> GetAllParameterAliases(const TString& key) const;
@@ -162,7 +166,7 @@ public:
 
     template <std::default_initializable TStruct, class TSerializer>
         // requires std::derived_from<TSerializer, TExternalizedYsonStruct<TStruct>>
-    static TSerializer CreateWritable(TStruct& writable);
+    static TSerializer CreateWritable(TStruct& writable, bool setDefaults);
 
     template <std::default_initializable TStruct, class TSerializer>
         // requires std::derived_from<TSerializer, TExternalizedYsonStruct<TStruct>>
@@ -185,8 +189,13 @@ public:
     template <class TStruct>
     void InitializeStruct(TStruct* target);
 
+    void OnBaseCtorCalled();
+
+    void OnFinalCtorCalled();
+
 private:
     static inline YT_THREAD_LOCAL(IYsonStructMeta*) CurrentlyInitializingMeta_ = nullptr;
+    static inline YT_THREAD_LOCAL(i64) RegistryDepth_ = 0;
 
     template <class TStruct>
     friend class TYsonStructRegistrar;

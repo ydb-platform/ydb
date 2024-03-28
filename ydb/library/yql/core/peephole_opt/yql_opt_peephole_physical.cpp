@@ -2577,12 +2577,70 @@ TExprNode::TPtr ExpandListHas(const TExprNode::TPtr& input, TExprContext& ctx) {
     return RewriteSearchByKeyForTypesMismatch<true, true>(input, ctx);
 }
 
+TExprNode::TPtr ExpandPgArrayOp(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const bool all = input->Content() == "PgAllResolvedOp";
+    auto list = ctx.Builder(input->Pos())
+        .Callable("PgCall")
+            .Atom(0, "unnest")
+            .List(1)
+            .Seal()
+            .Add(2, input->ChildPtr(3))
+        .Seal()
+        .Build();
+
+    auto value = ctx.Builder(input->Pos())
+        .Callable("Fold")
+            .Add(0, list)
+            .Callable(1, "PgConst")
+                .Atom(0, all ? "true" : "false")
+                .Callable(1, "PgType")
+                    .Atom(0, "bool")
+                .Seal()
+            .Seal()
+            .Lambda(2)
+                .Param("item")
+                .Param("state")
+                .Callable(all ? "PgAnd" : "PgOr")
+                    .Arg(0, "state")
+                    .Callable(1, "PgResolvedOp")
+                        .Add(0, input->ChildPtr(0))
+                        .Add(1, input->ChildPtr(1))
+                        .Add(2, input->ChildPtr(2))
+                        .Arg(3, "item")
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    return ctx.Builder(input->Pos())
+        .Callable("If")
+            .Callable(0, "Exists")
+                .Add(0, input->ChildPtr(3))
+            .Seal()
+            .Add(1, value)
+            .Callable(2, "Null")
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 template <bool Flat, bool List>
 TExprNode::TPtr ExpandContainerIf(const TExprNode::TPtr& input, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content();
     auto item = Flat ? input->TailPtr() : ctx.NewCallable(input->Tail().Pos(), List ? "AsList" : "Just", {input->TailPtr()});
     auto none = ctx.NewCallable(input->Tail().Pos(), "EmptyFrom", {item});
     return ctx.NewCallable(input->Pos(), "If", {input->HeadPtr(), std::move(item), std::move(none)});
+}
+
+TExprNode::TPtr DropDependsOnFromEmptyIterator(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (input->ChildrenSize() > 1) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop DependsOn from " << input->Content();
+        TExprNode::TListType newChildren;
+        newChildren.push_back(input->Child(0));
+        return ctx.ChangeChildren(*input, std::move(newChildren));
+    }
+    return input;
 }
 
 TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -5948,6 +6006,81 @@ TExprNode::TPtr OptimizeBlockMerge(const TExprNode::TPtr& node, TExprContext& ct
     return node;
 }
 
+TExprNode::TPtr SwapReplicateScalarsWithWideMap(const TExprNode::TPtr& wideMap, TExprContext& ctx) {
+    YQL_ENSURE(wideMap->IsCallable("WideMap") && wideMap->Head().IsCallable("ReplicateScalars"));
+    const auto& input = wideMap->Head();
+    auto inputTypes = input.GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    YQL_ENSURE(inputTypes.size() > 0);
+
+    THashSet<ui32> replicatedInputIndexes;
+    auto replicateScalarsInputTypes = input.Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    YQL_ENSURE(replicateScalarsInputTypes.size() > 0);
+    if (input.ChildrenSize() == 1) {
+        for (ui32 i = 0; i + 1 < replicateScalarsInputTypes.size(); ++i) {
+            if (replicateScalarsInputTypes[i]->IsScalar()) {
+                replicatedInputIndexes.insert(i);
+            }
+        }
+    } else {
+        for (auto& indexNode : input.Child(1)->ChildrenList()) {
+            YQL_ENSURE(indexNode->IsAtom());
+            ui32 idx = FromString<ui32>(indexNode->Content());
+            YQL_ENSURE(idx + 1 < replicatedInputIndexes.size() && replicateScalarsInputTypes[idx]->IsScalar());
+            replicatedInputIndexes.insert(idx);
+        }
+    }
+
+    YQL_ENSURE(!replicatedInputIndexes.empty(), "ReplicateScalars should be dropped earlier");
+
+    const auto& lambda = wideMap->Tail();
+    const auto& lambdaArgs = lambda.Head();
+
+    YQL_ENSURE(lambdaArgs.ChildrenSize() == inputTypes.size());
+
+    TNodeMap<ui32> arg2index;
+    for (ui32 i = 0; i < lambdaArgs.ChildrenSize(); ++i) {
+        YQL_ENSURE(arg2index.emplace(lambdaArgs.Child(i), i).second);
+    }
+
+    TVector<THashSet<ui32>> bodyItemDeps;
+    for (ui32 i = 1; i + 1 < lambda.ChildrenSize(); ++i) {
+        bodyItemDeps.emplace_back();
+        VisitExpr(lambda.ChildPtr(i), [&](const TExprNode::TPtr& node) {
+            if (node->IsArgument()) {
+                auto it = arg2index.find(node.Get());
+                if (it != arg2index.end()) {
+                    bodyItemDeps.back().insert(it->second);
+                }
+            }
+            return true;
+        });
+    }
+
+    TExprNodeList replicatedOutputIndexes;
+    for (ui32 i = 0; i < bodyItemDeps.size(); ++i) {
+        const auto& currDeps = bodyItemDeps[i];
+        if (!AnyOf(replicatedInputIndexes, [&](ui32 idx) { return currDeps.contains(idx); })) {
+            continue;
+        }
+
+        // output body item depends on some of replicated scalars
+        if (AllOf(currDeps, [&](ui32 idx) { return replicatedInputIndexes.contains(idx) || inputTypes[idx]->IsScalar(); })) {
+            // output body items only depends on scalars or replicated scalars
+            replicatedOutputIndexes.push_back(ctx.NewAtom(input.Pos(), i));
+        }
+    }
+
+    return ctx.Builder(wideMap->Pos())
+        .Callable("ReplicateScalars")
+            .Callable(0, "WideMap")
+                .Add(0, input.HeadPtr())
+                .Add(1, ctx.DeepCopyLambda(lambda))
+            .Seal()
+            .Add(1, ctx.NewList(input.Pos(), std::move(replicatedOutputIndexes)))
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto& input = node->Head(); input.IsCallable("ExpandMap")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
@@ -6042,6 +6175,9 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                         .Add(1, DropUnusedArgs(node->Tail(), unusedState, ctx))
                     .Seal().Build();
             }
+        } else if (node->IsCallable("WideMap") && input.IsCallable("ReplicateScalars")) {
+            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content();
+            return SwapReplicateScalarsWithWideMap(node, ctx);
         }
     }
 
@@ -7731,6 +7867,8 @@ struct TPeepHoleRules {
         {"Lookup", &RewriteSearchByKeyForTypesMismatch<false>},
         {"Contains", &RewriteSearchByKeyForTypesMismatch<true>},
         {"ListHas", &ExpandListHas},
+        {"PgAnyResolvedOp", &ExpandPgArrayOp},
+        {"PgAllResolvedOp", &ExpandPgArrayOp},
         {"Map", &CleckClosureOnUpperLambdaOverList},
         {"OrderedMap", &CleckClosureOnUpperLambdaOverList},
         {"FlatMap", &CleckClosureOnUpperLambdaOverList},
@@ -7790,6 +7928,7 @@ struct TPeepHoleRules {
         {"CheckedMinus", &ExpandCheckedMinus},
         {"JsonValue", &ExpandJsonValue},
         {"JsonExists", &ExpandJsonExists},
+        {"EmptyIterator", &DropDependsOnFromEmptyIterator},
     };
 
     const TExtPeepHoleOptimizerMap CommonStageExtRules = {
@@ -8019,6 +8158,10 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
         "PeepHoleBlock",
         issueCode);
 
+    if (peepholeSettings.FinalConfig) {
+        peepholeSettings.FinalConfig->AfterOptimize(&pipeline);
+    }
+
     pipeline.Add(
         CreateFunctorTransformer(
             [&types](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
@@ -8033,10 +8176,6 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
         ),
         "PeepHoleFinalBlock",
         issueCode);
-
-    if (peepholeSettings.FinalConfig) {
-        peepholeSettings.FinalConfig->AfterOptimize(&pipeline);
-    }
 
     return pipeline.BuildWithNoArgChecks(false);
 }

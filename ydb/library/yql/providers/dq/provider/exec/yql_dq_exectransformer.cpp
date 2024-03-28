@@ -155,6 +155,8 @@ public:
         }
 
         TVector<NDq::TDqSerializedBatch> rows;
+        ui64 totalSize = 0;
+        ui64 totalRows = 0;
         {
             auto guard = runner->BindAllocator(State->Settings->MemoryLimit.Get().GetOrElse(0));
             YQL_CLOG(DEBUG, ProviderDq) << " NDq::ERunStatus " << runner->Run();
@@ -164,33 +166,39 @@ public:
                 if (!fillSettings.Discard) {
                     NDq::TDqSerializedBatch data;
                     while (runner->GetOutputChannel(0)->Pop(data)) {
+                        totalSize += data.Size();
+                        totalRows += data.RowCount();
                         rows.push_back(std::move(data));
+                        if (!fillSettings.Discard) {
+                            if (fillSettings.AllResultsBytesLimit && totalSize >= *fillSettings.AllResultsBytesLimit) {
+                                result.Truncated = true;
+                                break;
+                            }
+                            if (fillSettings.RowsLimitPerWrite && totalRows >= *fillSettings.RowsLimitPerWrite) {
+                                result.Truncated = true;
+                                break;
+                            }
+                        }
+
                         data = {};
                     }
                 }
-                if (status == NDq::ERunStatus::Finished) {
+                if (status == NDq::ERunStatus::Finished || result.Truncated) {
                     break;
-                }
-                if (!fillSettings.Discard) {
-                    if (fillSettings.AllResultsBytesLimit && runner->GetOutputChannel(0)->GetPopStats().Bytes >= *fillSettings.AllResultsBytesLimit) {
-                        result.Truncated = true;
-                        break;
-                    }
-                    if (fillSettings.RowsLimitPerWrite && runner->GetOutputChannel(0)->GetPopStats().Rows >= *fillSettings.RowsLimitPerWrite) {
-                        result.Truncated = true;
-                        break;
-                    }
                 }
             }
 
-            YQL_ENSURE(status == NDq::ERunStatus::Finished || status == NDq::ERunStatus::PendingOutput);
+            YQL_ENSURE(status == NDq::ERunStatus::Finished || status == NDq::ERunStatus::PendingOutput || result.Truncated);
         }
 
         auto serializedResultType = GetSerializedResultType(lambda);
         NYql::NDqs::TProtoBuilder protoBuilder(serializedResultType, columns);
 
-        result.Data = protoBuilder.BuildYson(std::move(rows));
+        bool ysonTruncated = false;
+        result.Data = protoBuilder.BuildYson(std::move(rows), fillSettings.AllResultsBytesLimit.GetOrElse(Max<ui64>()),
+            fillSettings.RowsLimitPerWrite.GetOrElse(Max<ui64>()), &ysonTruncated);
 
+        result.Truncated = result.Truncated || ysonTruncated;
         AddCounter("LocalRun", TInstant::Now() - t);
 
         FlushStatisticsToState();
@@ -275,7 +283,7 @@ private:
 
     void AfterTypeAnnotation(TTransformationPipeline* pipeline) const final {
         // First truncate graph by calculated precomputes
-        pipeline->Add(NDqs::CreateDqsReplacePrecomputesTransformer(*pipeline->GetTypeAnnotationContext(), State_->FunctionRegistry), "ReplacePrecomputes");
+        pipeline->Add(NDqs::CreateDqsReplacePrecomputesTransformer(*pipeline->GetTypeAnnotationContext()), "ReplacePrecomputes");
 
         // Then apply provider specific transformers on truncated graph
         std::for_each(UniqIntegrations_.cbegin(), UniqIntegrations_.cend(), [&](const auto dqInt) {
@@ -305,7 +313,7 @@ private:
     std::unordered_set<IDqIntegration*> UniqIntegrations_;
 };
 
-TExprNode::TPtr DqMarkBlockStage(const TDqPhyStage& stage, TExprContext& ctx) {
+TExprNode::TPtr DqMarkBlockStage(const TDqStatePtr& state, const TPublicIds::TPtr& publicIds, const TDqPhyStage& stage, TExprContext& ctx) {
     using NDq::TDqStageSettings;
     TDqStageSettings settings = NDq::TDqStageSettings::Parse(stage);
     if (settings.BlockStatus.Defined()) {
@@ -359,7 +367,20 @@ TExprNode::TPtr DqMarkBlockStage(const TDqPhyStage& stage, TExprContext& ctx) {
         return true;
     });
 
-    YQL_CLOG(INFO, CoreDq) << "Setting block status for stage #" << settings.LogicalId << " = " << ToString(blockStatus);
+    auto publicId = publicIds->Stage2publicId.find(settings.LogicalId);
+    TString publicIdMsg;
+    if (publicId != publicIds->Stage2publicId.end()) {
+        publicIdMsg = TStringBuilder() << " (public id #" << publicId->second << ")";
+        auto p = TOperationProgress(TString(DqProviderName), publicId->second, TOperationProgress::EState::InProgress);
+        switch (blockStatus) {
+        case TDqStageSettings::EBlockStatus::None: p.BlockStatus = TOperationProgress::EOpBlockStatus::None; break;
+        case TDqStageSettings::EBlockStatus::Partial: p.BlockStatus = TOperationProgress::EOpBlockStatus::Partial; break;
+        case TDqStageSettings::EBlockStatus::Full: p.BlockStatus = TOperationProgress::EOpBlockStatus::Full; break;
+        }
+        state->ProgressWriter(p);
+    }
+
+    YQL_CLOG(INFO, CoreDq) << "Setting block status for stage #" << settings.LogicalId << publicIdMsg << " to " << ToString(blockStatus);
     return Build<TDqPhyStage>(ctx, stage.Pos())
         .InitFrom(stage)
         .Settings(settings.SetBlockStatus(blockStatus).BuildNode(ctx, stage.Settings().Pos()))
@@ -368,8 +389,9 @@ TExprNode::TPtr DqMarkBlockStage(const TDqPhyStage& stage, TExprContext& ctx) {
 
 struct TDqsFinalPipelineConfigurator : public IPipelineConfigurator {
 public:
-    explicit TDqsFinalPipelineConfigurator(const TDqStatePtr& state)
+    explicit TDqsFinalPipelineConfigurator(const TDqStatePtr& state, const TPublicIds::TPtr& publicIds)
         : State_(state)
+        , PublicIds_(publicIds)
     {
     }
 private:
@@ -384,13 +406,13 @@ private:
             "DqBuildWideBlockChannels",
             TIssuesIds::DEFAULT_ERROR);
         pipeline->Add(CreateFunctorTransformer(
-            [typeCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+            [typeCtx, state = State_, publicIds = PublicIds_](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 TOptimizeExprSettings optSettings{typeCtx.Get()};
                 optSettings.VisitLambdas = false;
-                return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+                return OptimizeExpr(input, output, [state, publicIds](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
                     TExprBase expr{node};
                     if (auto stage = expr.Maybe<TDqPhyStage>()) {
-                        return DqMarkBlockStage(stage.Cast(), ctx);
+                        return DqMarkBlockStage(state, publicIds, stage.Cast(), ctx);
                     }
                     return node;
                 }, ctx, optSettings);
@@ -399,7 +421,8 @@ private:
         "DqMarkBlockStages",
         TIssuesIds::DEFAULT_ERROR);
     }
-    TDqStatePtr State_;
+    const TDqStatePtr State_;
+    const TPublicIds::TPtr PublicIds_;
 };
 
 class TSimpleSkiffConverter : public ISkiffConverter {
@@ -884,11 +907,12 @@ private:
                 settings->_AllResultsBytesLimit = 64_MB;
             }
 
+            TPublicIds::TPtr publicIds = std::make_shared<TPublicIds>();
             int level;
             TExprNode::TPtr resInput = WrapLambdaBody(level, result.Input().Ptr(), ctx);
             {
                 auto block = MeasureBlock("PeepHole");
-                if (const auto status = PeepHole(resInput, resInput, ctx, resSettings); status.Level != TStatus::Ok) {
+                if (const auto status = PeepHole(resInput, resInput, ctx, resSettings, publicIds); status.Level != TStatus::Ok) {
                     return SyncStatus(status);
                 }
             }
@@ -903,7 +927,6 @@ private:
             TVector<TString> columns;
             GetResultType(&type, &columns, result.Ref(), result.Input().Ref());
 
-            TPublicIds::TPtr publicIds = std::make_shared<TPublicIds>();
             VisitExpr(result.Ptr(), [&](const TExprNode::TPtr& node) {
                 const TExprBase expr(node);
                 if (expr.Maybe<TResFill>()) {
@@ -963,7 +986,7 @@ private:
                 auto executionPlanner = THolder<IDqsExecutionPlanner>(
                     new TDqsSingleExecutionPlanner(
                         lambda, NActors::TActorId(),
-                        NActors::TActorId(1, 0, 1, 0), State->FunctionRegistry,
+                        NActors::TActorId(1, 0, 1, 0),
                         result.Input().Ref().GetTypeAnn()));
                 auto& tasks = executionPlanner->GetTasks();
                 Yql::DqsProto::TTaskMeta taskMeta;
@@ -1281,7 +1304,7 @@ private:
         optimizedInput->SetTypeAnn(pull.Input().Ref().GetTypeAnn());
         optimizedInput->CopyConstraints(pull.Input().Ref());
 
-        auto status = PeepHole(optimizedInput, optimizedInput, ctx, pullSettings);
+        auto status = PeepHole(optimizedInput, optimizedInput, ctx, pullSettings, publicIds);
         if (status.Level != TStatus::Ok) {
             return SyncStatus(status);
         }
@@ -1813,7 +1836,7 @@ private:
 
             auto optimizedInput = input;
             optimizedInput->SetState(TExprNode::EState::ConstrComplete);
-            auto status = PeepHole(optimizedInput, optimizedInput, ctx, providerParams);
+            auto status = PeepHole(optimizedInput, optimizedInput, ctx, providerParams, publicIds);
             if (status.Level != TStatus::Ok) {
                 return combinedStatus.Combine(status);
             }
@@ -2033,9 +2056,11 @@ private:
         return combinedStatus;
     }
 
-    IGraphTransformer::TStatus PeepHole(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx, const THashMap<TString, TString>& providerParams) const {
+    IGraphTransformer::TStatus PeepHole(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx,
+        const THashMap<TString, TString>& providerParams, const TPublicIds::TPtr& publicIds) const
+    {
         TDqsPipelineConfigurator peepholeConfig(State, providerParams);
-        TDqsFinalPipelineConfigurator finalPeepholeConfg(State);
+        TDqsFinalPipelineConfigurator finalPeepholeConfg(State, publicIds);
         TPeepholeSettings peepholeSettings;
         peepholeSettings.CommonConfig = &peepholeConfig;
         peepholeSettings.FinalConfig = &finalPeepholeConfg;

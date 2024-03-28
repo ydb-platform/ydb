@@ -271,6 +271,38 @@ enum EJobSpecSource
     JSS_AUTO = 0xFFFF;
 }
 
+enum EQueryEngine
+{
+    QE_UNKNOWN = 100;
+
+    QE_QL = 0;
+    QE_YQL = 1;
+    QE_CHYT = 2;
+    QE_MOCK = 3;
+    QE_SPYT = 4;
+}
+
+enum EContentType
+{
+    CT_RAW_INLINE_DATA = 0;
+    CT_URL = 1;
+}
+
+enum EQueryState
+{
+    QS_UNKNOWN = 100;
+
+    QS_DRAFT = 0;
+    QS_PENDING = 1;
+    QS_RUNNING = 2;
+    QS_ABORTING = 3;
+    QS_ABORTED = 4;
+    QS_COMPLETING = 5;
+    QS_COMPLETED = 6;
+    QS_FAILING = 7;
+    QS_FAILED = 8;
+}
+
 // COMPAT(max42).
 // A legacy analog of NYT.NYTree.NProto.TAttributeFilter.
 // It is different in that universal filter is encoded via all = true
@@ -591,6 +623,7 @@ message TReqSelectRows
     optional bool use_canonical_null_relations = 20;
     optional bool merge_versioned_rows = 21;
     optional int32 syntax_version = 22 [default = 1];
+    optional int32 execution_backend = 23; // EExecutionBackend
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 }
@@ -1026,11 +1059,19 @@ message TReqAddMaintenance
     required string address = 2;
     required EMaintenanceType type = 3;
     required string comment = 4;
+
+    // COMPAT(kvk1920): For compatibility with pre-24.2 RPC clients.
+    optional bool supports_per_target_response = 5 [default = false];
 }
 
 message TRspAddMaintenance
 {
-    required NYT.NProto.TGuid id = 1; // TMaintenanceId
+    // COMPAT(kvk1920): For compatibility with pre-24.2 RPC clients.
+    optional NYT.NProto.TGuid id = 1; // TMaintenanceId
+
+    // Key: component address
+    // Value: TMaintenanceId
+    map<string, NYT.NProto.TGuid> id_per_target = 2;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1043,22 +1084,35 @@ message TReqRemoveMaintenance
     optional EMaintenanceType type = 4;
     optional string user = 5;
     optional bool mine = 6 [default = false];
+
+    // COMPAT(kvk1920): Compatibility with pre-24.2 RPC clients.
+    optional bool supports_per_target_response = 7 [default = false];
 }
 
 message TRspRemoveMaintenance
 {
-    // COMPAT(kvk1920): Can be removed after all clients, proxies and masters will be updated.
+    // COMPAT(kvk1920): For compatibility with pre-23.2.
     optional int32 ban = 1;
     optional int32 decommission = 2;
     optional int32 disable_scheduler_jobs = 3;
     optional int32 disable_write_sessions = 4;
     optional int32 disable_tablet_cells = 5;
-
-    // COMPAT(kvk1920)
+    optional int32 pending_restart = 8;
     optional bool use_map_instead_of_fields = 6 [default = false];
+
+    // COMPAT(kvk1920): For compatibility with pre-24.2 RPC clients.
     map<int32, int32> removed_maintenance_counts = 7; // Key: EMaintenanceType
 
-    optional int32 pending_restart = 8;
+    // COMPAT(kvk1920): For compatibility with pre-24.2 RPC proxies.
+    optional bool supports_per_target_response = 9 [default = false];
+
+    message TMaintenanceCounts
+    {
+        map<int32, int32> counts = 1; // Key: EMaintenanceType
+    }
+
+    // Key: component address
+    map<string, TMaintenanceCounts> removed_maintenance_counts_per_target = 10;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1357,6 +1411,7 @@ message TReqCreateTableBackup
     required uint64 checkpoint_check_period = 3;
     required uint64 checkpoint_check_timeout = 4;
     required bool force = 5;
+    required bool preserve_account = 6;
 }
 
 message TRspCreateTableBackup
@@ -1371,6 +1426,7 @@ message TReqRestoreTableBackup
     required bool force = 2;
     required bool mount = 3;
     required bool enable_replicas = 4;
+    required bool preserve_account = 5;
 }
 
 message TRspRestoreTableBackup
@@ -3000,4 +3056,175 @@ message TCheckPermissionByAclResult
     required NYT.NProto.TGuid subject_id = 2;
     optional string subject_name = 3;
     repeated string missing_subjects = 4;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Query Tracker
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqStartQuery
+{
+    message TQueryFile
+    {
+        required string name = 1;
+        required string content = 2;
+        required EContentType type = 3;
+    }
+
+    required string query_tracker_stage = 1;
+    required EQueryEngine engine = 2;
+    required string query = 3;
+    optional bytes settings = 4; // YSON
+    optional bool draft = 5;
+    optional bytes annotations = 6; // YSON
+    repeated TQueryFile files = 7;
+    optional string access_control_object = 8;
+}
+
+message TRspStartQuery
+{
+    optional NYT.NProto.TGuid query_id = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqAbortQuery
+{
+    required string query_tracker_stage = 1;
+    required NYT.NProto.TGuid query_id = 2;
+    optional string abort_message = 3;
+}
+
+message TRspAbortQuery
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqGetQueryResult
+{
+    required string query_tracker_stage = 1;
+    required NYT.NProto.TGuid query_id = 2;
+    required int64 result_index = 3;
+}
+
+message TRspGetQueryResult
+{
+    required NYT.NProto.TGuid query_id = 1;
+    required int64 result_index = 2;
+    optional NYT.NProto.TError error = 3;
+    optional TTableSchema schema = 4;
+    required NYT.NChunkClient.NProto.TDataStatistics data_statistics = 5;
+    required bool is_truncated = 6;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqReadQueryResult
+{
+    message TColumns
+    {
+        repeated string items = 1;
+    }
+
+    required string query_tracker_stage = 1;
+    required NYT.NProto.TGuid query_id = 2;
+    required int64 result_index = 3;
+    optional TColumns columns = 4;
+    optional int64 lower_row_index = 5;
+    optional int64 upper_row_index = 6;
+}
+
+message TRspReadQueryResult
+{
+    required TRowsetDescriptor rowset_descriptor = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TQuery
+{
+    required NYT.NProto.TGuid id = 1;
+    optional EQueryEngine engine = 2;
+    optional string query = 3;
+    optional bytes files = 4; // YSON
+    optional uint64 start_time = 5; // TInstant
+    optional uint64 finish_time = 6; // TInstant
+    optional bytes settings = 7; // YSON
+    optional string user = 8;
+    optional string access_control_object = 9;
+    optional EQueryState state = 10;
+    optional int64 result_count = 11;
+    optional bytes progress = 12; // YSON
+    optional NYT.NProto.TError error = 13;
+    optional bytes annotations = 14; // YSON
+    optional NYT.NYTree.NProto.TAttributeDictionary other_attributes = 15;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqGetQuery
+{
+    required string query_tracker_stage = 1;
+    required NYT.NProto.TGuid query_id = 2;
+    optional NYT.NYTree.NProto.TAttributeFilter attributes = 3;
+    optional uint64 timestamp = 4;
+}
+
+message TRspGetQuery
+{
+    optional TQuery query = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqListQueries
+{
+    required string query_tracker_stage = 1;
+    optional uint64 from_time = 2; // TInstant
+    optional uint64 to_time = 3; // TInstant
+    optional uint64 cursor_time = 4; // TInstant
+    optional EOperationSortDirection cursor_direction = 5 [default = OSD_PAST];
+    optional string user_filter = 6;
+    optional EQueryState state_filter = 7;
+    optional EQueryEngine engine_filter = 8;
+    optional string substr_filter = 9;
+    optional uint64 limit = 10 [default = 100];
+    optional NYT.NYTree.NProto.TAttributeFilter attributes = 11;
+}
+
+message TRspListQueries
+{
+    repeated TQuery queries = 1;
+    required bool incomplete = 2;
+    required uint64 timestamp = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqAlterQuery
+{
+    required string query_tracker_stage = 1;
+    required NYT.NProto.TGuid query_id = 2;
+    optional bytes annotations = 3; // YSON
+    optional string access_control_object = 4;
+}
+
+message TRspAlterQuery
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqGetQueryTrackerInfo
+{
+    required string query_tracker_stage = 1;
+    optional NYT.NYTree.NProto.TAttributeFilter attributes = 2;
+}
+
+message TRspGetQueryTrackerInfo
+{
+    required string cluster_name = 1;
+    required bytes supported_features = 2; // YSON
+    repeated string access_control_objects = 3;
 }

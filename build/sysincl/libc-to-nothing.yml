@@ -10,6 +10,7 @@
   - arpa/telnet.h
   - arpa/tftp.h
   - assert.h
+  - bits/alltypes.h # not libc, but similar
   - byteswap.h
   - cpio.h
   - crypt.h

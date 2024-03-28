@@ -46,8 +46,8 @@ namespace {
         return a.GetStep() < b.Step || (a.GetStep() == b.Step && a.GetTxId() < b.TxId);
     }
 
-    bool IsLessEqual(const TOperation& a, const TRowVersion& b) {
-        return a.GetStep() < b.Step || (a.GetStep() == b.Step && a.GetTxId() <= b.TxId);
+    bool IsEqual(const TOperation& a, const TRowVersion& b) {
+        return a.GetStep() == b.Step && a.GetTxId() == b.TxId;
     }
 }
 
@@ -673,11 +673,13 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
 
                     if (lock) {
                         lock->SetLastOpId(op->GetTxId());
-                        if (locksCache.Locks.contains(lockTxId) && lock->IsPersistent()) {
+                        if (locksCache.Locks.contains(lockTxId) && lock->IsPersistent() && !lock->IsFrozen()) {
                             // This lock was cached before, and since we know
                             // it's persistent, we know it was also frozen
                             // during that lock caching. Restore the frozen
                             // flag for this lock.
+                            // Note: this code path is only for older shards
+                            // which didn't persist the frozen flag.
                             lock->SetFrozen();
                         }
                     }
@@ -797,8 +799,10 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
         Y_ABORT_UNLESS(!conflict.IsImmediate());
         if (snapshot.IsMax()) {
             conflict.AddImmediateConflict(op);
-        } else if (snapshotRepeatable ? IsLessEqual(conflict, snapshot) : IsLess(conflict, snapshot)) {
+        } else if (IsLess(conflict, snapshot)) {
             op->AddDependency(&conflict);
+        } else if (IsEqual(conflict, snapshot)) {
+            op->AddRepeatableReadConflict(&conflict);
         }
     };
 

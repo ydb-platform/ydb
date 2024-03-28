@@ -339,9 +339,6 @@ private:
 
         ~TCallHandler()
         {
-            if (ReplyBus_) {
-                ReplyBus_->Terminate(TError(NYT::EErrorCode::Canceled, "GRPC call completed"));
-            }
             Owner_->OnCallHandlerDestroyed();
         }
 
@@ -923,18 +920,6 @@ private:
                 return;
             }
 
-            TMessageWithAttachments messageWithAttachments;
-            try {
-                messageWithAttachments = ByteBufferToMessageWithAttachments(
-                    RequestBodyBuffer_.Unwrap(),
-                    RequestMessageBodySize_);
-            } catch (const std::exception& ex) {
-                YT_LOG_DEBUG(ex, "Failed to receive request body (RequestId: %v)",
-                    RequestId_);
-                Unref();
-                return;
-            }
-
             auto header = std::make_unique<NRpc::NProto::TRequestHeader>();
             ToProto(header->mutable_request_id(), RequestId_);
             if (User_) {
@@ -967,6 +952,19 @@ private:
             }
             if (CustomMetadataExt_) {
                 *header->MutableExtension(NRpc::NProto::TCustomMetadataExt::custom_metadata_ext) = std::move(*CustomMetadataExt_);
+            }
+
+            TMessageWithAttachments messageWithAttachments;
+            try {
+                messageWithAttachments = ByteBufferToMessageWithAttachments(
+                    RequestBodyBuffer_.Unwrap(),
+                    RequestMessageBodySize_,
+                    !header->has_request_codec());
+            } catch (const std::exception& ex) {
+                YT_LOG_DEBUG(ex, "Failed to receive request body (RequestId: %v)",
+                    RequestId_);
+                Unref();
+                return;
             }
 
             {

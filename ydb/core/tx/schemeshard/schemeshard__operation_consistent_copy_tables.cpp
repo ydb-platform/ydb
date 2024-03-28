@@ -115,13 +115,33 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
         TPath dstPath = TPath::Resolve(dstStr, context.SS);
         TPath dstParentPath = dstPath.Parent();
 
+        THashSet<TString> sequences;
+        for (const auto& child: srcPath.Base()->GetChildren()) {
+            auto name = child.first;
+            auto pathId = child.second;
+
+            TPath childPath = srcPath.Child(name);
+            if (!childPath.IsSequence() || childPath.IsDeleted()) {
+                continue;
+            }
+
+            Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
+
+            TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
+            const auto& sequenceDesc = sequenceInfo->Description;
+            const auto& sequenceName = sequenceDesc.GetName();
+
+            sequences.emplace(sequenceName);
+        }
+
         result.push_back(CreateCopyTable(NextPartId(nextId, result),
-            CopyTableTask(srcPath, dstPath, descr.GetOmitFollowers(), descr.GetIsBackup())));
+            CopyTableTask(srcPath, dstPath, descr.GetOmitFollowers(), descr.GetIsBackup()), sequences));
 
         if (descr.GetOmitIndexes()) {
             continue;
         }
 
+        TVector<NKikimrSchemeOp::TSequenceDescription> sequenceDescriptions;
         for (const auto& child: srcPath.Base()->GetChildren()) {
             const auto& name = child.first;
             const auto& pathId = child.second;
@@ -130,6 +150,13 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
             TPath dstIndexPath = dstPath.Child(name);
 
             if (srcIndexPath.IsDeleted()) {
+                continue;
+            }
+
+            if (srcIndexPath.IsSequence()) {
+                TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
+                const auto& sequenceDesc = sequenceInfo->Description;
+                sequenceDescriptions.push_back(sequenceDesc);
                 continue;
             }
 
@@ -150,6 +177,17 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
 
             result.push_back(CreateCopyTable(NextPartId(nextId, result),
                 CopyTableTask(srcImplTable, dstImplTable, descr.GetOmitFollowers(), descr.GetIsBackup())));
+        }
+
+        for (auto&& sequenceDescription : sequenceDescriptions) {
+            auto scheme = TransactionTemplate(
+                dstPath.PathString(),
+                NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
+            scheme.SetFailOnExist(true);
+
+            *scheme.MutableSequence() = std::move(sequenceDescription);
+
+            result.push_back(CreateNewSequence(NextPartId(nextId, result), scheme));
         }
     }
 

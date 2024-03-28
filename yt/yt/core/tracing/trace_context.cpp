@@ -78,22 +78,22 @@ void SetGlobalTracer(const ITracerPtr& tracer)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TTracingConfigSingleton
+struct TTracingConfigStorage
 {
-    TAtomicIntrusivePtr<TTracingConfig> Config{New<TTracingConfig>()};
+    TAtomicIntrusivePtr<TTracingTransportConfig> Config{New<TTracingTransportConfig>()};
 };
 
-static TTracingConfigSingleton* GlobalTracingConfig()
+static TTracingConfigStorage* GlobalTracingConfig()
 {
-    return LeakySingleton<TTracingConfigSingleton>();
+    return LeakySingleton<TTracingConfigStorage>();
 }
 
-void SetTracingConfig(TTracingConfigPtr config)
+void SetTracingTransportConfig(TTracingTransportConfigPtr config)
 {
     GlobalTracingConfig()->Config.Store(std::move(config));
 }
 
-TTracingConfigPtr GetTracingConfig()
+TTracingTransportConfigPtr GetTracingTransportConfig()
 {
     return GlobalTracingConfig()->Config.Acquire();
 }
@@ -627,7 +627,7 @@ void ToProto(NProto::TTracingExt* ext, const TTraceContextPtr& context)
     if (auto endpoint = context->GetTargetEndpoint()){
         ext->set_target_endpoint(endpoint.value());
     }
-    if (GetTracingConfig()->SendBaggage) {
+    if (GetTracingTransportConfig()->SendBaggage) {
         if (auto baggage = context->GetBaggage()) {
             ext->set_baggage(baggage.ToString());
         }
@@ -691,7 +691,7 @@ TTraceContextPtr TTraceContext::NewChildFromRpc(
         traceContext->SetBaggage(TYsonString(ext.baggage()));
     }
     if (ext.has_target_endpoint()) {
-        traceContext->SetTargetEndpoint(ext.target_endpoint());
+        traceContext->SetTargetEndpoint(FromProto<TString>(ext.target_endpoint()));
     }
     return traceContext;
 }

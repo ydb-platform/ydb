@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/misc/parser_helpers.h>
 
+#include <library/cpp/yt/misc/optional.h>
+
 #include <optional>
 
 namespace NYT::NYson {
@@ -252,7 +254,7 @@ auto TYsonPullParser::ParseItem() -> std::conditional_t<IsOptional, bool, void>
             }
         }
 
-        ThrowUnexpectedTokenException("item", *this, item, ItemType, /* isOptional */ true);
+        ThrowUnexpectedTokenException("item", *this, item, ItemType, /*isOptional*/ true);
     };
 
     auto result = parse();

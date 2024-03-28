@@ -1,10 +1,8 @@
 import os
 import shutil
 
-from six import iteritems
-
 from .lockfile import PnpmLockfile
-from .utils import build_lockfile_path, build_ws_config_path
+from .utils import build_lockfile_path, build_pre_lockfile_path, build_ws_config_path
 from .workspace import PnpmWorkspace
 from ..base import BasePackageManager, PackageManagerError
 from ..base.constants import NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
@@ -35,6 +33,10 @@ class PnpmPackageManager(BasePackageManager):
         """
         return cls.load_lockfile(build_lockfile_path(dir_path))
 
+    @staticmethod
+    def get_local_pnpm_store():
+        return os.path.join(home_dir(), ".cache", "pnpm-store")
+
     def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False):
         """
         Creates node_modules directory according to the lockfile.
@@ -48,7 +50,7 @@ class PnpmPackageManager(BasePackageManager):
         # Local mode optimizations (run from the `ya tool nots`)
         if local_cli:
             # Use single CAS for all the projects built locally
-            store_dir = os.path.join(home_dir(), ".cache", "pnpm-store")
+            store_dir = self.get_local_pnpm_store()
             # It's a default value of pnpm itself. But it should be defined explicitly for not using values from the lockfiles or from the previous installations.
             virtual_store_dir = self._nm_path('.pnpm')
 
@@ -59,6 +61,7 @@ class PnpmPackageManager(BasePackageManager):
             "--ignore-scripts",
             "--no-verify-store-integrity",
             "--offline",
+            "--config.confirmModulesPurge=false",  # hack for https://st.yandex-team.ru/FBP-1295
             "--package-import-method",
             "hardlink",
             # "--registry" will be set later inside self._exec_command()
@@ -68,11 +71,6 @@ class PnpmPackageManager(BasePackageManager):
             "--virtual-store-dir",
             virtual_store_dir,
         ]
-
-        lockfile_version = self.load_lockfile_from_dir(self.sources_path).data["lockfileVersion"]
-        if lockfile_version == '6.0':
-            install_cmd.append("--use-lockfile-v6")
-            os.environ['npm_config_auto_install_peers'] = 'true'
 
         self._exec_command(install_cmd)
 
@@ -87,69 +85,54 @@ class PnpmPackageManager(BasePackageManager):
                 bundle_path=os.path.join(self.build_path, NODE_MODULES_WORKSPACE_BUNDLE_FILENAME),
             )
 
+    # TODO: FBP-1254
+    # def calc_prepare_deps_inouts(self, store_path: str, has_deps: bool) -> (list[str], list[str]):
+    def calc_prepare_deps_inouts(self, store_path, has_deps):
+        ins = [
+            s_rooted(build_pj_path(self.module_path)),
+            s_rooted(build_lockfile_path(self.module_path)),
+        ]
+        outs = [
+            b_rooted(build_ws_config_path(self.module_path)),
+            b_rooted(build_pre_lockfile_path(self.module_path)),
+        ]
+
+        if has_deps:
+            for dep_path in self.get_local_peers_from_package_json():
+                ins.append(b_rooted(build_ws_config_path(dep_path)))
+                ins.append(b_rooted(build_pre_lockfile_path(dep_path)))
+
+            for pkg in self.extract_packages_meta_from_lockfiles([build_lockfile_path(self.sources_path)]):
+                ins.append(b_rooted(self._contrib_tarball_path(pkg)))
+                outs.append(b_rooted(self._tarballs_store_path(pkg, store_path)))
+
+        return ins, outs
+
+    # TODO: FBP-1254
+    # def calc_node_modules_inouts(self, local_cli=False) -> (list[str], list[str]):
     def calc_node_modules_inouts(self, local_cli=False):
         """
         Returns input and output paths for command that creates `node_modules` bundle.
-        Errors: errors caught while processing lockfiles
+        It relies on .PEERDIRSELF=TS_PREPARE_DEPS
         Inputs:
-            - source package.json and lockfile,
-            - built package.jsons of all deps,
-            - merged lockfiles and workspace configs of direct non-leave deps,
-            - tarballs.
+            - source package.json
+            - merged lockfiles and workspace configs of TS_PREPARE_DEPS
         Outputs:
-            - merged lockfile,
-            - generated workspace config,
-            - created node_modules bundle.
-        :rtype: (list of errors, list of str, list of str)
+            - created node_modules bundle
         """
-        ins = [
-            s_rooted(build_pj_path(self.module_path)),
-        ]
+        ins = [s_rooted(build_pj_path(self.module_path))]
         outs = []
 
         pj = self.load_package_json_from_dir(self.sources_path)
         if pj.has_dependencies():
-            ins.extend(
-                [
-                    s_rooted(build_lockfile_path(self.module_path)),
-                ]
-            )
-            outs.extend(
-                [
-                    b_rooted(build_lockfile_path(self.module_path)),
-                    b_rooted(build_ws_config_path(self.module_path)),
-                ]
-            )
+            ins.append(b_rooted(build_pre_lockfile_path(self.module_path)))
+            ins.append(b_rooted(build_ws_config_path(self.module_path)))
             if not local_cli:
-                outs.extend([b_rooted(build_nm_bundle_path(self.module_path))])
+                outs.append(b_rooted(build_nm_bundle_path(self.module_path)))
+            for dep_path in self.get_local_peers_from_package_json():
+                ins.append(b_rooted(build_pj_path(dep_path)))
 
-        # Source lockfiles are used only to get tarballs info.
-        src_lf_paths = [build_lockfile_path(self.sources_path)]
-
-        for [dep_src_path, (_, depth)] in iteritems(pj.get_workspace_map(ignore_self=True)):
-            dep_mod_path = dep_src_path[len(self.sources_root) + 1:]
-            # pnpm requires all package.jsons.
-            ins.append(b_rooted(build_pj_path(dep_mod_path)))
-
-            dep_lf_src_path = build_lockfile_path(dep_src_path)
-            if not os.path.isfile(dep_lf_src_path):
-                # It is ok for leaves.
-                continue
-            src_lf_paths.append(dep_lf_src_path)
-
-            if depth == 1:
-                ins.append(b_rooted(build_ws_config_path(dep_mod_path)))
-                ins.append(b_rooted(build_lockfile_path(dep_mod_path)))
-
-        errors = []
-        try:
-            for pkg in self.extract_packages_meta_from_lockfiles(src_lf_paths):
-                ins.append(b_rooted(self._contrib_tarball_path(pkg)))
-        except Exception as e:
-            errors.append(e)
-            pass
-
-        return errors, ins, outs
+        return ins, outs
 
     def extract_packages_meta_from_lockfiles(self, lf_paths):
         """
@@ -172,6 +155,13 @@ class PnpmPackageManager(BasePackageManager):
             raise PackageManagerError("Unable to process some lockfiles:\n{}".format("\n".join(errors)))
 
     def _prepare_workspace(self):
+        lf = self.load_lockfile(build_pre_lockfile_path(self.build_path))
+        lf.update_tarball_resolutions(lambda p: "file:" + os.path.join(self.build_root, p.tarball_url))
+        lf.write(build_lockfile_path(self.build_path))
+
+        return PnpmWorkspace.load(build_ws_config_path(self.build_path))
+
+    def build_workspace(self, tarballs_store):
         """
         :rtype: PnpmWorkspace
         """
@@ -182,7 +172,7 @@ class PnpmPackageManager(BasePackageManager):
 
         dep_paths = ws.get_paths(ignore_self=True)
         self._build_merged_workspace_config(ws, dep_paths)
-        self._build_merged_lockfile(dep_paths)
+        self._build_merged_pre_lockfile(tarballs_store, dep_paths)
 
         return ws
 
@@ -200,21 +190,21 @@ class PnpmPackageManager(BasePackageManager):
 
         return pj
 
-    def _build_merged_lockfile(self, dep_paths):
+    def _build_merged_pre_lockfile(self, tarballs_store, dep_paths):
         """
         :type dep_paths: list of str
         :rtype: PnpmLockfile
         """
         lf = self.load_lockfile_from_dir(self.sources_path)
         # Change to the output path for correct path calcs on merging.
-        lf.path = build_lockfile_path(self.build_path)
+        lf.path = build_pre_lockfile_path(self.build_path)
+        lf.update_tarball_resolutions(lambda p: self._tarballs_store_path(p, tarballs_store))
 
         for dep_path in dep_paths:
-            lf_path = build_lockfile_path(dep_path)
-            if os.path.isfile(lf_path):
-                lf.merge(self.load_lockfile(lf_path))
+            pre_lf_path = build_pre_lockfile_path(dep_path)
+            if os.path.isfile(pre_lf_path):
+                lf.merge(self.load_lockfile(pre_lf_path))
 
-        lf.update_tarball_resolutions(lambda p: self._contrib_tarball_url(p))
         lf.write()
 
     def _build_merged_workspace_config(self, ws, dep_paths):

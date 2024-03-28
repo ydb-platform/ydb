@@ -18,11 +18,11 @@ namespace NFwd {
         {
             out
                 << "TFwd{"
-                << Fetch << "b"
-                << " > " << Saved << "b"
-                << " > " << Usage << "b"
-                << " +" << After << "b"
-                << " ~" << Before << "b"
+                << "fetch=" << Fetch
+                << ",saved=" << Saved
+                << ",usage=" << Usage
+                << ",after=" << After
+                << ",before=" << Before
                 << "}";
         }
 
@@ -36,6 +36,8 @@ namespace NFwd {
 
             return *this;
         }
+
+        auto operator<=>(const TStat&) const = default;
 
         ui64 Fetch = 0;     /* Requested to load by cache       */
         ui64 Saved = 0;     /* Obtained by cache with DoSave()  */

@@ -24,12 +24,12 @@ using TRow = TKvWorkloadGenerator::TRow;
 // Note: there is no mechanism to update row values for now so all keys should be different
 struct TRowsVerifyer {
     TRowsVerifyer(size_t capacity = 10000)
-        : Capacity(capacity) 
+        : Capacity(capacity)
     {
         Rows.reserve(Capacity);
     }
 
-    void TryInsert(TRow row) {        
+    void TryInsert(TRow row) {
         std::unique_lock<std::mutex> lock(Mutex, std::try_to_lock);
         if (!lock.owns_lock()) {
             return;
@@ -43,7 +43,7 @@ struct TRowsVerifyer {
         Rows[RandomNumber<size_t>(Rows.size())] = row;
     }
 
-    std::optional<TRow> GetRandom() {        
+    std::optional<TRow> GetRandom() {
         std::unique_lock<std::mutex> lock(Mutex, std::try_to_lock);
         if (!lock.owns_lock()) {
             return { };
@@ -75,13 +75,20 @@ void AddResultSet(const NYdb::TResultSet& resultSet, TVector<TRow>& rows) {
     NYdb::TResultSetParser parser(resultSet);
     while (parser.TryNextRow()) {
         TRow row;
-        
+
         for (size_t col = 0; col < parser.ColumnsCount(); col++) {
             auto& valueParser = parser.ColumnParser(col);
+            bool optional = valueParser.GetKind() == NYdb::TTypeParser::ETypeKind::Optional; 
+            if (optional) {
+                valueParser.OpenOptional();
+            }
             if (valueParser.GetPrimitiveType() == NYdb::EPrimitiveType::Uint64) {
                 row.Ints.push_back(valueParser.GetUint64());
             } else {
                 row.Strings.push_back(valueParser.GetString());
+            }
+            if (optional) {
+                valueParser.CloseOptional();
             }
         }
 
@@ -101,7 +108,7 @@ void VerifyRows(const TRow& checkRow, const TVector<TRow>& readRows, TString mes
 
     if (readRows.size() > 1) {
         Cerr << "Expected to have " << checkRow.ToString()
-            << " but got " << readRows.size() << " rows " 
+            << " but got " << readRows.size() << " rows "
             << message
             << Endl;
 
@@ -147,9 +154,9 @@ std::string TKvWorkloadGenerator::GetDDLQueries() const {
 
     for (size_t i = 0; i < Params.ColumnsCnt; ++i) {
         if (i < Params.IntColumnsCnt) {
-            ss << "c" << i << " Uint64 NOT NULL, ";
+            ss << "c" << i << " Uint64, ";
         } else {
-            ss << "c" << i << " String NOT NULL, ";
+            ss << "c" << i << " String, ";
         }
     }
 
@@ -388,9 +395,9 @@ TQueryInfoList TKvWorkloadGenerator::Mixed() {
             if (Params.MixedDoReadRows) doReadRows = true;
             if (Params.MixedDoSelect) doSelect = true;
         } else {
-            if (RandomNumber<ui32>(2) == 0) 
-                doReadRows = true; 
-            else 
+            if (RandomNumber<ui32>(2) == 0)
+                doReadRows = true;
+            else
                 doSelect = true;
         }
         Y_ABORT_UNLESS(doReadRows ^ doSelect);
@@ -417,7 +424,7 @@ TQueryInfoList TKvWorkloadGenerator::Mixed() {
             }
 
             return selectQuery;
-        } 
+        }
         if (doReadRows) {
             auto readRowsQuery = ReadRows(std::move(rows));
 
@@ -453,7 +460,7 @@ TQueryInfoList TKvWorkloadGenerator::GetInitialData() {
 }
 
 TVector<std::string> TKvWorkloadGenerator::GetCleanPaths() const {
-    return { Params.TableName };
+    return { Params.DbPath + "/" + Params.TableName };
 }
 
 TVector<TRow> TKvWorkloadGenerator::GenerateRandomRows(bool randomValues) {
@@ -495,6 +502,8 @@ void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandTy
             .DefaultValue((ui64)KvWorkloadConstants::INIT_ROW_COUNT).StoreResult(&InitRowCount);
         opts.AddLongOption("min-partitions", "Minimum partitions for tables.")
             .DefaultValue((ui64)KvWorkloadConstants::MIN_PARTITIONS).StoreResult(&MinPartitions);
+        opts.AddLongOption("max-partitions", "Maximum partitions for tables.")
+            .DefaultValue((ui64)KvWorkloadConstants::MAX_PARTITIONS).StoreResult(&MaxPartitions);
         opts.AddLongOption("partition-size", "Maximum partition size in megabytes (AUTO_PARTITIONING_PARTITION_SIZE_MB).")
             .DefaultValue((ui64)KvWorkloadConstants::PARTITION_SIZE_MB).StoreResult(&PartitionSizeMb);
         opts.AddLongOption("auto-partition", "Enable auto partitioning by load.")

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       tuklib_integer.h
@@ -36,9 +38,6 @@
 //
 //  Authors:    Lasse Collin
 //              Joachim Henke
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -90,7 +89,7 @@
 
 #elif defined(HAVE_SYS_BYTEORDER_H)
 	// Solaris
-#	include <sys/byteorder.h>
+#	error #include <sys/byteorder.h>
 #	ifdef BSWAP_16
 #		define bswap16(num) BSWAP_16(num)
 #	endif

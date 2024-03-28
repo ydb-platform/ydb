@@ -71,7 +71,8 @@ namespace NSQLTranslationV1 {
         virtual bool IsStream() const;
         virtual EOrderKind GetOrderKind() const;
         virtual TWriteSettings GetWriteSettings() const;
-        virtual bool SetSamplingOptions(TContext& ctx, TPosition pos, ESampleMode mode, TNodePtr samplingRate, TNodePtr samplingSeed);
+        TNodePtr PrepareSamplingRate(TPosition pos, ESampleClause clause, TNodePtr samplingRate);
+        virtual bool SetSamplingOptions(TContext& ctx, TPosition pos, ESampleClause clause, ESampleMode mode, TNodePtr samplingRate, TNodePtr samplingSeed);
         virtual bool SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints);
         virtual bool CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const;
         virtual TNodePtr BuildFilter(TContext& ctx, const TString& label);
@@ -86,7 +87,7 @@ namespace NSQLTranslationV1 {
         virtual TNodePtr BuildSort(TContext& ctx, const TString& label);
         virtual TNodePtr BuildCleanupColumns(TContext& ctx, const TString& label);
         virtual bool BuildSamplingLambda(TNodePtr& node);
-        virtual bool SetSamplingRate(TContext& ctx, TNodePtr samplingRate);
+        virtual bool SetSamplingRate(TContext& ctx, ESampleClause clause, TNodePtr samplingRate);
         virtual IJoin* GetJoin();
         virtual ISource* GetCompositeSource();
         virtual bool IsSelect() const;
@@ -161,7 +162,12 @@ namespace NSQLTranslationV1 {
     }
 
     struct TJoinLinkSettings {
-        bool ForceSortedMerge = false;
+        enum class EStrategy {
+            Default,
+            SortedMerge,
+            StreamLookup
+        };
+        EStrategy Strategy = EStrategy::Default;
     };
 
     class IJoin: public ISource {
@@ -295,7 +301,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildTopicKey(TPosition pos, const TDeferredAtom& cluster, const TDeferredAtom& name);
     TNodePtr BuildInputOptions(TPosition pos, const TTableHints& hints);
     TNodePtr BuildInputTables(TPosition pos, const TTableList& tables, bool inSubquery, TScopedStatePtr scoped);
-    TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TScopedStatePtr scoped);
+    TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TSourcePtr source, TScopedStatePtr scoped);
     TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped);
     TNodePtr BuildDropTable(TPosition pos, const TTableRef& table, bool missingOk, ETableType tableType, TScopedStatePtr scoped);
     TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, TNodePtr options,

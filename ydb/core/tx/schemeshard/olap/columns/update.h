@@ -14,9 +14,13 @@ private:
     YDB_READONLY_DEF(TString, Name);
     YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
     YDB_READONLY_DEF(NArrow::NDictionary::TEncodingDiff, DictionaryEncoding);
+    YDB_READONLY_DEF(std::optional<TString>, StorageId);
 public:
     bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors) {
         Name = columnSchema.GetName();
+        if (!!columnSchema.GetStorageId()) {
+            StorageId = columnSchema.GetStorageId();
+        }
         if (!Name) {
             errors.AddError("empty field name");
             return false;
@@ -41,6 +45,7 @@ private:
     YDB_READONLY_DEF(TString, Name);
     YDB_READONLY_DEF(TString, TypeName);
     YDB_READONLY_DEF(NScheme::TTypeInfo, Type);
+    YDB_READONLY_DEF(TString, StorageId);
     YDB_FLAG_ACCESSOR(NotNull, false);
     YDB_READONLY_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, Serializer);
     YDB_READONLY_DEF(std::optional<NArrow::NDictionary::TEncodingSettings>, DictionaryEncoding);

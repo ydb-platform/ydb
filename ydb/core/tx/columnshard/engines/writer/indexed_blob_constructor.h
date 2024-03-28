@@ -57,7 +57,7 @@ public:
     bool AddData(TWideSerializedBatch& batch) {
         if (BlobData.size() + batch.GetSplittedBlobs().GetSize() < 8 * 1024 * 1024) {
             Ranges.emplace_back(&batch);
-            batch.SetRange(TBlobRange(TUnifiedBlobId(0, 0, 0, 0, BlobData.size() + batch.GetSplittedBlobs().GetSize()), BlobData.size(), batch.GetSplittedBlobs().GetSize()));
+            batch.SetRange(TBlobRange(TUnifiedBlobId(0, 0, 0, 0, 0, 0, BlobData.size() + batch.GetSplittedBlobs().GetSize()), BlobData.size(), batch.GetSplittedBlobs().GetSize()));
             BlobData += batch.GetSplittedBlobs().GetData();
             return true;
         } else {
@@ -136,7 +136,7 @@ public:
                         if (!DeclareRemoveAction) {
                             DeclareRemoveAction = bOperator->StartDeclareRemovingAction("WRITING_BUFFER");
                         }
-                        DeclareRemoveAction->DeclareRemove(s.GetRange().BlobId);
+                        DeclareRemoveAction->DeclareRemove(bOperator->GetSelfTabletId(), s.GetRange().BlobId);
                     }
                 }
                 Aggregations.erase(Aggregations.begin() + i);

@@ -17,7 +17,6 @@
 #include <library/cpp/yt/misc/cast.h>
 
 #include <optional>
-#include <numeric>
 
 namespace NYT::NYTree {
 
@@ -280,7 +279,7 @@ void WriteYson(
     NYson::EYsonFormat format,
     int indent)
 {
-    NYson::TYsonWriter writer(output, format, type, /* enableRaw */ false, indent);
+    NYson::TYsonWriter writer(output, format, type, /*enableRaw*/ false, indent);
     Serialize(value, &writer);
 }
 
@@ -373,14 +372,14 @@ void Serialize(const TCompactVector<T, N>& items, NYson::IYsonConsumer* consumer
 
 // RepeatedPtrField
 template <class T>
-void Serialize(const NProtoBuf::RepeatedPtrField<T>& items, NYson::IYsonConsumer* consumer)
+void Serialize(const google::protobuf::RepeatedPtrField<T>& items, NYson::IYsonConsumer* consumer)
 {
     NDetail::SerializeVector(items, consumer);
 }
 
 // RepeatedField
 template <class T>
-void Serialize(const NProtoBuf::RepeatedField<T>& items, NYson::IYsonConsumer* consumer)
+void Serialize(const google::protobuf::RepeatedField<T>& items, NYson::IYsonConsumer* consumer)
 {
     NDetail::SerializeVector(items, consumer);
 }

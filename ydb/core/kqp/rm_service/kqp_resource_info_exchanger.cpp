@@ -170,7 +170,7 @@ private:
         BoardState.Subscriber = TActorId();
 
         auto subscriber = CreateBoardLookupActor(
-            BoardState.Path, SelfId(), BoardState.StateStorageGroupId, EBoardLookupMode::Subscription,
+            BoardState.Path, SelfId(), EBoardLookupMode::Subscription,
             SubscriberSettings);
         BoardState.Subscriber = Register(subscriber);
 
@@ -186,7 +186,7 @@ private:
         BoardState.Publisher = TActorId();
 
         auto publisher = CreateBoardPublishActor(BoardState.Path, SelfInfo, SelfId(),
-            BoardState.StateStorageGroupId, /* ttlMs */ 0, /* reg */ true, PublisherSettings);
+            /* ttlMs */ 0, /* reg */ true, PublisherSettings);
         BoardState.Publisher = Register(publisher);
 
         auto& nodeState = NodesState[SelfId().NodeId()];
@@ -435,13 +435,7 @@ private:
         BoardState.Tenant = tenant;
         BoardState.Path = MakeKqpInfoExchangerBoardPath(tenant);
 
-        if (auto* domainInfo = AppData()->DomainsInfo->GetDomainByName(ExtractDomain(tenant))) {
-            BoardState.StateStorageGroupId = domainInfo->DefaultStateStorageGroup;
-        } else {
-            BoardState.StateStorageGroupId = std::numeric_limits<ui32>::max();
-        }
-
-        if (BoardState.StateStorageGroupId == std::numeric_limits<ui32>::max()) {
+        if (auto *domain = AppData()->DomainsInfo->GetDomain(); domain->Name != ExtractDomain(tenant)) {
             LOG_E("Can not find default state storage group for database " << BoardState.Tenant);
             return;
         }
@@ -468,23 +462,20 @@ private:
         CreateSubscriber();
 
         LOG_I("Received tenant pool status for exchanger, serving tenant: " << BoardState.Tenant
-            << ", board: " << BoardState.Path
-            << ", ssGroupId: " << BoardState.StateStorageGroupId);
+            << ", board: " << BoardState.Path);
     }
 
 
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
         if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable) {
             LOG_I("Subcriber is not available for info exchanger, serving tenant: " << BoardState.Tenant
-                << ", board: " << BoardState.Path
-                << ", ssGroupId: " << BoardState.StateStorageGroupId);
+                << ", board: " << BoardState.Path);
             CreateSubscriber();
             return;
         }
 
         LOG_D("Get board info from subscriber, serving tenant: " << BoardState.Tenant
                 << ", board: " << BoardState.Path
-                << ", ssGroupId: " << BoardState.StateStorageGroupId
                 << ", with size: " << ev->Get()->InfoEntries.size());
 
         auto [nodeIds, isChanged] = UpdateBoardInfo(ev->Get()->InfoEntries);
@@ -501,14 +492,12 @@ private:
     void Handle(TEvStateStorage::TEvBoardInfoUpdate::TPtr& ev) {
         if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable) {
             LOG_I("Subcriber is not available for info exchanger, serving tenant: " << BoardState.Tenant
-                << ", board: " << BoardState.Path
-                << ", ssGroupId: " << BoardState.StateStorageGroupId);
+                << ", board: " << BoardState.Path);
             CreateSubscriber();
             return;
         }
         LOG_D("Get board info update from subscriber, serving tenant: " << BoardState.Tenant
                 << ", board: " << BoardState.Path
-                << ", ssGroupId: " << BoardState.StateStorageGroupId
                 << ", with size: " << ev->Get()->Updates.size());
 
         auto [nodeIds, isChanged] = UpdateBoardInfo(ev->Get()->Updates);
@@ -754,7 +743,6 @@ private:
     struct TBoardState {
         TString Tenant;
         TString Path;
-        ui32 StateStorageGroupId = std::numeric_limits<ui32>::max();
         TActorId Publisher = TActorId();
         TActorId Subscriber = TActorId();
         TDelayState RetryStateForSubscriber;

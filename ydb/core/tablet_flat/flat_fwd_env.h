@@ -10,10 +10,8 @@
 #include "flat_table_subset.h"
 #include "flat_part_iface.h"
 #include "flat_part_store.h"
-#include "flat_sausage_packet.h"
 #include "flat_sausage_fetch.h"
 #include "util_fmt_abort.h"
-#include "util_basics.h"
 #include <util/generic/deque.h>
 #include <util/random/random.h>
 #include <util/generic/intrlist.h>

@@ -163,6 +163,8 @@ class TListClusterNodes: public TAdapterActor<
         out.set_host(in.Host);
         out.set_port(in.IcPort);
         out.set_state(ConvertNodeState(in.State));
+        out.set_version(in.Version);
+        *out.mutable_start_time() = TimeUtil::MicrosecondsToTimestamp(in.StartTime.GetValue());
 
         auto& location = *out.mutable_location();
         location.set_data_center(in.Location.GetDataCenterId());
@@ -561,7 +563,7 @@ public:
             opts.set_description(request.GetReason());
             opts.set_availability_mode(ConvertAvailabilityMode(request.GetAvailabilityMode()));
             opts.set_priority(request.GetPriority());
-            
+
             // pending actions
             for (const auto& action : request.GetActions()) {
                 ConvertAction(action, *result.add_action_group_states()->add_action_states());

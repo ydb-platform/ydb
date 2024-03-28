@@ -2,7 +2,6 @@
 
 #include "guid.h"
 #include "mpl.h"
-#include "optional.h"
 #include "object_pool.h"
 #include "range.h"
 #include "serialize.h"
@@ -14,10 +13,13 @@
 
 #include <library/cpp/yt/memory/ref.h>
 
+#include <library/cpp/yt/misc/optional.h>
 #include <library/cpp/yt/misc/preprocessor.h>
 
 #include <google/protobuf/message.h>
 #include <google/protobuf/repeated_field.h>
+
+#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
 namespace NYT {
 
@@ -72,10 +74,11 @@ void ToProto(
     ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
     const TOriginalArray& originalArray);
 
-template <class TOriginalArray, class TSerialized>
+template <class TOriginalArray, class TSerialized, class... TArgs>
 void FromProto(
     TOriginalArray* originalArray,
-    const ::google::protobuf::RepeatedPtrField<TSerialized>& serializedArray);
+    const ::google::protobuf::RepeatedPtrField<TSerialized>& serializedArray,
+    TArgs&&... args);
 
 template <class TOriginalArray, class TSerialized>
 void FromProto(
@@ -204,6 +207,7 @@ void DeserializeProtoWithCompression(
     TRef data,
     NCompression::ECodec codecId = NCompression::ECodec::None);
 
+TSharedRef PushEnvelope(const TSharedRef& data, NCompression::ECodec codec);
 TSharedRef PushEnvelope(const TSharedRef& data);
 TSharedRef PopEnvelope(const TSharedRef& data);
 
@@ -375,6 +379,78 @@ google::protobuf::Timestamp GetProtoNow();
 
 //! This macro may be used to extract std::optional<T> from protobuf message field of type T.
 #define YT_PROTO_OPTIONAL(message, field) (((message).has_##field()) ? std::make_optional((message).field()) : std::nullopt)
+
+////////////////////////////////////////////////////////////////////////////////
+
+// TODO(gritukan): This is a hack that allows to use proper string type in the protobuf-related code.
+// In Arcadia, protobuf is patched and TString is used as a string in it.
+// In vanilla protobuf, std::string is used.
+// TProtobufString is a type that you should use in code that works both with
+// Arcadia and vanilla protobuf.
+// It is an alias for TString in Arcadia and for std::string in vanilla protobuf.
+using TProtobufString = decltype(std::declval<::google::protobuf::MessageLite>().GetTypeName());
+
+constexpr bool IsVanillaProtobuf = std::is_same_v<TProtobufString, std::string>;
+constexpr bool IsArcadiaProtobuf = std::is_same_v<TProtobufString, TString>;
+
+// If this assert fails, something went very wrong. Refer to a comment above.
+static_assert(IsVanillaProtobuf || IsArcadiaProtobuf, "Unknown protobuf string type");
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TProtobufInputStream
+    : public ::google::protobuf::io::CopyingInputStream
+{
+public:
+    explicit TProtobufInputStream(IInputStream* stream);
+
+    int Read(void* buffer, int size) override;
+
+    // Arcadia-style streams throw errors instead of returning -1,
+    // so we intercept these errors and store them in a flag.
+    bool HasError() const;
+
+private:
+    IInputStream* const Stream_;
+
+    bool HasError_ = false;
+};
+
+class TProtobufInputStreamAdaptor
+    : public TProtobufInputStream
+    , public ::google::protobuf::io::CopyingInputStreamAdaptor
+{
+public:
+    explicit TProtobufInputStreamAdaptor(IInputStream* stream);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TProtobufOutputStream
+    : public ::google::protobuf::io::CopyingOutputStream
+{
+public:
+    explicit TProtobufOutputStream(IOutputStream* stream);
+
+    bool Write(const void* buffer, int size) override;
+
+    // Arcadia-style streams throw errors instead of returning -1,
+    // so we intercept these errors and store them in a flag.
+    bool HasError() const;
+
+private:
+    IOutputStream* const Stream_;
+
+    bool HasError_ = false;
+};
+
+class TProtobufOutputStreamAdaptor
+    : public TProtobufOutputStream
+    , public ::google::protobuf::io::CopyingOutputStreamAdaptor
+{
+public:
+    explicit TProtobufOutputStreamAdaptor(IOutputStream* stream);
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

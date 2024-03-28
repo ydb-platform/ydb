@@ -1104,7 +1104,7 @@ void FromProto(TError* error, const NYT::NProto::TError& protoError)
     }
 
     error->SetCode(TErrorCode(protoError.code()));
-    error->SetMessage(protoError.message());
+    error->SetMessage(FromProto<TString>(protoError.message()));
     if (protoError.has_attributes()) {
         error->Impl_->SetAttributes(FromProto(protoError.attributes()));
     } else {
@@ -1135,7 +1135,7 @@ void SerializeInnerErrors(TFluentMap fluent, const TError& error, int depth)
     auto visit = [&] (auto fluent, const TError& error, int depth) {
         fluent
             .Item().Do([&] (auto fluent) {
-                Serialize(error, fluent.GetConsumer(), /* valueProduce */ nullptr, depth);
+                Serialize(error, fluent.GetConsumer(), /*valueProduce*/ nullptr, depth);
             });
     };
 

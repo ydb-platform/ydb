@@ -78,58 +78,177 @@ private:
         }
     }
 
+    struct TCopyTo {
+        bool Transform = false;
+        bool Keep = false;
+        TString Recurse = "";
+        TString TargetFieldName;
+    };
+
+    void GenerateCopyToSingularField(const TVars& vars, const FieldDescriptor* const field, const TCopyTo& copyTo) {
+        if (copyTo.Transform) {
+            Header->Print(vars, "if (Has$field$()) {\n");
+            Header->Print(vars, "const auto& field = Get$field$();\n");
+            Header->Print(vars,
+                          "out.Set$target$("
+                              "Transform$field$To$target$For$output$<"
+                                  "typename std::remove_reference<decltype(Get$field$())>::type, "
+                                  "typename std::remove_cvref<decltype(out.Get$target$())>::type>("
+                                      "&field)"
+                          ");\n");
+            Header->Print(vars, "} else {\n");
+            Header->Print(vars,
+                          "out.Set$target$("
+                              "Transform$field$To$target$For$output$<"
+                                  "typename std::remove_reference<decltype(Get$field$())>::type, "
+                                  "typename std::remove_cvref<decltype(out.Get$target$())>::type>("
+                                      "nullptr)"
+                          ");\n");
+            Header->Print(vars, "}\n");
+        } else if (field->message_type()) {
+            if (!copyTo.Keep) {
+                Header->Print(vars, "if (Has$field$()) {\n");
+            } else {
+                Header->Print(vars, "if (Has$field$() && !out.Has$target$()) {\n");
+            }
+            WITH_INDENT(Header) {
+                if (!copyTo.Recurse) {
+                    // this static_assert is critically important
+                    // without it user will get error only at runtime!
+                    Header->Print(vars, "static_assert(std::is_same_v<typename std::remove_cvref_t<decltype(out.Get$target$())>, "
+                                                                     "typename std::remove_cvref_t<decltype(this->Get$field$())>>, \"FieldType mismatch\");\n");
+                    Header->Print(vars, "out.Mutable$target$()->CopyFrom(Get$field$());\n");
+                } else {
+                    Header->Print(vars, "auto& target = *out.Mutable$target$();\n");
+                    Header->Print(vars, "Get$field$().CopyTo$recurse$(target);\n");
+                }
+            }
+            Header->Print(vars, "}\n");
+        } else if (field->is_optional()) {
+            if (!copyTo.Keep) {
+                Header->Print(vars, "// if you get error below it means that target field is not optional and keep option isn't applicable\n");
+                Header->Print(vars, "if (Has$field$()) {\n");
+            } else {
+                Header->Print(vars, "if (Has$field$() && !out.Has$target$()) {\n");
+            }
+            WITH_INDENT(Header) {
+                Header->Print(vars, "out.Set$target$(Get$field$());\n");
+            }
+            Header->Print(vars, "}\n");
+        } else {
+            Y_ABORT_IF(copyTo.Keep, "Can't keep non optional and non message field");
+            Header->Print(vars, "out.Set$target$(Get$field$());\n");
+        }
+    }
+
+    void GenerateCopyToRepeatedField(const TVars& vars, const FieldDescriptor* const field, const TCopyTo& copyTo) {
+        if (copyTo.Transform) {
+            Header->Print(vars, "for (const auto& field : Get$field$()) {\n");
+            WITH_INDENT(Header) {
+                Header->Print(vars,
+                              "out.Add$target$("
+                                  "Transform$field$To$target$For$output$<"
+                                      "typename std::remove_reference<decltype(Get$field$(0))>::type, "
+                                      "typename std::remove_cvref<decltype(out.Get$target$(0))>::type>("
+                                          "&field)"
+                              ");\n");
+            }
+            Header->Print(vars, "}\n");
+            return;
+        }
+        if (copyTo.Keep) {
+            Header->Print(vars, "if (!out.$target$Size()) {\n");
+            Header->Indent();
+        }
+        if (field->message_type()) {
+            Header->Print(vars, "for (size_t i = 0; i < $field$Size(); ++i) {\n");
+            WITH_INDENT(Header) {
+                if (!copyTo.Recurse) {
+                    // this static_assert is critically important
+                    // without it user will get error only at runtime!
+                    Header->Print(vars, "static_assert(std::is_same_v<typename std::remove_cvref_t<decltype(*out.Add$target$())>, "
+                                                                     "typename std::remove_cvref_t<decltype(this->Get$field$(0))>>, \"FieldType mismatch\");\n");
+                    Header->Print(vars, "out.Add$target$()->CopyFrom(Get$field$(i));\n");
+                } else {
+                    Header->Print(vars, "auto& target = *out.Add$field$();\n");
+                    Header->Print(vars, "Get$field$(i).CopyTo$recurse$(target);\n");
+                }
+            }
+            Header->Print(vars, "}\n");
+        } else {
+            Header->Print(vars, "for (const auto& field : Get$field$()) {\n");
+            WITH_INDENT(Header) {
+                Header->Print(vars, "// if you get error below it means that target type either not scalar or not repeated\n");
+                Header->Print(vars, "out.Add$target$(field);\n");
+            }
+            Header->Print(vars, "}\n");
+        }
+        if (copyTo.Keep) {
+            Header->Outdent();
+            Header->Print(vars, "}\n");
+        }
+    }
+
     void GenerateCombinedType(TVars vars) {
-        TMap<TString, TSet<const FieldDescriptor*>> outputs;
+        TMap<TString, TMap<std::pair<const FieldDescriptor*, TString>, TCopyTo>> outputs;
         for (auto i = 0; i < Message->field_count(); ++i) {
             const FieldDescriptor* field = Message->field(i);
             auto opts = field->options();
             for (int i = 0; i < opts.ExtensionSize(NKikimrConfig::NMarkers::CopyTo); ++i) {
-                outputs[opts.GetExtension(NKikimrConfig::NMarkers::CopyTo, i)].insert(field);
+                Y_ABORT_IF(!opts.GetExtension(NKikimrConfig::NMarkers::CopyTo, i), "Target MUST be non-empty");
+                outputs[opts.GetExtension(NKikimrConfig::NMarkers::CopyTo, i)][{field, field->name()}] = TCopyTo{
+                        .Transform = false,
+                        .Keep = false,
+                        .Recurse = "",
+                        .TargetFieldName = field->name(),
+                    };
+            }
+
+            for (int i = 0; i < opts.ExtensionSize(NKikimrConfig::NMarkers::AdvancedCopyTo); ++i) {
+                auto option = opts.GetExtension(NKikimrConfig::NMarkers::AdvancedCopyTo, i);
+                Y_ABORT_IF(!option.GetTarget(), "Target MUST be non-empty");
+                outputs[option.GetTarget()][{field, option.GetRename()}] = TCopyTo{
+                        .Transform = option.GetTransform(),
+                        .Keep = option.GetKeep(),
+                        .Recurse = option.GetRecurse(),
+                        .TargetFieldName = option.HasRename() ? option.GetRename() : field->name(),
+                    };
             }
         }
 
         for (const auto& [output, fields] : outputs) {
             vars["output"] = output;
             WITH_PLUGIN_MARKUP(Header, PLUGIN_NAME) {
+                for (const auto& [fieldWithRename, copyTo] : fields) {
+                    const auto* field = fieldWithRename.first;
+                    vars["field"] = field->name();
+                    vars["target"] = copyTo.TargetFieldName;
+                    if (copyTo.Transform) {
+                        Header->Print(vars, "/* right instance **must** be defined in user code */\n");
+                        Header->Print(vars, "template <class TIn, class TOut>\n");
+                        Header->Print(vars, "static TOut Transform$field$To$target$For$output$(const TIn* from);\n");
+                    }
+                }
                 Header->Print(vars, "template <class TOut>\n");
                 Header->Print(vars, "void CopyTo$output$(TOut& out) const {\n");
-                Header->Indent();
-                for (const auto* field : fields) {
-                    vars["field"] = field->name();
+                WITH_INDENT(Header) {
+                    for (const auto& [fieldWithRename, copyTo] : fields) {
+                        const auto* field = fieldWithRename.first;
+                        vars["field"] = field->name();
+                        vars["target"] = copyTo.TargetFieldName;
+                        vars["recurse"] = copyTo.Recurse;
 
-                    if (!field->is_repeated()) {
-                        if (field->message_type()) {
-                            Header->Print(vars, "if (Has$field$()) {\n");
-                            WITH_INDENT(Header) {
-                                Header->Print(vars, "out.Mutable$field$()->CopyFrom(Get$field$());\n");
-                            }
-                            Header->Print(vars, "}\n");
-                        } else if (field->is_optional()) {
-                            Header->Print(vars, "if (Has$field$()) {\n");
-                            WITH_INDENT(Header) {
-                                Header->Print(vars, "out.Set$field$(Get$field$());\n");
-                            }
-                            Header->Print(vars, "}\n");
+                        Y_ABORT_IF(copyTo.Transform && field->message_type(), "Transform currently does not support Message type fields");
+                        Y_ABORT_IF(copyTo.Transform && copyTo.Keep, "Transform currently does not Keep flag");
+                        Y_ABORT_IF(copyTo.Transform && copyTo.Recurse, "Transform currently does not Recurse flag");
+
+                        if (!field->is_repeated()) {
+                            GenerateCopyToSingularField(vars, field, copyTo);
                         } else {
-                            Header->Print(vars, "out.Set$field$(Get$field$());\n");
-                        }
-                    } else {
-                        if (field->message_type()) {
-                            Header->Print(vars, "for (size_t i = 0; i < $field$Size(); ++i) {\n");
-                            WITH_INDENT(Header) {
-                                Header->Print(vars, "out.Add$field$()->CopyFrom(Get$field$(i));\n");
-                            }
-                            Header->Print(vars, "}\n");
-                        } else {
-                            Header->Print(vars, "for (const auto& field : Get$field$()) {\n");
-                            WITH_INDENT(Header) {
-                                Header->Print(vars, "out.Add$field$(field);\n");
-                            }
-                            Header->Print(vars, "}\n");
+                            GenerateCopyToRepeatedField(vars, field, copyTo);
                         }
                     }
                 }
-                Header->Outdent();
                 Header->Print(vars, "}\n");
             }
         }

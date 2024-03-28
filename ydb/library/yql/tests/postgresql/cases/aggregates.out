@@ -3,6 +3,122 @@
 --
 -- avoid bit-exact output here because operations may not be bit-exact.
 SET extra_float_digits = 0;
+SELECT avg(four) AS avg_1 FROM onek;
+       avg_1        
+--------------------
+ 1.5000000000000000
+(1 row)
+
+SELECT avg(a) AS avg_32 FROM aggtest WHERE a < 100;
+       avg_32        
+---------------------
+ 32.6666666666666667
+(1 row)
+
+-- In 7.1, avg(float4) is computed using float8 arithmetic.
+-- Round the result to 3 digits to avoid platform-specific results.
+SELECT avg(b)::numeric(10,3) AS avg_107_943 FROM aggtest;
+ avg_107_943 
+-------------
+     107.943
+(1 row)
+
+SELECT avg(gpa) AS avg_3_4 FROM ONLY student;
+ avg_3_4 
+---------
+     3.4
+(1 row)
+
+SELECT sum(four) AS sum_1500 FROM onek;
+ sum_1500 
+----------
+     1500
+(1 row)
+
+SELECT sum(a) AS sum_198 FROM aggtest;
+ sum_198 
+---------
+     198
+(1 row)
+
+SELECT sum(gpa) AS avg_6_8 FROM ONLY student;
+ avg_6_8 
+---------
+     6.8
+(1 row)
+
+SELECT max(four) AS max_3 FROM onek;
+ max_3 
+-------
+     3
+(1 row)
+
+SELECT max(a) AS max_100 FROM aggtest;
+ max_100 
+---------
+     100
+(1 row)
+
+SELECT max(aggtest.b) AS max_324_78 FROM aggtest;
+ max_324_78 
+------------
+     324.78
+(1 row)
+
+SELECT max(student.gpa) AS max_3_7 FROM student;
+ max_3_7 
+---------
+     3.7
+(1 row)
+
+SELECT stddev_pop(b) FROM aggtest;
+   stddev_pop    
+-----------------
+ 131.10703231895
+(1 row)
+
+SELECT stddev_samp(b) FROM aggtest;
+   stddev_samp    
+------------------
+ 151.389360803998
+(1 row)
+
+SELECT var_pop(b) FROM aggtest;
+     var_pop      
+------------------
+ 17189.0539234823
+(1 row)
+
+SELECT var_samp(b) FROM aggtest;
+     var_samp     
+------------------
+ 22918.7385646431
+(1 row)
+
+SELECT stddev_pop(b::numeric) FROM aggtest;
+    stddev_pop    
+------------------
+ 131.107032862199
+(1 row)
+
+SELECT stddev_samp(b::numeric) FROM aggtest;
+   stddev_samp    
+------------------
+ 151.389361431288
+(1 row)
+
+SELECT var_pop(b::numeric) FROM aggtest;
+      var_pop       
+--------------------
+ 17189.054065929769
+(1 row)
+
+SELECT var_samp(b::numeric) FROM aggtest;
+      var_samp      
+--------------------
+ 22918.738754573025
+(1 row)
+
 -- population variance is defined for a single tuple, sample variance
 -- is not
 SELECT var_pop(1.0::float8), var_samp(2.0::float8);
@@ -248,6 +364,61 @@ FROM (VALUES (7000000000005), (7000000000007)) v(x);
  7000000000006 |       1
 (1 row)
 
+-- SQL2003 binary aggregates
+SELECT regr_count(b, a) FROM aggtest;
+ regr_count 
+------------
+          4
+(1 row)
+
+SELECT regr_sxx(b, a) FROM aggtest;
+ regr_sxx 
+----------
+     5099
+(1 row)
+
+SELECT regr_syy(b, a) FROM aggtest;
+     regr_syy     
+------------------
+ 68756.2156939293
+(1 row)
+
+SELECT regr_sxy(b, a) FROM aggtest;
+     regr_sxy     
+------------------
+ 2614.51582155004
+(1 row)
+
+SELECT regr_avgx(b, a), regr_avgy(b, a) FROM aggtest;
+ regr_avgx |    regr_avgy     
+-----------+------------------
+      49.5 | 107.943152273074
+(1 row)
+
+SELECT regr_r2(b, a) FROM aggtest;
+      regr_r2       
+--------------------
+ 0.0194977982031803
+(1 row)
+
+SELECT regr_slope(b, a), regr_intercept(b, a) FROM aggtest;
+    regr_slope     |  regr_intercept  
+-------------------+------------------
+ 0.512750700441271 | 82.5619926012309
+(1 row)
+
+SELECT covar_pop(b, a), covar_samp(b, a) FROM aggtest;
+    covar_pop    |    covar_samp    
+-----------------+------------------
+ 653.62895538751 | 871.505273850014
+(1 row)
+
+SELECT corr(b, a) FROM aggtest;
+       corr        
+-------------------
+ 0.139634516517873
+(1 row)
+
 -- check single-tuple behavior
 SELECT covar_pop(1::float8,2::float8), covar_samp(3::float8,4::float8);
  covar_pop | covar_samp 
@@ -322,6 +493,51 @@ SELECT float8_regr_combine('{3,60,200,750,20000,2000}'::float8[],
 (1 row)
 
 DROP TABLE regr_test;
+-- test count, distinct
+SELECT count(four) AS cnt_1000 FROM onek;
+ cnt_1000 
+----------
+     1000
+(1 row)
+
+SELECT count(DISTINCT four) AS cnt_4 FROM onek;
+ cnt_4 
+-------
+     4
+(1 row)
+
+select ten, count(*), sum(four) from onek
+group by ten order by ten;
+ ten | count | sum 
+-----+-------+-----
+   0 |   100 | 100
+   1 |   100 | 200
+   2 |   100 | 100
+   3 |   100 | 200
+   4 |   100 | 100
+   5 |   100 | 200
+   6 |   100 | 100
+   7 |   100 | 200
+   8 |   100 | 100
+   9 |   100 | 200
+(10 rows)
+
+select ten, count(four), sum(DISTINCT four) from onek
+group by ten order by ten;
+ ten | count | sum 
+-----+-------+-----
+   0 |   100 |   2
+   1 |   100 |   4
+   2 |   100 |   2
+   3 |   100 |   4
+   4 |   100 |   2
+   5 |   100 |   4
+   6 |   100 |   2
+   7 |   100 |   4
+   8 |   100 |   2
+   9 |   100 |   4
+(10 rows)
+
 --
 -- test for bitwise integer aggregates
 --
@@ -338,12 +554,84 @@ CREATE TEMPORARY TABLE bool_test(
   b2 BOOL,
   b3 BOOL,
   b4 BOOL);
+select min(unique1) from tenk1;
+ min 
+-----
+   0
+(1 row)
+
+select max(unique1) from tenk1;
+ max  
+------
+ 9999
+(1 row)
+
+select max(unique1) from tenk1 where unique1 < 42;
+ max 
+-----
+  41
+(1 row)
+
+select max(unique1) from tenk1 where unique1 > 42;
+ max  
+------
+ 9999
+(1 row)
+
 -- the planner may choose a generic aggregate here if parallel query is
 -- enabled, since that plan will be parallel safe and the "optimized"
 -- plan, which has almost identical cost, will not be.  we want to test
 -- the optimized plan, so temporarily disable parallel query.
 begin;
+select max(unique1) from tenk1 where unique1 > 42000;
+ max 
+-----
+    
+(1 row)
+
 rollback;
+select max(tenthous) from tenk1 where thousand = 33;
+ max  
+------
+ 9033
+(1 row)
+
+select min(tenthous) from tenk1 where thousand = 33;
+ min 
+-----
+  33
+(1 row)
+
+select distinct max(unique2) from tenk1;
+ max  
+------
+ 9999
+(1 row)
+
+select max(unique2) from tenk1 order by 1;
+ max  
+------
+ 9999
+(1 row)
+
+select max(unique2) from tenk1 order by max(unique2);
+ max  
+------
+ 9999
+(1 row)
+
+select max(unique2) from tenk1 order by max(unique2)+1;
+ max  
+------
+ 9999
+(1 row)
+
+select max(100) from tenk1;
+ max 
+-----
+ 100
+(1 row)
+
 -- try it on an inheritance tree
 create table minmaxtest(f1 int);
 create index minmaxtesti on minmaxtest(f1);
@@ -356,3 +644,95 @@ insert into minmaxtest values(11), (12);
 create temp table t1 (a int, b int, c int, d int, primary key (a, b));
 create temp table t2 (x int, y int, z int, primary key (x, y));
 drop table t2;
+--
+-- Test GROUP BY matching of join columns that are type-coerced due to USING
+--
+create temp table t1(f1 int, f2 bigint);
+create temp table t2(f1 bigint, f22 bigint);
+drop table t1, t2;
+select array_agg(distinct a)
+  from (values (1),(2),(1),(3),(null),(2)) v(a);
+  array_agg   
+--------------
+ {1,2,3,NULL}
+(1 row)
+
+-- string_agg tests
+select string_agg(a,',') from (values('aaaa'),('bbbb'),('cccc')) g(a);
+   string_agg   
+----------------
+ aaaa,bbbb,cccc
+(1 row)
+
+select string_agg(a,',') from (values('aaaa'),(null),('bbbb'),('cccc')) g(a);
+   string_agg   
+----------------
+ aaaa,bbbb,cccc
+(1 row)
+
+select string_agg(a,'AB') from (values(null),(null),('bbbb'),('cccc')) g(a);
+ string_agg 
+------------
+ bbbbABcccc
+(1 row)
+
+select string_agg(a,',') from (values(null),(null)) g(a);
+ string_agg 
+------------
+ 
+(1 row)
+
+-- string_agg bytea tests
+create table bytea_test_table(v bytea);
+select string_agg(v, '') from bytea_test_table;
+ string_agg 
+------------
+ 
+(1 row)
+
+insert into bytea_test_table values(decode('ff','hex'));
+select string_agg(v, '') from bytea_test_table;
+ string_agg 
+------------
+ \xff
+(1 row)
+
+insert into bytea_test_table values(decode('aa','hex'));
+select string_agg(v, '') from bytea_test_table;
+ string_agg 
+------------
+ \xffaa
+(1 row)
+
+select string_agg(v, NULL) from bytea_test_table;
+ string_agg 
+------------
+ \xffaa
+(1 row)
+
+select string_agg(v, decode('ee', 'hex')) from bytea_test_table;
+ string_agg 
+------------
+ \xffeeaa
+(1 row)
+
+drop table bytea_test_table;
+-- outer reference in FILTER (PostgreSQL extension)
+select (select count(*)
+        from (values (1)) t0(inner_c))
+from (values (2),(3)) t1(outer_c); -- inner query is aggregation query
+ count 
+-------
+     1
+     1
+(2 rows)
+
+select p, percentile_cont(p order by p) within group (order by x)  -- error
+from generate_series(1,5) x,
+     (values (0::float8),(0.1),(0.25),(0.4),(0.5),(0.6),(0.75),(0.9),(1)) v(p)
+group by p order by p;
+ERROR:  cannot use multiple ORDER BY clauses with WITHIN GROUP
+LINE 1: select p, percentile_cont(p order by p) within group (order ...
+                                                ^
+-- test aggregates with common transition functions share the same states
+begin work;

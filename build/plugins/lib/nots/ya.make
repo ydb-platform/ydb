@@ -1,6 +1,8 @@
 OWNER(g:frontend-build-platform)
 
-PY23_LIBRARY()
+PY3_LIBRARY()
+
+STYLE_PYTHON()
 
 PY_SRCS(
     __init__.py
@@ -19,4 +21,5 @@ RECURSE(
     package_manager
     semver
     typescript
+    test_utils
 )

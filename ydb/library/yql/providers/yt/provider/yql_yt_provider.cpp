@@ -333,6 +333,45 @@ void TYtState::LeaveEvaluation(ui64 id) {
     }
 }
 
+std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::TPtr gateway, const TString& userName, const TString& sessionId, const TYtGatewayConfig* ytGatewayConfig, TIntrusivePtr<TTypeAnnotationContext> typeCtx) {
+    auto ytState = MakeIntrusive<TYtState>();
+    ytState->SessionId = sessionId;
+    ytState->Gateway = gateway;
+    ytState->Types = typeCtx.Get();
+    ytState->DqIntegration_ = CreateYtDqIntegration(ytState.Get());
+
+    if (ytGatewayConfig) {
+        std::unordered_set<std::string_view> groups;
+        if (ytState->Types->Credentials != nullptr) {
+            groups.insert(ytState->Types->Credentials->GetGroups().begin(), ytState->Types->Credentials->GetGroups().end());
+        }
+        auto filter = [userName, ytState, groups = std::move(groups)](const NYql::TAttr& attr) -> bool {
+            if (!attr.HasActivation()) {
+                return true;
+            }
+            if (NConfig::Allow(attr.GetActivation(), userName, groups)) {
+                with_lock(ytState->StatisticsMutex) {
+                    ytState->Statistics[Max<ui32>()].Entries.emplace_back(TStringBuilder() << "Activation:" << attr.GetName(), 0, 0, 0, 0, 1);
+                }
+                return true;
+            }
+            return false;
+        };
+
+        ytState->Configuration->Init(*ytGatewayConfig, filter, *typeCtx);
+    }
+
+    TStatWriter statWriter = [ytState](ui32 publicId, const TVector<TOperationStatistics::TEntry>& stat) {
+        with_lock(ytState->StatisticsMutex) {
+            for (size_t i = 0; i < stat.size(); ++i) {
+                ytState->Statistics[publicId].Entries.push_back(stat[i]);
+            }
+        }
+    };
+
+    return {ytState, statWriter};
+}
+
 TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gateway) {
     return [gateway] (
         const TString& userName,
@@ -352,40 +391,10 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         TDataProviderInfo info;
         info.SupportsHidden = true;
 
-        auto ytState = MakeIntrusive<TYtState>();
-        ytState->SessionId = sessionId;
-        ytState->Gateway = gateway;
-        ytState->Types = typeCtx.Get();
-        ytState->DqIntegration_ = CreateYtDqIntegration(ytState.Get());
-
-        TStatWriter statWriter = [ytState](ui32 publicId, const TVector<TOperationStatistics::TEntry>& stat) {
-            with_lock(ytState->StatisticsMutex) {
-                for (size_t i = 0; i < stat.size(); ++i) {
-                    ytState->Statistics[publicId].Entries.push_back(stat[i]);
-                }
-            }
-        };
-
-        if (gatewaysConfig) {
-            std::unordered_set<std::string_view> groups;
-            if (ytState->Types->Credentials != nullptr) {
-                groups.insert(ytState->Types->Credentials->GetGroups().begin(), ytState->Types->Credentials->GetGroups().end());
-            }
-            auto filter = [userName, ytState, groups = std::move(groups)](const NYql::TAttr& attr) -> bool {
-                if (!attr.HasActivation()) {
-                    return true;
-                }
-                if (NConfig::Allow(attr.GetActivation(), userName, groups)) {
-                    with_lock(ytState->StatisticsMutex) {
-                        ytState->Statistics[Max<ui32>()].Entries.emplace_back(TStringBuilder() << "Activation:" << attr.GetName(), 0, 0, 0, 0, 1);
-                    }
-                    return true;
-                }
-                return false;
-            };
-
-            ytState->Configuration->Init(gatewaysConfig->GetYt(), filter, *typeCtx);
-        }
+        const TYtGatewayConfig* ytGatewayConfig = gatewaysConfig ? &gatewaysConfig->GetYt() : nullptr;
+        TIntrusivePtr<TYtState> ytState;
+        TStatWriter statWriter;
+        std::tie(ytState, statWriter) = CreateYtNativeState(gateway, userName, sessionId, ytGatewayConfig, typeCtx);
 
         info.Names.insert({TString{YtProviderName}});
         info.Source = CreateYtDataSource(ytState);
@@ -516,9 +525,12 @@ bool TYtState::IsHybridEnabled() const {
 }
 
 bool TYtState::IsHybridEnabledForCluster(const std::string_view& cluster) const {
-    return !OnlyNativeExecution && Configuration->_EnableDq.Get(TString(cluster)).GetOrElse(true)
-        && TimeSpentInHybrid + (HybridInFlightOprations.empty() ? TDuration::Zero() : NMonotonic::TMonotonic::Now() - HybridStartTime)
-            < Configuration->HybridDqTimeSpentLimit.Get().GetOrElse(TDuration::Minutes(20));
+    return !OnlyNativeExecution && Configuration->_EnableDq.Get(TString(cluster)).GetOrElse(true);
+}
+
+bool TYtState::HybridTakesTooLong() const {
+    return TimeSpentInHybrid + (HybridInFlightOprations.empty() ? TDuration::Zero() : NMonotonic::TMonotonic::Now() - HybridStartTime)
+            > Configuration->HybridDqTimeSpentLimit.Get().GetOrElse(TDuration::Minutes(20));
 }
 
 }

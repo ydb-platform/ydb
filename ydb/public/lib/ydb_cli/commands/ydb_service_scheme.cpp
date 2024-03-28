@@ -858,6 +858,8 @@ void TCommandList::Config(TConfig& config) {
         .StoreTrue(&Recursive);
     config.Opts->AddCharOption('1', "List one object per line")
         .StoreTrue(&FromNewLine);
+    config.Opts->AddCharOption('m', "Multithread recursive request")
+        .StoreTrue(&Multithread);
     AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::Json });
     config.SetFreeArgsMax(1);
     SetFreeArgTitle(0, "<path>", "Path to list");
@@ -877,6 +879,7 @@ int TCommandList::Run(TConfig& config) {
     ISchemePrinter::TSettings settings = {
         Path,
         Recursive,
+        Multithread,
         FromNewLine,
         FillSettings(NScheme::TListDirectorySettings()),
         FillSettings(NTable::TDescribeTableSettings().WithTableStatistics(true))

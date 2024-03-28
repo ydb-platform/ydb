@@ -39,7 +39,7 @@ $ss=
    );
 -- start query 1 in stream 0 using template query78.tpl and seed 1819994127
  select
-ss_customer_sk,
+ss_sold_year, ss_item_sk, ss_customer_sk,
 Math::Round(cast(ss_qty as double)/(coalesce(ws_qty,0)+coalesce(cs_qty,0)),-2) ratio,
 ss_qty store_qty, ss_wc store_wholesale_cost, ss_sp store_sales_price,
 coalesce(ws_qty,0)+coalesce(cs_qty,0) other_chan_qty,
@@ -50,7 +50,7 @@ left join $ws ws on (ws.ws_sold_year=ss.ss_sold_year and ws.ws_item_sk=ss.ss_ite
 left join $cs cs on (cs.cs_sold_year=ss.ss_sold_year and cs.cs_item_sk=ss.ss_item_sk and cs.cs_customer_sk=ss.ss_customer_sk)
 where (coalesce(ws_qty,0)>0 or coalesce(cs_qty, 0)>0) and ss_sold_year=2001
 order by
-  ss_customer_sk,
+  ss_sold_year, ss_item_sk, ss_customer_sk,
   store_qty desc, store_wholesale_cost desc, store_sales_price desc,
   other_chan_qty,
   other_chan_wholesale_cost,

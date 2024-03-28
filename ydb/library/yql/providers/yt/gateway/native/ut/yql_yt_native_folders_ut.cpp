@@ -47,6 +47,21 @@ constexpr auto CYPRES_NODE_A_CONTENT = R"(
     };
 ]
 )";
+
+constexpr auto CYPRES_NODE_W_LINK = R"(
+[
+    {
+        output = [
+            <
+                "target_path" = "//link_dest";
+                "broken" = %false;
+                "type" = "link";
+            > "link";
+        ];
+    }
+]
+)";
+
 constexpr auto CYPRES_LINK_DEST = R"(
 [
   {
@@ -90,6 +105,8 @@ TGatewaysConfig MakeGatewaysConfig(size_t port)
 
 class TYtReplier : public TRequestReplier {
 public:
+    using THandler = std::function<THttpResponse(TStringBuf path, const NYT::TNode& attributes)>;
+
     bool DoReply(const TReplyParams& params) override {
         const TParsedHttpFull parsed(params.Input.FirstLine());
         Cout << parsed.Path << Endl;
@@ -114,48 +131,12 @@ public:
 
         return true;
     }
-    explicit TYtReplier(THashMap<TString, THashSet<TString>> requiredAttributes): requiredAttributes(requiredAttributes) {}
+    explicit TYtReplier(THandler handleListCommand, THandler handleGetCommand): 
+        HandleListCommand_(handleListCommand), HandleGetCommand_(handleGetCommand) {}
+    explicit TYtReplier(THandler handleListCommand, THandler handleGetCommand, std::function<void(const NYT::TNode& request)> assertion): 
+        Assertion_(assertion), HandleListCommand_(handleListCommand), HandleGetCommand_(handleGetCommand) {}
 
 private:
-    void CheckReqAttributes(TStringBuf path, const NYT::TNode& attributes) {
-        if (!requiredAttributes.contains(path)) {
-            return;
-        }
-
-        THashSet<TString> attributesSet;
-        for (const auto& attribute : attributes.AsList()) {
-            attributesSet.insert(attribute.AsString());
-        }
-        UNIT_ASSERT_VALUES_EQUAL(requiredAttributes[path], attributesSet);
-    }
-
-    THttpResponse HandleListCommand(const NYT::TNode& path, const NYT::TNode& attributes) {
-        CheckReqAttributes(path.AsString(), attributes);
-
-        THttpResponse resp{HTTP_OK};
-        if (path == "//test/a") {
-            resp.SetContent(CYPRES_NODE_A_CONTENT);
-            return resp;
-        }
-        return THttpResponse{HTTP_NOT_FOUND};
-    }
-
-    THttpResponse HandleGetCommand(const NYT::TNode& path, const NYT::TNode& attributes) {
-        CheckReqAttributes(path.AsString(), attributes);
-
-        THttpResponse resp{HTTP_OK};
-        if (path == "//link_dest") {
-            resp.SetContent(CYPRES_LINK_DEST);
-            return resp;
-        }
-        if (path == "//link_access_denied") {
-            resp.SetContent(CYPRES_ACCESS_ERROR);
-            return resp;
-        }
-
-        return THttpResponse{HTTP_NOT_FOUND};
-    }
-
     THttpResponse HandleExecuteBatch(THttpInput& input) {
         auto requestBody = input.ReadAll();
         auto requestBodyNode = NYT::NodeFromYsonString(requestBody);
@@ -167,31 +148,31 @@ private:
             return THttpResponse{HTTP_INTERNAL_SERVER_ERROR};
         }
         for (auto& request : requests.AsList()) {
-            auto& command = request["command"];
-            auto& parameters = request["parameters"];
+            Assertion_(request);
+
+            const auto& command = request["command"];
+            const auto& parameters = request["parameters"];
+            const auto& path = parameters["path"].AsString();
+            const auto& attributes = parameters.HasKey("attributes") ? parameters["attributes"] : NYT::TNode{};
             if (command == "list") {
-                return HandleListCommand(parameters["path"], parameters.HasKey("attributes") ? parameters["attributes"] : NYT::TNode{});
+                return HandleListCommand_(path, attributes);
             }
             if (command == "get") {
-                return HandleGetCommand(parameters["path"], parameters.HasKey("attributes") ? parameters["attributes"] : NYT::TNode{});
+                return HandleGetCommand_(path, attributes);
             }
         }
         return THttpResponse{HTTP_NOT_FOUND};
     }
 
-    THashMap<TString, THashSet<TString>> requiredAttributes;
+    std::function<void(const NYT::TNode& request)> Assertion_ = [] ([[maybe_unused]] auto _) {};
+    THandler HandleListCommand_;
+    THandler HandleGetCommand_;
+
 };
 
 Y_UNIT_TEST_SUITE(YtNativeGateway) {
-
-Y_UNIT_TEST(GetFolder) {
-    const auto port = NTesting::GetFreePort();
-    THashMap<TString, THashSet<TString>> requiredAttributes {
-        {"//test/a", {"type", "broken", "target_path", "user_attributes"}},
-        {"//link_dest", {"type", "user_attributes"}}
-    };
-    NMock::TMockServer mockServer{port, [&requiredAttributes] () {return new TYtReplier(requiredAttributes);}};
-
+    
+std::pair<TIntrusivePtr<TYtState>, IYtGateway::TPtr> InitTest(const NTesting::TPortHolder& port) {
     TYtNativeServices nativeServices;
     auto gatewaysConfig = MakeGatewaysConfig(port);
     nativeServices.Config = std::make_shared<TYtGatewayConfig>(gatewaysConfig.GetYt());
@@ -202,7 +183,61 @@ Y_UNIT_TEST(GetFolder) {
     ytState->Gateway = ytGateway;
 
     InitializeYtGateway(ytGateway, ytState);
+    return {ytState, ytGateway};
+}
 
+Y_UNIT_TEST(GetFolder) {
+    THashMap<TString, THashSet<TString>> requiredAttributes {
+        {"//test/a", {"type", "broken", "target_path", "user_attributes"}},
+        {"//link_dest", {"type", "user_attributes"}}
+    };
+    const auto checkRequiredAttributes = [&requiredAttributes] (const NYT::TNode& request) {
+        const auto& parameters = request["parameters"];
+        const auto path = parameters["path"].AsString();
+        const auto& attributes = parameters.HasKey("attributes") ? parameters["attributes"] : NYT::TNode{};
+
+        if (!requiredAttributes.contains(path)) {
+            return;
+        }
+
+        THashSet<TString> attributesSet;
+        for (const auto& attribute : attributes.AsList()) {
+            attributesSet.insert(attribute.AsString());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(requiredAttributes[path], attributesSet);
+    };
+    
+    const auto handleGet = [] (TStringBuf path, const NYT::TNode& attributes) {
+        Y_UNUSED(attributes);
+        THttpResponse resp{HTTP_OK};
+        if (path == "//link_dest") {
+            resp.SetContent(CYPRES_LINK_DEST);
+            return resp;
+        }
+        if (path == "//link_access_denied") {
+            resp.SetContent(CYPRES_ACCESS_ERROR);
+            return resp;
+        }
+
+        return THttpResponse{HTTP_NOT_FOUND};
+    };
+    
+    const auto handleList = [] (TStringBuf path, const NYT::TNode& attributes) {
+        Y_UNUSED(attributes);
+        THttpResponse resp{HTTP_OK};
+        if (path == "//test/a") {
+            resp.SetContent(CYPRES_NODE_A_CONTENT);
+            return resp;
+        }
+        return THttpResponse{HTTP_NOT_FOUND};
+    };
+
+    const auto port = NTesting::GetFreePort();
+    NMock::TMockServer mockServer{port, 
+        [checkRequiredAttributes, handleList, handleGet] () {return new TYtReplier(handleList, handleGet, checkRequiredAttributes);}
+    };
+
+    auto [ytState, ytGateway] = InitTest(port);
     IYtGateway::TFolderOptions folderOptions{ytState->SessionId};
     TYtSettings ytSettings {};
     folderOptions.Cluster("ut_cluster")
@@ -219,6 +254,48 @@ Y_UNIT_TEST(GetFolder) {
     UNIT_ASSERT_EQUAL(
         folderRes.ItemsOrFileLink, 
         (std::variant<TVector<IYtGateway::TFolderResult::TFolderItem>, TFileLinkPtr>(EXPECTED_ITEMS)));
+}
+
+Y_UNIT_TEST(EmptyResolveIsNotError) {
+    const auto port = NTesting::GetFreePort();
+
+    const auto handleList = [] (TStringBuf path, const NYT::TNode& attributes) {
+        Y_UNUSED(path);
+        Y_UNUSED(attributes);
+
+        THttpResponse resp{HTTP_OK};
+        resp.SetContent(CYPRES_NODE_W_LINK);
+        return resp;
+    };
+
+    const auto handleGet = [] (TStringBuf path, const NYT::TNode& attributes) {
+        Y_UNUSED(path);
+        Y_UNUSED(attributes);
+
+        THttpResponse resp{HTTP_OK};
+        resp.SetContent(CYPRES_ACCESS_ERROR);
+        return resp;
+    };
+
+    NMock::TMockServer mockServer{port, 
+        [handleList, handleGet] () {return new TYtReplier(handleList, handleGet);}
+    };
+
+    auto [ytState, ytGateway] = InitTest(port);
+    IYtGateway::TResolveOptions options{ytState->SessionId};
+
+    IYtGateway::TFolderOptions folderOptions{ytState->SessionId};
+    TYtSettings ytSettings {};
+    folderOptions.Cluster("ut_cluster")
+        .Config(std::make_shared<TYtSettings>(ytSettings))
+        .Prefix("//test");
+    auto folderFuture = ytGateway->GetFolder(std::move(folderOptions));
+
+    folderFuture.Wait();
+    ytState->Gateway->CloseSession({ytState->SessionId});
+    auto folderRes = folderFuture.GetValue();
+    
+    UNIT_ASSERT_EQUAL_C(folderRes.Success(), true, folderRes.Issues().ToString());
 }
 }
 

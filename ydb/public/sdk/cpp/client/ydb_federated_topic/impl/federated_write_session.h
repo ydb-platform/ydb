@@ -2,7 +2,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federated_topic_impl.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/write_session.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/write_session.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/write_session.h>
 
@@ -37,7 +37,8 @@ public:
     TFederatedWriteSession(const TFederatedWriteSessionSettings& settings,
                           std::shared_ptr<TGRpcConnectionsImpl> connections,
                           const TFederatedTopicClientSettings& clientSetttings,
-                          std::shared_ptr<TFederatedDbObserver> observer);
+                          std::shared_ptr<TFederatedDbObserver> observer,
+                          std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs);
 
     ~TFederatedWriteSession() = default;
 
@@ -62,6 +63,20 @@ public:
     inline NTopic::TWriterCounters::TPtr GetCounters() override {Y_ABORT("Unimplemented"); } //ToDo - unimplemented;
 
 private:
+
+    class TWrappedWriteMessage {
+    public:
+        const TString Data;
+        NTopic::TWriteMessage Message;
+        TWrappedWriteMessage(NTopic::TWriteMessage&& message)
+            : Data(message.Data)
+            , Message(std::move(message))
+        {
+            Message.Data = Data;
+        }
+    };    
+
+private:
     void Start();
     void OpenSubSessionImpl(std::shared_ptr<TDbInfo> db);
 
@@ -70,21 +85,26 @@ private:
     void OnFederatedStateUpdateImpl();
     void ScheduleFederatedStateUpdateImpl(TDuration delay);
 
-    void WriteInternal(NTopic::TContinuationToken&&, NTopic::TWriteMessage&& message);
+    void WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& message);
     bool PrepareDeferredWrite(TDeferredWrite& deferred);
 
     void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
+
+    TStringBuilder GetLogPrefix() const;
 
 private:
     // For subsession creation
     const NTopic::TFederatedWriteSessionSettings Settings;
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     const NTopic::TTopicClientSettings SubClientSetttings;
+    std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> ProvidedCodecs;
 
     std::shared_ptr<TFederatedDbObserver> Observer;
     NThreading::TFuture<void> AsyncInit;
     std::shared_ptr<TFederatedDbState> FederationState;
     NYdbGrpc::IQueueClientContextPtr UpdateStateDelayContext;
+
+    TLog Log;
 
     std::shared_ptr<TDbInfo> CurrentDatabase;
 
@@ -99,8 +119,8 @@ private:
 
     TMaybe<NTopic::TContinuationToken> PendingToken;  // from Subsession
     bool ClientHasToken = false;
-    std::deque<NTopic::TWriteMessage> OriginalMessagesToPassDown;
-    std::deque<NTopic::TWriteMessage> OriginalMessagesToGetAck;
+    std::deque<TWrappedWriteMessage> OriginalMessagesToPassDown;
+    std::deque<TWrappedWriteMessage> OriginalMessagesToGetAck;
     i64 BufferFreeSpace;
 
     // Exiting.

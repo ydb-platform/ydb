@@ -31,79 +31,8 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         auto &runtime = *server->GetRuntime();
         TAutoPtr<IEventHandle> handle;
 
-        THolder<NKqp::TEvKqp::TEvQueryRequest> request;
-        if (traceId) {
-            struct RequestCtx : NGRpcService::IRequestCtxMtSafe {
-                RequestCtx(NWilson::TTraceId &&traceId) : TraceId(std::move(traceId)) {}
-
-                NWilson::TTraceId GetWilsonTraceId() const override {
-                    return TraceId.Clone();
-                }
-
-                TMaybe<TString> GetTraceId() const override {
-                    return Nothing();
-                }
-
-                const TMaybe<TString> GetDatabaseName() const override {
-                    return "";
-                }
-
-                const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const override {
-                    return Ptr;
-                }
-
-                const TString& GetSerializedToken() const override {
-                    return Token;
-                }
-
-                bool IsClientLost() const override {
-                    return false;
-                };
-
-                virtual const google::protobuf::Message* GetRequest() const override {
-                    return nullptr;
-                };
-
-                const TMaybe<TString> GetRequestType() const override {
-                    return "_document_api_request";
-                };
-
-                void SetFinishAction(std::function<void()>&& cb) override {
-                    Y_UNUSED(cb);
-                };
-
-                google::protobuf::Arena* GetArena() override {
-                    return nullptr;
-                };
-
-                TIntrusiveConstPtr<NACLib::TUserToken> Ptr;
-                TString Token;
-                NWilson::TTraceId TraceId;
-            };
-            
-            auto *txControl = google::protobuf::Arena::CreateMessage<Ydb::Table::TransactionControl>(&arena);
-            txControl->mutable_begin_tx()->mutable_serializable_read_write();
-            txControl->set_commit_tx(true);
-
-            auto ptr = std::make_shared<RequestCtx>(std::move(traceId));
-            request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
-                NKikimrKqp::QUERY_ACTION_EXECUTE,
-                NKikimrKqp::QUERY_TYPE_SQL_DML,
-                TActorId(),
-                ptr,
-                TString(), //sessionId
-                TString(sql),
-                TString(), //queryId
-                txControl, //tx_control
-                nullptr, //ydbParameters
-                Ydb::Table::QueryStatsCollection::STATS_COLLECTION_UNSPECIFIED, //collectStats
-                nullptr, // query_cache_policy
-                nullptr //operationParams
-            );
-        } else {
-            request = MakeSQLRequest(sql, true);
-        }
-        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr));
+        THolder<NKqp::TEvKqp::TEvQueryRequest> request = MakeSQLRequest(sql, true);
+        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr, std::move(traceId)));
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetRef().GetYdbStatus(), code);
     }
@@ -178,7 +107,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         );
 
         UNIT_ASSERT(uploader->BuildTraceTrees());
-        UNIT_ASSERT_EQUAL(1, uploader->Traces.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, uploader->Traces.size());
 
         TFakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
 
@@ -186,11 +115,11 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         UNIT_ASSERT(deSpan);
 
         auto dsTxSpans = deSpan->get().FindAll("Datashard.Transaction");
-        UNIT_ASSERT_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
+        UNIT_ASSERT_VALUES_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
 
         for (auto dsTxSpan : dsTxSpans) {
             auto tabletTxs = dsTxSpan.get().FindAll("Tablet.Transaction");
-            UNIT_ASSERT_EQUAL(2, tabletTxs.size()); // Each shard executes a proposal tablet tx and a progress tablet tx.
+            UNIT_ASSERT_VALUES_EQUAL(2, tabletTxs.size()); // Each shard executes a proposal tablet tx and a progress tablet tx.
 
             auto propose = tabletTxs[0];
             // Note: when volatile transactions are enabled propose doesn't persist anything
@@ -236,7 +165,8 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
 
     Y_UNIT_TEST(TestTraceDistributedSelect) {
         auto [runtime, server, sender] = TestCreateServer();
-
+        bool bTreeIndex = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
+        
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
     
         TFakeWilsonUploader *uploader = new TFakeWilsonUploader();
@@ -287,7 +217,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         );
 
         UNIT_ASSERT(uploader->BuildTraceTrees());
-        UNIT_ASSERT_EQUAL(1, uploader->Traces.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, uploader->Traces.size());
 
         TFakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
 
@@ -297,7 +227,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             UNIT_ASSERT(readActorSpan);
 
             auto dsReads = readActorSpan->get().FindAll("Datashard.Read"); // Read actor sends EvRead to each shard.
-            UNIT_ASSERT_EQUAL(dsReads.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(dsReads.size(), 2);
 
             canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) , (LiteralExecuter) "
                 ", (DataExecuter -> [(WaitForTableResolve) , (WaitForShardsResolve) , (WaitForSnapshot) , (ComputeActor) "
@@ -310,27 +240,40 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                 ", (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) "
                 ", (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog "
                 "-> [(Tablet.WriteLog.LogEntry)])])])])])])])";
+
+            if (bTreeIndex) { // no index nodes (levels = 0)
+                canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) , (LiteralExecuter) "
+                ", (DataExecuter -> [(WaitForTableResolve) , (WaitForShardsResolve) , (WaitForSnapshot) , (ComputeActor) "
+                ", (RunTasks) , (KqpNode.SendTasks) , (ComputeActor -> [(ReadActor -> [(WaitForShardsResolve) , (Datashard.Read "
+                "-> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) "
+                ", (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) "
+                ", (Datashard.Unit)]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])])]) , (Datashard.Read -> [(Tablet.Transaction "
+                "-> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) "
+                ", (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog "
+                "-> [(Tablet.WriteLog.LogEntry)])])])])])])])";
+            }
+
         } else {
             auto deSpan = trace.Root.BFSFindOne("DataExecuter");
             UNIT_ASSERT(deSpan);
 
             auto dsTxSpans = deSpan->get().FindAll("Datashard.Transaction");
-            UNIT_ASSERT_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
+            UNIT_ASSERT_VALUES_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
 
             for (auto dsTxSpan : dsTxSpans) {
                 auto tabletTxs = dsTxSpan.get().FindAll("Tablet.Transaction");
-                UNIT_ASSERT_EQUAL(1, tabletTxs.size());
+                UNIT_ASSERT_VALUES_EQUAL(1, tabletTxs.size());
 
                 auto propose = tabletTxs[0];
                 CheckTxHasWriteLog(propose);
 
                 // Blobs are loaded from BS.
-                UNIT_ASSERT_EQUAL(2, propose.get().FindAll("Tablet.Transaction.Wait").size());
-                UNIT_ASSERT_EQUAL(2, propose.get().FindAll("Tablet.Transaction.Enqueued").size());
+                UNIT_ASSERT_VALUES_EQUAL(2, propose.get().FindAll("Tablet.Transaction.Wait").size());
+                UNIT_ASSERT_VALUES_EQUAL(2, propose.get().FindAll("Tablet.Transaction.Enqueued").size());
 
                 // We execute tx multiple times, because we have to load data for it to execute.
                 auto executeSpans = propose.get().FindAll("Tablet.Transaction.Execute");
-                UNIT_ASSERT_EQUAL(3, executeSpans.size());
+                UNIT_ASSERT_VALUES_EQUAL(3, executeSpans.size());
 
                 CheckExecuteHasDatashardUnits(executeSpans[0], 3);
                 CheckExecuteHasDatashardUnits(executeSpans[1], 1);
@@ -391,7 +334,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         );
 
         UNIT_ASSERT(uploader->BuildTraceTrees());
-        UNIT_ASSERT_EQUAL(1, uploader->Traces.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, uploader->Traces.size());
 
         TFakeWilsonUploader::Trace& trace = uploader->Traces.begin()->second;
 
@@ -399,7 +342,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         UNIT_ASSERT(readActorSpan);
 
         auto dsReads = readActorSpan->get().FindAll("Datashard.Read"); // Read actor sends EvRead to each shard.
-        UNIT_ASSERT_EQUAL(dsReads.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(dsReads.size(), 2);
 
         std::string canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) , "
             "(DataExecuter -> [(WaitForTableResolve) , (WaitForShardsResolve) , (WaitForSnapshot) , (ComputeActor) , "
@@ -415,7 +358,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
     Y_UNIT_TEST(TestTraceWriteImmediateOnShard) {
         auto [runtime, server, sender] = TestCreateServer();
 
-        auto opts = TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}});
+        TShardedTableOptions opts;
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
         TFakeWilsonUploader *uploader = new TFakeWilsonUploader();
@@ -426,10 +369,15 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         NWilson::TTraceId traceId = NWilson::TTraceId::NewTraceId(15, 4095);
         const ui32 rowCount = 3;
         ui64 txId = 100;
-        Write(runtime, sender, shards[0], tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED, std::move(traceId));
+        auto request = MakeWriteRequest(txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, opts.Columns_, rowCount);
+        runtime.SendToPipe(shards[0], sender, request.release(), 0, GetPipeConfigWithRetries(), TActorId(), 0, std::move(traceId));
+
+        auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+        auto resultRecord = ev->Get()->Record;
+        UNIT_ASSERT_C(resultRecord.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED, "Status: " << resultRecord.GetStatus() << " Issues: " << resultRecord.GetIssues());
 
         UNIT_ASSERT(uploader->BuildTraceTrees());
-        UNIT_ASSERT_EQUAL(1, uploader->Traces.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, uploader->Traces.size());
 
         TFakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
         
@@ -437,7 +385,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         UNIT_ASSERT(wtSpan);
         
         auto tabletTxs = wtSpan->get().FindAll("Tablet.Transaction");
-        UNIT_ASSERT_EQUAL(1, tabletTxs.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, tabletTxs.size());
         auto writeTx = tabletTxs[0];
 
         CheckTxHasWriteLog(writeTx); 

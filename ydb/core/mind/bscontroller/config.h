@@ -4,6 +4,8 @@
 #include "error.h"
 #include "impl.h"
 
+#include <ydb/core/protos/blob_depot_config.pb.h>
+
 namespace NKikimr {
     namespace NBsController {
 
@@ -89,7 +91,8 @@ namespace NKikimr {
             THashSet<TPDiskId> PDisksToRemove;
 
             // outgoing messages
-            std::deque<std::unique_ptr<IEventHandle>> Outbox;
+            std::deque<std::tuple<TNodeId, std::unique_ptr<IEventBase>, ui64>> Outbox;
+            std::deque<std::unique_ptr<IEventBase>> StatProcessorOutbox;
             THolder<TEvControllerUpdateSelfHealInfo> UpdateSelfHealInfoMsg;
 
             // deferred callbacks

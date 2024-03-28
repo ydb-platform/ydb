@@ -179,6 +179,11 @@ std::vector<TReplicationProgress> ScatterReplicationProgress(
     const std::vector<NTableClient::TUnversionedRow>& pivotKeys,
     NTableClient::TUnversionedRow upperKey);
 
+bool IsReplicaLocationValid(
+    const TReplicaInfo* replica,
+    const NYPath::TYPath& tablePath,
+    const TString& clusterName);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NChaosClient

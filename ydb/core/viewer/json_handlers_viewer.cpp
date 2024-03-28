@@ -38,6 +38,7 @@
 #include "json_acl.h"
 #include "json_graph.h"
 #include "json_render.h"
+#include "json_autocomplete.h"
 
 namespace NKikimr::NViewer {
 
@@ -80,4 +81,5 @@ void TViewerJsonHandlers::Init() {
     JsonHandlers["/json/acl"] = new TJsonHandler<TJsonACL>;
     JsonHandlers["/json/graph"] = new TJsonHandler<TJsonGraph>;
     JsonHandlers["/json/render"] = new TJsonHandler<TJsonRender>;
+    JsonHandlers["/json/autocomplete"] = new TJsonHandler<TJsonAutocomplete>;
 }}

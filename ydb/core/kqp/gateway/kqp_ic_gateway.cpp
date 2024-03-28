@@ -15,6 +15,7 @@
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/protos/external_sources.pb.h>
+#include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
@@ -343,9 +344,9 @@ private:
     typename TResponse::TPtr ResponseHandle;
 };
 
-// Handles scan query request for StreamExecuteYqlScript
-class TKqpScanQueryStreamRequestHandler : public TRequestHandlerBase<
-    TKqpScanQueryStreamRequestHandler,
+// Handles scan query and generic query request for StreamExecuteYqlScript
+class TKqpForwardStreamRequestHandler : public TRequestHandlerBase<
+    TKqpForwardStreamRequestHandler,
     NKqp::TEvKqp::TEvQueryRequest,
     NKqp::TEvKqp::TEvQueryResponse,
     IKqpGateway::TQueryResult>
@@ -355,9 +356,9 @@ public:
     using TResponse = NKqp::TEvKqp::TEvQueryResponse;
     using TResult = IKqpGateway::TQueryResult;
 
-    using TBase = TKqpScanQueryStreamRequestHandler::TBase;
+    using TBase = TKqpForwardStreamRequestHandler::TBase;
 
-    TKqpScanQueryStreamRequestHandler(TRequest* request, const TActorId& target, TPromise<TResult> promise,
+    TKqpForwardStreamRequestHandler(TRequest* request, const TActorId& target, TPromise<TResult> promise,
             TCallbackFunc callback)
         : TBase(request, promise, callback)
         , TargetActorId(target) {}
@@ -368,7 +369,7 @@ public:
         TActorId kqpProxy = MakeKqpProxyID(ctx.SelfID.NodeId());
         ctx.Send(kqpProxy, this->Request.Release());
 
-        this->Become(&TKqpScanQueryStreamRequestHandler::AwaitState);
+        this->Become(&TKqpForwardStreamRequestHandler::AwaitState);
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
@@ -390,7 +391,7 @@ public:
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
-            << "Received abort execution event for scan query: " << msg);
+            << "Received abort execution event for query: " << msg);
 
         TBase::HandleError(msg, ctx);
     }
@@ -418,7 +419,7 @@ public:
             HFunc(TResponse, HandleResponse);
 
         default:
-            TBase::HandleUnexpectedEvent("TKqpScanQueryStreamRequestHandler", ev->GetTypeRewrite());
+            TBase::HandleUnexpectedEvent("TKqpForwardStreamRequestHandler", ev->GetTypeRewrite());
         }
     }
 
@@ -744,8 +745,8 @@ public:
     TMaybe<TString> GetDomainName() override {
         TAppData* appData = AppData(ActorSystem);
         if (GetDomainLoginOnly()) {
-            if (appData->DomainsInfo && !appData->DomainsInfo->Domains.empty()) {
-                return appData->DomainsInfo->Domains.begin()->second->Name;
+            if (appData->DomainsInfo && appData->DomainsInfo->Domain) {
+                return appData->DomainsInfo->GetDomain()->Name;
             }
         }
         return {};
@@ -1870,7 +1871,7 @@ public:
         // TODO: Rewrite CollectParameters at kqp_host
         FillParameters(std::move(params), ev->Record.MutableRequest()->MutableYdbParameters());
 
-        return SendKqpScanQueryStreamRequest(ev.Release(), target,
+        return SendKqpQueryStreamRequest(ev.Release(), target,
             [](TPromise<TQueryResult> promise, TResponse&& responseEv) {
             TQueryResult queryResult;
             queryResult.ProtobufArenaPtr.reset(new google::protobuf::Arena());
@@ -2006,6 +2007,42 @@ public:
         return RunGenericQuery(query, NKikimrKqp::QUERY_ACTION_EXPLAIN, MakeHolder<TEvKqp::TEvQueryRequest>());
     }
 
+    TFuture<TQueryResult> StreamExecGenericQuery(const TString& cluster, const TString& query,
+        TQueryData::TPtr params, const TAstQuerySettings& settings,
+        const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target) override
+    {
+        YQL_ENSURE(cluster == Cluster);
+
+        using TRequest = NKqp::TEvKqp::TEvQueryRequest;
+        using TResponse = NKqp::TEvKqp::TEvQueryResponse;
+
+        auto ev = MakeHolder<TRequest>();
+        if (UserToken) {
+            ev->Record.SetUserToken(UserToken->GetSerializedToken());
+        }
+
+        ev->Record.MutableRequest()->SetDatabase(Database);
+        ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+        ev->Record.MutableRequest()->SetQuery(query);
+        ev->Record.MutableRequest()->SetKeepSession(false);
+        ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
+
+        FillParameters(std::move(params), ev->Record.MutableRequest()->MutableYdbParameters());
+
+        auto& txControl = *ev->Record.MutableRequest()->MutableTxControl();
+        txControl.mutable_begin_tx()->CopyFrom(txSettings);
+        txControl.set_commit_tx(true);
+
+        return SendKqpQueryStreamRequest(ev.Release(), target,
+            [](TPromise<TQueryResult> promise, TResponse&& responseEv) {
+            TQueryResult queryResult;
+            queryResult.ProtobufArenaPtr.reset(new google::protobuf::Arena());
+            KqpResponseToQueryResult(responseEv.Record.GetRef(), queryResult);
+            promise.SetValue(std::move(queryResult));
+        });
+    }
+
 private:
     using TDescribeSchemeResponse = TEvSchemeShard::TEvDescribeSchemeResult;
     using TTransactionResponse = TEvTxUserProxy::TEvProposeTransactionStatus;
@@ -2061,11 +2098,11 @@ private:
         return promise.GetFuture();
     }
 
-    TFuture<TQueryResult> SendKqpScanQueryStreamRequest(NKqp::TEvKqp::TEvQueryRequest* request,
-        const NActors::TActorId& target, TKqpScanQueryStreamRequestHandler::TCallbackFunc callback)
+    TFuture<TQueryResult> SendKqpQueryStreamRequest(NKqp::TEvKqp::TEvQueryRequest* request,
+        const NActors::TActorId& target, TKqpForwardStreamRequestHandler::TCallbackFunc callback)
     {
         auto promise = NewPromise<TQueryResult>();
-        IActor* requestHandler = new TKqpScanQueryStreamRequestHandler(request, target, promise, callback);
+        IActor* requestHandler = new TKqpForwardStreamRequestHandler(request, target, promise, callback);
         RegisterActor(requestHandler);
 
         return promise.GetFuture();

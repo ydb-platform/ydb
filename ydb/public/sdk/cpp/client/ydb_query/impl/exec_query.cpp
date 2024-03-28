@@ -77,7 +77,7 @@ public:
                     stats = TExecStats(std::move(*self->Response_.mutable_exec_stats()));
                 }
 
-                if (self->Response_.has_tx_meta() && self->Session_.Defined()) {
+                if (self->Response_.has_tx_meta() && self->Response_.tx_meta().id() && self->Session_.Defined()) {
                     tx = TTransaction(self->Session_.GetRef(), self->Response_.tx_meta().id());
                 }
 

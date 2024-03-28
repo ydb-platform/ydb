@@ -104,7 +104,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
     IEngineFlat* engine = tx->GetDataTx()->GetEngine();
     Y_VERIFY_S(engine, "missing engine for " << *op << " at " << DataShard.TabletID());
 
-    if (op->IsImmediate() && !tx->ReValidateKeys()) {
+    if (op->IsImmediate() && !tx->ReValidateKeys(txc.DB.GetScheme())) {
         // Immediate transactions may be reordered with schema changes and become invalid
         const auto& dataTx = tx->GetDataTx();
         Y_ABORT_UNLESS(!dataTx->Ready());

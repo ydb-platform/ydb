@@ -6,6 +6,7 @@
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_disk.pb.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 
@@ -417,6 +418,10 @@ bool TBlobStorageGroupInfo::TTopology::BelongsToSubgroup(const TVDiskIdShort& vd
 
 ui32 TBlobStorageGroupInfo::TTopology::GetIdxInSubgroup(const TVDiskIdShort& vdisk, ui32 hash) const {
     return BlobMapper->GetIdxInSubgroup(vdisk, hash);
+}
+
+bool TBlobStorageGroupInfo::TTopology::IsHandoff(const TVDiskIdShort& vdisk, ui32 hash) const {
+    return BlobMapper->GetIdxInSubgroup(vdisk, hash) >= GType.TotalPartCount();
 }
 
 TVDiskIdShort TBlobStorageGroupInfo::TTopology::GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash) const {

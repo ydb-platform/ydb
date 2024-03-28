@@ -1,11 +1,12 @@
 Metadata-Version: 2.1
 Name: sniffio
-Version: 1.3.0
+Version: 1.3.1
 Summary: Sniff out which async library your code is running under
-Home-page: https://github.com/python-trio/sniffio
-Author: Nathaniel J. Smith
-Author-email: njs@pobox.com
+Author-email: "Nathaniel J. Smith" <njs@pobox.com>
 License: MIT OR Apache-2.0
+Project-URL: Homepage, https://github.com/python-trio/sniffio
+Project-URL: Documentation, https://sniffio.readthedocs.io/
+Project-URL: Changelog, https://sniffio.readthedocs.io/en/latest/history.html
 Keywords: async,trio,asyncio
 Classifier: License :: OSI Approved :: MIT License
 Classifier: License :: OSI Approved :: Apache Software License
@@ -20,6 +21,7 @@ Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Intended Audience :: Developers
 Classifier: Development Status :: 5 - Production/Stable
 Requires-Python: >=3.7
+Description-Content-Type: text/x-rst
 License-File: LICENSE
 License-File: LICENSE.APACHE2
 License-File: LICENSE.MIT

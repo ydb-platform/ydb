@@ -637,7 +637,7 @@ void ReportUnrecognizedFlags(
 // --------------------------------------------------------------------
 
 bool WasPresentOnCommandLine(y_absl::string_view flag_name) {
-  y_absl::MutexLock l(&specified_flags_guard);
+  y_absl::ReaderMutexLock l(&specified_flags_guard);
   Y_ABSL_INTERNAL_CHECK(specified_flags != nullptr,
                       "ParseCommandLine is not invoked yet");
 

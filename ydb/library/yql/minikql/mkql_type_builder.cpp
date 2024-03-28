@@ -9,6 +9,7 @@
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
+#include <ydb/library/yql/minikql/mkql_runtime_version.h>
 #include <ydb/library/yql/minikql/mkql_node_printer.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/compare.h>
@@ -53,46 +54,6 @@ public:
         }
         return &e;
     }
-};
-
-class TCallablePayload : public NUdf::ICallablePayload {
-public:
-    TCallablePayload(NMiniKQL::TNode* node)
-    {
-        auto structObj = AS_VALUE(NMiniKQL::TStructLiteral, NMiniKQL::TRuntimeNode(node, true));
-        auto argsIndex = structObj->GetType()->GetMemberIndex("Args");
-        auto payloadIndex = structObj->GetType()->GetMemberIndex("Payload");
-        Payload_ = AS_VALUE(NMiniKQL::TDataLiteral, structObj->GetValue(payloadIndex))->AsValue().AsStringRef();
-        auto args = structObj->GetValue(argsIndex);
-        auto argsList = AS_VALUE(NMiniKQL::TListLiteral, args);
-        auto itemType = AS_TYPE(NMiniKQL::TStructType, AS_TYPE(NMiniKQL::TListType, args)->GetItemType());
-        auto nameIndex = itemType->GetMemberIndex("Name");
-        auto flagsIndex = itemType->GetMemberIndex("Flags");
-        ArgsNames_.reserve(argsList->GetItemsCount());
-        ArgsFlags_.reserve(argsList->GetItemsCount());
-        for (ui32 i = 0; i < argsList->GetItemsCount(); ++i) {
-            auto arg = AS_VALUE(NMiniKQL::TStructLiteral, argsList->GetItems()[i]);
-            ArgsNames_.push_back(AS_VALUE(NMiniKQL::TDataLiteral, arg->GetValue(nameIndex))->AsValue().AsStringRef());
-            ArgsFlags_.push_back(AS_VALUE(NMiniKQL::TDataLiteral, arg->GetValue(flagsIndex))->AsValue().Get<ui64>());
-        }
-    }
-
-    NUdf::TStringRef GetPayload() const override {
-        return Payload_;
-    }
-
-    NUdf::TStringRef GetArgumentName(ui32 index) const override {
-        return ArgsNames_[index];
-    }
-
-    ui64 GetArgumentFlags(ui32 index) const override {
-        return ArgsFlags_[index];
-    }
-
-private:
-    NUdf::TStringRef Payload_;
-    TVector<NUdf::TStringRef> ArgsNames_;
-    TVector<ui64> ArgsFlags_;
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2396,6 +2357,10 @@ size_t CalcMaxBlockItemSize(const TType* type) {
         case NUdf::EDataSlot::Interval:
         case NUdf::EDataSlot::Uint64:
         case NUdf::EDataSlot::Timestamp:
+        case NUdf::EDataSlot::Date32:
+        case NUdf::EDataSlot::Datetime64:
+        case NUdf::EDataSlot::Timestamp64:
+        case NUdf::EDataSlot::Interval64:
         case NUdf::EDataSlot::Float:
         case NUdf::EDataSlot::Double: {
             size_t sz = GetDataTypeInfo(slot).FixedSize;
@@ -2457,6 +2422,125 @@ NUdf::IBlockItemComparator::TPtr TBlockTypeHelper::MakeComparator(NUdf::TType* t
 
 NUdf::IBlockItemHasher::TPtr TBlockTypeHelper::MakeHasher(NUdf::TType* type) const {
     return NUdf::MakeBlockReaderImpl<THasherTraits>(TTypeInfoHelper(), type, nullptr).release();
+}
+
+TType* TTypeBuilder::NewVoidType() const {
+    return TRuntimeNode(Env.GetVoidLazy(), true).GetStaticType();
+}
+
+TType* TTypeBuilder::NewNullType() const {
+    if (!UseNullType || RuntimeVersion < 11) {
+        TCallableBuilder callableBuilder(Env, "Null", NewOptionalType(NewVoidType()));
+        return TRuntimeNode(callableBuilder.Build(), false).GetStaticType();
+    } else {
+        return TRuntimeNode(Env.GetNullLazy(), true).GetStaticType();
+    }
+}
+
+TType* TTypeBuilder::NewEmptyStructType() const {
+    return Env.GetEmptyStructLazy()->GetGenericType();
+}
+
+TType* TTypeBuilder::NewStructType(TType* baseStructType, const std::string_view& memberName, TType* memberType) const {
+    MKQL_ENSURE(baseStructType->IsStruct(), "Expected struct type");
+
+    const auto& detailedBaseStructType = static_cast<const TStructType&>(*baseStructType);
+    TStructTypeBuilder builder(Env);
+    builder.Reserve(detailedBaseStructType.GetMembersCount() + 1);
+    for (ui32 i = 0, e = detailedBaseStructType.GetMembersCount(); i < e; ++i) {
+        builder.Add(detailedBaseStructType.GetMemberName(i), detailedBaseStructType.GetMemberType(i));
+    }
+
+    builder.Add(memberName, memberType);
+    return builder.Build();
+}
+
+TType* TTypeBuilder::NewStructType(const TArrayRef<const std::pair<std::string_view, TType*>>& memberTypes) const {
+    TStructTypeBuilder builder(Env);
+    builder.Reserve(memberTypes.size());
+    for (auto& x : memberTypes) {
+        builder.Add(x.first, x.second);
+    }
+
+    return builder.Build();
+}
+
+TType* TTypeBuilder::NewArrayType(const TArrayRef<const std::pair<std::string_view, TType*>>& memberTypes) const {
+    return NewStructType(memberTypes);
+}
+
+TType* TTypeBuilder::NewDataType(NUdf::TDataTypeId schemeType, bool optional) const {
+    return optional ? NewOptionalType(TDataType::Create(schemeType, Env)) : TDataType::Create(schemeType, Env);
+}
+
+TType* TTypeBuilder::NewPgType(ui32 typeId) const {
+    return TPgType::Create(typeId, Env);
+}
+
+TType* TTypeBuilder::NewDecimalType(ui8 precision, ui8 scale) const {
+    return TDataDecimalType::Create(precision, scale, Env);
+}
+
+TType* TTypeBuilder::NewOptionalType(TType* itemType) const {
+    return TOptionalType::Create(itemType, Env);
+}
+
+TType* TTypeBuilder::NewListType(TType* itemType) const {
+    return TListType::Create(itemType, Env);
+}
+
+TType* TTypeBuilder::NewStreamType(TType* itemType) const {
+    return TStreamType::Create(itemType, Env);
+}
+
+TType* TTypeBuilder::NewFlowType(TType* itemType) const {
+    return TFlowType::Create(itemType, Env);
+}
+
+TType* TTypeBuilder::NewBlockType(TType* itemType, TBlockType::EShape shape) const {
+    return TBlockType::Create(itemType, shape, Env);
+}
+
+TType* TTypeBuilder::NewTaggedType(TType* baseType, const std::string_view& tag) const {
+    return TTaggedType::Create(baseType, tag, Env);
+}
+
+TType* TTypeBuilder::NewDictType(TType* keyType, TType* payloadType, bool multi) const {
+    return TDictType::Create(keyType, multi ? NewListType(payloadType) : payloadType, Env);
+}
+
+TType* TTypeBuilder::NewEmptyTupleType() const {
+    return Env.GetEmptyTupleLazy()->GetGenericType();
+}
+
+TType* TTypeBuilder::NewTupleType(const TArrayRef<TType* const>& elements) const {
+    return TTupleType::Create(elements.size(), elements.data(), Env);
+}
+
+TType* TTypeBuilder::NewArrayType(const TArrayRef<TType* const>& elements) const {
+    return NewTupleType(elements);
+}
+
+TType* TTypeBuilder::NewEmptyMultiType() const {
+    if (RuntimeVersion > 35) {
+        return TMultiType::Create(0, nullptr, Env);
+    }
+    return Env.GetEmptyTupleLazy()->GetGenericType();
+}
+
+TType* TTypeBuilder::NewMultiType(const TArrayRef<TType* const>& elements) const {
+    if (RuntimeVersion > 35) {
+        return TMultiType::Create(elements.size(), elements.data(), Env);
+    }
+    return TTupleType::Create(elements.size(), elements.data(), Env);
+}
+
+TType* TTypeBuilder::NewResourceType(const std::string_view& tag) const {
+    return TResourceType::Create(tag, Env);
+}
+
+TType* TTypeBuilder::NewVariantType(TType* underlyingType) const {
+    return TVariantType::Create(underlyingType, Env);
 }
 
 } // namespace NMiniKQL

@@ -6,6 +6,17 @@ namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct IDiscoverRequestHook
+    : public TRefCounted
+{
+    virtual void EnrichRequest(NProto::TReqDiscover* request) const = 0;
+    virtual void OnResponse(NProto::TRspDiscover* response) const = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(IDiscoverRequestHook);
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TPeerDiscoveryResponse
 {
     bool IsUp;
@@ -27,7 +38,7 @@ DEFINE_REFCOUNTED_TYPE(IPeerDiscovery)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IPeerDiscoveryPtr CreateDefaultPeerDiscovery(TDiscoverRequestHook hook = {});
+IPeerDiscoveryPtr CreateDefaultPeerDiscovery(IDiscoverRequestHookPtr hook = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -8,6 +8,8 @@
 #include <library/cpp/yaml/as/tstring.h>
 
 #include <google/protobuf/message.h>
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 #include <util/generic/string.h>
 
@@ -24,11 +26,25 @@ namespace NKikimr::NYaml {
         auto operator<=>(const TCombinedDiskInfoKey&) const = default;
     };
 
+    struct TPoolConfigKey {
+        ui32 Domain = 0; // always 0
+        ui32 StoragePoolType = 0;
+
+        auto operator<=>(const TPoolConfigKey&) const = default;
+    };
+
+    struct TPoolConfigInfo {
+        bool HasErasureSpecies = false;
+        bool HasKind = false;
+        bool HasVDiskKind = false;
+    };
+
     struct TTransformContext {
         bool DisableBuiltinSecurity;
         bool ExplicitEmptyDefaultGroups;
         bool ExplicitEmptyDefaultAccess;
         std::map<TCombinedDiskInfoKey, NKikimrConfig::TCombinedDiskInfo> CombinedDiskInfo;
+        std::map<TPoolConfigKey, TPoolConfigInfo> PoolConfigInfo;
         std::map<ui32, TString> GroupErasureSpecies;
     };
 

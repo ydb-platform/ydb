@@ -8,6 +8,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/protos/table_stats.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
 
@@ -83,7 +84,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
         auto schemeShardId = entry.DomainInfo->DomainKey.OwnerId;
 
         auto result = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>(
-            path, schemeShardId, TPathId());
+            path, TPathId());
 
         auto* pathDescription = result->Record.MutablePathDescription();
         auto* self = pathDescription->MutableSelf();
@@ -151,7 +152,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
         auto schemeShardId = entry.DomainInfo->DomainKey.OwnerId;
 
         auto result = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>(
-            path, schemeShardId, TPathId());
+            path, TPathId());
 
         auto* pathDescription = result->Record.MutablePathDescription();
         auto* self = pathDescription->MutableSelf();
@@ -232,18 +233,17 @@ void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TAct
 
     if (record.GetDescribePath().HasPath()) {
         TDomainsInfo *domainsInfo = AppData(ctx)->DomainsInfo.Get();
-        Y_ABORT_UNLESS(!domainsInfo->Domains.empty());
+        Y_ABORT_UNLESS(domainsInfo->Domain);
 
         if (record.GetDescribePath().GetPath() == "/") {
             // Special handling for enumerating roots
             TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder> result =
-                new NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder("/", NSchemeShard::RootSchemeShardId, TPathId(NSchemeShard::RootSchemeShardId, NSchemeShard::RootPathId));
+                new NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder("/", TPathId(NSchemeShard::RootSchemeShardId, NSchemeShard::RootPathId));
             auto descr = result->Record.MutablePathDescription();
             FillRootDescr(descr->MutableSelf(), "/", NSchemeShard::RootSchemeShardId);
-            for (const auto& domain : domainsInfo->Domains) {
-                auto entry = result->Record.MutablePathDescription()->AddChildren();
-                FillRootDescr(entry, domain.second->Name, domain.second->SchemeRoot);
-            }
+            auto entry = result->Record.MutablePathDescription()->AddChildren();
+            auto *domain = domainsInfo->GetDomain();
+            FillRootDescr(entry, domain->Name, domain->SchemeRoot);
 
             ctx.Send(Source, result.Release(), 0, SourceCookie);
             return Die(ctx);
@@ -407,8 +407,7 @@ void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult:
         const auto& pathDescription = ev->Get()->GetRecord().GetPathDescription();
         const auto& self = pathDescription.GetSelf();
 
-        TDomainsInfo *domainsInfo = AppData()->DomainsInfo.Get();
-        Y_ABORT_UNLESS(!domainsInfo->Domains.empty());
+        const auto& domainsInfo = AppData()->DomainsInfo;
 
         bool needSysFolder = false;
         if (self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeSubDomain ||
@@ -417,11 +416,8 @@ void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult:
         {
             needSysFolder = true;
         } else if (self.GetPathId() == NSchemeShard::RootPathId) {
-            for (const auto& [_, domain] : domainsInfo->Domains) {
-                if (domain->SchemeRoot == self.GetSchemeshardId()) {
-                    needSysFolder = true;
-                    break;
-                }
+            if (const auto& domain = domainsInfo->Domain; domain && domain->SchemeRoot == self.GetSchemeshardId()) {
+                needSysFolder = true;
             }
         }
 

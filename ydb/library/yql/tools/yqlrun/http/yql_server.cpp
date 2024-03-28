@@ -32,6 +32,7 @@
 
 #include <google/protobuf/arena.h>
 
+#include <util/folder/tempdir.h>
 #include <util/system/fstat.h>
 #include <util/system/tempfile.h>
 #include <util/string/escape.h>
@@ -173,11 +174,12 @@ struct TTableFileHolder {
 };
 
 TProgramPtr MakeFileProgram(const TString& program, TYqlServer& yqlServer,
-    const THashMap<TString, TString>& tables, const THashMap<std::pair<TString, TString>, TVector<std::pair<TString, TString>>>& rtmrTableAttributes) {
+    const THashMap<TString, TString>& tables, const THashMap<std::pair<TString, TString>, 
+    TVector<std::pair<TString, TString>>>& rtmrTableAttributes, const TString& tmpDir) {
 
     TVector<TDataProviderInitializer> dataProvidersInit;
 
-    auto ytNativeServices = NFile::TYtFileServices::Make(yqlServer.FunctionRegistry, tables, yqlServer.FileStorage);
+    auto ytNativeServices = NFile::TYtFileServices::Make(yqlServer.FunctionRegistry, tables, yqlServer.FileStorage, tmpDir);
     auto ytNativeGateway = CreateYtFileGateway(ytNativeServices);
 
     auto dqCompFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory({
@@ -217,7 +219,7 @@ TProgramPtr MakeFileProgram(const TString& program, TYqlServer& yqlServer,
 }
 
 TProgramPtr MakeFileProgram(const TString& program, const TString& input, const TString& attr,
-    TAutoPtr<TTableFileHolder>& inputFile, TTempFile& outputFile, TYqlServer& yqlServer) {
+    TAutoPtr<TTableFileHolder>& inputFile, TTempFile& outputFile, TYqlServer& yqlServer, const TString& tmpDir) {
     TString cluster = "plato";
 
     THashMap<TString, TString> tables;
@@ -238,7 +240,7 @@ TProgramPtr MakeFileProgram(const TString& program, const TString& input, const 
         rtmrTableAttributes[std::make_pair("plato_rtmr", "Input")] = {{"_yql_row_spec", NYT::NodeToYsonString(node[YqlRowSpecAttribute])}};
     }
 
-    return MakeFileProgram(program, yqlServer, tables, rtmrTableAttributes);
+    return MakeFileProgram(program, yqlServer, tables, rtmrTableAttributes, tmpDir);
 }
 
 YQL_ACTION(Paste)
@@ -319,7 +321,8 @@ YQL_ACTION(Parse)
         Y_UNUSED(input);
         Y_UNUSED(attr);
         Y_UNUSED(parameters);
-        TProgramPtr prg = MakeFileProgram(program, YqlServer, {}, {});
+        TTempDir tmpDir;
+        TProgramPtr prg = MakeFileProgram(program, YqlServer, {}, {}, tmpDir.Name());
 
         bool parsed = (options & TYqlAction::YqlProgram)
                 ? prg->ParseYql()
@@ -346,7 +349,8 @@ YQL_ACTION(Compile)
     void Perform(const TString& program, const TString& input, const TString& attr, ui32 options, const TString& parameters) {
         Y_UNUSED(input);
         Y_UNUSED(attr);
-        TProgramPtr prg = MakeFileProgram(program, YqlServer, {}, {});
+        TTempDir tmpDir;
+        TProgramPtr prg = MakeFileProgram(program, YqlServer, {}, {}, tmpDir.Name());
         prg->SetParametersYson(parameters);
 
         bool noError = (options & TYqlAction::YqlProgram) ? prg->ParseYql() : prg->ParseSql(GetTranslationSettings(YqlServer.GatewaysConfig));
@@ -380,7 +384,8 @@ YQL_ACTION(OptimizeOrValidateFile)
         TAutoPtr<TTableFileHolder> inputFile;
         TTempFile outputFile(MakeTempName());
         TTempFile outputFileAttr(outputFile.Name() + ".attr");
-        TProgramPtr prg = MakeFileProgram(program, input, attr, inputFile, outputFile, YqlServer);
+        TTempDir tmpDir;
+        TProgramPtr prg = MakeFileProgram(program, input, attr, inputFile, outputFile, YqlServer, tmpDir.Name());
 
         bool noError = (options & TYqlAction::YqlProgram) ? prg->ParseYql() : prg->ParseSql(GetTranslationSettings(YqlServer.GatewaysConfig));
 
@@ -451,7 +456,8 @@ YQL_ACTION(FileRun)
         TAutoPtr<TTableFileHolder> inputFile;
         TTempFile outputFile(MakeTempName());
         TTempFile outputFileAttr(outputFile.Name() + ".attr");
-        TProgramPtr prg = MakeFileProgram(program, input, attr, inputFile, outputFile, YqlServer);
+        TTempDir tmpDir;
+        TProgramPtr prg = MakeFileProgram(program, input, attr, inputFile, outputFile, YqlServer, tmpDir.Name());
 
         bool noError = (options & TYqlAction::YqlProgram) ? prg->ParseYql() : prg->ParseSql(GetTranslationSettings(YqlServer.GatewaysConfig));
 

@@ -25,7 +25,7 @@ private:
 
 TStoreWriteUnit::TStoreWriteUnit(TDataShard &dataShard,
                                    TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::StoreDataTx, false, dataShard, pipeline)
+    : TExecutionUnit(EExecutionUnitKind::StoreWrite, false, dataShard, pipeline)
 {
 }
 

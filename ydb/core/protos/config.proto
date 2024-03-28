@@ -4,6 +4,7 @@ import "ydb/core/fq/libs/config/protos/fq_config.proto";
 import "ydb/core/protos/alloc.proto";
 import "ydb/core/protos/auth.proto";
 import "ydb/core/protos/blobstorage.proto";
+import "ydb/core/protos/blobstorage_base3.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/blobstorage_vdisk_config.proto";
@@ -31,6 +32,7 @@ import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/tenant_pool.proto";
 import "ydb/core/protos/tenant_slot_broker.proto";
 import "ydb/library/actors/protos/interconnect.proto";
+import "ydb/library/yql/core/file_storage/proto/file_storage.proto";
 import "ydb/library/yql/providers/common/proto/gateways_config.proto";
 
 package NKikimrConfig;
@@ -78,6 +80,8 @@ message TActorSystemConfig {
         optional uint32 MaxThreads = 13; // Higher balancing bound, should be not lower than `Threads`
         optional int32 Priority = 16;
         optional int32 MaxAvgPingDeviation = 17;
+
+        optional bool HasSharedThread = 18;
     }
 
     message TScheduler {
@@ -112,6 +116,7 @@ message TActorSystemConfig {
     optional uint32 CpuCount = 13;
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
+    optional bool UseSharedThreads = 18;
 
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
@@ -175,7 +180,7 @@ message TDomainsConfig {
             optional bool IsDisabled = 6 [default = false]; // used in the intermediate reconfiguration step
         }
 
-        optional uint32 SSId = 1;
+        optional uint32 SSId = 1 [default = 1];
         optional TRing Ring = 2;
         optional uint32 StateStorageVersion = 3 [default = 0];
         repeated uint32 CompatibleVersions = 4;
@@ -211,7 +216,7 @@ message TDomainsConfig {
     }
 
     message THiveConfig { // look for another THiveConfig later in this file
-        optional uint32 HiveUid = 1;
+        optional uint32 HiveUid = 1 [default = 1];
         optional fixed64 Hive = 2;
     }
 
@@ -280,6 +285,18 @@ message TBlobStorageConfig {
     }
 
     optional TAutoconfigSettings AutoconfigSettings = 6;
+
+    message TCostMetricsConfig {
+        optional NKikimrBlobStorage.EPDiskType PDiskType = 1;
+        optional uint64 BurstThresholdNs = 2;
+        optional float DiskTimeAvailableScale = 3;
+    }
+
+    message TCostMetricsSettings {
+        repeated TCostMetricsConfig VDiskTypes = 1;
+    };
+
+    optional TCostMetricsSettings CostMetricsSettings = 7;
  }
 
 message TBlobStorageFormatConfig {
@@ -968,6 +985,8 @@ message TQueryServiceConfig {
     repeated string HostnamePatterns = 13; // List of hostname regexps for external data sources; disabled if empty
 
     optional NYql.TS3GatewayConfig S3 = 6;
+    optional NYql.TYtGatewayConfig Yt = 15;
+    optional NYql.TFileStorageConfig FileStorage = 16;
     optional NYql.THttpGatewayConfig HttpGateway = 7;
     optional NYql.TGenericConnectorConfig Connector = 8 [deprecated=true];
     optional string MdbGateway = 9 [deprecated=true];
@@ -1354,6 +1373,7 @@ message THiveConfig {
     optional double MinStorageScatterToBalance = 71 [default = 999]; // storage balancer trigger is disabled by default
     optional double MinGroupUsageToBalance = 72 [default = 0.1];
     optional uint64 StorageBalancerInflight = 73 [default = 1];
+    optional bool EnableDestroyOperations = 74 [default = false];
 }
 
 message TColumnShardConfig {
@@ -1541,29 +1561,54 @@ message TTracingConfig {
         optional TAuthConfig AuthConfig = 2;
     }
 
-    // Only global scope for now
     message TSelectors {
+        reserved 1;
+        repeated string RequestTypes = 3;
+        optional string Database = 2;
     }
 
-    message TSamplingScope {
+    message TSamplingRule {
+        // scope to which the rule applies
         optional TSelectors Scope = 1;
+        // fraction of requests sampled by this rule
         optional float Fraction = 2;
+        // detalisation of traces sampled by this rule
         optional uint32 Level = 3;
-        optional uint32 MaxRatePerMinute = 4;
-        optional uint32 MaxBurst = 5;
+        // maximum average amount of traces sampled by this rule
+        optional uint64 MaxTracesPerMinute = 4;
+        // maximum burst of traces sampled by this rule
+        optional uint64 MaxTracesBurst = 5;
     }
 
-    message TExternalThrottlingScope {
+    // field meaning is the same as in TSamplingRule
+    message TExternalThrottlingRule {
         optional TSelectors Scope = 1;
-        optional uint32 MaxRatePerMinute = 2;
-        optional uint32 MaxBurst = 3;
+        optional uint64 MaxTracesPerMinute = 2;
+        optional uint64 MaxTracesBurst = 3;
+    }
+
+    message TUploaderConfig {
+        // maximum average amount of spans uploaded from the node
+        optional uint64 MaxExportedSpansPerSecond = 1;
+        // maximum batch size in spans
+        optional uint64 MaxSpansInBatch = 2;
+        // maximum batch size in bytes
+        optional uint64 MaxBytesInBatch = 3;
+        // maximum batch accumulation time
+        optional uint64 MaxBatchAccumulationMilliseconds = 4;
+        // time after which generated span will be discarded and will
+        // not be sent to the collector
+        optional uint32 SpanExportTimeoutSeconds = 5;
+        // maximum batch export requests being run simultaneously
+        optional uint64 MaxExportRequestsInflight = 6;
     }
 
     reserved 1 to 5;
 
     optional TBackendConfig Backend = 6;
-    repeated TSamplingScope Sampling = 7;
-    repeated TExternalThrottlingScope ExternalThrottling = 8;
+    repeated TSamplingRule Sampling = 7;
+    repeated TExternalThrottlingRule ExternalThrottling = 8;
+    optional TUploaderConfig Uploader = 9;
 }
 
 message TFailureInjectionConfig {

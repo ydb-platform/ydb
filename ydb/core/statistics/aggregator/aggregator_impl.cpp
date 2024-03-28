@@ -2,6 +2,7 @@
 
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/statistics/stat_service.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 

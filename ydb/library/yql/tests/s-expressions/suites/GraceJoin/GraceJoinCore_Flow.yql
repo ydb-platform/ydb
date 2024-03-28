@@ -12,7 +12,7 @@
 (let joinInner (GraceJoinCore
 (ExpandMap (ToFlow list1) (lambda '(m)(Member m 'key1)))
 (ExpandMap (ToFlow list2) (lambda '(m)(Member m 'key2)))
-'Inner  '('0) '('0) '('0 '0) '('0 '1) '()))
+'Inner  '('0) '('0) '('0 '0) '('0 '1) '('key1) '('key2) '()))
 
 (let res_sink (DataSink 'result))
 

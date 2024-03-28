@@ -648,6 +648,10 @@ ids {
   severity: S_WARNING
 }
 ids {
+  code: PG_COMPAT
+  severity: S_WARNING
+}
+ids {
     code: YQL_UNTYPED_STRING_LITERALS
     severity: S_WARNING
 }

@@ -16,7 +16,7 @@ import tempfile
 class Opts(object):
     def __init__(self, args):
         argparser = argparse.ArgumentParser(allow_abbrev=False)
-        argparser.add_argument('--cmake-binary-dir', required=True)
+        argparser.add_argument('--project-binary-dir', required=True)
         argparser.add_argument('--cmake-ar', required=True)
         argparser.add_argument('--cmake-ranlib', required=True)
         argparser.add_argument('--cmake-host-system-name', required=True)
@@ -46,7 +46,7 @@ class Opts(object):
 
         self.preserved_options = []
 
-        # these variables can contain paths absolute or relative to CMAKE_BINARY_DIR
+        # these variables can contain paths absolute or relative to project_binary_dir
         self.global_libs_and_objects_input = []
         self.non_global_libs_input = []
         self.output = None
@@ -57,7 +57,7 @@ class Opts(object):
             (these use absolute paths).
             If it is a library that is added from some other path (like CUDA) return True
             """
-            return not (os.path.exists(path) or os.path.exists(os.path.join(self.parsed_args.cmake_binary_dir, path)))
+            return not (os.path.exists(path) or os.path.exists(os.path.join(self.parsed_args.project_binary_dir, path)))
 
         def process_input(args):
             i = 0
@@ -130,9 +130,9 @@ class FilesCombiner(object):
             archiver_tool_path = 'libtool'
         elif opts.is_msvc_compatible_linker:
             arch_type = 'LIB'
-        elif re.match('^(|.*/)llvm\-ar(\-[\d])?', opts.parsed_args.cmake_ar):
+        elif re.match(r'^(|.*/)llvm\-ar(\-[\d])?', opts.parsed_args.cmake_ar):
             arch_type = 'LLVM_AR'
-        elif re.match('^(|.*/)(gcc\-)?ar(\-[\d])?', opts.parsed_args.cmake_ar):
+        elif re.match(r'^(|.*/)(gcc\-)?ar(\-[\d])?', opts.parsed_args.cmake_ar):
             arch_type = 'GNU_AR'
         else:
             raise Exception('Unsupported arch type for CMAKE_AR={}'.format(opts.parsed_args.cmake_ar))
@@ -143,7 +143,7 @@ class FilesCombiner(object):
             archiver_tool_path,
             arch_type,
             'gnu',  # llvm_ar_format, used only if arch_type == 'LLVM_AR'
-            opts.parsed_args.cmake_binary_dir,
+            opts.parsed_args.project_binary_dir,
             'None',  # plugin. Unused for now
         ]
         # the remaining archiving cmd args are [output, .. input .. ]

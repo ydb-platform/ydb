@@ -12,7 +12,7 @@ namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
 
-void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteData& writeData, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx) {
+void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteData& writeData, const ui64 cookie, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx) {
     IncCounter(COUNTER_WRITE_FAIL);
     switch (overloadReason) {
         case EOverloadStatus::Disk:
@@ -42,7 +42,7 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
         << " overload reason: [" << overloadReason << "]"
         << " at tablet " << TabletID());
 
-    ctx.Send(writeData.GetWriteMeta().GetSource(), event.release());
+    ctx.Send(writeData.GetWriteMeta().GetSource(), event.release(), 0, cookie);
 }
 
 TColumnShard::EOverloadStatus TColumnShard::CheckOverloaded(const ui64 tableId) const {
@@ -116,8 +116,8 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
             } else {
                 auto operation = OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
                 Y_ABORT_UNLESS(operation);
-                auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), operation->GetTxId(), NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, "put data fails");
-                ctx.Send(writeMeta.GetSource(), result.release());
+                auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), operation->GetLockId(), NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, "put data fails");
+                ctx.Send(writeMeta.GetSource(), result.release(), 0, operation->GetCookie());
             }
             CSCounters.OnFailedWriteResponse(EWriteFailReason::PutBlob);
             wBuffer.RemoveData(aggr, StoragesManager->GetInsertOperator());
@@ -149,6 +149,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     const auto& record = Proto(ev->Get());
     const ui64 tableId = record.GetTableId();
     const ui64 writeId = record.GetWriteId();
+    const ui64 cookie = ev->Cookie;
     const TString dedupId = record.GetDedupId();
     const auto source = ev->Sender;
 
@@ -192,7 +193,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     auto overloadStatus = CheckOverloaded(tableId);
     if (overloadStatus != EOverloadStatus::None) {
         std::unique_ptr<NActors::IEventBase> result = std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeData.GetWriteMeta(), NKikimrTxColumnShard::EResultStatus::OVERLOADED);
-        OverloadWriteFail(overloadStatus, writeData, std::move(result), ctx);
+        OverloadWriteFail(overloadStatus, writeData, cookie, std::move(result), ctx);
         CSCounters.OnFailedWriteResponse(EWriteFailReason::Overload);
     } else {
         if (ui64 writeId = (ui64)HasLongTxWrite(writeMeta.GetLongTxIdUnsafe(), writeMeta.GetWritePartId())) {
@@ -221,41 +222,127 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     }
 }
 
+class TCommitOperation {
+public:
+    using TPtr = std::shared_ptr<TCommitOperation>;
+
+    bool Parse(const NEvents::TDataEvents::TEvWrite& evWrite) {
+        if (evWrite.Record.GetLocks().GetLocks().size() != 1) {
+            return false;
+        }
+        LockId = evWrite.Record.GetLocks().GetLocks()[0].GetLockId();
+        TxId = evWrite.Record.GetTxId();
+        KqpLocks = evWrite.Record.GetLocks();
+        return !!LockId && !!TxId && KqpLocks.GetOp() == NKikimrDataEvents::TKqpLocks::Commit;
+    }
+
+private:
+    NKikimrDataEvents::TKqpLocks KqpLocks;
+    YDB_READONLY(ui64, LockId, 0);
+    YDB_READONLY(ui64, TxId, 0);
+};
+class TProposeWriteTransaction : public TProposeTransactionBase {
+public:
+    TProposeWriteTransaction(TColumnShard* self, TCommitOperation::TPtr op, const TActorId source, const ui64 cookie)
+        : TProposeTransactionBase(self)
+        , WriteCommit(op)
+        , Source(source)
+        , Cookie(cookie)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override { return TXTYPE_PROPOSE; }
+
+private:
+    void OnProposeResult(TTxController::TProposeResult& proposeResult, const TTxController::TTxInfo& txInfo) override;
+    void OnProposeError(TTxController::TProposeResult& proposeResult, const TTxController::TBasicTxInfo& txInfo) override;
+
+private:
+    TCommitOperation::TPtr WriteCommit;
+    TActorId Source;
+    ui64 Cookie;
+    std::unique_ptr<NActors::IEventBase> Result;
+};
+
+bool TProposeWriteTransaction::Execute(TTransactionContext& txc, const TActorContext&) {
+    NKikimrTxColumnShard::TCommitWriteTxBody proto;
+    proto.SetLockId(WriteCommit->GetLockId());
+    TString txBody;
+    Y_ABORT_UNLESS(proto.SerializeToString(&txBody));
+    ProposeTransaction(TTxController::TBasicTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, WriteCommit->GetTxId()), txBody, Source, Cookie, txc);
+    return true;
+}
+
+void TProposeWriteTransaction::Complete(const TActorContext& ctx) {
+    ctx.Send(Source, Result.release(), 0, Cookie);
+}
+
+void TProposeWriteTransaction::OnProposeResult(TTxController::TProposeResult& proposeResult, const TTxController::TTxInfo& txInfo) {
+    Y_UNUSED(proposeResult);
+    Result = NEvents::TDataEvents::TEvWriteResult::BuildPrepared(Self->TabletID(), txInfo.TxId, Self->GetProgressTxController().BuildCoordinatorInfo(txInfo));
+}
+
+void TProposeWriteTransaction::OnProposeError(TTxController::TProposeResult& proposeResult, const TTxController::TBasicTxInfo& txInfo) {
+    Y_UNUSED(proposeResult);
+    Result = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), txInfo.TxId, NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, proposeResult.GetStatusMessage());
+}
+
 void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("event", "TEvWrite");
 
     const auto& record = ev->Get()->Record;
-    const ui64 txId = ev->Get()->GetTxId();
     const auto source = ev->Sender;
+    const auto cookie = ev->Cookie;
+    const auto behaviour = TOperationsManager::GetBehaviour(*ev->Get());
+
+    if (behaviour == EOperationBehaviour::Undefined) {
+        IncCounter(COUNTER_WRITE_FAIL);
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "invalid write event");
+        ctx.Send(source, result.release(), 0, cookie);
+        return;
+    }
+
+    if (behaviour == EOperationBehaviour::CommitWriteLock) {
+        auto commitOperation = std::make_shared<TCommitOperation>();
+        if (!commitOperation->Parse(*ev->Get())) {
+            IncCounter(COUNTER_WRITE_FAIL);
+            auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "invalid commit event");
+            ctx.Send(source, result.release(), 0, cookie);
+        }
+        Execute(new TProposeWriteTransaction(this, commitOperation, source, cookie), ctx);
+        return;
+    }
+
+    const ui64 lockId = (behaviour == EOperationBehaviour::InTxWrite) ? record.GetTxId() : record.GetLockTxId();
 
     if (record.GetOperations().size() != 1) {
         IncCounter(COUNTER_WRITE_FAIL);
-        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), txId, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "only single operation is supported");
-        ctx.Send(source, result.release());
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "only single operation is supported");
+        ctx.Send(source, result.release(), 0, cookie);
         return;
     }
 
     const auto& operation = record.GetOperations()[0];
-
     if (operation.GetType() != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE) {
         IncCounter(COUNTER_WRITE_FAIL);
-        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), txId, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "only REPLACE operation is supported");
-        ctx.Send(source, result.release());
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "only REPLACE operation is supported");
+        ctx.Send(source, result.release(), 0, cookie);
         return;
     }
 
     if (!operation.GetTableId().HasSchemaVersion()) {
         IncCounter(COUNTER_WRITE_FAIL);
-        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), txId, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "schema version not set");
-        ctx.Send(source, result.release());
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "schema version not set");
+        ctx.Send(source, result.release(), 0, cookie);
         return;
     }
 
     auto schema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchema(operation.GetTableId().GetSchemaVersion());
     if (!schema) {
         IncCounter(COUNTER_WRITE_FAIL);
-        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), txId, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "unknown schema version");
-        ctx.Send(source, result.release());
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "unknown schema version");
+        ctx.Send(source, result.release(), 0, cookie);
         return;
     }
 
@@ -263,30 +350,31 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     if (!TablesManager.IsReadyForWrite(tableId)) {
         IncCounter(COUNTER_WRITE_FAIL);
-        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), txId, NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, "table not writable");
-        ctx.Send(source, result.release());
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, "table not writable");
+        ctx.Send(source, result.release(), 0, cookie);
         return;
     }
 
     auto arrowData = std::make_shared<TArrowData>(schema);
     if (!arrowData->Parse(operation, NEvWrite::TPayloadReader<NEvents::TDataEvents::TEvWrite>(*ev->Get()))) {
         IncCounter(COUNTER_WRITE_FAIL);
-        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), txId, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "parsing data error");
-        ctx.Send(source, result.release());
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "parsing data error");
+        ctx.Send(source, result.release(), 0, cookie);
     }
 
     auto overloadStatus = CheckOverloaded(tableId);
     if (overloadStatus != EOverloadStatus::None) {
         NEvWrite::TWriteData writeData(NEvWrite::TWriteMeta(0, tableId, source), arrowData, nullptr, nullptr);
-        std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), txId, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
-        OverloadWriteFail(overloadStatus, writeData, std::move(result), ctx);
+        std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
+        OverloadWriteFail(overloadStatus, writeData, cookie, std::move(result), ctx);
         return;
     }
 
     auto wg = WritesMonitor.RegisterWrite(arrowData->GetSize());
 
-    auto writeOperation = OperationsManager->RegisterOperation(txId);
+    auto writeOperation = OperationsManager->RegisterOperation(lockId, cookie);
     Y_ABORT_UNLESS(writeOperation);
+    writeOperation->SetBehaviour(behaviour);
     writeOperation->Start(*this, tableId, arrowData, source, ctx);
 }
 

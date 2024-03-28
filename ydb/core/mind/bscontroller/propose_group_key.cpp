@@ -5,7 +5,7 @@ namespace NBsController {
 
 class TBlobStorageController::TTxProposeGroupKey : public TTransactionBase<TBlobStorageController> {
 protected:
-    NKikimrBlobStorage::TEvControllerProposeGroupKey Proto;
+    TEvBlobStorage::TEvControllerProposeGroupKey::TPtr Event;
     NKikimrProto::EReplyStatus Status = NKikimrProto::OK;
     ui32 NodeId = 0;
     ui32 GroupId = 0;
@@ -15,18 +15,20 @@ protected:
     ui64 MainKeyVersion = 0;
     ui64 GroupKeyNonce = 0;
     bool IsAnotherTxInProgress = false;
+
 public:
-    TTxProposeGroupKey(const NKikimrBlobStorage::TEvControllerProposeGroupKey& proto, TBlobStorageController *controller)
+    TTxProposeGroupKey(TEvBlobStorage::TEvControllerProposeGroupKey::TPtr event, TBlobStorageController *controller)
         : TBase(controller)
-        , Proto(proto)
+        , Event(event)
     {
-        NodeId = Proto.GetNodeId();
-        GroupId = Proto.GetGroupId();
-        LifeCyclePhase = Proto.GetLifeCyclePhase();
-        MainKeyId =  Proto.GetMainKeyId();
-        EncryptedGroupKey = Proto.GetEncryptedGroupKey();
-        MainKeyVersion = Proto.GetMainKeyVersion();
-        GroupKeyNonce = Proto.GetGroupKeyNonce();
+        const auto& proto = Event->Get()->Record;
+        NodeId = proto.GetNodeId();
+        GroupId = proto.GetGroupId();
+        LifeCyclePhase = proto.GetLifeCyclePhase();
+        MainKeyId =  proto.GetMainKeyId();
+        EncryptedGroupKey = proto.GetEncryptedGroupKey();
+        MainKeyVersion = proto.GetMainKeyVersion();
+        GroupKeyNonce = proto.GetGroupKeyNonce();
     }
 
     TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_PROPOSE_GROUP_KEY; }
@@ -78,6 +80,10 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXPGK07, "TTxProposeGroupKey Execute");
+        if (!Self->ValidateIncomingNodeWardenEvent(*Event)) {
+            Status = NKikimrProto::ERROR;
+            return true;
+        }
         Status = NKikimrProto::OK;
         ReadStep();
         if (Status == NKikimrProto::OK) {
@@ -99,7 +105,7 @@ public:
             }
         } else {
             STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK10, "TTxProposeGroupKey error", (GroupId, GroupId),
-                (Status, Status), (Request, Proto));
+                (Status, Status), (Request, Event->Get()->Record));
         }
         if (!IsAnotherTxInProgress) {
             // Get groupinfo for the group and send it to all whom it may concern.
@@ -113,7 +119,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerProposeGroupKey
     STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXPGK11, "Handle TEvControllerProposeGroupKey", (Request, proto));
     Y_ABORT_UNLESS(AppData());
     NodesAwaitingKeysForGroup[proto.GetGroupId()].insert(proto.GetNodeId());
-    Execute(new TTxProposeGroupKey(proto, this));
+    Execute(new TTxProposeGroupKey(ev, this));
 }
 
 } // NBlobStorageController

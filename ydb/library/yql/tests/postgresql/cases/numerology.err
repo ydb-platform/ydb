@@ -1,3 +1,10 @@
+Registering pre-existing tables
+	INT4_TBL
+	INT2_TBL
+	FLOAT8_TBL
+	int4_tbl
+	float8_tbl
+	int2_tbl
 <sql-statement>
 --
 -- NUMEROLOGY
@@ -14,18 +21,10 @@ CREATE TABLE TEMP_FLOAT (f1 FLOAT8);
 INSERT INTO TEMP_FLOAT (f1)
   SELECT float8(f1) FROM INT4_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.INT4_TBL
-    
 <sql-statement>
 INSERT INTO TEMP_FLOAT (f1)
   SELECT float8(f1) FROM INT2_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.INT2_TBL
-    
 <sql-statement>
 SELECT f1 FROM TEMP_FLOAT
   ORDER BY f1;
@@ -39,18 +38,10 @@ INSERT INTO TEMP_INT4 (f1)
   SELECT int4(f1) FROM FLOAT8_TBL
   WHERE (f1 > -2147483647) AND (f1 < 2147483647);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.FLOAT8_TBL
-    
 <sql-statement>
 INSERT INTO TEMP_INT4 (f1)
   SELECT int4(f1) FROM INT2_TBL;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.INT2_TBL
-    
 <sql-statement>
 SELECT f1 FROM TEMP_INT4
   ORDER BY f1;
@@ -64,19 +55,11 @@ INSERT INTO TEMP_INT2 (f1)
   SELECT int2(f1) FROM FLOAT8_TBL
   WHERE (f1 >= -32767) AND (f1 <= 32767);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.FLOAT8_TBL
-    
 <sql-statement>
 INSERT INTO TEMP_INT2 (f1)
   SELECT int2(f1) FROM INT4_TBL
   WHERE (f1 >= -32767) AND (f1 <= 32767);
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.INT4_TBL
-    
 <sql-statement>
 SELECT f1 FROM TEMP_INT2
   ORDER BY f1;
@@ -92,19 +75,19 @@ INSERT INTO TEMP_GROUP
   SELECT 1, (- i.f1), (- f.f1)
   FROM INT4_TBL i, FLOAT8_TBL f;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.FLOAT8_TBL
-    
 <sql-statement>
 INSERT INTO TEMP_GROUP
   SELECT 2, i.f1, f.f1
   FROM INT4_TBL i, FLOAT8_TBL f;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.FLOAT8_TBL
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	INSERT INTO TEMP_GROUP
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: f1
+        	INSERT INTO TEMP_GROUP
+	^
 <sql-statement>
 SELECT DISTINCT f1 AS two FROM TEMP_GROUP ORDER BY 1;
 </sql-statement>

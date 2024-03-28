@@ -77,7 +77,7 @@ TEST_F(TLogDigestTest, TestNormalDistributionFixture)
 {
     CreateStandardLogDigest();
 
-    std::mt19937 generator(42 /* seed */);
+    std::mt19937 generator(42 /*seed*/);
     std::normal_distribution<double> distribution(0.77, 0.05);
 
     for (int i = 0; i < SampleCount; ++i) {
@@ -93,7 +93,7 @@ TEST_F(TLogDigestTest, TestUniformRandomFixture)
 {
     CreateStandardLogDigest();
 
-    std::mt19937 generator(42 /* seed */);
+    std::mt19937 generator(42 /*seed*/);
     std::uniform_real_distribution<double> distribution(0.25, 1.25);
 
     for (int i = 0; i < SampleCount; ++i) {
@@ -115,7 +115,7 @@ TEST_F(TLogDigestTest, TestCoincidingBounds)
     config->RelativePrecision = Epsilon;
     LogDigest_ = CreateLogDigest(config);
 
-    std::mt19937 generator(42 /* seed */);
+    std::mt19937 generator(42 /*seed*/);
     std::uniform_real_distribution<double> distribution(0.5, 1.5);
 
     for (int i = 0; i < SampleCount; ++i) {

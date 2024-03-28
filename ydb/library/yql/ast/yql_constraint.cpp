@@ -1232,20 +1232,32 @@ TUniqueConstraintNodeBase<Distinct>::DoGetSimplifiedForType(const TTypeAnnotatio
         for (bool setChanged = true; setChanged;) {
             setChanged = false;
             for (auto it = sets.begin(); sets.end() != it;) {
-                if (it->size() != 1U || it->front().size() <= 1U)
-                    ++it;
-                else {
-                    auto from = it++;
-                    const auto prefix = getPrefix(from->front());
-                    while (sets.cend() != it && it->size() == 1U && it->front().size() > 1U && prefix == getPrefix(it->front()))
-                        ++it;
+                if (!it->empty() && it->front().size() > 1U) {
+                    TPartOfConstraintBase::TSetType prefixes;
+                    prefixes.reserve(it->size());
+                    for (const auto& path : *it) {
+                        if (path.size() > 1U) {
+                            prefixes.emplace_back(getPrefix(path));
+                        }
+                    }
 
-                    if (ssize_t(GetElementsCount(TBase::GetSubTypeByPath(prefix, rowType))) == std::distance(from, it)) {
-                        *from++ = TPartOfConstraintBase::TSetType{std::move(prefix)};
+                    auto from = it++;
+                    if (prefixes.size() < from->size())
+                        continue;
+
+                    while (sets.cend() != it && it->size() == prefixes.size() &&
+                        std::all_of(it->cbegin(), it->cend(), [&](const TPartOfConstraintBase::TPathType& path) { return path.size() > 1U && prefixes.contains(getPrefix(path)); })) {
+                            ++it;
+                    }
+
+                    if (std::all_of(prefixes.cbegin(), prefixes.cend(),
+                        [width = std::distance(from, it), &rowType] (const TPartOfConstraintBase::TPathType& path) { return width == ssize_t(GetElementsCount(TBase::GetSubTypeByPath(path, rowType))); })) {
+                        *from++ =std::move(prefixes);
                         it = sets.erase(from, it);
                         changed = setChanged = true;
                     }
-                }
+                } else
+                    ++it;
             }
         }
     }

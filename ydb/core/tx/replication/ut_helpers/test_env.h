@@ -1,3 +1,5 @@
+#pragma once
+
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/testlib/test_client.h>
@@ -6,7 +8,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr::NReplication {
+namespace NKikimr::NReplication::NTestHelpers {
 
 template <bool UseDatabase = true>
 class TEnv {
@@ -58,6 +60,14 @@ public:
         }
     }
 
+    explicit TEnv(const TString& builtin)
+        : TEnv(false)
+    {
+        UNIT_ASSERT_STRING_CONTAINS(builtin, "@builtin");
+        Init(builtin);
+        Client.ModifyOwner("/", DomainName, builtin);
+    }
+
     explicit TEnv(const TString& user, const TString& password)
         : TEnv(false)
     {
@@ -105,6 +115,24 @@ public:
         return Client.Ls(std::forward<Args>(args)...);
     }
 
+    auto GetDescription(const TString& path) {
+        auto resp = Describe(path);
+        return resp->Record;
+    }
+
+    TPathId GetPathId(const TString& path) {
+        const auto& desc = GetDescription(path);
+        UNIT_ASSERT(desc.HasPathDescription());
+        UNIT_ASSERT(desc.GetPathDescription().HasSelf());
+
+        const auto& self = desc.GetPathDescription().GetSelf();
+        return TPathId(self.GetSchemeshardId(), self.GetPathId());
+    }
+
+    ui64 GetSchemeshardId(const TString& path) {
+        return GetPathId(path).OwnerId;
+    }
+
     template <typename... Args>
     auto CreateTable(Args&&... args) {
         return Client.CreateTable(std::forward<Args>(args)...);
@@ -118,11 +146,6 @@ public:
     auto Send(const TActorId& recipient, IEventBase* ev) {
         SendAsync(recipient, ev);
         return Server.GetRuntime()->GrabEdgeEvent<TEvResponse>(Sender);
-    }
-
-    template <typename TEvResponse>
-    auto Send(IEventBase* ev) {
-        return Send<TEvResponse>(YdbProxy, ev);
     }
 
     auto& GetRuntime() {

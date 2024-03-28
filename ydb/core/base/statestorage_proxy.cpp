@@ -897,12 +897,10 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
             return;
 
         TIntrusivePtr<TStateStorageInfo> updated = new TStateStorageInfo();
-        updated->StateStorageGroup = Info->StateStorageGroup;
         updated->NToSelect = Info->NToSelect;
         updated->Rings.resize(Info->Rings.size());
 
         const bool checkOldInfo = FlowControlledInfo && old
-            && updated->StateStorageGroup == FlowControlledInfo->StateStorageGroup
             && updated->NToSelect == FlowControlledInfo->NToSelect
             && updated->Rings.size() == FlowControlledInfo->Rings.size();
 

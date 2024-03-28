@@ -77,6 +77,7 @@ message THostState {
   optional uint32        InterconnectPort = 7;
   repeated EMarker       Markers = 8;
   optional NActorsInterconnect.TNodeLocation Location = 9;
+  optional uint32        StartTimeSeconds = 10;
 }
 
 message TClusterState {

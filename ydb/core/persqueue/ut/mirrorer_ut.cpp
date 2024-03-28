@@ -1,7 +1,7 @@
 #include "actor_persqueue_client_iface.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/data_plane_helpers.h>
 
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -254,7 +254,6 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
                 }
             }
         }
-
     }
 
     Y_UNIT_TEST(ValidStartStream) {

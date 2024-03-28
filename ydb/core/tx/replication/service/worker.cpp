@@ -23,6 +23,11 @@ TEvWorker::TEvData::TRecord::TRecord(ui64 offset, TString&& data)
 {
 }
 
+TEvWorker::TEvData::TEvData(const TVector<TRecord>& records)
+    : Records(records)
+{
+}
+
 TEvWorker::TEvData::TEvData(TVector<TRecord>&& records)
     : Records(std::move(records))
 {
@@ -31,7 +36,7 @@ TEvWorker::TEvData::TEvData(TVector<TRecord>&& records)
 void TEvWorker::TEvData::TRecord::Out(IOutputStream& out) const {
     out << "{"
         << " Offset: " << Offset
-        << " Data: " << Data
+        << " Data: " << Data.size() << "b"
     << " }";
 }
 
@@ -53,14 +58,17 @@ TString TEvWorker::TEvGone::ToString() const {
 }
 
 class TWorker: public TActorBootstrapped<TWorker> {
-    struct TActorInfo {
-        THolder<IActor> Actor;
+    class TActorInfo {
+        std::function<IActor*(void)> CreateFn;
         TActorId ActorId;
         bool InitDone;
+        ui32 CreateAttempt;
 
-        explicit TActorInfo(THolder<IActor>&& actor)
-            : Actor(std::move(actor))
+    public:
+        explicit TActorInfo(std::function<IActor*(void)>&& createFn)
+            : CreateFn(std::move(createFn))
             , InitDone(false)
+            , CreateAttempt(0)
         {
         }
 
@@ -70,6 +78,22 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
         explicit operator bool() const {
             return InitDone;
+        }
+
+        void Register(IActorOps* ops) {
+            ActorId = ops->RegisterWithSameMailbox(CreateFn());
+            ops->Send(ActorId, new TEvWorker::TEvHandshake());
+            InitDone = false;
+            ++CreateAttempt;
+        }
+
+        void Registered() {
+            InitDone = true;
+            CreateAttempt = 0;
+        }
+
+        ui32 GetCreateAttempt() const {
+            return CreateAttempt;
         }
     };
 
@@ -83,38 +107,29 @@ class TWorker: public TActorBootstrapped<TWorker> {
         return LogPrefix.GetRef();
     }
 
-    TActorId RegisterActor(TActorInfo& info) {
-        Y_ABORT_UNLESS(info.Actor);
-        info.ActorId = RegisterWithSameMailbox(info.Actor.Release());
-        return info.ActorId;
-    }
-
-    void InitActor(TActorInfo& info) {
-        Y_ABORT_UNLESS(info.ActorId);
-        Send(info.ActorId, new TEvWorker::TEvHandshake());
-        info.InitDone = false;
-    }
-
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
         if (ev->Sender == Reader) {
             LOG_I("Handshake with reader"
                 << ": sender# " << ev->Sender);
-            Reader.InitDone = true;
+
+            Reader.Registered();
+            if (!InFlightRecords) {
+                Send(Reader, new TEvWorker::TEvPoll());
+            }
         } else if (ev->Sender == Writer) {
             LOG_I("Handshake with writer"
                 << ": sender# " << ev->Sender);
-            Writer.InitDone = true;
+
+            Writer.Registered();
+            if (InFlightRecords) {
+                Send(Writer, new TEvWorker::TEvData(InFlightRecords));
+            }
         } else {
             LOG_W("Handshake from unknown actor"
                 << ": sender# " << ev->Sender);
             return;
-        }
-
-        if (Reader && Writer) {
-            LOG_N("Start working");
-            Send(Reader, new TEvWorker::TEvPoll());
         }
     }
 
@@ -127,7 +142,10 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return;
         }
 
-        Send(ev->Forward(Reader));
+        InFlightRecords.clear();
+        if (Reader) {
+            Send(ev->Forward(Reader));
+        }
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
@@ -139,21 +157,44 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return;
         }
 
-        Send(ev->Forward(Writer));
+        Y_ABORT_UNLESS(InFlightRecords.empty());
+        InFlightRecords = ev->Get()->Records;
+
+        if (Writer) {
+            Send(ev->Forward(Writer));
+        }
     }
 
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
-        // TODO: handle status
         if (ev->Sender == Reader) {
             LOG_I("Reader has gone"
                 << ": sender# " << ev->Sender);
+            MaybeRecreateActor(ev->Get()->Status, Reader);
         } else if (ev->Sender == Writer) {
             LOG_I("Writer has gone"
                 << ": sender# " << ev->Sender);
+            MaybeRecreateActor(ev->Get()->Status, Writer);
         } else {
             LOG_W("Unknown actor has gone"
                 << ": sender# " << ev->Sender);
         }
+    }
+
+    void MaybeRecreateActor(TEvWorker::TEvGone::EStatus status, TActorInfo& info) {
+        switch (status) {
+        case TEvWorker::TEvGone::UNAVAILABLE:
+            if (info.GetCreateAttempt() < MaxAttempts) {
+                return info.Register(this);
+            }
+            [[fallthrough]];
+        default:
+            return Leave();
+        }
+    }
+
+    void Leave() {
+        // TODO: signal to parent
+        PassAway();
     }
 
     void PassAway() override {
@@ -169,16 +210,15 @@ public:
         return NKikimrServices::TActivity::REPLICATION_WORKER;
     }
 
-    explicit TWorker(THolder<IActor>&& reader, THolder<IActor>&& writer)
-        : Reader(std::move(reader))
-        , Writer(std::move(writer))
+    explicit TWorker(std::function<IActor*(void)>&& createReaderFn, std::function<IActor*(void)>&& createWriterFn)
+        : Reader(std::move(createReaderFn))
+        , Writer(std::move(createWriterFn))
     {
     }
 
     void Bootstrap() {
         for (auto* actor : {&Reader, &Writer}) {
-            RegisterActor(*actor);
-            InitActor(*actor);
+            actor->Register(this);
         }
 
         Become(&TThis::StateWork);
@@ -195,13 +235,15 @@ public:
     }
 
 private:
+    static constexpr ui32 MaxAttempts = 3;
     mutable TMaybe<TString> LogPrefix;
     TActorInfo Reader;
     TActorInfo Writer;
+    TVector<TEvWorker::TEvData::TRecord> InFlightRecords;
 };
 
-IActor* CreateWorker(THolder<IActor>&& reader, THolder<IActor>&& writer) {
-    return new TWorker(std::move(reader), std::move(writer));
+IActor* CreateWorker(std::function<IActor*(void)>&& createReaderFn, std::function<IActor*(void)>&& createWriterFn) {
+    return new TWorker(std::move(createReaderFn), std::move(createWriterFn));
 }
 
 }

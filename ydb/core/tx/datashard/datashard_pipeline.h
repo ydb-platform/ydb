@@ -200,6 +200,7 @@ public:
         std::vector<std::unique_ptr<IEventHandle>>& replies);
     bool CleanupVolatile(ui64 txId, const TActorContext& ctx,
         std::vector<std::unique_ptr<IEventHandle>>& replies);
+    size_t CleanupWaitingVolatile(const TActorContext& ctx, std::vector<std::unique_ptr<IEventHandle>>& replies);
     ui64 PlannedTxInFly() const;
     const TSet<TStepOrder> &GetPlan() const;
     bool HasProposeDelayers() const;
@@ -277,12 +278,12 @@ public:
         return tx->RestoreTxData(Self, txc, ctx);
     }
 
-    ERestoreDataStatus RestoreDataTx(
-        TWriteOperation* tx,
+    ERestoreDataStatus RestoreWriteTx(
+        TWriteOperation* writeOp,
         TTransactionContext& txc
     )
     {
-        return tx->RestoreTxData(Self, txc);
+        return writeOp->RestoreTxData(Self, txc.DB);
     }
 
     void RegisterDistributedWrites(const TOperation::TPtr& op, NTable::TDatabase& db);

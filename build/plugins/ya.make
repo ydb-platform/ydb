@@ -1,6 +1,6 @@
 OWNER(g:ymake)
 
-PY23_LIBRARY()
+PY3_LIBRARY()
 
 STYLE_PYTHON()
 
@@ -48,4 +48,5 @@ RECURSE(
     lib/proxy
     lib/test_const
     lib/test_const/proxy
+    lib/tests/ruff
 )

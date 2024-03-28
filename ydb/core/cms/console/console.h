@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/console.pb.h>
+#include <ydb/core/protos/console_base.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/console_tenant.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
@@ -357,10 +358,12 @@ struct TEvConsole {
             const NKikimrConfig::TAppConfig &config,
             const THashSet<ui32> &affectedKinds,
             const TString &yamlConfig = {},
-            const TMap<ui64, TString> &volatileYamlConfigs = {})
+            const TMap<ui64, TString> &volatileYamlConfigs = {},
+            const NKikimrConfig::TAppConfig &rawConfig = {})
         {
             Record.SetGeneration(generation);
             Record.MutableConfig()->CopyFrom(config);
+            Record.MutableRawConsoleConfig()->CopyFrom(rawConfig);
             for (ui32 kind : affectedKinds)
                 Record.AddAffectedKinds(kind);
 

@@ -739,11 +739,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     TShardedTableOptions SimpleTable() {
-        return TShardedTableOptions()
-            .Columns({
-                {"key", "Uint32", true, false},
-                {"value", "Uint32", false, false},
-            });
+        return TShardedTableOptions();
     }
 
     TCdcStream KeysOnly() {
@@ -886,11 +882,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     TShardedTableOptions TinyCacheTable() {
         return TShardedTableOptions()
-            .ExecutorCacheSize(1)
-            .Columns({
-                {"key", "Uint32", true, false},
-                {"value", "Uint32", false, false},
-            });
+            .ExecutorCacheSize(1);
     }
 
     Y_UNIT_TEST(PageFaults) {

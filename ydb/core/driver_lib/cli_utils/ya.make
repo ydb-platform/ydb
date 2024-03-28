@@ -12,11 +12,11 @@ SRCS(
     cli_cmds_cms.cpp
     cli_cmds_config.cpp
     cli_cmds_console.cpp
+    cli_cmds_validate_config.cpp
     cli_cmds_debug.cpp
     cli_cmds_disk.cpp
     cli_cmds_genconfig.cpp
     cli_cmds_get.cpp
-    cli_cmds_group.cpp
     cli_cmds_node.cpp
     cli_cmds_root.cpp
     cli_cmds_server.cpp
@@ -35,7 +35,6 @@ SRCS(
 
 PEERDIR(
     library/cpp/deprecated/enum_codegen
-    ydb/library/grpc/client
     library/cpp/protobuf/json
     library/cpp/yson
     ydb/core/actorlib_impl
@@ -43,6 +42,8 @@ PEERDIR(
     ydb/core/blobstorage/pdisk
     ydb/core/client/minikql_compile
     ydb/core/client/scheme_cache_lib
+    ydb/core/config/init
+    ydb/core/config/validation
     ydb/core/driver_lib/cli_base
     ydb/core/engine
     ydb/core/erasure
@@ -51,6 +52,7 @@ PEERDIR(
     ydb/core/scheme
     ydb/library/aclib
     ydb/library/folder_service/proto
+    ydb/library/grpc/client
     ydb/library/yaml_config
     ydb/public/api/grpc
     ydb/public/api/grpc/draft

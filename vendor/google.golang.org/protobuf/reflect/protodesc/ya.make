@@ -11,6 +11,4 @@ SRCS(
     proto.go
 )
 
-GO_EMBED_PATTERN(editions_defaults.binpb)
-
 END()

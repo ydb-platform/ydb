@@ -9,6 +9,8 @@
 #include <ydb/core/tx/locks/locks.h>
 #include <ydb/core/tx/datashard/datashard_user_table.h>
 #include <ydb/core/tx/datashard/range_ops.h>
+#include <ydb/core/protos/query_stats.pb.h>
+#include <ydb/core/protos/kqp_stats.pb.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
@@ -534,30 +536,32 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
     return result;
 }
 
-void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks, bool hasKqpLocks, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner, TSysLocks& sysLocks, ui64 tabletId)
+void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks, bool useGenericReadSets, NKqp::TKqpTasksRunner* tasksRunner, TSysLocks& sysLocks, ui64 tabletId)
 {
     TMap<std::pair<ui64, ui64>, NKikimrTxDataShard::TKqpReadset> readsetData;
 
-    for (auto& [taskId, task] : tasksRunner.GetTasks()) {
-        auto& taskRunner = tasksRunner.GetTaskRunner(task.GetId());
+    if (tasksRunner) {
+        for (auto& [taskId, task] : tasksRunner->GetTasks()) {
+            auto& taskRunner = tasksRunner->GetTaskRunner(task.GetId());
 
-        for (ui32 i = 0; i < task.OutputsSize(); ++i) {
-            for (auto& channel : task.GetOutputs(i).GetChannels()) {
-                if (channel.GetIsPersistent()) {
-                    MKQL_ENSURE_S(channel.GetSrcEndpoint().HasTabletId());
-                    MKQL_ENSURE_S(channel.GetDstEndpoint().HasTabletId());
+            for (ui32 i = 0; i < task.OutputsSize(); ++i) {
+                for (auto& channel : task.GetOutputs(i).GetChannels()) {
+                    if (channel.GetIsPersistent()) {
+                        MKQL_ENSURE_S(channel.GetSrcEndpoint().HasTabletId());
+                        MKQL_ENSURE_S(channel.GetDstEndpoint().HasTabletId());
 
-                    NDq::TDqSerializedBatch outputData;
-                    auto fetchStatus = FetchAllOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), outputData);
-                    MKQL_ENSURE_S(fetchStatus == NUdf::EFetchStatus::Finish);
-                    MKQL_ENSURE(!outputData.IsOOB(), "Out-of-band data transport is not yet supported");
+                        NDq::TDqSerializedBatch outputData;
+                        auto fetchStatus = FetchAllOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), outputData);
+                        MKQL_ENSURE_S(fetchStatus == NUdf::EFetchStatus::Finish);
+                        MKQL_ENSURE(!outputData.IsOOB(), "Out-of-band data transport is not yet supported");
 
-                    auto key = std::make_pair(channel.GetSrcEndpoint().GetTabletId(), channel.GetDstEndpoint().GetTabletId());
-                    auto& channelData = *readsetData[key].AddOutputs();
+                        auto key = std::make_pair(channel.GetSrcEndpoint().GetTabletId(), channel.GetDstEndpoint().GetTabletId());
+                        auto& channelData = *readsetData[key].AddOutputs();
 
-                    channelData.SetChannelId(channel.GetId());
-                    channelData.SetFinished(true);
-                    channelData.MutableData()->Swap(&outputData.Proto);
+                        channelData.SetChannelId(channel.GetId());
+                        channelData.SetFinished(true);
+                        channelData.MutableData()->Swap(&outputData.Proto);
+                    }
                 }
             }
         }
@@ -566,7 +570,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
     NKikimrTx::TReadSetData::EDecision decision = NKikimrTx::TReadSetData::DECISION_COMMIT;
     TMap<std::pair<ui64, ui64>, NKikimrTx::TReadSetData> genericData;
 
-    if (hasKqpLocks && NeedValidateLocks(kqpLocks.GetOp())) {
+    if (kqpLocks.HasOp() && NeedValidateLocks(kqpLocks.GetOp())) {
         bool sendLocks = SendLocks(kqpLocks, tabletId);
         YQL_ENSURE(sendLocks == !kqpLocks.GetLocks().empty());
 
@@ -980,6 +984,10 @@ public:
     }
 
     NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, bool /* withSpilling */, TActorSystem* /* actorSystem */, bool /*isConcurrent*/) const override {
+        return {};
+    }
+
+    std::function<void()> GetWakeupCallback() const override {
         return {};
     }
 };

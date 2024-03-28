@@ -11,6 +11,7 @@ SRCS(
     build_distributed_erase_tx_out_rs_unit.cpp
     build_index.cpp
     build_kqp_data_tx_out_rs_unit.cpp
+    build_write_out_rs_unit.cpp    
     build_scheme_tx_out_rs_unit.cpp
     cdc_stream_heartbeat.cpp
     cdc_stream_scan.cpp
@@ -42,6 +43,7 @@ SRCS(
     create_table_unit.cpp
     create_volatile_snapshot_unit.cpp
     datashard__cancel_tx_proposal.cpp
+    datashard__column_stats.cpp
     datashard__compact_borrowed.cpp
     datashard__compaction.cpp
     datashard__cleanup_borrowed.cpp
@@ -191,6 +193,7 @@ SRCS(
     restore_unit.cpp
     setup_sys_locks.h
     store_and_send_out_rs_unit.cpp
+    store_and_send_write_out_rs_unit.cpp    
     store_commit_writes_tx_unit.cpp
     store_data_tx_unit.cpp
     store_write_unit.cpp
@@ -284,6 +287,7 @@ RECURSE_FOR_TESTS(
     ut_build_index
     ut_change_collector
     ut_change_exchange
+    ut_column_stats
     ut_compaction
     ut_erase_rows
     ut_followers

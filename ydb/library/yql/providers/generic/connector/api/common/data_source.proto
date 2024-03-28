@@ -32,6 +32,8 @@ enum EDataSourceKind {
     POSTGRESQL = 2;
     S3 = 3;
     YDB = 4;
+    MYSQL = 5;
+    MS_SQL_SERVER = 6;
 }
 
 // EProtocol generalizes various kinds of network protocols supported by different databases.

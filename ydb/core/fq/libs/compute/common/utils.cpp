@@ -1,7 +1,9 @@
 #include "utils.h"
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 namespace NFq {
 
@@ -122,6 +124,93 @@ TString FormatDurationUs(ui64 durationUs) {
     }
 
     return FormatDurationMs(durationUs / 1000);
+}
+
+namespace detail {
+
+struct TDurationParser {
+    constexpr static bool IsDigit(char c) noexcept {
+        return '0' <= c && c <= '9';
+    }
+
+    constexpr std::string_view ConsumeLastFraction() noexcept {
+        ConsumeWhitespace();
+        if (Src.empty()) {
+            return Src;
+        }
+
+        auto it = Src.end() - 1;
+        while (true) {
+            // we rely on non-empty number before fraction
+            if (IsDigit(*it) || it == Src.begin()) {
+                ++it;
+                break;
+            }
+            --it;
+        }
+        auto start = it - Src.begin();
+        auto res = Src.substr(start);
+        Src = Src.substr(0, start);
+        return res;
+    }
+
+    constexpr ui32 ConsumeNumberPortion() noexcept {
+        ui32 dec = 1;
+        ui32 res = 0;
+        while (!Src.empty() && IsDigit(Src.back())) {
+            res += (Src.back() - '0') * dec;
+            dec *= 10;
+            Src.remove_suffix(1);
+        }
+        return res;
+    }
+
+    constexpr void ConsumeWhitespace() noexcept {
+        while (!Src.empty() && Src.back() == ' ') {
+            Src.remove_suffix(1);
+        }
+    }
+
+    constexpr std::chrono::microseconds ParseDuration() {
+        auto fraction = ConsumeLastFraction();
+        if (fraction == "us") {
+            return std::chrono::microseconds{ConsumeNumberPortion()};
+        } else if (fraction == "ms") {
+            return std::chrono::milliseconds{ConsumeNumberPortion()};
+        }
+
+        std::chrono::microseconds result{};
+        if (fraction == "s") {
+            auto part = ConsumeNumberPortion();
+            if (!Src.empty() && Src.back() == '.') {
+                // parsed milliseconds (cantiseconds actually)
+                part *= 10;
+                result += std::chrono::milliseconds(part);
+
+                Src.remove_suffix(1);
+                result += std::chrono::seconds(ConsumeNumberPortion());
+            } else {
+                result += std::chrono::seconds{part};
+            }
+            fraction = ConsumeLastFraction();
+        }
+        if (fraction == "m") {
+            result += std::chrono::minutes{ConsumeNumberPortion()};
+            fraction = ConsumeLastFraction();
+        }
+
+        if (fraction == "h") {
+            result += std::chrono::hours{ConsumeNumberPortion()};
+        }
+        return result;
+    }
+
+    std::string_view Src;
+};
+}
+
+TDuration ParseDuration(TStringBuf str) {
+    return detail::TDurationParser{.Src = str}.ParseDuration();
 }
 
 TString FormatInstant(TInstant instant) {
@@ -621,7 +710,7 @@ void EnumeratePlansV2(NYson::TYsonWriter& writer, NJson::TJsonValue& value, ui32
     }
 }
 
-TString GetV1StatFromV2PlanV2(const TString& plan) {
+TString GetV1StatFromV2PlanV2(const TString& plan, double* cpuUsage) {
     TStringStream out;
     NYson::TYsonWriter writer(&out);
     writer.OnBeginMap();
@@ -655,6 +744,9 @@ TString GetV1StatFromV2PlanV2(const TString& plan) {
                         if (totals.CpuTimeUs.Sum) {
                             writer.OnKeyedItem("cpu");
                             writer.OnStringScalar(FormatDurationUs(totals.CpuTimeUs.Sum));
+                            if (cpuUsage) {
+                                *cpuUsage = totals.CpuTimeUs.Sum / 1000000.0;
+                            }
                         }
                         if (totals.SourceCpuTimeUs.Sum) {
                             writer.OnKeyedItem("scpu");
@@ -663,6 +755,101 @@ TString GetV1StatFromV2PlanV2(const TString& plan) {
                         writer.OnEndMap();
                     }
                 }
+            }
+        }
+    }
+    writer.OnEndMap();
+    return NJson2Yson::ConvertYson2Json(out.Str());
+}
+
+namespace {
+void RemapValue(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& key) {
+    writer.OnKeyedItem(key);
+    if (auto* keyNode = node.GetValueByPath(key)) {
+        switch (keyNode->GetType()) {
+        case NJson::JSON_BOOLEAN:
+            writer.OnBooleanScalar(keyNode->GetBoolean());
+            break;
+        case NJson::JSON_INTEGER:
+            writer.OnInt64Scalar(keyNode->GetInteger());
+            break;
+        case NJson::JSON_DOUBLE:
+            writer.OnDoubleScalar(keyNode->GetDouble());
+            break;
+        case NJson::JSON_STRING:
+        default:
+            writer.OnStringScalar(keyNode->GetStringSafe());
+            break;
+        }
+    } else {
+        writer.OnStringScalar("-");
+    }
+}
+
+void RemapNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& path, const TString& key) {
+    if (auto* subNode = node.GetValueByPath(path)) {
+        writer.OnKeyedItem(key);
+        writer.OnBeginMap();
+            RemapValue(writer, *subNode, "sum");
+            RemapValue(writer, *subNode, "count");
+            RemapValue(writer, *subNode, "avg");
+            RemapValue(writer, *subNode, "max");
+            RemapValue(writer, *subNode, "min");
+        writer.OnEndMap();
+    }
+}
+}
+
+TString GetPrettyStatistics(const TString& statistics) {
+    TStringStream out;
+    NYson::TYsonWriter writer(&out);
+    writer.OnBeginMap();
+    NJson::TJsonReaderConfig jsonConfig;
+    NJson::TJsonValue stat;
+    if (NJson::ReadJsonTree(statistics, &jsonConfig, &stat)) {
+
+        //  EXP 
+        if (stat.GetValueByPath("Columns")) {
+            return statistics;
+        }
+
+        for (const auto& p : stat.GetMap()) {
+            // YQv1
+            if (p.first.StartsWith("Graph=") || p.first.StartsWith("Precompute=")) {
+                writer.OnKeyedItem(p.first);
+                writer.OnBeginMap();
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.Tasks", "Tasks");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.CpuTimeUs", "CpuTimeUs");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressBytes", "IngressBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressRows", "IngressRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputBytes", "InputBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputRows", "InputRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.OutputBytes", "OutputBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.OutputRows", "OutputRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.ResultBytes", "ResultBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.ResultRows", "ResultRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressBytes", "EgressBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressRows", "EgressRows");
+                writer.OnEndMap();
+            }
+            // YQv2
+            // if (p.first.StartsWith("Query")) 
+            else {
+                writer.OnKeyedItem(p.first);
+                writer.OnBeginMap();
+                    RemapNode(writer, p.second, "Tasks", "Tasks");
+                    RemapNode(writer, p.second, "CpuTimeUs", "CpuTimeUs");
+                    RemapNode(writer, p.second, "IngressBytes", "IngressBytes");
+                    RemapNode(writer, p.second, "IngressRows", "IngressRows");
+                    RemapNode(writer, p.second, "InputBytes", "InputBytes");
+                    RemapNode(writer, p.second, "InputRows", "InputRows");
+                    RemapNode(writer, p.second, "OutputBytes", "OutputBytes");
+                    RemapNode(writer, p.second, "OutputRows", "OutputRows");
+                    RemapNode(writer, p.second, "ResultBytes", "ResultBytes");
+                    RemapNode(writer, p.second, "ResultRows", "ResultRows");
+                    RemapNode(writer, p.second, "EgressBytes", "EgressBytes");
+                    RemapNode(writer, p.second, "EgressRows", "EgressRows");
+                writer.OnEndMap();
             }
         }
     }
@@ -748,6 +935,142 @@ TPublicStat GetPublicStat(const TString& statistics) {
         }
     }
     return counters;
+}
+
+struct TNoneStatProcessor : IPlanStatProcessor {
+    Ydb::Query::StatsMode GetStatsMode() override {
+        return Ydb::Query::StatsMode::STATS_MODE_NONE;
+    }
+
+    TString ConvertPlan(TString& plan) override {
+        return plan;
+    }
+
+    TString GetQueryStat(TString&, double& cpuUsage) override {
+        cpuUsage = 0.0;
+        return "";
+    }
+
+    TPublicStat GetPublicStat(TString&) override {
+        return TPublicStat{};
+    }
+};
+
+struct TBasicStatProcessor : TNoneStatProcessor {
+    Ydb::Query::StatsMode GetStatsMode() override {
+        return Ydb::Query::StatsMode::STATS_MODE_BASIC;
+    }
+};
+
+struct TFullStatProcessor : IPlanStatProcessor {
+    Ydb::Query::StatsMode GetStatsMode() override {
+        return Ydb::Query::StatsMode::STATS_MODE_FULL;
+    }
+
+    TString ConvertPlan(TString& plan) override {
+        return plan;
+    }
+
+    TString GetQueryStat(TString& plan, double& cpuUsage) override {
+        return GetV1StatFromV2Plan(plan, &cpuUsage);
+    }
+
+    TPublicStat GetPublicStat(TString& stat) override {
+        return NFq::GetPublicStat(stat);
+    }
+};
+
+struct TProfileStatProcessor : TFullStatProcessor {
+    Ydb::Query::StatsMode GetStatsMode() override {
+        return Ydb::Query::StatsMode::STATS_MODE_PROFILE;
+    }
+};
+
+struct TProdStatProcessor : TFullStatProcessor {
+    TString GetQueryStat(TString& plan, double& cpuUsage) override {
+        return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage));
+    }
+};
+
+std::unique_ptr<IPlanStatProcessor> CreateStatProcessor(const TString& statViewName) {
+    // disallow none and basic stat since they do not support metering
+    // if (statViewName == "stat_none") return std::make_unique<TNoneStatProcessor>();
+    // if (statViewName == "stat_basc") return std::make_unique<TBasicStatProcessor>();
+    if (statViewName == "stat_full") return std::make_unique<TFullStatProcessor>();
+    if (statViewName == "stat_prof") return std::make_unique<TProfileStatProcessor>();
+    if (statViewName == "stat_prod") return std::make_unique<TProdStatProcessor>();
+    return std::make_unique<TFullStatProcessor>();
+}
+
+PingTaskRequestBuilder::PingTaskRequestBuilder(const NConfig::TCommonConfig& commonConfig, std::unique_ptr<IPlanStatProcessor>&& processor) 
+    : Compressor(commonConfig.GetQueryArtifactsCompressionMethod(), commonConfig.GetQueryArtifactsCompressionMinSize())
+    , Processor(std::move(processor))
+{}
+
+Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(
+    const Ydb::TableStats::QueryStats& queryStats, 
+    const NYql::TIssues& issues, 
+    std::optional<FederatedQuery::QueryMeta::ComputeStatus> computeStatus,
+    std::optional<NYql::NDqProto::StatusIds::StatusCode> pendingStatusCode
+) {
+    Fq::Private::PingTaskRequest pingTaskRequest = Build(queryStats);
+
+    if (issues) {
+        NYql::IssuesToMessage(issues, pingTaskRequest.mutable_issues());
+    }
+
+    if (computeStatus) {
+        pingTaskRequest.set_status(*computeStatus);
+    }
+
+    if (pendingStatusCode) {
+        pingTaskRequest.set_pending_status_code(*pendingStatusCode);
+    }
+
+    return pingTaskRequest;
+}
+
+
+Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const Ydb::TableStats::QueryStats& queryStats) {
+    return Build(queryStats.query_plan(), queryStats.query_ast());
+}
+
+Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryPlan, const TString& queryAst) {
+    Fq::Private::PingTaskRequest pingTaskRequest;
+
+    Issues.Clear();
+
+    auto plan = queryPlan;
+    try {
+        plan = Processor->ConvertPlan(plan);
+    } catch(const NJson::TJsonException& ex) {
+        Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error plan conversion: " << ex.what()));
+    }
+
+    if (Compressor.IsEnabled()) {
+        auto [astCompressionMethod, astCompressed] = Compressor.Compress(queryAst);
+        pingTaskRequest.mutable_ast_compressed()->set_method(astCompressionMethod);
+        pingTaskRequest.mutable_ast_compressed()->set_data(astCompressed);
+
+        auto [planCompressionMethod, planCompressed] = Compressor.Compress(plan);
+        pingTaskRequest.mutable_plan_compressed()->set_method(planCompressionMethod);
+        pingTaskRequest.mutable_plan_compressed()->set_data(planCompressed);
+    } else {
+        pingTaskRequest.set_ast(queryAst);
+        pingTaskRequest.set_plan(plan);
+    }
+
+    CpuUsage = 0.0;
+    try {
+        auto stat = Processor->GetQueryStat(plan, CpuUsage);
+        pingTaskRequest.set_statistics(stat);
+        pingTaskRequest.set_dump_raw_statistics(true);
+        PublicStat = Processor->GetPublicStat(stat);
+    } catch(const NJson::TJsonException& ex) {
+        Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error stat conversion: " << ex.what()));
+    }
+
+    return pingTaskRequest;
 }
 
 } // namespace NFq

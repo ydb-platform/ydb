@@ -31,9 +31,9 @@ public:
         GroupId = groupId;
     }
 
-    void Bootstrap(const TActorContext &ctx) {
+    void Bootstrap(const TActorContext&/* ctx*/) {
         LastTs = TAppData::TimeProvider->Now();
-        BootstrapImpl(ctx);
+        EstablishSession();
     }
 
 protected:
@@ -67,7 +67,7 @@ protected:
         ScheduleRequests();
     }
 
-    virtual void BootstrapImpl(const TActorContext &ctx) = 0;
+    virtual void EstablishSession() = 0;
     virtual void SendRequest() = 0;
 
 protected:
@@ -79,7 +79,7 @@ protected:
     bool WakeupScheduled = false;
 
 public:
-    std::unordered_map<NKikimrProto::EReplyStatus, ui32> ResponsesByStatus;
+    std::map<NKikimrProto::EReplyStatus, ui32> ResponsesByStatus;
     ui32 RequestsSent = 0;
 
 protected:
@@ -101,7 +101,7 @@ public:
         hFunc(TEvBlobStorage::TEvPutResult, Handle);
     )
 
-    virtual void BootstrapImpl(const TActorContext&/* ctx*/) override {
+    void EstablishSession() override {
         // dummy request to establish the session
         auto ev = new TEvBlobStorage::TEvStatus(TInstant::Max());
         SendToBSProxy(SelfId(), GroupId, ev, 0);
@@ -109,7 +109,7 @@ public:
     }
 
 protected:
-    virtual void SendRequest() override {
+    void SendRequest() override {
         TString data = MakeData(DataSize);
         auto ev = new TEvBlobStorage::TEvPut(TLogoBlobID(1, 1, 1, 10, DataSize, Cookie++),
                 data, TInstant::Max(), NKikimrBlobStorage::UserData);
@@ -135,22 +135,32 @@ public:
     {}
 
     STRICT_STFUNC(StateWork,
-        cFunc(TEvBlobStorage::TEvPutResult::EventType, ScheduleRequests);
+        cFunc(TEvBlobStorage::TEvStatusResult::EventType, InitializeData);
+        hFunc(TEvBlobStorage::TEvPutResult, Handle);
         cFunc(TEvents::TEvWakeup::EventType, WakeupAndSchedule);
         hFunc(TEvBlobStorage::TEvGetResult, Handle);
     )
 
-    virtual void BootstrapImpl(const TActorContext&/* ctx*/) override {
-        TString data = MakeData(DataSize);
-        BlobId = TLogoBlobID(1, 1, 1, 10, DataSize, Cookie++);
-        auto ev = new TEvBlobStorage::TEvPut(BlobId, data, TInstant::Max());
+    void EstablishSession() override {
+        // dummy request to establish the session
+        auto ev = new TEvBlobStorage::TEvStatus(TInstant::Max());
         SendToBSProxy(SelfId(), GroupId, ev, 0);
         Become(&TInflightActorGet::StateWork);
     }
 
+    void InitializeData() {
+        for (ui32 i = 0; i < Settings.Requests; ++i) {
+            TString data = MakeData(DataSize);
+            TLogoBlobID blobId = TLogoBlobID(1, 1, 1, 10, DataSize, Cookie++);
+            auto ev = new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max());
+            SendToBSProxy(SelfId(), GroupId, ev, 0);
+        }
+    }
+
 protected:
-    virtual void SendRequest() override {
-        auto ev = new TEvBlobStorage::TEvGet(BlobId, 0, 10, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead);
+    void SendRequest() override {
+        auto ev = new TEvBlobStorage::TEvGet(BlobIds[RequestsSent - 1], 0, DataSize, TInstant::Max(),
+                NKikimrBlobStorage::EGetHandleClass::FastRead);
         SendToBSProxy(SelfId(), GroupId, ev, 0);
     }
 
@@ -158,10 +168,19 @@ protected:
         HandleReply(res->Get()->Status);
     }
 
+    void Handle(TEvBlobStorage::TEvPutResult::TPtr res) {
+        Y_VERIFY_S(res->Get()->Status == NKikimrProto::OK, res->Get()->ErrorReason);
+        BlobIds.push_back(res->Get()->Id);
+        if (++BlobsWritten == Settings.Requests) {
+            ScheduleRequests();
+        }
+    }
+
 private:
-    TLogoBlobID BlobId;
     std::string Data;
     ui32 DataSize;
+    std::vector<TLogoBlobID> BlobIds;
+    ui32 BlobsWritten = 0;
 };
 
 /////////////////////////////////// TInflightActorPatch ///////////////////////////////////
@@ -174,23 +193,30 @@ public:
     {}
 
     STRICT_STFUNC(StateWork,
+        cFunc(TEvBlobStorage::TEvStatusResult::EventType, InitializeData);
         cFunc(TEvents::TEvWakeup::EventType, WakeupAndSchedule);
         hFunc(TEvBlobStorage::TEvPatchResult, Handle);
         hFunc(TEvBlobStorage::TEvPutResult, Handle);
     )
 
-    virtual void BootstrapImpl(const TActorContext&/* ctx*/) override {
+    void EstablishSession() override {
+        // dummy request to establish the session
+        auto ev = new TEvBlobStorage::TEvStatus(TInstant::Max());
+        SendToBSProxy(SelfId(), GroupId, ev, 0);
+        Become(&TInflightActorPatch::StateWork);
+    }
+
+    void InitializeData() {
         TString data = MakeData(DataSize);
         for (ui32 i = 0; i < RequestInFlight; ++i) {
             TLogoBlobID blobId(1, 1, 1, 10, DataSize, Cookie++);
             auto ev = new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max());
             SendToBSProxy(SelfId(), GroupId, ev, 0);
         }
-        Become(&TInflightActorPatch::StateWork);
     }
 
 protected:
-    virtual void SendRequest() override {
+    void SendRequest() override {
         TLogoBlobID oldId = Blobs.front();
         Blobs.pop_front();
         TLogoBlobID newId(1, 1, oldId.Step() + 1, 10, DataSize, oldId.Cookie());
@@ -209,6 +235,7 @@ protected:
     }
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr res) {
+        Y_VERIFY_S(res->Get()->Status == NKikimrProto::OK, res->Get()->ErrorReason);
         Blobs.push_back(res->Get()->Id);
         if (++BlobsWritten == RequestInFlight) {
             ScheduleRequests();

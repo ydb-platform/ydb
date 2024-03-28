@@ -1,9 +1,13 @@
 #include "config_parser.h"
-#include "dummy.h"
 
 #include <ydb/library/actors/core/log_settings.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
+#include <ydb/core/protos/alloc.pb.h>
+#include <ydb/core/protos/bootstrap.pb.h>
+#include <ydb/core/protos/compile_service_config.pb.h>
+
+#include <ydb/core/config/init/dummy.h>
 
 #include <util/stream/file.h>
 #include <util/stream/format.h>

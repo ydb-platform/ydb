@@ -54,10 +54,16 @@ const std::type_info& CallCtor()
 //! Creates TSerializer object which has preprocessors applied
 //! to a TStruct object referred to by writable.
 template <std::default_initializable TStruct, class TSerializer>
-TSerializer TExternalizedYsonStruct::CreateWritable(TStruct& writable)
+TSerializer TExternalizedYsonStruct::CreateWritable(TStruct& writable, bool setDefaults)
 {
     static_assert(std::derived_from<TSerializer, TExternalizedYsonStruct>);
-    return TSerializer(&writable);
+    if (setDefaults) {
+        return TSerializer(&writable);
+    }
+
+    auto ret = TSerializer();
+    ret.SetThat(&writable);
+    return ret;
 }
 
 //! Creates TSerializer object which has preprocessors applied
@@ -98,7 +104,9 @@ void TYsonStructRegistry::InitializeStruct(TStruct* target)
     if (CurrentlyInitializingMeta_) {
         // TODO(renadeen): assert target is from the same type hierarchy.
         // Call initialization method that is provided by user.
-        TStruct::Register(TYsonStructRegistrar<TStruct>(CurrentlyInitializingMeta_));
+        if (RegistryDepth_ <= 1) {
+            TStruct::Register(TYsonStructRegistrar<TStruct>(CurrentlyInitializingMeta_));
+        }
         return;
     }
 
@@ -267,11 +275,19 @@ void Serialize(const T& value, NYson::IYsonConsumer* consumer)
 
 template <class T>
     requires CExternallySerializable<T>
+void DeserializeExternalized(T& value, INodePtr node, bool postprocess, bool setDefaults)
+{
+    using TTraits = TGetExternalizedYsonStructTraits<T>;
+    using TSerializer = typename TTraits::TExternalSerializer;
+    auto serializer = TSerializer::template CreateWritable<T, TSerializer>(value, setDefaults);
+    serializer.Load(node, postprocess, setDefaults);
+}
+
+template <class T>
+    requires CExternallySerializable<T>
 void Deserialize(T& value, INodePtr node)
 {
-    using TSerializer = typename TGetExternalizedYsonStructTraits<T>::TExternalSerializer;
-    auto serializer = TSerializer::template CreateWritable<T, TSerializer>(value);
-    Deserialize(serializer, node);
+    DeserializeExternalized(value, std::move(node), /*postprocess*/ true, /*setDefaults*/ true);
 }
 
 template <class T>
@@ -414,13 +430,16 @@ private: \
     using TThis = TStruct; \
     friend class ::NYT::NYTree::TYsonStructRegistry;
 
-#define YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
+#define YSON_STRUCT_IMPL__CTOR_BODY \
     ::NYT::NYTree::TYsonStructRegistry::Get()->InitializeStruct(this);
 
 #define YSON_STRUCT_LITE_IMPL__CTOR_BODY(TStruct) \
-    YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
-    if (std::type_index(typeid(TStruct)) == this->FinalType_ && !::NYT::NYTree::TYsonStructRegistry::Get()->InitializationInProgress()) { \
-        this->SetDefaults(); \
+    YSON_STRUCT_IMPL__CTOR_BODY \
+    if (std::type_index(typeid(TStruct)) == this->FinalType_) { \
+        ::NYT::NYTree::TYsonStructRegistry::Get()->OnFinalCtorCalled(); \
+        if (!::NYT::NYTree::TYsonStructRegistry::Get()->InitializationInProgress()) { \
+            this->SetDefaults(); \
+        } \
     } \
 
 //! NB(arkady-e1ppa): Alias is used by registrar postprocessors
@@ -448,10 +467,9 @@ public: \
     TStruct() \
     { \
         static_assert(std::derived_from<TStruct, ::NYT::NYTree::TYsonStruct>, "Class must inherit from TYsonStruct"); \
-        YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
+        YSON_STRUCT_IMPL__CTOR_BODY \
     } \
     YSON_STRUCT_IMPL__DECLARE_ALIASES(TStruct)
-
 
 #define DECLARE_YSON_STRUCT_LITE(TStruct) \
 public: \
@@ -480,7 +498,7 @@ TStruct::TStruct() \
 TStruct::TStruct() \
 { \
     static_assert(std::derived_from<TStruct, ::NYT::NYTree::TYsonStruct>, "Class must inherit from TYsonStruct"); \
-    YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
+    YSON_STRUCT_IMPL__CTOR_BODY \
 }
 
 //! NB(arkady-e1ppa): These constructors are only used internally.
@@ -552,7 +570,8 @@ public: \
 #define ASSIGN_EXTERNAL_YSON_SERIALIZER(TStruct, TSerializer) \
     [[maybe_unused]] constexpr auto GetExternalizedYsonStructTraits(TStruct) \
     { \
-        struct [[maybe_unused]] TTraits { \
+        struct [[maybe_unused]] TTraits \
+        { \
             using TExternalSerializer = TSerializer; \
         }; \
         static_assert(std::derived_from<TTraits::TExternalSerializer, ::NYT::NYTree::TExternalizedYsonStruct>, "External serializer must be derived from TExternalizedYsonStruct"); \

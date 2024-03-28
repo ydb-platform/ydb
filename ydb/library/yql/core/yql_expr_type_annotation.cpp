@@ -318,10 +318,25 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         if (IsDataTypeNumeric(from) && IsDataTypeNumeric(to)) {
             allow = GetNumericDataTypeLevel(to) >= GetNumericDataTypeLevel(from);
             isSafe = false;
-        } else if (from == EDataSlot::Date && (to == EDataSlot::TzDate || to == EDataSlot::Datetime || to == EDataSlot::Timestamp || to == EDataSlot::TzDatetime || to == EDataSlot::TzTimestamp)) {
+        } else if (from == EDataSlot::Date && (
+                    to == EDataSlot::Date32 ||
+                    to == EDataSlot::TzDate ||
+                    to == EDataSlot::Datetime ||
+                    to == EDataSlot::Timestamp ||
+                    to == EDataSlot::TzDatetime ||
+                    to == EDataSlot::TzTimestamp ||
+                    to == EDataSlot::Datetime64 ||
+                    to == EDataSlot::Timestamp64))
+        {
             allow = true;
             useCast = true;
-        } else if (from == EDataSlot::Datetime && (to == EDataSlot::TzDatetime || to == EDataSlot::Timestamp || to == EDataSlot::TzTimestamp)) {
+        } else if (from == EDataSlot::Datetime && (
+                    to == EDataSlot::Datetime64 ||
+                    to == EDataSlot::TzDatetime ||
+                    to == EDataSlot::Timestamp ||
+                    to == EDataSlot::TzTimestamp ||
+                    to == EDataSlot::Timestamp64))
+        {
             allow = true;
             useCast = true;
         } else if (from == EDataSlot::TzDate && (to == EDataSlot::TzDatetime || to == EDataSlot::TzTimestamp)) {
@@ -330,7 +345,16 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         } else if (from == EDataSlot::TzDatetime && to == EDataSlot::TzTimestamp) {
             allow = true;
             useCast = true;
-        } else if (from == EDataSlot::Timestamp && to == EDataSlot::TzTimestamp) {
+        } else if (from == EDataSlot::Timestamp && (to == EDataSlot::TzTimestamp || to == EDataSlot::Timestamp64)) {
+            allow = true;
+            useCast = true;
+        } else if (from == EDataSlot::Date32 && (to == EDataSlot::Datetime64 || to == EDataSlot::Timestamp64)) {
+            allow = true;
+            useCast = true;
+        } else if (from == EDataSlot::Datetime64 && (to == EDataSlot::Timestamp64)) {
+            allow = true;
+            useCast = true;
+        } else if (from == EDataSlot::Interval && (to == EDataSlot::Interval64)) {
             allow = true;
             useCast = true;
         } else if (from == EDataSlot::Json && to == EDataSlot::Utf8) {
@@ -1330,18 +1354,20 @@ const TPgExprType* CommonType(TPositionHandle pos, const TPgExprType* one, const
     if (one->GetId() == two->GetId()) {
         return one;
     }
+    const NPg::TTypeDesc* commonTypeDesc = nullptr;
+    if (const auto issue = NPg::LookupCommonType({one->GetId(), two->GetId()},
+        [&ctx, &pos](size_t i) {
+            Y_UNUSED(i);
 
-    if (one->GetName() == "unknown") {
-        return two;
+            return ctx.GetPosition(pos);
+        }, commonTypeDesc))
+    {
+        if constexpr (!Silent) {
+            ctx.AddError(*issue);
+        }
+        return nullptr;
     }
-
-    if (two->GetName() == "unknown") {
-        return one;
-    }
-
-    if constexpr (!Silent)
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Cannot infer common type for " << one->GetName() << " and " << two->GetName()));
-    return nullptr;
+    return ctx.MakeType<TPgExprType>(commonTypeDesc->TypeId);
 }
 
 template<bool Silent>
@@ -4189,6 +4215,10 @@ bool IsDataTypeTzDate(EDataSlot dataSlot) {
     return NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::TzDateType;
 }
 
+bool IsDataTypeBigDate(EDataSlot dataSlot) {
+    return (NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::BigDateType);
+}
+
 EDataSlot WithTzDate(EDataSlot dataSlot) {
     if (dataSlot == EDataSlot::Date) {
         return EDataSlot::TzDate;
@@ -4285,14 +4315,24 @@ TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2, bool wa
 
     if ((IsDataTypeDate(dataSlot1) || IsDataTypeTzDate(dataSlot1)) && (IsDataTypeDate(dataSlot2) || IsDataTypeTzDate(dataSlot2))) {
         // date < tzdate
-        auto norm1 = WithoutTzDate(dataSlot1);
-        auto norm2 = WithoutTzDate(dataSlot2);
-        auto ret = GetDateTypeByLevel(Max(GetDateTypeLevel(norm1), GetDateTypeLevel(norm2)));
+        auto level1 = GetDateTypeLevel(WithoutTzDate(dataSlot1));
+        auto level2 = GetDateTypeLevel(WithoutTzDate(dataSlot2));
+        constexpr auto narrowDateMask = 3;
+        auto level = Max(level1 & narrowDateMask, level2 & narrowDateMask);
+        auto bigDateBit = (narrowDateMask + 1) & (level1 | level2);
+        auto ret = GetDateTypeByLevel(level | bigDateBit);
+
         if (IsDataTypeTzDate(dataSlot1) || IsDataTypeTzDate(dataSlot2)) {
             ret = WithTzDate(ret);
         }
 
         return ret;
+    }
+
+    if (IsDataTypeInterval(dataSlot1) && IsDataTypeInterval(dataSlot2)) {
+        return (dataSlot1 == EDataSlot::Interval64 || dataSlot2 == EDataSlot::Interval64) 
+            ? EDataSlot::Interval64
+            : EDataSlot::Interval;
     }
 
     return {};
@@ -4907,16 +4947,22 @@ EDataSlot GetNumericDataTypeByLevel(ui32 level) {
 }
 
 ui32 GetDateTypeLevel(EDataSlot dataSlot) {
-    if (dataSlot == EDataSlot::Date)
+    switch (dataSlot) {
+    case EDataSlot::Date:
         return 0;
-
-    if (dataSlot == EDataSlot::Datetime)
+    case EDataSlot::Datetime:
         return 1;
-
-    if (dataSlot == EDataSlot::Timestamp)
+    case EDataSlot::Timestamp:
         return 2;
-
-    ythrow yexception() << "Unknown date type: " << NKikimr::NUdf::GetDataTypeInfo(dataSlot).Name;
+    case EDataSlot::Date32:
+        return 4;
+    case EDataSlot::Datetime64:
+        return 5;
+    case EDataSlot::Timestamp64:
+        return 6;
+    default:
+        ythrow yexception() << "Unknown date type: " << NKikimr::NUdf::GetDataTypeInfo(dataSlot).Name;
+    }
 }
 
 EDataSlot GetDateTypeByLevel(ui32 level) {
@@ -4927,6 +4973,12 @@ EDataSlot GetDateTypeByLevel(ui32 level) {
         return EDataSlot::Datetime;
     case 2:
         return EDataSlot::Timestamp;
+    case 4:
+        return EDataSlot::Date32;
+    case 5:
+        return EDataSlot::Datetime64;
+    case 6:
+        return EDataSlot::Timestamp64;
     default:
         ythrow yexception() << "Unknown date level: " << level;
     }
@@ -6347,7 +6399,11 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
     auto saveLambda = idLambda;
     auto loadLambda = idLambda;
     auto finishLambda = idLambda;
+    auto nullValue = ctx.NewCallable(pos, "Null", {});
     if (aggDesc.FinalFuncId) {
+        const ui32 originalAggResultType = NPg::LookupProc(aggDesc.FinalFuncId).ResultType;
+        ui32 aggResultType = originalAggResultType;
+        AdjustReturnType(aggResultType, aggDesc.ArgTypes, 0, argTypes);
         finishLambda = ctx.Builder(pos)
             .Lambda()
             .Param("state")
@@ -6355,14 +6411,30 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Atom(0, NPg::LookupProc(aggDesc.FinalFuncId).Name)
                 .Atom(1, ToString(aggDesc.FinalFuncId))
                 .List(2)
+                    .Do([aggResultType, originalAggResultType](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
+                        if (aggResultType != originalAggResultType) { 
+                            builder.List(0)
+                                .Atom(0, "type")
+                                .Atom(1, NPg::LookupType(aggResultType).Name)
+                            .Seal();
+                        }
+
+                        return builder;
+                    })
                 .Seal()
                 .Arg(3, "state")
+                .Do([&aggDesc, nullValue](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
+                    if (aggDesc.FinalExtra) {
+                        builder.Add(4, nullValue);
+                    }
+
+                    return builder;
+                })
             .Seal()
             .Seal()
             .Build();
     }
 
-    auto nullValue = ctx.NewCallable(pos, "Null", {});
     auto initValue = nullValue;
     if (aggDesc.InitValue) {
         initValue = ctx.Builder(pos)
@@ -6631,6 +6703,57 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Add(7, defaultValue)
             .Seal()
             .Build();
+    }
+}
+
+void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, ui32 procVariadicType, const TVector<ui32>& argTypes) {
+    if (returnType == NPg::AnyArrayOid) {
+        TMaybe<ui32> inputElementType;
+        TMaybe<ui32> inputArrayType;
+        for (ui32 i = 0; i < argTypes.size(); ++i) {
+            if (!argTypes[i]) {
+                continue;
+            }
+
+            auto targetType = i >= procArgTypes.size() ? procVariadicType : procArgTypes[i];
+            if (targetType == NPg::AnyNonArrayOid) {
+                if (!inputElementType) {
+                   inputElementType = argTypes[i];
+                } else {
+                    if (*inputElementType != argTypes[i]) {
+                        return;
+                    }
+                }
+            }
+
+            if (targetType == NPg::AnyArrayOid) {
+                if (!inputArrayType) {
+                   inputArrayType = argTypes[i];
+                } else {
+                    if (*inputArrayType != argTypes[i]) {
+                        return;
+                    }
+                }
+            }
+        }
+
+        if (inputElementType) {
+            returnType = NPg::LookupType(*inputElementType).ArrayTypeId;
+        } else if (inputArrayType) {
+            returnType = *inputArrayType;
+        }
+    } else if (returnType == NPg::AnyElementOid) {
+        for (ui32 i = 0; i < argTypes.size(); ++i) {
+            if (!argTypes[i]) {
+                continue;
+            }
+
+            const auto& typeDesc = NPg::LookupType(argTypes[i]);
+            if (typeDesc.ArrayTypeId == typeDesc.TypeId) {
+                returnType = typeDesc.ElementTypeId;
+                return;
+            }
+        }
     }
 }
 

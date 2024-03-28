@@ -30,6 +30,8 @@ message TConfig
 
     optional ECompressionCodec RequestCodec = 17 [default = None];
     optional ECompressionCodec ResponseCodec = 12 [default = None];
+    // Should set EnableLegacyRpcCodecs=False, to enable RequestCodec & ResponseCodec: https://nda.ya.ru/t/iXCfYZjS6yNEwg
+    optional bool EnableLegacyRpcCodecs = 20;
 
     optional bool EnableRetries = 13;
     optional uint32 RetryBackoffTime = 14;

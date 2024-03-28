@@ -97,8 +97,11 @@ EExecutionStatus TFinishProposeWriteUnit::Execute(TOperation::TPtr op,
         op->SetFinishProposeTs(DataShard.ConfirmReadOnlyLease());
     }
 
-    if (!op->HasResultSentFlag() && (op->IsDirty() || op->HasVolatilePrepareFlag() || !Pipeline.WaitCompletion(op)))
+    if (!op->HasResultSentFlag() && (op->IsDirty() || op->HasVolatilePrepareFlag() || !Pipeline.WaitCompletion(op))) {
+        DataShard.IncCounter(COUNTER_PREPARE_COMPLETE);
+        op->SetProposeResultSentEarly();
         CompleteRequest(op, ctx);
+    }
 
     if (!DataShard.IsFollower())
         DataShard.PlanCleanup(ctx);
@@ -127,7 +130,7 @@ void TFinishProposeWriteUnit::Complete(TOperation::TPtr op, const TActorContext 
 {
     TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
-    if (!op->HasResultSentFlag()) {
+    if (!op->HasResultSentFlag() && !op->IsProposeResultSentEarly()) {
         DataShard.IncCounter(COUNTER_WRITE_COMPLETE);
 
         if (writeOp->GetWriteResult())
@@ -183,7 +186,13 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
             res->SetOrbit(std::move(op->Orbit));
         }
 
-        ctx.Send(op->GetTarget(), res.release(), 0, op->GetCookie());
+        if (op->IsImmediate() && !op->IsReadOnly() && !op->IsAborted() && op->MvccReadWriteVersion) {
+            DataShard.SendImmediateWriteResult(*op->MvccReadWriteVersion, op->GetTarget(), res.release(), op->GetCookie());
+        } else if (op->HasVolatilePrepareFlag() && !op->IsDirty()) {
+            DataShard.SendWithConfirmedReadOnlyLease(op->GetFinishProposeTs(), op->GetTarget(), res.release(), op->GetCookie());
+        } else {
+            ctx.Send(op->GetTarget(), res.release(), 0, op->GetCookie());
+        }
     }
 }
 

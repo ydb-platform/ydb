@@ -1,3 +1,5 @@
+#include <util/stream/file.h>
+
 #include "client.h"
 
 namespace NYql::NConnector {
@@ -21,9 +23,21 @@ namespace NYql::NConnector {
     public:
         TClientGRPC() = delete;
         TClientGRPC(const TGenericConnectorConfig& config) {
-            TString endpoint = TStringBuilder() << config.GetEndpoint().host() << ":" << ToString(config.GetEndpoint().port());
-            GrpcConfig_ = NYdbGrpc::TGRpcClientConfig(endpoint);
+            GrpcConfig_ = NYdbGrpc::TGRpcClientConfig();
+
+            Y_ENSURE(config.GetEndpoint().host(), TStringBuilder() << "Empty host in TGenericConnectorConfig: " << config.DebugString());
+            Y_ENSURE(config.GetEndpoint().port(), TStringBuilder() << "Empty port in TGenericConnectorConfig: " << config.DebugString());
+            GrpcConfig_.Locator = TStringBuilder() << config.GetEndpoint().host() << ":" << config.GetEndpoint().port();
+
             GrpcConfig_.EnableSsl = config.GetUseSsl();
+
+            // Read content of CA cert
+            TString rootCertData;
+            if (config.GetSslCaCrt()) {
+                rootCertData = TFileInput(config.GetSslCaCrt()).ReadAll();
+            }
+
+            GrpcConfig_.SslCredentials = grpc::SslCredentialsOptions{.pem_root_certs = rootCertData, .pem_private_key = "", .pem_cert_chain = ""};
 
             GrpcClient_ = std::make_unique<NYdbGrpc::TGRpcClientLow>();
 

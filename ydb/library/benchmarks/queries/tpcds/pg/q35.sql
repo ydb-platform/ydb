@@ -6,19 +6,19 @@ select
   cd_marital_status,
   cd_dep_count,
   count(*) cnt1,
-  avg(cd_dep_count),
-  max(cd_dep_count),
-  sum(cd_dep_count),
+  avg(cd_dep_count) a1,
+  max(cd_dep_count) x1,
+  sum(cd_dep_count) s1,
   cd_dep_employed_count,
   count(*) cnt2,
-  avg(cd_dep_employed_count),
-  max(cd_dep_employed_count),
-  sum(cd_dep_employed_count),
+  avg(cd_dep_employed_count) a2,
+  max(cd_dep_employed_count) x2,
+  sum(cd_dep_employed_count) s2,
   cd_dep_college_count,
   count(*) cnt3,
-  avg(cd_dep_college_count),
-  max(cd_dep_college_count),
-  sum(cd_dep_college_count)
+  avg(cd_dep_college_count) a3,
+  max(cd_dep_college_count) x3,
+  sum(cd_dep_college_count) s3
  from
   {{customer}} c,{{customer_address}} ca,{{customer_demographics}}
  where
@@ -48,12 +48,12 @@ select
           cd_dep_count,
           cd_dep_employed_count,
           cd_dep_college_count
- order by ca_state,
-          cd_gender,
-          cd_marital_status,
-          cd_dep_count,
-          cd_dep_employed_count,
-          cd_dep_college_count
+ order by ca_state nulls first,
+          cd_gender nulls first,
+          cd_marital_status nulls first,
+          cd_dep_count nulls first,
+          cd_dep_employed_count nulls first,
+          cd_dep_college_count nulls first
  limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query35.tpl

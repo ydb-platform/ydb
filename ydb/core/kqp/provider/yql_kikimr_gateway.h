@@ -19,6 +19,7 @@
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -385,6 +386,7 @@ struct TExternalSource {
     TString Password;
     TString AwsAccessKeyId;
     TString AwsSecretAccessKey;
+    TString Token;
     NKikimrSchemeOp::TAuth DataSourceAuth;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
 };
@@ -743,6 +745,8 @@ public:
         std::shared_ptr<google::protobuf::Arena> ProtobufArenaPtr;
         TMaybe<ui16> SqlVersion;
         google::protobuf::RepeatedPtrField<NKqpProto::TResultSetMeta> ResultSetsMeta;
+        bool NeedToSplit = false;
+        bool AllowCache = true;
     };
 
     struct TExecuteLiteralResult : public TGenericResult {

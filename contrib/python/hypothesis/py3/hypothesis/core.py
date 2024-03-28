@@ -91,6 +91,7 @@ from hypothesis.internal.healthcheck import fail_health_check
 from hypothesis.internal.observability import (
     OBSERVABILITY_COLLECT_COVERAGE,
     TESTCASE_CALLBACKS,
+    _system_metadata,
     deliver_json_blob,
     make_testcase,
 )
@@ -107,6 +108,7 @@ from hypothesis.internal.reflection import (
     repr_call,
 )
 from hypothesis.internal.scrutineer import (
+    MONITORING_TOOL_ID,
     Trace,
     Tracer,
     explanatory_lines,
@@ -628,7 +630,7 @@ def get_random_for_wrapped_test(test, wrapped_test):
         return Random(global_force_seed)
     else:
         global _hypothesis_global_random
-        if _hypothesis_global_random is None:
+        if _hypothesis_global_random is None:  # pragma: no cover
             _hypothesis_global_random = Random()
         seed = _hypothesis_global_random.getrandbits(128)
         wrapped_test._hypothesis_internal_use_generated_seed = seed
@@ -833,8 +835,9 @@ class StateForActualGivenExecution:
                     in_drawtime = math.fsum(data.draw_times.values()) - arg_drawtime
                     runtime = datetime.timedelta(seconds=finish - start - in_drawtime)
                     self._timing_features = {
-                        "execute_test": finish - start - in_drawtime,
+                        "execute:test": finish - start - in_drawtime,
                         **data.draw_times,
+                        **data._stateful_run_times,
                     }
 
                 if (current_deadline := self.settings.deadline) is not None:
@@ -926,22 +929,33 @@ class StateForActualGivenExecution:
                     msg, format_arg = data._sampled_from_all_strategies_elements_message
                     add_note(e, msg.format(format_arg))
                 raise
+            finally:
+                if parts := getattr(data, "_stateful_repr_parts", None):
+                    self._string_repr = "\n".join(parts)
 
         # self.test_runner can include the execute_example method, or setup/teardown
         # _example, so it's important to get the PRNG and build context in place first.
         with local_settings(self.settings):
             with deterministic_PRNG():
                 with BuildContext(data, is_final=is_final) as context:
-                    # Run the test function once, via the executor hook.
-                    # In most cases this will delegate straight to `run(data)`.
-                    result = self.test_runner(data, run)
+                    # providers may throw in per_case_context_fn, and we'd like
+                    # `result` to still be set in these cases.
+                    result = None
+                    with data.provider.per_test_case_context_manager():
+                        # Run the test function once, via the executor hook.
+                        # In most cases this will delegate straight to `run(data)`.
+                        result = self.test_runner(data, run)
 
         # If a failure was expected, it should have been raised already, so
         # instead raise an appropriate diagnostic error.
         if expected_failure is not None:
             exception, traceback = expected_failure
             if isinstance(exception, DeadlineExceeded) and (
-                runtime_secs := self._timing_features.get("execute_test")
+                runtime_secs := math.fsum(
+                    v
+                    for k, v in self._timing_features.items()
+                    if k.startswith("execute:")
+                )
             ):
                 report(
                     "Unreliable test timings! On an initial run, this "
@@ -974,8 +988,27 @@ class StateForActualGivenExecution:
         """
         trace: Trace = set()
         try:
+            # this is actually covered by our tests, but only on >= 3.12.
+            if (
+                sys.version_info[:2] >= (3, 12)
+                and sys.monitoring.get_tool(MONITORING_TOOL_ID) is not None
+            ):  # pragma: no cover
+                warnings.warn(
+                    "avoiding tracing test function because tool id "
+                    f"{MONITORING_TOOL_ID} is already taken by tool "
+                    f"{sys.monitoring.get_tool(MONITORING_TOOL_ID)}.",
+                    HypothesisWarning,
+                    # I'm not sure computing a correct stacklevel is reasonable
+                    # given the number of entry points here.
+                    stacklevel=1,
+                )
+
             _can_trace = (
-                sys.gettrace() is None or sys.version_info[:2] >= (3, 12)
+                (sys.version_info[:2] < (3, 12) and sys.gettrace() is None)
+                or (
+                    sys.version_info[:2] >= (3, 12)
+                    and sys.monitoring.get_tool(MONITORING_TOOL_ID) is None
+                )
             ) and not PYPY
             _trace_obs = TESTCASE_CALLBACKS and OBSERVABILITY_COLLECT_COVERAGE
             _trace_failure = (
@@ -1054,7 +1087,9 @@ class StateForActualGivenExecution:
             if TESTCASE_CALLBACKS:
                 if self.failed_normally or self.failed_due_to_deadline:
                     phase = "shrink"
-                else:
+                elif runner := getattr(self, "_runner", None):
+                    phase = runner._current_phase
+                else:  # pragma: no cover  # in case of messing with internals
                     phase = "unknown"
                 tc = make_testcase(
                     start_timestamp=self._start_timestamp,
@@ -1064,8 +1099,8 @@ class StateForActualGivenExecution:
                     string_repr=self._string_repr,
                     arguments={**self._jsonable_arguments, **data._observability_args},
                     timing=self._timing_features,
-                    metadata={},
                     coverage=tractable_coverage_report(trace) or None,
+                    phase=phase,
                 )
                 deliver_json_blob(tc)
             self._timing_features = {}
@@ -1084,7 +1119,7 @@ class StateForActualGivenExecution:
             else:
                 database_key = None
 
-        runner = ConjectureRunner(
+        runner = self._runner = ConjectureRunner(
             self._execute_once_for_engine,
             settings=self.settings,
             random=self.random,
@@ -1193,7 +1228,11 @@ class StateForActualGivenExecution:
                     },
                     "timing": self._timing_features,
                     "coverage": None,  # Not recorded when we're replaying the MFE
-                    "metadata": {"traceback": tb},
+                    "metadata": {
+                        "traceback": tb,
+                        "predicates": ran_example._observability_predicates,
+                        **_system_metadata(),
+                    },
                 }
                 deliver_json_blob(tc)
                 # Whether or not replay actually raised the exception again, we want
@@ -1510,8 +1549,7 @@ def given(
                 except UnsatisfiedAssumption:
                     raise DidNotReproduce(
                         "The test data failed to satisfy an assumption in the "
-                        "test. Have you added it since this blob was "
-                        "generated?"
+                        "test. Have you added it since this blob was generated?"
                     ) from None
 
             # There was no @reproduce_failure, so start by running any explicit

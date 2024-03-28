@@ -319,6 +319,8 @@ namespace NKikimr::NTable::NPage {
                 Y_ABORT_UNLESS(Children);
                 TChild result = Children.front();
                 Children.pop_front();
+                PrevDataSize = result.DataSize;
+                PrevRowCount = result.RowCount;
                 return result;
             }
 
@@ -334,15 +336,41 @@ namespace NKikimr::NTable::NPage {
                 return Children.size();
             }
 
+            ui64 GetPrevRowCount() const {
+                return PrevRowCount;
+            }
+
+            ui64 GetPrevDataSize() const {
+                return PrevDataSize;
+            }
+
+            ui64 GetNextRowCount(ui64 prevRowCount) const {
+                return Children[1].RowCount - prevRowCount;
+            }
+
+            ui64 GetNextDataSize(ui64 prevDataSize) const {
+                return Children[1].DataSize - prevDataSize;
+            }
+
+            ui64 GetRowCount() const {
+                return Children.back().RowCount - PrevRowCount;
+            }
+
+            ui64 GetDataSize() const {
+                return Children.back().DataSize - PrevDataSize;
+            }
+
         private:
             size_t KeysSize = 0;
+            ui64 PrevRowCount = 0;
+            ui64 PrevDataSize = 0;
             TDeque<TString> Keys;
             TDeque<TChild> Children;
         };
 
     public:
         TBtreeIndexBuilder(TIntrusiveConstPtr<TPartScheme> scheme, TGroupId groupId,
-                ui32 nodeTargetSize, ui32 nodeKeysMin, ui32 nodeKeysMax)
+                ui32 nodeTargetSize, ui32 nodeKeysMin, ui32 nodeKeysMax, ui32 leafDataSizeMax, ui32 leafRowsCountMax)
             : Scheme(std::move(scheme))
             , GroupId(groupId)
             , GroupInfo(Scheme->GetLayout(groupId))
@@ -351,6 +379,8 @@ namespace NKikimr::NTable::NPage {
             , NodeTargetSize(nodeTargetSize)
             , NodeKeysMin(nodeKeysMin)
             , NodeKeysMax(nodeKeysMax)
+            , LeafDataSizeMax(leafDataSizeMax)
+            , LeafRowsCountMax(leafRowsCountMax)
         {
             Y_ABORT_UNLESS(NodeTargetSize > 0);
             Y_ABORT_UNLESS(NodeKeysMin > 0);
@@ -386,23 +416,35 @@ namespace NKikimr::NTable::NPage {
 
             Levels[0].PushChild(child);
         }
-
-        std::optional<TBtreeIndexMeta> Flush(IPageWriter &pager, bool last) {
-            Y_ABORT_UNLESS(Levels.size() < Max<ui32>(), "Levels size is out of bounds");
+        
+        void Flush(IPageWriter &pager) {
             for (ui32 levelIndex = 0; levelIndex < Levels.size(); levelIndex++) {
-                if (last && !Levels[levelIndex].GetKeysCount()) {
-                    Y_ABORT_UNLESS(Levels[levelIndex].GetChildrenCount() == 1, "Should be root");
-                    return TBtreeIndexMeta{ Levels[levelIndex].PopChild(), levelIndex, IndexSize };
+                bool hasChanges = false;
+
+                // Note: in theory we may want to flush one level multiple times when different triggers are applicable
+                while (CanFlush(levelIndex)) {
+                    DoFlush(levelIndex, pager, false);
+                    hasChanges = true;
                 }
 
-                if (!TryFlush(levelIndex, pager, last)) {
-                    Y_ABORT_UNLESS(!last);
-                    break;
+                if (!hasChanges) {
+                    break; // no more changes
                 }
             }
+        }
 
-            Y_ABORT_UNLESS(!last, "Should have returned root");
-            return { };
+        TBtreeIndexMeta Finish(IPageWriter &pager) {
+            for (ui32 levelIndex = 0; levelIndex < Levels.size(); levelIndex++) {
+                if (!Levels[levelIndex].GetKeysCount()) {
+                    Y_ABORT_UNLESS(Levels[levelIndex].GetChildrenCount() == 1, "Should be root");
+                    Y_ABORT_UNLESS(levelIndex + 1 == Levels.size(), "Should be root");
+                    return {Levels[levelIndex].PopChild(), levelIndex, IndexSize};
+                }
+
+                DoFlush(levelIndex, pager, true);
+            }
+
+            Y_ABORT_UNLESS(false, "Should have returned root");
         }
 
         void Reset() {
@@ -415,43 +457,48 @@ namespace NKikimr::NTable::NPage {
         }
 
     private:
-        bool TryFlush(ui32 levelIndex, IPageWriter &pager, bool last) {
-            if (!last && Levels[levelIndex].GetKeysCount() <= 2 * NodeKeysMax) {
-                // Note: node should meet both NodeKeysMin and NodeSize restrictions for split
+        bool CanFlush(ui32 levelIndex) {
+            const ui64 waitFullNodes = 2;
 
-                if (Levels[levelIndex].GetKeysCount() <= 2 * NodeKeysMin) {
-                    // not enough keys for split
-                    return false;
-                }
-
-                // Note: this size check is approximate and we might not produce 2 full-sized pages
-                if (CalcPageSize(Levels[levelIndex]) <= 2 * NodeTargetSize) {
-                    // not enough bytes for split
-                    return false;
-                }
+            if (Levels[levelIndex].GetKeysCount() <= waitFullNodes * NodeKeysMin) {
+                // node keys min restriction should be always satisfied
+                return false;
             }
 
+            // Note: size checks are approximate and flush might not produce 2 full-sized pages
+
+            return 
+                Levels[levelIndex].GetKeysCount() > waitFullNodes * NodeKeysMax ||
+                CalcPageSize(Levels[levelIndex]) > waitFullNodes * NodeTargetSize || 
+                levelIndex == 0 && Levels[levelIndex].GetDataSize() > waitFullNodes * LeafDataSizeMax ||
+                levelIndex == 0 && Levels[levelIndex].GetRowCount() > waitFullNodes * LeafRowsCountMax;
+        }
+
+        void DoFlush(ui32 levelIndex, IPageWriter &pager, bool last) {
             Writer.EnsureEmpty();
+            
+            if (last) {
+                // Note: for now we build last nodes from all remaining level's keys
+                // we may to try splitting them more evenly later
 
-            // Note: for now we build last nodes from all remaining level's keys
-            // we may to try splitting them more evenly later
+                while (Levels[levelIndex].GetKeysCount()) {
+                    Writer.AddChild(Levels[levelIndex].PopChild());
+                    Writer.AddKey(Levels[levelIndex].PopKey());
+                }
+            } else {
+                auto prevDataSize = Levels[levelIndex].GetPrevDataSize();
+                auto prevRowCount = Levels[levelIndex].GetPrevRowCount();
 
-            while (last || Writer.GetKeysCount() < NodeKeysMin || Writer.CalcPageSize() < NodeTargetSize) {
-                if (!last && Levels[levelIndex].GetKeysCount() < 3) {
-                    // we shouldn't produce empty nodes (but can violate NodeKeysMin restriction)
-                    break;
+                while (Writer.GetKeysCount() < NodeKeysMin || (
+                    // can add more to writer if:
+                        Levels[levelIndex].GetKeysCount() > 2 &&
+                        Writer.GetKeysCount() < NodeKeysMax &&
+                        Writer.CalcPageSize() < NodeTargetSize &&
+                        (levelIndex != 0 || Levels[levelIndex].GetNextDataSize(prevDataSize) < LeafDataSizeMax) &&
+                        (levelIndex != 0 || Levels[levelIndex].GetNextRowCount(prevRowCount) < LeafRowsCountMax))) {
+                    Writer.AddChild(Levels[levelIndex].PopChild());
+                    Writer.AddKey(Levels[levelIndex].PopKey());
                 }
-                if (!last && Writer.GetKeysCount() >= NodeKeysMax) {
-                    // have enough keys
-                    break;
-                }
-                if (last && !Levels[levelIndex].GetKeysCount()) {
-                    // nothing left
-                    break;
-                }
-
-                Writer.AddChild(Levels[levelIndex].PopChild());
-                Writer.AddKey(Levels[levelIndex].PopKey());
             }
             auto lastChild = Levels[levelIndex].PopChild();
             Writer.AddChild(lastChild);
@@ -462,6 +509,7 @@ namespace NKikimr::NTable::NPage {
 
             if (levelIndex + 1 == Levels.size()) {
                 Levels.emplace_back();
+                Y_ABORT_UNLESS(Levels.size() < Max<ui32>(), "Levels size is out of bounds");
             }
             Levels[levelIndex + 1].PushChild(TChild{pageId, lastChild.RowCount, lastChild.DataSize, lastChild.ErasedRowCount});
             if (!last) {
@@ -475,8 +523,6 @@ namespace NKikimr::NTable::NPage {
             } else {
                 Y_ABORT_UNLESS(Levels[levelIndex].GetKeysCount(), "Shouldn't leave empty levels");
             }
-
-            return true;
         }
 
         size_t CalcPageSize(const TLevel& level) const {
@@ -497,6 +543,8 @@ namespace NKikimr::NTable::NPage {
         const ui32 NodeTargetSize;
         const ui32 NodeKeysMin;
         const ui32 NodeKeysMax;
+        const ui32 LeafDataSizeMax;
+        const ui32 LeafRowsCountMax;
 
         TRowId ChildRowCount = 0;
         TRowId ChildErasedRowCount = 0;

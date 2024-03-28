@@ -92,7 +92,8 @@ class TAsyncTableStatsBuilder : public TActorBootstrapped<TAsyncTableStatsBuilde
 public:
     TAsyncTableStatsBuilder(TActorId replyTo, ui64 tabletId, ui64 tableId, ui64 indexSize, const TAutoPtr<TSubset> subset,
                             ui64 memRowCount, ui64 memDataSize,
-                            ui64 rowCountResolution, ui64 dataSizeResolution, ui64 searchHeight, TInstant statsUpdateTime)
+                            ui64 rowCountResolution, ui64 dataSizeResolution, ui32 resolutionMultiplier,
+                            ui64 searchHeight, TInstant statsUpdateTime)
         : ReplyTo(replyTo)
         , TabletId(tabletId)
         , TableId(tableId)
@@ -103,6 +104,7 @@ public:
         , MemDataSize(memDataSize)
         , RowCountResolution(rowCountResolution)
         , DataSizeResolution(dataSizeResolution)
+        , ResolutionMultiplier(resolutionMultiplier)
         , SearchHeight(searchHeight)
     {}
 
@@ -174,7 +176,7 @@ private:
 
         Subset->ColdParts.clear(); // stats won't include cold parts, if any
 
-        if (BuildStats(*Subset, ev->Stats, RowCountResolution, DataSizeResolution, &Env)) {
+        if (BuildStats(*Subset, ev->Stats, RowCountResolution, DataSizeResolution, ResolutionMultiplier, &Env)) {
             Y_DEBUG_ABORT_UNLESS(IndexSize == ev->Stats.IndexSize.Size);
 
             ctx.Send(ReplyTo, ev.Release());
@@ -237,6 +239,7 @@ private:
     ui64 MemDataSize;
     ui64 RowCountResolution;
     ui64 DataSizeResolution;
+    ui32 ResolutionMultiplier;
     ui64 SearchHeight;
 };
 
@@ -483,6 +486,7 @@ public:
             ui64 tableId = ti.first;
             ui64 rowCountResolution = gDbStatsRowCountResolution;
             ui64 dataSizeResolution = gDbStatsDataSizeResolution;
+            ui64 resolutionMultiplier = gDbStatsResolutionMultiplier;
 
             const ui64 MaxBuckets = 500;
 
@@ -535,6 +539,7 @@ public:
                 memDataSize,
                 rowCountResolution,
                 dataSizeResolution,
+                resolutionMultiplier,
                 searchHeight,
                 AppData(ctx)->TimeProvider->Now());
 

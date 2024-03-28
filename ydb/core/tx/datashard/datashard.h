@@ -151,6 +151,7 @@ namespace NDataShard {
     extern TDuration gDbStatsReportInterval;
     extern ui64 gDbStatsDataSizeResolution;
     extern ui64 gDbStatsRowCountResolution;
+    extern ui32 gDbStatsResolutionMultiplier;
 
     // This SeqNo is used to discard outdated schema Tx requests on datashards.
     // In case of tablet restart on network disconnects SS can resend same Propose for the same schema Tx.

@@ -976,7 +976,7 @@ struct TFullStatProcessor : IPlanStatProcessor {
     }
 
     TPublicStat GetPublicStat(TString& stat) override {
-        return NFq::GetPublicStat(stat);
+        return ::NFq::GetPublicStat(stat);
     }
 };
 
@@ -1071,6 +1071,37 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
     }
 
     return pingTaskRequest;
+}
+
+TString GetStatViewName(const TRunActorParams& params) {
+    auto p = params.Sql.find("--fq_dev_hint_");
+    if (p != params.Sql.npos) {
+        p += 14;
+        auto p1 = params.Sql.find("\n", p);
+        TString mode = params.Sql.substr(p, p1 == params.Sql.npos ? params.Sql.npos : p1 - p);
+        if (mode) {
+            return mode;
+        }
+    }
+
+    if (!params.Config.GetControlPlaneStorage().GetDumpRawStatistics()) {
+        return "stat_prod";
+    }
+
+    switch (params.Config.GetControlPlaneStorage().GetStatsMode()) {
+        case Ydb::Query::StatsMode::STATS_MODE_UNSPECIFIED:
+            return "stat_full";
+        case Ydb::Query::StatsMode::STATS_MODE_NONE:
+            return "stat_none";
+        case Ydb::Query::StatsMode::STATS_MODE_BASIC:
+            return "stat_basc";
+        case Ydb::Query::StatsMode::STATS_MODE_FULL:
+            return "stat_full";
+        case Ydb::Query::StatsMode::STATS_MODE_PROFILE:
+            return "stat_prof";
+        default:
+            return "stat_full";
+    }
 }
 
 } // namespace NFq

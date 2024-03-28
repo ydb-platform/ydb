@@ -404,7 +404,7 @@ private:
 
         auto runActorId =
             ComputeConfig.GetComputeType(task.query_type(), task.scope()) == NConfig::EComputeType::YDB
-                ? Register(CreateYdbRunActor(std::move(params), queryCounters))
+                ? Register(CreateYdbRunActor(std::move(params), queryCounters, ServiceCounters.RootCounters))
                 : Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));
 
         RunActorMap[runActorId] = TRunActorInfo { .QueryId = queryId, .QueryName = task.query_name() };
@@ -413,8 +413,8 @@ private:
         }
     }
 
-    NActors::IActor* CreateYdbRunActor(TRunActorParams&& params, const ::NYql::NCommon::TServiceCounters& queryCounters) const {
-        auto actorFactory = CreateActorFactory(params, queryCounters);
+    NActors::IActor* CreateYdbRunActor(TRunActorParams&& params, const ::NYql::NCommon::TServiceCounters& queryCounters, const ::NMonitoring::TDynamicCounterPtr& counters) const {
+        auto actorFactory = CreateActorFactory(params, queryCounters, counters);
         return ::NFq::CreateYdbRunActor(SelfId(), queryCounters, std::move(params), actorFactory);
     }
 

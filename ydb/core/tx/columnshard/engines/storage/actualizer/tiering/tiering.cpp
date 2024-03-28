@@ -106,6 +106,7 @@ void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, co
     THashSet<ui64> portionIds;
     for (auto&& [address, addressPortions] : PortionIdByWaitDuration) {
         if (!tasksContext.IsRWAddressAvailable(address)) {
+            Counters.SkipEvictionForLimit->Add(1);
             continue;
         }
         for (auto&& [duration, portions] : addressPortions.GetPortions()) {

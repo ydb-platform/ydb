@@ -131,6 +131,12 @@ public:
         return static_cast<EMarkers>(Raw.Simple.Meta);
     }
 
+    bool HasValue() const { return EMarkers::Empty != GetMarkers(); }
+
+    bool IsString() const { return EMarkers::String == GetMarkers(); }
+    bool IsBoxed() const { return EMarkers::Boxed == GetMarkers(); }
+    bool IsEmbedded() const { return EMarkers::Embedded == GetMarkers(); }
+
 private:
     union TRaw {
         ui64 Halfs[2] = {0, 0};

@@ -9,6 +9,8 @@
 #include <arrow/array/array_binary.h>
 #include <arrow/chunked_array.h>
 
+#include <ydb/library/yql/utils/log/log.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -36,6 +38,43 @@ public:
         }
 
         return TBlockItem(value.Get<T>());
+    }
+};
+
+template <bool Nullable>
+class TResourceBlockItemConverter : public IBlockItemConverter {
+public:
+    NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
+        Y_UNUSED(holderFactory);
+        if constexpr (Nullable) {
+            if (!item) {
+                return {};
+            }
+        }
+
+        if (item.IsEmbedded()) {
+            NUdf::TUnboxedValuePod embedded;
+            std::memcpy(embedded.GetRawPtr(), item.GetRawPtr(), sizeof(NYql::NUdf::TUnboxedValuePod));
+            return embedded;
+        } else {
+            return NYql::NUdf::TUnboxedValuePod(item.GetBoxed());
+        }
+    }
+
+    TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
+        if constexpr (Nullable) {
+            if (!value) {
+                return {};
+            }
+        }
+
+        if (value.IsEmbedded()) {
+            TBlockItem embedded;
+            std::memcpy(embedded.GetRawPtr(), value.GetRawPtr(), sizeof(TBlockItem));
+            return embedded;
+        } else {
+            return TBlockItem(value.AsBoxed());
+        }
     }
 };
 
@@ -211,7 +250,7 @@ struct TConverterTraits {
 
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
         Y_UNUSED(isOptional);
-        ythrow yexception() << "Converter not implemented for block resources";
+return std::make_unique<TResourceBlockItemConverter<true>>();
     }
 };
 

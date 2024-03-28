@@ -89,6 +89,38 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
 
         UNIT_ASSERT_VALUES_EQUAL_C(*destructorCallsCnt, 1, "Expected 1 call to resource destructor");
     }
+
+    Y_UNIT_TEST(TestBoxedResourceNullable) {
+        TArrayBuilderTestData data;
+        const auto resourceType = data.PgmBuilder.NewOptionalType(data.PgmBuilder.NewResourceType("Test.Resource"));
+        const auto arrayBuilder = MakeResourceArrayBuilder(resourceType, data);
+
+        struct TResourceItem {
+            int Payload;
+        };
+        using TTestResource = TBoxedResource<TResourceItem, ResourceName>;
+        for (int i = 0; i < 4; i++) {
+            if ((i % 2) == 0) {
+                TUnboxedValuePod resource(new TTestResource(TResourceItem{i}));
+                arrayBuilder->Add(resource);
+            } else {
+                arrayBuilder->Add(TUnboxedValuePod{});
+            }
+        } 
+        auto datum = arrayBuilder->Build(true);
+        const auto blockReader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), resourceType);
+        for (int i = 0; i < 4; i++) {
+            if ((i % 2) == 0) {
+                auto item = blockReader->GetItem(*datum.array(), i);
+                UNIT_ASSERT_C(item.HasValue(), "Expected not null");
+                auto* resourcePtr = reinterpret_cast<TTestResource*>(item.GetBoxed().Get());
+                UNIT_ASSERT_EQUAL(i, resourcePtr->Get()->Payload);
+            } else {
+                auto item = blockReader->GetItem(*datum.array(), i);
+                UNIT_ASSERT(!item.HasValue());
+            }
+        }
+    }
     
     Y_UNIT_TEST(TestBuilderWithReader) {
         TArrayBuilderTestData data;

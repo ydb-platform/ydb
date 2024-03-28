@@ -342,6 +342,7 @@ public:
                 DoAddNull();
                 return;
             }
+            NullPtr[GetCurrLen()] = 1;
         }
         static_cast<TDerived*>(this)->DoAddNotNull(value);
     }
@@ -498,7 +499,7 @@ public:
     {}
 
     void DoAddNotNull(TUnboxedValuePod value) {
-        this->DoAdd(TBlockItem(value.Get<TLayout>()));
+        this->PlaceItem(value.Get<TLayout>());
     }
 
     void DoAddNotNull(TBlockItem value) {

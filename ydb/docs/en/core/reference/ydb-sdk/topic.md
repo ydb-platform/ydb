@@ -754,7 +754,7 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
 - C++
 
- To take advantage of message metadata feature, use the `Write()` method with `TWriteMessage`argument as below:
+  To take advantage of message metadata feature, use the `Write()` method with `TWriteMessage`argument as below:
 
   ```cpp
   auto settings = TWriteSessionSettings()
@@ -778,7 +778,7 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
 - Java
 
- To take advantage of message metadata feature, build messages with builder. You can add `MetadataItem` to a message or set a `List` of `MetadataItem`s. Each item consists of a key of type `String` and a value of type `byte[]`:
+  To take advantage of message metadata feature, build messages with builder. You can add `MetadataItem` to a message or set a `List` of `MetadataItem`s. Each item consists of a key of type `String` and a value of type `byte[]`:
 
   ```java
   writer.send(
@@ -788,7 +788,7 @@ All the metadata provided when writing a message is sent to a consumer with the 
                   .build()
   ```
 
- While reading, metadata can be received from a `Message` with `getMetadataItems()` method:
+  While reading, metadata can be received from a `Message` with `getMetadataItems()` method:
 
   ```java
   Message message = reader.receive();
@@ -1083,7 +1083,7 @@ Information about which messages have already been processed can be [saved on th
 
 - C++
 
-Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceivedEvent` represents a batch of read messages.
+  Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceivedEvent` represents a batch of read messages.
 
 - Go
 
@@ -1203,7 +1203,7 @@ For example, if messages 1, 2, 3 are received from the server, the program proce
 
 - C++
 
-Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceivedEvent` represents a batch of read messages.
+  Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceivedEvent` represents a batch of read messages.
 
 - Go
 
@@ -1456,6 +1456,7 @@ Usually reading progress is saved on server within each Consumer. Though such pr
   It should be an active transaction (that has id) from one of YDB services. I.e. Table or Query.
 
 - Java (async)
+
   In `onMessages` callback one or more messages can be linked with transaction.
   To do that request `reader.updateOffsetsInTransaction` should be called. And transaction should not be committed untill response is received.
   This method needs partition offsets list as a parameter.

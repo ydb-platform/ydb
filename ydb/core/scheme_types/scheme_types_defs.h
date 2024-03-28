@@ -243,12 +243,16 @@ namespace NNames {
     extern const char Datetime[9];
     extern const char Timestamp[10];
     extern const char Interval[9];
+    extern const char Timestamp64[12];
+    extern const char Interval64[11];
 }
 
 class TDate : public IIntegerTypeWithKeyString<ui16, NTypeIds::Date, NNames::Date> {};
 class TDatetime : public IIntegerTypeWithKeyString<ui32, NTypeIds::Datetime, NNames::Datetime> {};
 class TTimestamp : public IIntegerTypeWithKeyString<ui64, NTypeIds::Timestamp, NNames::Timestamp> {};
 class TInterval : public IIntegerTypeWithKeyString<i64, NTypeIds::Interval, NNames::Interval> {};
+class TTimestamp64 : public IIntegerTypeWithKeyString<i64, NTypeIds::Timestamp64, NNames::Timestamp64> {};
+class TInterval64 : public IIntegerTypeWithKeyString<i64, NTypeIds::Interval64, NNames::Interval64> {};
 
 #define KIKIMR_FOREACH_MINIKQL_TYPE_I(name, size, macro, ...) macro(name, T##name, __VA_ARGS__)
 
@@ -279,6 +283,8 @@ class TInterval : public IIntegerTypeWithKeyString<i64, NTypeIds::Interval, NNam
     xx(Interval, TInterval, __VA_ARGS__) \
     xx(DyNumber, TDyNumber, __VA_ARGS__) \
     xx(Uuid, TUuid, __VA_ARGS__) \
+    xx(Timestamp64, TTimestamp64, __VA_ARGS__) \
+    xx(Interval64, TInterval64, __VA_ARGS__) \
     /**/
 
 

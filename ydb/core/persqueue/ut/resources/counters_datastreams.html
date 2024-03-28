@@ -3,6 +3,8 @@ topic=topic:
     name=api.grpc.topic.stream_write.bytes: 540
     name=api.grpc.topic.stream_write.messages: 30
     name=topic.write.bytes: 540
+    name=topic.write.discarded_bytes: 90
+    name=topic.write.discarded_messages: 10
     name=topic.write.messages: 30
     name=topic.write.uncompressed_bytes: 270
 
@@ -55,7 +57,7 @@ topic=topic:
         bin=99999999: 0
 
     name=topic.write.partition_throttled_milliseconds:
-        bin=0: 30
+        bin=0: 40
         bin=1: 0
         bin=10: 0
         bin=100: 0

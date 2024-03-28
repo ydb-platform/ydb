@@ -229,12 +229,6 @@
   - varargs.h
   - vm/vm_param.h
   #endif
-  #if defined(__GNUC__)
-  - varargs.h
-  - stdfix.h
-  - mm_malloc.h
-  - quadmath.h
-  #endif
   #if defined(_MSC_VER)
   - comdef.h
   - comutil.h
@@ -293,9 +287,6 @@
   #endif
   #if defined(HAVE_DMALLOC)
   - dmalloc.h
-  #endif
-  #if defined(HAVE_ALTIVEC)
-  - altivec.h
   #endif
   #if defined(_TRASH_) && TODO
   - gcrypt.h

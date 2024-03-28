@@ -495,7 +495,6 @@ private:
     NOlap::NResourceBroker::NSubscribe::TTaskContext InsertTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
-    const TScanCounters ReadCounters;
     const TScanCounters ScanCounters;
     const TIndexationCounters CompactionCounters = TIndexationCounters("GeneralCompaction");
     const TIndexationCounters IndexationCounters = TIndexationCounters("Indexation");

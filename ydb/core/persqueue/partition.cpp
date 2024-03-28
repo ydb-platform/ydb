@@ -330,8 +330,9 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     }
     Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateIdle);
 
-    if (ManageWriteTimestampEstimate)
+    if (ManageWriteTimestampEstimate) {
         WriteTimestampEstimate = now;
+    }
 
     THolder <TEvKeyValue::TEvRequest> request = MakeHolder<TEvKeyValue::TEvRequest>();
     bool haveChanges = CleanUp(request.Get(), ctx);
@@ -346,7 +347,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
         TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero();
         PartitionQuotaWaitTimeForCurrentBlob = TDuration::Zero();
         WritesTotal.Inc();
-        Become(&TThis::StateWrite);
+        BecomeWrite();
         AddMetaKey(request.Get());
         ctx.Send(Tablet, request.Release());
     }
@@ -966,7 +967,7 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
 }
 
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx) {
-    if (ClosedInternalPartition || CurrentStateFunc() != &TThis::StateIdle || !Requests.empty()) {
+    if (ClosedInternalPartition || WaitingForPreviousBlobQuota() || (CurrentStateFunc() != &TThis::StateIdle) || !Requests.empty()) {
         auto* response = new TEvPQ::TEvGetWriteInfoError(Partition.InternalPartitionId,
                                                        "Write info requested while writes are not complete");
         ctx.Send(ev->Sender, response);
@@ -1455,8 +1456,9 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         }
         diskIsOk = diskIsOk && CheckDiskStatus(res.GetStatusFlags());
     }
-    if (response.GetStatusResultSize())
+    if (response.GetStatusResultSize()) {
         DiskIsFull = !diskIsOk;
+    }
 
     if (response.HasCookie()) {
         OnProcessTxsAndUserActsWriteComplete(response.GetCookie(), ctx);
@@ -1923,9 +1925,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
 
     ProcessTxsAndUserActs(ctx);
 
-    if (ChangeConfig && CurrentStateFunc() == &TThis::StateIdle) {
-        HandleWrites(ctx);
-    }
+    HandleRequests(ctx);
 }
 
 void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
@@ -2544,8 +2544,14 @@ void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {
     ctx.Schedule(UPDATE_AVAIL_SIZE_INTERVAL, new TEvPQ::TEvUpdateAvailableSize());
 }
 
-void TPartition::BecomeIdle(const TActorContext&) {
+void TPartition::BecomeIdle()
+{
     Become(&TThis::StateIdle);
+}
+
+void TPartition::BecomeWrite()
+{
+    Become(&TThis::StateWrite);
 }
 
 void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue::TEvRequest* request) {
@@ -2593,11 +2599,9 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
 
     // Search for proper request
     Y_ABORT_UNLESS(TopicQuotaRequestCookie == cookie);
+    ConsumeBlobQuota();
     TopicQuotaRequestCookie = 0;
-    TopicQuotaConsumedCookie = cookie;
-    Y_ASSERT(!WaitingForPreviousBlobQuota());
-    Y_ABORT_UNLESS(PendingWriteRequest);
-    WritePendingBlob();
+    RemoveQuotaWaitingRequests();
 
     // Metrics
     TopicQuotaWaitTimeForCurrentBlob = ev->Get()->AccountQuotaWaitTime;
@@ -2606,8 +2610,9 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
     if (TopicWriteQuotaWaitCounter) {
         TopicWriteQuotaWaitCounter->IncFor(TopicQuotaWaitTimeForCurrentBlob.MilliSeconds());
     }
-    if (CurrentStateFunc() == &TThis::StateIdle)
-        HandleWrites(ctx);
+
+    RequestBlobQuota();
+    HandleRequests(ctx);
 }
 
 void TPartition::Handle(NReadQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx) {
@@ -2668,9 +2673,7 @@ void TPartition::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext
         );
 
         if (!SubDomainOutOfSpace) {
-            if (CurrentStateFunc() == &TThis::StateIdle) {
-                HandleWrites(ctx);
-            }
+            HandlePendingRequests(ctx);
         }
     }
 }

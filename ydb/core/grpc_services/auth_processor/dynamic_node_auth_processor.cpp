@@ -69,8 +69,6 @@ TVector<std::pair<TString, TString>> X509CertificateReader::ReadAllSubjectTerms(
 
     int entryCount = X509_NAME_entry_count(name);
     subjectTerms.reserve(entryCount);
-    char buf[1024];
-    static const int bufLen = sizeof(buf);
     for (int i = 0; i < entryCount; i++) {
         const X509_NAME_ENTRY* entry = X509_NAME_get_entry(name, i);
         if (!entry) {
@@ -80,17 +78,14 @@ TVector<std::pair<TString, TString>> X509CertificateReader::ReadAllSubjectTerms(
         if (!data) {
             continue;
         }
-        int dataLen = (data->length > (bufLen - 1)) ? (bufLen - 1) : data->length;
-        memcpy(buf, data->data, dataLen);
-        buf[dataLen] = '\0';
 
         const ASN1_OBJECT* object = X509_NAME_ENTRY_get_object(entry);
         if (!object) {
             continue;
         }
-        int nid = OBJ_obj2nid(object);
+        const int nid = OBJ_obj2nid(object);
         const char* sn = OBJ_nid2sn(nid);
-        subjectTerms.push_back(std::make_pair(TString(sn, std::strlen(sn)), TString(buf, std::strlen(buf))));
+        subjectTerms.push_back(std::make_pair(TString(sn, std::strlen(sn)), TString(reinterpret_cast<char*>(data->data), data->length)));
     }
     return subjectTerms;
 }

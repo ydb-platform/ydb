@@ -661,11 +661,10 @@ private:
         if (record.TokenType != TDerived::ETokenType::Certificate) {
             return false;
         }
-        const static TString error = "Cannot create token from certificate. Cannot extract subject from certificate";
         CounterTicketsCertificate->Inc();
         X509CertificateReader::X509Ptr x509cert = X509CertificateReader::ReadCertAsPEM(record.Certificate);
         if (!x509cert) {
-            SetError(key, record, { .Message = error, .Retryable = false });
+            SetError(key, record, { .Message = "Cannot create token from certificate. Cannot read certificate", .Retryable = false });
             return false;
         }
         TStringBuilder dn;
@@ -673,7 +672,7 @@ private:
             dn << attribute << "=" << value << ",";
         }
         if (dn.empty()) {
-            SetError(key, record, { .Message = error, .Retryable = false });
+            SetError(key, record, { .Message = "Cannot create token from certificate. Cannot extract subject from certificate", .Retryable = false });
             return false;
         }
         dn.remove(dn.size() - 1);
@@ -1547,8 +1546,7 @@ protected:
             } else {
                 return TDerived::ETokenType::Unsupported;
             }
-        }
-         if (tokenType == "ApiKey") {
+        } else if (tokenType == "ApiKey") {
             if (ApiKeyEnabled()) {
                 return TDerived::ETokenType::ApiKey;
             } else {

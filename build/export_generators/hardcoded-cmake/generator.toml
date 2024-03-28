@@ -100,7 +100,10 @@ attrs=[
     "target_proto_outs",
     "target_proto_addincls",
 ]
-copy=["cmake/protobuf.cmake"]
+copy=[
+    "cmake/protobuf.cmake",
+    "build/scripts/re_replace.py",
+]
 add_values=[{attr="includes", values=["cmake/protobuf.cmake"]}]
 
 [[rules]]

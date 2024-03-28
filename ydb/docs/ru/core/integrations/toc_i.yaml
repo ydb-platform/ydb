@@ -3,5 +3,5 @@ items:
   href: fluent-bit.md
 - name: goose
   href: goose.md
-- name: Liquibase диалект
+- name: Миграции схемы с помощью Liquibase
   href: liquibase.md

@@ -3,5 +3,5 @@ items:
   href: fluent-bit.md
 - name: Schema migrations with goose
   href: goose.md
-- name: Liquibase dialect
+- name: Schema migrations with Liquibase
   href: liquibase.md

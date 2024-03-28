@@ -2252,7 +2252,7 @@ bool TOlapStoreInfo::ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescrip
         preset.SetProtoIndex(protoIndex++);
 
         TOlapSchemaUpdate schemaDiff;
-        if (!schemaDiff.Parse(presetProto.GetSchema(), errors, true)) {
+        if (!schemaDiff.Parse(presetProto.GetSchema(), errors)) {
             return false;
         }
 

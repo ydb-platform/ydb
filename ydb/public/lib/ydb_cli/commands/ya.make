@@ -27,6 +27,7 @@ SRCS(
     ydb_service_scripting.cpp
     ydb_service_topic.cpp
     ydb_service_table.cpp
+    ydb_sql.cpp
     ydb_tools.cpp
     ydb_workload.cpp
     ydb_yql.cpp

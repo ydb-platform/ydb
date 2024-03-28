@@ -787,7 +787,21 @@ bool FillUsedFilesImpl(
             }
         }
 
-        TYqlExternalModuleProcessor::FillUsedFiles(TString(moduleName), types, crutches, files);
+        if (const auto& filesList = TYqlExternalModuleProcessor::GetUsedFilenamePaths(moduleName); !filesList.empty()) {
+            for (const auto& [fullPath, isRequired] : filesList) {
+                const auto fileKey = TUserDataKey::File(fullPath);
+                if (const auto block = types.UserDataStorage->FindUserDataBlock(fileKey)) {
+                    files.emplace(fileKey, *block).first->second.Usage.Set(EUserDataBlockUsage::Path);
+                } else {
+                    const auto it = crutches.find(fileKey);
+                    if (crutches.cend() != it) {
+                        auto pragma = it->second;
+                        types.UserDataStorage->AddUserDataBlock(fileKey, pragma);
+                        files.emplace(fileKey, pragma).first->second.Usage.Set(EUserDataBlockUsage::Path);
+                    }
+                }
+            }
+        }
 
         if (addSysModule) {
             auto pathWithMd5 = types.UdfResolver->GetSystemModulePath(moduleName);

@@ -10,13 +10,6 @@ void TYqlExternalModuleProcessor::AddModule(const IYqlModule* ptr) {
     }
 }
 
-void TYqlExternalModuleProcessor::FillUsedFiles(TStringBuf moduleName, const TTypeAnnotationContext& types, const TUserDataTable& crutches, TUserDataTable& files)
-{
-    if (const auto modulePtr = GetModule(moduleName)) {
-        modulePtr->FillUsedFiles(types, crutches, files);
-    }
-}
-
 bool TYqlExternalModuleProcessor::ApplyConfigFlag(const TPosition& pos, TStringBuf flagName, TExprContext& ctx, const TVector<TStringBuf>& args, TUserDataTable& crutches) {
     for (auto& [name, ptr] : KnownModules) {
         if (!ptr->ApplyConfigFlag(pos, flagName, ctx, args, crutches)) {

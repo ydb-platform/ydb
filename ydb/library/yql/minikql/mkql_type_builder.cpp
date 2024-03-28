@@ -1426,14 +1426,10 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
         type = arrow::uint32();
         return true;
     case NUdf::EDataSlot::Int32:
-    case NUdf::EDataSlot::Date32:
         type = arrow::int32();
         return true;
     case NUdf::EDataSlot::Int64:
     case NUdf::EDataSlot::Interval:
-    case NUdf::EDataSlot::Interval64:
-    case NUdf::EDataSlot::Datetime64:
-    case NUdf::EDataSlot::Timestamp64:
         type = arrow::int64();
         return true;
     case NUdf::EDataSlot::Uint64:

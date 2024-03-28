@@ -11,22 +11,23 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
-enum EFormat : ui32 {
+enum EFormat : ui8 {
     FloatVector = 1
 };
 
+static constexpr size_t HeaderLen = sizeof(ui8);
 
 class TFloatVectorSerializer {
 public:
     static TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) {
         auto serialize = [&x] (IOutputStream& outStream) {
-            const EFormat format = EFormat::FloatVector;
-            outStream.Write(&format, sizeof(ui32));
             EnumerateVector(x,  [&outStream] (float element) { outStream.Write(&element, sizeof(float)); });
+            const EFormat format = EFormat::FloatVector;
+            outStream.Write(&format, HeaderLen);
         };
 
         if (x.HasFastListLength()) {
-            auto str = valueBuilder->NewStringNotFilled(sizeof(ui32) + x.GetListLength() * sizeof(float));
+            auto str = valueBuilder->NewStringNotFilled(HeaderLen + x.GetListLength() * sizeof(float));
             auto strRef = str.AsStringRef();
             TMemoryOutput memoryOutput(strRef.Data(), strRef.Size());
 
@@ -42,9 +43,8 @@ public:
     }
 
     static TUnboxedValue Deserialize(const IValueBuilder *valueBuilder, const TStringRef& str) {
-        //skip format header, it was already read
-        const char* buf = str.Data() + sizeof(ui32);
-        const size_t len = str.Size() - sizeof(ui32);
+        const char* buf = str.Data();
+        const size_t len = str.Size() - HeaderLen;
 
         if (len % sizeof(float) != 0)    
             return {};
@@ -66,9 +66,8 @@ public:
     }
 
     static const TArrayRef<const float> GetArray(const TStringRef& str) {
-        //skip format header, it was already read
-        const char* buf = str.Data() + sizeof(ui32);
-        const size_t len = str.Size() - sizeof(ui32);
+        const char* buf = str.Data();
+        const size_t len = str.Size() - HeaderLen;
 
         if (len % sizeof(float) != 0)    
             return {};
@@ -95,8 +94,8 @@ public:
         if (str.Size() == 0)
             return {};
 
-        const ui32* format = reinterpret_cast<const ui32*>(str.Data());
-        switch (*format) {
+        const ui8 format = str.Data()[str.Size() - HeaderLen];
+        switch (format) {
             case EFormat::FloatVector:
                 return TFloatVectorSerializer::Deserialize(valueBuilder, str);
             default:
@@ -108,8 +107,8 @@ public:
         if (str.Size() == 0)
             return {};
 
-        const ui32* format = reinterpret_cast<const ui32*>(str.Data());
-        switch (*format) {
+        const ui8 format = str.Data()[str.Size() - HeaderLen];
+        switch (format) {
             case EFormat::FloatVector:
                 return TFloatVectorSerializer::GetArray(str);
             default:

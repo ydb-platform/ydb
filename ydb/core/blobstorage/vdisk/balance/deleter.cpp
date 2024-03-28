@@ -153,6 +153,7 @@ namespace {
 
         void Handle(TEvDelLogoBlobDataSyncLogResult::TPtr ev) {
             Y_VERIFY(ev->Get()->OrderId == Stats.PartsMarkedDeleted++);
+            ++Ctx->MonGroup.MarkedReadyToDelete();
         }
 
         void PassAway() override {

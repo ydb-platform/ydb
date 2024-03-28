@@ -144,7 +144,7 @@ TStatus RemoveDirectoryRecursive(
     // output order is: Root, Recursive(children)...
     // we need to reverse it to delete recursively
     for (auto it = recursiveListResult.Entries.rbegin(); it != recursiveListResult.Entries.rend(); ++it) {
-        if (auto result = Remove(schemeClient, tableClient, topicClient, it->Type, path + "/" + it->Name, prompt, settings); !result.IsSuccess()) {
+        if (auto result = Remove(schemeClient, tableClient, topicClient, it->Type, it->Name, prompt, settings); !result.IsSuccess()) {
             return result;
         }
         if (createProgressBar) {

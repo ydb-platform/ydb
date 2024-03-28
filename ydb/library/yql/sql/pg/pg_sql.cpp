@@ -4706,6 +4706,7 @@ NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTran
         *stmtParseInfo = stmtParseInfos.back();
     }
     Y_ENSURE(!results.empty());
+    results.back().ActualSyntaxType = NYql::ESyntaxType::Pg;
     return std::move(results.back());
 }
 
@@ -4713,6 +4714,9 @@ TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQ
     TVector<NYql::TAstParseResult> results;
     TConverter converter(results, settings, query, stmtParseInfo, true);
     NYql::PGParse(query, converter);
+    for (auto& res : results) {
+        res.ActualSyntaxType = NYql::ESyntaxType::Pg; 
+    }
     return results;
 }
 

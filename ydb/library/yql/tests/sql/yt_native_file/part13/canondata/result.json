@@ -1758,6 +1758,13 @@
             "uri": "https://{canondata_backend}/1931696/19ca459c2eb328839af867f3549817480dd3ab7e/resource.tar.gz#test.test_pg-join_using_case_insensetive1-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[pg-join_using_table_used_order2--Debug]": [],
+    "test.test[pg-join_using_table_used_order2--Plan]": [],
+    "test.test[pg-join_using_table_used_order2--Results]": [
+        {
+            "uri": "file://test.test_pg-join_using_table_used_order2--Results_/extracted"
+        }
+    ],
     "test.test[pg-long_ident-default.txt-Debug]": [
         {
             "checksum": "6fcbc1edafd1b0e640fe7d82006c1242",

@@ -20,30 +20,6 @@ Below are examples of the code for connecting to {{ ydb-short-name }} (driver cr
 
   import (
     "context"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
-
-  func main() {
-    db, err := ydb.Open(ctx, "grpc://localhost:2136/local")
-    if err != nil {
-        log.Fatal(err)
-    }
-    ...
-  }
-  ```
-
-- Go (database/sql)
-
-  {% cut "Using a connector (recommended)" %}
-  ```golang
-  package main
-
-  import (
-    "context"
-    "database/sql"
-    "os"
 
     "github.com/ydb-platform/ydb-go-sdk/v3"
   )
@@ -51,46 +27,82 @@ Below are examples of the code for connecting to {{ ydb-short-name }} (driver cr
   func main() {
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-    )
+
+    db, err := ydb.Open(ctx, "grpc://localhost:2136/local")
     if err != nil {
-      panic(err)
+        panic(err)
     }
-    defer nativeDriver.Close(ctx)
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    db := sql.OpenDB(connector)
     defer db.Close()
-    ...
+
+    // ...
   }
   ```
+
+- Go (database/sql)
+
+  {% cut "Using a connector (recommended)" %}
+
+    ```golang
+    package main
+
+    import (
+      "context"
+      "database/sql"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+    )
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+
+      // ...
+    }
+    ```
+
   {% endcut %}
 
   {% cut "Using a connection string" %}
 
-  The `database/sql` driver is registered when importing the package of a specific driver separated by an underscore:
-  ```golang
-  package main
+    The `database/sql` driver is registered when importing the package of a specific driver separated by an underscore:
+    ```golang
+    package main
 
-  import (
-    "context"
-    "database/sql"
-    "os"
+    import (
+      "database/sql"
 
-    _ "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
+      _ "github.com/ydb-platform/ydb-go-sdk/v3"
+    )
 
-  func main() {
-    db, err := sql.Open("ydb", "grpc://localhost:2136/local")
-    if err != nil {
-        log.Fatal(err)
+    func main() {
+      db, err := sql.Open("ydb", "grpc://localhost:2136/local")
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close()
+
+      // ...
     }
-    ...
-  }
-  ```
+    ```
+
   {% endcut %}
 
 - Java

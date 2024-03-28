@@ -1,6 +1,6 @@
 # App in Go
 
-This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-go-examples/tree/master/basic) that uses the {{ ydb-short-name }} [Go SDK](https://github.com/ydb-platform/ydb-go-sdk/v3).
+This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-go-examples/tree/master/basic) that uses the {{ ydb-short-name }} [Go SDK v3](https://github.com/ydb-platform/ydb-go-sdk).
 
 ## Downloading and starting {#download}
 
@@ -9,7 +9,7 @@ The following execution scenario is based on [git](https://git-scm.com/downloads
 Create a working directory and use it to run from the command line the command to clone the GitHub repository:
 
 ```bash
-git clone https://github.com/ydb-platform/ydb-go-examples/
+git clone https://github.com/ydb-platform/ydb-go-sdk/ && cd ydb-go-sdk
 ```
 
 Next, from the same working directory, run the command to start the test app. The command will differ depending on the database to connect to.
@@ -22,31 +22,55 @@ Next, from the same working directory, run the command to start the test app. Th
 
 To work with `YDB` in `Go`, import the `ydb-go-sdk` driver package:
 
-```go
-import (
-  // general imports from standard library
-  "context"
-  "log"
-  "path"
+{% list tabs %}
 
-  // importing the packages ydb-go-sdk
-  "github.com/ydb-platform/ydb-go-sdk/v3"
-  "github.com/ydb-platform/ydb-go-sdk/v3/table" // needed to work with table service
-  "github.com/ydb-platform/ydb-go-sdk/v3/table/options" // needed to work with table service
-  "github.com/ydb-platform/ydb-go-sdk/v3/table/result" // needed to work with table service
-  "github.com/ydb-platform/ydb-go-sdk/v3/table/result/named" // needed to work with table service
-  "github.com/ydb-platform/ydb-go-sdk/v3/table/types" // needed to work with YDB types and values
-  "github.com/ydb-platform/ydb-go-sdk-auth-environ" // needed to authenticate using environment variables
-  "github.com/ydb-platform/ydb-go-yc" // to work with YDB in Yandex Cloud
-)
-```
+- Test app over YDB Table service
+
+  ```go
+  import (
+    // general imports from standard library
+    "context"
+    "log"
+    "path"
+
+    // importing the packages ydb-go-sdk
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/table" // needed to work with table service
+    "github.com/ydb-platform/ydb-go-sdk/v3/table/options" // needed to work with table service
+    "github.com/ydb-platform/ydb-go-sdk/v3/table/result" // needed to work with table service
+    "github.com/ydb-platform/ydb-go-sdk/v3/table/result/named" // needed to work with table service
+    "github.com/ydb-platform/ydb-go-sdk/v3/table/types" // needed to work with YDB types and values
+    "github.com/ydb-platform/ydb-go-sdk-auth-environ" // needed to authenticate using environment variables
+    "github.com/ydb-platform/ydb-go-yc" // to work with YDB in Yandex Cloud
+  )
+  ```
+
+- Test app over YDB Query service
+
+  ```go
+  import (
+    // general imports from standard library
+    "context"
+    "log"
+    "path"
+
+    // importing the packages ydb-go-sdk
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/query" // needed to work with query service
+    "github.com/ydb-platform/ydb-go-sdk-auth-environ" // needed to authenticate using environment variables
+    "github.com/ydb-platform/ydb-go-yc" // to work with YDB in Yandex Cloud
+  )
+  ```
+
+{% endlist %}
+
 
 App code snippet for driver initialization:
 
 ```go
 ctx := context.Background()
 // connection string
-dsn := "grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1g8skpblkos03malf3s/etn01f8gv9an9sedo9fu"
+dsn := "grpcs://ydb.serverless.yandexcloud.net:2135/ru-central1/b1g8skpblkos03malf3s/etn01f8gv9an9sedo9fu"
 // IAM token
 token := "t1.9euelZrOy8aVmZKJm5HGjceMkMeVj-..."
 // create a connection object called db, it is an entry point for YDB services

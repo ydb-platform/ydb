@@ -4,10 +4,23 @@ If authentication is enabled in the database, you also need to select the [authe
 
 Run the command as follows:
 
+{% list tabs %}
+
+- Test app over YDB Table service
+
 ```bash
-( export <auth_mode_var>="<auth_mode_value>" && cd ydb-go-examples && \
-go run ./basic -ydb="<endpoint>?database=<database>" )
+( export <auth_mode_var>="<auth_mode_value>" && cd ydb-go-sdk/examples/basic/native && \
+go run ./table -ydb="<endpoint>/<database>" )
 ```
+
+- Test app over YDB Query service
+
+```bash
+( export <auth_mode_var>="<auth_mode_value>" && cd ydb-go-sdk/examples/basic/native && \
+go run ./query -ydb="<endpoint>/<database>" )
+```
+
+{% endlist %}
 
 where
 
@@ -19,6 +32,6 @@ where
 For example:
 
 ```bash
-( export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." && cd ydb-go-examples && \
-go run ./basic -ydb="grpcs://ydb.example.com:2135?database=/somepath/somelocation" )
+( export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." && cd ydb-go-sdk/examples/basic/native && \
+go run ./table -ydb="grpcs://ydb.example.com:2135/somepath/somelocation" )
 ```

@@ -39,6 +39,43 @@ public:
     }
 };
 
+template <bool Nullable>
+class TResourceBlockItemConverter : public IBlockItemConverter {
+public:
+    NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
+        Y_UNUSED(holderFactory);
+        if constexpr (Nullable) {
+            if (!item) {
+                return {};
+            }
+        }
+
+        if (item.IsEmbedded()) {
+            NUdf::TUnboxedValuePod embedded;
+            std::memcpy(embedded.GetRawPtr(), item.GetRawPtr(), sizeof(NYql::NUdf::TUnboxedValuePod));
+            return embedded;
+        } else {
+            return NYql::NUdf::TUnboxedValuePod(item.GetBoxed());
+        }
+    }
+
+    TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
+        if constexpr (Nullable) {
+            if (!value) {
+                return {};
+            }
+        }
+
+        if (value.IsEmbedded()) {
+            TBlockItem embedded;
+            std::memcpy(embedded.GetRawPtr(), value.GetRawPtr(), sizeof(TBlockItem));
+            return embedded;
+        } else {
+            return TBlockItem(value.AsBoxed());
+        }
+    }
+};
+
 template<typename TStringType, bool Nullable, NUdf::EPgStringType PgString>
 class TStringBlockItemConverter : public IBlockItemConverter {
 public:
@@ -206,6 +243,15 @@ struct TConverterTraits {
                 ret->SetPgBuilder(pgBuilder, desc.TypeId, desc.Typelen);
                 return ret;
             }
+        }
+    }
+
+    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
+        Y_UNUSED(isOptional);
+        if (isOptional) {
+            return std::make_unique<TResourceBlockItemConverter<true>>();
+        } else {
+            return std::make_unique<TResourceBlockItemConverter<false>>();
         }
     }
 };

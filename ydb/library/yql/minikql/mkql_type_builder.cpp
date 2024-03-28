@@ -1521,6 +1521,11 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
         return true;
     }
 
+    if (unpacked->IsResource()) {
+        type = arrow::fixed_size_binary(sizeof(NYql::NUdf::TUnboxedValuePod));
+        return true;
+    }
+
     if (!unpacked->IsData()) {
         return false;
     }
@@ -2341,6 +2346,10 @@ size_t CalcMaxBlockItemSize(const TType* type) {
         }
     }
 
+    if (type->IsResource()) {
+        return sizeof(NYql::NUdf::TUnboxedValue);
+    }
+
     if (type->IsData()) {
         auto slot = *AS_TYPE(TDataType, type)->GetDataSlot();
         switch (slot) {
@@ -2398,6 +2407,11 @@ struct TComparatorTraits {
         Y_UNUSED(pgBuilder);
         return std::unique_ptr<TResult>(MakePgItemComparator(desc.TypeId).Release());
     }
+
+    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
+        Y_UNUSED(isOptional);
+        ythrow yexception() << "Comparator not implemented for block resources: ";
+    }
 };
 
 struct THasherTraits {
@@ -2413,6 +2427,11 @@ struct THasherTraits {
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
         return std::unique_ptr<TResult>(MakePgItemHasher(desc.TypeId).Release());
+    }
+
+    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
+        Y_UNUSED(isOptional);
+        ythrow yexception() << "Hasher not implemented for block resources";
     }
 };
 

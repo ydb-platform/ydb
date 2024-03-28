@@ -32,8 +32,8 @@ struct TBlockItemSerializeProps {
     bool IsFixed = true;      // true if each block item takes fixed size
 };
 
-template<typename T, bool Nullable>
-class TFixedSizeBlockReader final : public IBlockReader {
+template<typename T, bool Nullable, typename TDerived> 
+class TFixedSizeBlockReaderBase : public IBlockReader {
 public:
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
         if constexpr (Nullable) {
@@ -41,18 +41,21 @@ public:
                 return {};
             }
         }
-
-        return TBlockItem(data.GetValues<T>(1)[index]);
+        return static_cast<TDerived*>(this)->MakeBlockItem(data.GetValues<T>(1)[index]);
     }
 
     TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
+        using namespace arrow::internal;
+
         if constexpr (Nullable) {
             if (!scalar.is_valid) {
                 return {};
             }
         }
 
-        return TBlockItem(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
+        return static_cast<TDerived*>(this)->MakeBlockItem(
+            *static_cast<const T*>(checked_cast<const PrimitiveScalarBase&>(scalar).data())
+        );
     }
 
     ui64 GetDataWeight(const arrow::ArrayData& data) const final {
@@ -94,6 +97,24 @@ public:
         }
 
         out.PushNumber(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
+    }
+};
+
+template<typename T, bool Nullable>
+class TFixedSizeBlockReader : public TFixedSizeBlockReaderBase<T, Nullable, TFixedSizeBlockReader<T, Nullable>> {
+public:
+    TBlockItem MakeBlockItem(const T& item) const {
+        return TBlockItem(item);
+    }
+};
+
+template<bool Nullable>
+class TResourceBlockReader : public TFixedSizeBlockReaderBase<TUnboxedValuePod, Nullable, TResourceBlockReader<Nullable>> {
+public:
+    TBlockItem MakeBlockItem(const TUnboxedValuePod& pod) const {
+        TBlockItem item;
+        std::memcpy(item.GetRawPtr(), pod.GetRawPtr(), sizeof(TBlockItem));
+        return item;
     }
 };
 
@@ -367,6 +388,8 @@ struct TReaderTraits {
     template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot TOriginal>
     using TStrings = TStringBlockReader<TStringType, Nullable, TOriginal>;
     using TExtOptional = TExternalOptionalBlockReader;
+    template<bool Nullable>
+    using TResource = TResourceBlockReader<Nullable>;
 
     static std::unique_ptr<TResult> MakePg(const TPgTypeDescription& desc, const IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -374,6 +397,14 @@ struct TReaderTraits {
             return std::make_unique<TFixedSize<ui64, true>>();
         } else {
             return std::make_unique<TStrings<arrow::BinaryType, true, NKikimr::NUdf::EDataSlot::String>>();
+        }
+    }
+
+    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
+        if (isOptional) {
+            return std::make_unique<TResource<true>>();
+        } else {
+            return std::make_unique<TResource<false>>();
         }
     }
 };
@@ -395,6 +426,7 @@ std::unique_ptr<typename TTraits::TResult> MakeFixedSizeBlockReaderImpl(bool isO
         return std::make_unique<typename TTraits::template TFixedSize<T, false>>();
     }
 }
+
 
 template <typename TTraits, typename T, NKikimr::NUdf::EDataSlot TOriginal>
 std::unique_ptr<typename TTraits::TResult> MakeStringBlockReaderImpl(bool isOptional) {
@@ -505,6 +537,11 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
         default:
             Y_ENSURE(false, "Unsupported data slot");
         }
+    }
+
+    TResourceTypeInspector resource(typeInfoHelper, type);
+    if (resource) {
+        return TTraits::MakeResource(isOptional);
     }
 
     TPgTypeInspector typePg(typeInfoHelper, type);

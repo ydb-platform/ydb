@@ -842,10 +842,6 @@ IGraphTransformer::TStatus WideToBlocksWrapper(const TExprNode::TPtr& input, TEx
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsurePersistableType(input->Pos(), *type, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
         if (!EnsureSupportedAsBlockType(input->Pos(), *type, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }

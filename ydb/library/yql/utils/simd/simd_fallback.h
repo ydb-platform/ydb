@@ -67,7 +67,7 @@ template <typename T>
 struct FallbackTrait {
 
     T Value;
-    
+
     static const int SIZE = sizeof(T);
 
     inline FallbackTrait() : Value() {}
@@ -96,8 +96,29 @@ struct FallbackTrait {
         return ans;
     }
 
+    inline FallbackTrait<T> Shuffle128(const FallbackTrait<T>& other) const {
+        return other;
+    }
+
+    template<bool CanBeNegative = true>
+    inline FallbackTrait<T> Shuffle(const FallbackTrait<T>& other) const {
+        return Shuffle128(other);
+    }
+
+    inline void SetMask(T* ptr) {
+        Value = *ptr;
+    }
+
+    inline void Get(const T* ptr) {
+        Value = *ptr;
+    }
+
     inline void Store(T* ptr) {
         *ptr = Value;
+    }
+
+    inline FallbackTrait<T> Blend(const FallbackTrait<T>& other, const FallbackTrait<T>& mask) const {
+        return other.Value == 1 ? other : mask;
     }
 };
 

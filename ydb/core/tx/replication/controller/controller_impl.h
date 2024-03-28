@@ -85,6 +85,7 @@ private:
 
     void CreateSession(ui32 nodeId, const TActorContext& ctx);
     void DeleteSession(ui32 nodeId, const TActorContext& ctx);
+    void CloseSession(ui32 nodeId, const TActorContext& ctx);
     void ScheduleRunWorkers();
     void RunWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);
     void StopWorker(ui32 nodeId, const TWorkerId& id);

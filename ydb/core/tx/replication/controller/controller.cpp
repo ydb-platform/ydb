@@ -73,6 +73,10 @@ void TController::Cleanup(const TActorContext& ctx) {
         Send(actorId, new TEvents::TEvPoison());
     }
 
+    for (const auto& [nodeId, _] : Sessions) {
+        CloseSession(nodeId, ctx);
+    }
+
     NodesManager.Shutdown(ctx);
 }
 
@@ -248,11 +252,17 @@ void TController::DeleteSession(ui32 nodeId, const TActorContext& ctx) {
     }
 
     Sessions.erase(nodeId);
+    CloseSession(nodeId, ctx);
+    ScheduleRunWorkers();
+}
+
+void TController::CloseSession(ui32 nodeId, const TActorContext& ctx) {
+    CLOG_T(ctx, "Close session"
+        << ": nodeId# " << nodeId);
+
     if (SelfId().NodeId() != nodeId) {
         Send(ctx.InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
     }
-
-    ScheduleRunWorkers();
 }
 
 void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& ctx) {

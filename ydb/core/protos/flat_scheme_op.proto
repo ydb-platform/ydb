@@ -1297,6 +1297,10 @@ message TMoveIndex {
 }
 
 message TSequenceDescription {
+    message TSetVal {
+        optional sint64 NextValue = 1;
+        optional bool NextUsed = 2;
+    }
     optional string Name = 1; // mandatory
     optional NKikimrProto.TPathID PathId = 2; // sequence path id, assigned by schemeshard
     optional uint64 Version = 3; // incremented every time sequence is altered
@@ -1308,6 +1312,7 @@ message TSequenceDescription {
     optional uint64 Cache = 8; // number of items to cache, defaults to 1
     optional sint64 Increment = 9; // increment at each call, defaults to 1
     optional bool Cycle = 10; // true when cycle on overflow is allowed
+    optional TSetVal SetVal = 11; // SetVal(NextValue, NextUsed) is executed atomically when creating
 }
 
 message TSequenceSharding {
@@ -1616,6 +1621,7 @@ message TDescribeOptions {
     optional bool ShowPrivateTable = 7 [default = false];
     optional bool ReturnChannelsBinding = 8 [default = false];
     optional bool ReturnRangeKey = 9 [default = true];
+    optional bool ReturnSetVal = 10 [default = false];
 }
 
 // Request to read scheme for a specific path

@@ -1416,6 +1416,14 @@ void FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
                 if (sequenceDescription.HasIncrement()) {
                     fromSequence->set_increment(sequenceDescription.GetIncrement());
                 }
+                if (sequenceDescription.HasCycle()) {
+                    fromSequence->set_cycle(sequenceDescription.GetCycle());
+                }
+                if (sequenceDescription.HasSetVal()) {
+                    auto* setVal = fromSequence->mutable_set_val();
+                    setVal->set_next_used(sequenceDescription.GetSetVal().GetNextUsed());
+                    setVal->set_next_value(sequenceDescription.GetSetVal().GetNextValue());
+                }
                 break;
             }
             case Ydb::Table::ColumnMeta::kFromLiteral: {

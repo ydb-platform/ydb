@@ -334,6 +334,10 @@ message TableProfile {
 }
 
 message SequenceDescription {
+    message SetVal {
+        optional sint64 next_value = 1;
+        optional bool next_used = 2;
+    }
     optional string name = 1; // mandatorys
     optional sint64 min_value = 2; // minimum value, defaults to 1 or Min<i64>
     optional sint64 max_value = 3; // maximum value, defaults to Max<i64> or -1
@@ -341,6 +345,7 @@ message SequenceDescription {
     optional uint64 cache = 5; // number of items to cache, defaults to 1
     optional sint64 increment = 6; // increment at each call, defaults to 1
     optional bool cycle = 7; // true when cycle on overflow is allowed
+    optional SetVal set_val = 8; // set_val(next_value, next_used) is executed atomically when creating
 }
 
 message ColumnMeta {

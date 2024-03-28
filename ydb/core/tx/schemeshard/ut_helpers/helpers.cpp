@@ -2362,16 +2362,17 @@ namespace NSchemeShardUT_Private {
         runtime.Send(new IEventHandle(NSequenceProxy::MakeSequenceProxyServiceID(), sender, request.Release()));
     }
 
-    i64 WaitNextValResult(TTestActorRuntime& runtime, const TActorId& sender) {
+    i64 WaitNextValResult(
+            TTestActorRuntime& runtime, const TActorId& sender, Ydb::StatusIds::StatusCode expectedStatus) {
         auto ev = runtime.GrabEdgeEventRethrow<NSequenceProxy::TEvSequenceProxy::TEvNextValResult>(sender);
         auto* msg = ev->Get();
-        UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(msg->Status, expectedStatus);
         return msg->Value;
     }
 
-    i64 DoNextVal(TTestActorRuntime& runtime, const TString& path) {
+    i64 DoNextVal(TTestActorRuntime& runtime, const TString& path, Ydb::StatusIds::StatusCode expectedStatus) {
         auto sender = runtime.AllocateEdgeActor(0);
         SendNextValRequest(runtime, sender, path);
-        return WaitNextValResult(runtime, sender);
+        return WaitNextValResult(runtime, sender, expectedStatus);
     }
 }

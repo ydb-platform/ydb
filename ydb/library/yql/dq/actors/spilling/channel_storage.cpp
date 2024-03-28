@@ -96,7 +96,7 @@ private:
             if (it->second.IsBlobWrittenFuture_.HasValue()) {
                 WritingBlobsTotalSize_ -= it->second.BlobSize_;
                 ++StoredBlobsCount_;
-                WritingBlobs_.erase(it++);
+                it = WritingBlobs_.erase(it);
             } else {
                 ++it;
             }
@@ -109,9 +109,9 @@ private:
     TActorSystem *ActorSystem_;
 
     // BlobId -> future with requested blob
-    THashMap<ui64, NThreading::TFuture<TBuffer>> LoadingBlobs_;
+    std::unordered_map<ui64, NThreading::TFuture<TBuffer>> LoadingBlobs_;
     // BlobId -> future with some additional info
-    THashMap<ui64, TWritingBlobInfo> WritingBlobs_;
+    std::unordered_map<ui64, TWritingBlobInfo> WritingBlobs_;
     ui64 WritingBlobsTotalSize_ = 0;
 
     ui64 StoredBlobsCount_ = 0;

@@ -156,10 +156,10 @@ private:
     TActorId SpillingActorId_;
 
     // BlobId -> promise that blob is saved
-    THashMap<ui64, NThreading::TPromise<void>> WritingBlobs_;
+    std::unordered_map<ui64, NThreading::TPromise<void>> WritingBlobs_;
     
     // BlobId -> promise with requested blob
-    THashMap<ui64, NThreading::TPromise<TBuffer>> LoadingBlobs_;
+    std::unordered_map<ui64, NThreading::TPromise<TBuffer>> LoadingBlobs_;
     TMaybe<TString> Error_;
 
     TActorSystem* ActorSystem_;

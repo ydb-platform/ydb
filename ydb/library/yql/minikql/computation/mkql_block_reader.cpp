@@ -9,8 +9,6 @@
 #include <arrow/array/array_binary.h>
 #include <arrow/chunked_array.h>
 
-#include <ydb/library/yql/utils/log/log.h>
-
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -250,7 +248,11 @@ struct TConverterTraits {
 
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
         Y_UNUSED(isOptional);
-return std::make_unique<TResourceBlockItemConverter<true>>();
+        if (isOptional) {
+            return std::make_unique<TResourceBlockItemConverter<true>>();
+        } else {
+            return std::make_unique<TResourceBlockItemConverter<false>>();
+        }
     }
 };
 

@@ -82,6 +82,11 @@ namespace NKqp {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
+    void TTestHelper::DropTable(const TString& tableName) {
+        auto result = Session.DropTable(tableName).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
     void TTestHelper::BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
         Y_UNUSED(opStatus);
         NKikimr::Tests::NCS::THelper helper(Kikimr.GetTestServer());

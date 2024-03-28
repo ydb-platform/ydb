@@ -330,9 +330,15 @@ private:
         // no TaskRunner => no outputChannel.Channel, nothing to Finish
         CA_LOG_I("Peer finished, channel: " << channelId);
         TOutputChannelInfo* outputChannel = OutputChannelsMap.FindPtr(channelId);
+        TrySendAsyncChannelData(*outputChannel); // earyly finish (skip data)
         YQL_ENSURE(outputChannel, "task: " << Task.GetId() << ", output channelId: " << channelId);
 
-        outputChannel->Finished = true;
+        if (outputChannel->PopStarted) {
+            InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssue("Several parallel pop operations. Please check multiple parallel TEvOutputChannelDataRequest for channel"));
+            return;
+        }
+
+        outputChannel->PopStarted = true;
         ProcessOutputsState.Inflight++;
         Send(TaskRunnerActorId, MakeHolder<NTaskRunnerActor::TEvOutputChannelDataRequest>(channelId, /* wasFinished = */ true, 0));  // finish channel
         DoExecute();

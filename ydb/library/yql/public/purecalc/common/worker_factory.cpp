@@ -146,7 +146,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
 
     TAstParseResult astRes;
 
-    if (mode != ETranslationMode::SExpr) {
+    if (mode == ETranslationMode::SQL || mode == ETranslationMode::PG) {
         NSQLTranslation::TTranslationSettings settings;
 
         typeContext->DeprecatedSQL = (syntaxVersion == 0);

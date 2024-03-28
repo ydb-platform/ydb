@@ -1,6 +1,7 @@
 #include "yql_yt_transform.h"
 
 #include <ydb/library/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
+#include <ydb/library/yql/providers/common/provider/yql_modules.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
 #include <ydb/library/yql/providers/yt/codec/yt_codec.h>
@@ -329,7 +330,7 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName name) {
                 }
 
                 if (const auto& filesList = TYqlExternalModuleProcessor::GetUsedFilenamePaths(moduleName); !filesList.empty()) {
-                    for (const auto& fullPath : filesList) {
+                    for (const auto& [fullPath, isRequired] : filesList) {
                         if (const auto fileInfo = ExecCtx_.UserFiles_->GetFile(fullPath)) {
                             const auto& relPath = TString::Join("./", TFsPath(fullPath).GetName());
                             AddFile(relPath, *fileInfo);

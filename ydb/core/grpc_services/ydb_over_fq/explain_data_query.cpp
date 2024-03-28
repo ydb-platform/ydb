@@ -29,24 +29,31 @@ public:
 
     // WaitForTermination
     void OnQueryTermination(const TString& queryId, FederatedQuery::QueryMeta_ComputeStatus status, const TActorContext& ctx) {
-        if (status != FederatedQuery::QueryMeta_ComputeStatus_COMPLETED) {
-            TString errorMsg = TStringBuilder{} << "created query " << queryId << " finished with non-success status: " <<
-                    FederatedQuery::QueryMeta::ComputeStatus_Name(status);
-            LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                "YdbOverFq::ExplainDataQuery actorId: " << SelfId().ToString() << ", error: " << errorMsg);
-            Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-            return;
-        }
-
         LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
             "YdbOverFq::ExplainDataQuery actorId: " << SelfId().ToString() << ", queryId: " << queryId <<
-            ", finished query execution");
+            ", finished query execution with status " << FederatedQuery::QueryMeta::ComputeStatus_Name(status));
 
+        // Whether query is successful or not, we want to call DescribeQuery
+        //   to get either AST and statistics or for issues
         TBase::DescribeQuery(queryId, ctx);
     }
 
     // DescribeQuery
     void Handle(const FederatedQuery::DescribeQueryResult& result, const TActorContext& ctx) {
+        auto status = result.query().meta().status();
+        if (status != FederatedQuery::QueryMeta_ComputeStatus_COMPLETED) {
+            TString errorMsg = TStringBuilder{} << "created query " << result.query().meta().common().id() <<
+                " finished with non-success status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(status);
+            LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
+                "YdbOverFq::ExecuteDataQuery actorId: " << SelfId().ToString() << ", error: " << errorMsg);
+
+            NYql::TIssues issues;
+            issues.AddIssue(std::move(errorMsg));
+            NYql::IssuesFromMessage(result.query().issue(), issues);
+            Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR, issues, ctx);
+            return;
+        }
+
         Ydb::Table::ExplainQueryResult response;
         response.set_query_ast(result.query().ast().data());
         response.set_query_plan(result.query().plan().json());

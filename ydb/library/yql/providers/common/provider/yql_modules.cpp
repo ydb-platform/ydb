@@ -17,22 +17,16 @@ void TYqlExternalModuleProcessor::FillUsedFiles(const TString& moduleName, const
     }
 }
 
-bool TYqlExternalModuleProcessor::ApplyConfigFlag(const TString& flagName, TExprContext& ctx, const TVector<TStringBuf>& args, TUserDataTable& crutches) {
+bool TYqlExternalModuleProcessor::ApplyConfigFlag(const TPosition& pos, const TString& flagName, TExprContext& ctx, const TVector<TStringBuf>& args, TUserDataTable& crutches) {
     for (auto& [name, ptr] : KnownModules) {
-        if (!ptr->ApplyConfigFlag(flagName, ctx, args, crutches)) {
+        if (!ptr->ApplyConfigFlag(pos, flagName, ctx, args, crutches)) {
             return false;
         }
     }
     return true;
 }
 
-void TYqlExternalModuleProcessor::TuneUploadList(const TString& moduleName, TUserDataTable& files, IDqGateway::TUploadList* uploadList) {
-    if (const auto modulePtr = GetModule(moduleName)) {
-        modulePtr->TuneUploadList(files, uploadList);
-    }
-}
-
-TVector<TString> TYqlExternalModuleProcessor::GetUsedFilenamePaths(const TString& moduleName) {
+TVector<IYqlModule::TDatafileTraits> TYqlExternalModuleProcessor::GetUsedFilenamePaths(const TString& moduleName) {
     if (const auto modulePtr = GetModule(moduleName)) {
         return modulePtr->GetUsedFilenamePaths();
     }
@@ -46,7 +40,7 @@ void TYqlExternalModuleProcessor::PragmaProcessing(const TYtSettings::TConstPtr 
     }
 }
 
-const TYqlModule* TYqlExternalModuleProcessor::GetModule(const TString& name) {
+const IYqlModule* TYqlExternalModuleProcessor::GetModule(const TString& name) {
     return KnownModules.contains(name) ? KnownModules.at(name) : nullptr;
 }
 

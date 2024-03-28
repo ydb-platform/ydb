@@ -497,7 +497,7 @@ namespace {
                 return false;
             }
 
-            if (!TYqlExternalModuleProcessor::ApplyConfigFlag(name, ctx, args, Types.UserDataStorageCrutches)) {
+            if (!TYqlExternalModuleProcessor::ApplyConfigFlag(pos, name, ctx, args, Types.UserDataStorageCrutches)) {
                 return false;
             }
 

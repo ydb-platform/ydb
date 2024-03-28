@@ -689,7 +689,24 @@ private:
                             uploadList->emplace(f);
                         }
 
-                        TYqlExternalModuleProcessor::TuneUploadList(moduleName, files, uploadList);
+                        if (const auto& filesList = TYqlExternalModuleProcessor::GetUsedFilenamePaths(TString(moduleName)); !filesList.empty()) {
+                            for (const auto& [fullPath, isRequired] : filesList) {
+                                auto datafileProcessing = [&](const TString& filename, bool throwIfNotExist = false) -> void {
+                                    if (auto block = TUserDataStorage::FindUserDataBlock(files, filename)) {
+                                        auto f = IDqGateway::TFileResource();
+                                        f.SetLocalPath(block->FrozenFile->GetPath().GetPath());
+                                        f.SetName(filename);
+                                        f.SetObjectId(block->FrozenFile->GetMd5());
+                                        f.SetObjectType(IDqGateway::TFileResource::EUSER_FILE);
+                                        f.SetSize(block->FrozenFile->GetSize());
+                                        uploadList->emplace(f);
+                                    } else if (throwIfNotExist) {
+                                        THROW yexception() << "File not found: " << filename;
+                                    }
+                                };
+                                datafileProcessing(fullPath, isRequired);
+                            }
+                        }
                     }
                 }
             }

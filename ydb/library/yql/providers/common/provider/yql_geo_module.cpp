@@ -1,5 +1,7 @@
 #include "yql_modules.h"
 
+#include <ydb/library/yql/providers/yt/common/yql_yt_settings.h>
+
 namespace NYql {
 
 class TYqlGeoModule : public IYqlModule {
@@ -13,8 +15,8 @@ public:
             || checkedPragmaName == ConfigPragmaName;
     }
 
-    TVector<TString> GetUsedFilenamePaths() const override {
-        return {DatafilePath, ConfigPath};
+    TVector<TDatafileTraits> GetUsedFilenamePaths() const override {
+        return {{DatafilePath, true}, {ConfigPath, false}};
     }
 
     void FillUsedFiles(const TTypeAnnotationContext& types, const TUserDataTable& crutches, TUserDataTable& files) const override {
@@ -36,7 +38,7 @@ public:
         datafileProcessing(ConfigPath);
     }
 
-    bool ApplyConfigFlag(const TString& name, TExprContext& ctx, const TVector<TStringBuf>& args, TUserDataTable& crutches) const override {
+    bool ApplyConfigFlag(const TPosition& pos, const TString& name, TExprContext& ctx, const TVector<TStringBuf>& args, TUserDataTable& crutches) const override {
         if (name == DatafilePragmaName) {
             if (args.size() != 1) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
@@ -52,36 +54,17 @@ public:
         return true;
     }
 
-    void TuneUploadList(TUserDataTable& files, IDqGateway::TUploadList* uploadList) const override {
-        auto datafileProcessing = [&](const TString& filename, bool throwIfNotExist = false) -> void {
-            if (auto block = TUserDataStorage::FindUserDataBlock(files, filename)) {
-                auto f = IDqGateway::TFileResource();
-                f.SetLocalPath(block->FrozenFile->GetPath().GetPath());
-                f.SetName(filename);
-                f.SetObjectId(block->FrozenFile->GetMd5());
-                f.SetObjectType(IDqGateway::TFileResource::EUSER_FILE);
-                f.SetSize(block->FrozenFile->GetSize());
-                uploadList->emplace(f);
-            } else if (throwIfNotExist) {
-                THROW yexception() << "File not found: " << filename;
-            }
-        };
-
-        datafileProcessing(DatafilePath, /* throwIfNotExist */ true);
-        datafileProcessing(ConfigPath);
-    }
-
     void PragmaProcessing(const TYtSettings::TConstPtr settingsPtr, const TString& cluster, TUserDataTable& crutches) const override {
         if (const auto& defaultGeobase = settingsPtr->GeobaseDownloadUrl.Get(cluster)) {
             AddUserDataBlock(DatafilePath, *defaultGeobase, crutches);
         }
-        if (const auto& geobaseConfig = config->GeobaseConfigUrl.Get(cluster)) {
+        if (const auto& geobaseConfig = settingsPtr->GeobaseConfigUrl.Get(cluster)) {
             AddUserDataBlock(ConfigPragmaName, *geobaseConfig, crutches);
         }
     }
 
 private:
-    void AddUserDataBlock(const TString& fname, const TString& value, TUserDataTable& crutches) {
+    void AddUserDataBlock(const TString& fname, const TString& value, TUserDataTable& crutches) const {
         auto& userDataBlock = (crutches[TUserDataKey::File(fname)] = TUserDataBlock{EUserDataType::URL, {}, value, {}, {}});
         userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
     }

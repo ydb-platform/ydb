@@ -18,6 +18,7 @@ class TTicketParser : public TTicketParserImpl<TTicketParser> {
         Builtin,
         Login,
         ApiKey, // IAM api_key
+        Certificate, // Token from SSL Certificate
     };
 
     THashMap<TString, TTokenRecord> UserTokens;

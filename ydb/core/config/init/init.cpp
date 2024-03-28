@@ -239,7 +239,6 @@ class TDefaultNodeBrokerClient
                 config.UseClientCertificate(certificate.c_str(), privateKey.c_str());
             }
         }
-        config.SetAuthToken(BUILTIN_ACL_ROOT);
         config.SetEndpoint(endpoint.Address);
         auto connection = NYdb::TDriver(config);
 

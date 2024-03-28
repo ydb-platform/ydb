@@ -68,6 +68,7 @@ namespace NKikimr {
 
             const TString Database;
             const TString Ticket;
+            const TString Certificate;
             const TString PeerName;
 
             // if two identical permissions with different attributies are specified,
@@ -89,6 +90,7 @@ namespace NKikimr {
             struct TInitializationFields {
                 TString Database;
                 TString Ticket;
+                TString Certificate;
                 TString PeerName;
                 std::vector<TEntry> Entries;
             };
@@ -96,6 +98,7 @@ namespace NKikimr {
             TEvAuthorizeTicket(TInitializationFields&& init)
                 : Database(std::move(init.Database))
                 , Ticket(std::move(init.Ticket))
+                , Certificate(std::move(init.Certificate))
                 , PeerName(std::move(init.PeerName))
                 , Entries(std::move(init.Entries))
             {

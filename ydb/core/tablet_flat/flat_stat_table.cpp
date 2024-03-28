@@ -12,16 +12,14 @@ bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
     TDataStats iteratorStats = { };
     TStatsIterator statsIterator(subset.Scheme->Keys);
 
-    // TODO: make it better
-    ui64 iterRowCountResolution = rowCountResolution / 2;
-    ui64 iterDataSizeResolution = dataSizeResolution / 2;
+    // TODO: deal with resolution
 
     // Make index iterators for all parts
     bool started = true;
     for (const auto& part : subset.Flatten) {
         stats.IndexSize.Add(part->IndexesRawSize, part->Label.Channel());
         TAutoPtr<TStatsScreenedPartIterator> iter = new TStatsScreenedPartIterator(part, env, subset.Scheme->Keys, part->Small, part->Large, 
-            iterRowCountResolution, iterDataSizeResolution);
+            rowCountResolution, dataSizeResolution);
         auto ready = iter->Start();
         if (ready == EReady::Page) {
             started = false;

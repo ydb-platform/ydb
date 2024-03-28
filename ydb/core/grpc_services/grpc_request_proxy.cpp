@@ -3,6 +3,7 @@
 #include "local_rate_limiter.h"
 #include "operation_helpers.h"
 
+#include <utility>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/nameservice.h>
@@ -421,14 +422,14 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
 }
 
 void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
-    if (auto isTracingDecided = ctx.IsTracingDecided()) {
-        if (*isTracingDecided) {
-            return;
-        }
-        *isTracingDecided = true;
-    } else {
-        return; // request can't hold TSpan
+    auto isTracingDecided = ctx.IsTracingDecided();
+    if (!isTracingDecided) {
+        return;
     }
+    if (std::exchange(*isTracingDecided, true)) {
+        return;
+    }
+
     NWilson::TTraceId traceId;
     if (const auto otelHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER)) {
         traceId = NWilson::TTraceId::FromTraceparentHeader(otelHeader.GetRef(), TComponentTracingLevels::ProductionVerbose);

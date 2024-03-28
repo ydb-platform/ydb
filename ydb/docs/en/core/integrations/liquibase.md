@@ -1,4 +1,4 @@
-# Migrating {{ ydb-short-name }} data schemas with the Liquibase migration tool.
+# Migrating {{ ydb-short-name }} data schemas with the Liquibase migration tool
 
 ## Introduction {#introductuin}
 

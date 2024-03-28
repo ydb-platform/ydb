@@ -120,12 +120,12 @@ jobs:
     runs-on: [ self-hosted, "${{ needs.provide-runner.outputs.label }}" ]
     steps:
       - name: Checkout PR
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         if: github.event.pull_request.head.sha != ''
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         if: github.event.pull_request.head.sha == ''
       - name: Prepare VM
         uses: ./.github/actions/prepare_vm

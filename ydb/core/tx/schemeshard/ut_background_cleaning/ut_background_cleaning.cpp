@@ -423,4 +423,48 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         TestLs(runtime, "/MyRoot/TempTable/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathNotExist);
     }
+
+    Y_UNIT_TEST(SchemeshardBackgroundCleaningTestDontDeleteAltered) {
+        TTestBasicRuntime runtime(3);
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        SetBackgroundCleaning(runtime, env, TTestTxConfig::SchemeShard);
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        auto ownerActorId = runtime.AllocateEdgeActor(1);
+
+        ui64 txId = 100;
+        TestCreateTempTable(runtime, txId, "/MyRoot", R"(
+                  Name: "TempTable"
+                  Columns { Name: "key"   Type: "Uint64" }
+                  Columns { Name: "value" Type: "Utf8" }
+                  KeyColumnNames: ["key"]
+            )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+
+        env.TestWaitNotification(runtime, txId);
+
+        CheckTable(runtime, "/MyRoot/TempTable");
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TempTable"
+            Temporary: False
+        )");
+
+        env.TestWaitNotification(runtime, txId);
+
+        CheckTable(runtime, "/MyRoot/TempTable");
+
+        const TActorId proxy = runtime.GetInterconnectProxy(1, 0);
+        runtime.Send(new IEventHandle(proxy, TActorId(), new TEvInterconnect::TEvDisconnect(), 0, 0), 1, true);
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvInterconnect::EvNodeDisconnected);
+        runtime.DispatchEvents(options);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(50));
+        CheckTable(runtime, "/MyRoot/TempTable");
+    }
 };

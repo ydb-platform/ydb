@@ -1083,6 +1083,14 @@ public:
                             auto resultNode = ctx.NewWorld(input->Pos());
                             return resultNode;
                         });
+                } else if (name == "resetTemporary") {
+                    auto future = Gateway->ResetTemporary(table.Metadata->Name, cluster);
+                    return WrapFuture(future,
+                        [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                            Y_UNUSED(res);
+                            auto resultNode = ctx.NewWorld(input->Pos());
+                            return resultNode;
+                        });
                 } else if (name == "addColumns") {
                     auto listNode = action.Value().Cast<TExprList>();
                     for (size_t i = 0; i < listNode.Size(); ++i) {

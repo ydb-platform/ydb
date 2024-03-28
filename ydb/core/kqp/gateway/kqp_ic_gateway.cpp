@@ -542,11 +542,12 @@ public:
         , UserToken(std::move(userToken))
         , Promise(promise)
         , RequestType(requestType)
-    {}
+{}
 
     void Bootstrap() {
         auto ctx = MakeIntrusive<TUserRequestContext>();
-        IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, SelfId(), RequestType, Database, UserToken, false /* temporary */, TString() /* sessionId */, ctx);
+        IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, SelfId(), RequestType, Database, UserToken,
+                                                false /* temporary */, false /* createTableAs */, TString() /* sessionId */, ctx);
         Register(actor);
         Become(&TThis::WaitState);
     }
@@ -890,6 +891,14 @@ public:
     {
         try {
             YQL_ENSURE(false, "gateway doesn't implement alter");
+        } catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    NThreading::TFuture<TGenericResult> ResetTemporary(const TString&, const TString&) override {
+        try {
+            YQL_ENSURE(false, "gateway doesn't implement reset temporary");
         } catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
         }

@@ -1415,7 +1415,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     && name != "setTableSettings"
                     && name != "addChangefeed"
                     && name != "dropChangefeed"
-                    && name != "renameIndexTo")
+                    && name != "renameIndexTo"
+                    && name != "resetTemporary")
             {
                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                     TStringBuilder() << "Unknown alter table action: " << name));

@@ -1033,7 +1033,10 @@ public:
 
         SessionCtx->SetDatabase(database);
         SessionCtx->SetCluster(cluster);
-        SessionCtx->SetTempTables(std::move(tempTablesState));
+        if (tempTablesState) {
+            SessionCtx->SetSessionId(tempTablesState->SessionId);
+            SessionCtx->SetTempTables(std::move(tempTablesState));
+        }
     }
 
     IAsyncQueryResultPtr ExecuteSchemeQuery(const TKqpQueryRef& query, bool isSql, const TExecSettings& settings) override {

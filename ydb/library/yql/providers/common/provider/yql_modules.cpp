@@ -34,7 +34,7 @@ TVector<IYqlModule::TDatafileTraits> TYqlExternalModuleProcessor::GetUsedFilenam
     return {};
 }
 
-void TYqlExternalModuleProcessor::PragmaProcessing(const TYtSettings::TConstPtr settingsPtr, const TString& cluster, TUserDataTable& crutches) {
+void TYqlExternalModuleProcessor::PragmaProcessing(TYtSettingsConstPtr settingsPtr, const TString& cluster, TUserDataTable& crutches) {
     for (auto& [name, ptr] : KnownModules) {
         ptr->PragmaProcessing(settingsPtr, cluster, crutches);
     }

@@ -516,6 +516,12 @@ struct TSerializerTraits {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Serializer not implemented for block resources";
     }
+
+    template<typename TTzDate>
+    static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
+        Y_UNUSED(isOptional);
+        ythrow yexception() << "Deserializer not implemented for block resources";
+    }
 };
 
 struct TDeserializerTraits {
@@ -537,6 +543,12 @@ struct TDeserializerTraits {
     }
 
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
+        Y_UNUSED(isOptional);
+        ythrow yexception() << "Deserializer not implemented for block resources";
+    }
+
+    template<typename TTzDate>
+    static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Deserializer not implemented for block resources";
     }

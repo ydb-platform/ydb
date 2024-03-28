@@ -33,6 +33,22 @@ inline size_t CalcBlockLen(size_t maxBlockItemSize) {
 bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type);
 bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type);
 
+template<NUdf::EDataSlot slot>
+std::pair<std::shared_ptr<arrow::DataType>, std::shared_ptr<arrow::DataType>> MakeTzDateArrowFieldTypes() {
+    const auto make_arrow_date_type = [] () {
+        if constexpr (slot == NUdf::EDataSlot::TzDate) {
+            return arrow::uint16();
+        }
+        if constexpr (slot == NUdf::EDataSlot::TzDatetime) {
+            return arrow::uint32();
+        }
+        return arrow::uint64();
+    };
+
+    const auto timezoneType = arrow::uint16();
+    return { make_arrow_date_type(), timezoneType };
+}
+
 class TArrowType : public NUdf::IArrowType {
 public:
     TArrowType(const std::shared_ptr<arrow::DataType>& type)

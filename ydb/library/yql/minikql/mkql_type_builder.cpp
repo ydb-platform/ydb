@@ -1455,6 +1455,33 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
     case NUdf::EDataSlot::Json:
         type = arrow::utf8();
         return true;
+    case NUdf::EDataSlot::TzDate: {
+        auto&& [dateType, timezoneType] = MakeTzDateArrowFieldTypes<NUdf::EDataSlot::TzDate>();
+        std::vector<std::shared_ptr<arrow::Field>> fields {
+            std::make_shared<arrow::Field>("date", std::move(dateType)),
+            std::make_shared<arrow::Field>("timezoneId", std::move(timezoneType)),
+        };
+        type = std::make_shared<arrow::StructType>(fields);
+        return true;
+    }
+    case NUdf::EDataSlot::TzDatetime: {
+        auto&& [dateType, timezoneType] = MakeTzDateArrowFieldTypes<NUdf::EDataSlot::TzDate>();
+        std::vector<std::shared_ptr<arrow::Field>> fields {
+            std::make_shared<arrow::Field>("datetime", std::move(dateType)),
+            std::make_shared<arrow::Field>("timezoneId", std::move(timezoneType)),
+        };
+        type = std::make_shared<arrow::StructType>(fields);
+        return true;
+    }
+    case NUdf::EDataSlot::TzTimestamp: {
+        auto&& [dateType, timezoneType] = MakeTzDateArrowFieldTypes<NUdf::EDataSlot::TzDate>();
+        std::vector<std::shared_ptr<arrow::Field>> fields {
+            std::make_shared<arrow::Field>("timestamp", std::move(dateType)),
+            std::make_shared<arrow::Field>("timezoneId", std::move(timezoneType)),
+        };
+        type = std::make_shared<arrow::StructType>(fields);
+        return true;
+    }
     default:
         return false;
     }

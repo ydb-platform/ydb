@@ -116,7 +116,10 @@ private:
             PushSettingsToStat(settings, nodeName, "SkipDqReadSettings", DqReadSupportedSettings);
             return false;
         }
-
+        auto sampleSetting = GetSetting(section.Settings().Ref(), EYtSettingType::Sample);
+        if (sampleSetting && sampleSetting->Child(1)->Child(0)->Content() == "system") {
+            return false;
+        }
         ui64 dataSize = 0ULL, dataChunks = 0ULL;
         for (const auto& path : section.Paths()) {
             const TYtPathInfo info(path);

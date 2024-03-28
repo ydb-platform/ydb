@@ -312,6 +312,10 @@ public:
                     AddInfo(ctx, info, skipIssues);
                     return false;
                 }
+                auto sampleSetting = GetSetting(section.Settings().Ref(), EYtSettingType::Sample);
+                if (sampleSetting && sampleSetting->Child(1)->Child(0)->Content() == "system") {
+                    return false;
+                }
                 for (auto path: section.Paths()) {
                     if (!path.Table().Maybe<TYtTable>()) {
                         AddInfo(ctx, "non-table path", skipIssues);

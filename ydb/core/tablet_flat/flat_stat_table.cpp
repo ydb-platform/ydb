@@ -12,13 +12,9 @@ bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
     TDataStats iteratorStats = { };
     TStatsIterator statsIterator(subset.Scheme->Keys);
 
-    TSet<TEpoch> epochs;
-    for (const auto& part : subset.Flatten) {
-        epochs.insert(part->Epoch);
-    }
-    // if rowCountResolution = 300, 3-leveled SST, let's move each iterator up to 25 rows 
-    ui64 iterRowCountResolution = rowCountResolution / Max<ui64>(1, epochs.size()) / 4;
-    ui64 iterDataSizeResolution = dataSizeResolution / Max<ui64>(1, epochs.size()) / 4;
+    // TODO: make it better
+    ui64 iterRowCountResolution = rowCountResolution / 2;
+    ui64 iterDataSizeResolution = dataSizeResolution / 2;
 
     // Make index iterators for all parts
     bool started = true;

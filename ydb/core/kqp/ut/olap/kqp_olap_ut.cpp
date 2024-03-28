@@ -232,7 +232,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 result = R"(Columns { Name: "field" Type: ")" + TypeName + "\"}";
             }
             result += R"(
-                Columns { Name: "pk_int" Type: "Int64" }
+                Columns { Name: "pk_int" Type: "Int64" NotNull: true }
                 Columns { Name: "ts" Type: "Timestamp" }
                 KeyColumnNames: "pk_int"
                 Engine: COLUMN_ENGINE_REPLACING_TIMESERIES

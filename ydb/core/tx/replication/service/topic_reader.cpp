@@ -99,8 +99,9 @@ public:
         , YdbProxy(ydbProxy)
         , Settings(opts)
     {
-        Y_ABORT_UNLESS(Settings.GetBase().Topics_.size() == 1);
-        Y_ABORT_UNLESS(Settings.GetBase().Topics_.at(0).PartitionIds_.size() == 1);
+        const auto& base = Settings.GetBase();
+        Y_ABORT_UNLESS(base.Topics_.size() == 1);
+        Y_ABORT_UNLESS(base.Topics_.at(0).PartitionIds_.size() == 1);
     }
 
     STFUNC(StateWork) {

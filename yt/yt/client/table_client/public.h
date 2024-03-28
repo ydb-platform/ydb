@@ -120,6 +120,7 @@ extern const TString RowIndexColumnName;
 extern const TString RangeIndexColumnName;
 extern const TString TabletIndexColumnName;
 extern const TString TimestampColumnName;
+extern const TString TtlColumnName;
 extern const TString CumulativeDataWeightColumnName;
 extern const TString EmptyValueColumnName;
 extern const TString PrimaryLockName;

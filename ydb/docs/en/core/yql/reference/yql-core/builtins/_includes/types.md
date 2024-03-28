@@ -358,6 +358,24 @@ SELECT FormatType(OptionalTypeHandle(
 )); -- Bool?
 ```
 
+## PgTypeName
+
+Getting the name of the PostgreSQL type from the type handle passed to the argument. Inverse function: [PgTypeHandle](#pgtypehandle).
+
+**Examples**
+``` yql
+SELECT PgTypeName(ParseTypeHandle("pgint4")); -- int4
+```
+
+## PgTypeHandle
+
+Builds a type handle based on the passed name of the PostgreSQL type. Inverse function: [PgTypeName](#pgtypename).
+
+**Examples**
+``` yql
+SELECT FormatType(PgTypeHandle("int4")); -- pgint4
+```
+
 ## ListTypeHandle and StreamTypeHandle {#list-stream-typehandle}
 
 Builds a list type handle or stream type handle based on the passed element type handle.

@@ -11,7 +11,7 @@ import ydb.public.api.protos.ydb_value_pb2 as ydb
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
 import ydb.tests.fq.s3.s3_helpers as s3_helpers
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_all, yq_stats_full
+from ydb.tests.tools.fq_runner.kikimr_utils import yq_all, YQ_STATS_FULL
 
 
 class TestS3Formats:
@@ -60,7 +60,7 @@ class TestS3Formats:
         assert result_set.rows[2].items[2].text_value == "33"
 
     @yq_all
-    @yq_stats_full
+    @pytest.mark.parametrize("kikimr_settings", [{"stats_mode": YQ_STATS_FULL}], indirect=True)
     @pytest.mark.parametrize("filename, type_format", [
         ("test.csv", "csv_with_names"),
         ("test.tsv", "tsv_with_names"),
@@ -68,14 +68,15 @@ class TestS3Formats:
         ("test.json", "json_list"),
         ("test.parquet", "parquet"),
     ])
-    def test_format(self, kikimr, s3, client, filename, type_format, yq_version):
+    def test_format(self, kikimr, s3, client, filename, type_format, yq_version, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        client.create_storage_connection("fruitbucket", "fbucket")
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = f'''
             PRAGMA s3.UseBlocksSource="true";
             SELECT *
-            FROM fruitbucket.`{filename}`
+            FROM `{storage_connection_name}`.`{filename}`
             WITH (format=`{type_format}`, SCHEMA (
                 Fruit String NOT NULL,
                 Price Int NOT NULL,
@@ -101,15 +102,16 @@ class TestS3Formats:
                 assert stat["ResultSet"]["IngressRows"]["sum"] == 3
 
     @yq_all
-    def test_btc(self, kikimr, s3, client, yq_version):
+    def test_btc(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("btct.parquet", s3, kikimr)
-        client.create_storage_connection("btct", "fbucket")
+        storage_connection_name = unique_prefix + "btct"
+        client.create_storage_connection(storage_connection_name, "fbucket")
 
-        sql = '''
+        sql = f'''
             PRAGMA s3.UseBlocksSource="true";
             SELECT
                 *
-            FROM btct.`btct.parquet`
+            FROM `{storage_connection_name}`.`btct.parquet`
             WITH (format=`parquet`,
                 SCHEMA=(
                     hash STRING,
@@ -138,7 +140,7 @@ class TestS3Formats:
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_invalid_format(self, kikimr, s3, client):
+    def test_invalid_format(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -163,11 +165,12 @@ Pear,15,33'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
         kikimr.control_plane.wait_bootstrap(1)
 
-        client.create_storage_connection("fruitbucket", "fbucket")
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
 
-        sql = '''
+        sql = f'''
             SELECT *
-            FROM fruitbucket.`fruits.csv`
+            FROM `{storage_connection_name}`.`fruits.csv`
             WITH (format=invalid_type_format, SCHEMA (
                 Fruit String,
                 Price Int,
@@ -184,7 +187,7 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_invalid_input_compression(self, kikimr, s3, client):
+    def test_invalid_input_compression(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -204,11 +207,13 @@ Pear,15,33'''
 
         s3_client.put_object(Body="blahblahblah", Bucket='ibucket', Key='fruits', ContentType='text/plain')
 
-        client.create_storage_connection("input_bucket", "ibucket")
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "input_bucket"
+        client.create_storage_connection(storage_connection_name, "ibucket")
 
-        sql = '''
+        sql = f'''
             SELECT *
-            FROM input_bucket.`*`
+            FROM `{storage_connection_name}`.`*`
             WITH (format=parquet, compression=abvgzip, SCHEMA (
                 Fruit String,
                 Price Int,
@@ -223,7 +228,7 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_invalid_output_compression(self, kikimr, s3, client):
+    def test_invalid_output_compression(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -243,12 +248,14 @@ Pear,15,33'''
 
         s3_client.put_object(Body="blahblahblah", Bucket='obucket', Key='fruits', ContentType='text/plain')
 
-        client.create_storage_connection("output_bucket", "obucket")
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "output_bucket"
+        client.create_storage_connection(storage_connection_name, "obucket")
 
-        sql = '''
-            INSERT INTO output_bucket.`path/` with (format=parquet, compression=abvgzip)
+        sql = f'''
+            INSERT INTO `{storage_connection_name}`.`path/` with (format=parquet, compression=abvgzip)
             SELECT *
-            FROM output_bucket.`*`
+            FROM `{storage_connection_name}`.`*`
             WITH (format=parquet, SCHEMA (
                 Fruit String,
                 Price Int,
@@ -263,7 +270,7 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_custom_csv_delimiter_format(self, kikimr, s3, client):
+    def test_custom_csv_delimiter_format(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -288,11 +295,12 @@ Pear,15,33'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
         kikimr.control_plane.wait_bootstrap(1)
 
-        client.create_storage_connection("fruitbucket", "fbucket")
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
 
-        sql = '''
+        sql = f'''
                 SELECT *
-                FROM fruitbucket.`fruits.csv`
+                FROM `{storage_connection_name}`.`fruits.csv`
                 WITH (
                     format = csv_with_names,
                     csv_delimiter = ";",
@@ -312,14 +320,15 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_no_not_nullable_column(self, kikimr, s3, client):
+    def test_no_not_nullable_column(self, kikimr, s3, client, unique_prefix):
         filename = "test_wrong_type.csv"
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        client.create_storage_connection("fruitbucket", "fbucket")
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
-            FROM fruitbucket.`{filename}`
+            FROM `{storage_connection_name}`.`{filename}`
             WITH (format=`csv_with_names`, SCHEMA (
                 Fruit String,
                 AMOGUS String not null
@@ -335,14 +344,15 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_no_nullable_column(self, kikimr, s3, client):
+    def test_no_nullable_column(self, kikimr, s3, client, unique_prefix):
         filename = "test_wrong_type.csv"
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        client.create_storage_connection("fruitbucket", "fbucket")
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
-            FROM fruitbucket.`{filename}`
+            FROM `{storage_connection_name}`.`{filename}`
             WITH (format=`csv_with_names`, SCHEMA (
                 Fruit String,
                 AMOGUS String
@@ -357,14 +367,15 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_invalid_column_type_in_csv(self, kikimr, s3, client):
+    def test_invalid_column_type_in_csv(self, kikimr, s3, client, unique_prefix):
         filename = "test_wrong_type.csv"
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        client.create_storage_connection("fruitbucket", "fbucket")
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql1 = f'''
             SELECT *
-            FROM fruitbucket.`{filename}`
+            FROM `{storage_connection_name}`.`{filename}`
             WITH (format=`csv_with_names`, SCHEMA (
                 Fruit String,
                 Owner Int
@@ -373,7 +384,7 @@ Pear,15,33'''
 
         sql2 = f'''
             SELECT *
-            FROM fruitbucket.`{filename}`
+            FROM `{storage_connection_name}`.`{filename}`
             WITH (format=`csv_with_names`, SCHEMA (
                 Fruit Int,
                 Owner String
@@ -395,13 +406,14 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_invalid_column_in_parquet(self, kikimr, s3, client):
+    def test_invalid_column_in_parquet(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
-        client.create_storage_connection("fruitbucket", "fbucket")
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
 
-        sql = '''
+        sql = f'''
             SELECT *
-            FROM fruitbucket.`test.parquet`
+            FROM `{storage_connection_name}`.`test.parquet`
             WITH (format=parquet, SCHEMA (
                 Fruit String,
                 Price Int,
@@ -419,13 +431,14 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_simple_pg_types(self, kikimr, s3, client):
+    def test_simple_pg_types(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
-        client.create_storage_connection("fruitbucket", "fbucket")
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
 
-        sql = '''
+        sql = f'''
             SELECT *
-            FROM fruitbucket.`test.parquet`
+            FROM `{storage_connection_name}`.`test.parquet`
             WITH (format=parquet, SCHEMA (
                 Fruit pgtext,
                 Price pgint4,
@@ -441,13 +454,14 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_precompute(self, kikimr, s3, client):
+    def test_precompute(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
-        client.create_storage_connection("fruitbucket", "fbucket")
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
 
-        sql = '''
+        sql = f'''
             $maxPrice = SELECT MAX(Price)
-            FROM fruitbucket.`test.parquet`
+            FROM `{storage_connection_name}`.`test.parquet`
             WITH (format=`parquet`, SCHEMA (
                 Fruit String NOT NULL,
                 Price Int NOT NULL,
@@ -455,7 +469,7 @@ Pear,15,33'''
             ));
 
             SELECT Fruit, Price
-            FROM fruitbucket.`test.parquet`
+            FROM `{storage_connection_name}`.`test.parquet`
             WITH (format=`parquet`, SCHEMA (
                 Fruit String NOT NULL,
                 Price Int NOT NULL,

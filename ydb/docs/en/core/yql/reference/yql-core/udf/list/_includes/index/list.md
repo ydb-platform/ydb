@@ -7,6 +7,7 @@
 * [DateTime](../../datetime.md)
 * [Url](../../url.md)
 * [Ip](../../ip.md)
+* [Knn](../../knn.md)
 * [Yson](../../yson.md)
 * [Digest](../../digest.md)
 * [Math](../../math.md)

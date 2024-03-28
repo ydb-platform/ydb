@@ -4540,6 +4540,130 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         }
     }
 
+    void CompactBorrowed(TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId) {
+        auto msg = MakeHolder<TEvDataShard::TEvCompactBorrowed>(tableId.PathId);
+        auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(shardId, sender, msg.Release(), 0, GetPipeConfigWithRetries());
+        runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactBorrowedResult>(sender);
+    }
+
+    Y_UNIT_TEST(PostMergeNotCompactedTooEarly) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(100);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        KqpSchemeExec(runtime, R"(
+            CREATE TABLE `/Root/table` (key int, value bytes, PRIMARY KEY (key))
+            WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+                  PARTITION_AT_KEYS = (5));
+        )");
+
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+
+        for (int i = 0; i < 20; ++i) {
+            Cerr << "... upserting key " << i << Endl;
+            auto query = Sprintf(R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (%d, '%s');
+            )", i, TString(128 * 1024, 'x').c_str());
+            ExecSQL(server, sender, query);
+            if (i >= 5) {
+                Cerr << "... compacting shard " << shards.at(1) << Endl;
+                CompactTable(runtime, shards.at(1), tableId, false);
+            } else if (i == 4) {
+                Cerr << "... compacting shard " << shards.at(0) << Endl;
+                CompactTable(runtime, shards.at(0), tableId, false);
+            }
+        }
+
+        // Read (and snapshot) current data, so it doesn't go away on compaction
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, "SELECT COUNT(*) FROM `/Root/table`;"),
+            "{ items { uint64_value: 20 } }");
+
+        // Delete all the data in shard 0, this is small and will stay in memtable
+        // But when borrowed dst compaction will have pressure to compact it all
+        ExecSQL(server, sender, "DELETE FROM `/Root/table` WHERE key < 5");
+
+        std::vector<TEvDataShard::TEvSplitTransferSnapshot::TPtr> snapshots;
+        auto captureSnapshots = runtime.AddObserver<TEvDataShard::TEvSplitTransferSnapshot>(
+            [&](TEvDataShard::TEvSplitTransferSnapshot::TPtr& ev) {
+                auto* msg = ev->Get();
+                Cerr << "... captured snapshot from " << msg->Record.GetSrcTabletId() << Endl;
+                snapshots.emplace_back(ev.Release());
+            });
+
+        Cerr << "... merging table" << Endl;
+        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+        ui64 txId = AsyncMergeTable(server, sender, "/Root/table", shards);
+        Cerr << "... started merge " << txId << Endl;
+        WaitFor(runtime, [&]{ return snapshots.size() >= 2; }, "both src tablet snapshots");
+
+        std::vector<TEvBlobStorage::TEvGet::TPtr> gets;
+        auto captureGets = runtime.AddObserver<TEvBlobStorage::TEvGet>(
+            [&](TEvBlobStorage::TEvGet::TPtr& ev) {
+                auto* msg = ev->Get();
+                if (msg->Queries[0].Id.TabletID() == shards.at(1)) {
+                    Cerr << "... blocking blob get of " << msg->Queries[0].Id << Endl;
+                    gets.emplace_back(ev.Release());
+                }
+            });
+
+        // Release snapshot for shard 0 then shard 1
+        captureSnapshots.Remove();
+        Cerr << "... unlocking snapshots from tablet " << shards.at(0) << Endl;
+        for (auto& ev : snapshots) {
+            if (ev && ev->Get()->Record.GetSrcTabletId() == shards.at(0)) {
+                runtime.Send(ev.Release(), 0, true);
+            }
+        }
+        Cerr << "... unblocking snapshots from tablet " << shards.at(1) << Endl;
+        for (auto& ev : snapshots) {
+            if (ev && ev->Get()->Record.GetSrcTabletId() == shards.at(1)) {
+                runtime.Send(ev.Release(), 0, true);
+            }
+        }
+
+        // Let it commit above snapshots and incorrectly compact after the first one is loaded and merged
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(gets.size() > 0);
+
+        Cerr << "... unblocking blob gets" << Endl;
+        captureGets.Remove();
+        for (auto& ev : gets) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+
+        // Let it finish loading the second snapshot
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Wait for merge to complete and start a borrowed compaction
+        // When bug is present it will cause newly compacted to part to have epoch larger than previously compacted
+        WaitTxNotification(server, sender, txId);
+        const auto merged = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(merged.size(), 1u);
+        Cerr << "... compacting borrowed parts in shard " << merged.at(0) << Endl;
+        CompactBorrowed(runtime, merged.at(0), tableId);
+
+        // Validate we have an expected number of rows
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, "SELECT COUNT(*) FROM `/Root/table`;"),
+            "{ items { uint64_value: 15 } }");
+    }
+
 }
 
 } // namespace NKikimr

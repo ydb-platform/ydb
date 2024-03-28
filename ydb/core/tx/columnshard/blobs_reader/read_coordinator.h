@@ -47,8 +47,8 @@ public:
     void AddTask(const std::shared_ptr<ITask>& task) {
         for (auto&& i : task->GetAgents()) {
             auto& storage = BlobTasks[i.second->GetStorageId()];
-            for (auto&& bRid : i.second->GetRangesForRead()) {
-                storage[bRid].emplace_back(task);
+            for (auto&& bRid : i.second->GetGroups()) {
+                storage[bRid.first].emplace_back(task);
             }
         }
     }
@@ -60,7 +60,6 @@ private:
     NActors::TActorId Parent;
     TBlobsForRead BlobTasks;
 public:
-    static TAtomicCounter WaitingBlobsCount;
     TReadCoordinatorActor(ui64 tabletId, const TActorId& parent);
 
     void Handle(TEvStartReadTask::TPtr& ev);

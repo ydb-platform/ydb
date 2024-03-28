@@ -14,6 +14,8 @@ private:
     TEvDataShard::TEvSplit::TPtr Ev;
     bool SplitAlreadyFinished;
 
+    std::vector<std::unique_ptr<IEventHandle>> Replies;
+
 public:
     TTxSplit(TDataShard* ds, TEvDataShard::TEvSplit::TPtr& ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
@@ -53,6 +55,8 @@ public:
                 Self->Pipeline.AddCandidateOp(op);
                 Self->PlanQueue.Progress(ctx);
             }
+
+            Self->Pipeline.CleanupWaitingVolatile(ctx, Replies);
         } else {
             // Check that this is the same split request
             Y_ABORT_UNLESS(opId == Self->SrcSplitOpId,
@@ -83,6 +87,8 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
+        Self->SendCommittedReplies(std::move(Replies));
+
         if (SplitAlreadyFinished) {
             // Send the Ack
             for (const TActorId& ackTo : Self->SrcAckSplitTo) {

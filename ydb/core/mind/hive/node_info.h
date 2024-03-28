@@ -87,6 +87,7 @@ public:
     THashSet<TLeaderTabletInfo*> LockedTablets;
     mutable TInstant LastResourceChangeReaction;
     NKikimrHive::TNodeStatistics Statistics;
+    bool DeletionScheduled = false;
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;

@@ -40,7 +40,6 @@ namespace NKikimr {
         , VDiskMemCounters(vdiskCounters->GetSubgroup("subsystem", "memhull"))
         , Histograms(VDiskCounters, type)
         , IFaceMonGroup(std::make_shared<NMonGroup::TVDiskIFaceGroup>(VDiskCounters, "subsystem", "interface"))
-        , OOSMonGroup(std::make_shared<NMonGroup::TOutOfSpaceGroup>(VDiskCounters, "subsystem", "oos"))
         , GroupId(selfVDisk.GroupID)
         , ShortSelfVDisk(selfVDisk)
         , VDiskLogPrefix(GenerateVDiskLogPrefix(selfVDisk, donorMode))
@@ -62,6 +61,7 @@ namespace NKikimr {
         , ReplNodeResponseQuoter(std::move(replNodeResponseQuoter))
         , CostTracker(std::make_shared<TBsCostTracker>(Top->GType, type, vdiskCounters, burstThresholdNs,
                 diskTimeAvailableScale))
+        , OOSMonGroup(std::make_shared<NMonGroup::TOutOfSpaceGroup>(VDiskCounters, "subsystem", "oos"))
         , OutOfSpaceState(Top->GetTotalVDisksNum(), Top->GetOrderNumber(ShortSelfVDisk))
         , CostMonGroup(vdiskCounters, "subsystem", "cost")
         , Logger(as ? ActorSystemLogger(as) : DevNullLogger())

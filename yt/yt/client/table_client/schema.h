@@ -278,10 +278,13 @@ public:
     bool HasAggregateColumns() const;
     bool HasHunkColumns() const;
     bool HasTimestampColumn() const;
+    bool HasTtlColumn() const;
     bool IsSorted() const;
     bool IsUniqueKeys() const;
     bool HasRenamedColumns() const;
     bool IsEmpty() const;
+
+    std::optional<int> GetTtlColumnIndex() const;
 
     std::vector<TColumnStableName> GetKeyColumnStableNames() const;
     TKeyColumns GetKeyColumnNames() const;

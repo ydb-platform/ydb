@@ -155,6 +155,8 @@ public:
         }
 
         TVector<NDq::TDqSerializedBatch> rows;
+        ui64 totalSize = 0;
+        ui64 totalRows = 0;
         {
             auto guard = runner->BindAllocator(State->Settings->MemoryLimit.Get().GetOrElse(0));
             YQL_CLOG(DEBUG, ProviderDq) << " NDq::ERunStatus " << runner->Run();
@@ -164,33 +166,39 @@ public:
                 if (!fillSettings.Discard) {
                     NDq::TDqSerializedBatch data;
                     while (runner->GetOutputChannel(0)->Pop(data)) {
+                        totalSize += data.Size();
+                        totalRows += data.RowCount();
                         rows.push_back(std::move(data));
+                        if (!fillSettings.Discard) {
+                            if (fillSettings.AllResultsBytesLimit && totalSize >= *fillSettings.AllResultsBytesLimit) {
+                                result.Truncated = true;
+                                break;
+                            }
+                            if (fillSettings.RowsLimitPerWrite && totalRows >= *fillSettings.RowsLimitPerWrite) {
+                                result.Truncated = true;
+                                break;
+                            }
+                        }
+
                         data = {};
                     }
                 }
-                if (status == NDq::ERunStatus::Finished) {
+                if (status == NDq::ERunStatus::Finished || result.Truncated) {
                     break;
-                }
-                if (!fillSettings.Discard) {
-                    if (fillSettings.AllResultsBytesLimit && runner->GetOutputChannel(0)->GetPopStats().Bytes >= *fillSettings.AllResultsBytesLimit) {
-                        result.Truncated = true;
-                        break;
-                    }
-                    if (fillSettings.RowsLimitPerWrite && runner->GetOutputChannel(0)->GetPopStats().Rows >= *fillSettings.RowsLimitPerWrite) {
-                        result.Truncated = true;
-                        break;
-                    }
                 }
             }
 
-            YQL_ENSURE(status == NDq::ERunStatus::Finished || status == NDq::ERunStatus::PendingOutput);
+            YQL_ENSURE(status == NDq::ERunStatus::Finished || status == NDq::ERunStatus::PendingOutput || result.Truncated);
         }
 
         auto serializedResultType = GetSerializedResultType(lambda);
         NYql::NDqs::TProtoBuilder protoBuilder(serializedResultType, columns);
 
-        result.Data = protoBuilder.BuildYson(std::move(rows));
+        bool ysonTruncated = false;
+        result.Data = protoBuilder.BuildYson(std::move(rows), fillSettings.AllResultsBytesLimit.GetOrElse(Max<ui64>()),
+            fillSettings.RowsLimitPerWrite.GetOrElse(Max<ui64>()), &ysonTruncated);
 
+        result.Truncated = result.Truncated || ysonTruncated;
         AddCounter("LocalRun", TInstant::Now() - t);
 
         FlushStatisticsToState();

@@ -199,6 +199,15 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             scheme.MutableAlterUserAttributes()->CopyFrom(tx.GetAlterUserAttributes());
         }
 
+        if (baseTableDescription.HasTemporary() && baseTableDescription.GetTemporary()) {
+            if (!context.SS->EnableTempTables) {
+                TString msg = TStringBuilder() << "It is not allowed to create temp table: "
+                    << baseTableDescription.GetName();
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, msg)};
+            }
+            *scheme.MutableTempTableOwnerActorId() = tx.GetTempTableOwnerActorId();
+        }
+
         result.push_back(CreateNewTable(NextPartId(nextId, result), scheme, sequences));
     }
 

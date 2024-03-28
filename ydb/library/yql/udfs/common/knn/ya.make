@@ -10,6 +10,11 @@ SRCS(
     knn.cpp
 )
 
+PEERDIR(
+    library/cpp/dot_product
+)
+
+
 END()
 
 RECURSE_FOR_TESTS(

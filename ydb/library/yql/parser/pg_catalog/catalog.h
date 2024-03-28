@@ -13,6 +13,7 @@ constexpr ui32 UnknownOid = 705;
 constexpr ui32 AnyOid = 2276;
 constexpr ui32 AnyArrayOid = 2277;
 constexpr ui32 AnyNonArrayOid = 2776;
+constexpr ui32 AnyElementOid = 2283;
 constexpr ui32 RecordOid = 2249;
 constexpr ui32 VarcharOid = 1043;
 constexpr ui32 TextOid = 25;
@@ -40,6 +41,8 @@ struct TOperDesc {
     ui32 RightType = 0;
     ui32 ResultType = 0;
     ui32 ProcId = 0;
+    ui32 ComId = 0;
+    ui32 NegateId = 0;
 };
 
 enum class EProcKind : char {

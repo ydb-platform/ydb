@@ -24,6 +24,11 @@
             "uri": "file://test.test_BlockFind_/results.txt"
         }
     ],
+    "test.test[BlockRemove]": [
+        {
+            "uri": "file://test.test_BlockRemove_/results.txt"
+        }
+    ],
     "test.test[BlockReplace]": [
         {
             "uri": "file://test.test_BlockReplace_/results.txt"

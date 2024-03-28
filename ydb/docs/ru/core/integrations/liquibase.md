@@ -1,4 +1,4 @@
-# Миграции схемы данных {{ ydb-short-name }} с помощью Liquibase {#ydb-dialect}
+# Миграции схемы данных {{ ydb-short-name }} с помощью Liquibase
 
 ## Введение {#introduction}
 

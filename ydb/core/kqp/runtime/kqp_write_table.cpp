@@ -191,6 +191,7 @@ public:
         Y_UNUSED(force);
         TBatches newBatches;
         std::swap(Batches, newBatches);
+        Memory = 0;
         return std::move(newBatches);
     }
 

@@ -139,8 +139,6 @@
   #if CONTRIB && defined(_HAVE_LIBIDSA)
   - idsa.h
   #endif
-  - ../../VC/include/math.h
-  - ../../VC/include/cfloat
   - prof.h
   - ll_alloc_hook.c
   - cpptl/config.h
@@ -162,16 +160,6 @@
   - not-cancel.h
   - local-setxid.h
   - vasprintf.h
-  #endif
-
-- case_sensitive: false
-  includes:
-  #if defined(WINDOWS) && CONTRIB && TRASH
-  - ../include/locale.h
-  - ../include/signal.h
-  - ../include/sys/stat.h
-  - ../include/fcntl.h
-  - ../include/math.h
   #endif
 
 - source_filter: "^contrib/(libs/(apache|httpd|libuv)|python/uWSGI)"
@@ -318,11 +306,6 @@
   #if defined(HAVE_ALTIVEC)
   - altivec.h
   #endif
-  #if defined(_LIBC) && TRASH
-  - ../locale/localeinfo.h
-  - ../locale/elem-hash.h
-  - ../locale/coll-lookup.h
-  #endif
   #if defined(HAVE_CONFIG_H) && TODO
   - config_auto.h
   #endif
@@ -362,11 +345,6 @@
   - sys/videoio.h
   - libv4l2.h
   - soundcard.h
-  - ../ucrt/fcntl.h
-  - ../ucrt/locale.h
-  - ../ucrt/math.h
-  - ../ucrt/signal.h
-  - ../ucrt/sys/stat.h
   - asm/page.h
   - asm/sgidefs.h
   - ndir.h
@@ -451,12 +429,6 @@
 # These includes are not used in autocheck builds, but might be necessary for
 # some external builds with exotic settings
 
-- case_sensitive: false
-  includes:
-  #if defined(WINDOWS) && CONTRIB && TRASH
-  - ../include/stdint.h
-  #endif
-
 - source_filter: ".*contrib.*"
   includes:
   #if defined (__OpenBSD__) && CONTRIB
@@ -540,8 +512,6 @@
   - win32thread.h
   - bsd/ctypes.h
   - sfio.h
-  - ../../VC/include/stdio.h
-  - ../ucrt/stdio.h
   - GL/glx.h
   - CL/va_ext.h
   - sys/sysconf.h

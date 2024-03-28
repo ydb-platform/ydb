@@ -570,6 +570,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, bool withSomeNulls = false) {
         UNIT_ASSERT(testTable != "/Root/benchTable"); // TODO: check schema instead
         TLocalHelper lHelper(kikimr);
+        if (withSomeNulls) {
+            lHelper.WithSomeNulls();
+        }
         auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount);
         lHelper.SendDataViaActorSystem(testTable, batch);
     }
@@ -1972,12 +1975,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` % 3 != 1)",
             R"(-`level` < -2)",
             R"(Abs(`level` - 3) >= 1)",
-            R"(LENGTH(`message`) > 1037U)",
-            R"(LENGTH(`uid`) > 1U OR `resource_id` = "10001")",
-            R"((LENGTH(`uid`) > 2U AND `resource_id` = "10001") OR `resource_id` = "10002")",
-            R"((LENGTH(`uid`) > 3U OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",
-            R"(NOT(LENGTH(`uid`) > 0U AND `resource_id` = "10001"))",
-            R"(NOT(LENGTH(`uid`) > 0U OR `resource_id` = "10001"))",
+            R"(LENGTH(`message`) > 1037)",
+            R"(LENGTH(`uid`) > 1 OR `resource_id` = "10001")",
+            R"((LENGTH(`uid`) > 2 AND `resource_id` = "10001") OR `resource_id` = "10002")",
+            R"((LENGTH(`uid`) > 3 OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",
+            R"(NOT(LENGTH(`uid`) > 0 AND `resource_id` = "10001"))",
+            R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",
             R"(`level` IS NULL OR `message` IS NULL)",
             R"(`level` IS NOT NULL AND `message` IS NULL)",
             R"(`level` IS NULL AND `message` IS NOT NULL)",
@@ -2052,18 +2055,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` >= CAST("2" As Uint32))",
             R"(`level` = NULL)",
             R"(`level` > NULL)",
-<<<<<<< ours
-            R"(LENGTH(`uid`) > 0 OR `resource_id` = "10001")",
-            R"((LENGTH(`uid`) > 0 AND `resource_id` = "10001") OR `resource_id` = "10002")",
-            R"((LENGTH(`uid`) > 0 OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",
-            R"(NOT(LENGTH(`uid`) > 0 AND `resource_id` = "10001"))",
-            // Not strict function in the beginning causes to disable pushdown
-            R"(Unwrap(`level`/1) = `level` AND `resource_id` = "10001")",
-            // We can handle this case in future
-            R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",
-            R"(`level` * 3.14 > 4)",
-=======
->>>>>>> theirs
 #if SSA_RUNTIME_VERSION < 2U
             R"(`uid` LIKE "%30000%")",
             R"(`uid` LIKE "uid%")",
@@ -2071,8 +2062,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`uid` LIKE "uid%001")",
 #endif
 #if SSA_RUNTIME_VERSION < 4U
-<<<<<<< ours
-=======
             R"(`level` * 3.14 > 4)",
             R"(LENGTH(`uid`) > 0 OR `resource_id` = "10001")",
             R"((LENGTH(`uid`) > 0 AND `resource_id` = "10001") OR `resource_id` = "10002")",
@@ -2080,7 +2069,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(NOT(LENGTH(`uid`) > 0 AND `resource_id` = "10001"))",
             R"(Unwrap(`level`/1) = `level` AND `resource_id` = "10001")",
             R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",
->>>>>>> theirs
             R"(`level` + 2 < 5)",
             R"(`level` - 2 >= 1)",
             R"(`level` * 3 > 4)",
@@ -5582,6 +5570,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         );
     }
 */
+
     Y_UNIT_TEST(PredicatePushdownCastErrors) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -5594,7 +5583,24 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto tableClient = kikimr.GetTableClient();
 
-        std::map<std::string, std::set<std::string>> exceptions = {
+#if SSA_RUNTIME_VERSION >= 4U
+        const std::set<std::string> numerics = {"Int8", "Int16", "Int32", "Int64", "UInt8", "UInt16", "UInt32", "UInt64", "Float", "Double"};
+        const std::map<std::string, std::set<std::string>> exceptions = {
+            {"Int8", numerics},
+            {"Int16", numerics},
+            {"Int32", numerics},
+            {"Int64", numerics},
+            {"UInt8", numerics},
+            {"UInt16", numerics},
+            {"UInt32", numerics},
+            {"UInt64", numerics},
+            {"Float", numerics},
+            {"Double", numerics},
+            {"String", {"Utf8"}},
+            {"Utf8", {"String"}},
+        };
+#else
+    std::map<std::string, std::set<std::string>> exceptions = {
             {"Int8", {"Int16", "Int32"}},
             {"Int16", {"Int8", "Int32"}},
             {"Int32", {"Int8", "Int16"}},
@@ -5603,9 +5609,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             {"UInt32", {"UInt8", "UInt16"}},
             {"String", {"Utf8"}},
             {"Utf8", {"String", "Json", "Yson"}},
-            {"Json", {"Utf8", "Yson"}},
-            {"Yson", {"Utf8", "Json"}},
         };
+#endif
 
         std::vector<std::string> allTypes = {
             //"Bool",
@@ -5956,7 +5961,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         UNIT_ASSERT(!result.IsSuccess());
         std::string errorMsg = result.GetIssues().ToString();
-        UNIT_ASSERT_C(errorMsg.find("Data manipulation queries do not support column shard tables.") != std::string::npos, errorMsg);
+        NIT_ASSERT_C(errorMsg.find("Write mode 'insert_abort' is not supported for olap tables.") != std::string::npos, errorMsg);
     }
 
     Y_UNIT_TEST(Olap_InsertFailsOnGenericQuery) {
@@ -6186,8 +6191,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2", "[[2;\"test_res_2\";#;[\"val1\"]]]");
     }
 
-<<<<<<< ours
-=======
     Y_UNIT_TEST(BulkUpsertUpdate) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -6784,7 +6787,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         TestTableWithNulls({ testCase }, /* generic */ true);
     }
->>>>>>> theirs
 }
 
 } // namespace NKqp

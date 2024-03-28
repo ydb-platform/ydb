@@ -7,6 +7,7 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <ydb/library/yql/providers/yt/lib/hash/yql_hash_builder.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <ydb/library/yql/providers/common/provider/yql_modules.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/transform/yql_exec.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
@@ -129,14 +130,8 @@ protected:
 
         const auto settings = State_->Configuration->GetSettingsForNode(*input);
         TUserDataTable crutches = State_->Types->UserDataStorageCrutches;
-        if (const auto& defaultGeobase = settings->GeobaseDownloadUrl.Get(usedCluster)) {
-            auto& userDataBlock = (crutches[TUserDataKey::File(TStringBuf("/home/geodata6.bin"))] = TUserDataBlock{EUserDataType::URL, {}, *defaultGeobase, {}, {}});
-            userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
-        }
-        if (const auto& geobaseConfig = settings->GeobaseConfigUrl.Get(usedCluster)) {
-            auto& userDataBlock = (crutches[TUserDataKey::File(TStringBuf("/home/geodata.conf"))] = TUserDataBlock{EUserDataType::URL, {}, *geobaseConfig, {}, {}});
-            userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
-        }
+
+        TYqlExternalModuleProcessor::PragmaProcessing(settings, usedCluster, crutches);
 
         bool hasNonDeterministicFunctions = false;
         if (const auto status = PeepHoleOptimizeBeforeExec(optimizedInput, optimizedInput, State_, hasNonDeterministicFunctions, ctx); status.Level != IGraphTransformer::TStatus::Ok) {

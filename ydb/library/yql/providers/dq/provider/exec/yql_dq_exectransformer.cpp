@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_state.h>
 
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
+#include <ydb/library/yql/providers/common/provider/yql_modules.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/transform/yql_exec.h>
@@ -688,27 +689,7 @@ private:
                             uploadList->emplace(f);
                         }
 
-                        if (moduleName == TStringBuf("Geo")) {
-                            auto datafileProcessing = [&](const TString& filename, bool throwIfNotExist = false) -> void {
-                                if (auto block = TUserDataStorage::FindUserDataBlock(files, filename)) {
-                                    auto f = IDqGateway::TFileResource();
-                                    f.SetLocalPath(block->FrozenFile->GetPath().GetPath());
-                                    f.SetName(filename);
-                                    f.SetObjectId(block->FrozenFile->GetMd5());
-                                    f.SetObjectType(IDqGateway::TFileResource::EUSER_FILE);
-                                    f.SetSize(block->FrozenFile->GetSize());
-                                    uploadList->emplace(f);
-                                } else if (throwIfNotExist) {
-                                    THROW yexception() << "File not found: " << filename;
-                                }
-                            };
-
-                            const TString dataFileName = "/home/geodata6.bin";
-                            datafileProcessing(dataFileName, /* throwIfNotExist */ true);
-
-                            const TString configFileName = "/home/geodata.conf";
-                            datafileProcessing(configFileName);
-                        }
+                        TYqlExternalModuleProcessor::TuneUploadList(moduleName, files, uploadList);
                     }
                 }
             }

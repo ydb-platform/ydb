@@ -9,6 +9,7 @@
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/providers/common/provider/yql_modules.h>
 
 #include <util/folder/path.h>
 #include <util/generic/is_in.h>
@@ -786,24 +787,7 @@ bool FillUsedFilesImpl(
             }
         }
 
-        if (moduleName == TStringBuf("Geo")) {
-            auto datafileProcessing = [&](TStringBuf filename) -> void {
-                const auto fileKey = TUserDataKey::File(filename);
-                if (const auto block = types.UserDataStorage->FindUserDataBlock(fileKey)) {
-                    files.emplace(fileKey, *block).first->second.Usage.Set(EUserDataBlockUsage::Path);
-                } else {
-                    const auto it = crutches.find(fileKey);
-                    if (crutches.cend() != it) {
-                        auto pragma = it->second;
-                        types.UserDataStorage->AddUserDataBlock(fileKey, pragma);
-                        files.emplace(fileKey, pragma).first->second.Usage.Set(EUserDataBlockUsage::Path);
-                    }
-                }
-            };
-
-            datafileProcessing("/home/geodata6.bin");
-            datafileProcessing("/home/geodata.conf");
-        }
+        TYqlExternalModuleProcessor::FillUsedFiles(moduleName, types, crutches, files);
 
         if (addSysModule) {
             auto pathWithMd5 = types.UdfResolver->GetSystemModulePath(moduleName);

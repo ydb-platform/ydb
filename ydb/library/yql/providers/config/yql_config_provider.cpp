@@ -1,5 +1,6 @@
 #include "yql_config_provider.h"
 
+#include <ydb/library/yql/providers/common/provider/yql_modules.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
@@ -496,6 +497,10 @@ namespace {
                 return false;
             }
 
+            if (!TYqlExternalModuleProcessor::ApplyConfigFlag(name, ctx, args, Types.UserDataStorageCrutches)) {
+                return false;
+            }
+
             if (name == "UnsecureCredential") {
                 if (!AddCredential(pos, args, ctx)) {
                     return false;
@@ -793,20 +798,6 @@ namespace {
                     return false;
                 }
                 Types.StrictTableProps = false;
-            }
-            else if (name == "GeobaseDownloadUrl") {
-                if (args.size() != 1) {
-                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
-                    return false;
-                }
-                auto& userDataBlock = (Types.UserDataStorageCrutches[TUserDataKey::File(TStringBuf("/home/geodata6.bin"))] = TUserDataBlock{EUserDataType::URL, {}, TString(args[0]), {}, {}});
-                userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
-            }
-            else if (name == "GeobaseConfigUrl") {
-                if (args.size() == 1) {
-                    auto& userDataBlock = (Types.UserDataStorageCrutches[TUserDataKey::File(TStringBuf("/home/geodata.conf"))] = TUserDataBlock{EUserDataType::URL, {}, TString(args[0]), {}, {}});
-                    userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
-                }
             }
             else if (name == "JsonQueryReturnsJsonDocument" || name == "DisableJsonQueryReturnsJsonDocument") {
                 if (args.size() != 0) {

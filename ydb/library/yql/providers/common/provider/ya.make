@@ -1,8 +1,10 @@
 LIBRARY()
 
 SRCS(
+    yql_geo_module.cpp  # TODO(dieash@) relocate!
     yql_data_provider_impl.cpp
     yql_data_provider_impl.h
+    yql_modules.cpp
     yql_provider.cpp
     yql_provider.h
     yql_provider_names.h

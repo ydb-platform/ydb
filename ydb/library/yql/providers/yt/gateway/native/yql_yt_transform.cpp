@@ -328,12 +328,12 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName name) {
                     AddFile(udfPath, *fileInfo, FindUdfPrefix(moduleName));
                 }
 
-                if (moduleName == TStringBuf("Geo")) {
-                    if (const auto fileInfo = ExecCtx_.UserFiles_->GetFile("/home/geodata6.bin")) {
-                        AddFile("./geodata6.bin", *fileInfo);
-                    }
-                    if (const auto fileInfo = ExecCtx_.UserFiles_->GetFile("/home/geodata.conf")) {
-                        AddFile("./geodata.conf", *fileInfo);
+                if (const auto& filesList = TYqlExternalModuleProcessor::GetUsedFilenamePaths(moduleName); !filesList.empty()) {
+                    for (const auto& fullPath : filesList) {
+                        if (const auto fileInfo = ExecCtx_.UserFiles_->GetFile(fullPath)) {
+                            const auto& relPath = TString::Join("./", TFsPath(fullPath).GetName());
+                            AddFile(relPath, *fileInfo);
+                        }
                     }
                 }
 

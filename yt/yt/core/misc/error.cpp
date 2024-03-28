@@ -372,12 +372,24 @@ TError::TErrorOr(TError&& other) noexcept
 
 TError::TErrorOr(const std::exception& ex)
 {
-    if (const auto* compositeException = dynamic_cast<const TCompositeException*>(&ex)) {
+    if (auto simpleException = dynamic_cast<const TSimpleException*>(&ex)) {
+        *this = TError(NYT::EErrorCode::Generic, simpleException->GetMessage());
+        // NB: clang-14 is incapable of capturing structured binding variables
+        //  so we force materialize them via this function call.
+        auto addAttribute = [this] (const auto& key, const auto& value) {
+            std::visit([&] (const auto& actual) {
+                *this <<= TErrorAttribute(key, actual);
+            }, value);
+        };
+        for (const auto& [key, value] : simpleException->GetAttributes()) {
+            addAttribute(key, value);
+        }
         try {
-            std::rethrow_exception(compositeException->GetInnerException());
+            if (simpleException->GetInnerException()) {
+                std::rethrow_exception(simpleException->GetInnerException());
+            }
         } catch (const std::exception& innerEx) {
-            *this = TError(NYT::EErrorCode::Generic, compositeException->GetMessage())
-                << TError(innerEx);
+            *this <<= TError(innerEx);
         }
     } else if (const auto* errorEx = dynamic_cast<const TErrorException*>(&ex)) {
         *this = errorEx->Error();

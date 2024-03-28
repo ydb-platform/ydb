@@ -2504,6 +2504,20 @@
                 {"Index": 0, "Name": "Type", "Type": "TCallable"},
                 {"Index": 1, "Name": "Buffer", "Type": "TExprBase"}
             ]
+        },
+        {
+            "Name" : "TCoReturningListItem",
+            "Base" : "TCallable",
+            "Match": {"Type": "Callable", "Name": "ReturningListItem"},
+            "Children": [
+                {"Index": 0, "Name": "ColumnRef", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TCoReturningStar",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "ReturningStar"},
+            "Children": []
         }
     ]
 }

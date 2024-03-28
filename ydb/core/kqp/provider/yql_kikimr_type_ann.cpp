@@ -574,6 +574,9 @@ private:
         if (auto status = DoHandleReturningList<TKiUpdateTable>(node, ctx)) {
             return *status;
         }
+        if (auto status = DoHandleReturningList<TKiDeleteTable>(node, ctx)) {
+            return *status;
+        }
         return TStatus::Error;
     }
 
@@ -650,13 +653,6 @@ private:
             }
         }
 
-
-
-        if (!node.ReturningColumns().Empty()) {
-            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "It is not allowed to use returning"));
-            return IGraphTransformer::TStatus::Error;
-        }
 
         auto updateBody = node.Update().Body().Ptr();
         auto status = ConvertTableRowType(updateBody, *table, ctx);

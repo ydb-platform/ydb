@@ -1,6 +1,10 @@
 #include "columnshard.h"
 #include <ydb/core/testlib/cs_helper.h>
 
+extern "C" {
+#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
+}
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -120,15 +124,19 @@ namespace NKqp {
         }
     }
 
-
     TString TTestHelper::TColumnSchema::BuildQuery() const {
-        auto str = TStringBuilder() << Name << " " << NScheme::GetTypeName(Type);
+        TStringBuilder str;
+        str << Name << ' ';
+        if (NScheme::NTypeIds::Pg == Type) {
+            str << NPg::PgTypeNameFromTypeDesc(TypeDesc);
+        } else {
+            str << NScheme::GetTypeName(Type);
+        }
         if (!NullableFlag) {
             str << " NOT NULL";
         }
         return str;
     }
-
 
     TString TTestHelper::TColumnTableBase::BuildQuery() const {
         auto str = TStringBuilder() << "CREATE " << GetObjectType() << " `" << Name << "`";
@@ -149,7 +157,7 @@ namespace NKqp {
     std::shared_ptr<arrow::Schema> TTestHelper::TColumnTableBase::GetArrowSchema(const TVector<TColumnSchema>& columns) {
         std::vector<std::shared_ptr<arrow::Field>> result;
         for (auto&& col : columns) {
-            result.push_back(BuildField(col.GetName(), col.GetType(), col.IsNullable()));
+            result.push_back(BuildField(col.GetName(), col.GetType(), col.GetTypeDesc(), col.IsNullable()));
         }
         return std::make_shared<arrow::Schema>(result);
     }
@@ -163,8 +171,7 @@ namespace NKqp {
         return JoinStrings(columnStr, ", ");
     }
 
-
-    std::shared_ptr<arrow::Field> TTestHelper::TColumnTableBase::BuildField(const TString name, const NScheme::TTypeId& typeId, bool nullable) const {
+    std::shared_ptr<arrow::Field> TTestHelper::TColumnTableBase::BuildField(const TString name, const NScheme::TTypeId typeId, void*const typeDesc, bool nullable) const {
         switch (typeId) {
         case NScheme::NTypeIds::Bool:
             return arrow::field(name, arrow::boolean(), nullable);
@@ -206,10 +213,28 @@ namespace NKqp {
             return arrow::field(name, arrow::duration(arrow::TimeUnit::TimeUnit::MICRO), nullable);
         case NScheme::NTypeIds::JsonDocument:
             return arrow::field(name, arrow::binary(), nullable);
+        case NScheme::NTypeIds::Pg:
+            switch (NPg::PgTypeIdFromTypeDesc(typeDesc)) {
+                case INT2OID:
+                    return arrow::field(name, arrow::int16(), true);
+                case INT4OID:
+                    return arrow::field(name, arrow::int32(), true);
+                case INT8OID:
+                    return arrow::field(name, arrow::int64(), true);
+                case FLOAT4OID:
+                    return arrow::field(name, arrow::float32(), true);
+                case FLOAT8OID:
+                    return arrow::field(name, arrow::float64(), true);
+                case BYTEAOID:
+                    return arrow::field(name, arrow::binary(), true);
+                case TEXTOID:
+                    return arrow::field(name, arrow::utf8(), true);
+                default:
+                    Y_FAIL("TODO: support pg");
+            }
         }
         return nullptr;
     }
-
 
     TString TTestHelper::TColumnTable::GetObjectType() const {
         return "TABLE";

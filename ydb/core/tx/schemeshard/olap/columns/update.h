@@ -63,6 +63,7 @@ public:
     }
     static bool IsAllowedType(ui32 typeId);
     static bool IsAllowedFirstPkType(ui32 typeId);
+    static bool IsAllowedPgType(ui32 pgTypeId);
 };
 
 class TOlapColumnsUpdate {

@@ -4,6 +4,10 @@
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
+extern "C" {
+#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
+}
+
 namespace NKikimr::NSchemeShard {
 
     bool TOlapColumnAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors) {
@@ -42,21 +46,29 @@ namespace NKikimr::NSchemeShard {
             return false;
         }
 
-        auto typeName = NMiniKQL::AdaptLegacyYqlType(TypeName);
-        Y_ABORT_UNLESS(AppData()->TypeRegistry);
-        const NScheme::IType* type = AppData()->TypeRegistry->GetType(typeName);
-        if (!type) {
-            errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
-            return false;
-        }
-        if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-            errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
-            return false;;
-        }
-        Type = NScheme::TTypeInfo(type->GetTypeId());
-        if (!IsAllowedType(type->GetTypeId())){
-            errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
-            return false;
+        if (const auto& typeName = NMiniKQL::AdaptLegacyYqlType(TypeName); typeName.StartsWith("pg")) {
+            const auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+            if (!(typeDesc && TOlapColumnAdd::IsAllowedPgType(NPg::PgTypeIdFromTypeDesc(typeDesc)))) {
+                errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
+                return false;
+            }
+            Type = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+        } else {
+            Y_ABORT_UNLESS(AppData()->TypeRegistry);
+            const NScheme::IType* type = AppData()->TypeRegistry->GetType(typeName);
+            if (!type) {
+                errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
+                return false;
+            }
+            if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
+                errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
+                return false;;
+            }
+            Type = NScheme::TTypeInfo(type->GetTypeId());
+            if (!IsAllowedType(type->GetTypeId())){
+                errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
+                return false;
+            }
         }
         return true;
     }
@@ -144,6 +156,20 @@ namespace NKikimr::NSchemeShard {
                 break;
         }
         return true;
+    }
+
+    bool TOlapColumnAdd::IsAllowedPgType(ui32 pgTypeId) {
+        switch (pgTypeId) {
+            case INT2OID:
+            case INT4OID:
+            case INT8OID:
+            case FLOAT4OID:
+            case FLOAT8OID:
+                return true;
+            default:
+                break;
+        }
+        return false;
     }
 
     bool TOlapColumnAdd::IsAllowedFirstPkType(ui32 typeId) {

@@ -172,13 +172,22 @@ bool TOlapColumnsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema
             return false;
         }
 
-        auto typeName = NMiniKQL::AdaptLegacyYqlType(colProto.GetType());
-        const NScheme::IType* type = typeRegistry->GetType(typeName);
-        if (!type || !TOlapColumnAdd::IsAllowedType(type->GetTypeId())) {
-            errors.AddError("Type '" + colProto.GetType() + "' specified for column '" + colName + "' is not supported");
-            return false;
+        NScheme::TTypeInfo typeInfo;
+        if (const auto& typeName = NMiniKQL::AdaptLegacyYqlType(colProto.GetType()); typeName.StartsWith("pg")) {
+            const auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+            if (!(typeDesc && TOlapColumnAdd::IsAllowedPgType(NPg::PgTypeIdFromTypeDesc(typeDesc)))) {
+                errors.AddError("Type '" + colProto.GetType() + "' specified for column '" + colName + "' is not supported");
+                return false;
+            }
+            typeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+        } else {
+            const NScheme::IType* type = typeRegistry->GetType(typeName);
+            if (!type || !TOlapColumnAdd::IsAllowedType(type->GetTypeId())) {
+                errors.AddError("Type '" + colProto.GetType() + "' specified for column '" + colName + "' is not supported");
+                return false;
+            }
+            typeInfo = NScheme::TTypeInfo(type->GetTypeId());
         }
-        NScheme::TTypeInfo typeInfo(type->GetTypeId());
 
         if (typeInfo != col->GetType()) {
             errors.AddError("Type '" + TypeName(typeInfo) + "' specified for column '" + colName + "' does not match schema preset type '" + TypeName(col->GetType()) + "'");

@@ -6787,6 +6787,11 @@
                 "ColumnId": 32,
                 "ColumnName": "MemDataSize",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 33,
+                "ColumnName": "StoragePoolsStats",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6824,7 +6829,8 @@
                     29,
                     30,
                     31,
-                    32
+                    32,
+                    33
                 ],
                 "RoomID": 0,
                 "Codec": 0,

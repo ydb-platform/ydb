@@ -170,6 +170,11 @@ public:
         }
     }
 
+    void PassAway() override {
+        this->Send(TActivationContext::InterconnectProxy(NodeId), new TEvents::TEvUnsubscribe);
+        TBase::PassAway();
+    }
+
     void ReplyAndPassAway(const TString &error = "") {
         try {
             TStringStream json;
@@ -182,10 +187,8 @@ public:
         } catch (const std::exception& e) {
             TBase::Send(Initiator, new NMon::TEvHttpInfoRes(TString("HTTP/1.1 400 Bad Request\r\n\r\n") + e.what(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         }
-        TBase::PassAway();
+        PassAway();
     }
-
-
 };
 
 template <typename RequestType, typename ResponseType>

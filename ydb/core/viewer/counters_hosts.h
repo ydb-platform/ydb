@@ -16,11 +16,13 @@ using namespace NActors;
 using namespace NNodeWhiteboard;
 
 class TCountersHostsList : public TActorBootstrapped<TCountersHostsList> {
+    using TBase = TActorBootstrapped<TCountersHostsList>;
+
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
     TMap<TNodeId, THolder<TEvWhiteboard::TEvSystemStateResponse>> NodesResponses;
-    ui32 NodesRequested = 0;
+    std::deque<TNodeId> RequestedNodes;
     ui32 NodesReceived = 0;
     bool StaticNodesOnly = false;
     bool DynamicNodesOnly = false;
@@ -65,12 +67,12 @@ public:
         TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         THolder<TEvWhiteboard::TEvSystemStateRequest> request = MakeHolder<TEvWhiteboard::TEvSystemStateRequest>();
         ctx.Send(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        ++NodesRequested;
+        RequestedNodes.push_back(nodeId);
     }
 
     void NodeStateInfoReceived(const TActorContext& ctx) {
         ++NodesReceived;
-        if (NodesRequested == NodesReceived) {
+        if (RequestedNodes.size() == NodesReceived) {
             ReplyAndDie(ctx);
         }
     }
@@ -149,6 +151,13 @@ public:
         }
         ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKTEXT(Event->Get()) + text.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
+    }
+
+    void PassAway() {
+        for (auto &nodeId: RequestedNodes) {
+            Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
+        }
+        TBase::PassAway();
     }
 
     void Timeout(const TActorContext &ctx) {

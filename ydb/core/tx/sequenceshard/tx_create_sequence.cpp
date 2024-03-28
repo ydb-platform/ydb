@@ -64,6 +64,16 @@ namespace NSequenceShard {
                     sequence.StartValue = sequence.MaxValue;
                 }
             }
+
+            bool frozen = msg->Record.GetFrozen();
+            if (frozen) {
+                sequence.State = Schema::ESequenceState::Frozen;
+            }
+
+            if (msg->Record.OptionalCycle_case() == NKikimrTxSequenceShard::TEvCreateSequence::kCycle) {
+                sequence.Cycle = msg->Record.GetCycle();
+            }
+
             sequence.NextValue = sequence.StartValue;
             sequence.NextUsed = false;
             if (msg->Record.OptionalCache_case() == NKikimrTxSequenceShard::TEvCreateSequence::kCache) {
@@ -82,7 +92,8 @@ namespace NSequenceShard {
                 NIceDb::TUpdate<Schema::Sequences::NextUsed>(sequence.NextUsed),
                 NIceDb::TUpdate<Schema::Sequences::Cache>(sequence.Cache),
                 NIceDb::TUpdate<Schema::Sequences::Increment>(sequence.Increment),
-                NIceDb::TUpdate<Schema::Sequences::Cycle>(sequence.Cycle));
+                NIceDb::TUpdate<Schema::Sequences::Cycle>(sequence.Cycle),
+                NIceDb::TUpdate<Schema::Sequences::State>(sequence.State));
             SetResult(NKikimrTxSequenceShard::TEvCreateSequenceResult::SUCCESS);
             SLOG_N("TTxCreateSequence.Execute SUCCESS"
                 << " PathId# " << pathId
@@ -91,7 +102,8 @@ namespace NSequenceShard {
                 << " StartValue# " << sequence.StartValue
                 << " Cache# " << sequence.Cache
                 << " Increment# " << sequence.Increment
-                << " Cycle# " << (sequence.Cycle ? "true" : "false"));
+                << " Cycle# " << (sequence.Cycle ? "true" : "false")
+                << " State# " << (frozen ? "Frozen" : "Active"));
             return true;
         }
 

@@ -36,6 +36,9 @@ ci:
               title: IX submodule revision (github.com/stal-ix/ix)
               type: string
               default: CURRENT
+            platforms:
+              title: Build only for particular platforms (comma separated)
+              type: string
       filters:
         - discovery: dir
           abs-paths:
@@ -56,6 +59,7 @@ ci:
           input:
             <<: *base-input
             resource_path: *resource-path
+            particular_platforms: ${flow-vars.platforms}
 
         update-mapping:
           title: Update mapping.conf.json

@@ -5,6 +5,7 @@
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
@@ -2354,5 +2355,23 @@ namespace NSchemeShardUT_Private {
         auto status = ev->Get()->Record.GetStatus();
 
         UNIT_ASSERT_C(successIsExpected == (status == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED), "Status: " << ev->Get()->Record.GetStatus() << " Issues: " << ev->Get()->Record.GetIssues());
+    }
+
+    void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
+        auto request = MakeHolder<NSequenceProxy::TEvSequenceProxy::TEvNextVal>(path);
+        runtime.Send(new IEventHandle(NSequenceProxy::MakeSequenceProxyServiceID(), sender, request.Release()));
+    }
+
+    i64 WaitNextValResult(TTestActorRuntime& runtime, const TActorId& sender) {
+        auto ev = runtime.GrabEdgeEventRethrow<NSequenceProxy::TEvSequenceProxy::TEvNextValResult>(sender);
+        auto* msg = ev->Get();
+        UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+        return msg->Value;
+    }
+
+    i64 DoNextVal(TTestActorRuntime& runtime, const TString& path) {
+        auto sender = runtime.AllocateEdgeActor(0);
+        SendNextValRequest(runtime, sender, path);
+        return WaitNextValResult(runtime, sender);
     }
 }

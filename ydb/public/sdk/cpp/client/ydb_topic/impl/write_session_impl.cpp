@@ -1,9 +1,9 @@
-#include "write_session.h"
+#include "write_session_impl.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h>
-
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/trace_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+
 #include <library/cpp/string_utils/url/url.h>
 
 #include <google/protobuf/util/time_util.h>
@@ -15,31 +15,10 @@
 
 
 namespace NYdb::NTopic {
-using ::NMonitoring::TDynamicCounterPtr;
-using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
-
 
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
 // Error code from file ydb/public/api/protos/persqueue_error_codes_v1.proto
 const ui64 WRITE_ERROR_PARTITION_INACTIVE = 500029;
-
-#define HISTOGRAM_SETUP ::NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
-TWriterCounters::TWriterCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
-    Errors = counters->GetCounter("errors", true);
-    CurrentSessionLifetimeMs = counters->GetCounter("currentSessionLifetimeMs", false);
-    BytesWritten = counters->GetCounter("bytesWritten", true);
-    MessagesWritten = counters->GetCounter("messagesWritten", true);
-    BytesWrittenCompressed = counters->GetCounter("bytesWrittenCompressed", true);
-    BytesInflightUncompressed = counters->GetCounter("bytesInflightUncompressed", false);
-    BytesInflightCompressed = counters->GetCounter("bytesInflightCompressed", false);
-    BytesInflightTotal = counters->GetCounter("bytesInflightTotal", false);
-    MessagesInflight = counters->GetCounter("messagesInflight", false);
-
-    TotalBytesInflightUsageByTime = counters->GetHistogram("totalBytesInflightUsageByTime", HISTOGRAM_SETUP);
-    UncompressedBytesInflightUsageByTime = counters->GetHistogram("uncompressedBytesInflightUsageByTime", HISTOGRAM_SETUP);
-    CompressedBytesInflightUsageByTime = counters->GetHistogram("compressedBytesInflightUsageByTime", HISTOGRAM_SETUP);
-}
-#undef HISTOGRAM_SETUP
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSessionImpl
@@ -230,7 +209,7 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
 
     prevDescribePartitionContext = std::exchange(DescribePartitionContext, describePartitionContext);
     Y_ASSERT(DescribePartitionContext);
-    NPersQueue::Cancel(prevDescribePartitionContext);
+    Cancel(prevDescribePartitionContext);
 
     Ydb::Topic::DescribePartitionRequest request;
     // Currently, the whole topic path needs to be sent in the DescribePartitionRequest.
@@ -247,7 +226,7 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
         if (response)
             response->operation().result().UnpackTo(&result);
 
-        TStatus st = status.Status == EStatus::SUCCESS ? NPersQueue::MakeErrorFromProto(response->operation()) : std::move(status);
+        TStatus st = status.Status == EStatus::SUCCESS ? MakeErrorFromProto(response->operation()) : std::move(status);
 
         if (auto self = cbContext->LockShared()) {
             self->OnDescribePartition(st, result, context);
@@ -287,7 +266,7 @@ void TWriteSessionImpl::OnDescribePartition(const TStatus& status, const Ydb::To
 
     if (!status.IsSuccess()) {
         with_lock (Lock) {
-            handleResult = OnErrorImpl({status.GetStatus(), NPersQueue::MakeIssueWithSubIssues("Failed to get partition location", status.GetIssues())});
+            handleResult = OnErrorImpl({status.GetStatus(), MakeIssueWithSubIssues("Failed to get partition location", status.GetIssues())});
         }
         ProcessHandleResult(handleResult);
         return;
@@ -590,10 +569,11 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
         Y_ASSERT(ConnectTimeoutContext);
 
         // Cancel previous operations.
-        NPersQueue::Cancel(prevConnectContext);
-        if (prevConnectDelayContext)
-            NPersQueue::Cancel(prevConnectDelayContext);
-        NPersQueue::Cancel(prevConnectTimeoutContext);
+        Cancel(prevConnectContext);
+        if (prevConnectDelayContext) {
+            Cancel(prevConnectDelayContext);
+        }
+        Cancel(prevConnectTimeoutContext);
 
         reqSettings = TRpcRequestSettings::Make(Settings, PreferredPartitionLocation.Endpoint);
 
@@ -631,7 +611,7 @@ void TWriteSessionImpl::OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr&
     THandleResult handleResult;
     with_lock (Lock) {
         if (ConnectTimeoutContext == connectTimeoutContext) {
-            NPersQueue::Cancel(ConnectContext);
+            Cancel(ConnectContext);
             ConnectContext = nullptr;
             ConnectTimeoutContext = nullptr;
             ConnectDelayContext = nullptr;
@@ -658,7 +638,7 @@ void TWriteSessionImpl::OnConnect(
     THandleResult handleResult;
     with_lock (Lock) {
         if (ConnectContext == connectContext) {
-            NPersQueue::Cancel(ConnectTimeoutContext);
+            Cancel(ConnectTimeoutContext);
             ConnectContext = nullptr;
             ConnectTimeoutContext = nullptr;
             ConnectDelayContext = nullptr;
@@ -676,7 +656,7 @@ void TWriteSessionImpl::OnConnect(
             if (handleResult.DoStop) {
                 CloseImpl(
                         st.Status,
-                        NPersQueue::MakeIssueWithSubIssues(
+                        MakeIssueWithSubIssues(
                                 TStringBuilder() << "Failed to establish connection to server \"" << st.Endpoint
                                                  << "\". Attempts done: " << ConnectionAttemptsDone,
                                 st.Issues
@@ -804,8 +784,8 @@ void TWriteSessionImpl::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t co
             return; // Message from previous connection. Ignore.
         }
         if (errorStatus.Ok()) {
-            if (NPersQueue::IsErrorMessage(*ServerMessage)) {
-                errorStatus = NPersQueue::MakeErrorFromProto(*ServerMessage);
+            if (IsErrorMessage(*ServerMessage)) {
+                errorStatus = MakeErrorFromProto(*ServerMessage);
             } else {
                 processResult = ProcessServerMessageImpl();
                 needSetValue = !InitSeqNoSetDone && processResult.InitSeqNo.Defined() && (InitSeqNoSetDone = true);
@@ -1073,7 +1053,8 @@ TMemoryUsageChange TWriteSessionImpl::OnMemoryUsageChangedImpl(i64 diff) {
 
 TBuffer CompressBuffer(std::shared_ptr<TTopicClient::TImpl> client, TVector<TStringBuf>& data, ECodec codec, i32 level) {
     TBuffer result;
-    THolder<IOutputStream> coder = client->GetCodecImplOrThrow(codec)->CreateCoder(result, level);
+    Y_UNUSED(client);
+    THolder<IOutputStream> coder = TCodecMap::GetTheCodecMap().GetOrThrow((ui32)codec)->CreateCoder(result, level);
     for (auto& buffer : data) {
         coder->Write(buffer.data(), buffer.size());
     }
@@ -1481,14 +1462,14 @@ void TWriteSessionImpl::AbortImpl() {
     if (!AtomicGet(Aborting)) {
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: aborting");
         AtomicSet(Aborting, 1);
-        NPersQueue::Cancel(DescribePartitionContext);
-        NPersQueue::Cancel(ConnectContext);
-        NPersQueue::Cancel(ConnectTimeoutContext);
-        NPersQueue::Cancel(ConnectDelayContext);
+        Cancel(DescribePartitionContext);
+        Cancel(ConnectContext);
+        Cancel(ConnectTimeoutContext);
+        Cancel(ConnectDelayContext);
         if (Processor)
             Processor->Cancel();
 
-        NPersQueue::Cancel(ClientContext);
+        Cancel(ClientContext);
         ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
     }
 }
@@ -1532,4 +1513,4 @@ TWriteSessionImpl::~TWriteSessionImpl() {
     }
 }
 
-}; // namespace NYdb::NTopic
+}  // namespace NYdb::NTopic

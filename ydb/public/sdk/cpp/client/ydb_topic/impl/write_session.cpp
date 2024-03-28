@@ -1,6 +1,6 @@
 #include "write_session.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h>
 
 namespace NYdb::NTopic {
 
@@ -170,4 +170,4 @@ bool TSimpleBlockingWriteSession::Close(TDuration closeTimeout) {
     return Writer->Close(std::move(closeTimeout));
 }
 
-}; // namespace NYdb::NTopic
+}  // namespace NYdb::NTopic

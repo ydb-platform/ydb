@@ -1,4 +1,4 @@
-#include "ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h"
+#include "ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h"
 #include <ydb/public/api/grpc/ydb_federation_discovery_v1.grpc.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federation_observer.h>

@@ -306,24 +306,11 @@
   #if defined(_arm_)
   - arm/limits.h
   #endif
-  #if defined(_SOLARIS_) && TODO
-  - synch.h
-  - sys/byteorder.h
-  #endif
   #if defined(__MSL__) && TODO && WTF
   - unix.h
   #endif
   #if defined(__sgi)
   - sgidefs.h
-  #endif
-  #if defined(_sun_)
-  - procfs.h
-  #endif
-  #if defined(__sun)
-  - sys/port.h
-  #endif
-  #if defined(__sun__)
-  - sys/isa_defs.h
   #endif
   #if defined(HAVE_DMALLOC)
   - dmalloc.h
@@ -368,7 +355,6 @@
   - msvc.h
   - sqlite3userauth.h
   - linenoise.h
-  - sunmath.h
   - sys/fpu.h
   - win32.h
   - bsd/stdlib.h
@@ -384,7 +370,6 @@
   - asm/page.h
   - asm/sgidefs.h
   - ndir.h
-  - sunmedia_types.h
   - clidef.h
   - credef.h
   - dos/dos.h

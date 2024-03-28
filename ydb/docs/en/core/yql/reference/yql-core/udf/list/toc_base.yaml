@@ -10,6 +10,7 @@ items:
 - { name: DateTime,               href: datetime.md }
 - { name: Url,                    href: url.md }
 - { name: Ip,                     href: ip.md }
+- { name: Knn,                    href: knn.md }
 - { name: Yson,                   href: yson.md }
 - { name: Digest,                 href: digest.md }
 - { name: Math,                   href: math.md }

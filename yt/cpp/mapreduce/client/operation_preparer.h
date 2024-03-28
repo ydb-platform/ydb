@@ -56,7 +56,7 @@ struct IItemToUpload
     virtual TString CalculateMD5() const = 0;
     virtual THolder<IInputStream> CreateInputStream() const = 0;
     virtual TString GetDescription() const = 0;
-    virtual ui64 GetDataSize() const = 0;
+    virtual i64 GetDataSize() const = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

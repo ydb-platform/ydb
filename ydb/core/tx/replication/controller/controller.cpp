@@ -285,6 +285,10 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
 }
 
 void TController::StopWorker(ui32 nodeId, const TWorkerId& id) {
+    LOG_D("Stop worker"
+        << ": nodeId# " << nodeId
+        << ", workerId# " << id);
+
     Y_ABORT_UNLESS(Sessions.contains(nodeId));
     auto& session = Sessions[nodeId];
 
@@ -333,7 +337,10 @@ void TController::ScheduleRunWorkers() {
     RunWorkersScheduled = true;
 }
 
-void TController::Handle(TEvPrivate::TEvRunWorkers::TPtr&, const TActorContext&) {
+void TController::Handle(TEvPrivate::TEvRunWorkers::TPtr&, const TActorContext& ctx) {
+    CLOG_D(ctx, "Run workers"
+        << ": queue# " << WorkersToRun.size());
+
     static constexpr ui32 limit = 100;
     ui32 i = 0;
 
@@ -380,6 +387,10 @@ void TController::Handle(TEvPrivate::TEvRunWorkers::TPtr&, const TActorContext&)
 }
 
 void TController::RunWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd) {
+    LOG_D("Run worker"
+        << ": nodeId# " << nodeId
+        << ", workerId# " << id);
+
     Y_ABORT_UNLESS(Sessions.contains(nodeId));
     auto& session = Sessions[nodeId];
 

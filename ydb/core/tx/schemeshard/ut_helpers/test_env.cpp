@@ -8,6 +8,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/filestore/core/filestore.h>
@@ -569,7 +570,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         set.SetMinimumStepSeconds(5); // 5 seconds
     }
     //
-                                                        
+
     for (const auto& sid : opts.SystemBackupSIDs_) {
         app.AddSystemBackupSID(sid);
     }
@@ -613,6 +614,13 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         IActor* txProxy = CreateTxProxy(runtime.GetTxAllocatorTabletIds());
         TActorId txProxyId = runtime.Register(txProxy, node);
         runtime.RegisterService(MakeTxProxyID(), txProxyId, node);
+    }
+
+    // Create sequence proxies
+    for (size_t i = 0; i < runtime.GetNodeCount(); ++i) {
+        IActor* sequenceProxy = NSequenceProxy::CreateSequenceProxy();
+        TActorId sequenceProxyId = runtime.Register(sequenceProxy, i);
+        runtime.RegisterService(NSequenceProxy::MakeSequenceProxyServiceID(), sequenceProxyId, i);
     }
 
     //SetupBoxAndStoragePool(runtime, sender, TTestTxConfig::DomainUid);

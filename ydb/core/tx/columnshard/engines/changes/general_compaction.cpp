@@ -11,6 +11,7 @@
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/read_filter_merger.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/null_column.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
@@ -212,13 +213,13 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     i64 otherPortionsSize = 0;
     for (auto&& i : SwitchedPortions) {
         if (i.GetMeta().GetProduced() == TPortionMeta::EProduced::INSERTED) {
-            insertedPortionsSize += i.GetBlobBytes();
+            insertedPortionsSize += i.GetTotalBlobBytes();
         } else if (i.GetMeta().GetProduced() == TPortionMeta::EProduced::SPLIT_COMPACTED) {
-            compactedPortionsSize += i.GetBlobBytes();
+            compactedPortionsSize += i.GetTotalBlobBytes();
         } else {
-            otherPortionsSize += i.GetBlobBytes();
+            otherPortionsSize += i.GetTotalBlobBytes();
         }
-        portionsSize += i.GetBlobBytes();
+        portionsSize += i.GetTotalBlobBytes();
         ++portionsCount;
     }
     NChanges::TGeneralCompactionCounters::OnPortionsKind(insertedPortionsSize, compactedPortionsSize, otherPortionsSize);
@@ -264,7 +265,7 @@ void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TC
 void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
     auto& g = *GranuleMeta;
-    self.CSCounters.OnSplitCompactionInfo(g.GetAdditiveSummary().GetCompacted().GetPortionsSize(), g.GetAdditiveSummary().GetCompacted().GetPortionsCount());
+    self.CSCounters.OnSplitCompactionInfo(g.GetAdditiveSummary().GetCompacted().GetTotalPortionsSize(), g.GetAdditiveSummary().GetCompacted().GetPortionsCount());
 }
 
 NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {

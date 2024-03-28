@@ -32,7 +32,9 @@ constexpr TStringBuf TabletsName = "hive_tablets";
 constexpr TStringBuf QueryMetricsName = "query_metrics_one_minute";
 
 constexpr TStringBuf StorePrimaryIndexStatsName = "store_primary_index_stats";
+constexpr TStringBuf StorePrimaryIndexPortionStatsName = "store_primary_index_portion_stats";
 constexpr TStringBuf TablePrimaryIndexStatsName = "primary_index_stats";
+constexpr TStringBuf TablePrimaryIndexPortionStatsName = "primary_index_portion_stats";
 
 constexpr TStringBuf TopPartitions1MinuteName = "top_partitions_one_minute";
 constexpr TStringBuf TopPartitions1HourName = "top_partitions_one_hour";
@@ -498,6 +500,38 @@ struct Schema : NIceDb::Schema {
             StateChangeAt,
             UserSID>;
     };
+
+    struct PrimaryIndexPortionStats: Table<14> {
+        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Kind: Column<2, NScheme::NTypeIds::Utf8> {};
+        struct TabletId: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Rows: Column<4, NScheme::NTypeIds::Uint64> {};
+        struct ColumnRawBytes: Column<5, NScheme::NTypeIds::Uint64> {};
+        struct IndexRawBytes: Column<6, NScheme::NTypeIds::Uint64> {};
+        struct ColumnBlobBytes: Column<7, NScheme::NTypeIds::Uint64> {};
+        struct IndexBlobBytes: Column<8, NScheme::NTypeIds::Uint64> {};
+        struct PortionId: Column<9, NScheme::NTypeIds::Uint64> {};
+        struct Activity: Column<10, NScheme::NTypeIds::Bool> {};
+        struct TierName: Column<11, NScheme::NTypeIds::Utf8> {};
+        struct Stats: Column<12, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<PathId, TabletId, PortionId>;
+        using TColumns = TableColumns<
+            PathId,
+            Kind,
+            TabletId,
+            Rows,
+            ColumnRawBytes,
+            IndexRawBytes,
+            ColumnBlobBytes,
+            IndexBlobBytes,
+            PortionId,
+            Activity,
+            TierName,
+            Stats
+        >;
+    };
+
 };
 
 bool MaybeSystemViewPath(const TVector<TString>& path);

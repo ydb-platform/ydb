@@ -1,6 +1,6 @@
-#pragma once 
+#pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/test_server.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/write_session.h>
 

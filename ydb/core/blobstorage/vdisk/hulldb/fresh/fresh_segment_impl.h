@@ -204,7 +204,8 @@ namespace NKikimr {
         buffer = TRope::CopySpaceOptimized(std::move(buffer), 128, *Arena);
         const ui64 fullDataSize = key.LogoBlobID().BlobSize();
         const size_t delta = buffer.size();
-        TRope blob = TDiskBlob::Create(fullDataSize, partId, HullCtx->VCtx->Top->GType.TotalPartCount(), std::move(buffer), *Arena);
+        TRope blob = TDiskBlob::Create(fullDataSize, partId, HullCtx->VCtx->Top->GType.TotalPartCount(), std::move(buffer), *Arena,
+            HullCtx->AddHeader);
         FreshDataMemConsumer.Add(delta);
         const ui32 blobSize = blob.GetSize();
 

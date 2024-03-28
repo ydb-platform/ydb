@@ -3,6 +3,7 @@
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
 #include <ydb/library/yql/core/yql_opt_window.h>
+#include <ydb/library/yql/core/yql_type_annotation.h>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/strbuf.h>
@@ -28,6 +29,7 @@ bool IsTablePropsDependent(const TExprNode& node);
 bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType);
 
 TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& typeCtx);
+TExprNode::TPtr KeepColumnOrder(const TColumnOrder& order, const TExprNode::TPtr& node, TExprContext& ctx);
 
 // returns true if usedFields contains subset of fields
 template<class TFieldsSet>

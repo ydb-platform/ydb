@@ -76,7 +76,7 @@ Asynchronous indexes should be created using native SQL migrations.
 
 ### Inserting data into a table
 
-`loadData`, `loadUpdateData` - download data from CSV file. *loadUpdate* loads data using the UPSERT command. Data will be automatically converted to the required types, taking into account the strict typing in {{db-short-name}}.
+`loadData`, `loadUpdateData` - download data from CSV file. *loadUpdate* loads data using the UPSERT command. Data will be automatically converted to the required types, taking into account the strict typing in {{ ydb-short-name }}.
 
 `insert` is a changeset that performs a single insert into a table. The value can be specified in the `value` field, for example, `<column name="timestamp_column" value="2023-07-31T17:00:00.123123Z"/>`.
 

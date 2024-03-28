@@ -1094,6 +1094,7 @@ keyword_expr_uncompat:
   | PROCESS
   | REDUCE
   | RETURN
+  | RETURNING
   | ROLLUP
   | SELECT
   | SYMMETRIC
@@ -1349,7 +1350,6 @@ keyword_compat: (
   | RESPECT
   | RESTRICT
   | RESULT
-  | RETURNING
   | REVERT
   | REVOKE
   | RIGHT

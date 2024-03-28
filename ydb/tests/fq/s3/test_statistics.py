@@ -26,6 +26,7 @@ class TestS3(object):
         bucket = resource.Bucket("egress_bucket")
         bucket.create(ACL='public-read-write')
 
+        kikimr.control_plane.wait_bootstrap()
         storage_connection_name = unique_prefix + "sbucket"
         client.create_storage_connection(storage_connection_name, "egress_bucket")
 
@@ -54,6 +55,9 @@ class TestS3(object):
     @pytest.mark.parametrize("format2", ["json_list", "json_each_row", "csv_with_names", "parquet"])
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_convert(self, kikimr, s3, client, format1, format2, yq_version, unique_prefix):
+        if yq_version == 'v1':
+            pytest.skip("Tiket: YQ-3004")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -64,6 +68,7 @@ class TestS3(object):
         bucket = resource.Bucket("convert_bucket")
         bucket.create(ACL='public-read-write')
 
+        kikimr.control_plane.wait_bootstrap()
         storage_connection_name = unique_prefix + "sbucket"
         client.create_storage_connection(storage_connection_name, "convert_bucket")
 
@@ -138,6 +143,7 @@ class TestS3(object):
         bucket = resource.Bucket("pbucket")
         bucket.create(ACL='public-read-write')
 
+        kikimr.control_plane.wait_bootstrap()
         storage_connection_name = unique_prefix + "pb"
         client.create_storage_connection(storage_connection_name, "pbucket")
 
@@ -214,6 +220,7 @@ class TestS3(object):
         bucket = resource.Bucket(bucket_name)
         bucket.create(ACL='public-read-write')
 
+        kikimr.control_plane.wait_bootstrap()
         storage_connection_name = unique_prefix + "sbucket"
         client.create_storage_connection(storage_connection_name, bucket_name)
 
@@ -251,6 +258,7 @@ class TestS3(object):
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_aborted_by_user(self, kikimr, client):
+        kikimr.control_plane.wait_bootstrap()
 
         sql = R'''
 SELECT * FROM AS_TABLE(()->(Yql::ToStream(ListReplicate(<|x:

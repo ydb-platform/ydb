@@ -294,6 +294,8 @@ public:
         , StmtParseInfo(stmtParseInfo)
         , PerStatementResult(perStatementResult)
     {
+        Y_ENSURE(settings.Mode == NSQLTranslation::ESqlMode::QUERY || settings.Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW);
+        Y_ENSURE(settings.Mode != NSQLTranslation::ESqlMode::LIMITED_VIEW || !perStatementResult);
         State.ApplicationName = Settings.ApplicationName;
         AstParseResults.push_back({});
         if (StmtParseInfo) {
@@ -394,14 +396,16 @@ public:
             return nullptr;
         }
 
-        if (Settings.EndOfQueryCommit) {
+        if (Settings.EndOfQueryCommit && Settings.Mode != NSQLTranslation::ESqlMode::LIMITED_VIEW) {
             State.Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
                 A("world"))));
         }
 
         AddVariableDeclarations();
 
-        State.Statements.push_back(L(A("return"), A("world")));
+        if (Settings.Mode != NSQLTranslation::ESqlMode::LIMITED_VIEW) {
+            State.Statements.push_back(L(A("return"), A("world")));
+        }
 
         if (DqEngineEnabled) {
             State.Statements[dqEnginePgmPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
@@ -431,6 +435,12 @@ public:
     bool ParseRawStmt(const RawStmt* value) {
         AT_LOCATION_EX(value, stmt_location);
         auto node = value->stmt;
+        if (Settings.Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW) {
+            if (NodeTag(node) != T_SelectStmt && NodeTag(node) != T_VariableSetStmt) {
+                AddError("Unsupported statement in LIMITED_VIEW mode");
+                return false;
+            }
+        }
         switch (NodeTag(node)) {
         case T_SelectStmt:
             return ParseSelectStmt(CAST_NODE(SelectStmt, node), false) != nullptr;
@@ -747,6 +757,15 @@ public:
         bool fillTargetColumns = false,
         bool unknownsAllowed = false
     ) {
+        if (Settings.Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW) {
+            if (HasSelectInLimitedView) {
+                AddError("Expected exactly one SELECT in LIMITED_VIEW mode");
+                return nullptr;
+            }
+
+            HasSelectInLimitedView = true;
+        }
+
         bool isValuesClauseOfInsertStmt = fillTargetColumns;
 
         State.CTE.emplace_back();
@@ -1283,6 +1302,11 @@ public:
 
         if (inner) {
             return output;
+        }
+
+        if (Settings.Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW) {
+            State.Statements.push_back(L(A("return"), L(A("Right!"), L(A("Cons!"), A("world"), output))));
+            return State.Statements.back();
         }
 
         auto resOptions = QL(QL(QA("type")), QL(QA("autoref")));
@@ -2453,6 +2477,9 @@ public:
         }
         if (varName == "standard_conforming_strings"){
             return "on";
+        }
+        if (varName == "transaction_isolation"){
+            return "serializable";
         }
         return {};
     }
@@ -4284,6 +4311,17 @@ public:
         }
 
         auto lhs = ParseExpr(value->lexpr, settings);
+        if (NodeTag(value->rexpr) == T_SubLink) {
+            auto sublink = CAST_NODE(SubLink, value->rexpr);
+            auto subselect = CAST_NODE(SelectStmt, sublink->subselect);
+            if (subselect->withClause && subselect->withClause->recursive) {
+                if (State.ApplicationName && State.ApplicationName->StartsWith("pgAdmin")) {
+                    AddWarning(TIssuesIds::PG_COMPAT, "AEXPR_OP_ANY forced to false");
+                    return L(A("PgConst"), QA("false"), L(A("PgType"), QA("bool")));
+                }
+            }
+        }
+
         auto rhs = ParseExpr(value->rexpr, settings);
         if (!lhs || !rhs) {
             return nullptr;
@@ -4689,6 +4727,7 @@ private:
     ui32 StatementId = 0;
     TVector<TStmtParseInfo>* StmtParseInfo;
     bool PerStatementResult;
+    bool HasSelectInLimitedView = false;
 };
 
 const THashMap<TStringBuf, TString> TConverter::ProviderToInsertModeMap = {
@@ -4706,6 +4745,7 @@ NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTran
         *stmtParseInfo = stmtParseInfos.back();
     }
     Y_ENSURE(!results.empty());
+    results.back().ActualSyntaxType = NYql::ESyntaxType::Pg;
     return std::move(results.back());
 }
 
@@ -4713,6 +4753,9 @@ TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQ
     TVector<NYql::TAstParseResult> results;
     TConverter converter(results, settings, query, stmtParseInfo, true);
     NYql::PGParse(query, converter);
+    for (auto& res : results) {
+        res.ActualSyntaxType = NYql::ESyntaxType::Pg; 
+    }
     return results;
 }
 

@@ -38,7 +38,7 @@
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
 
 #include <ydb/services/datastreams/datastreams_proxy.h>
 #include <ydb/services/datastreams/next_token.h>
@@ -507,7 +507,7 @@ namespace NKikimr::NHttpProxy {
                     ReplyToHttpContext(ctx);
                 } else {
                     auto retryClass =
-                        NYdb::NPersQueue::GetRetryErrorClass(ev->Get()->Status->GetStatus());
+                        NYdb::NTopic::GetRetryErrorClass(ev->Get()->Status->GetStatus());
 
                     switch (retryClass) {
                     case ERetryErrorClass::ShortRetry:

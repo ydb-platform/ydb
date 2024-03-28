@@ -232,7 +232,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 result = R"(Columns { Name: "field" Type: ")" + TypeName + "\"}";
             }
             result += R"(
-                Columns { Name: "pk_int" Type: "Int64" }
+                Columns { Name: "pk_int" Type: "Int64" NotNull: true }
                 Columns { Name: "ts" Type: "Timestamp" }
                 KeyColumnNames: "pk_int"
                 Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         template <class TFiller>
         void FillTable(const TFiller& fillPolicy, const ui32 pkKff = 0, const ui32 numRows = 800000) const {
             std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
-            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>>("pk_int", numRows * pkKff));
+            builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable("pk_int", numRows * pkKff));
             builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<TFiller>>("field", fillPolicy));
             NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
             std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
@@ -424,7 +424,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         void FillPKOnly(const double pkKff = 0, const ui32 numRows = 800000) const {
             std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
-            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>>("pk_int", numRows * pkKff));
+            builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable("pk_int", numRows * pkKff));
             NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
             std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
             TBase::SendDataViaActorSystem(TablePath, batch);

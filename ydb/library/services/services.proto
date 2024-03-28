@@ -288,6 +288,7 @@ enum EServiceKikimr {
     DATASHARD_RESTORE = 801;
     IMPORT = 802;
     S3_WRAPPER = 803;
+    CONTINUOUS_BACKUP = 804;
 
     // System views
     SYSTEM_VIEWS = 900;
@@ -1025,5 +1026,6 @@ message TActivity {
         PERSQUEUE_ACCOUNT_WRITE_QUOTER = 631;
         PERSQUEUE_WRITE_QUOTER = 632;
         REPLICATION_CONTROLLER_TABLE_WORKER_REGISTAR = 633;
+        REPLICATION_S3_WRITER = 634;
     };
 };

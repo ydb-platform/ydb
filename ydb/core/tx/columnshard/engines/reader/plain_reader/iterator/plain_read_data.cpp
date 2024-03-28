@@ -29,9 +29,9 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
 
         if (movePortion) {
             if ((*itPortion)->GetMeta().GetProduced() == NPortion::EProduced::COMPACTED || (*itPortion)->GetMeta().GetProduced() == NPortion::EProduced::SPLIT_COMPACTED) {
-                compactedPortionsBytes += (*itPortion)->BlobsBytes();
+                compactedPortionsBytes += (*itPortion)->GetTotalBlobBytes();
             } else {
-                insertedPortionsBytes += (*itPortion)->BlobsBytes();
+                insertedPortionsBytes += (*itPortion)->GetTotalBlobBytes();
             }
             sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, *itPortion, SpecialReadContext, (*itPortion)->IndexKeyStart(), (*itPortion)->IndexKeyEnd()));
             ++itPortion;

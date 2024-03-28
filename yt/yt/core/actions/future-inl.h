@@ -860,7 +860,11 @@ TFuture<R> ApplyUniqueHelper(TFutureBase<T> this_, TCallback<S> callback)
 }
 
 template <class T, class D>
-TFuture<T> ApplyTimeoutHelper(TFutureBase<T> this_, D timeoutOrDeadline, IInvokerPtr invoker)
+TFuture<T> ApplyTimeoutHelper(
+    TFutureBase<T> this_,
+    D timeoutOrDeadline,
+    TFutureTimeoutOptions options,
+    IInvokerPtr invoker)
 {
     auto promise = NewPromise<T>();
 
@@ -877,6 +881,9 @@ TFuture<T> ApplyTimeoutHelper(TFutureBase<T> this_, D timeoutOrDeadline, IInvoke
                 if constexpr (std::is_same_v<D, TInstant>) {
                     error = error << NYT::TErrorAttribute("deadline", timeoutOrDeadline);
                 }
+            }
+            if (!options.Error.IsOK()) {
+                error = options.Error << std::move(error);
             }
             promise.TrySet(error);
             cancelable.Cancel(error);
@@ -1125,7 +1132,10 @@ TFuture<T> TFutureBase<T>::ToImmediatelyCancelable() const
 }
 
 template <class T>
-TFuture<T> TFutureBase<T>::WithDeadline(TInstant deadline, IInvokerPtr invoker) const
+TFuture<T> TFutureBase<T>::WithDeadline(
+    TInstant deadline,
+    TFutureTimeoutOptions options,
+    IInvokerPtr invoker) const
 {
     YT_ASSERT(Impl_);
 
@@ -1133,11 +1143,14 @@ TFuture<T> TFutureBase<T>::WithDeadline(TInstant deadline, IInvokerPtr invoker) 
         return TFuture<T>(Impl_);
     }
 
-    return NYT::NDetail::ApplyTimeoutHelper(*this, deadline, std::move(invoker));
+    return NYT::NDetail::ApplyTimeoutHelper(*this, deadline, std::move(options), std::move(invoker));
 }
 
 template <class T>
-TFuture<T> TFutureBase<T>::WithTimeout(TDuration timeout, IInvokerPtr invoker) const
+TFuture<T> TFutureBase<T>::WithTimeout(
+    TDuration timeout,
+    TFutureTimeoutOptions options,
+    IInvokerPtr invoker) const
 {
     YT_ASSERT(Impl_);
 
@@ -1145,15 +1158,16 @@ TFuture<T> TFutureBase<T>::WithTimeout(TDuration timeout, IInvokerPtr invoker) c
         return TFuture<T>(Impl_);
     }
 
-    return NYT::NDetail::ApplyTimeoutHelper(*this, timeout, std::move(invoker));
+    return NYT::NDetail::ApplyTimeoutHelper(*this, timeout, std::move(options), std::move(invoker));
 }
 
 template <class T>
 TFuture<T> TFutureBase<T>::WithTimeout(
     std::optional<TDuration> timeout,
+    TFutureTimeoutOptions options,
     IInvokerPtr invoker) const
 {
-    return timeout ? WithTimeout(*timeout, std::move(invoker)) : TFuture<T>(Impl_);
+    return timeout ? WithTimeout(*timeout, std::move(options), std::move(invoker)) : TFuture<T>(Impl_);
 }
 
 template <class T>

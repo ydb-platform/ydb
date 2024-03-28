@@ -11,14 +11,17 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     NArrow::Append<arrow::StringType>(*builders[1], prod);
     NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
     NArrow::Append<arrow::UInt64Type>(*builders[3], portion.NumRows());
-    NArrow::Append<arrow::UInt64Type>(*builders[4], portion.GetRawBytes());
-    NArrow::Append<arrow::UInt64Type>(*builders[5], portion.GetPortionId());
-    NArrow::Append<arrow::BooleanType>(*builders[6], !portion.IsRemovedFor(ReadMetadata->GetRequestSnapshot()));
+    NArrow::Append<arrow::UInt64Type>(*builders[4], portion.GetColumnRawBytes());
+    NArrow::Append<arrow::UInt64Type>(*builders[5], portion.GetIndexRawBytes());
+    NArrow::Append<arrow::UInt64Type>(*builders[6], portion.GetColumnBlobBytes());
+    NArrow::Append<arrow::UInt64Type>(*builders[7], portion.GetIndexBlobBytes());
+    NArrow::Append<arrow::UInt64Type>(*builders[8], portion.GetPortionId());
+    NArrow::Append<arrow::BooleanType>(*builders[9], !portion.IsRemovedFor(ReadMetadata->GetRequestSnapshot()));
 
     auto tierName = portion.GetTierNameDef(NBlobOperations::TGlobal::DefaultStorageId);
-    NArrow::Append<arrow::StringType>(*builders[7], arrow::util::string_view(tierName.data(), tierName.size()));
+    NArrow::Append<arrow::StringType>(*builders[10], arrow::util::string_view(tierName.data(), tierName.size()));
     auto statInfo = portion.GetMeta().GetStatisticsStorage().SerializeToProto().DebugString();
-    NArrow::Append<arrow::StringType>(*builders[8], arrow::util::string_view(statInfo.data(), statInfo.size()));
+    NArrow::Append<arrow::StringType>(*builders[11], arrow::util::string_view(statInfo.data(), statInfo.size()));
 }
 
 std::unique_ptr<TScanIteratorBase> TReadStatsMetadata::StartScan(const std::shared_ptr<TReadContext>& readContext) const {

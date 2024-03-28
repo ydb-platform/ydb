@@ -20,6 +20,9 @@ protected:
     virtual TString DoDebugString() const {
         return "";
     }
+    virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& /*source*/) const {
+        return 0;
+    }
 public:
     virtual ~IFetchingStep() = default;
 
@@ -33,8 +36,14 @@ public:
         return nextStep;
     }
 
-    virtual ui64 PredictRawBytes(const std::shared_ptr<IDataSource>& /*source*/) const {
-        return 0;
+    ui64 PredictRawBytes(const std::shared_ptr<IDataSource>& source) const {
+        ui64 result = 0;
+        auto* current = this;
+        while (current) {
+            result += current->DoPredictRawBytes(source);
+            current = current->NextStep.get();
+        }
+        return result;
     }
 
     bool ExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step) const {
@@ -92,6 +101,9 @@ private:
     const ui32 Count = 0;
 protected:
     virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const override;
+    virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& /*source*/) const override {
+        return TIndexInfo::GetSpecialColumnsRecordSize() * Count;
+    }
 public:
     TBuildFakeSpec(const ui32 count, const TString& nameBranch = "")
         : TBase("FAKE_SPEC", nameBranch)
@@ -138,7 +150,7 @@ private:
     std::shared_ptr<TIndexesSet> Indexes;
 protected:
     virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step) const override;
-    virtual ui64 PredictRawBytes(const std::shared_ptr<IDataSource>& source) const override;
+    virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const override;
     virtual TString DoDebugString() const override {
         TStringBuilder sb;
         if (Columns) {

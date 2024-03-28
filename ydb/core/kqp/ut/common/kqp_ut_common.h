@@ -329,6 +329,7 @@ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer* server, TAc
 TVector<ui64> GetTableShards(Tests::TServer* server, TActorId sender, const TString &path);
 
 TVector<ui64> GetTableShards(Tests::TServer::TPtr server, TActorId sender, const TString &path);
+TVector<ui64> GetColumnTableShards(Tests::TServer* server, TActorId sender, const TString &path);
 
 void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
 

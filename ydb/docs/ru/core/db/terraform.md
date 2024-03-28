@@ -68,6 +68,17 @@
 
 ## Использование Terraform провайдера {{ ydb-short-name }} {#work-with-tf}
 
+Для применения изменений в terraform ресурсах используются следующие команды:
+
+1. `terraform init` - инициализация модуля terraform (выполняется в директории ресурсов terraform).
+2. `terraform validate` - проверка синтаксиса конфигурационных файлов ресурсов terraform.
+3. `terraform apply` - непосредственное применение конфигурации ресурсов terraform.
+
+Для удобства использования файлы terraform рекомендуется именовать следующим образом:
+
+1. `provider.tf` - содержит настройки самого terraform провайдера.
+2. `main.tf` - содержит набор ресурсов для создания.
+
 ### Соединение с базой данных (БД) {#connection_string}
 
 Для всех ресурсов, описывающих объекты схемы данных, необходимо задать реквизиты БД, в которой они размещаются. Для этого укажите один из двух аргументов:
@@ -138,6 +149,8 @@ resource "ydb_table_index" "table_index" {
   name              = "my_index"
   type              = "global_sync" # "global_async"
   columns           = ["a", "b"]
+
+  depends_on = [ydb_table.table] # ссылка на ресурс создания таблицы
 }
 
 resource "ydb_table_changefeed" "table_changefeed" {
@@ -149,6 +162,8 @@ resource "ydb_table_changefeed" "table_changefeed" {
     name = "test"
     supported_codecs = ["raw", "gzip"]
   }
+
+  depends_on = [ydb_table.table] # ссылка на ресурс создания таблицы
 }
 
 resource "ydb_topic" "test" {
@@ -507,6 +522,8 @@ resource "ydb_table_changefeed" "ydb_table_changefeed" {
   consumer {
     name = "test_consumer"
   }
+
+  depends_on = [ydb_table.ydb_table] # ссылка на ресурс создания таблицы
 }
 
 resource "ydb_table_index" "ydb_table_index" {
@@ -515,6 +532,8 @@ resource "ydb_table_index" "ydb_table_index" {
   columns = ["c", "d"]
   cover = ["e"]
   type = "global_sync"
+
+  depends_on = [ydb_table.ydb_table] # ссылка на ресурс создания таблицы
 }
 ```
 

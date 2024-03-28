@@ -1,20 +1,29 @@
-YQL_UDF_YDB(json_udf)
+IF (YQL_PACKAGED)
+    PACKAGE()
+        FROM_SANDBOX(FILE {FILE_RESOURCE_ID} OUT_NOAUTO
+            libjson_udf.so
+        )
+    END()
+ELSE ()
+    YQL_UDF_YDB(json_udf)
 
-YQL_ABI_VERSION(
-    2
-    28
-    0
-)
+    YQL_ABI_VERSION(
+        2
+        28
+        0
+    )
 
-SRCS(
-    json_udf.cpp
-)
+    SRCS(
+        json_udf.cpp
+    )
 
-PEERDIR(
-    library/cpp/json/easy_parse
-)
+    PEERDIR(
+        library/cpp/json/easy_parse
+    )
 
-END()
+    END()
+ENDIF ()
+
 
 RECURSE_FOR_TESTS(
     test

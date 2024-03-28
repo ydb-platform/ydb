@@ -506,11 +506,14 @@ struct Schema : NIceDb::Schema {
         struct Kind: Column<2, NScheme::NTypeIds::Utf8> {};
         struct TabletId: Column<3, NScheme::NTypeIds::Uint64> {};
         struct Rows: Column<4, NScheme::NTypeIds::Uint64> {};
-        struct RawBytes: Column<5, NScheme::NTypeIds::Uint64> {};
-        struct PortionId: Column<6, NScheme::NTypeIds::Uint64> {};
-        struct Activity: Column<7, NScheme::NTypeIds::Bool> {};
-        struct TierName: Column<8, NScheme::NTypeIds::Utf8> {};
-        struct Stats: Column<9, NScheme::NTypeIds::Utf8> {};
+        struct ColumnRawBytes: Column<5, NScheme::NTypeIds::Uint64> {};
+        struct IndexRawBytes: Column<6, NScheme::NTypeIds::Uint64> {};
+        struct ColumnBlobBytes: Column<7, NScheme::NTypeIds::Uint64> {};
+        struct IndexBlobBytes: Column<8, NScheme::NTypeIds::Uint64> {};
+        struct PortionId: Column<9, NScheme::NTypeIds::Uint64> {};
+        struct Activity: Column<10, NScheme::NTypeIds::Bool> {};
+        struct TierName: Column<11, NScheme::NTypeIds::Utf8> {};
+        struct Stats: Column<12, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<PathId, TabletId, PortionId>;
         using TColumns = TableColumns<
@@ -518,7 +521,10 @@ struct Schema : NIceDb::Schema {
             Kind,
             TabletId,
             Rows,
-            RawBytes,
+            ColumnRawBytes,
+            IndexRawBytes,
+            ColumnBlobBytes,
+            IndexBlobBytes,
             PortionId,
             Activity,
             TierName,

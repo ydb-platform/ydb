@@ -124,14 +124,22 @@ class TS3Writer
     }
 
     void WriteIdentity() {
-        TString key = Sprintf("writer.%s.json", WriterName.c_str());
+        const TString key = Sprintf("writer.%s.json", WriterName.c_str());
 
         auto request = Aws::S3::Model::PutObjectRequest()
             .WithKey(key);
 
-        TString buffer = Sprintf(R"({"table_name":"%s","writer_name":"%s","finished":%s})", TableName.c_str(), WriterName.c_str(), Finished ? "true" : "false");
+        auto identity = NJson::TJsonMap{
+            {"finished", Finished},
+            {"table_name", TableName},
+            {"writer_name", WriterName},
+        };
 
-        RequestInFlight = std::make_unique<TS3Request>(request, buffer);
+        NJsonWriter::TBuf buf(NJsonWriter::HEM_RELAXED);
+        buf.WriteJsonValue(&identity);
+        TString buffer = buf.Str();
+
+        RequestInFlight = std::make_unique<TS3Request>(std::move(request), std::move(buffer));
         SendS3Request();
     }
 
@@ -149,28 +157,25 @@ class TS3Writer
             return;
         }
 
-        TString key = Sprintf("part.%ld.%s.jsonl", ev->Get()->Records[0].Offset, WriterName.c_str());
+        const TString key = Sprintf("part.%ld.%s.jsonl", ev->Get()->Records[0].Offset, WriterName.c_str());
 
         auto request = Aws::S3::Model::PutObjectRequest()
             .WithKey(key);
 
-        TVector<TString> data;
+        TStringBuilder buffer;
 
         for (auto& rec : ev->Get()->Records) {
-            data.push_back(rec.Data);
+            buffer << rec.Data << '\n';
         }
 
-        TString buffer = JoinSeq('\n', data) + "\n";
-
-        RequestInFlight = std::make_unique<TS3Request>(request, buffer);
+        RequestInFlight = std::make_unique<TS3Request>(std::move(request), std::move(buffer));
         SendS3Request();
     }
 
     void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        CB_LOG_D("HandleScheme TEvExternalStorage::TEvPutObjectResponse"
-            << ", result# " << result);
+        CB_LOG_D("Handle " << ev->Get()->ToString());
 
         if (!CheckResult(result, TStringBuf("PutObject"))) {
             return;

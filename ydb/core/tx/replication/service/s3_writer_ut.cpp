@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(S3Writer) {
 
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().at("/TEST/writer.AtufpxzetsqaVnEuozdXpD.json"),
-                                 R"({"table_name":"/MyRoot/Table","writer_name":"AtufpxzetsqaVnEuozdXpD","finished":false})");
+                                 R"({"finished":false,"table_name":"/MyRoot/Table","writer_name":"AtufpxzetsqaVnEuozdXpD"})");
 
         using TRecord = TEvWorker::TEvData::TRecord;
         env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData({
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(S3Writer) {
 
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().at("/TEST/writer.AtufpxzetsqaVnEuozdXpD.json"),
-                                 R"({"table_name":"/MyRoot/Table","writer_name":"AtufpxzetsqaVnEuozdXpD","finished":false})");
+                                 R"({"finished":false,"table_name":"/MyRoot/Table","writer_name":"AtufpxzetsqaVnEuozdXpD"})");
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().at("/TEST/part.1.AtufpxzetsqaVnEuozdXpD.jsonl"),
                                  R"({"key":[1], "update":{"value":"10"}})" "\n"
                                  R"({"key":[2], "update":{"value":"20"}})" "\n"
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(S3Writer) {
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, TEvWorker::TEvGone::DONE);
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().at("/TEST/writer.AtufpxzetsqaVnEuozdXpD.json"),
-                                 R"({"table_name":"/MyRoot/Table","writer_name":"AtufpxzetsqaVnEuozdXpD","finished":true})");
+                                 R"({"finished":true,"table_name":"/MyRoot/Table","writer_name":"AtufpxzetsqaVnEuozdXpD"})");
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().at("/TEST/part.1.AtufpxzetsqaVnEuozdXpD.jsonl"),
                                  R"({"key":[1], "update":{"value":"10"}})" "\n"
                                  R"({"key":[2], "update":{"value":"20"}})" "\n"

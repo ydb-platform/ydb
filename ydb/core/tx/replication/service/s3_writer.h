@@ -7,6 +7,6 @@
 
 namespace NKikimr::NReplication::NService {
 
-IActor* CreateS3Writer(NWrappers::IExternalStorageConfig::TPtr&&  s3Settings, const TString& tableName, const TString& writerName);
+IActor* CreateS3Writer(NWrappers::IExternalStorageConfig::TPtr&& s3Settings, const TString& tableName, const TString& writerName);
 
 }

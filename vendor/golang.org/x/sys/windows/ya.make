@@ -24,6 +24,7 @@ IF (OS_WINDOWS)
     )
 
     GO_XTEST_SRCS(
+        env_windows_test.go
         syscall_test.go
         syscall_windows_test.go
     )

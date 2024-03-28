@@ -209,10 +209,6 @@ def add_python_lint_checks(unit, py_ver, files):
             ymake.report_configure_error(
                 'NO_LINT() and STYLE_RUFF() can\'t be enabled both at the same time',
             )
-        # temporary allow using ruff for taxi only
-        ruff_allowed_paths = ("taxi/",)
-        if not upath.startswith(ruff_allowed_paths):
-            ymake.report_configure_error("STYLE_RUFF() is allowed only in " + ", ".join(ruff_allowed_paths))
 
         resolved_files = get_resolved_files()
         if resolved_files:

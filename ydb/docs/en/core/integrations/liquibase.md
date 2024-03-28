@@ -1,4 +1,4 @@
-# Support for the YDB dialect in the Liquibase migration tool. 
+# Support for the {{ ydb-short-name }} dialect in the Liquibase migration tool. 
 
 ## Introduction {#introductuin}
 

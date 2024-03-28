@@ -787,7 +787,7 @@ bool FillUsedFilesImpl(
             }
         }
 
-        TYqlExternalModuleProcessor::FillUsedFiles(moduleName, types, crutches, files);
+        TYqlExternalModuleProcessor::FillUsedFiles(TString(moduleName), types, crutches, files);
 
         if (addSysModule) {
             auto pathWithMd5 = types.UdfResolver->GetSystemModulePath(moduleName);

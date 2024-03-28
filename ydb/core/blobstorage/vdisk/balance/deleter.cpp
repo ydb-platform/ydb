@@ -13,11 +13,16 @@ namespace NKikimr {
 namespace NBalancing {
 
 namespace {
+    struct TPartOnMain {
+        TLogoBlobID Key;
+        bool HasOnMain;
+    };
+
     class TPartsRequester {
     private:
         const TActorId NotifyId;
         const size_t BatchSize;
-        TQueue<TPartInfo> Parts;
+        TQueue<TLogoBlobID> Parts;
         TReplQuoter::TPtr Quoter;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TQueueActorMapPtr QueueActorMapPtr;
@@ -27,7 +32,7 @@ namespace {
         ui32 ExpectedResponses;
     public:
 
-        TPartsRequester(TActorId notifyId, size_t batchSize, TQueue<TPartInfo> parts, TReplQuoter::TPtr quoter, TIntrusivePtr<TBlobStorageGroupInfo> gInfo, TQueueActorMapPtr queueActorMapPtr)
+        TPartsRequester(TActorId notifyId, size_t batchSize, TQueue<TLogoBlobID> parts, TReplQuoter::TPtr quoter, TIntrusivePtr<TBlobStorageGroupInfo> gInfo, TQueueActorMapPtr queueActorMapPtr)
             : NotifyId(notifyId)
             , BatchSize(batchSize)
             , Parts(std::move(parts))
@@ -43,21 +48,20 @@ namespace {
             Result.resize(Min(Parts.size(), BatchSize));
             ExpectedResponses = 0;
             for (ui64 i = 0; i < BatchSize && !Parts.empty(); ++i) {
-                auto item = Parts.front();
+                auto key = Parts.front();
                 Parts.pop();
                 Result[i] = TPartOnMain{
-                    .Key=item.Key,
-                    .Ingress=item.Ingress,
+                    .Key=key,
                     .HasOnMain=false
                 };
 
-                auto vDiskId = GetMainReplicaVDiskId(*GInfo, item.Key);
+                auto vDiskId = GetMainReplicaVDiskId(*GInfo, key);
 
                 // query which would tell us which parts are realy on main (not by ingress)
                 auto ev = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(
                     vDiskId, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::AsyncRead,
                     TEvBlobStorage::TEvVGet::EFlags::None, i,
-                    {{item.Key.FullID(), 0, 0}}
+                    {{key.FullID(), 0, 0}}
                 );
                 ui32 msgSize = ev->CalculateSerializedSize();
                 TReplQuoter::QuoteMessage(
@@ -173,7 +177,7 @@ namespace {
         TDeleter() = default;
         TDeleter(
             TActorId notifyId,
-            TQueue<TPartInfo> parts,
+            TQueue<TLogoBlobID> parts,
             TQueueActorMapPtr queueActorMapPtr,
             std::shared_ptr<TBalancingCtx> ctx
         )
@@ -192,11 +196,11 @@ namespace {
 
 IActor* CreateDeleterActor(
     TActorId notifyId,
-    TQueue<TPartInfo> parts,
+    TQueue<TLogoBlobID> parts,
     TQueueActorMapPtr queueActorMapPtr,
     std::shared_ptr<TBalancingCtx> ctx
 ) {
-    return new TDeleter(notifyId, parts, queueActorMapPtr, ctx);
+    return new TDeleter(notifyId, std::move(parts), queueActorMapPtr, ctx);
 }
 
 } // NBalancing

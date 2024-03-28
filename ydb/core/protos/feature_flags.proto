@@ -134,4 +134,5 @@ message TFeatureFlags {
     optional bool EnableLocalDBFlatIndex = 119 [default = true];
     optional bool ExtendedVDiskCounters = 120 [default = true];
     optional bool ExtendedPDiskSensors = 121 [default = true];
+    optional bool EnableSlotNameGeneration = 122 [default = false];
 }

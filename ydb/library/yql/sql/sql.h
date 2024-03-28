@@ -16,7 +16,7 @@
 namespace NSQLTranslation {
 
     NYql::TAstParseResult SqlToYql(const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules = nullptr, ui16* actualSyntaxVersion = nullptr, NYql::TStmtParseInfo* stmtParseInfo = nullptr);
+        NYql::TWarningRules* warningRules = nullptr, NYql::TStmtParseInfo* stmtParseInfo = nullptr);
     google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, NYql::TIssues& issues, size_t maxErrors,
         const TTranslationSettings& settings = {}, ui16* actualSyntaxVersion = nullptr);
     ILexer::TPtr SqlLexer(const TString& query, NYql::TIssues& issues, const TTranslationSettings& settings = {}, ui16* actualSyntaxVersion = nullptr);

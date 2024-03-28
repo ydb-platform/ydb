@@ -4311,6 +4311,17 @@ public:
         }
 
         auto lhs = ParseExpr(value->lexpr, settings);
+        if (NodeTag(value->rexpr) == T_SubLink) {
+            auto sublink = CAST_NODE(SubLink, value->rexpr);
+            auto subselect = CAST_NODE(SelectStmt, sublink->subselect);
+            if (subselect->withClause && subselect->withClause->recursive) {
+                if (State.ApplicationName && State.ApplicationName->StartsWith("pgAdmin")) {
+                    AddWarning(TIssuesIds::PG_COMPAT, "AEXPR_OP_ANY forced to false");
+                    return L(A("PgConst"), QA("false"), L(A("PgType"), QA("bool")));
+                }
+            }
+        }
+
         auto rhs = ParseExpr(value->rexpr, settings);
         if (!lhs || !rhs) {
             return nullptr;

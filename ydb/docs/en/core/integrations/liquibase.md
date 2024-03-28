@@ -22,7 +22,7 @@ You can also explicitly specify the original name. For example, types like `Int3
 
 {% endnote %}
 
-Table of comparison of Liquibase types descriptions with [{{ ydb-short-name }} types](https://db.tech/docs/en/yql/reference/types/primitive):
+Table of comparison of Liquibase types descriptions with [{{ ydb-short-name }} types](https://ydb.tech/docs/en/yql/reference/types/primitive):
 
 | Liquibase types                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | {{ ydb-short-name }} type  |
 |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------|

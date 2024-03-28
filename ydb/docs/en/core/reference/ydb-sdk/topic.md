@@ -745,10 +745,10 @@ If, on other hand, you want to ensure deduplication is enabled, you can specify 
 
 {% endlist %}
 
-### Using message metadata feature
+### Using message metadata feature {#messagemeta}
 
 You can provide some metadata for any particular message when writing. This metadata can be a list of up to 100 key-value pairs per message.
-All the metadata provided when writing a message is returned to a consumer with the message during reading.
+All the metadata provided when writing a message is sent to a consumer with the message during reading.
 
 {% list tabs %}
 
@@ -778,7 +778,7 @@ All the metadata provided when writing a message is returned to a consumer with 
 
 - Java
 
- To take advantage of message metadata feature, build messages with builder. You can add `MetadataItem` to a message or set a `List` of `MetadataItem`s. Each item consists of a key of type `String` and value of type `byte[]`:
+ To take advantage of message metadata feature, build messages with builder. You can add `MetadataItem` to a message or set a `List` of `MetadataItem`s. Each item consists of a key of type `String` and a value of type `byte[]`:
 
   ```java
   writer.send(
@@ -788,7 +788,12 @@ All the metadata provided when writing a message is returned to a consumer with 
                   .build()
   ```
 
- Metadata can be read from a `Message` using `getMetadataItems()` method.
+ While reading, metadata can be received from a `Message` with `getMetadataItems()` method:
+
+  ```java
+  Message message = reader.receive();
+  List<MetadataItem> metadata = message.getMetadataItems();
+  ```
 
 {% endlist %}
 
@@ -1384,7 +1389,7 @@ When reading starts, the client code must transmit the starting consumer offset 
 
   Starting offset for reading in Java can be set only for AsyncReader.
   In `StartPartitionSessionEvent` callback `StartPartitionSessionSettings` with desired ReadOffset can be passed to `confirm` method.
-  Offset that should be considered as committed could also be set with `setCommittedOffset`.
+  Offset that should be considered as committed can be set with `setCommittedOffset`.
 
   ```java
   @Override
@@ -1445,16 +1450,16 @@ Usually reading progress is saved on server within each Consumer. Though such pr
           .build());
   ```
   Such received message will be committed with this transaction. And shouldn't be committed directly.
-  `receive` method will send `sendUpdateOffsetsInTransaction` request on server to link message offset with this transaction and will be blocked until the response will be received.
+  `receive` method sends `sendUpdateOffsetsInTransaction` request on server to link message offset with this transaction and blocks until response is received.
 
   Transaction requirements:
   It should be an active transaction (that has id) from one of YDB services. I.e. Table or Query.
 
 - Java (async)
-  In `onMessages` one or more messages can be linked with transaction.
-  To do that request `reader.updateOffsetsInTransaction` should be called. And transaction chould not be committed untill response is received.
-  This merhod needs partition offsets list as a parameter.
-  Such list can be constructed manually or via helper method `getPartitionOffsets()` that `Message` and `DataReceivedEvent` both have.
+  In `onMessages` callback one or more messages can be linked with transaction.
+  To do that request `reader.updateOffsetsInTransaction` should be called. And transaction should not be committed untill response is received.
+  This method needs partition offsets list as a parameter.
+  Such list can be constructed manually or using helper method `getPartitionOffsets()` that `Message` and `DataReceivedEvent` both provide.
 
   ```java
   @Override

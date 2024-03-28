@@ -14,6 +14,7 @@
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <library/cpp/charset/ci_string.h>
+#include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -592,6 +593,46 @@ public:
     TNodePtr DoClone() const final {
         return new TYqlAddTimezone(Pos, CloneContainer(Args));
     }
+};
+
+class TVersion final : public INode {
+public:
+    TVersion(TPosition pos, const TVector<TNodePtr>& args)
+        : TVersion(pos, args.size())
+    {}
+
+    TVersion(TPosition pos, ui32 argsCount)
+        : INode(pos)
+        , ArgsCount(argsCount)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Y_UNUSED(src);
+        if (ArgsCount > 0) {
+            ctx.Error(Pos) << "Version requires exactly 0 arguments";
+            return false;
+        }
+        const TString branch(GetBranch());
+        Node = Y("String", BuildQuotedAtom(Pos, branch.substr(branch.rfind("/") + 1)));
+        return true;
+    }
+
+    TAstNode* Translate(TContext& ctx) const override {
+        Y_DEBUG_ABORT_UNLESS(Node);
+        return Node->Translate(ctx);
+    }
+
+    void DoUpdateState() const override {
+        State.Set(ENodeState::Const, false);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TVersion(Pos, ArgsCount);
+    }
+
+private:
+    const size_t ArgsCount;
+    TNodePtr Node;
 };
 
 class TYqlPgType: public TCallNode {
@@ -3092,6 +3133,7 @@ struct TBuiltinFuncData {
             {"jointablerow", BuildSimpleBuiltinFactoryCallback<TTableRow<true>>() },
             {"tablerows", BuildSimpleBuiltinFactoryCallback<TTableRows>() },
             {"weakfield", BuildSimpleBuiltinFactoryCallback<TWeakFieldOp>()},
+            {"version", BuildSimpleBuiltinFactoryCallback<TVersion>()},
 
             {"systemmetadata", BuildNamedArgcBuiltinFactoryCallback<TCallDirectRow>("SystemMetadata", 1, -1)},
 

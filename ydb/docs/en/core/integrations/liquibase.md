@@ -4,7 +4,7 @@
 
 [Liquibase](https://www.liquibase.com/) is an open-source library for tracking, managing, and applying changes to database schemas. It is expanded with dialects for different DBMS.
 
-Dialect is the main entity in the Liquibase framework, which helps form SQL queries for the database, taking into account the specific features of a particular DBMS.
+Dialect is the main component in the Liquibase framework, which assists in creating SQL queries for a database, considering the specific features of a specific DBMS.
 
 ## Features of the {{ ydb-short-name }} Dialect {#ydb-dialect}
 

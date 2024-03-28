@@ -263,6 +263,7 @@ bool IsDataTypeIntegral(EDataSlot dataSlot);
 bool IsDataTypeSigned(EDataSlot dataSlot);
 bool IsDataTypeUnsigned(EDataSlot dataSlot);
 bool IsDataTypeDate(EDataSlot dataSlot);
+bool IsDataTypeBigDate(EDataSlot dataSlot);
 bool IsDataTypeTzDate(EDataSlot dataSlot);
 EDataSlot WithTzDate(EDataSlot dataSlot);
 EDataSlot WithoutTzDate(EDataSlot dataSlot);

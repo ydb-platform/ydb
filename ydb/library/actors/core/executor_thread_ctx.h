@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include "executor_thread.h"
 #include "thread_context.h"
 
 #include <ydb/library/actors/util/datetime.h>
@@ -208,7 +209,11 @@ namespace NActors {
             WaitingPad.Interrupt();
         }
 
-        TSharedExecutorThreadCtx() = default;
+        TSharedExecutorThreadCtx() {
+            for (ui32 idx = 0; idx < MaxPoolsForSharedThreads; ++idx) {
+                ExecutorPools[idx].store(nullptr, std::memory_order_release);
+            }
+        }
     };
 
 }

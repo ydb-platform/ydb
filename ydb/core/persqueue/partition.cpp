@@ -20,6 +20,18 @@
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
 
+namespace {
+
+template <class T>
+struct TIsSimpleSharedPtr : std::false_type {
+};
+
+template <class U>
+struct TIsSimpleSharedPtr<TSimpleSharedPtr<U>> : std::true_type {
+};
+
+}
+
 namespace NKikimr::NPQ {
 
 static const TDuration WAKE_TIMEOUT = TDuration::Seconds(5);
@@ -57,16 +69,28 @@ template <class T>
 T& TPartition::GetUserActionAndTransactionEventsFront()
 {
     Y_ABORT_UNLESS(!UserActionAndTransactionEvents.empty());
-    auto* ptr = get_if<TSimpleSharedPtr<T>>(&UserActionAndTransactionEvents.front());
+    auto* ptr = get_if<T>(&UserActionAndTransactionEvents.front());
     Y_ABORT_UNLESS(ptr);
-    return **ptr;
+    return *ptr;
 }
 
 template <class T>
-bool TPartition::UserActionAndTransactionEventsFrontIs() const
+T& TPartition::GetCurrentEvent()
+{
+    return *GetUserActionAndTransactionEventsFront<TSimpleSharedPtr<T>>();
+}
+
+TTransaction& TPartition::GetCurrentTransaction()
+{
+    return GetUserActionAndTransactionEventsFront<TTransaction>();
+}
+
+template <class T>
+void TPartition::EnsureUserActionAndTransactionEventsFrontIs() const
 {
     Y_ABORT_UNLESS(!UserActionAndTransactionEvents.empty());
-    return get_if<TSimpleSharedPtr<T>>(&UserActionAndTransactionEvents.front());
+    auto* ptr = get_if<T>(&UserActionAndTransactionEvents.front());
+    Y_ABORT_UNLESS(ptr);
 }
 
 const TString& TPartition::TopicName() const {
@@ -225,9 +249,9 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
 
     if (!distrTxs.empty()) {
         for (auto& tx : distrTxs) {
-            UserActionAndTransactionEvents.emplace_back(new TTransaction(std::move(tx)));
+            UserActionAndTransactionEvents.emplace_back(TTransaction(std::move(tx)));
         }
-        TxInProgress = GetUserActionAndTransactionEventsFront<TTransaction>().Predicate.Defined();
+        TxInProgress = GetCurrentTransaction().Predicate.Defined();
     }
 }
 
@@ -1475,22 +1499,22 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
 
 void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event)
 {
-    UserActionAndTransactionEvents.emplace_back(new TTransaction(std::move(event)));
+    UserActionAndTransactionEvents.emplace_back(TTransaction(std::move(event)));
 }
 
 void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event)
 {
-    UserActionAndTransactionEvents.emplace_back(new TTransaction(std::move(event), true));
+    UserActionAndTransactionEvents.emplace_back(TTransaction(std::move(event), true));
 }
 
 void TPartition::PushFrontDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event)
 {
-    UserActionAndTransactionEvents.emplace_front(new TTransaction(std::move(event), false));
+    UserActionAndTransactionEvents.emplace_front(TTransaction(std::move(event), false));
 }
 
 void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> event)
 {
-    UserActionAndTransactionEvents.emplace_back(new TTransaction(std::move(event)));
+    UserActionAndTransactionEvents.emplace_back(TTransaction(std::move(event)));
 }
 
 void TPartition::AddImmediateTx(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> tx)
@@ -1508,8 +1532,7 @@ void TPartition::AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act)
 
 void TPartition::RemoveImmediateTx()
 {
-    Y_ABORT_UNLESS(!UserActionAndTransactionEvents.empty());
-    Y_ABORT_UNLESS(UserActionAndTransactionEventsFrontIs<TEvPersQueue::TEvProposeTransaction>());
+    EnsureUserActionAndTransactionEventsFrontIs<TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>>();
 
     UserActionAndTransactionEvents.pop_front();
     --ImmediateTxCount;
@@ -1517,10 +1540,7 @@ void TPartition::RemoveImmediateTx()
 
 void TPartition::RemoveUserAct()
 {
-    Y_ABORT_UNLESS(!UserActionAndTransactionEvents.empty());
-    Y_ABORT_UNLESS(UserActionAndTransactionEventsFrontIs<TEvPQ::TEvSetClientInfo>());
-
-    TString clientId = GetUserActionAndTransactionEventsFront<TEvPQ::TEvSetClientInfo>().ClientId;
+    TString clientId = GetCurrentEvent<TEvPQ::TEvSetClientInfo>().ClientId;
     auto p = UserActCount.find(clientId);
     Y_ABORT_UNLESS(p != UserActCount.end());
 
@@ -1560,8 +1580,13 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
     Y_ABORT_UNLESS(!TxInProgress);
 
     if (!UserActionAndTransactionEvents.empty()) {
-        auto visitor = [this, &ctx](const auto& event) -> bool {
-            return this->ProcessUserActionOrTransaction(*event, ctx);
+        auto visitor = [this, &ctx](auto& event) -> bool {
+            using T = std::decay_t<decltype(event)>;
+            if constexpr (TIsSimpleSharedPtr<T>::value) {
+                return this->ProcessUserActionOrTransaction(*event, ctx);
+            } else {
+                return this->ProcessUserActionOrTransaction(event, ctx);
+            }
         };
 
         size_t index = UserActionAndTransactionEvents.front().index();
@@ -1602,8 +1627,7 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
 
 void TPartition::RemoveDistrTx()
 {
-    Y_ABORT_UNLESS(!UserActionAndTransactionEvents.empty());
-    Y_ABORT_UNLESS(UserActionAndTransactionEventsFrontIs<TTransaction>());
+    EnsureUserActionAndTransactionEventsFrontIs<TTransaction>();
 
     UserActionAndTransactionEvents.pop_front();
     PendingPartitionConfig = nullptr;
@@ -1742,7 +1766,7 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
 
     Y_ABORT_UNLESS(TxInProgress);
 
-    TTransaction& t = GetUserActionAndTransactionEventsFront<TTransaction>();
+    TTransaction& t = GetCurrentTransaction();
 
     if (t.Tx) {
         Y_ABORT_UNLESS(GetStepAndTxId(event) == GetStepAndTxId(*t.Tx));
@@ -1788,7 +1812,7 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxRollback& event,
 
     Y_ABORT_UNLESS(TxInProgress);
 
-    TTransaction& t = GetUserActionAndTransactionEventsFront<TTransaction>();
+    TTransaction& t = GetCurrentTransaction();
 
     if (t.Tx) {
         Y_ABORT_UNLESS(GetStepAndTxId(event) == GetStepAndTxId(*t.Tx));

@@ -109,6 +109,7 @@ public:
     bool HasScopeTabletId() const;
     const ui64& GetScopePathId() const;
     bool HasScopePathId() const;
+    const TString& GetSlotName() const;
     const TVector<TNodeInfo>& GetNodes() const;
 
 private:
@@ -117,6 +118,7 @@ private:
     ui64 Expire_;
     std::optional<ui64> ScopeTableId_;
     std::optional<ui64> ScopePathId_;
+    TString SlotName_;
     TVector<TNodeInfo> Nodes_;
 };
 

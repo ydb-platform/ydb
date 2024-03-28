@@ -50,6 +50,7 @@ struct Schema : NIceDb::Schema {
         SourceSessionsTableId,
         DestinationSessionsTableId,
         OperationTxIdsId,
+        BackupIdsDeprecated,
         ExportSessionsId
     };
 

@@ -6,14 +6,19 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
+#include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pq_rl_helpers.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
 #include <util/generic/guid.h>
 #include <util/system/compiler.h>
+
+#include <google/protobuf/util/time_util.h>
 
 #include <type_traits>
 
@@ -444,8 +449,3 @@ private:
 };
 
 }
-
-// Implementation
-#define READ_SESSION_ACTOR_IMPL
-    #include "read_session_actor.ipp"
-#undef READ_SESSION_ACTOR_IMPL

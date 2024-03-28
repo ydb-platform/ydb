@@ -14,11 +14,6 @@
             "uri": "file://test.test_DeserializationError_/results.txt"
         }
     ],
-    "test.test[EuclideanDistance]": [
-        {
-            "uri": "file://test.test_EuclideanDistance_/results.txt"
-        }
-    ],
     "test.test[InnerProductSimilarity]": [
         {
             "uri": "file://test.test_InnerProductSimilarity_/results.txt"

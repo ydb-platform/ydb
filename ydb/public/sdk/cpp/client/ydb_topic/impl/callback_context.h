@@ -5,6 +5,7 @@
 #include <util/system/spinlock.h>
 
 #include <memory>
+#include <mutex>
 #include <shared_mutex>
 
 namespace NYdb::NTopic {

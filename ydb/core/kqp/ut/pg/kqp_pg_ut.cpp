@@ -1911,6 +1911,64 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
+    Y_UNIT_TEST(SelectIndex) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(
+            serverSettings.SetWithSampleTables(false));
+
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE TABLE test(
+                    id int4,
+                    fk int4,
+                    value int4,
+                    primary key(id)
+                );
+                CREATE INDEX "test_fk_idx" ON test (fk);
+                CREATE INDEX "test_fk_idx_cover" ON test (fk) INCLUDE(value);
+                )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO test (id, fk, value) VALUES (1, 2, 5), (2, 3, 6);
+                )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT id, fk, value FROM test where fk = 2;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), execSettings).GetValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+
+            CompareYson(R"([["1";"2";"5"]])", FormatResultSetYson(result.GetResultSet(0)));
+            AssertTableStats(result, "/Root/test/test_fk_idx_cover/indexImplTable", {
+                .ExpectedReads = 1,
+            });
+        }
+    }
+
     Y_UNIT_TEST(DropIndex) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;

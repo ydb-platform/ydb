@@ -15,7 +15,7 @@
 namespace NSQLTranslation {
 
     NYql::TAstParseResult SqlToYql(const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules, ui16* actualSyntaxVersion, NYql::TStmtParseInfo* stmtParseInfo)
+        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo)
     {
         NYql::TAstParseResult result;
         TTranslationSettings parsedSettings(settings);
@@ -26,10 +26,6 @@ namespace NSQLTranslation {
 
         if (!ParseTranslationSettings(query, parsedSettings, result.Issues)) {
             return result;
-        }
-
-        if (actualSyntaxVersion) {
-            *actualSyntaxVersion = parsedSettings.SyntaxVersion;
         }
 
         if (!parsedSettings.DeclaredNamedExprs.empty() && !parsedSettings.PgParser && parsedSettings.SyntaxVersion != 1) {

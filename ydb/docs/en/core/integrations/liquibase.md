@@ -46,7 +46,7 @@ The case of the data type does not matter.
 
 {% endnote %}
 
-### Изменение структуры таблицы
+### Changing the table structure
 
 `dropTable` - delete table. For example: `<dropTable tableName="episodes"/>`
 

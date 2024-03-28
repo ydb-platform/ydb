@@ -87,7 +87,7 @@ TQueryInfoList TStockWorkloadGenerator::GetInitialData() {
 }
 
 TVector<std::string> TStockWorkloadGenerator::GetCleanPaths() const {
-    return {DbPath + "/stock", DbPath + "/orders", DbPath + "/orderLines"};
+    return {"stock", "orders", "orderLines"};
 }
 
 TQueryInfo TStockWorkloadGenerator::FillStockData() const {

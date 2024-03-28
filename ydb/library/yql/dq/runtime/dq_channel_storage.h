@@ -20,8 +20,8 @@ public:
 public:
     virtual ~IDqChannelStorage() = default;
 
-    virtual bool IsEmpty() const = 0;
-    virtual bool IsFull() const = 0;
+    virtual bool IsEmpty() = 0;
+    virtual bool IsFull() = 0;
 
     // methods Put/Get can throw `TDqChannelStorageException`
 

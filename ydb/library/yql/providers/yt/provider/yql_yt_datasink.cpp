@@ -161,7 +161,7 @@ public:
         }
 
         writer.OnBeginMap();
-            NCommon::WriteStatistics(writer, totalOnly, State_->Statistics, false, false);
+            NCommon::WriteStatistics(writer, totalOnly, State_->Statistics, true, false);
             writer.OnKeyedItem("HybridTotal");
             writer.OnBeginMap();
             for (const auto& [subFolder, stats] : State_->HybridStatistics) {

@@ -205,6 +205,7 @@ public:
         std::vector<std::unique_ptr<IEventHandle>>& replies);
     bool CleanupVolatile(ui64 txId, const TActorContext& ctx,
         std::vector<std::unique_ptr<IEventHandle>>& replies);
+    size_t CleanupWaitingVolatile(const TActorContext& ctx, std::vector<std::unique_ptr<IEventHandle>>& replies);
     ui64 PlannedTxInFly() const;
     const TSet<TStepOrder> &GetPlan() const;
     bool HasProposeDelayers() const;

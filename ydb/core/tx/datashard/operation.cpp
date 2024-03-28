@@ -330,5 +330,10 @@ bool TOperation::OnStopping(TDataShard&, const TActorContext&)
     return true;
 }
 
+void TOperation::OnCleanup(TDataShard&, std::vector<std::unique_ptr<IEventHandle>>&)
+{
+    // By default operation does nothing
+}
+
 } // namespace NDataShard
 } // namespace NKikimr

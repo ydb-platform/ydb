@@ -693,7 +693,7 @@ value {
             << "[\"" << 200500 << "\"];" // uint64
             << "[\"" << 255 << "\"];" // uint8
             << "[\"" << "lorem ipsum dolor sit amet" << "\"];" // utf8
-            << "[\"" << "65df1ec1-a97d-47b2-ae56-3c023da6ee8c" << "\"]" // uuid
+            << "[[\"" << "wR7fZX2pskeuVjwCPabujA==" << "\"]]" // uuid
         << "]];\%false]]]";
 
         const auto data = TTestData(std::move(csv), std::move(yson));

@@ -167,11 +167,8 @@ protected:
         case NScheme::NTypeIds::Pg:
             // TODO: support pg types
             Y_ABORT("pg types are not supported");
-        case NScheme::NTypeIds::Uuid: {
-            TStringStream out;
-            NUuid::UuidBytesToString(cell.Data(), out);
-            return NJson::TJsonValue(out.Str());
-        }
+        case NScheme::NTypeIds::Uuid:
+            return NJson::TJsonValue(NUuid::UuidBytesToString(cell.Data()));
         default:
             Y_ABORT("Unexpected type");
         }

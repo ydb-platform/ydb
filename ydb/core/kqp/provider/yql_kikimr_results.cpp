@@ -49,10 +49,10 @@ void WriteValueToYson(const TStringStream& stream, NCommon::TYsonResultWriter& w
             }
 
             if (type.GetData().GetScheme() == NYql::NProto::TypeIds::Uuid) {
-                using NKikimr::NUuid::UuidHalfsToString;
+                using NKikimr::NUuid::UuidHalfsToByteString;
 
                 TStringStream stream;
-                UuidHalfsToString(value.GetLow128(), value.GetHi128(), stream);
+                UuidHalfsToByteString(value.GetLow128(), value.GetHi128(), stream);
                 writer.OnStringScalar(stream.Str());
 
                 return;

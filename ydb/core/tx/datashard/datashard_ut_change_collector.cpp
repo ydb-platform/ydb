@@ -110,7 +110,9 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
 struct TUuidHolder {
     TString Uuid;
 
-    TUuidHolder(const TString& uuid) : Uuid(uuid) {}
+    TUuidHolder(const TString& uuid)
+        : Uuid(uuid)
+    {}
 
     bool operator==(const TUuidHolder& rhs) const {
         return Uuid == rhs.Uuid;
@@ -290,7 +292,7 @@ using TStructRecords = THashMap<TString, TVector<TStructRecordBase<SK>>>;
 } // anonymous
 
 Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
-    template <typename SK>
+    template <typename SK = ui32>
     void Run(const TString& path, const TShardedTableOptions& opts, const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords) {
         const auto pathParts = SplitPath(path);
         UNIT_ASSERT(pathParts.size() > 1);
@@ -362,7 +364,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
         }
     }
 
-    template <typename SK>
+    template <typename SK = ui32>
     void Run(const TString& path, const TShardedTableOptions& opts, const TString& query, const TStructRecords<SK>& expectedRecords) {
         Run(path, opts, TVector<TString>(1, query), expectedRecords);
     }
@@ -379,13 +381,13 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(InsertSingleRow) {
-        Run<ui32>("/Root/path", SimpleTable(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
+        Run("/Root/path", SimpleTable(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
             {"by_ikey", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}},
         });
     }
 
     Y_UNIT_TEST(InsertManyRows) {
-        Run<ui32>("/Root/path", SimpleTable(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10), (2, 20);", {
+        Run("/Root/path", SimpleTable(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10), (2, 20);", {
             {"by_ikey", {
                 TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}),
                 TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 20}, {"pkey", 2}}),
@@ -394,13 +396,13 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(UpsertSingleRow) {
-        Run<ui32>("/Root/path", SimpleTable(), "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
+        Run("/Root/path", SimpleTable(), "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
             {"by_ikey", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}},
         });
     }
 
     Y_UNIT_TEST(UpsertManyRows) {
-        Run<ui32>("/Root/path", SimpleTable(), "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10), (2, 20);", {
+        Run("/Root/path", SimpleTable(), "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10), (2, 20);", {
             {"by_ikey", {
                 TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}),
                 TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 20}, {"pkey", 2}}),
@@ -409,7 +411,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(UpsertToSameKey) {
-        Run<ui32>("/Root/path", SimpleTable(), "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10), (1, 20);", {
+        Run("/Root/path", SimpleTable(), "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10), (1, 20);", {
             {"by_ikey", {
                 TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}),
                 TStructRecord(NTable::ERowOp::Erase,  {{"ikey", 10}, {"pkey", 1}}),
@@ -419,11 +421,11 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(DeleteNothing) {
-        Run<ui32>("/Root/path", SimpleTable(), "DELETE FROM `/Root/path` WHERE pkey = 1;", {});
+        Run("/Root/path", SimpleTable(), "DELETE FROM `/Root/path` WHERE pkey = 1;", {});
     }
 
     Y_UNIT_TEST(DeleteSingleRow) {
-        Run<ui32>("/Root/path", SimpleTable(), TVector<TString>{
+        Run("/Root/path", SimpleTable(), TVector<TString>{
             "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);",
             "DELETE FROM `/Root/path` WHERE pkey = 1;",
         }, {
@@ -448,14 +450,14 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(MultiIndexedTableInsertSingleRow) {
-        Run<ui32>("/Root/path", MultiIndexedTable(), "INSERT INTO `/Root/path` (pkey, ikey1, ikey2) VALUES (1, 10, 100);", {
+        Run("/Root/path", MultiIndexedTable(), "INSERT INTO `/Root/path` (pkey, ikey1, ikey2) VALUES (1, 10, 100);", {
             {"by_ikey1", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey1", 10},  {"pkey", 1}})}},
             {"by_ikey2", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey2", 100}, {"pkey", 1}})}},
         });
     }
 
     Y_UNIT_TEST(MultiIndexedTableUpdateOneIndexedColumn) {
-        Run<ui32>("/Root/path", MultiIndexedTable(), TVector<TString>{
+        Run("/Root/path", MultiIndexedTable(), TVector<TString>{
             "INSERT INTO `/Root/path` (pkey, ikey1, ikey2) VALUES (1, 10, 100);",
             "UPDATE `/Root/path` SET ikey1 = 20 WHERE pkey = 1;",
         }, {
@@ -471,7 +473,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(MultiIndexedTableReplaceSingleRow) {
-        Run<ui32>("/Root/path", MultiIndexedTable(), TVector<TString>{
+        Run("/Root/path", MultiIndexedTable(), TVector<TString>{
             "INSERT INTO `/Root/path` (pkey, ikey1, ikey2) VALUES (1, 10, 100);",
             "REPLACE INTO `/Root/path` (pkey, ikey1) VALUES (1, 20);",
         }, {
@@ -500,13 +502,13 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(IndexedPrimaryKeyInsertSingleRow) {
-        Run<ui32>("/Root/path", IndexedPrimaryKey(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
+        Run("/Root/path", IndexedPrimaryKey(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
             {"by_ikey_pkey", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}},
         });
     }
 
     Y_UNIT_TEST(IndexedPrimaryKeyDeleteSingleRow) {
-        Run<ui32>("/Root/path", IndexedPrimaryKey(), TVector<TString>{
+        Run("/Root/path", IndexedPrimaryKey(), TVector<TString>{
             "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);",
             "DELETE FROM `/Root/path` WHERE pkey = 1;",
         }, {
@@ -530,7 +532,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(CoveredIndexUpdateCoveredColumn) {
-        Run<ui32>("/Root/path", CoveredIndex(), TVector<TString>{
+        Run("/Root/path", CoveredIndex(), TVector<TString>{
             "INSERT INTO `/Root/path` (pkey, ikey, value) VALUES (1, 10, 100);",
             "UPDATE `/Root/path` SET value = 200 WHERE pkey = 1;",
         }, {
@@ -542,7 +544,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     }
 
     Y_UNIT_TEST(CoveredIndexUpsert) {
-        Run<ui32>("/Root/path", CoveredIndex(), TVector<TString>{
+        Run("/Root/path", CoveredIndex(), TVector<TString>{
             "INSERT INTO `/Root/path` (pkey, ikey, value) VALUES (1, 10, 100);",
             "UPSERT INTO `/Root/path` (pkey, ikey, value) VALUES (1, 10, 200);",
         }, {
@@ -564,7 +566,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
                 {"by_b", {"b"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
             });
 
-        Run<ui32>("/Root/path", schema, TVector<TString>{
+        Run("/Root/path", schema, TVector<TString>{
             "UPSERT INTO `/Root/path` (a, b) VALUES (1, 10);",
             "UPSERT INTO `/Root/path` (a, b) VALUES (1, 20);",
             "UPSERT INTO `/Root/path` (a, b) VALUES (1, 10);",
@@ -590,7 +592,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
                 {"by_c", {"c"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
             });
 
-        Run<ui32>("/Root/path", schema, TVector<TString>{
+        Run("/Root/path", schema, TVector<TString>{
             "UPSERT INTO `/Root/path` (a, b, d) VALUES (1, 10, 10000);",
             "UPSERT INTO `/Root/path` (a, b, c) VALUES (1, 10, 1000);",
         }, {
@@ -615,7 +617,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
                 {"by_d", {"d"}, {"c"}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
             });
 
-        Run<ui32>("/Root/path", schema, TVector<TString>{
+        Run("/Root/path", schema, TVector<TString>{
             "UPSERT INTO `/Root/path` (a, b, c, d) VALUES (1, 10, 100, 1000);",
         }, {
             {"by_bc", {
@@ -638,7 +640,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
                 {"by_b", {"b"}, {"c"}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
             });
 
-        Run<ui32>("/Root/path", schema, TVector<TString>{
+        Run("/Root/path", schema, TVector<TString>{
             "UPSERT INTO `/Root/path` (a, b, c) VALUES (1, 10, 100);",
             "UPSERT INTO `/Root/path` (a, b) VALUES (1, 20);",
         }, {
@@ -666,7 +668,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         return pqConfig;
     }
 
-    template <typename SK>
+    template <typename SK = ui32>
     void Run(const NFake::TCaches& cacheParams, const TString& path,
             const TShardedTableOptions& opts, const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
@@ -776,14 +778,14 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         return params;
     }
 
-    template <typename SK>
+    template <typename SK = ui32>
     void Run(const TString& path, const TShardedTableOptions& opts, const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
         Run(DefaultCacheParams(), path, opts, streams, queries, expectedRecords);
     }
 
-    template <typename SK>
+    template <typename SK = ui32>
     void Run(const TString& path, const TShardedTableOptions& opts, const TCdcStream& stream,
             const TString& query, const TStructRecords<SK>& expectedRecords)
     {
@@ -843,7 +845,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(InsertSingleRow) {
-        Run<ui32>("/Root/path", SimpleTable(), KeysOnly(), "INSERT INTO `/Root/path` (key, value) VALUES (1, 10);", {
+        Run("/Root/path", SimpleTable(), KeysOnly(), "INSERT INTO `/Root/path` (key, value) VALUES (1, 10);", {
             {"keys_stream", {TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}})}},
         });
     }
@@ -855,13 +857,13 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(DeleteNothing) {
-        Run<ui32>("/Root/path", SimpleTable(), KeysOnly(), "DELETE FROM `/Root/path` WHERE key = 1;", {
+        Run("/Root/path", SimpleTable(), KeysOnly(), "DELETE FROM `/Root/path` WHERE key = 1;", {
             {"keys_stream", {TStructRecord(NTable::ERowOp::Erase, {{"key", 1}})}},
         });
     }
 
     Y_UNIT_TEST(UpsertManyRows) {
-        Run<ui32>("/Root/path", SimpleTable(), Updates(), "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (2, 20);", {
+        Run("/Root/path", SimpleTable(), Updates(), "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (2, 20);", {
             {"updates_stream", {
                 TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 10}}),
                 TStructRecord(NTable::ERowOp::Upsert, {{"key", 2}}, {{"value", 20}}),
@@ -870,7 +872,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(UpsertToSameKey) {
-        Run<ui32>("/Root/path", SimpleTable(), Updates(), "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (1, 20);", {
+        Run("/Root/path", SimpleTable(), Updates(), "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (1, 20);", {
             {"updates_stream", {
                 TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 10}}),
                 TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 20}}),
@@ -879,7 +881,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(UpsertToSameKeyWithImages) {
-        Run<ui32>("/Root/path", SimpleTable(), NewAndOldImages(), "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (1, 20);", {
+        Run("/Root/path", SimpleTable(), NewAndOldImages(), "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (1, 20);", {
             {"new_and_old_images", {
                 TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {}, {{"value", 10}}),
                 TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {{"value", 10}}, {{"value", 20}}),
@@ -888,7 +890,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(UpsertIntoTwoStreams) {
-        Run<ui32>("/Root/path", SimpleTable(), TVector<TCdcStream>{Updates(), NewAndOldImages()}, TVector<TString>{
+        Run("/Root/path", SimpleTable(), TVector<TCdcStream>{Updates(), NewAndOldImages()}, TVector<TString>{
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (1, 20);",
         }, {
             {"updates_stream", {
@@ -903,7 +905,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(DeleteSingleRow) {
-        Run<ui32>("/Root/path", SimpleTable(), TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
+        Run("/Root/path", SimpleTable(), TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10);",
             "DELETE FROM `/Root/path` WHERE key = 1;",
         }, {
@@ -915,7 +917,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(UpsertModifyDelete) {
-        Run<ui32>("/Root/path", SimpleTable(), TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
+        Run("/Root/path", SimpleTable(), TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10);",
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 20);",
             "DELETE FROM `/Root/path` WHERE key = 1;",
@@ -940,7 +942,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     Y_UNIT_TEST(IndexAndStreamUpsert) {
-        Run<ui32>("/Root/path", IndexedTable(), Updates(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
+        Run("/Root/path", IndexedTable(), Updates(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
             {"by_ikey", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}},
             {"updates_stream", {TStructRecord(NTable::ERowOp::Upsert, {{"pkey", 1}}, {{"ikey", 10}})}},
         });
@@ -970,7 +972,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         expectedRecords.push_back(TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {{"value", 1}}, {{"value", 10}}));
         expectedRecords.push_back(TStructRecord(NTable::ERowOp::Upsert, {{"key", 1000}}, {}, {{"value", 1000}}, {{"value", 10000}}));
 
-        Run<ui32>(TinyCacheParams(), "/Root/path", TinyCacheTable(), TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
+        Run(TinyCacheParams(), "/Root/path", TinyCacheTable(), TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
             bigUpsert,
             "COMPACT TABLE `/Root/path`;",
             "SELECT * FROM `/Root/path` WHERE key = 1;",
@@ -988,7 +990,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
                 {"c", "Uint32", false, false},
             });
 
-        Run<ui32>("/Root/path", schema, TVector<TCdcStream>{NewImage()}, TVector<TString>{
+        Run("/Root/path", schema, TVector<TCdcStream>{NewImage()}, TVector<TString>{
             "INSERT INTO `/Root/path` (a, b) values (1, 2)",
             "DELETE FROM `/Root/path` WHERE a = 1;",
         }, {
@@ -1007,7 +1009,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
                 {"c", "Uint32", false, false},
             });
 
-        Run<ui32>("/Root/path", schema, TVector<TCdcStream>{OldImage()}, TVector<TString>{
+        Run("/Root/path", schema, TVector<TCdcStream>{OldImage()}, TVector<TString>{
             "INSERT INTO `/Root/path` (a, b) values (1, 2)",
             "DELETE FROM `/Root/path` WHERE a = 1;",
         }, {

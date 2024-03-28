@@ -13,6 +13,7 @@ namespace NUuid {
 
 static constexpr ui32 UUID_LEN = 16;
 
+TString UuidBytesToString(const TString& in);
 void UuidBytesToString(const TString& in, IOutputStream& out);
 void UuidHalfsToString(ui64 low, ui64 hi, IOutputStream& out);
 void UuidToString(ui16 dw[8], IOutputStream& out);

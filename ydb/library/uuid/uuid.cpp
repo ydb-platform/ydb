@@ -28,6 +28,14 @@ static void WriteHex(ui16 bytes, IOutputStream& out, bool reverseBytes = false) 
     }
 }
 
+TString UuidBytesToString(const TString& in) {
+    TStringStream ss;
+    
+    UuidBytesToString(in, ss);
+
+    return ss.Str();
+}
+
 void UuidBytesToString(const TString& in, IOutputStream& out) {
     ui16 dw[8];
     std::memcpy(dw, in.Data(), sizeof(dw));

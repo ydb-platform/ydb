@@ -3995,7 +3995,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto query = TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLESTORE `)" << tableStoreName << R"(` (
-                Key Uint64,
+                Key Uint64 NOT NULL,
                 Value1 String,
                 PRIMARY KEY (Key)
             )
@@ -4035,7 +4035,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto query = TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
+                Key Uint64 NOT NULL,
                 Value1 String,
                 PRIMARY KEY (Key)
             )
@@ -4050,7 +4050,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto query2 = TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLESTORE `)" << tableStoreName << R"(` (
-                Key Uint64,
+                Key Uint64 NOT NULL,
                 Value1 String,
                 PRIMARY KEY (Key)
             )
@@ -4146,7 +4146,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto query = TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLESTORE `)" << tableStoreName << R"(` (
-                Key Uint64,
+                Key Uint64 NOT NULL,
                 Value1 String,
                 PRIMARY KEY (Key)
             )
@@ -4161,7 +4161,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto query2 = TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
+                Key Uint64 NOT NULL,
                 Value1 String,
                 PRIMARY KEY (Key)
             )

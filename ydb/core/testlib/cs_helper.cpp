@@ -110,7 +110,7 @@ std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() const {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.emplace_back(arrow::field("timestamp", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), false));
     fields.emplace_back(arrow::field("resource_id", arrow::utf8()));
-    fields.emplace_back(arrow::field("uid", arrow::utf8()));
+    fields.emplace_back(arrow::field("uid", arrow::utf8()), false);
     fields.emplace_back(arrow::field("level", arrow::int32()));
     fields.emplace_back(arrow::field("message", arrow::utf8()));
     if (GetWithJsonDocument()) {

@@ -1,5 +1,3 @@
-#pragma once
-
 #include "dphyp_opt_join_cost_based.h"
 #include "dphyp_dphyp_solver.h"
 #include "dphyp_make_join_hypergraph.h"
@@ -197,8 +195,8 @@ public:
     {}
 
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(const std::shared_ptr<TJoinOptimizerNode>& joinTree) override {
-        TJoinHypergraph<TNodeSet> hyperGraph = MakeHypergraph<TNodeSet>(joinTree);
-        TDPHypSolver solver(hyperGraph, this->Pctx);
+        TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree);
+        TDPHypSolver solver(hypergraph, this->Pctx);
         auto bestJoinOrder = solver.Solve();
         return ConvertFromInternal(bestJoinOrder);
     }

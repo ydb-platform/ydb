@@ -1,8 +1,10 @@
-#include <bitset>
+#pragma once
+
 #include <vector>
 
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h> 
+#include "dphyp_bitset.h"
 
+#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h> 
 #include <ydb/library/yql/core/yql_cost_function.h>
 
 namespace NYql::NDq::NDphyp {
@@ -34,8 +36,8 @@ public:
         TNodeSet Left;
         TNodeSet Right;
         EJoinKind JoinKind;
-        std::set<std::pair<TJoinColumn, TJoinColumn>> JoinConditions;
         bool IsCommutative;
+        std::set<std::pair<TJoinColumn, TJoinColumn>> JoinConditions;
         TVector<TString> LeftJoinKeys;
         TVector<TString> RightJoinKeys;
 
@@ -75,16 +77,15 @@ public:
 
 public:
     TNodeSet AddNode(const std::shared_ptr<IBaseOptimizerNode>& relationNode) {
-        auto it = NodeIdByRelationNode_.find(relationNode); 
+        Y_ASSERT(relationNode->Labels().size() == 1);
 
-        if (it != NodeIdByRelationNode_.end()) {
+        auto it = NodeIdByRelationName_.find(relationNode->Labels()[0]); 
+
+        if (it != NodeIdByRelationName_.end()) {
             return it->second;
         }
 
         size_t nodeId = Nodes_.size(); 
-        NodeIdByRelationNode_.insert({relationNode, nodeId});
-
-        Y_ASSERT(relationNode->Labels().size() == 1);
         NodeIdByRelationName_.insert_noresize({relationNode->Labels()[0], nodeId});
 
         Nodes_.push_back({});
@@ -96,7 +97,8 @@ public:
     void AddEdge(TEdge edge) {
         AddEdgeImpl(edge);
 
-        TEdge reversedEdge = {.Left = edge.Right, .Right = edge.Left};
+        TEdge reversedEdge = std::move(edge);
+        std::swap(reversedEdge.Left, reversedEdge.Right);
         AddEdgeImpl(reversedEdge);
     }
 
@@ -118,17 +120,15 @@ public:
         return Nodes_;
     }
 
-    TEdge FindEdgeBetween(const TNodeSet& lhs, const TNodeSet& rhs) {
+    const TEdge* FindEdgeBetween(const TNodeSet& lhs, const TNodeSet& rhs) {
         for (const auto& edge: Edges_) {
             if (IsSubset(edge.Left, lhs) && !AreOverlaps(edge.Left, rhs) && IsSubset(edge.Right, rhs) && !AreOverlaps(edge.Right, lhs)) {
-                return true;
+                return &edge;
             }
         }
-        return false;
-    }
 
-public:
-    static const struct TEdge NOT_FOUND;
+        return nullptr;
+    }
 
 private:
     void AddEdgeImpl(TEdge edge) {
@@ -146,7 +146,6 @@ private:
     }
 
 private:
-    THashMap<std::shared_ptr<IBaseOptimizerNode>, size_t> NodeIdByRelationNode_;
     THashMap<TString, size_t> NodeIdByRelationName_;
 
     TVector<TNode> Nodes_;

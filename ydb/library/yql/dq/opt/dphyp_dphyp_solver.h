@@ -46,7 +46,7 @@ private:
     IProviderContext& Pctx_;
 
 private:
-    THashMap<TNodeSet, std::shared_ptr<IBaseOptimizerNode>> DpTable_;
+    THashMap<TNodeSet, std::shared_ptr<IBaseOptimizerNode>, std::hash<TNodeSet>> DpTable_;
 };
 
 template<typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::Neighs(TNodeSet s, TNodeSet x) {
@@ -55,19 +55,19 @@ template<typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::Neighs(TNodeSet s, 
     auto& nodes = Graph_.GetNodes();
 
     TSetBitsIt<TNodeSet> setBitsIt(s);
-    while (s.HasNext()) {
-        size_t nodeId = s.Next();
+    while (setBitsIt.HasNext()) {
+        size_t nodeId = setBitsIt.Next();
         
         neighs |= nodes[nodeId].SimpleNeighborhood;
 
         for (const auto& edge: nodes[nodeId].ComplexEdges) {
             if (
-                IsSubset(edge.Left, s) &&
-                !AreOverlaps(edge.Right, x) &&
-                !AreOverlaps(edge.Rught, s) && 
-                !AreOverlaps(edge.Right, neighs)
+                IsSubset(edge->Left, s) &&
+                !AreOverlaps(edge->Right, x) &&
+                !AreOverlaps(edge->Right, s) && 
+                !AreOverlaps(edge->Right, neighs)
             ) {
-                neighs |= GetLowestSetBit(edge.Right);
+                neighs |= GetLowestSetBit(edge->Right);
             }
         }
     }
@@ -84,7 +84,7 @@ template<typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::NextBitset(const TN
     TNodeSet res = prev;
 
     bool carry = true;
-    for (int i = 0; i < NNodes_; i++)
+    for (size_t i = 0; i < NNodes_; i++)
     {
         if (!carry) {
             break;
@@ -183,8 +183,8 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsg(const TNodeSet
             TNodeSet s2{};
             s2[i] = 1;
 
-            if (auto edge = Graph_.FindEdgeBetween(s1, s2); edge != TJoinHypergraph<TNodeSet>::TEdge::NOT_FOUND) {
-                EmitCsgCmp(s1, s2, edge);
+            if (auto* edge = Graph_.FindEdgeBetween(s1, s2); edge != nullptr) {
+                EmitCsgCmp(s1, s2, *edge);
             }
 
             EnumerateCmpRec(s1, s2, x | MakeB(neighs, GetLowestSetBit(s2)));
@@ -206,8 +206,8 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCmpRec(const 
         next = NextBitset(prev, neighs);
 
         if (DpTable_.contains(s2 | next)) {
-            if (auto edge = Graph_.FindEdgeBetween(s1, s2); edge != TJoinHypergraph<TNodeSet>::TEdge::NOT_FOUND) {
-                EmitCsgCmp(s1, s2 | next, edge);
+            if (auto* edge = Graph_.FindEdgeBetween(s1, s2); edge != nullptr) {
+                EmitCsgCmp(s1, s2 | next, *edge);
             }
         }
 
@@ -235,9 +235,9 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCmpRec(const 
 template <typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::MakeBiMin(const TNodeSet& s) {
     TNodeSet res{};
 
-    for (int i = 0; i < NNodes_; i++) {
+    for (size_t i = 0; i < NNodes_; i++) {
         if (s[i]) {
-            for (int j = 0; j <= i; j++) {
+            for (size_t j = 0; j <= i; j++) {
                 res[j] = 1;
             }
             break;
@@ -256,44 +256,6 @@ template <typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::MakeB(const TNodeS
     }
 
     return res;
-}
-
-/* 
- * Emit a single CSG + CMP pair
-*/
-template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const TJoinHypergraph<TNodeSet>::TEdge& csgCmpEdge) {
-    // Here we actually build the join and choose and compare the
-    // new plan to what's in the dpTable, if it there
-
-    Y_ENSURE(DpTable_.contains(s1), "DP Table does not contain S1");
-    Y_ENSURE(DpTable_.contains(s2), "DP Table does not conaint S2");
-
-    TNodeSet joined = s1 | s2;
-
-    auto bestJoin = PickBestJoin(
-        DpTable_[s1],
-        DpTable_[s2],
-        csgCmpEdge.JoinKind,
-        csgCmpEdge.IsCommutative,
-        csgCmpEdge.JoinConditions,
-        csgCmpEdge.LeftJoinKeys,
-        csgCmpEdge.RightJoinKeys,
-        Pctx_
-    );
-
-    if (!DpTable_.contains(joined) || bestJoin->Stats->Cost < DpTable_[joined]->Stats->Cost) {
-        DpTable_[joined] = bestJoin;
-    }
-
-    /*
-    * This is a sanity check that slows down the optimizer
-    *
-
-    auto pair = std::make_pair(S1, S2);
-    Y_ENSURE (!CheckTable.contains(pair), "Check table already contains pair S1|S2");
-
-    CheckTable[ std::pair<std::bitset<N>,std::bitset<N>>(S1, S2) ] = true;
-    */
 }
 
 /**
@@ -350,6 +312,44 @@ std::shared_ptr<TJoinOptimizerNodeInternal> PickBestJoin(
     }
     
     return MakeJoinInternal(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinKind, bestAlgo, ctx);
+}
+
+/* 
+ * Emit a single CSG + CMP pair
+*/
+template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const TJoinHypergraph<TNodeSet>::TEdge& csgCmpEdge) {
+    // Here we actually build the join and choose and compare the
+    // new plan to what's in the dpTable, if it there
+
+    Y_ENSURE(DpTable_.contains(s1), "DP Table does not contain S1");
+    Y_ENSURE(DpTable_.contains(s2), "DP Table does not conaint S2");
+
+    TNodeSet joined = s1 | s2;
+
+    auto bestJoin = PickBestJoin(
+        DpTable_[s1],
+        DpTable_[s2],
+        csgCmpEdge.JoinKind,
+        csgCmpEdge.IsCommutative,
+        csgCmpEdge.JoinConditions,
+        csgCmpEdge.LeftJoinKeys,
+        csgCmpEdge.RightJoinKeys,
+        Pctx_
+    );
+
+    if (!DpTable_.contains(joined) || bestJoin->Stats->Cost < DpTable_[joined]->Stats->Cost) {
+        DpTable_[joined] = bestJoin;
+    }
+
+    /*
+    * This is a sanity check that slows down the optimizer
+    *
+
+    auto pair = std::make_pair(S1, S2);
+    Y_ENSURE (!CheckTable.contains(pair), "Check table already contains pair S1|S2");
+
+    CheckTable[ std::pair<std::bitset<N>,std::bitset<N>>(S1, S2) ] = true;
+    */
 }
 
 } // namespace NYql::NDq

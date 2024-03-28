@@ -1,20 +1,11 @@
 #pragma once
 
+#include <vector>
 #include <ydb/library/yql/core/cbo/cbo_optimizer_new.h> 
 
 #include "dphyp_join_tree_node.h"
 
 namespace NYql::NDq::NDphyp {
-
-template <typename TNodeSet>
-bool AreOverlaps(const TNodeSet& lhs, const TNodeSet& rhs) {
-    return (lhs & rhs) != 0;
-}
-
-template <typename TNodeSet>
-bool IsSubset(const TNodeSet& lhs, const TNodeSet& rhs) {
-    return (lhs & rhs) == lhs;
-}
 
 bool OperatorIsCommut(EJoinKind);
 
@@ -40,7 +31,7 @@ class TConflictRulesCollector {
 public:
     TConflictRulesCollector(
         std::shared_ptr<TJoinOptimizerNode> root,
-        THashMap<std::shared_ptr<TJoinOptimizerNode>, TNodeSet>& subtreeNodes
+        std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet>& subtreeNodes
     )
         : Root_(root)
         , ConflictRules_({})
@@ -50,6 +41,7 @@ public:
     TVector<TConflictRule<TNodeSet>> CollectConflicts() {
         VisitJoinTree(Root_->LeftArg, GetLeftConflictsVisitor());
         VisitJoinTree(Root_->RightArg, GetRightConflictsVisitor());
+        return ConflictRules_;
     }
 
 private:
@@ -110,11 +102,11 @@ private:
 private:
     std::shared_ptr<TJoinOptimizerNode> Root_;
     TVector<TConflictRule<TNodeSet>> ConflictRules_;
-    THashMap<std::shared_ptr<TJoinOptimizerNode>, TNodeSet>& SubtreeNodes_;
+    std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet>& SubtreeNodes_;
 };
 
 template <typename TNodeSet>
-void ConvertConflictRulesIntoTES(const TNodeSet& SES, TVector<TConflictRule<TNodeSet>> conflictRules) {
+TNodeSet ConvertConflictRulesIntoTES(const TNodeSet& SES, TVector<TConflictRule<TNodeSet>> conflictRules) {
     auto TES = SES;
 
     while (true) {
@@ -126,10 +118,10 @@ void ConvertConflictRulesIntoTES(const TNodeSet& SES, TVector<TConflictRule<TNod
             }
         }
 
-        auto it = std::erase_if(std::begin(conflictRules), std::end(conflictRules), 
-            [&](const TConflictRule<TNodeSet>& conflictRule){ return IsSubset(conflictRule.RequiredNodes, TES);}
+        EraseIf(
+            conflictRules,
+            [&](const TConflictRule<TNodeSet>& conflictRule){ return IsSubset(conflictRule.RequiredNodes, TES); }
         );
-        conflictRules.erase(it, conflictRules.end());
 
         if (TES == prevTES || conflictRules.empty()) {
             return TES;

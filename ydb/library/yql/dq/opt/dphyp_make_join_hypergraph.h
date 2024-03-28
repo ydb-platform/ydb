@@ -7,13 +7,13 @@
 
 #include <memory.h>
 
-namespace NYql::NDq {
+namespace NYql::NDq::NDphyp {
 
 template <typename TNodeSet>
 TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
     const std::shared_ptr<TJoinOptimizerNode>& joinNode,
     TNodeSet conditionUsedRels,
-    THashMap<std::shared_ptr<TJoinOptimizerNode>, TNodeSet>& subtreeNodes
+    std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet>& subtreeNodes
 ) {
     auto conflictRulesCollector = TConflictRulesCollector<TNodeSet>(joinNode, subtreeNodes);
     auto conflictRules = conflictRulesCollector.CollectConflicts();
@@ -23,14 +23,14 @@ TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
     TNodeSet left = TES & subtreeNodes[joinNode->LeftArg];
     TNodeSet right = TES & subtreeNodes[joinNode->RightArg];
     
-    return TJoinHypergraph<TNodeSet>::TEdge(left, right, joinNode->JoinType, OperatorIsCommut(joinNode->JoinType), joinNode->JoinConditions);
+    return typename TJoinHypergraph<TNodeSet>::TEdge(left, right, joinNode->JoinType, OperatorIsCommut(joinNode->JoinType), joinNode->JoinConditions);
 }
 
 template<typename TNodeSet>
 void MakeJoinHypergraphRec(
     TJoinHypergraph<TNodeSet>& graph,
     const std::shared_ptr<IBaseOptimizerNode>& joinTree,
-    THashMap<std::shared_ptr<TJoinOptimizerNode>, TNodeSet>& subtreeNodes
+    std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet>& subtreeNodes
 ) {
     if (joinTree->Kind == RelNodeType) {
         TNodeSet node = graph.AddNode(joinTree);
@@ -42,19 +42,20 @@ void MakeJoinHypergraphRec(
     MakeJoinHypergraphRec(graph, joinNode->LeftArg, subtreeNodes);
     MakeJoinHypergraphRec(graph, joinNode->RightArg, subtreeNodes);
 
-    subtreeNodes[joinNode] = subtreeNodes[joinNode->LeftArg] | subtreeNodes[joinNode->RightArg];
+    subtreeNodes[joinTree] = subtreeNodes[joinNode->LeftArg] | subtreeNodes[joinNode->RightArg];
 
     TNodeSet conditionUsedRels = graph.GetNodesByRelNames(joinNode->Labels());
     graph.AddEdge(MakeHyperedge<TNodeSet>(joinNode, conditionUsedRels, subtreeNodes));
 }
 
 template <typename TNodeSet>
-TJoinHypergraph<TNodeSet> MakeHypergraph(
+TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
     const std::shared_ptr<IBaseOptimizerNode>& joinTree
 ) {
-    TJoinHypergraph<TNodeSet>& graph{};
-    THashMap<std::shared_ptr<TJoinOptimizerNode>, TNodeSet>& subtreeNodes{};
+    TJoinHypergraph<TNodeSet> graph{};
+    std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet> subtreeNodes{};
     MakeJoinHypergraphRec(graph, joinTree, subtreeNodes);
+    return graph;
 }
 
 } // namespace NYql::NDq

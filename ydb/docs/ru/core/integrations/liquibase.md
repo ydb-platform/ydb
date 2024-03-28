@@ -187,7 +187,7 @@ Liquibase command 'update' was executed successfully.
 
 ![../_assets/liquibase-step-1.png](../_assets/liquibase-step-1.png)
 
-Можно увидеть, что Liquibase создал две служебные таблицы DATABASECHANGELOG - лог миграций, DATABASECHANGELOGLOCK - таблица для взятия распределенной блокировки.
+Можно увидеть, что Liquibase создал две служебные таблицы `DATABASECHANGELOG` - лог миграций, `DATABASECHANGELOGLOCK` - таблица для взятия распределенной блокировки.
 
 Содержимое таблицы DATABASECHANGELOG:
 

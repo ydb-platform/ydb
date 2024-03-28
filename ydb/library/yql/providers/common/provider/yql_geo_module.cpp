@@ -38,7 +38,7 @@ public:
         datafileProcessing(ConfigPath);
     }
 
-    bool ApplyConfigFlag(const TPosition& pos, const TString& name, TExprContext& ctx, const TVector<TStringBuf>& args, TUserDataTable& crutches) const override {
+    bool ApplyConfigFlag(const TPosition& pos, TStringBuf name, TExprContext& ctx, const TVector<TStringBuf>& args, TUserDataTable& crutches) const override {
         if (name == DatafilePragmaName) {
             if (args.size() != 1) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));

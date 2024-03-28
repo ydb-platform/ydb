@@ -40,6 +40,11 @@ using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorage
 using TEvExternalStorage = NWrappers::TEvExternalStorage;
 
 struct TS3Request {
+    TS3Request(Aws::S3::Model::PutObjectRequest&& request, TString&& buffer)
+        : Request(std::move(request))
+        , Buffer(std::move(buffer))
+    {}
+
     Aws::S3::Model::PutObjectRequest Request;
     TString Buffer;
 };

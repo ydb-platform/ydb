@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
+#include <ydb/library/yql/minikql/computation/mkql_spiller_adapter.h>
 #include <ydb/library/yql/minikql/computation/presort.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
@@ -79,6 +80,28 @@ struct TMyValueCompare {
     }
 
     const std::vector<TRuntimeKeyInfo> Keys;
+};
+
+using TAsyncWriteOperation = std::optional<NThreading::TFuture<ISpiller::TKey>>;
+using TAsyncReadOperation = std::optional<NThreading::TFuture<std::optional<TRope>>>;
+
+struct TSpilledData {
+    TSpilledData(std::unique_ptr<TWideUnboxedValuesSpillerAdapter> &&spiller)
+    : Spiller(std::move(spiller)) {}
+
+    TAsyncWriteOperation Write(NUdf::TUnboxedValue* item, size_t size) {
+        AsyncWriteOperation = Spiller->WriteWideItem({item, size});
+        return AsyncWriteOperation;
+    }
+
+    TAsyncWriteOperation FinishWrite() {
+        AsyncWriteOperation = Spiller->FinishWriting();
+        return AsyncWriteOperation;
+    }
+
+    std::unique_ptr<TWideUnboxedValuesSpillerAdapter> Spiller;
+    TAsyncWriteOperation AsyncWriteOperation = std::nullopt;
+    TAsyncReadOperation AsyncReadOperation = std::nullopt;
 };
 
 using TComparePtr = int(*)(const bool*, const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*);
@@ -292,7 +315,8 @@ private:
     }
 
 public:
-    TSpillingSupportState(TMemoryUsageInfo* memInfo, ui64 count, const bool* directons, size_t keyWidth, const TCompareFunc& compare, const std::vector<ui32>& indexes, IComputationWideFlowNode *const flow)
+    TSpillingSupportState(TMemoryUsageInfo* memInfo, ui64 count, const bool* directons, size_t keyWidth, const TCompareFunc& compare,
+        const std::vector<ui32>& indexes, IComputationWideFlowNode *const flow, TMultiType* sortKeysMultiType)
         : TBase(memInfo)
         , ITopSortState(flow)
         , Count(count)
@@ -300,6 +324,7 @@ public:
         , Directions(directons, directons + keyWidth)
         , LessFunc(std::bind(std::less<int>(), std::bind(compare, Directions.data(), std::placeholders::_1, std::placeholders::_2), 0))
         , Fields(Indexes.size(), nullptr)
+        , SortKeysMultiType(sortKeysMultiType)
     {
         if constexpr (!HasCount) {
             ResetFields();
@@ -317,8 +342,6 @@ public:
                             SwitchMode(EOperatingMode::Spilling, ctx);
                             return EFetchResult::Yield;
                         }
-                        // Add place for new part of data
-                        ResetFields();
                     }
                     continue;
                 case EFetchResult::Yield:
@@ -327,6 +350,11 @@ public:
                     Seal();
                     break;
             }
+        }
+
+        if (!SpilledStates.empty()) {
+            SwitchMode(EOperatingMode::ProcessSpilled, ctx);
+            return EFetchResult::Yield;
         }
 
         if (auto extract = Extract()) {
@@ -345,12 +373,15 @@ public:
         if (!SpillState()) {
             return EFetchResult::Yield;
         }
+        ResetFields();
         SwitchMode(EOperatingMode::InMemory, ctx);
         return EFetchResult::Yield;
     }
 
     EFetchResult ProcessSpilledData(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-        return EFetchResult::Yield;
+        Y_UNUSED(ctx);
+        Y_UNUSED(output);
+        return EFetchResult::Finish;
     }
 
     virtual EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) override {
@@ -385,6 +416,7 @@ public:
 
     bool Put() {
         if constexpr (!HasCount) {
+            ResetFields();
             return true;
         }
 
@@ -394,7 +426,9 @@ public:
     void Seal() {
         if constexpr (!HasCount) {
             static_assert (Sort);
+            // Remove placeholder for new data
             Storage.resize(Storage.size() - Indexes.size());
+
             Full.reserve(Storage.size() / Indexes.size());
             for (auto it = Storage.begin(); it != Storage.end(); it += Indexes.size()) {
                 Full.emplace_back(&*it);
@@ -421,18 +455,21 @@ public:
     EFetchResult InputStatus = EFetchResult::One;
 private:
     bool HasMemoryForProcessing() const {
-        return !TlsAllocState->IsMemoryYellowZoneEnabled();
+        // return !TlsAllocState->IsMemoryYellowZoneEnabled();
+        return false;
     }
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
         switch(mode) {
             case EOperatingMode::InMemory:
-                MKQL_ENSURE(false, "Internal logic error");
                 break;
             case EOperatingMode::Spilling:
+            {
                 auto spiller = ctx.SpillerFactory->CreateSpiller();
-                Spillers.push_back(spiller, type, 10);
-               break;
+                const size_t packSize = 2;
+                SpilledStates.emplace_back(std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, SortKeysMultiType, packSize));
+                break;
+            }
             case EOperatingMode::ProcessSpilled:
                 break;
         }
@@ -440,6 +477,30 @@ private:
     }
 
     bool SpillState() {
+        MKQL_ENSURE(!SpilledStates.empty(), "At least one Spiller must be created to spill data in Sort operation.");
+        auto &lastSpilledState = SpilledStates.back();
+        if (lastSpilledState.AsyncWriteOperation.has_value()) {
+            if (!lastSpilledState.AsyncWriteOperation->HasValue()) {
+                return false;
+            }
+            lastSpilledState.Spiller->AsyncWriteCompleted(lastSpilledState.AsyncWriteOperation->ExtractValue());
+            lastSpilledState.AsyncWriteOperation = std::nullopt;
+        } else {
+            Seal();
+        }
+
+        while (auto extract = Extract()) {
+            auto writeOp = lastSpilledState.Write(extract, Indexes.size());
+            if (writeOp) {
+                return false;
+            }
+        }
+
+        auto writeFinishOp = lastSpilledState.FinishWrite();
+        if (writeFinishOp){
+            return false;
+        }
+        Storage.resize(0);
 
         return true;
     }
@@ -451,7 +512,8 @@ private:
     TStorage Storage;
     TPointers Free, Full;
     TFields Fields;
-    std::list<TWideUnboxedValuesSpillerAdapter*> Spillers;
+    TMultiType* SortKeysMultiType;
+    std::list<TSpilledData> SpilledStates;
     EOperatingMode Mode;
 };
 
@@ -528,11 +590,11 @@ public:
 
             std::vector<bool> dirs(Directions.size());
             std::transform(Directions.cbegin(), Directions.cend(), dirs.begin(), [&ctx](IComputationNode* dir){ return dir->GetValue(ctx).Get<bool>(); });
-#ifdef MKQL_DISABLE_CODEGEN
-            MakeSpillingSupportState(ctx, state, count, dirs.data());
-#else
-            MakeState(ctx, state, count, dirs.data());
-#endif
+            if (!ctx.ExecuteLLVM) {
+                MakeSpillingSupportState(ctx, state, count, dirs.data());
+            } else {
+                MakeState(ctx, state, count, dirs.data());
+            }
         }
 
         if (const auto ptr = dynamic_cast<ITopSortState*>(state.AsBoxed().Get())) {
@@ -742,13 +804,11 @@ private:
     }
 
     void MakeSpillingSupportState(TComputationContext& ctx, NUdf::TUnboxedValue& state, ui64 count, const bool* directions) const {
-#ifdef MKQL_DISABLE_CODEGEN
-        if (Sort && !HasCount) {
-            state = ctx.HolderFactory<TSpillingSupportState<Sort>>(count, directions, Directions.size(), TMyValueCompare(Keys), Indexes, Flow);
+        if (Sort && !HasCount && !ctx.ExecuteLLVM) {
+            state = ctx.HolderFactory.Create<TSpillingSupportState<Sort, HasCount>>(count, directions, Directions.size(), TMyValueCompare(Keys), Indexes, Flow, SortKeysMultiType);
             return;
         }
-#endif
-        state = ctx.HolderFactory.Create<TState<Sort, HasCount>>(count, directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, Flow);
+        state = ctx.HolderFactory.Create<TState<Sort, HasCount>>(count, directions, Directions.size(), TMyValueCompare(Keys), Indexes, Flow);
     }
 
     void RegisterDependencies() const final {
@@ -839,6 +899,8 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
         }
     }
 
+    auto sortKeysMultiType = TMultiType::Create(inputWideComponents.size(), inputWideComponents.data(), ctx.Env);
+
     size_t payloadPos = keyWidth;
     for (auto i = 0U; i < indexes.size(); ++i) {
         if (keyIndexes.contains(i)) {
@@ -858,7 +920,7 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
 
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         return new TWideTopWrapper<Sort, HasCount>(ctx.Mutables, wide, count, std::move(directions), std::move(keys),
-            std::move(indexes), std::move(representations));
+            std::move(indexes), std::move(representations), sortKeysMultiType);
     }
 
     THROW yexception() << "Expected wide flow.";

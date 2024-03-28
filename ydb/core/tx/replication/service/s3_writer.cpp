@@ -3,23 +3,17 @@
 #include "s3_writer.h"
 #include "worker.h"
 
-#include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/change_exchange/change_sender_common_ops.h>
-#include <ydb/core/tablet_flat/flat_row_eggs.h>
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/scheme_cache/helpers.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/wrappers/s3_storage_config.h>
+#include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/core/wrappers/s3_storage_config.h>
-#include <ydb/core/wrappers/s3_wrapper.h>
 
-#include <util/generic/map.h>
+#include <library/cpp/json/json_writer.h>
+
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
-#include <util/string/join.h>
 
 #define CB_LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << stream)
 #define CB_LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << stream)
@@ -27,6 +21,18 @@
 #define CB_LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << stream)
 #define CB_LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << stream)
 #define CB_LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() <<  stream)
+
+namespace {
+
+TString GetPartKey(ui64 firstOffset, const TString& writerName) {
+    return Sprintf("part.%ld.%s.jsonl", firstOffset, writerName.c_str());
+}
+
+TString GetIdentityKey(const TString& writerName) {
+    return Sprintf("writer.%s.json", writerName.c_str());
+}
+
+} // anonymous namespace
 
 namespace NKikimr::NReplication::NService {
 
@@ -124,7 +130,7 @@ class TS3Writer
     }
 
     void WriteIdentity() {
-        const TString key = Sprintf("writer.%s.json", WriterName.c_str());
+        const TString key = GetIdentityKey(WriterName);
 
         auto request = Aws::S3::Model::PutObjectRequest()
             .WithKey(key);
@@ -135,9 +141,7 @@ class TS3Writer
             {"writer_name", WriterName},
         };
 
-        NJsonWriter::TBuf buf(NJsonWriter::HEM_RELAXED);
-        buf.WriteJsonValue(&identity);
-        TString buffer = buf.Str();
+        TString buffer = NJson::WriteJson(identity, false);
 
         RequestInFlight = std::make_unique<TS3Request>(std::move(request), std::move(buffer));
         SendS3Request();
@@ -157,7 +161,7 @@ class TS3Writer
             return;
         }
 
-        const TString key = Sprintf("part.%ld.%s.jsonl", ev->Get()->Records[0].Offset, WriterName.c_str());
+        const TString key = GetPartKey(ev->Get()->Records[0].Offset, WriterName);
 
         auto request = Aws::S3::Model::PutObjectRequest()
             .WithKey(key);

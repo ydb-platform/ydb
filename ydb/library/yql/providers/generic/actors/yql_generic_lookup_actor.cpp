@@ -300,8 +300,11 @@ namespace NYql::NDq {
             *select.mutable_data_source_instance() = DataSource;
             try {
                 TokenProvider->MaybeFillToken(*select.mutable_data_source_instance());
-            } catch (std::exception& e) {
-                YQL_CLOG(INFO, ProviderGeneric) << "ActorId=" << SelfId() << " Failed to get IAM token";
+                //Note: returned token may be stale and we have no way to check or recover here
+                //Consider to redesign ICredentialsProvider
+            } catch (const std::exception& e) {
+                //As for now, we do not expect an exception after successful TokenProvider initialization.
+                YQL_ENSURE(false, "ActorId=" << SelfId() << " Failed to get IAM token: " << e.what());
             }
 
             for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {

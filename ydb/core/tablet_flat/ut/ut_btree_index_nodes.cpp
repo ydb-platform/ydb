@@ -660,7 +660,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
         Dump(result, builder.GroupInfo, pager.Back());
         
         TBtreeIndexMeta expected{{15, 15150, 106050, 8080}, 3, 10270};
-        UNIT_ASSERT_EQUAL_C(result, expected, "Got " + result->ToString());
+        UNIT_ASSERT_EQUAL_C(result, expected, "Got " + result.ToString());
     }
 
 }

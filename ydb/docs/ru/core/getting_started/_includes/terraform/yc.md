@@ -17,28 +17,17 @@
     secret: YCPKNJDVhRZgyywl4hQwVdcSRC...
     ```
     Скопируйте `access_key.id` и `secret`. Значения этих полей нужны будут в дальнейшем при работе с AWS CLI.
-5. [Скачать](https://aws.amazon.com/ru/cli/) AWS CLI.
-6. Настроить окружение AWS CLI: 
-    * Запустите команду `aws configure` и последовательно введите сохраненные ранее `access_key.id` и `secret`. Для значения региона используйте `ru-central1`:
-    ```
-    aws configure
-    AWS Access Key ID [None]: AKIAIOSFODNN********
-    AWS Secret Access Key [None]: wJalr********/*******/bPxRfiCYEX********
-    Default region name [None]: ru-central1
-    Default output format [None]:
-    ```
-    Будут созданы файлы `~/.aws/credentials` и `~/.aws/config`. 
-7. Отредактировать `~/.aws/credentials` и `~/.aws/config` следующим образом:
-    * Добавьте `[Ya_def_reg]` в `~/.aws/config` перед `region = ru-central1-a`.
-    * Добавьте `[Yandex]` перед секретной информацией о ключах подключения.
-8. [Настроить](https://cloud.yandex.com/ru/docs/tutorials/infrastructure-management/terraform-quickstart#configure-provider) Yandex Cloud Terraform провайдера.
-9. Скачать данный репозиторий командой `git clone https://github.com/ydb-platform/ydb-terraform.git`.
-10. Перейти в директорию `yandex_cloud` (директория в скаченном репозитории) и внести изменения в следующие переменные, в файле `variables.tf`:
+5. [Настроить](https://cloud.yandex.com/ru/docs/tutorials/infrastructure-management/terraform-quickstart#configure-provider) Yandex Cloud Terraform провайдера.
+6. Скачать данный репозиторий командой `git clone https://github.com/ydb-platform/ydb-terraform.git`.
+7. Перейти в директорию `yandex_cloud` (директория в скаченном репозитории) и внести изменения в следующие переменные, в файле `variables.tf`:
     * `key_path` – путь к сгенерированному SA ключу с помощью CLI.
     * `cloud_id` – ID облака. Можно получить список доступных облаков командой `yc resource-manager cloud list`.
     * `profile` – название профиля из файла `~/.aws/config`.
     * `folder_id` – ID Cloud folder. Можно получить командой `yc resource-manager folder list`.
 
-Теперь, находясь в директории `yandex_cloud`, можно выполните команду `terraform init` для установки провайдера и инициализации модулей. Далее нужно выполнить серию команд:
+Теперь, находясь в поддиректории `yandex_cloud` можно выполнить последовательность следующих команд для установки провайдера, инициализации модулей и создания инфраструктуры:
+* `terraform init` – установка провайдера и инициализация модулей.
 * `terraform plan` – создание плана будущей инфраструктуры.
-* `terraform init` (повторный вызов) – создание ресурсов в облаке.
+* `terraform init` (повторное выполнение) – создание ресурсов в облаке. 
+
+Далее используются команды `terraform plan`, `terraform init` и `terraform destroy` (уничтожение созданной инфраструктуры).

@@ -120,10 +120,7 @@ class TPendingFetcher : public NActors::TActorBootstrapped<TPendingFetcher> {
         explicit TRequestCounters(const TString& name, const ::NMonitoring::TDynamicCounterPtr& counters = nullptr)
             : Name(name)
             , Counters(counters)
-        { }
-
-        void Register(const ::NMonitoring::TDynamicCounterPtr& counters) {
-            Counters = counters;
+        { 
             Register();
         }
 
@@ -240,6 +237,7 @@ private:
         HasRunningRequest = false;
         LOG_T("Got GetTask response from PrivateApi");
         GetTaskCounters.LatencyMs->Collect((TInstant::Now() - StartGetTaskTime).MilliSeconds());
+        GetTaskCounters.InFly->Dec();
         if (!ev->Get()->Status.IsSuccess()) {
             GetTaskCounters.Error->Inc();
             LOG_E("Error with GetTask: "<< ev->Get()->Status.GetIssues().ToString());

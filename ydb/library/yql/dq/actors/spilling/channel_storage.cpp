@@ -92,7 +92,6 @@ public:
 
 private:
     void UpdateWriteStatus() {
-        TVector<THashMap<ui64, TWritingBlobInfo>::iterator> itersToRemove;
         for (auto it = WritingBlobs_.begin(); it != WritingBlobs_.end();) {
             if (it->second.IsBlobWrittenFuture_.HasValue()) {
                 WritingBlobsTotalSize_ -= it->second.BlobSize_;

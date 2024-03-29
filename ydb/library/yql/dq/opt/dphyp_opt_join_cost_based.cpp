@@ -186,17 +186,20 @@ TExprBase RearrangeEquiJoinTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
         .Done();
 }
 
-class TOptimizerNativeNew: public IOptimizerNew {
+class TOptimizerNativeNewDpHyp: public IOptimizerNew {
 public:
     using TNodeSet = std::bitset<128>;
 
-    TOptimizerNativeNew(IProviderContext& ctx)
+    TOptimizerNativeNewDpHyp(IProviderContext& ctx)
         : IOptimizerNew(ctx) 
     {}
 
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(const std::shared_ptr<TJoinOptimizerNode>& joinTree) override {
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree);
         TDPHypSolver solver(hypergraph, this->Pctx);
+
+        Y_ASSERT(hypergraph.GetNodeCount() > 0 && hypergraph.GetEdges().size() > 0);
+
         auto bestJoinOrder = solver.Solve();
         return ConvertFromInternal(bestJoinOrder);
     }
@@ -250,7 +253,8 @@ TExprBase DqOptimizeEquiJoinWithCosts(
         YQL_CLOG(TRACE, CoreDq) << str.str();
     }
 
-    joinTree = opt.JoinSearch(joinTree);
+    auto optik = TOptimizerNativeNewDpHyp(opt.Pctx);
+    joinTree = optik.JoinSearch(joinTree);
 
     // rewrite the join tree and record the output statistics
     TExprBase res = RearrangeEquiJoinTree(ctx, equiJoin, joinTree);

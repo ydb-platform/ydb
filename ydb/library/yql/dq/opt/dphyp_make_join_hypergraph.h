@@ -9,6 +9,18 @@
 
 namespace NYql::NDq::NDphyp {
 
+inline TVector<TString> GetConditionUsedRelationNames(const std::shared_ptr<TJoinOptimizerNode>& joinNode) {
+    TVector<TString> res;
+    res.reserve(joinNode->JoinConditions.size());
+
+    for (const auto& [lhsTable, rhsTable]: joinNode->JoinConditions) {
+        res.push_back(lhsTable.RelName);
+        res.push_back(rhsTable.RelName);
+    }
+
+    return res;
+}
+
 template <typename TNodeSet>
 TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
     const std::shared_ptr<TJoinOptimizerNode>& joinNode,
@@ -33,7 +45,9 @@ void MakeJoinHypergraphRec(
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet>& subtreeNodes
 ) {
     if (joinTree->Kind == RelNodeType) {
-        TNodeSet node = graph.AddNode(joinTree);
+        size_t nodeId = graph.AddNode(joinTree);
+        TNodeSet node{};
+        node[nodeId] = 1;
         subtreeNodes[joinTree] = node;
         return;
     }
@@ -44,7 +58,7 @@ void MakeJoinHypergraphRec(
 
     subtreeNodes[joinTree] = subtreeNodes[joinNode->LeftArg] | subtreeNodes[joinNode->RightArg];
 
-    TNodeSet conditionUsedRels = graph.GetNodesByRelNames(joinNode->Labels());
+    TNodeSet conditionUsedRels = graph.GetNodesByRelNames(GetConditionUsedRelationNames(joinNode));
     graph.AddEdge(MakeHyperedge<TNodeSet>(joinNode, conditionUsedRels, subtreeNodes));
 }
 

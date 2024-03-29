@@ -71,12 +71,12 @@ public:
 
     struct TNode {
         TNodeSet SimpleNeighborhood;
-        TVector<TEdge*> ComplexEdges;
+        TVector<size_t> ComplexEdgesId;
         std::shared_ptr<IBaseOptimizerNode> RelationOptimizerNode;
     };
 
 public:
-    TNodeSet AddNode(const std::shared_ptr<IBaseOptimizerNode>& relationNode) {
+    size_t AddNode(const std::shared_ptr<IBaseOptimizerNode>& relationNode) {
         Y_ASSERT(relationNode->Labels().size() == 1);
 
         auto it = NodeIdByRelationName_.find(relationNode->Labels()[0]); 
@@ -86,7 +86,7 @@ public:
         }
 
         size_t nodeId = Nodes_.size(); 
-        NodeIdByRelationName_.insert_noresize({relationNode->Labels()[0], nodeId});
+        NodeIdByRelationName_.insert({relationNode->Labels()[0], nodeId});
 
         Nodes_.push_back({});
         Nodes_.back().RelationOptimizerNode = relationNode;
@@ -97,8 +97,15 @@ public:
     void AddEdge(TEdge edge) {
         AddEdgeImpl(edge);
 
+        std::set<std::pair<TJoinColumn, TJoinColumn>> reversedJoinConditions;
+        for (const auto& [lhs, rhs]: edge.JoinConditions) {
+            reversedJoinConditions.insert({rhs, lhs});
+        }
+
         TEdge reversedEdge = std::move(edge);
         std::swap(reversedEdge.Left, reversedEdge.Right);
+        reversedEdge.JoinConditions = std::move(reversedJoinConditions);
+    
         AddEdgeImpl(reversedEdge);
     }
 
@@ -106,7 +113,7 @@ public:
         TNodeSet nodeSet{};
 
         for (const auto& relationName: relationNames) {
-            nodeSet |= NodeIdByRelationName_[relationName];
+            nodeSet[NodeIdByRelationName_[relationName]] = 1;
         }
 
         return nodeSet;
@@ -114,6 +121,10 @@ public:
 
     inline size_t GetNodeCount() {
         return Nodes_.size();
+    }
+
+    TVector<TEdge>& GetEdges() {
+        return Edges_;
     }
 
     inline TVector<TNode>& GetNodes() {
@@ -141,7 +152,7 @@ private:
 
         auto setBitsIt = TSetBitsIt(edge.Left);
         while (setBitsIt.HasNext()) {
-            Nodes_[setBitsIt.Next()].ComplexEdges.push_back(&Edges_.back());
+            Nodes_[setBitsIt.Next()].ComplexEdgesId.push_back(Edges_.size() - 1);
         }
     }
 

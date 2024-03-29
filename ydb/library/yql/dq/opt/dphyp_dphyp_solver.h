@@ -3,9 +3,20 @@
 #include "dphyp_join_hypergraph.h"
 #include "dphyp_join_tree_node.h"
 #include "dphyp_bitset.h"
-#include "dphyp_conflict_rules_collector.h"
 
 namespace NYql::NDq::NDphyp {
+
+struct pair_hash {
+    template <class T1, class T2>
+    std::size_t operator () (const std::pair<T1,T2> &p) const {
+        auto h1 = std::hash<T1>{}(p.first);
+        auto h2 = std::hash<T2>{}(p.second);
+
+        // Mainly for demonstration purposes, i.e. works but is overly simple
+        // In the real world, use sth. like boost.hash_combine
+        return h1 ^ h2;
+    }
+};
 
 template <typename TNodeSet>
 class TDPHypSolver {
@@ -40,10 +51,23 @@ private:
 
     TNodeSet NextBitset(const TNodeSet& current, const TNodeSet& final);
 
+    std::shared_ptr<TJoinOptimizerNodeInternal>  PickBestJoin(
+        std::shared_ptr<IBaseOptimizerNode> left,
+        std::shared_ptr<IBaseOptimizerNode> right,
+        EJoinKind joinKind,
+        bool isCommutative,
+        const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
+        const std::set<std::pair<TJoinColumn, TJoinColumn>>& reversedJoinConditions,
+        const TVector<TString>& leftJoinKeys,
+        const TVector<TString>& rightJoinKeys,
+        IProviderContext& ctx
+    );
+
 private:
     TJoinHypergraph<TNodeSet>& Graph_;
     size_t NNodes_;
     IProviderContext& Pctx_;
+    THashMap<std::pair<TNodeSet, TNodeSet>, bool, pair_hash> CheckTable;
 
 private:
     THashMap<TNodeSet, std::shared_ptr<IBaseOptimizerNode>, std::hash<TNodeSet>> DpTable_;
@@ -60,14 +84,15 @@ template<typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::Neighs(TNodeSet s, 
         
         neighs |= nodes[nodeId].SimpleNeighborhood;
 
-        for (const auto& edge: nodes[nodeId].ComplexEdges) {
+        for (const auto& edgeId: nodes[nodeId].ComplexEdgesId) {
+            auto& edge = Graph_.GetEdges()[edgeId];
             if (
-                IsSubset(edge->Left, s) &&
-                !AreOverlaps(edge->Right, x) &&
-                !AreOverlaps(edge->Right, s) && 
-                !AreOverlaps(edge->Right, neighs)
+                IsSubset(edge.Left, s) &&
+                !AreOverlaps(edge.Right, x) &&
+                !AreOverlaps(edge.Right, s) && 
+                !AreOverlaps(edge.Right, neighs)
             ) {
-                neighs |= GetLowestSetBit(edge->Right);
+                neighs[GetLowestSetBit(edge.Right)] = 1;
             }
         }
     }
@@ -120,7 +145,8 @@ template<typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSo
         TNodeSet s{};
         s[i] = 1;
         EmitCsg(s);
-        EnumerateCsgRec(s, MakeBiMin(s));
+        auto bi = MakeBiMin(s);
+        EnumerateCsgRec(s, bi);
     }
 
     TNodeSet allNodes{};
@@ -133,7 +159,7 @@ template<typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSo
 }
 
 template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCsgRec(const TNodeSet& s1, const TNodeSet& x) {
-    TNodeSet neighs{};
+    TNodeSet neighs =  Neighs(s1, x);
 
     if (neighs == TNodeSet{}) {
         return;
@@ -145,7 +171,7 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCsgRec(const 
     while (true) {
         next = NextBitset(prev, neighs);
 
-        if (DpTable_.contains(s1 | neighs)) {
+        if (DpTable_.contains(s1 | next)) {
             EmitCsg(s1 | next);
         }
 
@@ -206,7 +232,7 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCmpRec(const 
         next = NextBitset(prev, neighs);
 
         if (DpTable_.contains(s2 | next)) {
-            if (auto* edge = Graph_.FindEdgeBetween(s1, s2); edge != nullptr) {
+            if (auto* edge = Graph_.FindEdgeBetween(s1, s2 | next); edge != nullptr) {
                 EmitCsgCmp(s1, s2 | next, *edge);
             }
         }
@@ -262,26 +288,20 @@ template <typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::MakeB(const TNodeS
  * Iterate over all join algorithms and pick the best join that is applicable.
  * Also considers commuting joins
 */
-std::shared_ptr<TJoinOptimizerNodeInternal> PickBestJoin(
+template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSolver<TNodeSet>::PickBestJoin(
     std::shared_ptr<IBaseOptimizerNode> left,
     std::shared_ptr<IBaseOptimizerNode> right,
     EJoinKind joinKind,
     bool isCommutative,
     const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
+    const std::set<std::pair<TJoinColumn, TJoinColumn>>& reversedJoinConditions,
     const TVector<TString>& leftJoinKeys,
     const TVector<TString>& rightJoinKeys,
     IProviderContext& ctx
 ) {
-    double bestCost = -1.0f;
+    double bestCost = std::numeric_limits<double>::infinity();
     EJoinAlgoType bestAlgo{};
-    bool bestJoinIsReversed = true;
-
-    std::set<std::pair<TJoinColumn, TJoinColumn>> reversedJoinConditions{};
-    if (isCommutative) {
-        for (const auto& [c1, c2]: joinConditions) {
-            reversedJoinConditions.insert({c2, c1});
-        }
-    }
+    bool bestJoinIsReversed = false;
 
     for (auto joinAlgo : AllJoinAlgos) {
         if (ctx.IsJoinApplicable(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinAlgo)){
@@ -289,7 +309,7 @@ std::shared_ptr<TJoinOptimizerNodeInternal> PickBestJoin(
             if (cost < bestCost){
                 bestCost = cost;
                 bestAlgo = joinAlgo;
-                bestJoinIsReversed = true;
+                bestJoinIsReversed = false;
             }
         }
 
@@ -299,13 +319,13 @@ std::shared_ptr<TJoinOptimizerNodeInternal> PickBestJoin(
                 if (cost < bestCost){
                     bestCost = cost;
                     bestAlgo = joinAlgo;
-                    bestJoinIsReversed = false;
+                    bestJoinIsReversed = true;
                 }
             }
         }
     }
 
-    Y_ENSURE(bestCost != -1.0f, "No join was chosen!");
+    Y_ENSURE(bestCost != std::numeric_limits<double>::infinity(), "No join was chosen!");
 
     if (bestJoinIsReversed) {
         return MakeJoinInternal(right, left, reversedJoinConditions, rightJoinKeys, leftJoinKeys, joinKind, bestAlgo, ctx);
@@ -326,12 +346,15 @@ template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeS
 
     TNodeSet joined = s1 | s2;
 
+    auto reversedEdge = Graph_.FindEdgeBetween(s2, s1);
+
     auto bestJoin = PickBestJoin(
         DpTable_[s1],
         DpTable_[s2],
         csgCmpEdge.JoinKind,
         csgCmpEdge.IsCommutative,
         csgCmpEdge.JoinConditions,
+        reversedEdge->JoinConditions,
         csgCmpEdge.LeftJoinKeys,
         csgCmpEdge.RightJoinKeys,
         Pctx_
@@ -341,15 +364,10 @@ template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeS
         DpTable_[joined] = bestJoin;
     }
 
-    /*
-    * This is a sanity check that slows down the optimizer
-    *
-
-    auto pair = std::make_pair(S1, S2);
+    auto pair = std::make_pair(s1, s2);
     Y_ENSURE (!CheckTable.contains(pair), "Check table already contains pair S1|S2");
 
-    CheckTable[ std::pair<std::bitset<N>,std::bitset<N>>(S1, S2) ] = true;
-    */
+    CheckTable[ std::pair<TNodeSet,TNodeSet>(s1, s2) ] = true;
 }
 
 } // namespace NYql::NDq

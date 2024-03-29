@@ -37,6 +37,7 @@ inline size_t GetLowestSetBit(TNodeSet nodeSet) {
         }
     }
 
+    Y_ASSERT(false);
     return nodeSet.size();
 }
 

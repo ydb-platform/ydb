@@ -97,9 +97,9 @@ private:
 
     bool SendResult(bool pageFault, bool lastBatch);
 
-    void SendScanError(TString reason = {});
+    void SendScanError(const TString& reason);
 
-    void SendAbortExecution(TString reason = {});
+    void SendAbortExecution(const TString& reason);
 
     void Finish(const NColumnShard::TScanCounters::EStatusFinish status);
 

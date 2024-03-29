@@ -19,7 +19,7 @@ public:
         return {};
     }
     virtual bool Finished() const = 0;
-    virtual std::optional<TPartialReadResult> GetBatch() = 0;
+    virtual TConclusion<std::optional<TPartialReadResult>> GetBatch() = 0;
     virtual void PrepareResults() {
 
     }

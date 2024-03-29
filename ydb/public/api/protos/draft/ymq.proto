@@ -62,7 +62,7 @@ message CreateQueueRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     repeated string attributes = 1;
     string queue_name = 2;
-    repeated string tags = 3;
+    map<string,string> tags = 3;
 }
 
 message CreateQueueResponse {

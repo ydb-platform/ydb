@@ -89,7 +89,7 @@ protected:
 
     std::deque<std::shared_ptr<TPortionInfo>> IndexPortions;
 
-    virtual std::optional<TPartialReadResult> GetBatch() override {
+    virtual TConclusion<std::optional<TPartialReadResult>> GetBatch() override {
         // Take next raw batch
         auto batch = FillStatsBatch();
 
@@ -99,13 +99,13 @@ protected:
 
         ApplyRangePredicates(batch);
         if (!batch->num_rows()) {
-            return {};
+            return std::nullopt;
         }
         // Leave only requested columns
         auto resultBatch = NArrow::ExtractColumns(batch, ResultSchema);
         NArrow::TStatusValidator::Validate(ReadMetadata->GetProgram().ApplyProgram(resultBatch));
         if (!resultBatch->num_rows()) {
-            return {};
+            return std::nullopt;
         }
         TPartialReadResult out(resultBatch, lastKey);
 

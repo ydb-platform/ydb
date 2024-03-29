@@ -108,7 +108,7 @@ protected:
     virtual void DoAbort() = 0;
     virtual bool DoIsFinished() const = 0;
     virtual std::vector<TPartialReadResult> DoExtractReadyResults(const int64_t maxRowsInBatch) = 0;
-    virtual bool DoReadNextInterval() = 0;
+    virtual TConclusion<bool> DoReadNextInterval() = 0;
 public:
     IDataReader(const std::shared_ptr<TReadContext>& context);
     virtual ~IDataReader() = default;
@@ -156,7 +156,7 @@ public:
         sb << DoDebugString(verbose);
         return sb;
     }
-    bool ReadNextInterval() {
+    [[nodiscard]] TConclusion<bool> ReadNextInterval() {
         return DoReadNextInterval();
     }
 };

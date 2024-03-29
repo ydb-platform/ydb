@@ -83,10 +83,10 @@ public:
         return IndexedData->IsFinished() && ReadyResults.empty();
     }
 
-    std::optional<TPartialReadResult> GetBatch() override;
+    TConclusion<std::optional<TPartialReadResult>> GetBatch() override;
     virtual void PrepareResults() override;
 
-    virtual bool ReadNextInterval() override;
+    virtual TConclusion<bool> ReadNextInterval() override;
 
 private:
     void FillReadyResults();

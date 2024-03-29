@@ -236,5 +236,5 @@ After getting a hold of some basics demonstrated in this guide, you should be re
 
 * Walk through a more detailed [YQL tutorial](yql/reference/index.md) that focuses on writing queries.
 * Try to build your first app storing data in {{ ydb-short-name }} using [one of the SDKs](reference/ydb-sdk/index.md).
-* Learn how to set up a [production-ready deployment of {{ ydb-short-name }}](sre/index.md).
+* Learn how to set up a [production-ready deployment of {{ ydb-short-name }}](devops/index.md).
 * Read about [{{ ydb-short-name }} concepts](concepts/index.md).

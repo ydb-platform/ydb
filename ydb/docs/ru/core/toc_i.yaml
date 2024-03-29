@@ -7,10 +7,10 @@ items:
   include:
     mode: link
     path: concepts/toc_p.yaml
-- name: Для SRE
+- name: Для DevOps
   include:
     mode: link
-    path: sre/toc_p.yaml
+    path: devops/toc_p.yaml
 
 # Main
 - { name: Практические руководства,                include: { mode: link, path: operations/toc_p.yaml } }
@@ -18,17 +18,21 @@ items:
 - { name: Управление базами данных,                include: { mode: link, path: db/toc_p.yaml } }
 - { name: Управление кластером,                    include: { mode: link, path: cluster/toc_p.yaml } }
 
-- name: Для контрибьюторов
-  include:
-    mode: link
-    path: development/toc_p.yaml
+
 - name: Справка
   include:
     mode: link
     path: reference/toc_p.yaml
 
 # Footer
-- { name: Вопросы и ответы,                        include: { mode: link, path: faq/toc_p.yaml } }
+- name: Вопросы и ответы
+  include:
+    mode: link
+    path: faq/toc_p.yaml
+- name: Для контрибьюторов
+  include:
+    mode: link
+    path: development/toc_p.yaml
 - include: { mode: link, path: downloads/toc_p.yaml }
 - name: Публичные материалы
   href: public-talks.md

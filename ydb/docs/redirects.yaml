@@ -22,19 +22,19 @@ common:
   - from: /ops/devslice-user-guide-k8s-baremetal-host.md
     to: /ops/devslice-setup-kikimr-slice.md
   - from: /deploy/orchestrated/concepts.md
-    to: /sre/kubernetes/initial-deployment.md
+    to: /devops/kubernetes/initial-deployment.md
   - from: /deploy/orchestrated/yc_managed_kubernetes.md
-    to: /sre/kubernetes/initial-deployment.md
+    to: /devops/kubernetes/initial-deployment.md
   - from: /deploy/orchestrated/aws_eks.md
-    to: /sre/kubernetes/initial-deployment.md
+    to: /devops/kubernetes/initial-deployment.md
   - from: /deploy/orchestrated/operate.md
-    to: /sre/kubernetes/initial-deployment.md
+    to: /devops/kubernetes/initial-deployment.md
   - from: /getting_started/index.md
     to: /quickstart.md
   - from: /getting_started/kubernetes.md
-    to: /sre/kubernetes/initial-deployment.md
+    to: /devops/kubernetes/initial-deployment.md
   - from: /getting_started/ansible.md
-    to: /sre/ansible/initial-deployment.md
+    to: /devops/ansible/initial-deployment.md
   - from: /getting_started/yql.md
     to: /yql/reference/index.md
 

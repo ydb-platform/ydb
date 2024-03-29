@@ -54,8 +54,10 @@ public:
             NUdf::TUnboxedValuePod embedded;
             std::memcpy(embedded.GetRawPtr(), item.GetRawPtr(), sizeof(NYql::NUdf::TUnboxedValuePod));
             return embedded;
-        } else {
+        } else if (item.IsBoxed()) {
             return NYql::NUdf::TUnboxedValuePod(item.GetBoxed());
+        } else {
+            return NYql::NUdf::TUnboxedValuePod(item.AsStringValue());
         }
     }
 
@@ -70,8 +72,10 @@ public:
             TBlockItem embedded;
             std::memcpy(embedded.GetRawPtr(), value.GetRawPtr(), sizeof(TBlockItem));
             return embedded;
-        } else {
+        } else if (value.IsBoxed()) {
             return TBlockItem(value.AsBoxed());
+        } else {
+            return TBlockItem(value.AsStringValue());
         }
     }
 };

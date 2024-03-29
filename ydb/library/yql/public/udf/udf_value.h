@@ -687,6 +687,16 @@ struct TRawBoxedValue {
     ui8 Meta;
 };
 
+struct TRawStringValue {
+    static constexpr ui32 OffsetSize = 24;
+    static constexpr ui32 OffsetLimit = 1 << 24;
+
+    TStringValue::TData* Value;
+    ui32 Size;
+    ui32 Offset : OffsetSize;
+    ui8 Meta;
+};
+
 class TUnboxedValuePod
 {
 friend class TUnboxedValue;
@@ -839,18 +849,8 @@ protected:
         TRawEmbeddedValue Embedded;
         
         TRawBoxedValue Boxed;
-
-        struct {
-            TStringValue::TData* Value;
-            ui32 Size;
-            union {
-                ui32 Offset;
-                struct {
-                    ui8 Skip[3];
-                    ui8 Meta;
-                };
-            };
-        } String;
+        
+        TRawStringValue String;
 
         struct {
             union {

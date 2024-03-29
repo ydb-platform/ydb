@@ -171,4 +171,23 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
         UNIT_ASSERT_VALUES_EQUAL(*resource2->Get(), 22222222);
         UNIT_ASSERT_VALUES_EQUAL(resource2->GetResourceTag(), ResourceName);
     }
+
+    Y_UNIT_TEST(TestResourceStringValueBuilderReader) {
+        TArrayBuilderTestData data;
+        const auto resourceType = data.PgmBuilder.NewResourceType(ResourceName);
+        const auto arrayBuilder = MakeResourceArrayBuilder(resourceType, data);
+
+        arrayBuilder->Add(TUnboxedValuePod(TStringValue("test")));
+        arrayBuilder->Add(TUnboxedValuePod(TStringValue("1234"), /* size */ 3, /* offset */ 1));
+        const auto datum = arrayBuilder->Build(true);
+        UNIT_ASSERT(datum.is_array());
+        UNIT_ASSERT_VALUES_EQUAL(datum.length(), 2);
+
+        const auto blockReader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), resourceType);
+        const auto item1AfterRead = blockReader->GetItem(*datum.array(), 0);
+        const auto item2AfterRead = blockReader->GetItem(*datum.array(), 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(item1AfterRead.GetStringRefFromValue(), "test");
+        UNIT_ASSERT_VALUES_EQUAL(item2AfterRead.GetStringRefFromValue(), "234");
+    }
 }

@@ -7,9 +7,25 @@
 
 namespace NYql::NUdf {
 
-// ABI stable
 class TBlockItem {
-    using EMarkers = TUnboxedValuePod::EMarkers;
+    enum class EMarkers : ui8 {
+        Empty = 0,
+        Embedded,
+        // TUnboxedValuePod stores strings as refcounted TStringValue,
+        // TBlockItem can store both refcounted string and simple string view
+        StringValue,
+        Boxed,
+        StringRef,
+    };
+    static_assert(static_cast<ui8>(TBlockItem::EMarkers::Empty) 
+        == static_cast<ui8>(TUnboxedValuePod::EMarkers::Empty));
+
+    static_assert(static_cast<ui8>(TBlockItem::EMarkers::Embedded) 
+        == static_cast<ui8>(TUnboxedValuePod::EMarkers::Embedded));
+    static_assert(static_cast<ui8>(TBlockItem::EMarkers::StringValue) 
+        == static_cast<ui8>(TUnboxedValuePod::EMarkers::String));
+    static_assert(static_cast<ui8>(TBlockItem::EMarkers::Boxed) 
+        == static_cast<ui8>(TUnboxedValuePod::EMarkers::Boxed));
 
 public:
     TBlockItem() noexcept = default;
@@ -30,15 +46,22 @@ public:
         Raw.Resource.Value->ReleaseRef();
     }
 
+    inline explicit TBlockItem(TStringValue&& value, ui32 size, ui32 offset) {
+        Raw.StringValue.Size = std::min(value.Size() - offset, size);
+        Raw.StringValue.Offset = offset;
+        Raw.StringValue.Value = value.ReleaseBuf();
+        Raw.StringValue.Meta = static_cast<ui8>(EMarkers::StringValue);
+    }
+
     inline explicit TBlockItem(bool value) {
         Raw.Simple.bool_ = value ? 1 : 0;
         Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
     }
 
     inline explicit TBlockItem(TStringRef value) {
-        Raw.String.Value = value.Data();
-        Raw.String.Size = value.Size();
-        Raw.Simple.Meta = static_cast<ui8>(EMarkers::String);
+        Raw.StringRef.Value = value.Data();
+        Raw.StringRef.Size = value.Size();
+        Raw.Simple.Meta = static_cast<ui8>(EMarkers::StringRef);
     }
 
     inline explicit TBlockItem(const TBlockItem* tupleItems) {
@@ -83,8 +106,18 @@ public:
     }
 
     inline TStringRef AsStringRef() const {
-        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::String);
-        return TStringRef(Raw.String.Value, Raw.String.Size);
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::StringRef);
+        return TStringRef(Raw.StringRef.Value, Raw.StringRef.Size);
+    }
+
+    inline TStringValue AsStringValue() const {
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::StringValue);
+        return TStringValue(Raw.StringValue.Value);
+    }
+    
+    inline TStringRef GetStringRefFromValue() const {
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::StringValue);
+        return { Raw.StringValue.Value->Data() + (Raw.StringValue.Offset & 0xFFFFFF), Raw.StringValue.Size };
     }
 
     inline TBlockItem MakeOptional() const
@@ -133,7 +166,6 @@ public:
 
     bool HasValue() const { return EMarkers::Empty != GetMarkers(); }
 
-    bool IsString() const { return EMarkers::String == GetMarkers(); }
     bool IsBoxed() const { return EMarkers::Boxed == GetMarkers(); }
     bool IsEmbedded() const { return EMarkers::Embedded == GetMarkers(); }
 
@@ -144,6 +176,8 @@ private:
         TRawEmbeddedValue Embedded;
         
         TRawBoxedValue Resource;
+
+        TRawStringValue StringValue;
 
         struct {
             union {
@@ -168,7 +202,9 @@ private:
         struct {
             const char* Value;
             ui32 Size;
-        } String;
+            ui8 Reserved;
+            ui8 Meta;
+        } StringRef;
 
         struct {
             // client should know tuple size

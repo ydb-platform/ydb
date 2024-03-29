@@ -54,8 +54,6 @@ public:
         return LastReadKey;
     }
 
-    std::string ErrorString;
-
     explicit TPartialReadResult(
         const std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>& resourcesGuards,
         const NArrow::TShardedRecordBatch& batch, std::shared_ptr<arrow::RecordBatch> lastKey)

@@ -4215,6 +4215,10 @@ bool IsDataTypeTzDate(EDataSlot dataSlot) {
     return NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::TzDateType;
 }
 
+bool IsDataTypeBigDate(EDataSlot dataSlot) {
+    return (NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::BigDateType);
+}
+
 EDataSlot WithTzDate(EDataSlot dataSlot) {
     if (dataSlot == EDataSlot::Date) {
         return EDataSlot::TzDate;

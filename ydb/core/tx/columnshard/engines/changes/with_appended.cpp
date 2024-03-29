@@ -7,7 +7,7 @@
 
 namespace NKikimr::NOlap {
 
-void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* /*self*/, TWriteIndexContext& context) {
+void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     THashSet<ui64> usedPortionIds;
     for (auto& [_, portionInfo] : PortionsToRemove) {
         Y_ABORT_UNLESS(!portionInfo.Empty());
@@ -15,6 +15,16 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* /*sel
         AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
         portionInfo.SaveToDatabase(context.DBWrapper);
     }
+    const auto predRemoveDroppedTable = [self](const TPortionInfoWithBlobs& item) {
+        auto& portionInfo = item.GetPortionInfo();
+        if (!!self && (!self->TablesManager.HasTable(portionInfo.GetPathId()) || self->TablesManager.GetTable(portionInfo.GetPathId()).IsDropped())) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_inserted_data")("reason", "table_removed")("path_id", portionInfo.GetPathId());
+            return true;
+        } else {
+            return false;
+        }
+    };
+    AppendedPortions.erase(std::remove_if(AppendedPortions.begin(), AppendedPortions.end(), predRemoveDroppedTable), AppendedPortions.end());
     for (auto& portionInfoWithBlobs : AppendedPortions) {
         auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
         Y_ABORT_UNLESS(!portionInfo.Empty());

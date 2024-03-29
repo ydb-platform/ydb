@@ -45,9 +45,11 @@ public:
         Success /* "Success" */ = 0,
         ConveyorInternalError /* "ConveyorInternalError" */,
         ExternalAbort /* "ExternalAbort" */,
-        IteratorInternalError /* "IteratorInternalError" */,
+        IteratorInternalErrorScan /* "IteratorInternalErrorScan" */,
+        IteratorInternalErrorResult /* "IteratorInternalErrorResult" */,
         Deadline /* "Deadline" */,
         UndeliveredEvent /* "UndeliveredEvent" */,
+        CannotAddInFlight /* "CannotAddInFlight" */,
 
         COUNT
     };

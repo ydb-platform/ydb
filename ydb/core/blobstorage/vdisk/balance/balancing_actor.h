@@ -16,7 +16,7 @@ namespace NBalancing {
     );
     IActor* CreateDeleterActor(
         TActorId notifyId,
-        TQueue<TPartInfo> parts,
+        TQueue<TLogoBlobID> parts,
         TQueueActorMapPtr queueActorMapPtr,
         std::shared_ptr<TBalancingCtx> ctx
     );

@@ -5,11 +5,13 @@ ydb/core/client/ut TClientTest.ReadFromFollower
 ydb/core/client/ut TFlatTest.AutoSplitMergeQueue
 ydb/core/cms/ut_sentinel TSentinelTests.BSControllerCantChangeStatus
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
-ydb/core/kafka_proxy/ut KafkaProtocol.CreatePartitionsScenario
-ydb/core/kafka_proxy/ut KafkaProtocol.ProduceScenario
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
 ydb/core/kqp/ut/federated_query/generic *
-ydb/core/kqp/ut/olap *
+ydb/core/kqp/ut/olap KqpOlap.IndexesActualization
+ydb/core/kqp/ut/olap KqpOlap.BlobsSharing*
+ydb/core/kqp/ut/olap KqpOlap.ScanQueryOltpAndOlap
+ydb/core/kqp/ut/olap KqpOlap.StatsUsageWithTTL
+ydb/core/kqp/ut/olap KqpOlap.YqlScriptOltpAndOlap
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout
@@ -22,9 +24,6 @@ ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [38/50]*
 ydb/core/persqueue/ut TPQTest.*DirectRead*
-ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.ForgetAfterFail
-ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.RebootForgetAfterFail
-ydb/core/tx/columnshard/engines/ut *
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
@@ -36,8 +35,7 @@ ydb/core/viewer/ut Viewer.TabletMerging
 ydb/core/viewer/ut Viewer.TabletMergingPacked
 ydb/library/actors/http/ut HttpProxy.TooLongHeader
 ydb/library/actors/http/ut sole*
-ydb/library/yql/providers/generic/connector/tests sole*
-ydb/library/yql/providers/generic/connector/tests test.py.*
+ydb/library/yql/providers/generic/connector/tests *
 ydb/public/lib/ydb_cli/topic/ut TTopicReaderTests.TestRun_ReadOneMessage
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut RetryPolicy.RetryWithBatching
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut RetryPolicy.TWriteSession_TestBrokenPolicy
@@ -83,7 +81,6 @@ ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/restarts test_restarts.py.*
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--*]
-ydb/tests/functional/sqs/cloud test_common.py.TestCommonSqsYandexCloudMode.test_private_create_queue[tables_format_v0-std]
 ydb/tests/functional/tenants test_dynamic_tenants.py.*
 ydb/tests/functional/tenants test_storage_config.py.TestStorageConfig.*
 ydb/tests/functional/tenants test_tenants.py.*

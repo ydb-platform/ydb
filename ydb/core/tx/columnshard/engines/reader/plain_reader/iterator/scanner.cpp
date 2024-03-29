@@ -76,7 +76,7 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
     }
 }
 
-bool TScanHead::BuildNextInterval() {
+TConclusion<bool> TScanHead::BuildNextInterval() {
     while (BorderPoints.size() && (FetchingIntervals.size() < InFlightLimit || BorderPoints.begin()->second.GetStartSources().empty())) {
         auto firstBorderPointInfo = std::move(BorderPoints.begin()->second);
         bool includeStart = firstBorderPointInfo.GetStartSources().size();

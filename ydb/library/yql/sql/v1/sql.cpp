@@ -83,6 +83,7 @@ NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst,
     TAstParseResult res;
     TContext ctx(settings, hints, res.Issues);
     SqlASTToYqlImpl(res, protoAst, ctx);
+    res.ActualSyntaxType = NYql::ESyntaxType::YQLv1;
     return res;
 }
 
@@ -111,6 +112,7 @@ NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTra
         *warningRules = ctx.WarningPolicy.GetRules();
         ctx.WarningPolicy.Clear();
     }
+    res.ActualSyntaxType = NYql::ESyntaxType::YQLv1;
     return res;
 }
 

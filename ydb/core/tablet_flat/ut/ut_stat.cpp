@@ -294,7 +294,7 @@ Y_UNIT_TEST_SUITE(BuildStats) {
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), true, true)).Mixed(0, 1, TMixerOne{ }, 0.3, 13);   
         subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
-        Check(*subset, 13570, 2186460 /* ~2277890 */, 42292, 5310, 531050);
+        Check(*subset, 13570, 2114857 /* ~2277890 */, 42292, 5310, 531050);
     }
 }
 

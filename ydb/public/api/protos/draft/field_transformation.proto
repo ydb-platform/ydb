@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+import "google/protobuf/descriptor.proto";
+
 package Ydb.FieldTransformation;
 
 enum EFieldTransformationType {

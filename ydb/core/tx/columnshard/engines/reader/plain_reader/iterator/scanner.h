@@ -69,7 +69,7 @@ public:
 
     TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context);
 
-    bool BuildNextInterval();
+    [[nodiscard]] TConclusion<bool> BuildNextInterval();
 
 };
 

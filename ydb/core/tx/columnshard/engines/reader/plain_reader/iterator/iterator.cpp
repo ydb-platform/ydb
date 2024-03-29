@@ -15,7 +15,7 @@ TColumnShardScanIterator::TColumnShardScanIterator(const std::shared_ptr<TReadCo
     }
 }
 
-std::optional<TPartialReadResult> TColumnShardScanIterator::GetBatch() {
+TConclusion<std::optional<TPartialReadResult>> TColumnShardScanIterator::GetBatch() {
     FillReadyResults();
     return ReadyResults.pop_front();
 }
@@ -24,7 +24,7 @@ void TColumnShardScanIterator::PrepareResults() {
     FillReadyResults();
 }
 
-bool TColumnShardScanIterator::ReadNextInterval() {
+TConclusion<bool> TColumnShardScanIterator::ReadNextInterval() {
     return IndexedData->ReadNextInterval();
 }
 

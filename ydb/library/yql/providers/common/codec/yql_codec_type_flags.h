@@ -23,7 +23,7 @@ enum ENativeTypeCompatFlags: ui64 {
     NTCF_PRODUCTION = NTCF_COMPLEX | NTCF_DATE | NTCF_NULL | NTCF_VOID | NTCF_FLOAT | NTCF_JSON | NTCF_DECIMAL /* "production" */,
 
     // add all new types here, supported by YT
-    NTCF_ALL = NTCF_PRODUCTION /* "all" */,
+    NTCF_ALL = NTCF_PRODUCTION | NTCF_BIGDATE /* "all" */,
 };
 
 } // namespace NYql

@@ -4,8 +4,8 @@ import "ydb/public/api/protos/ydb_operation.proto";
 
 import "google/protobuf/descriptor.proto";
 
-package Ydb.YMQ.V0;
-option java_package = "com.yandex.ydb.ymq.v0";
+package Ydb.YMQ;
+option java_package = "com.yandex.ydb.ymq";
 
 // TODO: move to common place with DataStreams
 enum EFieldTransformationType {

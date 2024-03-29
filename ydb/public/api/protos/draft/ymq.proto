@@ -211,7 +211,6 @@ message Message {
     map<string, MessageAttribute>  message_attributes = 5;
     string  message_id = 6;
     string receipt_handle = 7;
-
 }
 
 message ReceiveMessageResult {

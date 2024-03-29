@@ -8,24 +8,7 @@
 namespace NYql::NUdf {
 
 class TBlockItem {
-    enum class EMarkers : ui8 {
-        Empty = 0,
-        Embedded,
-        // TUnboxedValuePod stores strings as refcounted TStringValue,
-        // TBlockItem can store both refcounted string and simple string view
-        StringValue,
-        Boxed,
-        StringRef,
-    };
-    static_assert(static_cast<ui8>(TBlockItem::EMarkers::Empty) 
-        == static_cast<ui8>(TUnboxedValuePod::EMarkers::Empty));
-
-    static_assert(static_cast<ui8>(TBlockItem::EMarkers::Embedded) 
-        == static_cast<ui8>(TUnboxedValuePod::EMarkers::Embedded));
-    static_assert(static_cast<ui8>(TBlockItem::EMarkers::StringValue) 
-        == static_cast<ui8>(TUnboxedValuePod::EMarkers::String));
-    static_assert(static_cast<ui8>(TBlockItem::EMarkers::Boxed) 
-        == static_cast<ui8>(TUnboxedValuePod::EMarkers::Boxed));
+    using EMarkers = TUnboxedValuePod::EMarkers;
 
 public:
     TBlockItem() noexcept = default;
@@ -52,7 +35,7 @@ public:
         Raw.StringValue.Size = std::min(value.Size() - offset, size);
         Raw.StringValue.Offset = offset;
         Raw.StringValue.Value = value.ReleaseBuf();
-        Raw.StringValue.Meta = static_cast<ui8>(EMarkers::StringValue);
+        Raw.StringValue.Meta = static_cast<ui8>(EMarkers::String);
     }
 
     inline explicit TBlockItem(bool value) {
@@ -63,7 +46,7 @@ public:
     inline explicit TBlockItem(TStringRef value) {
         Raw.StringRef.Value = value.Data();
         Raw.StringRef.Size = value.Size();
-        Raw.Simple.Meta = static_cast<ui8>(EMarkers::StringRef);
+        Raw.Simple.Meta = static_cast<ui8>(EMarkers::String);
     }
 
     inline explicit TBlockItem(const TBlockItem* tupleItems) {
@@ -107,18 +90,20 @@ public:
         return Raw.Tuple.Value[index];
     }
 
+    // TUnboxedValuePod stores strings as refcounted TStringValue,
+    // TBlockItem can store pointer to both refcounted string and simple string view
     inline TStringRef AsStringRef() const {
-        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::StringRef);
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::String);
         return TStringRef(Raw.StringRef.Value, Raw.StringRef.Size);
     }
 
     inline TStringValue AsStringValue() const {
-        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::StringValue);
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::String);
         return TStringValue(Raw.StringValue.Value);
     }
     
     inline TStringRef GetStringRefFromValue() const {
-        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::StringValue);
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::String);
         return { Raw.StringValue.Value->Data() + (Raw.StringValue.Offset & 0xFFFFFF), Raw.StringValue.Size };
     }
 

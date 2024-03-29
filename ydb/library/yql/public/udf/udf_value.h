@@ -892,7 +892,7 @@ public:
     inline i32 RefCount() const noexcept;
 
     static constexpr ui32 InternalBufferSize = sizeof(TRaw::Embedded.Buffer);
-    static constexpr ui32 OffsetLimit = 1U << 24U;
+    static constexpr ui32 OffsetLimit = TRawStringValue::OffsetLimit;
 };
 
 UDF_ASSERT_TYPE_SIZE(TUnboxedValuePod, 16);

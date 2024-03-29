@@ -243,7 +243,7 @@ public:
 
     void Failed() {
         LOG_I("Execution status: Failed, Status: " << Status << ", StatusCode: " << NYql::NDqProto::StatusIds::StatusCode_Name(StatusCode) << " Issues: " << Issues.ToOneLineString());
-        FailedStatusCodeCounters->IncByStatusCode(StatusCode);
+        FailedStatusCodeCounters->IncByStatusCode(StatusCode, Issues);
         OnPingRequestStart();
 
         Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(QueryStats, Issues, std::nullopt, StatusCode);

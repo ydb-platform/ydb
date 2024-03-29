@@ -672,7 +672,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvFinalStatus
     }
 
     if (IsFailedStatus(event.Status)) {
-        FailedStatusCodeCounters->IncByStatusCode(event.StatusCode);
+        FailedStatusCodeCounters->IncByStatusCode(event.StatusCode, event.Issues);
         LOG_YQ_AUDIT_SERVICE_INFO("FinalFailedStatus: cloud id: [" << event.CloudId  << "], scope: [" << event.Scope << "], query id: [" <<
                                 event.QueryId << "], job id: [" << event.JobId << "], "
                                 "status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status) <<

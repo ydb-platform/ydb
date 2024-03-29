@@ -180,8 +180,8 @@ message PurgeQueueResult {
 }
 
 message MessageAttribute {
-    repeated bytes binary_list_values = 1;
-    bytes binary_value = 2;
+    repeated bytes binary_list_values = 1 [(FieldTransformer) = TRANSFORM_BASE64];
+    bytes binary_value = 2 [(FieldTransformer) = TRANSFORM_BASE64];
     string data_type = 3;
     repeated string string_list_values = 4;
     string string_value = 5;
@@ -207,7 +207,7 @@ message Message {
     map<string, string> attributes = 1;
     string body = 2;
     string md5_of_body = 3;
-    string  md5_of_message_attributes = 4;
+    string md5_of_message_attributes = 4;
     map<string, MessageAttribute>  message_attributes = 5;
     string  message_id = 6;
     string receipt_handle = 7;

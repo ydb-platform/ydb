@@ -33,6 +33,11 @@
 
 #include <ydb/core/http_proxy/auth_factory.h>
 
+#if defined(_darwin_)
+    #ifndef TCP_USER_TIMEOUT
+        #define TCP_USER_TIMEOUT TCP_RXT_CONNDROPTIME
+    #endif
+#endif
 
 using TJMap = NJson::TJsonValue::TMapType;
 using TJVector = NJson::TJsonValue::TArray;

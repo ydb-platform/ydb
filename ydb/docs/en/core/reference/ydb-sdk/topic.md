@@ -785,7 +785,7 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
 - Java
 
-  To take advantage of message metadata feature, build messages with builder. You can add `MetadataItem` to a message or set a `List` of `MetadataItem`s. Each item consists of a key of type `String` and a value of type `byte[]`:
+  Construct messages with the builder to take advantage of the message metadata feature. You can add `MetadataItem` objects to a message individually or set a `List` of `MetadataItem`s. Each item consists of a key of type `String` and a value of type `byte[]`:
 
   ```java
   writer.send(

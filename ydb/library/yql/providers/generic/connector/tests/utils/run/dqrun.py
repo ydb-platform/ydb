@@ -45,10 +45,12 @@ Generic {
             port: {{port}}
         }
         Credentials {
+            {% if username and password %}
             basic {
                 username: "{{username}}"
                 password: "{{password}}"
             }
+            {% endif %}
         }
         UseSsl: false
         Protocol: {{protocol}}
@@ -108,8 +110,8 @@ Generic {
     settings.ydb.cluster_name,
     settings.ydb.host_internal,
     settings.ydb.port_internal,
-    settings.ydb.username,
-    settings.ydb.password,
+    NONE,
+    NONE,
     NATIVE,
     cluster.database,
     NONE)

@@ -40,12 +40,8 @@ IF (OPENSOURCE)
 ENDIF()
 
 TEST_SRCS(
-    collection.py
-    conftest.py
-    select_datetime.py
-    select_positive.py
-    select_positive_with_schema.py
     test.py
+    conftest.py
 )
 
 PEERDIR(
@@ -53,7 +49,7 @@ PEERDIR(
     ydb/library/yql/providers/generic/connector/api/common
     ydb/library/yql/providers/generic/connector/tests/common_test_cases
     ydb/library/yql/providers/generic/connector/tests/utils
-    ydb/library/yql/providers/generic/connector/tests/utils/types
+    ydb/library/yql/providers/generic/connector/tests/utils/run
     ydb/library/yql/providers/generic/connector/tests/utils/clients
     ydb/library/yql/providers/generic/connector/tests/utils/scenario
 )

@@ -48,6 +48,13 @@ class Settings:
 
     postgresql: PostgreSQL
 
+    @dataclass
+    class Ydb:
+        dbname: str
+        cluster_name: str
+        host_internal: str
+        port_internal: int
+
     @classmethod
     def from_env(cls, docker_compose_dir: pathlib.Path, data_source_kinds: Sequence[EDataSourceKind]) -> 'Settings':
         docker_compose_file_relative_path = str(docker_compose_dir / 'docker-compose.yml')
@@ -88,10 +95,15 @@ class Settings:
                         username='user',
                         password='password',
                     )
+                case EDataSourceKind.YDB:
+                    data_sources[data_source_kind] = cls.Ydb(
+                        cluster_name='ydb_integration_test',
+                        host_internal=endpoint_determiner.get_container_name('ydb'),
+                        port_internal=2136,
+                        dbname="/local"
+                    )
                 case _:
                     raise Exception(f'invalid data source: {data_source_kind}')
-
-        print("CRAB", data_sources)
 
         return cls(
             connector=cls.Connector(

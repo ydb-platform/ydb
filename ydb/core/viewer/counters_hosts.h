@@ -22,7 +22,7 @@ class TCountersHostsList : public TActorBootstrapped<TCountersHostsList> {
     NMon::TEvHttpInfo::TPtr Event;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
     TMap<TNodeId, THolder<TEvWhiteboard::TEvSystemStateResponse>> NodesResponses;
-    THashSet<TNodeId> ConnectedNodes;
+    THashSet<TActorId> TcpProxies;
     ui32 NodesRequested = 0;
     ui32 NodesReceived = 0;
     bool StaticNodesOnly = false;
@@ -115,14 +115,14 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         ui32 nodeId = ev->Get()->NodeId;
-        ConnectedNodes.erase(nodeId);
+        TcpProxies.erase(ev->Sender);
         if (NodesResponses.emplace(nodeId, nullptr).second) {
             NodeStateInfoReceived();
         }
     }
 
     void Connected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
-        ConnectedNodes.insert(ev->Get()->NodeId);
+        TcpProxies.insert(ev->Sender);
     }
 
     void ReplyAndDie() {
@@ -161,8 +161,8 @@ public:
     }
 
     void PassAway() {
-        for (auto &nodeId: ConnectedNodes) {
-            Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
+        for (auto &tcpPorxy: TcpProxies) {
+            Send(tcpPorxy, new TEvents::TEvUnsubscribe);
         }
         TBase::PassAway();
     }

@@ -1,11 +1,16 @@
 # Приложение на Node.js
 
-На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v1), доступного в составе [Node.js SDK](https://github.com/ydb-platform/ydb-nodejs-sdk) {{ ydb-short-name }}.
+На этой странице подробно разбирается код тестовых приложений 
+[basic-example-v2-with-query-service](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v2-with-query-service) и 
+[basic-example-v1-with-table-service](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v1-with-table-service),
+доступых в составе [Node.js SDK](https://github.com/ydb-platform/ydb-nodejs-sdk) {{ ydb-short-name }}.
 
 {% include [init.md](steps/01_init.md) %}
 
 Фрагмент кода приложения для инициализации драйвера:
 
+{% list tabs %}
+ 
 - Используя connectionString
 
 ```ts
@@ -19,7 +24,7 @@ if (!await driver.ready(timeout)) {
 }
 ```
 
-- Используя ebdpoint и database
+- Используя endpoint и database
 
 ```ts
 const authService = getCredentialsFromEnv();
@@ -37,9 +42,9 @@ if (!await driver.ready(timeout)) {
 Фрагмент кода приложения для создания сессии:
 
 {% list tabs %}
-
+    
 - Используя Query Service
-
+    
 ```ts
 const result = await driver.queryClient.do({
     ...
@@ -226,13 +231,13 @@ _Прим.:_ Query Service не поддерживает функциональ�
 ```ts
 async function upsertSimple(driver: Driver, logger: Logger): Promise<void> {
     logger.info('Making an upsert...');
-        await driver.queryClient.do({
-            fn: async (session) => {
-                 await session.execute({
-                     text: `
-                        UPSERT INTO ${EPISODES_TABLE} (series_id, season_id, episode_id, title)
-                        VALUES (2, 6, 1, "TBD");`,
-               })
+    await driver.queryClient.do({
+        fn: async (session) => {
+             await session.execute({
+                 text: `
+                    UPSERT INTO ${EPISODES_TABLE} (series_id, season_id, episode_id, title)
+                    VALUES (2, 6, 1, "TBD");`,
+           })
         }
     });
     logger.info('Upsert completed.')
@@ -258,11 +263,11 @@ UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES
 
 {% list tabs %}
 
-- Query Service (rowMode: RowType.Native)
+- Используя Query Service (rowMode: RowType.Native)
 
 Для выполнения YQL-запросов используется метод `QuerySession.execute()`.
 
-В зависимости оп параметра rowMode данные можно получить в javascript форме иил как YDB структуры.  
+В зависимости оп параметра rowMode данные можно получить в javascript форме или как YDB структуры.  
 
 ```ts
 async function selectNativeSimple(driver: Driver, logger: Logger): Promise<void> {
@@ -290,7 +295,7 @@ async function selectNativeSimple(driver: Driver, logger: Logger): Promise<void>
 }
 ```
 
-- Query Service (rowMode: RowType.Ydb)
+- Используя Query Service (rowMode: RowType.Ydb)
 
 Для выполнения YQL-запросов используется метод `QuerySession.execute()`.
 
@@ -323,7 +328,7 @@ async function selectTypedSimple(driver: Driver, logger: Logger): Promise<void> 
 }
 ```
 
-- Table Service
+- Используя Table Service
 
 Для выполнения YQL-запросов используется метод `TableSession.executeQuery()`.
 
@@ -554,7 +559,7 @@ async function transactionPerWholeDo(driver: Driver, ids: ThreeIds, logger: Logg
                       AND season_id = $seasonId
                       AND episode_id = $episodeId;`
             })
-            logger.info(`TxId ${session.txId} committed.`);
+            logger.info(`TxId ${session.txId} will be committed by doTx().`);
         }
     });
 }

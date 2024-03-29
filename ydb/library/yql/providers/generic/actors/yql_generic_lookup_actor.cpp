@@ -298,14 +298,9 @@ namespace NYql::NDq {
         NConnector::NApi::TSelect CreateSelect(const NKikimr::NMiniKQL::TUnboxedValueVector& keys) {
             NConnector::NApi::TSelect select;
             *select.mutable_data_source_instance() = DataSource;
-            try {
-                TokenProvider->MaybeFillToken(*select.mutable_data_source_instance());
-                //Note: returned token may be stale and we have no way to check or recover here
-                //Consider to redesign ICredentialsProvider
-            } catch (const std::exception& e) {
-                //As for now, we do not expect an exception after successful TokenProvider initialization.
-                YQL_ENSURE(false, "ActorId=" << SelfId() << " Failed to get IAM token: " << e.what());
-            }
+            //Note: returned token may be stale and we have no way to check or recover here
+            //Consider to redesign ICredentialsProvider
+            TokenProvider->MaybeFillToken(*select.mutable_data_source_instance());
 
             for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {
                 auto c = select.mutable_what()->add_items()->mutable_column();

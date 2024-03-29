@@ -15,7 +15,7 @@ CREATE [TEMPORARY | TEMP] TABLE <table name> (
 );
 ```
 При создании таблицы можно задать:
-1. **Тип таблицы**: {% include [_includes/temp_table_description.md](../../_includes/temp_table_description.md) %}
+1. **Тип таблицы**: {% include [temp-table-description.md](../../_includes/temp-table-description.md) %}
 2. **Имя таблицы**: `<table name>` – можно использовать английские буквы в нижнем регистре, цифры, нижнее подчёркивание и знак доллара ($). Например, название таблицы "People" будет сохранено как "people";
 3. **Имя столбца/колонки**: <column name> – действую такие же правила нейминга как и для имен таблиц;
 4. **Тип данных**: <column data type> – указываются [стандартные типы](https://www.postgresql.org/docs/current/datatype.html) данных PostgreSQL;

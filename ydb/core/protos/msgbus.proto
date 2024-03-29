@@ -449,11 +449,6 @@ message TSchemeOperationStatus {
     optional TFlatTxPollOptions PollOptions = 10;
 };
 
-message TDsTestLoadRequest {
-    optional uint32 NodeId = 1;
-    optional NKikimrDataShardLoad.TEvYCSBTestLoadRequest Event = 2;
-};
-
 message TDsTestLoadResponse {
     message TItem {
         optional uint32 NodeId = 1;

@@ -2,15 +2,15 @@
 
 ## Introduction {#introductuin}
 
-[Liquibase](https://www.liquibase.com/) is an open-source library for tracking, managing, and applying changes to database schemas. It is expanded with dialects for different DBMS.
+[Liquibase](https://www.liquibase.com/) is an open-source library for tracking, managing, and applying changes to database schemas. It is extended with dialects for different database management systems (DBMS), including {{ ydb-short-name }}.
 
-Dialect is the main component in the Liquibase framework, which assists in creating SQL queries for a database, considering the specific features of a specific DBMS.
+Dialect is the main component in the Liquibase framework, which assists in creating SQL queries for a database, considering the specific features of a given DBMS.
 
 ## Features of the {{ ydb-short-name }} Dialect {#ydb-dialect}
 
-Liquibase's main functionality is the abstract description of database schemas in `.xml`, `.json`, or `.yaml` format. This ensures portability when switching between different database management systems (DBMS).
+Liquibase's main functionality is the abstract description of database schemas in a `.xml`, `.json`, or `.yaml` format. This ensures portability when switching between different DBMSs.
 
-The dialect supports basic constructions in the migration description standard (changeset).
+The {{ ydb-short-name }} dialect supports the following basic constructs in the standard migration description (changeset).
 
 ### Creating a table
 
@@ -18,7 +18,7 @@ The `сreateTable` changeset is responsible for creating a table. The descriptio
 
 {% note info %}
 
-You can also explicitly specify the original name. For example, types like `Int32`, `Json`, `Json Document`, `Bytes` and `Interval`. But in that case, the portability of the schema is lost.
+You can also explicitly specify the original type name, such as `Int32`, `Json`, `Json Document`, `Bytes`, or `Interval`. However, in this case, the schema won't be portable.
 
 {% endnote %}
 
@@ -36,51 +36,250 @@ Table of comparison of Liquibase types descriptions with [{{ ydb-short-name }} t
 | `bigint`, `java.sql.Types.BIGINT`, `java.math.BigInteger`, `java.lang.Long`, `integer8`, `bigserial`, `long`                                                                                                                                                                                                                                                                                                                                                                                                  | `Int64`                    |
 | `java.sql.Types.SMALLINT`, `int2`, `smallserial`, `smallint`                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `Int16`                    |
 | `java.sql.Types.TINYINT`, `tinyint`                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `Int8`                     |
-| `char`, `java.sql.Types.CHAR`, `bpchar`, `character`, `nchar`, `java.sql.Types.NCHAR`, `nchar2`, `text`, `varchar`, `java.sql.Types.VARCHAR`, `java.lang.String`, `varchar2`, `character varying`, `nvarchar`, `java.sql.Types.NVARCHAR`, `nvarchar2`, `national`, `clob`, `longvarchar`, `longtext`, `java.sql.Types.LONGVARCHAR`, `java.sql.Types.CLOB`, `nclob`, `longnvarchar`, `ntext`, `java.sql.Types.LONGNVARCHAR`, `java.sql.Types.NCLOB`, `tinytext`, `mediumtext`, `long varchar`, `long nvarchar` | `Text`                     |
+| `char`, `java.sql.Types.CHAR`, `bpchar`, `character`, `nchar`, `java.sql.Types.NCHAR`, `nchar2`, `text`, `varchar`, `java.sql.Types.VARCHAR`, `java.lang.String`, `varchar2`, `character varying`, `nvarchar`, `java.sql.Types.NVARCHAR`, `nvarchar2`, `national`, `clob`, `longvarchar`, `longtext`, `java.sql.Types.LONGVARCHAR`, `java.sql.Types.CLOB`, `nclob`, `longnvarchar`, `ntext`, `java.sql.Types.LONGNVARCHAR`, `java.sql.Types.NCLOB`, `tinytext`, `mediumtext`, `long varchar`, `long nvarchar` | `Text` (synonym `Utf8`)    |
 | `timestamp`, `java.sql.Types.TIMESTAMP`, `java.sql.TIMESTAMP`                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `Timestamp`                |
-| `java.util.Date`, `time`, `java.sql.Types.TIME`, `java.sql.Time`                                                                                                                                                                                                                                                                                                                                                                                                                                              | `Datetime`                 |
+| `time`, `java.sql.Types.TIME`, `java.sql.Time`                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `Datetime`                 |
 
 {% note info %}
 
-The case of the data type does not matter.
+The type names are case insensitive.
 
 {% endnote %}
+
+The `dropTable` changeset - delete a table. For example: `<dropTable tableName="episodes"/>`
 
 ### Changing the table structure
 
-`dropTable` - delete table. For example: `<dropTable tableName="episodes"/>`
+`addColumn` - add a column to a table. For example:
 
-`addColumn` - add column in table. For example:
+{% list tabs %}
 
-```xml
+- xml
 
-<addColumn tableName="seasons">
-    <column name="is_deleted" type="bool"/>
-</addColumn>
-```
+  ```xml
+  <addColumn tableName="seasons">
+      <column name="is_deleted" type="bool"/>
+  </addColumn>
+  ```
 
-`createIndex` - create index. For example:
+- json
 
-```xml
+  ```json
+  "changes": [
+      {
+        "addColumn": {
+          "tableName": "seasons",
+          "columns": [
+            {
+              "column": {
+                "name": "is_deleted",
+                "type": "bool"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  ```
+  
+- yaml
 
-<createIndex tableName="episodes" indexName="episodes_index" unique="false">
-    <column name="title"/>
-</createIndex>
-```
+  ```yaml
+  changes:
+  - addColumn:
+      tableName: seasons
+      columns:
+      - column:
+          name: is_deleted
+          type: bool
+  ```
 
-{% note info %}
+{% endlist %}
 
-Asynchronous indexes should be created using native SQL migrations.
+`createIndex` - create a secondary index. For example:
+
+{% list tabs %}
+
+- xml
+
+  ```xml
+  <createIndex tableName="episodes" indexName="episodes_index" unique="false">
+      <column name="title"/>
+  </createIndex>
+  ```
+
+- json
+
+  ```json
+  "changes": [
+      {
+        "createIndex": {
+          "tableName": "episodes",
+          "indexName": "episodes_index",
+          "unique": "false",
+          "columns": {
+            "column": {
+              "name": "title"
+            }
+          }
+        }
+      }
+  ```
+
+- yaml
+
+  ```yaml
+  changes:
+  - createIndex:
+      tableName: episodes
+      indexName: episodes_index
+      unique: false
+      columns:
+      - column:
+          name: title
+  ```
+
+{% endlist %}
+
+{% note warning %}
+
+YDB doesn't support unique secondary indexes.
 
 {% endnote %}
 
-`dropIndex` - drop index. For example: `<dropIndex tableName="series" indexName="series_index"/>`
+{% note info %}
 
-### Inserting data into a table
+Asynchronous indexes should be created using [native SQL migrations](https://docs.liquibase.com/concepts/changelogs/sql-format.html).
 
-`loadData`, `loadUpdateData` - download data from CSV file. *loadUpdate* loads data using the UPSERT command. Data will be automatically converted to the required types, taking into account the strict typing in {{ ydb-short-name }}.
+{% endnote %}
 
-`insert` is a changeset that performs a single insert into a table. The value can be specified in the `value` field, for example, `<column name="timestamp_column" value="2023-07-31T17:00:00.123123Z"/>`.
+`dropIndex` - drop a secondary index. For example: 
+
+{% list tabs %}
+
+- xml
+
+  ```xml
+  <dropIndex tableName="series" indexName="series_index"/>
+  ```
+
+- json
+
+  ```json
+  "changes": [
+    {
+      "dropIndex": {
+        "tableName": "series",
+        "indexName": "series_index"
+      }
+    }
+  ]
+  ```
+
+- yaml
+
+  ```yaml
+  changes:
+  - dropIndex:
+      tableName: series
+      indexName: series_index
+  ```
+
+{% endlist %}
+
+### Ingesting data into a table
+
+`loadData`, `loadUpdateData` - upload data from a CSV file into a table. `loadUpdateData` loads data using the [UPSERT](../yql/reference/ydb-core/syntax/upsert_into.md) command. Data will be automatically converted to the required types, taking into account the strict typing in {{ ydb-short-name }}.
+
+`insert` is a changeset that performs a single insert into a table using [INSERT INTO](../yql/reference/syntax/ydb-core/insert_into.md) sql statement. For example:
+
+{% list tabs %}
+
+- xml 
+
+  ```xml
+  <insert tableName="episodes">
+      <column name="series_id" valueNumeric="1"/>
+      <column name="season_id" valueNumeric="1"/>
+      <column name="episode_id" valueNumeric="1"/>
+      <column name="title" value="Yesterday's Jam"/>
+      <column name="air_date" valueDate="2023-04-03T08:46:23.456"/>
+  </insert>
+  ```
+
+  - json
+  
+    ```json
+    "changes": [
+      {
+        "insert": {
+          "tableName": "episodes",
+          "columns": [
+            {
+              "column": {
+                "name": "series_id",
+                "valueNumeric": "1"
+              }
+            },
+            {
+              "column": {
+                "name": "season_id",
+                "valueNumeric": "1"
+              }
+            },
+            {
+              "column": {
+                "name": "episode_id",
+                "valueNumeric": "1"
+              }
+            },
+            {
+              "column": {
+                "name": "title",
+                "value": "Yesterday's Jam"
+              }
+            },
+            {
+              "column": {
+                "name": "air_date",
+                "valueDate": "2023-04-03T08:46:23.456"
+              }
+            }
+          ]
+        }
+      }
+    ]
+    ```
+
+- yaml
+
+  ```yaml
+  changes:
+  - insert:
+      tableName: episodes
+      columns:
+        - column:
+            name: series_id
+            valueNumeric: 1
+        - column:
+            name: season_id
+            valueNumeric: 1
+        - column:
+            name: episode_id
+            valueNumeric: 1
+        - column:
+            name: title
+            value: Yesterday's Jam
+        - column:
+            name: air_date
+            valueDate: 2023-04-03T08:46:23.456
+  ```
+
+{% endlist %}
+
+You can also specify an any value in the `value` field. If the value is of type time, it will be converted to the corresponding type (DATE, DATETIME or TIMESTAMP) based on the type specified in the column definition. For example: `<column name="timestamp_column" value="2023-07-31T17:00:00.123123Z"/>` convert to `TIMESTAMP('2023-07-31T17:00:00.123123Z')`. 
+
+All string values will be converted to their desired type.
 
 {% note warning %}
 
@@ -88,9 +287,9 @@ To understand which SQL statements {{ydb-short-name}} can perform, read the docu
 
 {% endnote %}
 
-{% endnote %}
+{% note info %}
 
-It is important to note that custom YQL instructions can be applied via native SQL queries.
+It is important to note that custom YQL instructions can be applied via [native SQL queries](https://docs.liquibase.com/concepts/changelogs/sql-format.html).
 
 {% endnote %}
 
@@ -102,11 +301,11 @@ There are two ways:
 
 - Programmatically from Java / Kotlin applications
 
-  How to use Java / Kotlin is described in detail in [README](https://github.com/ydb-platform/ydb-java-dialects/tree/main/liquibase-dialect) of the project, there is also a link to an example of a Spring Boot application.
+  The project's [README](https://github.com/ydb-platform/ydb-java-dialects/tree/main/liquibase-dialect) describes how to use it from Java or Kotlin in detail. There is also an [example of a Spring Boot application](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-liquibase-app) using it.
 
 - Liquibase CLI
 
-  First, you need to install Liquibase itself using [one of the recommended methods](https://docs.liquibase.com/start/install/home.html). Then you need to place the actual .jar archives [{{ ydb-short-name }} JDBC driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases) and Liquibase [dialect {{ ydb-short-name }}](https://mvnrepository.com/artifact/tech.ydb.dialects/liquibase-ydb-dialect/1.0.0)
+  First, you need to install Liquibase itself using [one of the recommended methods](https://docs.liquibase.com/start/install/home.html). Then you need to place the `.jar` archives of [{{ ydb-short-name }} JDBC driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases) and Liquibase [{{ ydb-short-name }} dialect](https://mvnrepository.com/artifact/tech.ydb.dialects/liquibase-ydb-dialect/1.0.0) into the `internal/lib` folder.
 
   ```bash
   # $(which liquibase)
@@ -117,18 +316,18 @@ There are two ways:
   curl -L -o ydb-jdbc-driver.jar https://repo1.maven.org/maven2/tech/ydb/jdbc/ydb-jdbc-driver-shaded/2.0.7/ydb-jdbc-driver-shaded-2.0.7.jar
   curl -L -o liquibase-ydb-dialect.jar https://repo1.maven.org/maven2/tech/ydb/dialects/liquibase-ydb-dialect/1.0.0/liquibase-ydb-dialect-1.0.0.jar
   ```
-  
-  For a more detailed description, see the [Manual library management](https://docs.liquibase.com/start/install/home.html ). 
- 
-  Now the liquibase utility can be used in standard ways.
+
+  For a more detailed description, see the [Manual library management](https://docs.liquibase.com/start/install/home.html) in Liquibase documentation.
+
+  Now the `liquibase` command line utility can be used with {{ ydb-short-name }}.
 
 {% endlist %}
 
 ## Liquibase usage scenarios
 
-### Initializing liquibase to an empty {{ ydb-short-name }}
+### Initializing Liquibase on an empty {{ ydb-short-name }} cluster
 
-The main command is 'liquibase update', which applies migrations if the current schema {{ ydb-short-name }} lags behind the user description.
+The main command is `liquibase update`, which applies migrations if the current schema in {{ ydb-short-name }} lags behind the user-defined description.
 
 Let's apply this changeset to an empty database:
 
@@ -169,7 +368,7 @@ Let's apply this changeset to an empty database:
 </databaseChangeLog>
 ```
 
-After executing the `liquibase update` command, Liquibase will print the following log.
+After executing the `liquibase update` command, Liquibase will print the following log:
 
 ```bash
 UPDATE SUMMARY
@@ -185,27 +384,26 @@ Liquibase command 'update' was executed successfully.
 
 After applying migrations, the data schema now looks like this:
 
-![../_assets/liquibase-step-1.png](../_assets/liquibase-step-1.png)
+![_assets/liquibase-step-1.png](_assets/liquibase-step-1.png)
 
 You can see that Liquibase has created two service tables: `DATABASECHANGELOG`, which is the migration log, and `DATABASECHANGELOGLOCK`, which is a table for acquiring a distributed lock.
 
-Contents of the `DATABASECHANGELOG` table:
+Example contents of the `DATABASECHANGELOG` table:
 
 | AUTHOR        | COMMENTS        | CONTEXTS | DATEEXECUTED | DEPLOYMENT_ID | DESCRIPTION                                                    | EXECTYPE | FILENAME               | ID                   | LABELS | LIQUIBASE | MD5SUM                             | ORDEREXECUTED | TAG |
 |:--------------|:----------------|:---------|:-------------|:--------------|:---------------------------------------------------------------|:---------|:-----------------------|:---------------------|:-------|:----------|:-----------------------------------|:--------------|:----|
 | kurdyukov-kir | Table episodes. |          | 12:53:27     | 1544007500    | createTable tableName=episodes                                 | EXECUTED | migration/episodes.xml | episodes             |        | 4.25.1    | 9:4067056a5ab61db09b379a93625870ca | 1             |
 | kurdyukov-kir | ""              |          | 12:53:28     | 1544007500    | createIndex indexName=index_episodes_title, tableName=episodes | EXECUTED | migration/episodes.xml | index_episodes_title |        | 4.25.1    | 9:49b8b0b22d18c7fd90a3d6b2c561455d | 2             |
 
-### Evolution of the database schema
+### Database schema evolution
 
 Let's say we need to create a {{ydb-short-name }} topic and turn off auto partitioning of the table. This can be done with a native SQL script:
 
 ```sql
 --liquibase formatted sql
 
---changeset kurdyukov-kir:10
-CREATE
-TOPIC `my_topic` (
+--changeset kurdyukov-kir:create-a-topic
+CREATE TOPIC `my_topic` (
     CONSUMER my_consumer
     ) WITH (retention_period = Interval('P1D')
 );
@@ -214,7 +412,7 @@ TOPIC `my_topic` (
 ALTER TABLE episodes SET (AUTO_PARTITIONING_BY_SIZE = DISABLED);
 ```
 
-Also add a new column `is_deleted` and remove the index `index_episodes_title`:
+Also, let's add a new column `is_deleted` and remove the `index_episodes_title` index:
 
 ```xml
 
@@ -230,7 +428,7 @@ Also add a new column `is_deleted` and remove the index `index_episodes_title`:
 <include file="/migration/sql/yql.sql" relativeToChangelogFile="true"/>
 ```
 
-After executing `liquibase update`, the database schema will be successfully updated:
+After executing `liquibase update`, the database schema will be successfully updated with all of these changes:
 
 ```bash
 UPDATE SUMMARY
@@ -246,17 +444,17 @@ Liquibase command 'update' was executed successfully.
 
 The result will be deleting the index, adding the `is_deleted` column, disabling the auto partitioning setting, and creating a topic:
 
-![../_assets/liquibase-step-2.png](../_assets/liquibase-step-2.png)
+![_assets/liquibase-step-2.png](_assets/liquibase-step-2.png)
 
 ### Initializing liquibase in a project with a non-empty data schema
 
-Suppose I have an existing project with the current database schema:
+Let's suppose there's an existing project with the following database schema:
 
-![../_assets/liquibase-step-3.png](../_assets/liquibase-step-3.png)
+![_assets/liquibase-step-3.png](_assets/liquibase-step-3.png)
 
-To start using liquibase, you need to run `liquibase generate-changelog --changelog-file=changelog.xml`.
+In this case to start using Liquibase, you need to run `liquibase generate-changelog --changelog-file=changelog.xml` first.
 
-The content of the generated changelog.xml:
+The contents of the generated changelog.xml:
 
 ```xml
 <changeSet author="kurdyukov-kir (generated)" id="1711556283305-1">
@@ -307,8 +505,8 @@ The content of the generated changelog.xml:
 </changeSet>
 ```
 
-Then you need to synchronize the generated changelog.xml the file, this is done by the command `liquibase changelog-sync --changelog-file=dbchangelog.xml`.
+Then you need to synchronize the generated changelog.xml the file, this is done by the command `liquibase changelog-sync --changelog-file=changelog.xml`.
 
 The result will be liquibase synchronization in your project:
 
-![../_assets/liquibase-step-4.png](../_assets/liquibase-step-4.png)
+![_assets/liquibase-step-4.png](_assets/liquibase-step-4.png)

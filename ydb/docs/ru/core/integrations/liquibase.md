@@ -185,7 +185,7 @@ Liquibase command 'update' was executed successfully.
 
 После применения миграций схемы данных выглядит следующим образом:
 
-![../_assets/liquibase-step-1.png](../_assets/liquibase-step-1.png)
+![_assets/liquibase-step-1.png](_assets/liquibase-step-1.png)
 
 Можно увидеть, что Liquibase создал две служебные таблицы `DATABASECHANGELOG` - лог миграций, `DATABASECHANGELOGLOCK` - таблица для взятия распределенной блокировки.
 
@@ -246,13 +246,13 @@ Liquibase command 'update' was executed successfully.
 
 Результатом будет удаление индекса, добавление колонки `is_deleted`, выключение настройки авто партиционирования, а также создание топика:
 
-![../_assets/liquibase-step-2.png](../_assets/liquibase-step-2.png)
+![_assets/liquibase-step-2.png](_assets/liquibase-step-2.png)
 
 ### Инициализация liquibase в проекте с непустой схемой данных
 
 Предположим, что я имею существующий проект с текущей схемой базы данных:
 
-![../_assets/liquibase-step-3.png](../_assets/liquibase-step-3.png)
+![_assets/liquibase-step-3.png](_assets/liquibase-step-3.png)
 
 Чтобы начать использовать liquibase, требуется выполнить `liquibase generate-changelog --changelog-file=changelog.xml`.
 
@@ -311,4 +311,4 @@ Liquibase command 'update' was executed successfully.
 
 Результатом будет синхронизация liquibase в вашем проекте:
 
-![../_assets/liquibase-step-4.png](../_assets/liquibase-step-4.png)
+![_assets/liquibase-step-4.png](_assets/liquibase-step-4.png)

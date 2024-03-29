@@ -177,7 +177,7 @@ namespace NActors {
 
     void TInterconnectSessionTCP::Unsubscribe(STATEFN_SIG) {
         LOG_DEBUG_IC_SESSION("ICS05", "unsubscribe for session state for %s", ev->Sender.ToString().data());
-        Proxy->Metrics->SubSubscribersCount( Subscribers.erase(ev->Sender));
+        Proxy->Metrics->SubSubscribersCount(Subscribers.erase(ev->Sender));
     }
 
     THolder<TEvHandshakeAck> TInterconnectSessionTCP::ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) {

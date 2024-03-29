@@ -10,6 +10,8 @@ items:
     href: getting_started/kubernetes.md
   - name: Ansible
     href: getting_started/ansible.md
+  - name: Terraform
+    href: getting_started/terraform.md
 
 # Main
 - { name: Concepts,                               include: { mode: link, path: concepts/toc_p.yaml } }

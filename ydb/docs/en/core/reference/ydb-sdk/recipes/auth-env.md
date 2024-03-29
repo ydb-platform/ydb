@@ -102,7 +102,22 @@ Below are examples of the code for authentication using environment variables in
 
 - Node.js
 
-  {% include [auth-env](../../../../_includes/nodejs/auth-env.md) %}
+  ```ts
+  import {Driver, getCredentialsFromEnv} from "ydb-sdk";
+
+  async function main() {
+      const authService = getCredentialsFromEnv();
+      const driver = new Driver({connectionString: process.env.YDB_CONNECTION_STRING, authService});
+      try {
+          await driver.ready(3000);
+          ...
+      } finally {
+          await driver.destroy();
+      }
+  }
+
+  main();
+  ```
 
 - Python
 

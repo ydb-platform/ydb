@@ -22,7 +22,7 @@ public:
 private:
     TString ErrorDescription;
     TEvColumnShard::TEvScan::TPtr Ev;
-    std::vector<TReadMetadataPtr> ReadMetadataRanges;
+    TReadMetadataPtr ReadMetadataRange;
 };
 
 }

@@ -150,20 +150,18 @@ bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/
     if (!record.RangesSize()) {
         auto range = scannerConstructor->BuildReadMetadata(Self, read);
         if (range) {
-            ReadMetadataRanges = {range.DetachResult()};
+            ReadMetadataRange = range.DetachResult();
         } else {
             ErrorDescription = range.GetErrorMessage();
         }
         return true;
     }
 
-    ReadMetadataRanges.reserve(1);
-
     auto ydbKey = scannerConstructor->GetPrimaryKeyScheme(Self);
     auto* indexInfo = (vIndex && isIndex) ? &vIndex->GetSchema(snapshot)->GetIndexInfo() : nullptr;
     for (auto& range : record.GetRanges()) {
         if (!FillPredicatesFromRange(read, range, ydbKey, Self->TabletID(), indexInfo, ErrorDescription)) {
-            ReadMetadataRanges.clear();
+            ReadMetadataRange = nullptr;
             return true;
         }
     }
@@ -171,13 +169,12 @@ bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/
         auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
         if (!newRange) {
             ErrorDescription = newRange.GetErrorMessage();
-            ReadMetadataRanges.clear();
+            ReadMetadataRange = nullptr;
             return true;
         }
-        ReadMetadataRanges.emplace_back(newRange.DetachResult());
+        ReadMetadataRange = newRange.DetachResult();
     }
-    Y_ABORT_UNLESS(ReadMetadataRanges.size() == 1);
-
+    AFL_VERIFY(ReadMetadataRange);
     return true;
 }
 
@@ -198,6 +195,7 @@ struct TContainerPrinter {
 };
 
 void TTxScan::Complete(const TActorContext& ctx) {
+
     auto& request = Ev->Get()->Record;
     auto scanComputeActor = Ev->Sender;
     const auto& snapshot = request.GetSnapshot();
@@ -210,38 +208,43 @@ void TTxScan::Complete(const TActorContext& ctx) {
     if (scanGen > 1) {
         Self->IncCounter(NColumnShard::COUNTER_SCAN_RESTARTED);
     }
+    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()
+        ("tx_id", txId)("scan_id", scanId)("gen", scanGen)("table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout);
 
-    TStringStream detailedInfo;
-    if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD)) {
-        detailedInfo << " read metadata: (" << TContainerPrinter(ReadMetadataRanges) << ")" << " req: " << request;
-    }
-    if (ReadMetadataRanges.empty()) {
-        LOG_S_DEBUG("TTxScan failed "
-            << " txId: " << txId
-            << " scanId: " << scanId
-            << " gen: " << scanGen
-            << " table: " << table
-            << " snapshot: " << snapshot
-            << " timeout: " << timeout
-            << detailedInfo.Str()
-            << " at tablet " << Self->TabletID());
+    if (!ReadMetadataRange) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("reason", "no metadata");
 
         auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(scanGen, Self->TabletID());
-
         ev->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
-            << "Table " << table << " (shard " << Self->TabletID() << ") scan failed, reason: " << ErrorDescription ? ErrorDescription : "unknown error");
+            << "Table " << table << " (shard " << Self->TabletID() << ") scan failed, reason: " << ErrorDescription ? ErrorDescription : "no metadata ranges");
         NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
 
         ctx.Send(scanComputeActor, ev.Release());
         return;
+    }
+    TStringBuilder detailedInfo;
+    if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD)) {
+        detailedInfo << " read metadata: (" << *ReadMetadataRange << ")" << " req: " << request;
     }
 
     const TVersionedIndex* index = nullptr;
     if (Self->HasIndex()) {
         index = &Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
     }
-    ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(ReadMetadataRanges, index);
+    const TConclusion<ui64> requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(ReadMetadataRange, index);
+    if (!requestCookie) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("reason", requestCookie.GetErrorMessage())("trace_details", detailedInfo);
+        auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(scanGen, Self->TabletID());
+
+        ev->Record.SetStatus(Ydb::StatusIds::INTERNAL_ERROR);
+        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, TStringBuilder()
+            << "Table " << table << " (shard " << Self->TabletID() << ") scan failed, reason: " << requestCookie.GetErrorMessage());
+        NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
+        Self->ScanCounters.OnScanDuration(NColumnShard::TScanCounters::EStatusFinish::CannotAddInFlight, TDuration::Zero());
+        ctx.Send(scanComputeActor, ev.Release());
+        return;
+    }
     auto statsDelta = Self->InFlightReadsTracker.GetSelectStatsDelta();
 
     Self->IncCounter(NColumnShard::COUNTER_READ_INDEX_PORTIONS, statsDelta.Portions);
@@ -253,17 +256,9 @@ void TTxScan::Complete(const TActorContext& ctx) {
     AFL_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));
 
     auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
-        shardingPolicy, scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout, std::move(ReadMetadataRanges), dataFormat, Self->ScanCounters));
+        shardingPolicy, scanId, txId, scanGen, *requestCookie, Self->TabletID(), timeout, ReadMetadataRange, dataFormat, Self->ScanCounters));
 
-    LOG_S_DEBUG("TTxScan starting " << scanActor
-        << " txId: " << txId
-        << " scanId: " << scanId
-        << " gen: " << scanGen
-        << " table: " << table
-        << " snapshot: " << snapshot
-        << " timeout: " << timeout
-        << detailedInfo.Str()
-        << " at tablet " << Self->TabletID());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActor)("trace_detailed", detailedInfo);
 }
 
 }

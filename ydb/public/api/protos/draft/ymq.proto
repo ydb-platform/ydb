@@ -49,9 +49,9 @@ message ChangeMessageVisibilityBatchResult {
 
 message CreateQueueRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    repeated string attributes = 1;
-    string queue_name = 2;
-    map<string,string> tags = 3;
+    repeated string attributes = 2;
+    string queue_name = 3;
+    map<string,string> tags = 4;
 }
 
 message CreateQueueResponse {
@@ -230,7 +230,7 @@ message SendMessageResult {
 
 message SendMessageBatchRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    repeated SendMessageRequest entries = 1;
+    repeated SendMessageRequest entries = 2;
 }
 
 message SendMessageBatchResponse {

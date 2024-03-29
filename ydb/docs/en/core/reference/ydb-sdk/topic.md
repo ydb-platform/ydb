@@ -1540,37 +1540,37 @@ Usually reading progress is saved on server within each Consumer. Though such pr
 
   ```java
   @Override
-        public void onMessages(DataReceivedEvent event) {
-            for (Message message : event.getMessages()) {
-                // creating session in table service
-                Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
-                if (!sessionResult.isSuccess()) {
-                    logger.error("Couldn't get session from pool: {}", sessionResult);
-                    return; // retry or shutdown
-                }
-                Session session = sessionResult.getValue();
-                // creating transaction in table service
-                // this transaction is not yet active and has no id
-                TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+  public void onMessages(DataReceivedEvent event) {
+      for (Message message : event.getMessages()) {
+          // creating session in table service
+          Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+          if (!sessionResult.isSuccess()) {
+              logger.error("Couldn't get session from pool: {}", sessionResult);
+              return; // retry or shutdown
+          }
+          Session session = sessionResult.getValue();
+          // creating transaction in table service
+          // this transaction is not yet active and has no id
+          TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
 
-                // do something else in transaction
-                transaction.executeDataQuery("SELECT 1").join();
-                // now transaction is active and has id
-                // analyzeQueryResultIfNeeded();
+          // do something else in transaction
+          transaction.executeDataQuery("SELECT 1").join();
+          // now transaction is active and has id
+          // analyzeQueryResultIfNeeded();
 
-                Status updateStatus = reader.updateOffsetsInTransaction(transaction,
-                                message.getPartitionOffsets(), new UpdateOffsetsInTransactionSettings.Builder().build())
-                        // Do not commit transaction without waiting for updateOffsetsInTransaction result to avoid race condition
-                        .join();
-                if (!updateStatus.isSuccess()) {
-                    logger.error("Couldn't update offsets in transaction: {}", updateStatus);
-                    return; // retry or shutdown
-                }
+          Status updateStatus = reader.updateOffsetsInTransaction(transaction,
+                          message.getPartitionOffsets(), new UpdateOffsetsInTransactionSettings.Builder().build())
+                  // Do not commit transaction without waiting for updateOffsetsInTransaction result to avoid race condition
+                  .join();
+          if (!updateStatus.isSuccess()) {
+              logger.error("Couldn't update offsets in transaction: {}", updateStatus);
+              return; // retry or shutdown
+          }
 
-                Status commitStatus = transaction.commit().join();
-                analyzeCommitStatus(commitStatus);
-            }
-        }
+          Status commitStatus = transaction.commit().join();
+          analyzeCommitStatus(commitStatus);
+      }
+  }
   ```
 
   Transaction requirements:

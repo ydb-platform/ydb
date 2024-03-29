@@ -41,7 +41,13 @@ public:
             } else {
                 Sort(servicedDomains);
             }
-            db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Local, Schema::Node::ServicedDomains, Schema::Node::Statistics>(Local, servicedDomains, node.Statistics);
+            db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Local>(Local);
+            db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::ServicedDomains>(servicedDomains);
+            db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Statistics>(node.Statistics);
+
+            TString slotName = Record.GetSlotName();
+            db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::SlotName>(slotName);
+ 
             node.BecomeDisconnected();
             if (node.LastSeenServicedDomains != servicedDomains) {
                 // new tenant - new rules
@@ -51,7 +57,8 @@ public:
             }
             node.Local = Local;
             node.ServicedDomains.swap(servicedDomains);
-            node.LastSeenServicedDomains = node.ServicedDomains;
+            node.LastSeenServicedDomains = node.ServicedDomains;     
+            node.SlotName = slotName;
         }
         if (Record.HasSystemLocation() && Record.GetSystemLocation().HasDataCenter()) {
             node.Location = TNodeLocation(Record.GetSystemLocation());

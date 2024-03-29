@@ -10,10 +10,12 @@ from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 impo
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 
 import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
-from ydb.library.yql.providers.generic.connector.tests.utils.runner import Result, Runner
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings, GenericSettings
+
+from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
+from ydb.library.yql.providers.generic.connector.tests.utils.run.result import Result
 
 LOGGER = make_logger(__name__)
 
@@ -31,6 +33,7 @@ Generic {
 
 {% set CLICKHOUSE = 'CLICKHOUSE' %}
 {% set POSTGRESQL = 'POSTGRESQL' %}
+{% set YDB = 'YDB' %}
 
 {% macro data_source(kind, cluster, host, port, username, password, protocol, database, schema) -%}
     ClusterMapping {
@@ -96,6 +99,20 @@ Generic {
     NATIVE,
     cluster.database,
     cluster.schema)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.ydb_clusters %}
+{{ data_source(
+    YDB,
+    settings.ydb.cluster_name,
+    settings.ydb.host_internal,
+    settings.ydb.port_internal,
+    settings.ydb.username,
+    settings.ydb.password,
+    NATIVE,
+    cluster.database,
+    NONE)
 }}
 {% endfor %}
 

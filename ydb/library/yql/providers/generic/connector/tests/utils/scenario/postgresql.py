@@ -8,7 +8,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.database import Dat
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger, debug_with_limit
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
-from ydb.library.yql.providers.generic.connector.tests.utils.runner import Runner
+from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
 from ydb.library.yql.providers.generic.connector.tests.utils.sql import format_values_for_bulk_sql_insert
 from ydb.library.yql.providers.generic.connector.tests.utils.clients.postgresql import Client
 

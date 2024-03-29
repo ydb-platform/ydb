@@ -46,7 +46,9 @@ public:
         Raw.Resource.Value->ReleaseRef();
     }
 
-    inline explicit TBlockItem(TStringValue&& value, ui32 size, ui32 offset) {
+    inline explicit TBlockItem(TStringValue&& value, ui32 size = Max<ui32>(), ui32 offset = 0U) {
+        Y_DEBUG_ABORT_UNLESS(size);
+        Y_DEBUG_ABORT_UNLESS(offset < std::min(TRawStringValue::OffsetLimit, value.Size()));
         Raw.StringValue.Size = std::min(value.Size() - offset, size);
         Raw.StringValue.Offset = offset;
         Raw.StringValue.Value = value.ReleaseBuf();

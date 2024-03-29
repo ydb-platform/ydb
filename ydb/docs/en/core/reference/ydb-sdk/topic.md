@@ -1129,6 +1129,8 @@ Confirmation of message processing (commit) informs the server that the message 
 
 For example, if messages 1, 2, 3 are received from the server, the program processes them in parallel and sends confirmations in the following order: 1, 3, 2. In this case, message 1 will be committed first, and messages 2 and 3 will be committed only after the server receives confirmation of the processing of message 2.
 
+If commit fails with error, application should log it and continue, it makes no sense to retry commit. It is not known at this point if the message was actually confirmed.
+
 #### Reading messages one by one with commits
 
 {% list tabs %}
@@ -1261,15 +1263,28 @@ Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceive
 
 ### Reading with consumer offset storage on the client side {#client-commit}
 
-When reading starts, the client code must transmit the starting consumer offset to the server:
+Instead of committing messages client application may track reading progress on its own. In this case client can provide a handler, which will be called back on each partition read start. This handler may set starting reading position for this partition.
 
 {% list tabs %}
 
 - C++
 
-  Setting the starting offset for reading is not supported in the current C++ SDK.
+  Starting position of specific partition read can be set during `TStartPartitionSessionEvent` handling.
+  For this purpose `TStartPartitionSessionEvent::Confirm` has a `readOffset` parameter.
+  Additionally there is a `commitOffset` parameter, which will tell server to consider all messages with lesser offsets [committed](#commit).
 
-  The `ReadFromTimestamp` setting is used for reading only messages with write timestamps no less than the given one.
+  Setting handler example:
+  ```cpp
+  settings.EventHandlers_.StartPartitionSessionHandler(
+      [](TReadSessionEvent::TStartPartitionSessionEvent& event) {
+          auto readFromOffset = GetOffsetToReadFrom(event.GetPartitionId());
+          event.Confirm(readFromOffset);
+      }
+  );
+  ```
+  In the code above `GetOffsetToReadFrom` is a part of the example, not SDK. Use your own way to provide correct starting offset for a partition with given partition id.
+
+  Also `TReadSessionSettings` have a `ReadFromTimestamp` setting for reading only messages newer than given timestamp. This setting is intended to be used to skip some amount of messages, not for precise reading start positioning. Several first received messages may still have timestamps less than specified.
 
 - Go
 

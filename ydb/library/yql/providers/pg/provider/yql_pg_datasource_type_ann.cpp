@@ -119,12 +119,12 @@ public:
 
         const auto relKind = NPg::LookupStaticTable(NPg::TTableInfoKey{ cluster, TString(tableName) }).Kind;
         if (relKind == NPg::ERelKind::Relation) {
-            AddColumn(items, ctx, "_yql_virtual_tableoid", "oid");
-            AddColumn(items, ctx, "_yql_virtual_xmin", "xid");
-            AddColumn(items, ctx, "_yql_virtual_cmin", "cid");
-            AddColumn(items, ctx, "_yql_virtual_xmax", "xid");
-            AddColumn(items, ctx, "_yql_virtual_cmax", "cid");
-            AddColumn(items, ctx, "_yql_virtual_ctid", "tid");
+            AddSystemColumn(items, ctx, "tableoid", "oid");
+            AddSystemColumn(items, ctx, "xmin", "xid");
+            AddSystemColumn(items, ctx, "cmin", "cid");
+            AddSystemColumn(items, ctx, "xmax", "xid");
+            AddSystemColumn(items, ctx, "cmax", "cid");
+            AddSystemColumn(items, ctx, "ctid", "tid");
         }
 
         TVector<TString> columnOrder;
@@ -155,6 +155,10 @@ public:
 private:
     void AddColumn(TVector<const TItemExprType*>& items, TExprContext& ctx, const TString& name, const TString& type) {
         items.push_back(ctx.MakeType<TItemExprType>(name, ctx.MakeType<TPgExprType>(NPg::LookupType(type).TypeId)));
+    }
+
+    void AddSystemColumn(TVector<const TItemExprType*>& items, TExprContext& ctx, const TString& name, const TString& type) {
+        AddColumn(items, ctx, YqlVirtualPrefix + name, type);
     }
 
 private:

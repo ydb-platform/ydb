@@ -659,7 +659,7 @@ Only connections with matching [producer and message group](../../concepts/topic
                           logger.debug(str.toString());
                           break;
                       case ALREADY_WRITTEN:
-                          logger.warn("Message was already written");
+                          logger.warn("Message has already been written");
                           break;
                       default:
                           break;
@@ -829,14 +829,14 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
   [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteSync.java)
 
-  Transaction can be set in `SendSettings` of `send` method while sending a message.
-  Such message will be written on transaction commit.
+  Transaction can be set in the `SendSettings` argument of the `send` method while sending a message.
+  Such a message will be written on the transaction commit.
 
   ```java
-  // creating session in table service
+  // creating a session in the table service
   Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
   if (!sessionResult.isSuccess()) {
-      logger.error("Couldn't get session from pool: {}", sessionResult);
+      logger.error("Couldn't get a session from the pool: {}", sessionResult);
       return; // retry or shutdown
   }
   Session session = sessionResult.getValue();
@@ -844,9 +844,9 @@ All the metadata provided when writing a message is sent to a consumer with the 
   // this transaction is not yet active and has no id
   TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
 
-  // do something else in transaction
+  // do something else in the transaction
   transaction.executeDataQuery("SELECT 1").join();
-  // now transaction is active and has id
+  // now the transaction is active and has an id
   // analyzeQueryResultIfNeeded();
 
   writer.send(
@@ -855,9 +855,7 @@ All the metadata provided when writing a message is sent to a consumer with the 
                   .build(),
           SendSettings.newBuilder()
                   .setTransaction(transaction)
-                  .build(),
-          timeoutSeconds,
-          TimeUnit.SECONDS
+                  .build()
   );
 
   // flush to wait until all messages reach server
@@ -874,14 +872,14 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
   [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteAsync.java)
 
-  Transaction can be set in `SendSettings` of `send` method while sending a message.
-  Such message will be written on transaction commit.
+  Transaction can be set in the `SendSettings` argument of the `send` method while sending a message.
+  Such a message will be written on the transaction commit.
 
   ```java
-  // creating session in table service
+  // creating a session in the table service
   Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
   if (!sessionResult.isSuccess()) {
-      logger.error("Couldn't get session from pool: {}", sessionResult);
+      logger.error("Couldn't get a session from the pool: {}", sessionResult);
       return; // retry or shutdown
   }
   Session session = sessionResult.getValue();
@@ -889,10 +887,15 @@ All the metadata provided when writing a message is sent to a consumer with the 
   // this transaction is not yet active and has no id
   TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
 
-  // do something else in transaction
-  transaction.executeDataQuery("SELECT 1").join();
-  // now transaction is active and has id
-  // analyzeQueryResultIfNeeded();
+  // get message text executing data query on a transaction
+  Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
+          .join();
+  // now the transaction is active and has an id
+  if (!dataQueryResult.isSuccess()) {
+      logger.error("Couldn't execute DataQuery: {}", dataQueryResult);
+      return; // retry or shutdown
+  }
+  String messageString = dataQueryResult.getValue().getResultSet(0).getColumn(0).getText();
 
   try {
       // Blocks until the message is put into sending buffer
@@ -904,7 +907,7 @@ All the metadata provided when writing a message is sent to a consumer with the 
                               .build())
               .whenComplete((result, ex) -> {
                   if (ex != null) {
-                      logger.error("Exception while sending message: ", ex);
+                      logger.error("Exception while sending a message: ", ex);
                   } else {
                       switch (result.getState()) {
                           case WRITTEN:
@@ -912,18 +915,18 @@ All the metadata provided when writing a message is sent to a consumer with the 
                               logger.info("Message was written successfully, offset: " + details.getOffset());
                               break;
                           case ALREADY_WRITTEN:
-                              logger.info("Message was already written");
+                              logger.info("Message has already been written");
                               break;
                           default:
                               break;
                       }
                   }
               })
-              // Waiting for message to reach server before transaction commit
+              // Waiting for the message to reach the server before committing the transaction
               .join();
   } catch (QueueOverflowException exception) {
-      logger.error("Queue overflow exception while sending message{}: ", index, exception);
-      // Send queue is full. Need retry with backoff or skip
+      logger.error("Queue overflow exception while sending a message{}: ", index, exception);
+      // Send queue is full. Need to retry with backoff or skip
   }
 
   Status commitStatus = transaction.commit().join();
@@ -931,7 +934,7 @@ All the metadata provided when writing a message is sent to a consumer with the 
   ```
 
   Transaction requirements:
-  It should be an active transaction (that has id) from one of YDB services. I.e. Table or Query.
+  It should be an active transaction (that has an id) from one of {{ ydb-short-name }} services. I.e., Table or Query.
 
 {% endlist %}
 
@@ -1039,7 +1042,7 @@ Topic can have several Consumers and for each of them server stores its own read
   ```
   Optionally, an executor for message handling can be also provided in `ReadEventHandlersSettings`.
   To implement a Handler, default abstract class `AbstractReadEventHandler` can be used.
-  It is enough to override `onMessages` method that describes message handling. Implementation example:
+  It is enough to override the `onMessages` method that describes message handling. Implementation example:
   ```java
   private class Handler extends AbstractReadEventHandler {
       @Override
@@ -1147,7 +1150,7 @@ Information about which messages have already been processed can be [saved on th
 
   For each kind of event user can set a handler in read session settings before session creation. Also, a common handler can be set.
 
-  If handler is not set for a particular event, it will be delivered to SDK client via `GetEvent` / `GetEvents` methods. `WaitEvent` method allows user to await for a next event in non-blocking way with `TFuture<void>()` interface.
+  If handler is not set for a particular event, it will be delivered to SDK client via `GetEvent` / `GetEvents` methods. The `WaitEvent` method allows user to await for a next event in non-blocking way with `TFuture<void>()` interface.
 
 - Go
 
@@ -1198,7 +1201,7 @@ Information about which messages have already been processed can be [saved on th
 
 - Java (sync)
 
-  To read messages one-by-one without commit just do not call `commit` method on messages:
+  To read messages one-by-one without commit just do not call the `commit` method on messages:
 
   ```java
   while(true) {
@@ -1265,7 +1268,7 @@ Information about which messages have already been processed can be [saved on th
 
 - Java (async)
 
-  To read messages without commit just do not call `commit` method:
+  To read messages without commit just do not call the `commit` method:
 
   ```java
   private class Handler extends AbstractReadEventHandler {
@@ -1559,10 +1562,10 @@ Usually reading progress is saved on server within each Consumer. Though such pr
   @Override
   public void onMessages(DataReceivedEvent event) {
       for (Message message : event.getMessages()) {
-          // creating session in table service
+          // creating a session in the table service
           Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
           if (!sessionResult.isSuccess()) {
-              logger.error("Couldn't get session from pool: {}", sessionResult);
+              logger.error("Couldn't get a session from the pool: {}", sessionResult);
               return; // retry or shutdown
           }
           Session session = sessionResult.getValue();
@@ -1570,9 +1573,9 @@ Usually reading progress is saved on server within each Consumer. Though such pr
           // this transaction is not yet active and has no id
           TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
 
-          // do something else in transaction
+          // do something else in the transaction
           transaction.executeDataQuery("SELECT 1").join();
-          // now transaction is active and has id
+          // now the transaction is active and has an id
           // analyzeQueryResultIfNeeded();
 
           Status updateStatus = reader.updateOffsetsInTransaction(transaction,

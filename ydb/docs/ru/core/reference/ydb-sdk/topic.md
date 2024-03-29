@@ -654,7 +654,7 @@
                           logger.debug(str.toString());
                           break;
                       case ALREADY_WRITTEN:
-                          logger.warn("Message was already written");
+                          logger.warn("Message has already been written");
                           break;
                       default:
                           break;
@@ -830,10 +830,10 @@
   Тогда сообщение будет записано вместе с коммитом этой транзакцией.
 
   ```java
-  // creating session in table service
+  // creating a session in the table service
   Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
   if (!sessionResult.isSuccess()) {
-      logger.error("Couldn't get session from pool: {}", sessionResult);
+      logger.error("Couldn't get a session from the pool: {}", sessionResult);
       return; // retry or shutdown
   }
   Session session = sessionResult.getValue();
@@ -841,10 +841,15 @@
   // this transaction is not yet active and has no id
   TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
 
-  // do something else in transaction
-  transaction.executeDataQuery("SELECT 1").join();
-  // now transaction is active and has id
-  // analyzeQueryResultIfNeeded();
+  // get message text executing data query on a transaction
+  Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
+          .join();
+  // now the transaction is active and has an id
+  if (!dataQueryResult.isSuccess()) {
+      logger.error("Couldn't execute DataQuery: {}", dataQueryResult);
+      return; // retry or shutdown
+  }
+  String messageString = dataQueryResult.getValue().getResultSet(0).getColumn(0).getText();
 
   writer.send(
           Message.newBuilder()
@@ -852,9 +857,7 @@
                   .build(),
           SendSettings.newBuilder()
                   .setTransaction(transaction)
-                  .build(),
-          timeoutSeconds,
-          TimeUnit.SECONDS
+                  .build()
   );
 
   // flush to wait until all messages reach server before commit
@@ -875,10 +878,10 @@
   Тогда сообщение будет записано вместе с коммитом этой транзакцией.
 
   ```java
-  // creating session in table service
+  // creating a session in the table service
   Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
   if (!sessionResult.isSuccess()) {
-      logger.error("Couldn't get session from pool: {}", sessionResult);
+      logger.error("Couldn't get a session from the pool: {}", sessionResult);
       return; // retry or shutdown
   }
   Session session = sessionResult.getValue();
@@ -886,9 +889,9 @@
   // this transaction is not yet active and has no id
   TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
 
-  // do something else in transaction
+  // do something else in the transaction
   transaction.executeDataQuery("SELECT 1").join();
-  // now transaction is active and has id
+  // now the transaction is active and has an id
   // analyzeQueryResultIfNeeded();
 
   try {
@@ -901,7 +904,7 @@
                               .build())
               .whenComplete((result, ex) -> {
                   if (ex != null) {
-                      logger.error("Exception while sending message: ", ex);
+                      logger.error("Exception while sending a message: ", ex);
                   } else {
                       switch (result.getState()) {
                           case WRITTEN:
@@ -909,18 +912,18 @@
                               logger.info("Message was written successfully, offset: " + details.getOffset());
                               break;
                           case ALREADY_WRITTEN:
-                              logger.info("Message was already written");
+                              logger.info("Message has already been written");
                               break;
                           default:
                               break;
                       }
                   }
               })
-              // Waiting for message to reach server before transaction commit
+              // Waiting for the message to reach the server before committing the transaction
               .join();
   } catch (QueueOverflowException exception) {
-      logger.error("Queue overflow exception while sending message{}: ", index, exception);
-      // Send queue is full. Need retry with backoff or skip
+      logger.error("Queue overflow exception while sending a message{}: ", index, exception);
+      // Send queue is full. Need to retry with backoff or skip
   }
 
   Status commitStatus = transaction.commit().join();
@@ -1615,10 +1618,10 @@
   @Override
   public void onMessages(DataReceivedEvent event) {
       for (Message message : event.getMessages()) {
-          // creating session in table service
+          // creating a session in the table service
           Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
           if (!sessionResult.isSuccess()) {
-              logger.error("Couldn't get session from pool: {}", sessionResult);
+              logger.error("Couldn't get a session from the pool: {}", sessionResult);
               return; // retry or shutdown
           }
           Session session = sessionResult.getValue();
@@ -1626,17 +1629,17 @@
           // this transaction is not yet active and has no id
           TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
 
-          // do something else in transaction
+          // do something else in the transaction
           transaction.executeDataQuery("SELECT 1").join();
-          // now transaction is active and has id
+          // now the transaction is active and has an id
           // analyzeQueryResultIfNeeded();
 
           Status updateStatus = reader.updateOffsetsInTransaction(transaction,
                           message.getPartitionOffsets(), new UpdateOffsetsInTransactionSettings.Builder().build())
-                  // Do not commit transaction without waiting for updateOffsetsInTransaction result to avoid race condition
+                  // Do not commit a transaction without waiting for updateOffsetsInTransaction result to avoid a race condition
                   .join();
           if (!updateStatus.isSuccess()) {
-              logger.error("Couldn't update offsets in transaction: {}", updateStatus);
+              logger.error("Couldn't update offsets in a transaction: {}", updateStatus);
               return; // retry or shutdown
           }
 

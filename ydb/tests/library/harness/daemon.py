@@ -225,6 +225,7 @@ class ExternalNodeDaemon(object):
     def __init__(self, host):
         self._host = host
         self._ssh_username = param_constants.ssh_username
+        self._ssh_options = ["-o", "UserKnownHostsFile=/dev/null", "-o", "StrictHostKeyChecking=no", "-o", "LogLevel=ERROR"]
         self.logger = logger.getChild(self.__class__.__name__)
 
     @property
@@ -242,9 +243,7 @@ class ExternalNodeDaemon(object):
         if not isinstance(command_and_params, list):
             command_and_params = [command_and_params]
 
-        args = [
-            executable,
-            "-A", "-o", "UserKnownHostsFile=/dev/null", "-o", "StrictHostKeyChecking=no", self._username_at_host]
+        args = [executable, "-A"] + self._ssh_options + [self._username_at_host]
         args += command_and_params
         return self._run_in_subprocess(args, raise_on_error)
 
@@ -253,10 +252,10 @@ class ExternalNodeDaemon(object):
 
         transit_path = os.path.join(self._artifacts_path, os.path.basename(file_or_dir))
 
-        self.ssh_command(['sudo', 'rm', '-fr', target_path], raise_on_error=True)
+        self.ssh_command(['sudo', 'rm', '-rf', target_path], raise_on_error=True)
 
         self._run_in_subprocess(
-            ["scp", '-r', file_or_dir, self._path_at_host(transit_path)],
+            ["scp"] + self._ssh_options + [ '-r', file_or_dir, self._path_at_host(transit_path)],
             raise_on_error=True
         )
 
@@ -308,9 +307,11 @@ class ExternalNodeDaemon(object):
         self.logger.info("Executing command = " + str(command))
         try:
             ret_str = subprocess.check_output(command, stderr=subprocess.STDOUT)
-            self.logger.info("Command returned stdout + stderr = " + str(ret_str))
+            self.logger.info("Command returned stdout + stderr = " + ret_str.decode("utf-8", errors="replace"))
             return ret_str
         except subprocess.CalledProcessError as e:
-            self.logger.exception("Ssh command failed with output = " + str(e.output))
             if raise_on_error:
+                self.logger.exception("Ssh command failed with output = " + e.output.decode("utf-8", errors="replace"))
                 raise
+            else:
+                self.logger.info("Ssh command failed with output (it was ignored) = " + e.output.decode("utf-8", errors="replace"))

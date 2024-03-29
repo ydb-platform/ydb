@@ -47,9 +47,15 @@ public:
 class TTabletsByBlob {
 private:
     THashMap<TUnifiedBlobId, THashSet<TTabletId>> Data;
+    i32 Size = 0;
 public:
+    ui32 GetSize() const {
+        return Size;
+    }
+
     void Clear() {
         Data.clear();
+        Size = 0;
     }
 
     NKikimrColumnShardBlobOperationsProto::TTabletsByBlob SerializeToProto() const;
@@ -85,13 +91,20 @@ public:
     }
 
     template <class TFilter>
-    TTabletsByBlob ExtractBlobs(const TFilter& filter) {
+    TTabletsByBlob ExtractBlobs(const TFilter& filter, const std::optional<ui32> countLimit = {}) {
         TTabletsByBlob result;
         THashSet<TUnifiedBlobId> idsRemove;
+        ui32 count = 0;
         for (auto&& i : Data) {
             if (filter(i.first, i.second)) {
                 idsRemove.emplace(i.first);
+                Size -= i.second.size();
                 result.Data.emplace(i.first, i.second);
+                result.Size += i.second.size();
+                count += i.second.size();
+                if (countLimit && count >= *countLimit) {
+                    break;
+                }
             }
         }
         for (auto&& i : idsRemove) {
@@ -156,6 +169,7 @@ public:
         if (b.empty()) {
             Data.erase(Data.begin());
         }
+        AFL_VERIFY(--Size >= 0);
         return true;
     }
 
@@ -175,6 +189,8 @@ public:
             return false;
         }
         AFL_VERIFY(dest.Add(blobId, it->second));
+        Size -= it->second.size();
+        AFL_VERIFY(Size >= 0);
         Data.erase(it);
         return true;
     }
@@ -201,9 +217,12 @@ public:
             if (it == Data.end()) {
                 THashSet<TTabletId> tabletsLocal = {tabletId};
                 it = Data.emplace(i, tabletsLocal).first;
+                Size += 1;
             } else {
                 if (!it->second.emplace(tabletId).second) {
                     hasSkipped = true;
+                } else {
+                    Size += 1;
                 }
             }
         }
@@ -219,6 +238,8 @@ public:
         for (auto&& i : tabletIds) {
             if (!hashSet.emplace(i).second) {
                 hasSkipped = true;
+            } else {
+                Size += 1;
             }
         }
         return !hasSkipped;
@@ -234,6 +255,7 @@ public:
             return false;
         }
         it->second.erase(itTablet);
+        AFL_VERIFY(--Size >= 0);
         if (it->second.empty()) {
             Data.erase(it);
         }
@@ -397,6 +419,10 @@ private:
     YDB_ACCESSOR_DEF(TBlobsByTablet, Direct);
     YDB_READONLY_DEF(TBlobsByTablet, Borrowed);
 public:
+    bool IsEmpty() const {
+        return Sharing.IsEmpty() && Direct.IsEmpty() && Borrowed.IsEmpty();
+    }
+
     class TIterator {
     private:
         const TBlobsCategories* Owner;

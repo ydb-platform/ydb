@@ -42,10 +42,12 @@ public:
                         db.Table<Schema::TabletFollowerTablet>().Key(tablet->GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0);
                     }
                 }
-                tablet->InitiateStop(SideEffects);
+                tablet->InitiateStop(SideEffects, PreferredNodeId != 0);
             }
-            tablet->PreferredNodeId = PreferredNodeId;
-            tablet->GetLeader().TryToBoot();
+            tablet->InitiateBoot(PreferredNodeId);
+            if (tablet->IsLeader()) {
+                tablet->AsLeader().InitiateFollowersBoot();
+            }
         }
         return true;
     }

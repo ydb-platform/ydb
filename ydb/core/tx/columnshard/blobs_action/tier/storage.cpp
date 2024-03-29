@@ -29,6 +29,7 @@ std::shared_ptr<IBlobsReadingAction> TOperator::DoStartReadingAction() {
 
 std::shared_ptr<IBlobsGCAction> TOperator::DoStartGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const {
     std::deque<TUnifiedBlobId> draftBlobIds;
+    AFL_VERIFY(!!TabletActorId);
     TBlobsCategories categories(TTabletId(0));
     {
         TTabletsByBlob deleteBlobIds;
@@ -38,6 +39,9 @@ std::shared_ptr<IBlobsGCAction> TOperator::DoStartGCAction(const std::shared_ptr
         categories = GetSharedBlobs()->BuildRemoveCategories(std::move(deleteBlobIds));
     }
     auto gcTask = std::make_shared<TGCTask>(GetStorageId(), std::move(draftBlobIds), GetCurrentOperator(), std::move(categories), counters);
+    if (gcTask->IsEmpty()) {
+        return nullptr;
+    }
     TActorContext::AsActorContext().Register(new TGarbageCollectionActor(gcTask, TabletActorId, GetSelfTabletId()));
     return gcTask;
 }

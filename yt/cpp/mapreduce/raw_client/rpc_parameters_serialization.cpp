@@ -550,6 +550,9 @@ TNode SerializeParamsForListJobs(
     if (options.WithFailContext_) {
         result["with_fail_context"] = *options.WithFailContext_;
     }
+    if (options.WithMonitoringDescriptor_) {
+        result["with_monitoring_descriptor"] = *options.WithMonitoringDescriptor_;
+    }
 
     if (options.SortField_) {
         result["sort_field"] = ToString(*options.SortField_);

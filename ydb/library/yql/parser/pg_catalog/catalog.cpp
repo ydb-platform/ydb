@@ -304,15 +304,21 @@ bool ValidateOperArgs(const TOperDesc& d, const TVector<ui32>& argTypeIds, const
     return true;
 }
 
+struct TLazyOperInfo {
+    TString Com;
+    TString Negate;
+};
+
 class TOperatorsParser : public TParser {
 public:
     TOperatorsParser(TOperators& operators, const THashMap<TString, ui32>& typeByName, const TTypes& types,
-        const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs)
+        const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs, THashMap<ui32, TLazyOperInfo>& lazyInfos)
         : Operators(operators)
         , TypeByName(typeByName)
         , Types(types)
         , ProcByName(procByName)
         , Procs(procs)
+        , LazyInfos(lazyInfos)
     {}
 
     void OnKey(const TString& key, const TString& value) override {
@@ -346,6 +352,10 @@ public:
             LastOperator.ResultType = *typeIdPtr;
         } else if (key == "oprcode") {
             LastCode = value;
+        } else if (key == "oprnegate") {
+            LastNegate = value;
+        } else if (key == "oprcom") {
+            LastCom = value;
         }
     }
 
@@ -372,11 +382,21 @@ public:
                     Y_ENSURE(!LastOperator.Name.empty());
                     Operators[LastOperator.OperId] = LastOperator;
                 }
+
+                if (!LastCom.empty()) {
+                    LazyInfos[LastOperator.OperId].Com = LastCom;
+                }
+
+                if (!LastNegate.empty()) {
+                    LazyInfos[LastOperator.OperId].Negate = LastNegate;
+                }
             }
         }
 
         LastOperator = TOperDesc();
         LastCode = "";
+        LastNegate = "";
+        LastCom = "";
         IsSupported = true;
     }
 
@@ -386,9 +406,12 @@ private:
     const TTypes& Types;
     const THashMap<TString, TVector<ui32>>& ProcByName;
     const TProcs& Procs;
+    THashMap<ui32, TLazyOperInfo>& LazyInfos;
     TOperDesc LastOperator;
     bool IsSupported = true;
     TString LastCode;
+    TString LastNegate;
+    TString LastCom;
 };
 
 class TProcsParser : public TParser {
@@ -1362,11 +1385,65 @@ private:
 };
 
 TOperators ParseOperators(const TString& dat, const THashMap<TString, ui32>& typeByName,
-    const TTypes& types, const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs) {
+    const TTypes& types, const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs, THashMap<ui32, TLazyOperInfo>& lazyInfos) {
     TOperators ret;
-    TOperatorsParser parser(ret, typeByName, types, procByName, procs);
+    TOperatorsParser parser(ret, typeByName, types, procByName, procs, lazyInfos);
     parser.Do(dat);
     return ret;
+}
+
+ui32 FindOperator(const THashMap<TString, TVector<ui32>>& operatorsByName, const THashMap<TString, ui32>& typeByName, TOperators& operators, const TString& signature) {
+    auto pos1 = signature.find('(');
+    auto pos2 = signature.find(')');
+    Y_ENSURE(pos1 != TString::npos && pos1 > 0);
+    Y_ENSURE(pos2 != TString::npos && pos2 > pos1);
+    auto name = signature.substr(0, pos1);
+    auto operIdsPtr = operatorsByName.FindPtr(name);
+    Y_ENSURE(operIdsPtr);
+    TVector<TString> strArgs;
+    Split(signature.substr(pos1 + 1, pos2 - pos1 - 1), ",", strArgs);
+    Y_ENSURE(strArgs.size() >= 1 && strArgs.size() <= 2);
+    TVector<ui32> argTypes;
+    for (const auto& str : strArgs) {
+        auto typePtr = typeByName.FindPtr(str);
+        Y_ENSURE(typePtr);
+        argTypes.push_back(*typePtr);
+    }
+
+    for (const auto& operId : *operIdsPtr) {
+        auto operPtr = operators.FindPtr(operId);
+        Y_ENSURE(operPtr);
+        if (argTypes.size() == 1) {
+            if (operPtr->RightType != argTypes[0]) {
+                continue;
+            }
+        } else {
+            if (operPtr->LeftType != argTypes[0]) {
+                continue;
+            }
+
+            if (operPtr->RightType != argTypes[1]) {
+                continue;
+            }
+        }
+
+        return operId;
+    }
+    
+    // for example, some operators are based on SQL system_functions.sql
+    return 0;
+}
+
+void ApplyLazyOperInfos(TOperators& operators, const THashMap<TString, TVector<ui32>>& operatorsByName, const THashMap<TString, ui32>& typeByName, const THashMap<ui32, TLazyOperInfo>& lazyInfos) {
+    for (const auto& x : lazyInfos) {
+        if (!x.second.Com.empty()) {
+            operators[x.first].ComId = FindOperator(operatorsByName, typeByName, operators, x.second.Com);
+        }
+
+        if (!x.second.Negate.empty()) {
+            operators[x.first].NegateId = FindOperator(operatorsByName, typeByName, operators, x.second.Negate);
+        }
+    }
 }
 
 TAggregations ParseAggregations(const TString& dat, const THashMap<TString, ui32>& typeByName,
@@ -1682,11 +1759,13 @@ struct TCatalog {
             Y_ENSURE(CastsByDir.insert(std::make_pair(std::make_pair(v.SourceId, v.TargetId), k)).second);
         }
 
-        Operators = ParseOperators(opData, TypeByName, Types, ProcByName, Procs);
+        THashMap<ui32, TLazyOperInfo> lazyOperInfos;
+        Operators = ParseOperators(opData, TypeByName, Types, ProcByName, Procs, lazyOperInfos);
         for (const auto&[k, v] : Operators) {
             OperatorsByName[v.Name].push_back(k);
         }
 
+        ApplyLazyOperInfos(Operators, OperatorsByName, TypeByName, lazyOperInfos);
         Aggregations = ParseAggregations(aggData, TypeByName, Types, ProcByName, Procs);
         for (const auto&[k, v] : Aggregations) {
             AggregationsByName[v.Name].push_back(k);
@@ -1856,6 +1935,11 @@ const TTypeDesc& LookupType(const TString& name) {
     const auto typePtr = catalog.Types.FindPtr(*typeIdPtr);
     Y_ENSURE(typePtr);
     return *typePtr;
+}
+
+bool HasType(ui32 typeId) {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.Types.contains(typeId);
 }
 
 const TTypeDesc& LookupType(ui32 typeId) {
@@ -2551,10 +2635,15 @@ TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::functio
 
     const auto& catalog = TCatalog::Instance();
 
-    const TTypeDesc* commonType = &LookupType(typeIds[0]);
-    char commonCategory = commonType->Category;
-    size_t unknownsCnt = (commonType->TypeId == UnknownOid) ? 1 : 0;
+    size_t unknownsCnt = (typeIds[0] == UnknownOid || typeIds[0] == InvalidOid) ? 1 : 0;
     castsNeeded = (unknownsCnt != 0);
+    const TTypeDesc* commonType = nullptr;
+    char commonCategory = 0;
+    if (typeIds[0] != InvalidOid) {
+        commonType = &LookupType(typeIds[0]);
+        commonCategory = commonType->Category;
+    }
+
     size_t i = 1;
     for (auto typeId = typeIds.cbegin() + 1; typeId != typeIds.cend(); ++typeId, ++i) {
         if (*typeId == UnknownOid || *typeId == InvalidOid) {
@@ -2562,11 +2651,11 @@ TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::functio
             castsNeeded = true;
             continue;
         }
-        if (Y_LIKELY(*typeId == commonType->TypeId)) {
+        if (commonType && *typeId == commonType->TypeId) {
             continue;
         }
         const TTypeDesc& otherType = LookupType(*typeId);
-        if (commonType->TypeId == UnknownOid) {
+        if (!commonType || commonType->TypeId == UnknownOid) {
             commonType = &otherType;
             commonCategory = otherType.Category;
             continue;

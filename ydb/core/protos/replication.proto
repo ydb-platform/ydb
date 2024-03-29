@@ -1,11 +1,22 @@
 import "ydb/core/scheme/protos/pathid.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 package NKikimrReplication;
 option java_package = "ru.yandex.kikimr.proto";
 
 message TStaticCredentials {
     optional string User = 1;
-    optional string Password = 2;
+    optional string Password = 2 [(Ydb.sensitive) = true];
+}
+
+message TConnectionParams {
+    optional string Endpoint = 1;
+    optional string Database = 2;
+    // credentials
+    oneof Credentials {
+        TStaticCredentials StaticCredentials = 3;
+        string OAuthToken = 4 [(Ydb.sensitive) = true];
+    }
 }
 
 message TReplicationConfig {
@@ -22,14 +33,7 @@ message TReplicationConfig {
         repeated TTarget Targets = 1;
     }
 
-    // endpoint (host + port) and database of source cluster
-    optional string SrcEndpoint = 1;
-    optional string SrcDatabase = 2;
-    // credentials
-    oneof Credentials {
-        TStaticCredentials StaticCredentials = 3;
-        string OAuthToken = 7;
-    }
+    optional TConnectionParams SrcConnectionParams = 1;
 
     // targets to be replicated
     // Currently, only OLTP tables are supported.
@@ -77,15 +81,59 @@ message TEvDropReplicationResult {
         SUCCESS = 1;
         NOT_FOUND = 2;
     }
+
     optional TOperationId OperationId = 1;
     optional uint64 Origin = 2;
     optional EStatus Status = 3;
 }
 
-message TEvHandshake {
-    optional uint64 ControllerId = 1;
+message TControllerIdentity {
+    optional uint64 TabletId = 1;
     optional uint64 Generation = 2;
 }
 
+message TWorkerIdentity {
+    optional uint64 ReplicationId = 1;
+    optional uint64 TargetId = 2;
+    optional uint64 WorkerId = 3;
+}
+
+message TEvHandshake {
+    optional TControllerIdentity Controller = 1;
+}
+
 message TEvStatus {
+    repeated TWorkerIdentity Workers = 1;
+}
+
+message TRemoteTopicReaderSettings {
+    optional TConnectionParams ConnectionParams = 1;
+    optional string TopicPath = 2;
+    optional uint64 TopicPartitionId = 3;
+    optional string ConsumerName = 4;
+}
+
+message TLocalTableWriterSettings {
+    optional NKikimrProto.TPathID PathId = 1;
+}
+
+message TRunWorkerCommand {
+    oneof Reader {
+        TRemoteTopicReaderSettings RemoteTopicReader = 1;
+    }
+
+    oneof Writer {
+        TLocalTableWriterSettings LocalTableWriter = 2;
+    }
+}
+
+message TEvRunWorker {
+    optional TControllerIdentity Controller = 1;
+    optional TWorkerIdentity Worker = 2;
+    optional TRunWorkerCommand Command = 3;
+}
+
+message TEvStopWorker {
+    optional TControllerIdentity Controller = 1;
+    optional TWorkerIdentity Worker = 2;
 }

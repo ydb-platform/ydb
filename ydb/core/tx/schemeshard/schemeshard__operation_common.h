@@ -43,6 +43,7 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState& txState,
 class TProposedWaitParts: public TSubOperationState {
 private:
     TOperationId OperationId;
+    const TTxState::ETxState NextState;
 
     TString DebugHint() const override {
         return TStringBuilder()
@@ -51,8 +52,9 @@ private:
     }
 
 public:
-    TProposedWaitParts(TOperationId id)
+    TProposedWaitParts(TOperationId id, TTxState::ETxState nextState = TTxState::Done)
         : OperationId(id)
+        , NextState(nextState)
     {
         IgnoreMessages(DebugHint(),
             { TEvHive::TEvCreateTabletReply::EventType
@@ -124,7 +126,7 @@ public:
         // Got notifications from all datashards?
         if (txState->ShardsInProgress.empty()) {
             NTableState::AckAllSchemaChanges(OperationId, *txState, context);
-            context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+            context.SS->ChangeTxState(db, OperationId, NextState);
             return true;
         }
 
@@ -968,7 +970,7 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreatePQGroup || txState->TxType == TTxState::TxAlterPQGroup || txState->TxType == TTxState::TxAllocatePQ);
- 
+
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 

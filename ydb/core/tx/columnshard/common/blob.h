@@ -66,6 +66,10 @@ public:
     TUnifiedBlobId(TUnifiedBlobId&& other) = default;
     TUnifiedBlobId& operator = (TUnifiedBlobId&& logoBlobId) = default;
 
+    static TUnifiedBlobId BuildRaw(const ui32 groupId, const ui64 tabletId, const ui64 r1, const ui64 r2) {
+        return TUnifiedBlobId(groupId, TLogoBlobID(tabletId, r1, r2));
+    }
+
     NKikimrColumnShardProto::TUnifiedBlobId SerializeToProto() const;
 
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardProto::TUnifiedBlobId& proto);
@@ -187,8 +191,30 @@ struct TBlobRange {
     ui32 Offset;
     ui32 Size;
 
+    bool operator<(const TBlobRange& br) const {
+        if (BlobId != br.BlobId) {
+            return BlobId.Hash() < br.BlobId.Hash();
+        } else if (Offset != br.Offset) {
+            return Offset < br.Offset;
+        } else {
+            return Size < br.Size;
+        }
+    }
+
     const TUnifiedBlobId& GetBlobId() const {
         return BlobId;
+    }
+
+    bool IsNextRangeFor(const TBlobRange& br) const {
+        return BlobId == br.BlobId && br.Offset + br.Size == Offset;
+    }
+
+    bool TryGlueWithNext(const TBlobRange& br) {
+        if (!br.IsNextRangeFor(*this)) {
+            return false;
+        }
+        Size += br.Size;
+        return true;
     }
 
     TBlobRangeLink16 BuildLink(const TBlobRangeLink16::TLinkId idx) const {

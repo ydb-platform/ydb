@@ -16,13 +16,13 @@ namespace NFwd {
 
         /*_ Outline blobs materialization conf  */
 
-        ui32 Edge = Max<ui32>();    /* Outlined blob materialization edge   */
-        ui64 Tablet = 0;            /* Use Edge only for this tablet if set */
-        TVector<ui32> Keys;         /* Always materalize this tag values    */
+        ui32 Edge = Max<ui32>();    /* Outlined blob materialization edge    */
+        ui64 Tablet = 0;            /* Use Edge only for this tablet if set  */
+        TVector<ui32> Keys;         /* Always materialize these tag values   */
 
-        /*_ Misc features configuation          */
+        /*_ Misc features configuration          */
 
-        bool Trace = false;         /* Track seen blobs used by reference   */
+        bool Trace = false;         /* Track seen blobs used by reference    */
     };
 
 }

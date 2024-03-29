@@ -96,6 +96,7 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::TabletCellNode ||
         type == EObjectType::TabletCellBundleMap ||
         type == EObjectType::TabletActionMap ||
+        type == EObjectType::CellOrchidNode ||
         type == EObjectType::AreaMap ||
         type == EObjectType::ChaosCellMap ||
         type == EObjectType::VirtualChaosCellMap ||
@@ -121,7 +122,9 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::ScionMap ||
         type == EObjectType::ClusterProxyNode ||
         type == EObjectType::SequoiaMapNode ||
-        type == EObjectType::Pipeline;
+        type == EObjectType::Pipeline ||
+        type == EObjectType::Consumer ||
+        type == EObjectType::Producer;
 }
 
 bool IsUserType(EObjectType type)

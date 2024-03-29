@@ -63,7 +63,7 @@ protected:
         const auto pred = [](const TPortionForEviction& p) {
             return p.GetPortionInfo().GetAddress();
         };
-        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), PortionsToEvict, pred);
+        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + RWAddress.DebugString() + "::" + GetTaskIdentifier(), PortionsToEvict, pred);
     }
 public:
     class TMemoryPredictorSimplePolicy: public IMemoryPredictor {
@@ -72,10 +72,10 @@ public:
         ui64 MaxRawMemory = 0;
     public:
         virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
-            if (MaxRawMemory < portionInfo.GetRawBytes()) {
-                MaxRawMemory = portionInfo.GetRawBytes();
+            if (MaxRawMemory < portionInfo.GetTotalRawBytes()) {
+                MaxRawMemory = portionInfo.GetTotalRawBytes();
             }
-            SumBlobsMemory += portionInfo.GetBlobBytes();
+            SumBlobsMemory += portionInfo.GetTotalBlobBytes();
             return SumBlobsMemory + MaxRawMemory;
         }
     };
@@ -109,8 +109,8 @@ public:
         return StaticTypeName();
     }
 
-    TTTLColumnEngineChanges(const NActualizer::TRWAddress& address, const TSplitSettings& splitSettings, const TSaverContext& saverContext)
-        : TBase(splitSettings, saverContext, StaticTypeName())
+    TTTLColumnEngineChanges(const NActualizer::TRWAddress& address, const TSaverContext& saverContext)
+        : TBase(saverContext, StaticTypeName())
         , RWAddress(address)
     {
 

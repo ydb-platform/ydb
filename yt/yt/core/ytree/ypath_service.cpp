@@ -33,13 +33,13 @@ namespace NYT::NYTree {
 struct TCacheKey
 {
     TYPath Path;
-    TString Method;
+    TProtobufString Method;
     TSharedRef RequestBody;
     TChecksum RequestBodyHash;
 
     TCacheKey(
         const TYPath& path,
-        const TString& method,
+        const TProtobufString& method,
         const TSharedRef& requestBody)
         : Path(path)
         , Method(method)

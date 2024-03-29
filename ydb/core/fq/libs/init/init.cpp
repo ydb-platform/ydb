@@ -37,7 +37,7 @@
 #include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
 #include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h>
-#include <ydb/library/yql/providers/generic/actors/yql_generic_source_factory.h>
+#include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 #include <ydb/library/yql/providers/s3/proto/retry_config.pb.h>
@@ -227,7 +227,7 @@ void Init(
             yqCounters->GetSubgroup("subsystem", "S3ReadActor"));
         RegisterS3WriteActorFactory(*asyncIoFactory, credentialsFactory,
             httpGateway, s3HttpRetryPolicy);
-        RegisterGenericReadActorFactory(*asyncIoFactory, credentialsFactory, connectorClient);
+        RegisterGenericProviderFactories(*asyncIoFactory, credentialsFactory, connectorClient);
 
         RegisterDqPqWriteActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
         RegisterDQSolomonWriteActorFactory(*asyncIoFactory, credentialsFactory);

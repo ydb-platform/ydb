@@ -37,6 +37,9 @@ NKikimrColumnShardStatisticsProto::TScalar TPortionStorage::ScalarToProto(const 
         case arrow::Type::DOUBLE:
             result.SetDouble(static_cast<const arrow::DoubleScalar&>(scalar).value);
             break;
+        case arrow::Type::FLOAT:
+            result.SetFloat(static_cast<const arrow::FloatScalar&>(scalar).value);
+            break;
         case arrow::Type::TIMESTAMP:
         {
             auto* ts = result.MutableTimestamp();
@@ -71,6 +74,8 @@ std::shared_ptr<arrow::Scalar> TPortionStorage::ProtoToScalar(const NKikimrColum
         return std::make_shared<arrow::Int64Scalar>(proto.GetInt64());
     } else if (proto.HasDouble()) {
         return std::make_shared<arrow::DoubleScalar>(proto.GetDouble());
+    } else if (proto.HasFloat()) {
+        return std::make_shared<arrow::FloatScalar>(proto.GetFloat());
     } else if (proto.HasTimestamp()) {
         arrow::TimeUnit::type unit = arrow::TimeUnit::type(proto.GetTimestamp().GetUnit());
         return std::make_shared<arrow::TimestampScalar>(proto.GetTimestamp().GetValue(), std::make_shared<arrow::TimestampType>(unit));
@@ -90,7 +95,7 @@ void TPortionStorage::AddScalar(const std::shared_ptr<arrow::Scalar>& scalar) {
     AFL_VERIFY(type == arrow::Type::BOOL ||
         type == arrow::Type::UINT8 || type == arrow::Type::UINT16 || type == arrow::Type::UINT32 || type == arrow::Type::UINT64 ||
         type == arrow::Type::INT8 || type == arrow::Type::INT16 || type == arrow::Type::INT32 || type == arrow::Type::INT64 ||
-        type == arrow::Type::DOUBLE || type == arrow::Type::TIMESTAMP)
+        type == arrow::Type::DOUBLE || type == arrow::Type::TIMESTAMP || type == arrow::Type::FLOAT)
         ("problem", "incorrect_stat_type")("incoming", scalar->type->ToString());
     Data.emplace_back(scalar);
 }

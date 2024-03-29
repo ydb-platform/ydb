@@ -128,6 +128,7 @@ namespace NKikimr {
         ui32 HullCompMaxInFlightReads;
         double HullCompReadBatchEfficiencyThreshold;
         ui64 AnubisOsirisMaxInFly;
+        bool AddHeader;
 
         //////////////// LOG CUTTER SETTINGS ////////////////
         TDuration RecoveryLogCutterFirstDuration;
@@ -170,8 +171,8 @@ namespace NKikimr {
         ui32 HandoffMaxInFlightByteSize;
         TDuration HandoffTimeout;
         bool RunRepl;
-        bool RunHandoff;
         bool ReplPausedAtStart = false;
+        TDuration ReplMaxTimeToMakeProgress;
 
         ///////////// SKELETON SETTINGS /////////////////////
         ui64 SkeletonFrontGets_MaxInFlightCount;

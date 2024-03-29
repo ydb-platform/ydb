@@ -4,6 +4,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/public/api/protos/annotations/sensitive.pb.h>
 
 #include <util/stream/format.h>
 
@@ -1282,6 +1283,26 @@ void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& nam
     DescribeReplication(pathId, name, it->second, desc);
 }
 
+static void ClearSensitiveFields(google::protobuf::Message* message) {
+    const auto* desc = message->GetDescriptor();
+    const auto* self = message->GetReflection();
+
+    for (int i = 0; i < desc->field_count(); ++i) {
+        const auto* field = desc->field(i);
+        if (field->options().GetExtension(Ydb::sensitive)) {
+            self->ClearField(message, field);
+        } else if (field->message_type()) {
+            if (!field->is_repeated() && self->HasField(*message, field)) {
+                ClearSensitiveFields(self->MutableMessage(message, field));
+            } else if (field->is_repeated()) {
+                for (int j = 0, size = self->FieldSize(*message, field); j < size; ++j) {
+                    ClearSensitiveFields(self->MutableRepeatedMessage(message, field, j));
+                }
+            }
+        }
+    }
+}
+
 void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& name, TReplicationInfo::TPtr info,
         NKikimrSchemeOp::TReplicationDescription& desc)
 {
@@ -1290,6 +1311,7 @@ void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& nam
         << " name# " << name);
 
     desc = info->Description;
+    ClearSensitiveFields(&desc);
 
     desc.SetName(name);
     PathIdFromPathId(pathId, desc.MutablePathId());

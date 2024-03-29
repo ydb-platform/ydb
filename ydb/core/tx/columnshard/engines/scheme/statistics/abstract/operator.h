@@ -25,6 +25,7 @@ protected:
     virtual void DoShiftCursor(TPortionStorageCursor& cursor) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrColumnShardStatisticsProto::TOperatorContainer& proto) = 0;
     virtual void DoSerializeToProto(NKikimrColumnShardStatisticsProto::TOperatorContainer& proto) const = 0;
+    virtual void DoCopyData(const TPortionStorageCursor& cursor, const TPortionStorage& portionStatsFrom, TPortionStorage& portionStatsTo) const = 0;
 public:
     using TProto = NKikimrColumnShardStatisticsProto::TOperatorContainer;
     using TFactory = NObjectFactory::TObjectFactory<IOperator, TString>;
@@ -40,6 +41,10 @@ public:
 
     void ShiftCursor(TPortionStorageCursor& cursor) const {
         DoShiftCursor(cursor);
+    }
+
+    void CopyData(const TPortionStorageCursor& cursor, const TPortionStorage& portionStatsFrom, TPortionStorage& portionStatsTo) const {
+        return DoCopyData(cursor, portionStatsFrom, portionStatsTo);
     }
 
     void FillStatisticsData(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, TPortionStorage& portionStats, const IIndexInfo& index) const {
@@ -63,10 +68,18 @@ public:
 
 class TOperatorContainer: public NBackgroundTasks::TInterfaceProtoContainer<IOperator> {
 private:
+    YDB_READONLY_DEF(TString, Name);
     std::optional<TPortionStorageCursor> Cursor;
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IOperator>;
 public:
-    using TBase::TBase;
+    TOperatorContainer() = default;
+
+    TOperatorContainer(const TString& name, const std::shared_ptr<IOperator>& object)
+        : TBase(object)
+        , Name(name)
+    {
+        AFL_VERIFY(Name);
+    }
 
     const TPortionStorageCursor& GetCursorVerified() const {
         AFL_VERIFY(Cursor);
@@ -81,6 +94,30 @@ public:
     std::shared_ptr<arrow::Scalar> GetScalarVerified(const TPortionStorage& storage) {
         AFL_VERIFY(!!Cursor);
         return storage.GetScalarVerified(*Cursor);
+    }
+
+    NKikimrColumnShardStatisticsProto::TOperatorContainer SerializeToProto() const {
+        NKikimrColumnShardStatisticsProto::TOperatorContainer result = TBase::SerializeToProto();
+        result.SetName(Name);
+        AFL_VERIFY(Name);
+        return result;
+    }
+
+    void SerializeToProto(NKikimrColumnShardStatisticsProto::TOperatorContainer& proto) const {
+        TBase::SerializeToProto(proto);
+        proto.SetName(Name);
+        AFL_VERIFY(Name);
+    }
+
+    bool DeserializeFromProto(const NKikimrColumnShardStatisticsProto::TOperatorContainer& proto) {
+        Name = proto.GetName();
+        if (!Name) {
+            return false;
+        }
+        if (!TBase::DeserializeFromProto(proto)) {
+            return false;
+        }
+        return true;
     }
 };
 

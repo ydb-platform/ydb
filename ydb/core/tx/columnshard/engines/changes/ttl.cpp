@@ -33,22 +33,32 @@ void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
 void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {
     auto& engine = self.MutableIndexAs<TColumnEngineForLogs>();
     engine.GetActualizationController()->FinishActualization(RWAddress);
+    if (IsAborted()) {
+        THashMap<ui64, THashSet<ui64>> restoreIndexAddresses;
+        for (auto&& i : PortionsToEvict) {
+            AFL_VERIFY(restoreIndexAddresses[i.GetPortionInfo().GetPathId()].emplace(i.GetPortionInfo().GetPortionId()).second);
+        }
+        for (auto&& i : PortionsToRemove) {
+            AFL_VERIFY(restoreIndexAddresses[i.first.GetPathId()].emplace(i.first.GetPortionId()).second);
+        }
+        engine.ReturnToIndexes(restoreIndexAddresses);
+    }
 }
 
 std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
-    TConstructionContext& context) const {
+    TConstructionContext& context) const
+{
     const TPortionInfo& portionInfo = info.GetPortionInfo();
     auto& evictFeatures = info.GetFeatures();
-    Y_ABORT_UNLESS(portionInfo.GetMeta().GetTierName() != evictFeatures.GetTargetTierName());
-
     auto blobSchema = context.SchemaVersions.GetSchema(portionInfo.GetMinSnapshot());
-    auto portionWithBlobs = TPortionInfoWithBlobs::RestorePortion(portionInfo, srcBlobs, blobSchema->GetIndexInfo(), SaverContext.GetStoragesManager());
+    Y_ABORT_UNLESS(portionInfo.GetMeta().GetTierName() != evictFeatures.GetTargetTierName() || blobSchema->GetVersion() < evictFeatures.GetTargetScheme()->GetVersion());
 
-    portionWithBlobs.GetPortionInfo().MutableMeta().SetTierName(evictFeatures.GetTargetTierName());
-    auto resultSchema = context.SchemaVersions.GetLastSchema();
-    TSaverContext saverContext(SaverContext.GetStoragesManager());
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_for_eviction", portionInfo.DebugString());
-    return portionWithBlobs.ChangeSaver(resultSchema, saverContext);
+    auto portionWithBlobs = TPortionInfoWithBlobs::RestorePortion(portionInfo, srcBlobs, blobSchema->GetIndexInfo(), SaverContext.GetStoragesManager());
+    TPortionInfoWithBlobs result = TPortionInfoWithBlobs::SyncPortion(
+        std::move(portionWithBlobs), blobSchema, evictFeatures.GetTargetScheme(), evictFeatures.GetTargetTierName(), SaverContext.GetStoragesManager(), context.Counters.SplitterCounters);
+
+    result.GetPortionInfo().MutableMeta().SetTierName(evictFeatures.GetTargetTierName());
+    return std::move(result);
 }
 
 NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {

@@ -4,7 +4,9 @@
 #include "resource_subscriber/actor.h"
 #include "engines/writer/buffer/actor.h"
 #include "engines/column_engine_logs.h"
+#include "export/manager/manager.h"
 
+#include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/protos/table_stats.pb.h>
 
 namespace NKikimr {
@@ -22,6 +24,8 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     ctx.Send(BufferizationWriteActorId, new TEvents::TEvPoisonPill);
 
     StoragesManager->Stop();
+    ExportsManager->Stop();
+    DataLocksManager->Stop();
     if (Tiers) {
         Tiers->Stop(true);
     }
@@ -73,7 +77,6 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "initialize_tiring_finished");
     auto& icb = *AppData(ctx)->Icb;
     Limits.RegisterControls(icb);
-    CompactionLimits.RegisterControls(icb);
     Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));

@@ -1106,29 +1106,33 @@ public:
     static void Check(TSelfCheckContext& context, const NKikimrWhiteboard::TSystemStateInfo::TPoolStats& poolStats) {
         if (poolStats.name() == "System" || poolStats.name() == "IC" || poolStats.name() == "IO") {
             if (poolStats.usage() >= 0.99) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Pool usage over 99%", ETags::OverloadState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Pool usage is over than 99%", ETags::OverloadState);
             } else if (poolStats.usage() >= 0.95) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Pool usage over 95%", ETags::OverloadState);
-            } else if (poolStats.usage() >= 0.90) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage over 90%", ETags::OverloadState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over than 95%", ETags::OverloadState);
             } else {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
         } else {
             if (poolStats.usage() >= 0.99) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Pool usage over 99%", ETags::OverloadState);
-            } else if (poolStats.usage() >= 0.95) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage over 95%", ETags::OverloadState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over than 99%", ETags::OverloadState);
             } else {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
         }
     }
 
-    Ydb::Monitoring::StatusFlag::Status FillSystemTablets(TSelfCheckContext context) {
+    Ydb::Monitoring::StatusFlag::Status FillSystemTablets(TDatabaseState& databaseState, TSelfCheckContext context) {
         TString databaseId = context.Location.database().name();
         for (auto& [tabletId, tablet] : TabletRequests.TabletStates) {
             if (tablet.Database == databaseId) {
+                auto tabletIt = databaseState.MergedTabletState.find(std::make_pair(tabletId, 0));
+                if (tabletIt != databaseState.MergedTabletState.end()) {
+                    auto nodeId = tabletIt->second->GetNodeID();
+                    if (nodeId) {
+                        FillNodeInfo(nodeId, context.Location.mutable_node());
+                    }
+                }
+
                 context.Location.mutable_compute()->clear_tablet();
                 auto& protoTablet = *context.Location.mutable_compute()->mutable_tablet();
                 auto timeoutMs = Timeout.MilliSeconds();
@@ -1164,6 +1168,7 @@ public:
                 if (count.Count > 0) {
                     TSelfCheckContext tabletContext(&tabletsContext, "TABLET");
                     auto& protoTablet = *tabletContext.Location.mutable_compute()->mutable_tablet();
+                    FillNodeInfo(nodeId, tabletContext.Location.mutable_node());
                     protoTablet.set_type(TTabletTypes::EType_Name(count.Type));
                     protoTablet.set_count(count.Count);
                     if (!count.Identifiers.empty()) {
@@ -1188,7 +1193,7 @@ public:
                             break;
                         case TNodeTabletState::ETabletState::RestartsTooOften:
                             computeTabletStatus.set_state("RESTARTS_TOO_OFTEN");
-                            tabletContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Tablets are restarting too often", ETags::TabletState);
+                            tabletContext.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Tablets are restarting too often", ETags::TabletState);
                             break;
                         case TNodeTabletState::ETabletState::Dead:
                             computeTabletStatus.set_state("DEAD");
@@ -1227,7 +1232,7 @@ public:
 
         TSelfCheckContext rrContext(&context, "NODE_UPTIME");
         if (databaseState.NodeRestartsPerPeriod[nodeId] >= 30) {
-            rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Node is restarting too often", ETags::Uptime);
+            rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Node is restarting too often", ETags::Uptime);
         } else if (databaseState.NodeRestartsPerPeriod[nodeId] >= 10) {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "The number of node restarts has increased", ETags::Uptime);
         } else {
@@ -1287,7 +1292,7 @@ public:
         if (computeNodeIds->empty()) {
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no compute nodes", ETags::ComputeState);
         } else {
-            Ydb::Monitoring::StatusFlag::Status systemStatus = FillSystemTablets({&context, "SYSTEM_TABLET"});
+            Ydb::Monitoring::StatusFlag::Status systemStatus = FillSystemTablets(databaseState, {&context, "SYSTEM_TABLET"});
             if (systemStatus != Ydb::Monitoring::StatusFlag::GREEN && systemStatus != Ydb::Monitoring::StatusFlag::GREY) {
                 context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::ComputeState, {ETags::SystemTabletState});
             }
@@ -2087,7 +2092,8 @@ public:
             tabletContext.Location.mutable_database()->set_name(DomainPath);
             databaseStatus.set_name(DomainPath);
             {
-                FillSystemTablets({&tabletContext, "SYSTEM_TABLET"});
+                TDatabaseState databaseState;
+                FillSystemTablets(databaseState, {&tabletContext, "SYSTEM_TABLET"});
                 context.UpdateMaxStatus(tabletContext.GetOverallStatus());
             }
         }
@@ -2162,6 +2168,8 @@ public:
 
         FillResult({&result});
         RemoveUnrequestedEntries(result, Request->Request);
+
+        FillNodeInfo(SelfId().NodeId(), result.mutable_location());
 
         auto byteSize = result.ByteSizeLong();
         auto byteLimit = 50_MB - 1_KB; // 1_KB - for HEALTHCHECK STATUS issue going last

@@ -276,9 +276,3 @@ private:
 };
 
 }
-
-/////////////////////////////////////////
-// Implementation
-#define WRITE_SESSION_ACTOR_IMPL
-#include "write_session_actor.ipp"
-#undef WRITE_SESSION_ACTOR_IMPL

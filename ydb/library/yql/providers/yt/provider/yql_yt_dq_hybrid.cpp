@@ -64,8 +64,14 @@ private:
     }
 
     bool CanReplaceOnHybrid(const TYtOutputOpBase& operation) const {
+        const TStringBuf nodeName = operation.Raw()->Content();
         if (!State_->IsHybridEnabledForCluster(operation.DataSink().Cluster().Value())) {
-            PushHybridStat("SkipDisabledCluster", operation.Raw()->Content());
+            PushSkipStat("DisabledCluster", nodeName);
+            return false;
+        }
+
+        if (State_->HybridTakesTooLong()) {
+            PushSkipStat("TakesTooLong", nodeName);
             return false;
         }
 
@@ -73,19 +79,20 @@ private:
             return false;
 
         if (operation.Output().Size() != 1U) {
-            PushHybridStat("SkipMultipleOutputs", operation.Raw()->Content());
+            PushSkipStat("MultipleOutputs", nodeName);
             return false;
         }
 
         if (const auto& trans = operation.Maybe<TYtTransientOpBase>(); trans && trans.Cast().Input().Size() != 1U) {
-            PushHybridStat("SkipMultipleInputs", operation.Raw()->Content());
+            PushSkipStat("MultipleInputs", nodeName);
             return false;
         }
 
         const auto& settings = *operation.Ref().Child(4U);
         if (HasSettingsExcept(settings, DqOpSupportedSettings)) {
             if (!NYql::HasSetting(settings, EYtSettingType::NoDq)) {
-                PushHybridStat("SkipUnsupportedDqOpSettings", operation.Raw()->Content());
+                PushSkipStat("UnsupportedDqOpSettings", nodeName);
+                PushSettingsToStat(settings, nodeName, "SkipDqOpSettings", DqOpSupportedSettings);
             }
             return false;
         }
@@ -96,15 +103,17 @@ private:
     bool HasDescOrderOutput(const TYtOutputOpBase& operation) const {
         TYqlRowSpecInfo outRowSpec(operation.Output().Item(0).RowSpec());
         if (outRowSpec.IsSorted() && outRowSpec.HasAuxColumns()) {
-            PushHybridStat("SkipDescSort", operation.Raw()->Content());
+            PushSkipStat("DescSort", operation.Raw()->Content());
             return true;
         }
         return false;
     }
 
     bool CanReadHybrid(const TYtSection& section, const TStringBuf& nodeName, bool orderedInput) const {
-        if (HasSettingsExcept(section.Settings().Ref(), DqReadSupportedSettings)) {
-            PushHybridStat("SkipUnsupportedDqReadSettings", nodeName);
+        const auto& settings = section.Settings().Ref();
+        if (HasSettingsExcept(settings, DqReadSupportedSettings)) {
+            PushSkipStat("UnsupportedDqReadSettings", nodeName);
+            PushSettingsToStat(settings, nodeName, "SkipDqReadSettings", DqReadSupportedSettings);
             return false;
         }
 
@@ -120,7 +129,7 @@ private:
                 return false;
             }
             if (NYql::HasSetting(tableInfo->Settings.Ref(), EYtSettingType::WithQB)) {
-                PushHybridStat("SkipWithQB", nodeName);
+                PushSkipStat("WithQB", nodeName);
                 return false;
             }
             auto tableSize = tableInfo->Stat->DataSize;
@@ -140,7 +149,7 @@ private:
             State_->Configuration->HybridDqDataSizeLimitForUnordered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForUnordered);
 
         if (dataSize > sizeLimit || dataChunks > chunksLimit) {
-            PushHybridStat("SkipOverLimits", nodeName);
+            PushSkipStat("OverLimits", nodeName);
             return false;
         }
                 
@@ -158,7 +167,11 @@ private:
                                         });
         TNodeSet flowSources;
         std::for_each(sources.cbegin(), sources.cend(), [&flowSources](const TExprNode::TPtr& node) { flowSources.insert(node.Get()); });
-        return !FindNonYieldTransparentNode(handler, *State_->Types, flowSources) &&
+        bool noNonTransparentNode = !FindNonYieldTransparentNode(handler, *State_->Types, flowSources);
+        if (!noNonTransparentNode) {
+            PushSkipStat("NonTransparentNode", nodeName);
+        }
+        return noNonTransparentNode &&
             !FindNode(handler, [&flow, this, &nodeName, orderedInput] (const TExprNode::TPtr& node) {
                 if (TCoScriptUdf::Match(node.Get()) && NKikimr::NMiniKQL::IsSystemPython(NKikimr::NMiniKQL::ScriptTypeFromStr(node->Head().Content()))) {
                     return true;
@@ -170,7 +183,7 @@ private:
                     if (const auto& maybeRead = tableContent.Cast().Input().Maybe<TYtReadTable>()) {
                         const auto& read = maybeRead.Cast();
                         if (1U != read.Input().Size()) {
-                            PushHybridStat("SkipMultipleInputs", nodeName);
+                            PushSkipStat("MultipleInputs", nodeName);
                             return true;
                         }
                         if(!CanReadHybrid(read.Input().Item(0), nodeName, orderedInput)) {
@@ -189,6 +202,7 @@ private:
         const auto fill = node.Cast<TYtFill>();
         if (CanReplaceOnHybrid(fill) && CanExecuteInHybrid(fill.Content().Ptr(), nodeName, true)) {
             YQL_CLOG(INFO, ProviderYt) << "Rewrite " << nodeName << " node by hybrid";
+            PushHybridStat("Try", nodeName);
             return Build<TYtTryFirst>(ctx, fill.Pos())
                 .First<TYtDqProcessWrite>()
                     .World(fill.World())
@@ -528,47 +542,61 @@ private:
             }
         }
 
-        auto arg = ctx.NewArgument(reduce.Pos(), "list");
+        auto reducer = Build<TCoLambda>(ctx, reduce.Pos())
+                            .Args({"list"})
+                            .Body("list")
+                            .Done();
 
-        auto body = hasGetSysKeySwitch ? Build<TCoChain1Map>(ctx, reduce.Pos())
-            .Input(arg)
-            .InitHandler()
-                .Args({"first"})
-                .template Body<TCoAddMember>()
-                    .Struct("first")
-                    .Name().Value(YqlSysColumnKeySwitch).Build()
-                    .Item(MakeBool<false>(reduce.Pos(), ctx))
-                    .Build()
-                .Build()
-            .UpdateHandler()
-                .Args({"next", "prev"})
-                .template Body<TCoAddMember>()
-                    .Struct("next")
-                    .Name().Value(YqlSysColumnKeySwitch).Build()
-                    .template Item<TCoAggrNotEqual>()
-                        .template Left<TExprApplier>()
-                            .Apply(extract).With(0, "next")
-                            .Build()
-                        .template Right<TExprApplier>()
-                            .Apply(extract).With(0, "prev")
-                            .Build()
-                        .Build()
-                    .Build()
-                .Build()
-            .Done().Ptr() : arg;
+        if (hasGetSysKeySwitch) {
+            reducer = Build<TCoLambda>(ctx, reducer.Pos())
+                            .Args({"list"})
+                            .template Body<TCoChain1Map>()
+                                .Input("list")
+                                .InitHandler()
+                                    .Args({"first"})
+                                    .template Body<TCoAddMember>()
+                                        .Struct("first")
+                                        .Name().Value(YqlSysColumnKeySwitch).Build()
+                                        .Item(MakeBool<false>(reduce.Pos(), ctx))
+                                        .Build()
+                                    .Build()
+                                .UpdateHandler()
+                                    .Args({"next", "prev"})
+                                    .template Body<TCoAddMember>()
+                                        .Struct("next")
+                                        .Name().Value(YqlSysColumnKeySwitch).Build()
+                                        .template Item<TCoAggrNotEqual>()
+                                            .template Left<TExprApplier>()
+                                                .Apply(extract).With(0, "next")
+                                                .Build()
+                                            .template Right<TExprApplier>()
+                                                .Apply(extract).With(0, "prev")
+                                                .Build()
+                                            .Build()
+                                        .Build()
+                                    .Build()
+                                .Build()
+                            .Done();
+        }
 
         const auto& items = GetSeqItemType(*reduce.Reducer().Args().Arg(0).Ref().GetTypeAnn()).template Cast<TStructExprType>()->GetItems();
         TExprNode::TListType fields(items.size());
         std::transform(items.cbegin(), items.cend(), fields.begin(), [&](const TItemExprType* item) { return ctx.NewAtom(reduce.Pos(), item->GetName()); });
-        body = Build<TExprApplier>(ctx, reduce.Pos())
-            .Apply(reduce.Reducer())
-                .template With<TCoExtractMembers>(0)
-                    .Input(std::move(body))
-                    .Members().Add(std::move(fields)).Build()
-                    .Build()
-            .Done().Ptr();
-
-        auto reducer = ctx.NewLambda(reduce.Pos(), ctx.NewArguments(reduce.Pos(), {std::move(arg)}), std::move(body));
+        auto [placeHolder, lambdaWithPlaceholder] = ReplaceDependsOn(reduce.Reducer().Ptr(), ctx, State_->Types);
+        reducer = Build<TCoLambda>(ctx, reduce.Pos())
+                    .Args({"list"})
+                    .template Body<TExprApplier>()
+                        .Apply(TCoLambda(lambdaWithPlaceholder))
+                        .template With<TCoExtractMembers>(0)
+                            .template Input<TExprApplier>()
+                                .Apply(reducer)
+                                .With(0, "list")
+                                .Build()
+                            .Members().Add(std::move(fields)).Build()
+                            .Build()
+                        .With(TExprBase(placeHolder), "list")
+                        .Build()
+                    .Done();
 
         return Build<TYtTryFirst>(ctx, reduce.Pos())
             .template First<TYtDqProcessWrite>()
@@ -613,7 +641,7 @@ private:
         const auto reduce = node.Cast<TYtReduce>();
         if (CanReplaceOnHybrid(reduce) && CanReadHybrid(reduce.Input().Item(0), nodeName, true) && CanExecuteInHybrid(reduce.Reducer().Ptr(), nodeName, true)) {
             if (ETypeAnnotationKind::Struct != GetSeqItemType(*reduce.Reducer().Args().Arg(0).Ref().GetTypeAnn()).GetKind()) {
-                PushHybridStat("SkipNotStructReducerType", nodeName);
+                PushSkipStat("NotStructReducerType", nodeName);
                 return node;
             }
             YQL_CLOG(INFO, ProviderYt) << "Rewrite " << nodeName << " node by hybrid";
@@ -629,7 +657,7 @@ private:
         if (CanReplaceOnHybrid(mapReduce) && CanReadHybrid(mapReduce.Input().Item(0), nodeName, true) &&
             CanExecuteInHybrid(mapReduce.Reducer().Ptr(), nodeName, true) && CanExecuteInHybrid(mapReduce.Mapper().Ptr(), nodeName, true)) {
             if (ETypeAnnotationKind::Struct != GetSeqItemType(*mapReduce.Reducer().Args().Arg(0).Ref().GetTypeAnn()).GetKind()) {
-                PushHybridStat("SkipNotStructReducerType", nodeName);
+                PushSkipStat("NotStructReducerType", nodeName);
                 return node;
             }
             YQL_CLOG(INFO, ProviderYt) << "Rewrite " << nodeName << " node by hybrid";
@@ -639,12 +667,25 @@ private:
         return node;
     }
 
-    void PushHybridStat(const TStringBuf& statName, const TStringBuf& nodeName) const {
+    void PushSkipStat(const TStringBuf& statName, const TStringBuf& nodeName) const {
+        PushHybridStat(statName, nodeName, "SkipReasons");
+        PushHybridStat("Skip", nodeName);
+    }
+
+    void PushHybridStat(const TStringBuf& statName, const TStringBuf& nodeName, const TStringBuf& folderName = "") const {
         with_lock(State_->StatisticsMutex) {
-            State_->Statistics[Max<ui32>()].Entries.emplace_back("Hybrid" + TString{statName}, 0, 0, 0, 0, 1);
-            State_->HybridStatistics[nodeName].Entries.emplace_back(TString{statName}, 0, 0, 0, 0, 1);
+            State_->HybridStatistics[folderName].Entries.emplace_back(TString{statName}, 0, 0, 0, 0, 1);
+            State_->HybridOpStatistics[nodeName][folderName].Entries.emplace_back(TString{statName}, 0, 0, 0, 0, 1);
         }
     };
+
+    void PushSettingsToStat(const TExprNode & settings, const TStringBuf& nodeName, const TStringBuf& folderName, EYtSettingTypes types) const {
+        for (auto& setting: settings.Children()) {
+            if (setting->ChildrenSize() != 0 && !types.HasFlags(FromString<EYtSettingType>(setting->Child(0)->Content()))) {
+                PushHybridStat(setting->Child(0)->Content(), nodeName, folderName);
+            }
+        }
+    }
 
     TExprNode::TListType GetHybridFlags(TExprBase node, TExprContext& ctx) const {
         TExprNode::TListType flags;

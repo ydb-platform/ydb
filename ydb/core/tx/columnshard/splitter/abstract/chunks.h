@@ -76,9 +76,13 @@ public:
         return DoIsSplittable();
     }
 
-    ui16 GetChunkIdx() const {
+    ui16 GetChunkIdxVerified() const {
         AFL_VERIFY(!!ChunkIdx);
         return *ChunkIdx;
+    }
+
+    std::optional<ui16> GetChunkIdxOptional() const {
+        return ChunkIdx;
     }
 
     void SetChunkIdx(const ui16 value) {
@@ -100,8 +104,16 @@ public:
         return result;
     }
 
-    TChunkAddress GetChunkAddress() const {
-        return TChunkAddress(GetEntityId(), GetChunkIdx());
+    TChunkAddress GetChunkAddressVerified() const {
+        return TChunkAddress(GetEntityId(), GetChunkIdxVerified());
+    }
+
+    std::optional<TChunkAddress> GetChunkAddressOptional() const {
+        if (ChunkIdx) {
+            return TChunkAddress(GetEntityId(), GetChunkIdxVerified());
+        } else {
+            return {};
+        }
     }
 
     void AddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfo& portionInfo) const {

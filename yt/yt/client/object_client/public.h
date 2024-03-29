@@ -289,6 +289,7 @@ DEFINE_ENUM(EObjectType,
     ((HunkStorage)                                  (715))
     ((HunkTablet)                                   (716))
     ((VirtualTabletCellMap)                         (717))
+    ((CellOrchidNode)                               (718))
 
     // Node Tracker stuff
     ((Rack)                                         (800))
@@ -338,6 +339,10 @@ DEFINE_ENUM(EObjectType,
 
     // Flow stuff
     ((Pipeline)                                    (1600))
+
+    // Queue stuff
+    ((Consumer)                                    (1700))
+    ((Producer)                                    (1701))
 );
 
 //! A bit mask marking schema types.

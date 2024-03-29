@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/user_info.h>
 #include <ydb/core/persqueue/write_meta.h>
 #include <ydb/core/tx/scheme_board/events.h>
+#include <ydb/core/tx/scheme_board/events_internal.h>
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
@@ -2371,7 +2372,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 break;
 
             case TSchemeBoardEvents::EvUpdate:
-                if (auto* msg = ev->Get<TSchemeBoardEvents::TEvUpdate>()) {
+                if (auto* msg = ev->Get<NSchemeBoard::NInternalEvents::TEvUpdate>()) {
                     NKikimrScheme::TEvDescribeSchemeResult desc;
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(desc, *msg->GetRecord().GetDescribeSchemeResultSerialized().begin()));
                     if (desc.GetPath() == "/Root/Table/Stream" && desc.GetPathDescription().GetSelf().GetCreateFinished()) {

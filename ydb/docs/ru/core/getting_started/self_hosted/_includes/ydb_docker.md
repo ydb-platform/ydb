@@ -2,6 +2,8 @@
 
 Для отладки или тестирования вы можете запустить [Docker](https://docs.docker.com/get-docker/)-контейнер YDB.
 
+Рекомендуется использовать Docker версии 20.10.25 или новее. При использовании более старых версий может понадобиться добавить флаг `--privileged` или `--security-opt seccomp=unconfined` при запуске контейнеров.
+
 ## Параметры соединения {#conn}
 
 В результате выполнения описанных ниже инструкций вы получите локальную базу данных YDB, к которой можно будет обратиться по следующим реквизитам:
@@ -193,7 +195,7 @@ docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} THIRD_PARTY_LI
 
 1. Установите `docker-compose` подходящим вам [способом](https://github.com/docker/compose?tab=readme-ov-file#where-to-get-docker-compose). 
 
-1. Скачайте [пример](https://github.com/ydb-platform/fq-connector-go/blob/main/examples/docker-compose/docker-compose.yaml) файла `docker-compose.yaml` и запустите контейнеры:
+1. Скачайте [пример](https://github.com/ydb-platform/fq-connector-go/blob/main/examples/docker_compose/docker-compose.yaml) файла `docker-compose.yaml` и запустите контейнеры:
 
     ```bash
     mkdir /tmp/fq && cd /tmp/fq

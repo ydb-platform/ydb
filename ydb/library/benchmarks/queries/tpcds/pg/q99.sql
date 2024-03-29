@@ -28,9 +28,9 @@ group by
    substr(w_warehouse_name,1,20)
   ,sm_type
   ,cc_name
-order by substr(w_warehouse_name,1,20)
-        ,sm_type
-        ,cc_name
+order by substr(w_warehouse_name,1,20) nulls first
+        ,sm_type nulls first
+        ,cc_name nulls first
 limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query99.tpl

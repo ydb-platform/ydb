@@ -184,6 +184,7 @@ struct TEvPQ {
         EvGetWriteInfoResponse,
         EvGetWriteInfoError,
         EvReadingPartitionStatusRequest,
+        EvProcessChangeOwnerRequests,
         EvEnd
     };
 
@@ -1066,6 +1067,12 @@ struct TEvPQ {
         NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
         TVector<NPQ::TClientBlob> BlobsFromHead;
+        ui64 BytesWrittenTotal;
+        ui64 BytesWrittenGrpc;
+        ui64 BytesWrittenUncompressed;
+        ui64 MessagesWrittenTotal;
+        ui64 MessagesWrittenGrpc;
+        TVector<ui64> MessagesSizes;
     };
 
     struct TEvGetWriteInfoError : public TEventLocal<TEvGetWriteInfoError, EvGetWriteInfoError> {
@@ -1086,6 +1093,9 @@ struct TEvPQ {
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
         }
+    };
+
+    struct TEvProcessChangeOwnerRequests : public TEventLocal<TEvProcessChangeOwnerRequests, EvProcessChangeOwnerRequests> {
     };
 };
 

@@ -30,7 +30,7 @@ using namespace NSchemeShard;
 using namespace NTabletFlatExecutor;
 
 // NOTE: We really want to batch log records by default in datashards!
-// But in unittests we want to test both scenarios
+// But in unit tests we want to test both scenarios
 bool gAllowLogBatchingDefaultValue = true;
 
 TDuration gDbStatsReportInterval = TDuration::Seconds(10);
@@ -2174,6 +2174,12 @@ TDataShard::TPromotePostExecuteEdges TDataShard::PromoteImmediatePostExecuteEdge
                 << " promoting UnprotectedReadEdge to " << version);
             SnapshotManager.PromoteUnprotectedReadEdge(version);
 
+            // Make sure pending distributed transactions are marked incomplete,
+            // since we just protected up to and including version from writes,
+            // we need to make sure new immediate conflicting writes are blocked
+            // and don't perform writes with out-of-order versions.
+            res.HadWrites |= Pipeline.MarkPlannedLogicallyIncompleteUpTo(version, txc);
+
             // We want to promote the complete edge when protected reads are
             // used or when we're already writing something anyway.
             if (res.HadWrites) {
@@ -3032,13 +3038,13 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
                     kind, TabletID(), txId,
                     NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED);
                 ctx.Send(target, result, 0, cookie);
-                return;
+                break;
             }
             case NEvents::TDataEvents::TEvWrite::EventType: {
                 auto* msg = item.Event->Get<NEvents::TDataEvents::TEvWrite>();
                 auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), msg->GetTxId(), NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED, "Canceled");
                 ctx.Send(target, result.release(), 0, cookie);
-                return;
+                break;
             }
             default:
                 Y_FAIL_S("Unexpected event type " << item.Event->GetTypeRewrite());

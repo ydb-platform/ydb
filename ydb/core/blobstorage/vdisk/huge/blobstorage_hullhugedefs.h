@@ -243,6 +243,10 @@ namespace NKikimr {
                 }
             }
 
+            void AddDeletedPart(const TDiskPart &part) {
+                Deleted.push_back(part);
+            }
+
             void AddMetadataParts(NMatrix::TVectorType parts) {
                 // this is special case for mirror3of4, where data can have empty TDiskPart
                 std::array<TDiskPart, 8> zero;
@@ -290,6 +294,10 @@ namespace NKikimr {
                 TStringStream str;
                 Output(str);
                 return str.Str();
+            }
+
+            const NMatrix::TVectorType& GetParts() const {
+                return Parts;
             }
 
             const TVector<TDiskPart> &SavedData() const {

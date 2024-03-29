@@ -96,7 +96,7 @@ namespace NKikimr {
                             << " ErrorReason# " << ErrorReason
                             << " Marker# BSVSP01");
                 }
-                SendVDiskResponse(ctx, Event->Sender, vMovedPatchResult.release(), Event->Cookie);
+                SendVDiskResponse(ctx, Event->Sender, vMovedPatchResult.release(), Event->Cookie, VCtx);
                 PassAway();
             }
 

@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/column_record.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 #include <ydb/core/formats/arrow/hash/xx_hash.h>
 #include <ydb/core/formats/arrow/hash/calcer.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
@@ -12,7 +13,7 @@ namespace NKikimr::NOlap::NIndexes {
 
 void TPortionIndexChunk::DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfo& portionInfo) const {
     AFL_VERIFY(!bRange.IsValid());
-    portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdx(), RecordsCount, RawBytes, bRange));
+    portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdxVerified(), RecordsCount, RawBytes, bRange));
 }
 
 std::shared_ptr<NKikimr::NOlap::IPortionDataChunk> TIndexByColumns::DoBuildIndex(const ui32 indexId, THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
@@ -31,7 +32,7 @@ std::shared_ptr<NKikimr::NOlap::IPortionDataChunk> TIndexByColumns::DoBuildIndex
     TChunkedBatchReader reader(std::move(columnReaders));
     std::shared_ptr<arrow::RecordBatch> indexBatch = DoBuildIndexImpl(reader);
     const TString indexData = Serializer->SerializeFull(indexBatch);
-    return std::make_shared<TPortionIndexChunk>(TChunkAddress(indexId, 0), recordsCount, NArrow::GetBatchDataSize(indexBatch), indexData);
+    return std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(indexId, 0), recordsCount, NArrow::GetBatchDataSize(indexBatch), indexData);
 }
 
 bool TIndexByColumns::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& /*proto*/) {

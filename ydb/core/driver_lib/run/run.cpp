@@ -99,6 +99,7 @@
 #include <ydb/services/discovery/grpc_service.h>
 #include <ydb/services/fq/grpc_service.h>
 #include <ydb/services/fq/private_grpc.h>
+#include <ydb/services/fq/ydb_over_fq.h>
 #include <ydb/services/kesus/grpc_service.h>
 #include <ydb/services/keyvalue/grpc_service.h>
 #include <ydb/services/local_discovery/grpc_service.h>
@@ -831,6 +832,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasYandexQuery) {
             server.AddService(new NGRpcService::TGRpcFederatedQueryService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
             server.AddService(new NGRpcService::TGRpcFqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+
+            if (!hasTableService && !hasSchemeService) {
+                server.AddService(new NGRpcService::TGrpcTableOverFqService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+                server.AddService(new NGRpcService::TGrpcSchemeOverFqService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+            }
         }   /* REMOVE */ else /* THIS else as well and separate ifs */ if (hasYandexQueryPrivate) {
             server.AddService(new NGRpcService::TGRpcFqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
@@ -1710,10 +1716,6 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         SqsHttp->Shutdown();
     }
 
-    if (YdbDriver) {
-        YdbDriver->Stop(true);
-    }
-
     if (Monitoring) {
         Monitoring->Stop();
     }
@@ -1753,6 +1755,10 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         if (ModuleFactories->DataShardExportFactory) {
             ModuleFactories->DataShardExportFactory->Shutdown();
         }
+    }
+
+    if (YdbDriver) {
+        YdbDriver->Stop(true);
     }
 }
 

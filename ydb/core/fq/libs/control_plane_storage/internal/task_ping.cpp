@@ -2,6 +2,7 @@
 
 #include <util/datetime/base.h>
 
+#include <ydb/core/fq/libs/compute/common/utils.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 #include <ydb/core/metering/metering.h>
@@ -254,7 +255,7 @@ TPingTaskParams ConstructHardPingTask(
         if (request.statistics()) {
             TString statistics = request.statistics();
             internal.clear_statistics();
-            PackStatisticsToProtobuf(*internal.mutable_statistics(), statistics);
+            PackStatisticsToProtobuf(*internal.mutable_statistics(), statistics, TInstant::Now() - NProtoInterop::CastFromProto(job.meta().created_at()));
 
             // global dumpRawStatistics will be removed with YQv1
             if (!dumpRawStatistics && !request.dump_raw_statistics()) {

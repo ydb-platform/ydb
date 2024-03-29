@@ -6,7 +6,8 @@
 namespace NKikimr::NOlap::NStatistics {
 enum class EType {
     Undefined /* "undefined" */,
-    Max /* "max" */
+    Max /* "max" */,
+    Variability /* "variability" */
 };
 
 class TIdentifier {

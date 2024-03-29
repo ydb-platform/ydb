@@ -1,4 +1,5 @@
 #include "vdisk_config.h"
+#include "vdisk_performance_params.h"
 #include <ydb/core/base/interconnect_channels.h>
 #include <google/protobuf/text_format.h>
 
@@ -44,6 +45,7 @@ namespace NKikimr {
         HullCompMaxInFlightReads = 20;
         HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data
         AnubisOsirisMaxInFly = 1000;
+        AddHeader = true;
 
         RecoveryLogCutterFirstDuration = TDuration::Seconds(10);
         RecoveryLogCutterRegularDuration = TDuration::Seconds(30);
@@ -78,7 +80,8 @@ namespace NKikimr {
         HandoffMaxInFlightByteSize = 16u << 20u;
         HandoffTimeout = TDuration::Seconds(10);
         RunRepl = !baseInfo.ReadOnly;
-        RunHandoff = false;
+
+        ReplMaxTimeToMakeProgress = VDiskPerformance.at(baseInfo.DeviceType).ReplMaxTimeToMakeProgress;
 
         SkeletonFrontGets_MaxInFlightCount = 24;
         SkeletonFrontGets_MaxInFlightCost = 200000000;              // 200ms

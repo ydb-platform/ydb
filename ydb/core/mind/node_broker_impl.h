@@ -1,8 +1,10 @@
 #pragma once
 
 #include "node_broker.h"
+#include "slot_indexes_pool.h"
 
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/subdomain.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/tx_processor.h>
@@ -114,6 +116,8 @@ private:
         ui32 Lease;
         TInstant Expire;
         bool AuthorizedByCertificate = false;
+        std::optional<ui32> SlotIndex;
+        TSubDomainKey ServicedSubDomain;
     };
 
     // State changes to apply while moving to the next epoch.
@@ -134,7 +138,9 @@ private:
     ITransaction *CreateTxExtendLease(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev);
     ITransaction *CreateTxInitScheme();
     ITransaction *CreateTxLoadState();
-    ITransaction *CreateTxRegisterNode(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev, const NActors::TScopeId& scopeId);
+    ITransaction *CreateTxRegisterNode(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
+                                       const NActors::TScopeId& scopeId,
+                                       const TSubDomainKey& servicedSubDomain);
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfigSubscription(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev);
@@ -208,6 +214,7 @@ private:
     void ExtendLease(TNodeInfo &node);
     void FixNodeId(TNodeInfo &node);
     void RecomputeFreeIds();
+    void RecomputeSlotIndexesPools();
     bool IsBannedId(ui32 id) const;
 
     void AddDelayedListNodesRequest(ui64 epoch,
@@ -292,6 +299,9 @@ private:
     THashMap<std::tuple<TString, TString, ui16>, ui32> Hosts;
     // Bitmap with free Node IDs (with no lower 5 bits).
     TDynBitMap FreeIds;
+    // Maps tenant to its slot indexes pool.
+    std::unordered_map<TSubDomainKey, TSlotIndexesPool, THash<TSubDomainKey>> SlotIndexesPools;
+    bool EnableSlotNameGeneration = false;
     // Epoch info.
     TEpochInfo Epoch;
     // Current config.

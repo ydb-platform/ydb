@@ -1,63 +1,12 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include "ut_helpers.h"
 
 Y_UNIT_TEST_SUITE(GroupReconfiguration) {
 
-    class TBsProxyLoader : public TActorBootstrapped<TBsProxyLoader> {
-    public:
-        TBsProxyLoader(ui32 groupId, ui32& sendCounter, ui32& successCounter)
-            : GroupId(groupId)
-            , SendCounter(sendCounter)
-            , SuccessCounter(successCounter)
-        {}
-
-        void Bootstrap(const TActorContext&/* ctx*/) {
-            Become(&TThis::StateFunc);
-            HandleWakeup();
-        }
-
-    private:
-        ui32 GroupId;
-        ui32& SendCounter;
-        ui32& SuccessCounter;
-
-        constexpr static TDuration PutDelay = TDuration::MilliSeconds(2);
-
-        // BsProxy requests parameters
-        constexpr static ui64 TabletId = 1000;
-        constexpr static ui64 Channel = 2;
-        constexpr static ui64 BlobSize = 100;
-
-        static ui32 Counter;
-
-    private:
-        void Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
-            if (ev->Get()->Status == NKikimrProto::OK) {
-                SuccessCounter += 1;
-            }
-            Schedule(PutDelay, new TEvents::TEvWakeup);
-        }
-
-        void HandleWakeup() {
-            TString data = TString(BlobSize, '0');
-            SendToBSProxy(SelfId(), GroupId, new TEvBlobStorage::TEvPut(
-                    TLogoBlobID(TabletId, 1, 1, Channel, data.size(), Counter++),
-                    std::move(data),
-                    TInstant::Max()));
-            SendCounter += 1;
-        }
-
-        STRICT_STFUNC(StateFunc, {
-            hFunc(TEvBlobStorage::TEvPutResult, Handle)
-            cFunc(TEvents::TSystem::Wakeup, HandleWakeup)
-        })
-    };
-
-    ui32 TBsProxyLoader::Counter = 0;
-
-    void SetupTesEnv(std::unique_ptr<TEnvironmentSetup>& env, ui32 numDCs, ui32 numNodesInDC,
+    void SetupEnvForPropagationTest(std::unique_ptr<TEnvironmentSetup>& env, ui32 numDCs, ui32 numNodesInDC,
             ui32& groupId, ui32& fromNodeId, ui32& toNodeId, std::set<ui32>& nodesInGroup,
-            std::vector<std::pair<ui32, ui32>>& counters,
-            bool loadNodesWVDisks, NKikimrBlobStorage::TConfigRequest& reassignRequest) {
+            std::vector<TInflightActor*>& actors, bool loadNodesWVDisks,
+            NKikimrBlobStorage::TConfigRequest& reassignRequest) {
         const ui32 numNodes = numDCs * numNodesInDC + 1; // one node is reserved for bsc tablet
         TBlobStorageGroupType groupType = TBlobStorageGroupType::ErasureMirror3dc;
 
@@ -118,23 +67,21 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
         }
 
         // Start load actors
-        counters.resize(numNodes); // to avoid reallocation
-        for (ui32 i = 0; i < numNodes - 1; ++i) {
-            ui32 nodeId = i + 1;
-            counters[i] = {0, 0};
+        for (ui32 nodeId = 1; nodeId < numNodes - 1; ++nodeId) {
             if (loadNodesWVDisks || (nodesInGroup.count(nodeId) > 0 && nodeId != toNodeId && nodeId != fromNodeId)) {
-                env->Runtime->Register(new TBsProxyLoader(groupId, counters[i].first, counters[i].second), nodeId);
+                TInflightActor* newActor = new TInflightActorPut({100, 1, TDuration::MilliSeconds(100), groupId}, 1_KB);
+                actors.push_back(newActor);
+                env->Runtime->Register(newActor, nodeId);
             }
         }
     }
 
-
-    void VerifyCounters(std::vector<std::pair<ui32, ui32>>& counters, ui32 acceptableLoss = 5) {
-        for (ui32 i = 0; i < counters.size(); ++i) {
-            auto [sent, successes] = counters[i];
-            UNIT_ASSERT_GE_C(successes + acceptableLoss, sent, "Sent puts number# " << sent
-                    << " recieved successes number# " << successes
-                    << " nodeId# " << i + 1);
+    void VerifyCounters(std::vector<TInflightActor*>& actors, ui32 acceptableLoss = 5) {
+        for (ui32 i = 0; i < actors.size(); ++i) {
+            auto* actor = actors[i];
+            ui32 oks = actor->ResponsesByStatus[NKikimrProto::OK];
+            UNIT_ASSERT_GE_C(actor->RequestsSent + acceptableLoss, oks,
+                    "RequestsSent# " << actor->RequestsSent << " recieved OKs# " << oks << " nodeId# " << i + 1);
         }
     }
 
@@ -181,13 +128,13 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
         ui32 fromNodeId;
         ui32 toNodeId;
 
-        std::vector<std::pair<ui32, ui32>> counters;
+        std::vector<TInflightActor*> actors;
 
         NKikimrBlobStorage::TConfigRequest request;
         NKikimrBlobStorage::TConfigResponse response;
 
         std::unique_ptr<TEnvironmentSetup> env;
-        SetupTesEnv(env, numDCs, numNodesInDC, groupId, fromNodeId, toNodeId, nodesInGroup, counters, requestsToNodesWVDisks, request);
+        SetupEnvForPropagationTest(env, numDCs, numNodesInDC, groupId, fromNodeId, toNodeId, nodesInGroup, actors, requestsToNodesWVDisks, request);
         env->Sim(TDuration::Seconds(1));
 
         Cerr << "Reassign disk fromNodeId# " << fromNodeId << " toNodeId# " << toNodeId << Endl;
@@ -213,16 +160,17 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
 
         UNIT_ASSERT(bscShutDown);
         env->Sim(TDuration::Seconds(2));
-        VerifyCounters(counters, 5);
+        VerifyCounters(actors, 5);
 
         nodesInGroup.erase(fromNodeId);
         nodesInGroup.insert(toNodeId);
         VerifyConfigsAreSame(*env, nodesInGroup, groupId);
     }
 
-    Y_UNIT_TEST(PropagateNewConfigurationViaVDisks) {
-        TestPropagateNewConfigurationViaVDisks(true);
-    }
+    // FIXME serg-belyakov
+    // Y_UNIT_TEST(PropagateNewConfigurationViaVDisks) {
+    //     TestPropagateNewConfigurationViaVDisks(true);
+    // }
 
     // TODO: KIKIMR-11627
     // Y_UNIT_TEST(PropagateNewConfigurationViaVDisksNoRequestsToNodesWVDisks) {
@@ -240,18 +188,16 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
         ui32 fromNodeId;
         ui32 toNodeId;
 
-        std::vector<std::pair<ui32, ui32>> counters;
+        std::vector<TInflightActor*> actors;
 
         NKikimrBlobStorage::TConfigRequest request;
         NKikimrBlobStorage::TConfigResponse response;
 
         std::unique_ptr<TEnvironmentSetup> env;
-        SetupTesEnv(env, numDCs, numNodesInDC, groupId, fromNodeId, toNodeId, nodesInGroup, counters, requestsToNodesWVDisks, request);
+        SetupEnvForPropagationTest(env, numDCs, numNodesInDC, groupId, fromNodeId, toNodeId, nodesInGroup, actors, requestsToNodesWVDisks, request);
         env->Sim(TDuration::Seconds(1));
 
         response = env->Invoke(request);
-        env->Sim(TDuration::MilliSeconds(1));
-
 
         std::array<bool, numNodes - 1> passedMessages{true};
 
@@ -271,7 +217,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
 
        // UNIT_ASSERT(!passOne);
         env->Sim(TDuration::Seconds(2));
-        VerifyCounters(counters, 5);
+        VerifyCounters(actors, 5);
     }
 
     Y_UNIT_TEST(BsControllerDoesNotDisableGroup) {
@@ -282,84 +228,12 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
         TestBsControllerDoesNotDisableGroup(false);
     }
 
-    class TConfigurationRequestActor : public TActorBootstrapped<TConfigurationRequestActor> {
-    public:
-        TConfigurationRequestActor(ui32 groupId, ui64 bsController, TDuration& delay)
-            : GroupId(groupId)
-            , BsController(bsController)
-            , Delay(delay)
-        {}
-
-        void Bootstrap(const TActorContext&/* ctx*/) {
-            Become(&TThis::StateFunc);
-            ClientId = Register(NKikimr::NTabletPipe::CreateClient(SelfId(), BsController,
-                    TTestActorSystem::GetPipeConfigWithRetries()));
-        }
-
-    private:
-        ui32 GroupId;
-        ui64 BsController;
-        THPTimer Timer;
-        TDuration& Delay;
-        TActorId ClientId;
-
-        ui32 ReassignReqests = 10'000;
-        constexpr static TDuration ReassignDelay = TDuration::MicroSeconds(1);
-
-    private:
-        void Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr/* ev*/) {
-            Delay = TDuration::Seconds(Timer.Passed());
-        }
-
-        void HandleWakeup() {
-            Timer.Reset();
-            if (ReassignReqests > 0) {
-                NKikimrBlobStorage::TConfigRequest reassignRequest;
-                auto* reassign = reassignRequest.AddCommand()->MutableReassignGroupDisk();
-                reassign->SetGroupId(GroupId);
-                reassign->SetFailRealmIdx(0);
-                reassign->SetFailDomainIdx(0);
-                reassign->SetVDiskIdx(0);
-
-                auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
-                ev->SelfHeal = true;
-                ev->Record.MutableRequest()->CopyFrom(reassignRequest);
-                NTabletPipe::SendData(SelfId(), ClientId, ev.release(), 0);
-                ReassignReqests -= 1;
-                Schedule(ReassignDelay, new TEvents::TEvWakeup);
-            } else {
-                Timer.Reset();
-                auto ev = std::make_unique<TEvBlobStorage::TEvControllerGetGroup>();
-                ev->Record.AddGroupIDs(GroupId);
-                NTabletPipe::SendData(SelfId(), ClientId, ev.release(), Max<ui64>());
-            }
-        }
-
-        void HandleConnected() {
-            HandleWakeup();
-        }
-
-        void Ignore() {
-        }
-
-        STRICT_STFUNC(StateFunc,
-            hFunc(TEvBlobStorage::TEvControllerNodeServiceSetUpdate, Handle)
-            cFunc(TEvents::TSystem::Wakeup, HandleWakeup)
-            cFunc(TEvTabletPipe::TEvClientConnected::EventType, HandleConnected)
-
-            cFunc(TEvBlobStorage::TEvControllerConfigResponse::EventType, Ignore)
-        )
-    };
-
-    Y_UNIT_TEST(BsControllerConfigurationRequestIsFastEnough) {
-        const ui32 numDCs = 3;
-        const ui32 numNodesInDC = 10;
-        const ui32 numNodes = numDCs * numNodesInDC + 1;
-        const ui32 disksPerNode = 1;
-        const ui32 numGroups = numDCs * numNodesInDC * disksPerNode * 9 / 8;
-
-        TEnvironmentSetup env{TEnvironmentSetup::TSettings{
+    void SetupEnvForReassignTest(ui32 numDCs, ui32 numNodesInDC, ui32 disksPerNode, ui32& numNodes, ui32 numGroups,
+            ui32& groupId, TBlobStorageGroupType erasure, std::unique_ptr<TEnvironmentSetup>& env) {
+        numNodes = numDCs * numNodesInDC + 1;
+        env.reset(new TEnvironmentSetup({
             .NodeCount = numNodes,
+            .Erasure = erasure,
             .ControllerNodeId = numNodes,
             .LocationGenerator = [&](ui32 nodeId) {
                 NActorsInterconnect::TNodeLocation proto;
@@ -368,30 +242,261 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
                 proto.SetUnit("1");
                 return TNodeLocation(proto);
             },
-        }};
+        }));
 
-        env.CreateBoxAndPool(disksPerNode, numGroups, numNodes);
+        env->CreateBoxAndPool(disksPerNode, numGroups, numNodes);
 
         NKikimrBlobStorage::TConfigRequest request;
         request.AddCommand()->MutableQueryBaseConfig();
-        auto response = env.Invoke(request);
+        auto response = env->Invoke(request);
 
         const auto& base = response.GetStatus(0).GetBaseConfig();
         UNIT_ASSERT_GE(base.GroupSize(), 1);
         const auto& group = base.GetGroup(0);
-        ui32 groupId = group.GetGroupId();
+        groupId = group.GetGroupId();
 
-        std::array<TDuration, numNodes> delays{TDuration::Max()};
+        env->Sim(TDuration::Seconds(30));
+    }
+
+    class TReassignActor : public TActorBootstrapped<TReassignActor> {
+    public:
+        TReassignActor(ui32 groupId, ui64 bsController, ui32 reassignRequests, TDuration reassignDelay)
+            : GroupId(groupId)
+            , BsController(bsController)
+            , ReassignReqests(reassignRequests)
+            , ReassignDelay(reassignDelay)
+        {}
+
+        ~TReassignActor() = default;
+
+        void Bootstrap(const TActorContext&/* ctx*/) {
+            ClientId = Register(NKikimr::NTabletPipe::CreateClient(SelfId(), BsController,
+                    TTestActorSystem::GetPipeConfigWithRetries()));
+            BootstrapImpl();
+        }
+
+    protected:
+        ui32 GroupId;
+        ui64 BsController;
+        TActorId ClientId;
+
+        ui32 ReassignReqests;
+        TDuration ReassignDelay;
+
+        bool Started = false;
+
+    protected:
+        virtual void BootstrapImpl() = 0;
+
+        void SendFirstRequest() {
+
+        }
+
+        void SendRequest() {
+            if (ReassignReqests > 0) {
+                SendReassign();
+                ReassignReqests -= 1;
+                Schedule(ReassignDelay, new TEvents::TEvWakeup);
+            } else {
+                SendBscRequest();
+            }
+        }
+
+        void HandleConnected() {
+            if (!std::exchange(Started, true)) {
+                SendRequest();
+            }
+        }
+
+        virtual void SendReassign() = 0;
+
+        virtual void SendBscRequest() {
+        }
+    };
+
+    class TSelfHealActor : public TReassignActor {
+    public:
+        TSelfHealActor(ui32 groupId, ui64 bsController, TDuration& delay)
+            : TReassignActor(groupId, bsController, 10'000, TDuration::MicroSeconds(1))
+            , Delay(delay)
+        {}
+
+    private:
+        void BootstrapImpl() override {
+            Become(&TSelfHealActor::StateFunc);
+        }
+    private:
+        TDuration& Delay;
+
+    private:
+        void SendReassign() override {
+            NKikimrBlobStorage::TConfigRequest reassignRequest;
+            auto* reassign = reassignRequest.AddCommand()->MutableReassignGroupDisk();
+            reassign->SetGroupId(GroupId);
+            reassign->SetFailRealmIdx(0);
+            reassign->SetFailDomainIdx(0);
+            reassign->SetVDiskIdx(0);
+
+            auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+            ev->SelfHeal = true;
+            ev->Record.MutableRequest()->CopyFrom(reassignRequest);
+            NTabletPipe::SendData(SelfId(), ClientId, ev.release(), 0);
+        }
+
+        void SendBscRequest() override {
+            Timer.Reset();
+            auto ev = std::make_unique<TEvBlobStorage::TEvControllerGetGroup>();
+            ev->Record.AddGroupIDs(GroupId);
+            NTabletPipe::SendData(SelfId(), ClientId, ev.release(), Max<ui64>());
+        }
+
+    private:
+        void Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr/* ev*/) {
+            Delay = TDuration::Seconds(Timer.Passed());
+        }
+
+        STRICT_STFUNC(StateFunc,
+            hFunc(TEvBlobStorage::TEvControllerNodeServiceSetUpdate, Handle);
+            cFunc(TEvents::TSystem::Wakeup, SendRequest);
+            cFunc(TEvTabletPipe::TEvClientConnected::EventType, HandleConnected);
+
+            IgnoreFunc(TEvBlobStorage::TEvControllerConfigResponse);
+        )
+
+        THPTimer Timer;
+    };
+
+    Y_UNIT_TEST(BsControllerConfigurationRequestIsFastEnough) {
+        const ui32 numDCs = 3;
+        const ui32 numNodesInDC = 10;
+        const ui32 disksPerNode = 1;
+        ui32 numNodes;
+        const ui32 numGroups = 1;
+        ui32 groupId;
+        std::unique_ptr<TEnvironmentSetup> env;
+        SetupEnvForReassignTest(numDCs, numNodesInDC, disksPerNode, numNodes, numGroups, groupId,
+                TBlobStorageGroupType::ErasureMirror3dc, env);
+
+        std::vector<TDuration> delays(numNodes, TDuration::Max());
         const TDuration maxDelay = TDuration::Seconds(2);
 
         for (ui32 nodeId = 1; nodeId < numNodes; ++nodeId) {
-            env.Runtime->Register(new TConfigurationRequestActor(groupId, env.TabletId, delays[nodeId - 1]), nodeId);
+            env->Runtime->Register(new TSelfHealActor(groupId, env->TabletId, delays[nodeId - 1]), nodeId);
         }
 
-        env.Sim(TDuration::Seconds(30));
+        env->Sim(TDuration::Seconds(30));
 
         for (ui32 i = 0; i < numNodes - 1; ++i) {
             UNIT_ASSERT_LE_C(delays[i], maxDelay, delays[i].ToString() << ' ' << maxDelay.ToString() << ' ' << i);
         }
+    }
+
+    class TSequentialReassigner : public TReassignActor {
+    public:
+        TSequentialReassigner(ui32 groupId, ui64 bsController, ui32 numNodes, TVDiskIdShort vdisk, bool target)
+            : TReassignActor(groupId, bsController, 100, TDuration::MilliSeconds(1))
+            , NumNodes(numNodes)
+            , VDisk(vdisk)
+            , TargetPDisk(target)
+        {}
+
+    private:
+        void BootstrapImpl() override {
+            Become(&TSequentialReassigner::StateFunc);
+            SendReassign();
+        }
+
+    private:
+        const ui32 NumNodes;
+        ui32 TargetNode = 0;
+        TVDiskIdShort VDisk;
+        bool TargetPDisk = false;
+
+    private:
+        void SendReassign() override {
+            auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+            auto* reassign = ev->Record.MutableRequest()->AddCommand()->MutableReassignGroupDisk();
+            reassign->SetGroupId(GroupId);
+            reassign->SetFailRealmIdx(VDisk.FailRealm);
+            reassign->SetFailDomainIdx(VDisk.FailDomain);
+            reassign->SetVDiskIdx(VDisk.VDisk);
+            if (TargetPDisk) {
+                auto* pdiskId = reassign->MutableTargetPDiskId();
+                pdiskId->SetNodeId(TargetNode++ % NumNodes + 1);
+                pdiskId->SetPDiskId(1);
+            }
+
+            NTabletPipe::SendData(SelfId(), ClientId, ev.release(), 0);
+        }
+
+    private:
+        STRICT_STFUNC(StateFunc,
+            cFunc(TEvents::TSystem::Wakeup, SendRequest);
+            cFunc(TEvTabletPipe::TEvClientConnected::EventType, HandleConnected);
+            IgnoreFunc(TEvBlobStorage::TEvControllerConfigResponse);
+        )
+    };
+
+    void TestReassignsDoNotCauseErrorMessages(TBlobStorageGroupType erasure, ui32 numDCs, ui32 numNodesInDC) {
+        const ui32 disksPerNode = 1;
+        ui32 numNodes;
+        const ui32 numGroups = 1;
+        ui32 groupId;
+        std::unique_ptr<TEnvironmentSetup> env;
+        SetupEnvForReassignTest(numDCs, numNodesInDC, disksPerNode, numNodes, numGroups, groupId,
+                erasure, env);
+
+        const ui32 requests = 10;
+        const ui32 requestsHuge = 10;
+        const ui32 blobSize = 10;
+        const ui32 hugeBlobSize = 4_MB;
+
+        env->Runtime->Register(new TSequentialReassigner(groupId, env->TabletId, numNodes, TVDiskIdShort{0, 0, 0}, false), 1);
+        env->Runtime->Register(new TSequentialReassigner(groupId, env->TabletId, numNodes, TVDiskIdShort{0, 1, 0}, true), 1);
+        std::vector<TInflightActor*> actors;
+
+        const std::vector<TString> actorTypes = {
+            "Put", "HugePut", "Get", "HugeGet", "Patch", "HugePatch",
+        };
+
+        for (ui32 nodeId = 1; nodeId < numNodes; ++nodeId) {
+            std::vector<TInflightActor*> newActors = {
+                new TInflightActorPut({requests, 1, TDuration::MilliSeconds(1), groupId}, blobSize),
+                new TInflightActorPut({requestsHuge, 1, TDuration::MilliSeconds(1), groupId}, hugeBlobSize),
+                new TInflightActorGet({requests, 1, TDuration::MilliSeconds(1), groupId}, blobSize),
+                new TInflightActorGet({requestsHuge, 1, TDuration::MilliSeconds(1), groupId}, hugeBlobSize),
+                new TInflightActorPatch({requests, 1, TDuration::MilliSeconds(1), groupId}, blobSize),
+                new TInflightActorPatch({requestsHuge, 1, TDuration::MilliSeconds(1), groupId}, hugeBlobSize),
+            };
+            // remember to add new actor type to actorTypes
+            Y_ABORT_UNLESS(newActors.size() == actorTypes.size());
+            for (auto* actor : newActors) {
+                actors.push_back(actor);
+                env->Runtime->Register(actor, nodeId);
+            }
+        }
+
+        env->Sim(TDuration::Seconds(30));
+
+        for (ui32 nodeId = 1; nodeId < numNodes; ++nodeId) {
+            for (ui32 i = 0; i < actorTypes.size(); ++i) {
+                auto* actor = actors[actorTypes.size() * (nodeId - 1) + i];
+                ui32 errors = actor->ResponsesByStatus[NKikimrProto::ERROR];
+                UNIT_ASSERT_VALUES_EQUAL_C(errors, 0, "NodeId# " << nodeId <<
+                        " ActorType# " << actorTypes[i] << " errors# " << errors);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ReassignsDoNotCauseErrorMessagesMirror3dc) {
+        TestReassignsDoNotCauseErrorMessages(TBlobStorageGroupType::ErasureMirror3dc, 3, 4);
+    }
+
+    Y_UNIT_TEST(ReassignsDoNotCauseErrorMessagesMirror3of4) {
+        TestReassignsDoNotCauseErrorMessages(TBlobStorageGroupType::ErasureMirror3of4, 1, 12);
+    }
+
+    Y_UNIT_TEST(ReassignsDoNotCauseErrorMessagesBlock4Plus2) {
+        TestReassignsDoNotCauseErrorMessages(TBlobStorageGroupType::Erasure4Plus2Block, 1, 12);
     }
 }

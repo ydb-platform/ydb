@@ -1,4 +1,5 @@
 #include "init_impl.h"
+#include "mock.h"
 
 namespace NKikimr::NConfig {
 
@@ -33,11 +34,6 @@ public:
     }
 };
 
-struct TFileConfigOptions {
-    TString Description;
-    TMaybe<TString> ParsedOption;
-};
-
 class TDefaultProtoConfigFileProvider
     : public IProtoConfigFileProvider
 {
@@ -62,17 +58,15 @@ private:
         return false;
     }
 public:
-    TDefaultProtoConfigFileProvider() {
-        AddProtoConfigOptions(*this);
-    }
-
     void AddConfigFile(TString optName, TString description) override {
         Opts.emplace(optName, MakeSimpleShared<TFileConfigOptions>(TFileConfigOptions{.Description = description}));
     }
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) const override {
         for (const auto& [name, opt] : Opts) {
-            opts.AddLongOption(name, opt->Description).OptionalArgument("PATH").StoreResult(&opt->ParsedOption);
+            opts.AddLongOption(name, opt->Description)
+                .OptionalArgument("PATH")
+                .StoreResult(&opt->ParsedOption);
         }
     }
 
@@ -172,6 +166,7 @@ class TDefaultNodeBrokerClient
                     nodeInfo.SetAddress(node.Address);
                     nodeInfo.SetExpire(node.Expire);
                     NConfig::CopyNodeLocation(nodeInfo.MutableLocation(), node.Location);
+                    nodeInfo.SetSlotName(result.GetSlotName());
                 } else {
                     auto &info = *nsConfig.AddNode();
                     info.SetNodeId(node.NodeId);
@@ -369,7 +364,7 @@ class TDefaultNodeBrokerClient
     }
 
 public:
-    std::unique_ptr<INodeRegistrationResult> RegisterDynamicNode(
+    std::shared_ptr<INodeRegistrationResult> RegisterDynamicNode(
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const TNodeRegistrationSettings& regSettings,
@@ -396,7 +391,33 @@ public:
                 logger);
         }
 
-        return std::make_unique<TResult>(std::move(result));
+        return std::make_shared<TResult>(std::move(result));
+    }
+};
+
+class TDynConfigResultWrapper
+    : public IConfigurationResult
+{
+    NKikimr::NClient::TConfigurationResult Result;
+public:
+    TDynConfigResultWrapper(NKikimr::NClient::TConfigurationResult&& result)
+        : Result(std::move(result))
+    {}
+
+    const NKikimrConfig::TAppConfig& GetConfig() const {
+        return Result.GetConfig();
+    }
+
+    bool HasYamlConfig() const {
+        return Result.HasYamlConfig();
+    }
+
+    const TString& GetYamlConfig() const {
+        return Result.GetYamlConfig();
+    }
+
+    TMap<ui64, TString> GetVolatileYamlConfigs() const {
+        return Result.GetVolatileYamlConfigs();
     }
 };
 
@@ -409,7 +430,7 @@ class TDefaultDynConfigClient
         const TDynConfigSettings& settings,
         const IEnv& env,
         IInitLogger& logger,
-        TMaybe<NKikimr::NClient::TConfigurationResult>& res,
+        std::shared_ptr<IConfigurationResult>& res,
         TString &error)
     {
         NClient::TKikimr kikimr(GetKikimr(
@@ -430,6 +451,7 @@ class TDefaultDynConfigClient
                                                      1);
 
         if (!result.IsSuccess()) {
+            res = nullptr;
             error = result.GetErrorMessage();
             logger.Err() << "Configuration error: " << error << Endl;
             return false;
@@ -437,19 +459,19 @@ class TDefaultDynConfigClient
 
         logger.Out() << "Success." << Endl;
 
-        res = result;
+        res = std::make_shared<TDynConfigResultWrapper>(std::move(result));
 
         return true;
     }
 public:
-    TMaybe<NKikimr::NClient::TConfigurationResult> GetConfig(
+    std::shared_ptr<IConfigurationResult> GetConfig(
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const TDynConfigSettings& settings,
         const IEnv& env,
         IInitLogger& logger) const override
     {
-        TMaybe<NKikimr::NClient::TConfigurationResult> res;
+        std::shared_ptr<IConfigurationResult> res;
         bool success = false;
         TString error;
 
@@ -742,7 +764,7 @@ NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, cons
     return NClient::TKikimr(grpcConfig);
 }
 
-NKikimrConfig::TAppConfig GetYamlConfigFromResult(const NKikimr::NClient::TConfigurationResult& result, const TMap<TString, TString>& labels) {
+NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& result, const TMap<TString, TString>& labels) {
     NKikimrConfig::TAppConfig yamlConfig;
     if (result.HasYamlConfig() && !result.GetYamlConfig().empty()) {
         NYamlConfig::ResolveAndParseYamlConfig(
@@ -780,6 +802,54 @@ NKikimrConfig::TAppConfig GetActualDynConfig(
 
 std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(TInitialConfiguratorDependencies deps) {
     return std::make_unique<TInitialConfiguratorImpl>(deps);
+}
+
+class TInitialConfiguratorDepsRecorder
+    : public IInitialConfiguratorDepsRecorder
+{
+    TInitialConfiguratorDependencies Impls;
+    TProtoConfigFileProviderRecorder ProtoConfigFileProvider;
+    TNodeBrokerClientRecorder NodeBrokerClient;
+    TDynConfigClientRecorder DynConfigClient;
+    TEnvRecorder Env;
+public:
+    TInitialConfiguratorDepsRecorder(TInitialConfiguratorDependencies deps)
+        : Impls(deps)
+        , ProtoConfigFileProvider(deps.ProtoConfigFileProvider)
+        , NodeBrokerClient(deps.NodeBrokerClient)
+        , DynConfigClient(deps.DynConfigClient)
+        , Env(deps.Env)
+    {}
+
+    TInitialConfiguratorDependencies GetDeps() override {
+        return TInitialConfiguratorDependencies {
+            .ErrorCollector = Impls.ErrorCollector,
+            .ProtoConfigFileProvider = ProtoConfigFileProvider,
+            .ConfigUpdateTracer = Impls.ConfigUpdateTracer,
+            .MemLogInit = Impls.MemLogInit,
+            .NodeBrokerClient = NodeBrokerClient,
+            .DynConfigClient = DynConfigClient,
+            .Env = Env,
+            .Logger = Impls.Logger,
+        };
+    }
+
+    TRecordedInitialConfiguratorDeps GetRecordedDeps() const override {
+        return TRecordedInitialConfiguratorDeps {
+            .ErrorCollector = MakeDefaultErrorCollector(),
+            .ProtoConfigFileProvider = std::make_unique<TProtoConfigFileProviderMock>(ProtoConfigFileProvider.GetMock()),
+            .ConfigUpdateTracer = MakeDefaultConfigUpdateTracer(),
+            .MemLogInit = MakeNoopMemLogInitializer(),
+            .NodeBrokerClient = std::make_unique<TNodeBrokerClientMock>(NodeBrokerClient.GetMock()),
+            .DynConfigClient = std::make_unique<TDynConfigClientMock>(DynConfigClient.GetMock()),
+            .Env = std::make_unique<TEnvMock>(Env.GetMock()),
+            .Logger = MakeNoopInitLogger(),
+        };
+    }
+};
+
+std::unique_ptr<IInitialConfiguratorDepsRecorder> MakeDefaultInitialConfiguratorDepsRecorder(TInitialConfiguratorDependencies deps) {
+    return std::make_unique<TInitialConfiguratorDepsRecorder>(deps);
 }
 
 } // namespace NKikimr::NConfig

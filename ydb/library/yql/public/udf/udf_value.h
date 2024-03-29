@@ -698,7 +698,7 @@ struct TRawStringValue {
             ui8 Meta;
         };
         ui32 Offset;
-    }
+    };
 };
 
 class TUnboxedValuePod

@@ -64,7 +64,7 @@ void WaitForUpdate(TTenantTestRuntime& runtime) {
     runtime.DispatchEvents(std::move(options));
 }
 
-void CofigureAndWaitUpdate(TTenantTestRuntime& runtime, const NKikimrConfig::TTracingConfig& cfg, ui32 order) {
+void ConfigureAndWaitUpdate(TTenantTestRuntime& runtime, const NKikimrConfig::TTracingConfig& cfg, ui32 order) {
     auto configItem = MakeConfigItem(NKikimrConsole::TConfigItem::TracingConfigItem,
                                      NKikimrConfig::TAppConfig(), {}, {}, "", "", order,
                                      NKikimrConsole::TConfigItem::OVERWRITE, "");
@@ -189,18 +189,18 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
         }
         InitJaegerTracingConfigurator(runtime, std::move(configurator), cfg);
 
-        TVector<TRequestDiscriminator> discriminators = {
-            // {
-            //     .RequestType = ERequestType::TABLE_READROWS,
-            //     .Database = "/Root/test3",
-            // },
-            {
+        std::array discriminators{
+            TRequestDiscriminator{
+                .RequestType = ERequestType::TABLE_READROWS,
+                .Database = "/Root/test3",
+            },
+            TRequestDiscriminator{
                 .RequestType = ERequestType::KEYVALUE_READ,
             },
-            // {
-            //     .Database = "/Root/test2",
-            // },
-            // {},
+            TRequestDiscriminator{
+                .Database = "/Root/test2",
+            },
+            TRequestDiscriminator{},
         };
 
         {
@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
         WaitForUpdate(runtime); // Initial update
         cfg.MutableExternalThrottling(0)->SetMaxTracesPerMinute(10);
         cfg.MutableExternalThrottling(0)->SetMaxTracesBurst(2);
-        CofigureAndWaitUpdate(runtime, cfg, 1);
+        ConfigureAndWaitUpdate(runtime, cfg, 1);
 
         for (size_t i = 0; i < 3; ++i) {
             UNIT_ASSERT_EQUAL(
@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
             rule.SetFraction(0.25);
             rule.MutableScope()->MutableRequestTypes(0)->assign("KeyValue.ReadRange");
         }
-        CofigureAndWaitUpdate(runtime, cfg, 1);
+        ConfigureAndWaitUpdate(runtime, cfg, 1);
 
         TRequestDiscriminator readRangeDiscriminators[] = {
             {
@@ -503,14 +503,196 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::MilliSeconds(250));
             }
-            // level8 <= 750
-            // level10 <= 375
-            Cerr << "Level8: " << level8 << Endl;
-            Cerr << "Level10: " << level10 << Endl;
             UNIT_ASSERT(level8 >= 470 && level8 <= 760);
             UNIT_ASSERT(level10 >= 340 && level10 <= 385);
         }
     }
-}
 
+    Y_UNIT_TEST(ThrottlingByDb) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        auto timeProvider = MakeIntrusive<TTimeProviderMock>(TInstant::Now());
+        auto [controls, configurator] = CreateSamplingThrottlingConfigurator(10, timeProvider);
+        NKikimrConfig::TTracingConfig cfg;
+        {
+            auto rule = cfg.AddExternalThrottling();
+            rule->SetMaxTracesBurst(10);
+            rule->SetMaxTracesPerMinute(60);
+            rule->MutableScope()->MutableDatabase()->assign("/Root/db1");
+        }
+        InitJaegerTracingConfigurator(runtime, std::move(configurator), cfg);
+
+        std::array discriminators{
+            TRequestDiscriminator{
+                .RequestType = ERequestType::TABLE_READROWS,
+                .Database = "/Root/db1",
+            },
+            TRequestDiscriminator{
+                .Database = "/Root/db1",
+            },
+        };
+
+        {
+            size_t traced = 0;
+            for (size_t i = 0; i < 100; ++i) {
+                auto [state, _] = controls.HandleTracing(true, discriminators[i % discriminators.size()]);
+                UNIT_ASSERT_UNEQUAL(state, TTracingControls::SAMPLED);
+                if (state == TTracingControls::EXTERNAL) {
+                    ++traced;
+                }
+                timeProvider->Advance(TDuration::Seconds(1));
+            }
+            UNIT_ASSERT_EQUAL(traced, 100);
+
+            for (size_t i = 0; i < 12; ++i) {
+                auto [state, _] = controls.HandleTracing(true, discriminators[i % discriminators.size()]);
+                UNIT_ASSERT_UNEQUAL(state, TTracingControls::SAMPLED);
+                if (state == TTracingControls::EXTERNAL) {
+                    ++traced;
+                }
+            }
+            UNIT_ASSERT_EQUAL(traced, 111);
+        }
+
+        cfg.MutableExternalThrottling(0)->MutableScope()->AddRequestTypes()->assign("Table.ReadRows");
+        WaitForUpdate(runtime); // Initial update
+        ConfigureAndWaitUpdate(runtime, cfg, 1);
+        timeProvider->Advance(TDuration::Minutes(1));
+
+        {
+            size_t traced = 0;
+            for (size_t i = 0; i < 12; ++i) {
+                auto [state, _] = controls.HandleTracing(true, discriminators[0]);
+                UNIT_ASSERT_UNEQUAL(state, TTracingControls::SAMPLED);
+                if (state == TTracingControls::EXTERNAL) {
+                    ++traced;
+                }
+            }
+            UNIT_ASSERT_EQUAL(traced, 11);
+            timeProvider->Advance(TDuration::Minutes(1));
+
+            std::array notMatchingDiscriminators{
+                discriminators[1],
+                TRequestDiscriminator{
+                    .RequestType = ERequestType::TABLE_DROPTABLE,
+                    .Database = "/Root/db1",
+                },
+                TRequestDiscriminator{
+                    .RequestType = ERequestType::TABLE_READROWS,
+                    .Database = "/Root/db2",
+                },
+                TRequestDiscriminator{
+                    .RequestType = ERequestType::TABLE_READROWS,
+                },
+                TRequestDiscriminator{
+                    .Database = "/Root/db1",
+                },
+                TRequestDiscriminator{},
+            };
+
+            for (auto& discriminator : notMatchingDiscriminators) {
+                UNIT_ASSERT_EQUAL(controls.HandleTracing(true, discriminator).first, TTracingControls::OFF);
+                timeProvider->Advance(TDuration::Seconds(1));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(SamplingByDb) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        auto timeProvider = MakeIntrusive<TTimeProviderMock>(TInstant::Now());
+        auto [controls, configurator] = CreateSamplingThrottlingConfigurator(10, timeProvider);
+        NKikimrConfig::TTracingConfig cfg;
+        {
+            auto rule = cfg.AddSampling();
+            rule->SetMaxTracesBurst(10);
+            rule->SetMaxTracesPerMinute(60);
+            rule->SetLevel(0);
+            rule->SetFraction(0.5);
+            rule->MutableScope()->MutableDatabase()->assign("/Root/db1");
+        }
+        InitJaegerTracingConfigurator(runtime, std::move(configurator), cfg);
+
+        std::array discriminators{
+            TRequestDiscriminator{
+                .RequestType = ERequestType::TABLE_READROWS,
+                .Database = "/Root/db1",
+            },
+            TRequestDiscriminator{
+                .Database = "/Root/db1",
+            },
+        };
+
+        {
+            size_t sampled = 0;
+            for (size_t i = 0; i < 1000; ++i) {
+                auto [state, level] = controls.HandleTracing(false, discriminators[i % discriminators.size()]);
+                UNIT_ASSERT_UNEQUAL(state, TTracingControls::EXTERNAL);
+                if (state == TTracingControls::SAMPLED) {
+                    UNIT_ASSERT_EQUAL(level, 0);
+                    ++sampled;
+                }
+                timeProvider->Advance(TDuration::Seconds(1));
+            }
+            UNIT_ASSERT(sampled >= 400 && sampled <= 600);
+
+        }
+        {
+            size_t sampled = 0;
+            for (size_t i = 0; i < 60; ++i) {
+                auto [state, level] = controls.HandleTracing(false, discriminators[i % discriminators.size()]);
+                UNIT_ASSERT_UNEQUAL(state, TTracingControls::EXTERNAL);
+                if (state == TTracingControls::SAMPLED) {
+                    UNIT_ASSERT_EQUAL(level, 0);
+                    ++sampled;
+                }
+            }
+            UNIT_ASSERT_EQUAL(sampled, 11);
+        }
+
+        cfg.MutableSampling(0)->MutableScope()->AddRequestTypes()->assign("Table.ReadRows");
+        WaitForUpdate(runtime); // Initial update
+        ConfigureAndWaitUpdate(runtime, cfg, 1);
+        timeProvider->Advance(TDuration::Minutes(1));
+
+        {
+            size_t sampled = 0;
+            for (size_t i = 0; i < 1000; ++i) {
+                auto [state, level] = controls.HandleTracing(false, discriminators[0]);
+                UNIT_ASSERT_UNEQUAL(state, TTracingControls::EXTERNAL);
+                if (state == TTracingControls::SAMPLED) {
+                    UNIT_ASSERT_EQUAL(level, 0);
+                    ++sampled;
+                }
+                timeProvider->Advance(TDuration::Seconds(1));
+            }
+            UNIT_ASSERT(sampled >= 400 && sampled <= 600);
+            timeProvider->Advance(TDuration::Minutes(1));
+
+            std::array notMatchingDiscriminators{
+                discriminators[1],
+                TRequestDiscriminator{
+                    .RequestType = ERequestType::TABLE_DROPTABLE,
+                    .Database = "/Root/db1",
+                },
+                TRequestDiscriminator{
+                    .RequestType = ERequestType::TABLE_READROWS,
+                    .Database = "/Root/db2",
+                },
+                TRequestDiscriminator{
+                    .RequestType = ERequestType::TABLE_READROWS,
+                },
+                TRequestDiscriminator{
+                    .Database = "/Root/db1",
+                },
+                TRequestDiscriminator{},
+            };
+
+            for (size_t i = 0; i < 10; ++i) {
+                for (auto& discriminator : notMatchingDiscriminators) {
+                    UNIT_ASSERT_EQUAL(controls.HandleTracing(false, discriminator).first, TTracingControls::OFF);
+                    timeProvider->Advance(TDuration::Seconds(1));
+                }
+            }
+        }
+    }
+}
 } // namespace NKikimr

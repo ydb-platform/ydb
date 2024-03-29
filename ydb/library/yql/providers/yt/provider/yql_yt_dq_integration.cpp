@@ -314,6 +314,7 @@ public:
                 }
                 auto sampleSetting = GetSetting(section.Settings().Ref(), EYtSettingType::Sample);
                 if (sampleSetting && sampleSetting->Child(1)->Child(0)->Content() == "system") {
+                    AddInfo(ctx, "ReadTable with system sampling", skipIssues);
                     return false;
                 }
                 for (auto path: section.Paths()) {

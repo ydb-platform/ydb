@@ -60,6 +60,8 @@ protected:
     ui32 PDiskId = 0;
     ui32 VSlotId = 0;
 
+    std::optional<TActorId> TcpProxyId;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
@@ -111,6 +113,7 @@ public:
             hFunc(ResponseType, Handle);
             cFunc(TEvRetryNodeRequest::EventType, HandleRetry);
             cFunc(TEvents::TEvUndelivered::EventType, Undelivered);
+            hFunc(TEvInterconnect::TEvNodeConnected, Connected);
             cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, Disconnected);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
@@ -143,7 +146,12 @@ public:
         }
     }
 
+    void Connected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
+        TcpProxyId = ev->Sender;
+    }
+
     void Disconnected() {
+        TcpProxyId = {};
         if (!RetryRequest()) {
             TBase::RequestDone();
         }
@@ -171,7 +179,9 @@ public:
     }
 
     void PassAway() override {
-        this->Send(TActivationContext::InterconnectProxy(NodeId), new TEvents::TEvUnsubscribe);
+        if (TcpProxyId) {
+            this->Send(*TcpProxyId, new TEvents::TEvUnsubscribe);
+        }
         TBase::PassAway();
     }
 

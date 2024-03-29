@@ -204,6 +204,10 @@ namespace NKqp {
             return arrow::field(name, arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), nullable);
         case NScheme::NTypeIds::Interval:
             return arrow::field(name, arrow::duration(arrow::TimeUnit::TimeUnit::MICRO), nullable);
+        case NScheme::NTypeIds::Timestamp64:
+            return arrow::field(name, arrow::int64(), nullable);
+        case NScheme::NTypeIds::Interval64:
+            return arrow::field(name, arrow::int64(), nullable);
         case NScheme::NTypeIds::JsonDocument:
             return arrow::field(name, arrow::binary(), nullable);
         }

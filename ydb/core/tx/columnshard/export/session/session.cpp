@@ -40,10 +40,10 @@ bool TSession::Start(const std::shared_ptr<IStoragesManager>& storages, const TT
 void TSession::SaveFullToDB(NTable::TDatabase& tdb) {
     using namespace NColumnShard;
     NIceDb::TNiceDb db(tdb);
-    db.Table<Schema::ExportSessions>().Key(Task->GetIdentifier().ToString()).Update(
-        NIceDb::TUpdate<Schema::ExportSessions::Status>(::ToString(Status)),
-        NIceDb::TUpdate<Schema::ExportSessions::Cursor>(Cursor.SerializeToProto().SerializeAsString()),
-        NIceDb::TUpdate<Schema::ExportSessions::Task>(Task->SerializeToProto().SerializeAsString())
+    db.Table<Schema::ExportPersistentSessions>().Key(Task->GetIdentifier().ToString()).Update(
+        NIceDb::TUpdate<Schema::ExportPersistentSessions::Status>(::ToString(Status)),
+        NIceDb::TUpdate<Schema::ExportPersistentSessions::Cursor>(Cursor.SerializeToProto().SerializeAsString()),
+        NIceDb::TUpdate<Schema::ExportPersistentSessions::Task>(Task->SerializeToProto().SerializeAsString())
     );
 }
 
@@ -51,13 +51,13 @@ void TSession::SaveCursorToDB(NTable::TDatabase& tdb) {
     using namespace NColumnShard;
     NIceDb::TNiceDb db(tdb);
     if (Status != EStatus::Started) {
-        db.Table<Schema::ExportSessions>().Key(Task->GetIdentifier().ToString()).Update(
-            NIceDb::TUpdate<Schema::ExportSessions::Status>(::ToString(Status)),
-            NIceDb::TUpdate<Schema::ExportSessions::Cursor>(Cursor.SerializeToProto().SerializeAsString())
+        db.Table<Schema::ExportPersistentSessions>().Key(Task->GetIdentifier().ToString()).Update(
+            NIceDb::TUpdate<Schema::ExportPersistentSessions::Status>(::ToString(Status)),
+            NIceDb::TUpdate<Schema::ExportPersistentSessions::Cursor>(Cursor.SerializeToProto().SerializeAsString())
         );
     } else {
-        db.Table<Schema::ExportSessions>().Key(Task->GetIdentifier().ToString()).Update(
-            NIceDb::TUpdate<Schema::ExportSessions::Cursor>(Cursor.SerializeToProto().SerializeAsString())
+        db.Table<Schema::ExportPersistentSessions>().Key(Task->GetIdentifier().ToString()).Update(
+            NIceDb::TUpdate<Schema::ExportPersistentSessions::Cursor>(Cursor.SerializeToProto().SerializeAsString())
         );
     }
 }

@@ -50,6 +50,7 @@ struct Schema : NIceDb::Schema {
         SourceSessionsTableId,
         DestinationSessionsTableId,
         OperationTxIdsId,
+        BackupIdsDeprecated,
         ExportSessionsId
     };
 
@@ -323,7 +324,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TxId, LockId>;
     };
 
-    struct ExportSessions : NIceDb::Schema::Table<ExportSessionsId> {
+    struct ExportPersistentSessions : NIceDb::Schema::Table<ExportSessionsId> {
         struct Identifier : Column<1, NScheme::NTypeIds::String> {};
         struct Status: Column<2, NScheme::NTypeIds::String> {};
         struct Task: Column<3, NScheme::NTypeIds::String> {};
@@ -479,7 +480,7 @@ struct Schema : NIceDb::Schema {
         SourceSessions,
         DestinationSessions,
         OperationTxIds,
-        ExportSessions
+        ExportPersistentSessions
         >;
 
     //

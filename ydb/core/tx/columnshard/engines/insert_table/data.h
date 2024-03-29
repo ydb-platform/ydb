@@ -24,6 +24,7 @@ private:
     };
 
     std::shared_ptr<TBlobStorageGuard> BlobDataGuard;
+
 public:
     ui64 PlanStep = 0;
     ui64 WriteTxId = 0;
@@ -39,6 +40,10 @@ public:
         } else {
             return {};
         }
+    }
+
+    ui64 GetTxVolume() const {
+        return Meta.GetTxVolume() + sizeof(TBlobRange);
     }
 
     const TInsertedDataMeta& GetMeta() const {

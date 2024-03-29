@@ -1,8 +1,4 @@
-#ifndef READ_SESSION_ACTOR_IMPL
 #include "read_session_actor.h"
-#error "Do not include this file directly"
-#endif
-
 
 #include "helpers.h"
 #include "read_init_auth_actor.h"
@@ -12,8 +8,6 @@
 
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
 #include <library/cpp/random_provider/random_provider.h>
-
-#include <google/protobuf/util/time_util.h>
 
 #include <util/string/join.h>
 #include <util/string/strip.h>
@@ -478,7 +472,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDirectReadAc
 
     if (it->second.MaxProcessedDirectReadId + 1 != (ui64)ev->Get()->DirectReadId) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
-            << "direct reads must be confirmed in strict order - expecting " << (it->second.MaxProcessedDirectReadId + 1) 
+            << "direct reads must be confirmed in strict order - expecting " << (it->second.MaxProcessedDirectReadId + 1)
             << " but got " << ev->Get()->DirectReadId, ctx);
     }
 
@@ -565,7 +559,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReleased::TP
             return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
                 << "release of partition that is not requested is forbiden for " << partitionInfo.Partition, ctx);
         }
-        //TODO: filter all direct reads 
+        //TODO: filter all direct reads
         ReleasePartition(it, true, ctx);
     }
 }
@@ -1076,7 +1070,7 @@ void TReadSessionActor<UseMigrationProtocol>::InitSession(const TActorContext& c
         if (!ReadWithoutConsumer) {
             holder.PipeClient = CreatePipeClient(holder.TabletID, ctx);
         }
-        
+
         Y_ABORT_UNLESS(holder.FullConverter);
         auto it = TopicGroups.find(holder.FullConverter->GetInternalName());
         if (it != TopicGroups.end()) {
@@ -1738,6 +1732,9 @@ i64 TFormedReadResponse<TServerMessage>::ApplyDirectReadResponse(TEvPQProxy::TEv
     return diff;
 }
 
+//explicit instantation
+template struct TFormedReadResponse<PersQueue::V1::MigrationStreamingReadServerMessage>;
+template struct TFormedReadResponse<Topic::StreamReadMessage::FromServer>;
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadResponse::TPtr& ev, const TActorContext& ctx) {
@@ -2251,5 +2248,9 @@ void TReadSessionActor<UseMigrationProtocol>::RunAuthActor(const TActorContext& 
         ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token, TopicsList,
         TopicsHandler.GetLocalCluster(), ReadWithoutConsumer));
 }
+
+//explicit instantation
+template class TReadSessionActor<true>;
+template class TReadSessionActor<false>;
 
 }

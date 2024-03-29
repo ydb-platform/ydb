@@ -69,7 +69,7 @@ std::vector<TPartialReadResult> TPlainReadData::DoExtractReadyResults(const int6
     return result;
 }
 
-bool TPlainReadData::DoReadNextInterval() {
+TConclusion<bool> TPlainReadData::DoReadNextInterval() {
     return Scanner->BuildNextInterval();
 }
 

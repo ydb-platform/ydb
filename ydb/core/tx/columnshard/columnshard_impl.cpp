@@ -689,7 +689,8 @@ void TColumnShard::SetupIndexation() {
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start_indexation_tasks")("insert_overload_size", InsertTable->GetCountersCommitted().Bytes);
     CSCounters.OnSetupIndexation();
-    i64 bytesToIndex = 0;
+    ui64 bytesToIndex = 0;
+    ui64 txBytesWrite = 0;
     std::vector<const NOlap::TInsertedData*> dataToIndex;
     dataToIndex.reserve(TLimits::MIN_SMALL_BLOBS_TO_INSERT);
     for (auto it = InsertTable->GetPathPriorities().rbegin(); it != InsertTable->GetPathPriorities().rend(); ++it) {
@@ -697,11 +698,13 @@ void TColumnShard::SetupIndexation() {
             for (auto& data : pathInfo->GetCommitted()) {
                 Y_ABORT_UNLESS(data.BlobSize());
                 bytesToIndex += data.BlobSize();
+                txBytesWrite += data.GetTxVolume();
                 dataToIndex.push_back(&data);
-                if (bytesToIndex >= Limits.MaxInsertBytes) {
+                if (bytesToIndex >= (ui64)Limits.MaxInsertBytes || txBytesWrite >= NOlap::TGlobalLimits::TxWriteLimitBytes) {
                     StartIndexTask(std::move(dataToIndex), bytesToIndex);
                     dataToIndex.clear();
                     bytesToIndex = 0;
+                    txBytesWrite = 0;
                 }
             }
         }

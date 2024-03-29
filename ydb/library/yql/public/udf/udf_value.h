@@ -674,10 +674,33 @@ UDF_ASSERT_TYPE_SIZE(TBoxedValue, 32);
 ///////////////////////////////////////////////////////////////////////////////
 // TUnboxedValuePod
 ///////////////////////////////////////////////////////////////////////////////
+
+struct TRawEmbeddedValue {
+    char Buffer[0xE];
+    ui8 Size;
+    ui8 Meta;
+};
+
+struct TRawBoxedValue {
+    IBoxedValue* Value;
+    ui8 Reserved[7];
+    ui8 Meta;
+};
+
+struct TRawStringValue {
+    static constexpr ui32 OffsetSize = 24;
+    static constexpr ui32 OffsetLimit = 1 << 24;
+
+    TStringValue::TData* Value;
+    ui32 Size;
+    ui32 Offset : OffsetSize;
+    ui8 Meta;
+};
+
 class TUnboxedValuePod
 {
 friend class TUnboxedValue;
-protected:
+public:
     enum class EMarkers : ui8 {
         Empty = 0,
         Embedded,
@@ -685,7 +708,6 @@ protected:
         Boxed,
     };
 
-public:
     inline TUnboxedValuePod() noexcept = default;
     inline ~TUnboxedValuePod() noexcept = default;
 
@@ -824,29 +846,11 @@ protected:
     union TRaw {
         ui64 Halfs[2] = {0, 0};
 
-        struct {
-            char Buffer[0xE];
-            ui8 Size;
-            ui8 Meta;
-        } Embedded;
-
-        struct {
-            IBoxedValue* Value;
-            ui8 Reserved[7];
-            ui8 Meta;
-        } Boxed;
-
-        struct {
-            TStringValue::TData* Value;
-            ui32 Size;
-            union {
-                ui32 Offset;
-                struct {
-                    ui8 Skip[3];
-                    ui8 Meta;
-                };
-            };
-        } String;
+        TRawEmbeddedValue Embedded;
+        
+        TRawBoxedValue Boxed;
+        
+        TRawStringValue String;
 
         struct {
             union {
@@ -888,7 +892,7 @@ public:
     inline i32 RefCount() const noexcept;
 
     static constexpr ui32 InternalBufferSize = sizeof(TRaw::Embedded.Buffer);
-    static constexpr ui32 OffsetLimit = 1U << 24U;
+    static constexpr ui32 OffsetLimit = TRawStringValue::OffsetLimit;
 };
 
 UDF_ASSERT_TYPE_SIZE(TUnboxedValuePod, 16);

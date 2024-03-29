@@ -869,7 +869,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
 
     // From*
     
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TFromSeconds, TOptional<TTimestamp>(TAutoMap<ui32>)) {
+    SIMPLE_STRICT_UDF(TFromSeconds, TOptional<TTimestamp>(TAutoMap<ui32>)) {
         Y_UNUSED(valueBuilder);
         auto res = args[0].Get<ui32>();
         if (!ValidateDatetime(res)) {
@@ -880,7 +880,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
 
     using TFromSecondsKernel = TUnaryUnsafeFixedSizeFilterKernel<ui32, ui64, 
         [] (ui32 seconds) { return std::make_pair(ui64(seconds * 1000000ull), ValidateDatetime(seconds)); }>;
-    END_SIMPLE_ARROW_UDF(TFromSeconds, TFromSecondsKernel::Do);
+    // END_SIMPLE_ARROW_UDF(TFromSeconds, TFromSecondsKernel::Do);
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TFromMilliseconds, TOptional<TTimestamp>(TAutoMap<ui64>)) {
         Y_UNUSED(valueBuilder);

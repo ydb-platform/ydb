@@ -22,8 +22,23 @@ message TStatus {
         NO_SUCH_SERVICE = 12;
     }
 
-    optional ECode   Code = 1;
-    optional string  Reason = 2;
+    enum EReasonType {
+        REASON_TYPE_UNSPECIFIED = 0;
+        // Affected storage group has too many unavailable (locked or down) vdisks.
+        TOO_MANY_UNAVAILABLE_VDISKS = 1;
+        // Too many unavailable state storage rings.
+        TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS = 2;
+        // Too many disabled nodes (storage & dynamic) in cluster.
+        DISABLED_NODES_LIMIT_REACHED = 3;
+        // Too many disabled dynamic nodes of specific tenant.
+        TENANT_DISABLED_NODES_LIMIT_REACHED = 4;
+        // Too many unavailable nodes with system tablets.
+        SYS_TABLETS_NODE_LIMIT_REACHED = 5;
+    }
+
+    optional ECode       Code = 1;
+    optional string      Reason = 2;
+    optional EReasonType ReasonType = 3;
 }
 
 enum EState {
@@ -117,6 +132,7 @@ message TAction {
   optional uint64    Duration = 5;
   // If specified will be expanded to list of hosts.
   optional string    Tenant = 6;
+  optional TStatus   Status = 7;
 }
 
 enum ETenantPolicy {

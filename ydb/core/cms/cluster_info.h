@@ -40,6 +40,7 @@ using TCmsStatePtr = TIntrusivePtr<TCmsState>;
 struct TErrorInfo {
     NKikimrCms::TStatus::ECode Code = NKikimrCms::TStatus::ALLOW;
     TString Reason;
+    NKikimrCms::TStatus::EReasonType ReasonType = NKikimrCms::TStatus::REASON_TYPE_UNSPECIFIED;
     TInstant Deadline;
     ui64 RollbackPoint = 0;
 };
@@ -666,7 +667,7 @@ public:
     friend TOperationLogManager;
 
     TenantNodesCheckers TenantNodesChecker;
-    TSimpleSharedPtr<TClusterLimitsCounter> ClusterNodes = MakeSimpleShared<TClusterLimitsCounter>(0u, 0u);
+    TSimpleSharedPtr<TNodesLimitsCounterBase> ClusterNodes = MakeSimpleShared<TNodesLimitsCounterBase>(0u, 0u);
 
     TOperationLogManager LogManager;
     TOperationLogManager ScheduledLogManager;

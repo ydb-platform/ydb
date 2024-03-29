@@ -782,7 +782,23 @@
 
 - Java
 
-  При конструировании сообщения для записи с помощью Builder'а, ему можно передать объект `MetadataItem` с парой ключ типа `String` + значение типа `byte[]`:
+  При конструировании сообщения для записи с помощью Builder'а, ему можно передать объекты типа `MetadataItem` с парой ключ типа `String` + значение типа `byte[]`.
+
+  Можно передать сразу `List` таких объектов:
+
+  ```java
+  List<MetadataItem> metadataItems = Arrays.asList(
+          new MetadataItem("meta-key", "meta-value".getBytes()),
+          new MetadataItem("another-key", "value".getBytes())
+  );
+  writer.send(
+          Message.newBuilder()
+                  .setMetadataItems(metadataItems)
+                  .build()
+  );
+  ```
+
+  Или добавлять каждый `MetadataItem` отдельно:
 
   ```java
   writer.send(

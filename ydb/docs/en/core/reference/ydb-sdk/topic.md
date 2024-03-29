@@ -785,7 +785,23 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
 - Java
 
-  Construct messages with the builder to take advantage of the message metadata feature. You can add `MetadataItem` objects to a message individually or set a `List` of `MetadataItem`s. Each item consists of a key of type `String` and a value of type `byte[]`:
+  Construct messages with the builder to take advantage of the message metadata feature. You can add `MetadataItem` objects to a message. Each item consists of a key of type `String` and a value of type `byte[]`.
+
+  `MetadataItem`s can be set as a `List`:
+
+  ```java
+  List<MetadataItem> metadataItems = Arrays.asList(
+          new MetadataItem("meta-key", "meta-value".getBytes()),
+          new MetadataItem("another-key", "value".getBytes())
+  );
+  writer.send(
+          Message.newBuilder()
+                  .setMetadataItems(metadataItems)
+                  .build()
+  );
+  ```
+
+  Or each `MetadataItem` can be added individually:
 
   ```java
   writer.send(
@@ -793,9 +809,10 @@ All the metadata provided when writing a message is sent to a consumer with the 
                   .addMetadataItem(new MetadataItem("meta-key", "meta-value".getBytes()))
                   .addMetadataItem(new MetadataItem("another-key", "value".getBytes()))
                   .build()
+  );
   ```
 
-  While reading, metadata can be received from a `Message` with `getMetadataItems()` method:
+  While reading, metadata can be received from a `Message` with the `getMetadataItems()` method:
 
   ```java
   Message message = reader.receive();
@@ -804,7 +821,7 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
 {% endlist %}
 
-### Write in transaction {#write-tx}
+### Write in a transaction {#write-tx}
 
 {% list tabs %}
 
@@ -1508,7 +1525,7 @@ Usually reading progress is saved on server within each Consumer. Though such pr
 
 {% endlist %}
 
-### Reading in transaction {#read-tx}
+### Reading in a transaction {#read-tx}
 
 {% list tabs %}
 
@@ -1533,10 +1550,10 @@ Usually reading progress is saved on server within each Consumer. Though such pr
 
   [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadAsync.java)
 
-  In `onMessages` callback one or more messages can be linked with transaction.
-  To do that request `reader.updateOffsetsInTransaction` should be called. And transaction should not be committed untill response is received.
-  This method needs partition offsets list as a parameter.
-  Such list can be constructed manually or using helper method `getPartitionOffsets()` that `Message` and `DataReceivedEvent` both provide.
+  In the `onMessages` callback, one or more messages can be linked with a transaction.
+  To do that request `reader.updateOffsetsInTransaction` should be called. And transaction should not be committed until a response is received.
+  This method needs a partition offsets list as a parameter.
+  Such a list can be constructed manually or using the helper method `getPartitionOffsets()` that `Message` and `DataReceivedEvent` both provide.
 
   ```java
   @Override
@@ -1560,10 +1577,10 @@ Usually reading progress is saved on server within each Consumer. Though such pr
 
           Status updateStatus = reader.updateOffsetsInTransaction(transaction,
                           message.getPartitionOffsets(), new UpdateOffsetsInTransactionSettings.Builder().build())
-                  // Do not commit transaction without waiting for updateOffsetsInTransaction result to avoid race condition
+                  // Do not commit a transaction without waiting for updateOffsetsInTransaction result to avoid a race condition
                   .join();
           if (!updateStatus.isSuccess()) {
-              logger.error("Couldn't update offsets in transaction: {}", updateStatus);
+              logger.error("Couldn't update offsets in a transaction: {}", updateStatus);
               return; // retry or shutdown
           }
 

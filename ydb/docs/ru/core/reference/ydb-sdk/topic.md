@@ -837,7 +837,7 @@
       return; // retry or shutdown
   }
   Session session = sessionResult.getValue();
-  // creating transaction in table service
+  // creating a transaction in the table service
   // this transaction is not yet active and has no id
   TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
 
@@ -885,7 +885,7 @@
       return; // retry or shutdown
   }
   Session session = sessionResult.getValue();
-  // creating transaction in table service
+  // creating a transaction in the table service
   // this transaction is not yet active and has no id
   TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
 
@@ -1493,8 +1493,8 @@
   @Override
   public void onStartPartitionSession(StartPartitionSessionEvent event) {
       event.confirm(StartPartitionSessionSettings.newBuilder()
-              .setReadOffset(lastReadOffset)
-              .setCommitOffset(lastCommitOffset)
+              .setReadOffset(lastReadOffset) // Long
+              .setCommitOffset(lastCommitOffset) // Long
               .build());
   }
   ```
@@ -1528,7 +1528,7 @@
   @Override
   public void onStartPartitionSession(StartPartitionSessionEvent event) {
       event.confirm(StartPartitionSessionSettings.newBuilder()
-              .setReadOffset(lastReadOffset) // last offset read by client
+              .setReadOffset(lastReadOffset) // the last offset read by this client, Long
               .build());
   }
   ```
@@ -1625,7 +1625,7 @@
               return; // retry or shutdown
           }
           Session session = sessionResult.getValue();
-          // creating transaction in table service
+          // creating a transaction in the table service
           // this transaction is not yet active and has no id
           TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
 

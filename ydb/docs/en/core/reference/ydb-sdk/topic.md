@@ -840,7 +840,7 @@ All the metadata provided when writing a message is sent to a consumer with the 
       return; // retry or shutdown
   }
   Session session = sessionResult.getValue();
-  // creating transaction in table service
+  // creating a transaction in the table service
   // this transaction is not yet active and has no id
   TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
 
@@ -883,7 +883,7 @@ All the metadata provided when writing a message is sent to a consumer with the 
       return; // retry or shutdown
   }
   Session session = sessionResult.getValue();
-  // creating transaction in table service
+  // creating a transaction in the table service
   // this transaction is not yet active and has no id
   TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
 
@@ -1479,16 +1479,16 @@ When reading starts, the client code must transmit the starting consumer offset 
 
 - Java
 
-  Starting offset for reading in Java can be set only for AsyncReader.
-  In `StartPartitionSessionEvent` callback `StartPartitionSessionSettings` with desired ReadOffset can be passed to `confirm` method.
-  Offset that should be considered as committed can be set with `setCommittedOffset`.
+  The starting offset for reading in Java can only be set for AsyncReader.
+  In `StartPartitionSessionEvent`, a `StartPartitionSessionSettings` object with the desired ReadOffset can be passed to the `confirm` method.
+  The offset that should be considered as committed can be set with the `setCommittedOffset` method.
 
   ```java
   @Override
   public void onStartPartitionSession(StartPartitionSessionEvent event) {
       event.confirm(StartPartitionSessionSettings.newBuilder()
-              .setReadOffset(lastReadOffset)
-              .setCommitOffset(lastCommitOffset)
+              .setReadOffset(lastReadOffset) // Long
+              .setCommitOffset(lastCommitOffset) // Long
               .build());
   }
   ```
@@ -1498,13 +1498,13 @@ When reading starts, the client code must transmit the starting consumer offset 
 {% endlist %}
 
 ### Reading without a Consumer {#no-consumer}
-Usually reading progress is saved on server within each Consumer. Though such progres can not be saved if a reader is created without a `Consumer`
+Reading progress is usually saved on a server for each Consumer. However, such progress can't be saved if a reader is created without a specified `Consumer`.
 
 {% list tabs %}
 
 - Java
 
-  To read without a Consumer, `withoutConsumer()` method should be called explicitly on `ReaderSettings` Builder:
+  To read without a Consumer, the `withoutConsumer()` method should be called explicitly on the `ReaderSettings` builder:
 
   ```java
   ReaderSettings settings = ReaderSettings.newBuilder()
@@ -1514,14 +1514,14 @@ Usually reading progress is saved on server within each Consumer. Though such pr
                   .build())
           .build();
   ```
-  In this case reading progress on server will be lost on PartitionSession restart.
-  To avoid reading from the beginning each time, starting offsets should be set each time on `PartitionSession` start:
+  In this case, reading progress on the server will be lost on partition session restart.
+  To avoid reading from the beginning each time, starting offsets should be set on each partition session start:
 
   ```java
   @Override
   public void onStartPartitionSession(StartPartitionSessionEvent event) {
       event.confirm(StartPartitionSessionSettings.newBuilder()
-              .setReadOffset(lastReadOffset) // last offset read by client
+              .setReadOffset(lastReadOffset) // the last offset read by this client, Long
               .build());
   }
   ```
@@ -1536,15 +1536,15 @@ Usually reading progress is saved on server within each Consumer. Though such pr
 
   [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadSync.java)
 
-  Transaction can be set in `ReceiveSettings` for `receive` method:
+  A transaction can be set in `ReceiveSettings` for the `receive` method:
 
   ```java
   Message message = reader.receive(ReceiveSettings.newBuilder()
           .setTransaction(transaction)
           .build());
   ```
-  Such received message will be committed with this transaction. And shouldn't be committed directly.
-  `receive` method sends `sendUpdateOffsetsInTransaction` request on server to link message offset with this transaction and blocks until response is received.
+  A message received this way will be automatically committed with the provided transaction and shouldn't be committed directly.
+  The `receive` method sends the `sendUpdateOffsetsInTransaction` request on the server to link the message offset with this transaction and blocks until a response is received.
 
   Transaction requirements:
   It should be an active transaction (that has id) from one of YDB services. I.e. Table or Query.
@@ -1569,7 +1569,7 @@ Usually reading progress is saved on server within each Consumer. Though such pr
               return; // retry or shutdown
           }
           Session session = sessionResult.getValue();
-          // creating transaction in table service
+          // creating a transaction in the table service
           // this transaction is not yet active and has no id
           TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
 
@@ -1594,7 +1594,7 @@ Usually reading progress is saved on server within each Consumer. Though such pr
   ```
 
   Transaction requirements:
-  It should be an active transaction (that has id) from one of YDB services. I.e. Table or Query.
+  It should be an active transaction (that has an id) from one of {{ ydb-short-name }} services. I.e., Table or Query.
 
 {% endlist %}
 

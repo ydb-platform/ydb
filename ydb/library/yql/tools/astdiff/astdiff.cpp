@@ -29,17 +29,6 @@ std::string CalculateDiff(const TString& oldAst, const TString& newAst) {
     return ss.str();
 }
 
-std::pair<TFsPath, TFsPath> CopyFilesToTemp(const TFsPath& oldAstPath, const TFsPath& newAstPath) {
-    const auto tempPath = TFsPath("/tmp") / "astdiff";
-    tempPath.MkDir();
-
-    const auto oldAstTempPath = tempPath / "old.yql";
-    const auto newAstTempPath = tempPath / "new.yql";
-    oldAstPath.CopyTo(oldAstTempPath, /* force */ true);
-    newAstPath.CopyTo(newAstTempPath, /* force */ true);
-    return {oldAstTempPath, newAstTempPath};
-}
-
 int Main(int argc, const char *argv[])
 {
     if (argc != 3) {
@@ -89,7 +78,6 @@ int Main(int argc, const char *argv[])
     auto rootOnePos = ctxOne.GetPosition(rootOne->Pos());
     auto rootTwoPos = ctxTwo.GetPosition(rootTwo->Pos());
     if (!CompareExprTrees(rootOne, rootTwo)) {
-        const auto [oldAstTempPath, newAstTempPath] = CopyFilesToTemp(fileOne, fileTwo);
         const auto diff = CalculateDiff(oldAstTempPath, newAstTempPath);
 
         Cerr << "Programs are not equal!" << Endl;
@@ -98,14 +86,14 @@ int Main(int argc, const char *argv[])
             Cerr << "Node in " << fileTwo << " at [" << rootTwoPos.Row << ":" << rootTwoPos.Column << "] type is " << rootTwo->Type() << Endl;
             Cerr << "\nFile diff:\n" << diff;
         } else if (rootOne->ChildrenSize() != rootTwo->ChildrenSize()) {
-            Cerr << "Node '" << rootOne->Content() << "' in " << oldAstTempPath << " at [" << rootOnePos.Row << ":" << rootOnePos.Column << "] has " << rootOne->ChildrenSize() << " children." << Endl;
+            Cerr << "Node '" << rootOne->Content() << "' in " << fileOne << " at [" << rootOnePos.Row << ":" << rootOnePos.Column << "] has " << rootOne->ChildrenSize() << " children." << Endl;
             Cerr << rootOne->Dump();
-            Cerr << "Node '" << rootTwo->Content() << "' in " << newAstTempPath << " at [" << rootTwoPos.Row << ":" << rootTwoPos.Column << "] has " << rootTwo->ChildrenSize() << " children." << Endl;
+            Cerr << "Node '" << rootTwo->Content() << "' in " << fileTwo << " at [" << rootTwoPos.Row << ":" << rootTwoPos.Column << "] has " << rootTwo->ChildrenSize() << " children." << Endl;
             Cerr << rootTwo->Dump();
             Cerr << "\nFile diff:\n" << diff;
         } else {
-            Cerr << "Node in " << oldAstTempPath << " at [" << rootOnePos.Row << ":" << rootOnePos.Column << "]:" << Endl << rootOne->Dump() << Endl;
-            Cerr << "Node in " << newAstTempPath << " at [" << rootTwoPos.Row << ":" << rootTwoPos.Column << "]:" << Endl << rootTwo->Dump() << Endl;
+            Cerr << "Node in " << fileOne << " at [" << rootOnePos.Row << ":" << rootOnePos.Column << "]:" << Endl << rootOne->Dump() << Endl;
+            Cerr << "Node in " << fileTwo << " at [" << rootTwoPos.Row << ":" << rootTwoPos.Column << "]:" << Endl << rootTwo->Dump() << Endl;
             Cerr << "\nFile diff:\n" << diff;
         }
         return 5;

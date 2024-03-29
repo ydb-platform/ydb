@@ -36,7 +36,7 @@ message ChangeMessageVisibilityResult {
 message ChangeMessageVisibilityBatchRequestEntry {
     string id = 1;
     string receipt_handle = 2;
-    optional int32 visibility_timeout = 3;
+    int32 visibility_timeout = 3;
 }
 
 message ChangeMessageVisibilityBatchRequest {
@@ -140,7 +140,7 @@ message GetQueueAttributesResult {
 message GetQueueUrlRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     string queue_name = 2;
-    optional string queue_owner_aws_account_id = 3;
+    string queue_owner_aws_account_id = 3;
 }
 
 message GetQueueUrlResponse {
@@ -153,9 +153,9 @@ message GetQueueUrlResult {
 
 message ListQueuesRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    optional int64 max_results = 2;
-    optional string next_token = 3;
-    optional string queue_name_prefix = 4;
+    int64 max_results = 2;
+    string next_token = 3;
+    string queue_name_prefix = 4;
 }
 
 message ListQueuesResponse {
@@ -181,22 +181,22 @@ message PurgeQueueResult {
 
 message MessageAttribute {
     repeated bytes binary_list_values = 1;
-    optional bytes binary_value = 2;
+    bytes binary_value = 2;
     string data_type = 3;
     repeated string string_list_values = 4;
-    optional string string_value = 5;
+    string string_value = 5;
 }
 
 message ReceiveMessageRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     repeated string attribute_names = 2;
-    optional int32 max_number_of_messages = 3;
+    int32 max_number_of_messages = 3;
     repeated string message_attribute_names = 4;
     repeated string message_system_attribute_names = 5;
     string queue_url = 6;
-    optional string receive_request_attempt_id = 7;
-    optional int32 visibility_timeout = 8;
-    optional int32 wait_time_seconds = 9;
+    string receive_request_attempt_id = 7;
+    int32 visibility_timeout = 8;
+    int32 wait_time_seconds = 9;
 }
 
 message ReceiveMessageResponse {
@@ -205,12 +205,12 @@ message ReceiveMessageResponse {
 
 message Message {
     map<string, string> attributes = 1;
-    optional string body = 2;
-    optional string md5_of_body = 3;
-    optional string  md5_of_message_attributes = 4;
+    string body = 2;
+    string md5_of_body = 3;
+    string  md5_of_message_attributes = 4;
     map<string, MessageAttribute>  message_attributes = 5;
-    optional string  message_id = 6;
-    optional string receipt_handle = 7;
+    string  message_id = 6;
+    string receipt_handle = 7;
 
 }
 
@@ -220,11 +220,11 @@ message ReceiveMessageResult {
 
 message SendMessageRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    optional int32 delay_seconds = 2;
+    int32 delay_seconds = 2;
     map<string, MessageAttribute> message_attributes = 3;
     string message_body = 4;
-    optional string message_deduplication_id = 5;
-    optional string message_group_id = 6;
+    string message_deduplication_id = 5;
+    string message_group_id = 6;
     map<string, MessageAttribute> message_system_attributes = 7;
     string queue_url = 8;
 }
@@ -254,7 +254,7 @@ message BatchResultErrorEntry {
     string code = 1;
     string id = 2;
     bool sender_fault = 3;
-    optional string message = 4;
+    string message = 4;
 }
 
 message SendMessageBatchResultEntry {

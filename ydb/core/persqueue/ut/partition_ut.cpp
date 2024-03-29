@@ -20,6 +20,7 @@
 #include <util/system/types.h>
 
 #include "make_config.h"
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -267,6 +268,10 @@ protected:
     void TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration, bool ignoreQuotaDeadline);
     void WaitKeyValueRequest(TMaybe<ui64>& cookie);
 
+    void CmdChangeOwner(ui64 cookie, const TString& sourceId, TDuration duration, TString& ownerCookie);
+
+    void EmulateKVTablet();
+
     TMaybe<TTestContext> Ctx;
     TMaybe<TFinalizer> Finalizer;
 
@@ -445,11 +450,13 @@ void TPartitionFixture::SendGetOffset(ui64 cookie,
 {
     auto event = MakeHolder<TEvPQ::TEvGetClientOffset>(cookie,
                                                        clientId);
+    DBGTRACE_LOG("send TEvPQ::TEvGetClientOffset");
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
 {
+    DBGTRACE("TPartitionFixture::WaitCmdWrite");
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
 
@@ -545,6 +552,7 @@ void TPartitionFixture::SendCmdWriteResponse(NMsgBusProxy::EResponseStatus statu
     event->Record.SetStatus(status);
     event->Record.SetCookie(1); // SET_OFFSET_COOKIE
 
+    DBGTRACE_LOG("send TEvKeyValue::TEvResponse");
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -553,12 +561,14 @@ void TPartitionFixture::SendSubDomainStatus(bool subDomainOutOfSpace)
     auto event = MakeHolder<TEvPQ::TEvSubDomainStatus>();
     event->Record.SetSubDomainOutOfSpace(subDomainOutOfSpace);
 
+    DBGTRACE_LOG("send TEvPQ::TEvSubDomainStatus");
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::SendReserveBytes(const ui64 cookie, const ui32 size, const TString& ownerCookie, const ui64 messageNo, bool lastRequest)
 {
     auto event = MakeHolder<TEvPQ::TEvReserveBytes>(cookie, size, ownerCookie, messageNo, lastRequest);
+    DBGTRACE_LOG("send TEvPQ::TEvReserveBytes");
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -594,6 +604,7 @@ void TPartitionFixture::SendWrite
 void TPartitionFixture::SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force)
 {
     auto event = MakeHolder<TEvPQ::TEvChangeOwner>(cookie, owner, pipeClient, Ctx->Edge, force, true);
+    DBGTRACE_LOG("send TEvPQ::TEvChangeOwner");
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -604,6 +615,7 @@ void TPartitionFixture::SendGetWriteInfo(const ui32 internalPartitionId) {
 
 void TPartitionFixture::WaitProxyResponse(const TProxyResponseMatcher& matcher)
 {
+    DBGTRACE("TPartitionFixture::WaitProxyResponse");
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>();
     UNIT_ASSERT(event != nullptr);
 
@@ -835,11 +847,13 @@ void TPartitionFixture::SendProposeTransactionRequest(ui32 partition,
     body->SetImmediate(immediate);
     event->Record.SetTxId(txId);
 
+    DBGTRACE_LOG("send TEvPersQueue::TEvProposeTransaction");
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::WaitProposeTransactionResponse(const TProposeTransactionResponseMatcher& matcher)
 {
+    DBGTRACE("TPartitionFixture::WaitProposeTransactionResponse");
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>();
     UNIT_ASSERT(event != nullptr);
 
@@ -1290,6 +1304,7 @@ Y_UNIT_TEST_F(TooManyImmediateTxs, TPartitionFixture)
 
 Y_UNIT_TEST_F(CommitOffsetRanges, TPartitionFixture)
 {
+    DBGTRACE("CommitOffsetRanges");
     const TPartitionId partition{0};
     const ui64 begin = 0;
     const ui64 end = 10;
@@ -1663,8 +1678,29 @@ Y_UNIT_TEST_F(TabletConfig_Is_Newer_That_PartitionConfig, TPartitionFixture)
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 }
 
+void TPartitionFixture::CmdChangeOwner(ui64 cookie, const TString& sourceId, TDuration duration, TString& ownerCookie)
+{
+    DBGTRACE("TPartitionFixture::CmdChangeOwner");
+    SendChangeOwner(cookie, sourceId, Ctx->Edge);
+
+    EmulateKVTablet();
+
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(duration);
+    UNIT_ASSERT(event != nullptr);
+    ownerCookie = event->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+    DBGTRACE_LOG("ownerCookie=" << ownerCookie);
+}
+
+void TPartitionFixture::EmulateKVTablet()
+{
+    TMaybe<ui64> cookie;
+    WaitKeyValueRequest(cookie);
+    SendDiskStatusResponse(&cookie);
+}
+
 Y_UNIT_TEST_F(ReserveSubDomainOutOfSpace, TPartitionFixture)
 {
+    DBGTRACE("ReserveSubDomainOutOfSpace");
     Ctx->Runtime->GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
 
     CreatePartition({
@@ -1684,11 +1720,14 @@ Y_UNIT_TEST_F(ReserveSubDomainOutOfSpace, TPartitionFixture)
 
     ui64 cookie = 1;
     ui64 messageNo = 0;
+    TString ownerCookie;
 
-    SendChangeOwner(cookie, "owner1", Ctx->Edge);
-    auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
-    UNIT_ASSERT(ownerEvent != nullptr);
-    auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+    CmdChangeOwner(cookie, "owner1", TDuration::Seconds(1), ownerCookie);
+//    SendChangeOwner(cookie, "owner1", Ctx->Edge);
+//    auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
+//    UNIT_ASSERT(ownerEvent != nullptr);
+//    auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+//    DBGTRACE_LOG("ownerCookie=" << ownerCookie);
 
     TAutoPtr<IEventHandle> handle;
     std::function<bool(const TEvPQ::TEvProxyResponse&)> truth = [&](const TEvPQ::TEvProxyResponse& e) { return cookie == e.Cookie; };
@@ -1698,13 +1737,23 @@ Y_UNIT_TEST_F(ReserveSubDomainOutOfSpace, TPartitionFixture)
 
     // Second message will not be processed because the limit is exceeded.
     SendReserveBytes(++cookie, 13, ownerCookie, messageNo++);
-    auto reserveEvent = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
-    UNIT_ASSERT(reserveEvent == nullptr);
+
+    //EmulateKVTablet();
+
+    {
+        DBGTRACE("wait for TEvPQ::TEvProxyResponse");
+        auto reserveEvent = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
+        UNIT_ASSERT(reserveEvent == nullptr);
+    }
 
     // SudDomain quota available - second message will be processed..
     SendSubDomainStatus(false);
-    reserveEvent = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
-    UNIT_ASSERT(reserveEvent != nullptr);
+
+    {
+        DBGTRACE("wait for TEvPQ::TEvProxyResponse");
+        auto reserveEvent = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
+        UNIT_ASSERT(reserveEvent != nullptr);
+    }
 }
 
 Y_UNIT_TEST_F(WriteSubDomainOutOfSpace, TPartitionFixture)

@@ -467,6 +467,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFuncTraced(TEvKeyValue::TEvResponse, Handle);
+            HFuncTraced(TEvPQ::TEvHandleWriteResponse, Handle);
             HFuncTraced(TEvPQ::TEvBlobResponse, Handle);
             HFuncTraced(TEvPQ::TEvWrite, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvRead, Handle);
@@ -599,6 +600,7 @@ private:
     static void RemoveMessages(TMessageQueue& src, TMessageQueue& dst);
     void RemovePendingRequests(TMessageQueue& requests);
     void RemoveQuotaWaitingRequests();
+    void RemoveMessagesToQueue(TMessageQueue& requests);
 
 private:
     ui64 TabletID;

@@ -17,24 +17,24 @@ bool TExportsManager::Load(NTable::TDatabase& database) {
     NIceDb::TNiceDb db(database);
     using namespace NColumnShard;
     {
-        auto rowset = db.Table<Schema::ExportSessions>().Select();
+        auto rowset = db.Table<Schema::ExportPersistentSessions>().Select();
         if (!rowset.IsReady()) {
             return false;
         }
 
         while (!rowset.EndOfSet()) {
             NKikimrColumnShardExportProto::TExportTask taskProto;
-            AFL_VERIFY(taskProto.ParseFromString(rowset.GetValue<Schema::ExportSessions::Task>()));
+            AFL_VERIFY(taskProto.ParseFromString(rowset.GetValue<Schema::ExportPersistentSessions::Task>()));
             auto task = TExportTask::BuildFromProto(taskProto);
             AFL_VERIFY(task)("event", "cannot_parse_export_session_task")("error", task.GetErrorMessage());
 
             NKikimrColumnShardExportProto::TCursor cursorProto;
-            AFL_VERIFY(cursorProto.ParseFromString(rowset.GetValue<Schema::ExportSessions::Cursor>()));
+            AFL_VERIFY(cursorProto.ParseFromString(rowset.GetValue<Schema::ExportPersistentSessions::Cursor>()));
             auto cursor = TCursor::BuildFromProto(cursorProto);
             AFL_VERIFY(cursor)("event", "cannot_parse_export_session_cursor")("error", cursor.GetErrorMessage());
 
             TSession::EStatus status;
-            AFL_VERIFY(TryFromString(rowset.GetValue<Schema::ExportSessions::Status>(), status));
+            AFL_VERIFY(TryFromString(rowset.GetValue<Schema::ExportPersistentSessions::Status>(), status));
 
             auto session = std::make_shared<TSession>(std::make_shared<TExportTask>(task.DetachResult()), status, cursor.DetachResult());
 
@@ -55,7 +55,7 @@ void TExportsManager::RemoveSession(const NExport::TIdentifier& id, NTabletFlatE
     }
     Sessions.erase(id);
     NIceDb::TNiceDb db(txc.DB);
-    db.Table<NColumnShard::Schema::ExportSessions>().Key(id.ToString()).Delete();
+    db.Table<NColumnShard::Schema::ExportPersistentSessions>().Key(id.ToString()).Delete();
 }
 
 void TExportsManager::Stop() {

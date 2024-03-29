@@ -151,7 +151,7 @@ IGraphTransformer::TStatus InferPgCommonType(TPositionHandle pos, const TExprNod
         {
             size_t j = 0;
             for (const auto& col : *childColumnOrder) {
-                auto itemIdx = structType->FindItemI(col);
+                auto itemIdx = structType->FindItemI(col, nullptr);
                 YQL_ENSURE(itemIdx);
 
                 const auto* type = structType->GetItems()[*itemIdx]->GetItemType();
@@ -1725,7 +1725,8 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
                             }
                         }
 
-                        auto pos = x.Type->FindItemI(node->Tail().Content());
+                        bool isVirtual;
+                        auto pos = x.Type->FindItemI(node->Tail().Content(), &isVirtual);
                         if (pos) {
                             foundAlias = x.Alias;
                             ++matches;
@@ -1737,7 +1738,8 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
                             }
 
                             if (x.Priority == TInput::External) {
-                                x.UsedExternalColumns.insert(TString(x.Type->GetItems()[*pos]->GetName()));
+                                auto name = TString(x.Type->GetItems()[*pos]->GetCleanName(isVirtual));
+                                x.UsedExternalColumns.insert(name);
                             }
                         }
                     }
@@ -1966,17 +1968,18 @@ void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TStri
                     continue;
                 }
 
-                auto pos = x.Type->FindItemI(ref);
+                bool isVirtual;
+                auto pos = x.Type->FindItemI(ref, &isVirtual);
                 if (pos) {
                     auto item = x.Type->GetItems()[*pos];
-                    TString lcase = to_lower(TString(item->GetName()));
+                    TString lcase = to_lower(TString(item->GetCleanName(isVirtual)));
                     if (auto it = usedInUsing.find(lcase); it != usedInUsing.end() && !present.contains(lcase)) {
                         items.push_back(ctx.MakeType<TItemExprType>(it->second, item->GetItemType()));
                         present.emplace(lcase);
                     }
                     item = AddAlias(x.Alias, item, ctx);
                     items.push_back(item);
-                    usedRefs.insert(TString(item->GetName()));
+                    usedRefs.insert(TString(item->GetCleanName(isVirtual)));
                 }
             }
 
@@ -1986,7 +1989,7 @@ void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TStri
                 }
 
                 for (const auto& ref : qualifiedRefs->find(x.Alias)->second) {
-                    auto pos = x.Type->FindItemI(ref);
+                    auto pos = x.Type->FindItemI(ref, nullptr);
                     if (pos) {
                         auto item = x.Type->GetItems()[*pos];
                         item = AddAlias(x.Alias, item, ctx);
@@ -2110,7 +2113,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
                         }
                     }
 
-                    auto pos = x.Type->FindItemI(node->Tail().Content());
+                    auto pos = x.Type->FindItemI(node->Tail().Content(), nullptr);
                     if (pos) {
                         return ctx.Expr.Builder(node->Pos())
                             .Callable("Member")
@@ -3119,7 +3122,7 @@ bool GatherExtraSortColumns(const TExprNode& data, const TInputs& inputs, TExprN
                                 continue;
                             }
 
-                            auto pos = x.Type->FindItemI(column);
+                            auto pos = x.Type->FindItemI(column, nullptr);
                             if (pos) {
                                 index = inputIndex;
                                 break;
@@ -3791,7 +3794,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                             TVector<const TItemExprType*> newStructItems;
                             TColumnOrder newOrder;
                             for (ui32 i = 0; i < p->Child(2)->ChildrenSize(); ++i) {
-                                auto pos = inputStructType->FindItemI((*columnOrder)[i]);
+                                auto pos = inputStructType->FindItemI((*columnOrder)[i], nullptr);
                                 YQL_ENSURE(pos);
                                 auto type = inputStructType->GetItems()[*pos]->GetItemType();
                                 newOrder.push_back(TString(p->Child(2)->Child(i)->Content()));
@@ -4138,11 +4141,12 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                         } else {
                                             int matchCount = 0;
                                             for (size_t j = 0; j <= groupInputs.size() - 2; ++j) {
-                                                auto pos = groupInputs[j].Type->FindItemI(name);
+                                                bool isVirtual;
+                                                auto pos = groupInputs[j].Type->FindItemI(name, &isVirtual);
                                                 if (!pos) {
                                                     continue;
                                                 }
-                                                lrNames[0] = ctx.Expr.NewAtom(inp->Pos(), MakeAliasedColumn(groupInputs[j].Alias, groupInputs[j].Type->GetItems()[*pos]->GetName()));
+                                                lrNames[0] = ctx.Expr.NewAtom(inp->Pos(), MakeAliasedColumn(groupInputs[j].Alias, groupInputs[j].Type->GetItems()[*pos]->GetCleanName(isVirtual)));
                                                 ++matchCount;
                                             }
                                             if (!matchCount) {
@@ -4154,13 +4158,14 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                                 return IGraphTransformer::TStatus::Error;
                                             }
                                         }
-                                        auto pos = rightInput.Type->FindItemI(name);
+                                        bool isVirtual;
+                                        auto pos = rightInput.Type->FindItemI(name, &isVirtual);
                                         usedInUsingBefore.emplace(lcase);
                                         if (!pos) {
                                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Can't find column: " << name));
                                             return IGraphTransformer::TStatus::Error;
                                         }
-                                        lrNames[1] = ctx.Expr.NewAtom(inp->Pos(), MakeAliasedColumn(rightInput.Alias, rightInput.Type->GetItems()[*pos]->GetName()));
+                                        lrNames[1] = ctx.Expr.NewAtom(inp->Pos(), MakeAliasedColumn(rightInput.Alias, rightInput.Type->GetItems()[*pos]->GetCleanName(isVirtual)));
                                         nodes[colIdx] = ctx.Expr.NewList(inp->Pos(), std::move(lrNames));
                                     }
                                     TExprNode::TListType newJoin(4);
@@ -4616,9 +4621,10 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                     const auto type = data.Child(j)->Tail().GetTypeAnn()->Cast<TTypeExprType>()->
                         GetType()->Cast<TStructExprType>();
                     for (const auto& col : x.UsedExternalColumns) {
-                        auto pos = type->FindItemI(col);
+                        bool isVirtual;
+                        auto pos = type->FindItemI(col, &isVirtual);
                         YQL_ENSURE(pos);
-                        items.push_back(type->GetItems()[*pos]);
+                        items.push_back(type->GetItems()[*pos]->GetCleanItem(isVirtual, ctx.Expr));
                     }
 
                     auto effectiveType = ctx.Expr.MakeType<TStructExprType>(items);

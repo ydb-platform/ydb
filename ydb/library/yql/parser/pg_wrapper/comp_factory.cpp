@@ -502,9 +502,33 @@ public:
         }
     }
 
+    class TSystemColumnFiller {
+    public:
+        TSystemColumnFiller(TStructType* itemType, const TString& cluster, const TString& table) {
+            const auto& info = NPg::LookupStaticTable(NPg::TTableInfoKey(cluster, table));
+            TableOid = info.Oid;
+            if (info.Kind != NPg::ERelKind::Relation) {
+                return;
+            }
+
+            TableOidPos = itemType->FindMemberIndex("_yql_virtual_tableoid");
+        }
+
+        void Fill(NUdf::TUnboxedValue* items) {
+            if (TableOidPos) {
+                items[*TableOidPos] = ScalarDatumToPod(Int32GetDatum(TableOid));
+            }
+        }
+
+    private:
+        ui32 TableOid = 0;
+        TMaybe<ui32> TableOidPos;
+    };
+
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         TUnboxedValueVector rows;
         if (Cluster_ == "pg_catalog") {
+            TSystemColumnFiller sysFiller(ItemType_, TString(Cluster_), TString(Table_));
             if (Table_ == "pg_type") {
                 NPg::EnumTypes([&](ui32 oid, const NPg::TTypeDesc& desc) {
                     NUdf::TUnboxedValue* items;
@@ -513,8 +537,10 @@ public:
                         if (PgTypeFillers_[i]) {
                             items[i] = PgTypeFillers_[i](desc);
                         }
+
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 });
             } else if (Table_ == "pg_database") {
@@ -527,6 +553,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 }
             } else if (Table_ == "pg_tablespace") {
@@ -539,6 +566,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 }
             } else if (Table_ == "pg_shdescription") {
@@ -551,6 +579,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 }
             } else if (Table_ == "pg_stat_gssapi") {
@@ -562,6 +591,7 @@ public:
                     }
                 }
 
+                sysFiller.Fill(items);
                 rows.emplace_back(row);
             } else if (Table_ == "pg_namespace") {
                 NPg::EnumNamespace([&](ui32 oid, const NPg::TNamespaceDesc& desc) {
@@ -573,6 +603,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 });
             } else if (Table_ == "pg_am") {
@@ -585,6 +616,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 });
             } else if (Table_ == "pg_description") {
@@ -601,6 +633,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 });
 
@@ -616,6 +649,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 });
 
@@ -631,6 +665,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 });
 
@@ -647,6 +682,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 });
 
@@ -663,6 +699,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 });
 
@@ -679,6 +716,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 });
             } else if (Table_ == "pg_tables") {
@@ -692,6 +730,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 }
             } else if (Table_ == "pg_roles") {
@@ -703,6 +742,7 @@ public:
                     }
                 }
 
+                sysFiller.Fill(items);
                 rows.emplace_back(row);
             } else if (Table_ == "pg_stat_database") {
                 for (ui32 index = 0; index <= 1; ++index) {
@@ -714,6 +754,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 }
             } else if (Table_ == "pg_class") {
@@ -740,6 +781,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 }
             } else if (Table_ == "pg_proc") {
@@ -752,6 +794,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 });
             } else if (Table_ == "pg_operator") {
@@ -764,6 +807,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 });
             } else if (Table_ == "pg_aggregate") {
@@ -776,6 +820,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 });
             } else if (Table_ == "pg_language") {
@@ -788,6 +833,7 @@ public:
                         }
                     }
 
+                    sysFiller.Fill(items);
                     rows.emplace_back(row);
                 });
             }

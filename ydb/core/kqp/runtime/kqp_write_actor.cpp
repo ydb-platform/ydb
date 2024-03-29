@@ -24,8 +24,8 @@
 
 namespace {
     struct TWriteActorBackoffSettings {
-        TDuration StartRetryDelay = TDuration::MilliSeconds(150);
-        TDuration MaxRetryDelay = TDuration::Seconds(5);
+        TDuration StartRetryDelay = TDuration::MilliSeconds(250);
+        TDuration MaxRetryDelay = TDuration::Seconds(10);
         double UnsertaintyRatio = 0.5;
         double Multiplier = 2.0;
 
@@ -218,16 +218,15 @@ class TKqpWriteActor : public TActorBootstrapped<TKqpWriteActor>, public NYql::N
 
         void CheckMemory() {
             const auto freeSpace = Writer.GetFreeSpace();
-            if (NeedToResume && freeSpace > 0) {
-                Writer.Callbacks->ResumeExecution();
-            } else if (!NeedToResume && freeSpace <= 0) {
-                NeedToResume = true;
+            if (freeSpace > LastFreeMemory) {
+                Writer.ResumeExecution();
             }
+            LastFreeMemory = freeSpace;
         }
 
     private:
         TKqpWriteActor& Writer;
-        bool NeedToResume = false;
+        i64 LastFreeMemory = std::numeric_limits<i64>::max();
     };
 
     friend class TResumeNotificationManager;
@@ -291,9 +290,14 @@ private:
     }
 
     i64 GetFreeSpace() const final {
-        return Serializer
+        const i64 result = Serializer
             ? MemoryLimit - Serializer->GetMemory() - ShardsInfo.GetMemory()
             : std::numeric_limits<i64>::min(); // Can't use zero here because compute can use overcommit!
+
+        if (result <= 0) {
+            CA_LOG_D("No free space left. FreeSpace=" << result << " bytes.");
+        }
+        return result;
     }
 
     TMaybe<google::protobuf::Any> ExtraData() override {
@@ -308,11 +312,13 @@ private:
         return result;
     }
 
-    void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
+    void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64 size, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
         YQL_ENSURE(!Finished);
         Finished = finished;
         EgressStats.Resume();
+
+        CA_LOG_D("New data: size=" << size << ", finished=" << finished << ".");
 
         YQL_ENSURE(Serializer);
         try {
@@ -394,8 +400,6 @@ private:
         }
 
         Prepare();
-
-        Callbacks->ResumeExecution();
     }
 
     void Handle(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -554,7 +558,8 @@ private:
 
         CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << std::get<ui64>(TxId)
             << ", LockTxId=" << Settings.GetLockTxId() << ", LockNodeId=" << Settings.GetLockNodeId()
-            << ", Size=" << inFlightBatch.Data.size() << ", Cookie=" << inFlightBatch.Cookie);
+            << ", Size=" << inFlightBatch.Data.size() << ", Cookie=" << inFlightBatch.Cookie
+            << "; ShardBatchesLeft=" << shard.Size() << ", ShardClosed=" << shard.IsClosed());
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
@@ -628,6 +633,7 @@ private:
                 *SchemeEntry,
                 columnsMetadata,
                 TypeEnv);
+            ResumeExecution();
         } catch (...) {
             RuntimeError(
                 CurrentExceptionMessage(),
@@ -635,6 +641,10 @@ private:
         }
     }
 
+    void ResumeExecution() {
+        CA_LOG_D("Resuming execution.");
+        Callbacks->ResumeExecution();
+    }
 
     NActors::TActorId TxProxyId = MakeTxProxyID();
     NActors::TActorId PipeCacheId = NKikimr::MakePipePeNodeCacheID(false);

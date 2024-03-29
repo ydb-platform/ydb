@@ -810,6 +810,8 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
 - Java (sync)
 
+  [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteSync.java)
+
   Transaction can be set in `SendSettings` of `send` method while sending a message.
   Such message will be written on transaction commit.
 
@@ -843,6 +845,69 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
   // flush to wait until all messages reach server
   writer.flush();
+
+  Status commitStatus = transaction.commit().join();
+  analyzeCommitStatus(commitStatus);
+  ```
+
+  Transaction requirements:
+  It should be an active transaction (that has id) from one of YDB services. I.e. Table or Query.
+
+- Java (async)
+
+  [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteAsync.java)
+
+  Transaction can be set in `SendSettings` of `send` method while sending a message.
+  Such message will be written on transaction commit.
+
+  ```java
+  // creating session in table service
+  Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+  if (!sessionResult.isSuccess()) {
+      logger.error("Couldn't get session from pool: {}", sessionResult);
+      return; // retry or shutdown
+  }
+  Session session = sessionResult.getValue();
+  // creating transaction in table service
+  // this transaction is not yet active and has no id
+  TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+  // do something else in transaction
+  transaction.executeDataQuery("SELECT 1").join();
+  // now transaction is active and has id
+  // analyzeQueryResultIfNeeded();
+
+  try {
+      // Blocks until the message is put into sending buffer
+      writer.send(Message.newBuilder()
+                              .setData(messageString.getBytes())
+                              .build(),
+                      SendSettings.newBuilder()
+                              .setTransaction(transaction)
+                              .build())
+              .whenComplete((result, ex) -> {
+                  if (ex != null) {
+                      logger.error("Exception while sending message: ", ex);
+                  } else {
+                      switch (result.getState()) {
+                          case WRITTEN:
+                              WriteAck.Details details = result.getDetails();
+                              logger.info("Message was written successfully, offset: " + details.getOffset());
+                              break;
+                          case ALREADY_WRITTEN:
+                              logger.info("Message was already written");
+                              break;
+                          default:
+                              break;
+                      }
+                  }
+              })
+              // Waiting for message to reach server before transaction commit
+              .join();
+  } catch (QueueOverflowException exception) {
+      logger.error("Queue overflow exception while sending message{}: ", index, exception);
+      // Send queue is full. Need retry with backoff or skip
+  }
 
   Status commitStatus = transaction.commit().join();
   analyzeCommitStatus(commitStatus);
@@ -1449,6 +1514,8 @@ Usually reading progress is saved on server within each Consumer. Though such pr
 
 - Java (sync)
 
+  [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadSync.java)
+
   Transaction can be set in `ReceiveSettings` for `receive` method:
 
   ```java
@@ -1463,6 +1530,8 @@ Usually reading progress is saved on server within each Consumer. Though such pr
   It should be an active transaction (that has id) from one of YDB services. I.e. Table or Query.
 
 - Java (async)
+
+  [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadAsync.java)
 
   In `onMessages` callback one or more messages can be linked with transaction.
   To do that request `reader.updateOffsetsInTransaction` should be called. And transaction should not be committed untill response is received.

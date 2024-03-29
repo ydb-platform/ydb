@@ -808,6 +808,8 @@
 
 - Java (sync)
 
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteSync.java)
+
   В настройках `SendSettings` метода `send` можно указать транзакцию.
   Тогда сообщение будет записано вместе с коммитом этой транзакцией.
 
@@ -839,8 +841,71 @@
           TimeUnit.SECONDS
   );
 
-  // flush to wait until all messages reach server
+  // flush to wait until all messages reach server before commit
   writer.flush();
+
+  Status commitStatus = transaction.commit().join();
+  analyzeCommitStatus(commitStatus);
+  ```
+
+  Требование к транзакции:
+  Это должна быть активная (имеющая идентификатор) транзакция в одном из сервисов YDB. Например, Table или Query.
+
+- Java (async)
+
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteAsync.java)
+
+  В настройках `SendSettings` метода `send` можно указать транзакцию.
+  Тогда сообщение будет записано вместе с коммитом этой транзакцией.
+
+  ```java
+  // creating session in table service
+  Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+  if (!sessionResult.isSuccess()) {
+      logger.error("Couldn't get session from pool: {}", sessionResult);
+      return; // retry or shutdown
+  }
+  Session session = sessionResult.getValue();
+  // creating transaction in table service
+  // this transaction is not yet active and has no id
+  TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+  // do something else in transaction
+  transaction.executeDataQuery("SELECT 1").join();
+  // now transaction is active and has id
+  // analyzeQueryResultIfNeeded();
+
+  try {
+      // Blocks until the message is put into sending buffer
+      writer.send(Message.newBuilder()
+                              .setData(messageString.getBytes())
+                              .build(),
+                      SendSettings.newBuilder()
+                              .setTransaction(transaction)
+                              .build())
+              .whenComplete((result, ex) -> {
+                  if (ex != null) {
+                      logger.error("Exception while sending message: ", ex);
+                  } else {
+                      switch (result.getState()) {
+                          case WRITTEN:
+                              WriteAck.Details details = result.getDetails();
+                              logger.info("Message was written successfully, offset: " + details.getOffset());
+                              break;
+                          case ALREADY_WRITTEN:
+                              logger.info("Message was already written");
+                              break;
+                          default:
+                              break;
+                      }
+                  }
+              })
+              // Waiting for message to reach server before transaction commit
+              .join();
+  } catch (QueueOverflowException exception) {
+      logger.error("Queue overflow exception while sending message{}: ", index, exception);
+      // Send queue is full. Need retry with backoff or skip
+  }
 
   Status commitStatus = transaction.commit().join();
   analyzeCommitStatus(commitStatus);
@@ -1507,6 +1572,8 @@
 
 - Java (sync)
 
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadSync.java)
+
   В настройках `ReceiveSettings` метода `receive` можно указать транзакцию:
 
   ```java
@@ -1521,6 +1588,8 @@
   Это должна быть активная (имеющая идентификатор) транзакция в одном из сервисов YDB. Например, Table или Query.
 
 - Java (async)
+
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadAsync.java)
 
   После получения сообщения в обработчике `onMessages` можно связать одно или несколько сообщений с транзакцией.
   Для этого нужно вызвать отдельный метод `reader.updateOffsetsInTransaction` и дождаться его выполнения на сервере.

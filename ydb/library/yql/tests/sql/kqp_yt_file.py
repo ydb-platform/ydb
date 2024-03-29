@@ -92,101 +92,98 @@ EXCLUDED_CANONIZATION = [
 ]
 
 
-def contains_not_commented(sql_query, substr, lower=False):
-    if lower:
-        sql_query = sql_query.lower()
-    count_substr = sql_query.count(substr)
-    count_substr_commented = sql_query.count('--' + substr) + sql_query.count('-- ' + substr)
-    return count_substr > count_substr_commented
+def contains_insert(sql_query):
+    sql_query = sql_query.lower()
+    return sql_query.count('insert into') > sql_query.count('--insert into') + sql_query.count('-- insert into')
 
 
 def validate_sql(sql_query):
     # Unsupported constructions
-    if contains_not_commented(sql_query, 'define subquery', lower=True):
+    if 'define subquery' in sql_query.lower():
         pytest.skip('SUBQUERY is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'insert into', lower=True):
+    if contains_insert(sql_query):
         pytest.skip('INSERT is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'discard', lower=True):
+    if 'discard' in sql_query.lower():
         pytest.skip('DISCARD is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'evaluate', lower=True):
+    if 'evaluate' in sql_query.lower():
         pytest.skip('EVALUATE is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'concat(', lower=True):
+    if 'concat(' in sql_query.lower():
         pytest.skip('CONCAT is not supported in KQP')
 
-    if contains_not_commented(sql_query, '.range(', lower=True) or contains_not_commented(sql_query, ' range(', lower=True):
+    if '.range(' in sql_query.lower() or ' range(' in sql_query.lower():
         pytest.skip('RANGE is not supported in KQP')
 
-    if contains_not_commented(sql_query, ' each(', lower=True):
+    if ' each(' in sql_query.lower():
         pytest.skip('EACH is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'drop table', lower=True):
+    if 'drop table' in sql_query.lower():
         pytest.skip('DROP TABLE is not supported in KQP for extarnal entities')
 
-    if contains_not_commented(sql_query, 'sample ', lower=True) or contains_not_commented(sql_query, 'sample(', lower=True):
+    if 'sample ' in sql_query.lower() or 'sample(' in sql_query.lower():
         pytest.skip('SAMPLE is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'count(', lower=True):
+    if 'count(' in sql_query.lower():
         pytest.skip('COUNT is not supported in KQP')
 
     # Unsupported functions
-    if contains_not_commented(sql_query, 'TableName('):
+    if 'TableName(' in sql_query:
         pytest.skip('TableName is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'QuoteCode('):
+    if 'QuoteCode(' in sql_query:
         pytest.skip('QuoteCode is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'RangeComputeFor('):
+    if 'RangeComputeFor(' in sql_query:
         pytest.skip('RangeComputeFor is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'FromBytes('):
+    if 'FromBytes(' in sql_query:
         pytest.skip('FromBytes is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'folder(', lower=True):
+    if 'folder(' in sql_query.lower():
         pytest.skip('Folder is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'file(', lower=True) or contains_not_commented(sql_query, 'FileContent('):
+    if 'file(' in sql_query.lower() or 'FileContent(' in sql_query:
         pytest.skip('Files is not supported in KQP')
 
     # Unsupported pragmas
-    if contains_not_commented(sql_query, 'library(', lower=True):
+    if 'library(' in sql_query.lower():
         pytest.skip('Pragma Library is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'refselect', lower=True):
+    if 'refselect' in sql_query.lower():
         pytest.skip('Pragma RefSelect is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'optimizerflags', lower=True):
+    if 'optimizerflags' in sql_query.lower():
         pytest.skip('Pragma OptimizerFlags is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'disablepullupflatmapoverjoin', lower=True):
+    if 'disablepullupflatmapoverjoin' in sql_query.lower():
         pytest.skip('Pragma DisablePullUpFlatMapOverJoin is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'costbasedoptimizer', lower=True):
+    if 'costbasedoptimizer' in sql_query.lower():
         pytest.skip('Pragma CostBasedOptimizer is not supported in KQP')
 
     # Unsupported types
-    if contains_not_commented(sql_query, 'date32', lower=True):
+    if 'date32' in sql_query.lower():
         pytest.skip('Type Date32 is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'datetime64', lower=True):
+    if 'datetime64' in sql_query.lower():
         pytest.skip('Type Datetime64 is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'timestamp64', lower=True):
+    if 'timestamp64' in sql_query.lower():
         pytest.skip('Type Timestamp64 is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'interval64', lower=True):
+    if 'interval64' in sql_query.lower():
         pytest.skip('Type Interval64 is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'interval64', lower=True):
+    if 'interval64' in sql_query.lower():
         pytest.skip('Type Interval64 is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'void(', lower=True):
+    if 'void(' in sql_query.lower():
         pytest.skip('Type Void is not supported in KQP')
 
-    if contains_not_commented(sql_query, 'variant(', lower=True):
+    if 'variant(' in sql_query.lower():
         pytest.skip('Type Variant is not supported in KQP')
 
 

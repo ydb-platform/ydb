@@ -11,8 +11,8 @@ The `CREATE TABLE` statement is used to create an empty table in the current dat
 
 
 When creating a table, you can specify:
-1. **Table Type**: {% include [../../_includes/temp_table_description.md](../../_includes/temp_table_description.md) %}
-2. **Table Name**: `<table name>` – you can use English letters in lowercase, numbers, and underscores. For example, the table name "People" will be stored as "people". For more information, see [Identifiers and Key Words](https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS).
+1. **Table Type**: {% include [_includes/temp_table_description.md](../../_includes/temp_table_description.md) %}
+2. **Table Name**: `<table name>` – you can use English letters in lowercase, numbers, underscores and dollar signs ($). For example, the table name "People" will be stored as "people". For more information, see [Identifiers and Key Words](https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS).
 3. **Column Name**: `<column name>` – the same naming rules apply as for table names.
 4. **Data Type**: `<column data type>` – [standard PostgreSQL data types](https://www.postgresql.org/docs/14/datatype.html) are specified.
 5. **Collation Rule**: `COLLATE` – [collation rules](https://www.postgresql.org/docs/current/collation.html) allow setting sorting order and character classification features in individual columns or even when performing individual operations. Sortable types include: `text`, `varchar`, and `char`. You can specify the locale (e.g., `en_US`, `ru_RU`) used to determine the sorting and string comparison rules in the specified columns.

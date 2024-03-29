@@ -7,7 +7,11 @@ ydb/core/cms/ut_sentinel TSentinelTests.BSControllerCantChangeStatus
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
 ydb/core/kqp/ut/federated_query/generic *
-ydb/core/kqp/ut/olap *
+ydb/core/kqp/ut/olap KqpOlap.IndexesActualization
+ydb/core/kqp/ut/olap KqpOlap.BlobsSharing*
+ydb/core/kqp/ut/olap KqpOlap.ScanQueryOltpAndOlap
+ydb/core/kqp/ut/olap KqpOlap.StatsUsageWithTTL
+ydb/core/kqp/ut/olap KqpOlap.YqlScriptOltpAndOlap
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout
@@ -20,9 +24,6 @@ ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [38/50]*
 ydb/core/persqueue/ut TPQTest.*DirectRead*
-ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.ForgetAfterFail
-ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.RebootForgetAfterFail
-ydb/core/tx/columnshard/engines/ut *
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables

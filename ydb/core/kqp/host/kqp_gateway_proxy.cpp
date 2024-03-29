@@ -746,11 +746,13 @@ public:
     TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
         const TMaybe<TString>& requestType, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings) override
     {
-        auto prepareFuture = PrepareAlterTable(cluster, std::move(req), requestType, flags, std::move(buildSettings));
-        return AlterTableImpl(cluster, requestType, std::move(prepareFuture));
+        return AlterTableImpl(cluster, requestType, [&]() {
+            return PrepareAlterTable(cluster, std::move(req), requestType, flags, std::move(buildSettings));
+        });
     }
 
-    TFuture<TGenericResult> AlterTableImpl(const TString& cluster, const TMaybe<TString>& requestType, TFuture<TGenericResult>&& prepareFuture)
+    template <typename GetPrepareFutureFunc>
+    TFuture<TGenericResult> AlterTableImpl(const TString& cluster, const TMaybe<TString>& requestType, GetPrepareFutureFunc getPrepareFuture)
     {
         CHECK_PREPARED_DDL(AlterTable);
 
@@ -773,6 +775,7 @@ public:
             }
         }
 
+        auto prepareFuture = getPrepareFuture();
         if (IsPrepare())
             return prepareFuture;
 
@@ -832,7 +835,9 @@ public:
 
         TGenericResult result;
         result.SetSuccess();
-        return AlterTableImpl(cluster, Nothing(), MakeFuture<TGenericResult>(result));
+        return AlterTableImpl(cluster, Nothing(), [&]() {
+            return MakeFuture<TGenericResult>(result);
+        });
     }
 
     TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) override {

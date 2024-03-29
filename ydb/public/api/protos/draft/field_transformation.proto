@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package Ydb.FieldTransformation
+
+enum EFieldTransformationType {
+    TRANSFORM_NONE = 0;
+    TRANSFORM_BASE64 = 1;
+    TRANSFORM_DOUBLE_S_TO_INT_MS = 2;
+    TRANSFORM_EMPTY_TO_NOTHING = 3;
+}
+
+extend google.protobuf.FieldOptions {
+    EFieldTransformationType FieldTransformer = 58123;
+}

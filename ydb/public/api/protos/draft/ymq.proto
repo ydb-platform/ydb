@@ -1,23 +1,12 @@
 syntax = "proto3";
 
 import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/draft/field_transformation.proto"
 
 import "google/protobuf/descriptor.proto";
 
 package Ydb.YMQ;
 option java_package = "com.yandex.ydb.ymq";
-
-// TODO: move to common place with DataStreams
-enum EFieldTransformationType {
-    TRANSFORM_NONE = 0;
-    TRANSFORM_BASE64 = 1;
-    TRANSFORM_DOUBLE_S_TO_INT_MS = 2;
-    TRANSFORM_EMPTY_TO_NOTHING = 3;
-}
-
-extend google.protobuf.FieldOptions {
-    EFieldTransformationType FieldTransformer = 58123;
-}
 
 message ChangeMessageVisibilityRequest {
     Ydb.Operations.OperationParams operation_params = 1;
@@ -180,8 +169,8 @@ message PurgeQueueResult {
 }
 
 message MessageAttribute {
-    repeated bytes binary_list_values = 1 [(FieldTransformer) = TRANSFORM_BASE64];
-    bytes binary_value = 2 [(FieldTransformer) = TRANSFORM_BASE64];
+    repeated bytes binary_list_values = 1 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_BASE64];
+    bytes binary_value = 2 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_BASE64];
     string data_type = 3;
     repeated string string_list_values = 4;
     string string_value = 5;

@@ -189,9 +189,9 @@ Asynchronous indexes should be created using [native SQL migrations](https://doc
 
 ### Ingesting data into a table
 
-`loadData`, `loadUpdateData` - upload data from a CSV file into a table. `loadUpdateData` loads data using the [UPSERT](/en/core/yql/reference/yql-core/syntax/upsert_into.md) command. Data will be automatically converted to the required types, taking into account the strict typing in {{ ydb-short-name }}.
+`loadData`, `loadUpdateData` - upload data from a CSV file into a table. `loadUpdateData` loads data using the `UPSERT` command. Data will be automatically converted to the required types, taking into account the strict typing in {{ ydb-short-name }}.
 
-`insert` is a changeset that performs a single insert into a table using [INSERT](/en/core/yql/reference/yql-core/syntax/insert_into.md) sql statement. For example:
+`insert` is a changeset that performs a single insert into a table using `INSERT` sql statement. For example:
 
 {% list tabs %}
 

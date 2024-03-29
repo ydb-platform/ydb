@@ -327,7 +327,7 @@ Code snippet for data insert/update:
     }
     ```
     
-    - Using Table Service
+- Using Table Service
     
     To execute YQL queries, use the `Session.executeQuery()` method.
     

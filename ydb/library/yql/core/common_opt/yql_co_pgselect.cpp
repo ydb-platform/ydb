@@ -1079,7 +1079,7 @@ void FillInputIndices(const TExprNode::TPtr& from, const TExprNode::TPtr& finalE
                 } else {
                     auto type = read.GetTypeAnn()->
                         Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-                    auto pos = type->FindItemI(column, nullptr);
+                    auto pos = type->FindItem(column);
                     foundColumn = pos.Defined();
                 }
             }
@@ -1104,7 +1104,7 @@ void FillInputIndices(const TExprNode::TPtr& from, const TExprNode::TPtr& finalE
 
                 auto type = input->Tail().GetTypeAnn()->
                     Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-                auto pos = type->FindItemI(column, nullptr);
+                auto pos = type->FindItem(column);
                 foundColumn = pos.Defined();
                 if (foundColumn) {
                     x.second.first = inputIndex;

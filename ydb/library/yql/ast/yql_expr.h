@@ -465,9 +465,7 @@ public:
         return Name;
     }
 
-    TStringBuf GetCleanName(bool isVirtual) const {
-        return isVirtual ? Name.SubStr(YqlVirtualPrefix.size()) : Name;
-    }
+    TStringBuf GetCleanName(bool isVirtual) const;
 
     const TTypeAnnotationNode* GetItemType() const {
         return ItemType;

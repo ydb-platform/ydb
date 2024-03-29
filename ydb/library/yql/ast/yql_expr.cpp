@@ -3029,11 +3029,21 @@ bool TItemExprType::Validate(TPositionHandle position, TExprContext& ctx) const 
     return Validate(ctx.GetPosition(position), ctx);
 }
 
+TStringBuf TItemExprType::GetCleanName(bool isVirtual) const {
+    if (!isVirtual) {
+        return Name;
+    }
+
+    YQL_ENSURE(Name.StartsWith(YqlVirtualPrefix));
+    return Name.SubStr(YqlVirtualPrefix.size());
+}
+
 const TItemExprType* TItemExprType::GetCleanItem(bool isVirtual, TExprContext& ctx) const {
     if (!isVirtual) {
         return this;
     }
 
+    YQL_ENSURE(Name.StartsWith(YqlVirtualPrefix));
     return ctx.MakeType<TItemExprType>(Name.SubStr(YqlVirtualPrefix.size()), ItemType);
 }
 

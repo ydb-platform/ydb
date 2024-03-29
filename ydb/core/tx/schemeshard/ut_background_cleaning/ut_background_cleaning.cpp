@@ -439,10 +439,12 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         ui64 txId = 100;
         TestCreateTempTable(runtime, txId, "/MyRoot", R"(
-                  Name: "TempTable"
-                  Columns { Name: "key"   Type: "Uint64" }
-                  Columns { Name: "value" Type: "Utf8" }
-                  KeyColumnNames: ["key"]
+                TableDescription {
+                    Name: "TempTable"
+                    Columns { Name: "key"   Type: "Uint64" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                }
             )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
 
         env.TestWaitNotification(runtime, txId);

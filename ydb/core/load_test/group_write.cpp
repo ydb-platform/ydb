@@ -923,7 +923,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                     IssueReadIfPossible(ctx);
                 }
             };
-            SendToBSProxy(ctx, GroupId, ev.release(), Self.QueryDispatcher.ObtainCookie(std::move(writeCallback)));
+            SendToBSProxy(ctx, GroupId, ev.release(), Self.QueryDispatcher.ObtainCookie(std::move(writeCallback)),
+                    NWilson::TTraceId::NewTraceId(15, ::Max<ui32>()));
             const auto nowCycles = GetCycleCountFast();
             WritesInFlightTimestamps.emplace_back(writeQueryId, nowCycles);
             SentTimestamp.emplace(writeQueryId, nowCycles);
@@ -1073,7 +1074,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 IssueReadIfPossible(ctx);
             };
 
-            SendToBSProxy(ctx, GroupId, ev.release(), Self.QueryDispatcher.ObtainCookie(std::move(readCallback)));
+            SendToBSProxy(ctx, GroupId, ev.release(), Self.QueryDispatcher.ObtainCookie(std::move(readCallback)),
+                    NWilson::TTraceId::NewTraceId(15, ::Max<ui32>()));
             ReadSentTimestamp.emplace(readQueryId, GetCycleCountFast());
 
             ReadSettings.InFlightTracker.Request(size);

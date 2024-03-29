@@ -115,7 +115,7 @@ public:
             event->Record.SetFrozen(true);
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TCoptSequence TConfigureParts ProgressState"
+                        "TCopySequence TConfigureParts ProgressState"
                         << " sending TEvCreateSequence to tablet " << tabletId
                         << " operationId# " << OperationId
                         << " at tablet " << ssId);
@@ -274,6 +274,18 @@ private:
                 << " operationId#" << OperationId;
     }
 
+    void UpdateSequenceDescription(NKikimrSchemeOp::TSequenceDescription& descr) {
+        descr.SetStartValue(GetSequenceResult.GetStartValue());
+        descr.SetMinValue(GetSequenceResult.GetMinValue());
+        descr.SetMaxValue(GetSequenceResult.GetMaxValue());
+        descr.SetCache(GetSequenceResult.GetCache());
+        descr.SetIncrement(GetSequenceResult.GetIncrement());
+        descr.SetCycle(GetSequenceResult.GetCycle());
+        auto* setValMsg = descr.MutableSetVal();
+        setValMsg->SetNextValue(GetSequenceResult.GetNextValue());
+        setValMsg->SetNextUsed(GetSequenceResult.GetNextUsed());
+    }
+
 public:
     TProposedCopySequence(TOperationId id)
         : OperationId(id)
@@ -333,7 +345,15 @@ public:
             return false;
         }
 
+        TPathId pathId = txState->TargetPathId;
+
         NIceDb::TNiceDb db(context.GetDB());
+
+        auto sequenceInfo = context.SS->Sequences.at(pathId);
+        UpdateSequenceDescription(sequenceInfo->Description);
+
+        context.SS->PersistSequence(db, pathId, *sequenceInfo);
+
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
         context.OnComplete.ActivateTx(OperationId);
         return true;
@@ -387,7 +407,7 @@ public:
             return false;
         }
 
-        auto getSequenceResult = ev->Get()->Record;
+        GetSequenceResult = ev->Get()->Record;
 
         Y_ABORT_UNLESS(txState->Shards.size() == 1);
         for (auto shard : txState->Shards) {
@@ -397,7 +417,8 @@ public:
             Y_ABORT_UNLESS(currentTabletId != InvalidTabletId);
 
             auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvRestoreSequence>(
-                txState->TargetPathId, getSequenceResult);
+                txState->TargetPathId, GetSequenceResult);
+
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
 

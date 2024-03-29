@@ -553,7 +553,11 @@ namespace NSchemeShardUT_Private {
     void WriteRow(TTestActorRuntime& runtime, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected = true);
 
     void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path);
-    i64 WaitNextValResult(TTestActorRuntime& runtime, const TActorId& sender);
-    i64 DoNextVal(TTestActorRuntime& runtime, const TString& path);
+    i64 WaitNextValResult(
+        TTestActorRuntime& runtime, const TActorId& sender,
+        Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    i64 DoNextVal(
+        TTestActorRuntime& runtime, const TString& path,
+        Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 
 } //NSchemeShardUT_Private

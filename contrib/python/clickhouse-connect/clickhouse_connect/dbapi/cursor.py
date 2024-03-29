@@ -1,7 +1,7 @@
 import logging
 import re
 
-from typing import Optional, Sequence
+from typing import Optional, Sequence, List, Dict
 
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.driver.common import unescape_identifier
@@ -17,6 +17,7 @@ str_type = get_from_name('String')
 int_type = get_from_name('Int32')
 
 
+# pylint: disable=too-many-instance-attributes
 class Cursor:
     """
     See :ref:`https://peps.python.org/pep-0249/`
@@ -29,6 +30,7 @@ class Cursor:
         self.names = []
         self.types = []
         self._rowcount = 0
+        self._summary: List[Dict[str, str]] = []
         self._ix = 0
 
     def check_valid(self):
@@ -43,6 +45,10 @@ class Cursor:
     def rowcount(self):
         return self._rowcount
 
+    @property
+    def summary(self) -> List[Dict[str, str]]:
+        return self._summary
+
     def close(self):
         self.data = None
 
@@ -50,6 +56,7 @@ class Cursor:
         query_result = self.client.query(operation, parameters)
         self.data = query_result.result_set
         self._rowcount = len(self.data)
+        self._summary.append(query_result.summary)
         if query_result.column_names:
             self.names = query_result.column_names
             self.types = [x.name for x in query_result.column_types]
@@ -94,6 +101,7 @@ class Cursor:
                 else:
                     self.names = query_result.column_names
                     self.types = query_result.column_types
+                self._summary.append(query_result.summary)
         except TypeError as ex:
             raise ProgrammingError(f'Invalid parameters {parameters} passed to cursor executemany') from ex
         self._rowcount = len(self.data)

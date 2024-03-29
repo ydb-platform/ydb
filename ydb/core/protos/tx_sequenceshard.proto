@@ -18,6 +18,11 @@ message TEvMarkSchemeShardPipe {
 }
 
 message TEvCreateSequence {
+    message TSetVal {
+        sint64 NextValue = 1;
+        bool NextUsed = 2;
+    }
+
     NKikimrProto.TPathID PathId = 1;
     uint64 TxId = 2;
     uint64 TxPartId = 3;
@@ -40,6 +45,7 @@ message TEvCreateSequence {
         bool Cycle = 9;
     }
     bool Frozen = 10; // defaults to false
+    TSetVal SetVal = 11;
 }
 
 message TEvCreateSequenceResult {

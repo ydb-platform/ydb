@@ -8,7 +8,7 @@ This article describes how to create and configure the necessary set of virtual 
 
 ![AiC_scheme](./_assets/terraform/AiC_scheme.png)
 
-The configuration for setting up the VM environment is described in YAML format, and the infrastructure code is written in [HCL](https://github.com/hashicorp/hcl) (Terraform configuration language). The basic logical unit of recording in HCL is a "block". A block consists of a keyword identifying its type, name, and the body of the block inside curly brackets. For example, this is what a virtual server control block in AWS might look like:
+The configuration for setting up the VM environment is described in YAML format, and the infrastructure code is written in [HCL](https://github.com/hashicorp/hcl) (Terraform configuration language). The basic logical unit of recording in HCL is a "block". A block consists of a keyword identifying its type, name, and the block's body inside curly brackets. For example, this is what a virtual server control block in AWS might look like:
 
 ```hcl
 resource "aws_instance" "ydb-vm" {
@@ -26,7 +26,7 @@ resource "aws_instance" "ydb-vm" {
 }
 ```
 
-Blocks can be independent, refer to each other and thus be dependent, or they can also be nested inside each other.
+Blocks can be independent, refer to each other, and thus be dependent, or they can also be nested inside each other.
 
 Main block types:
 
@@ -54,38 +54,38 @@ module "vpc" {
 ```
 In the example, the `vpc` module is connected (the module name is assigned when connecting). The required parameter is `source`, a path to the directory where the module is located. `subnets_count` and `subnets_availability_zones` are variables inside the `vpc` module that take values from the global level variables `var.subnets_count`, `var.availability_zones`.
 
-Modules, just like blocks, are placed one after another in the root `main.tf` file of the project. The main advantage of the modular approach to project organization is the ability to easily manage logically related sets of resources. Therefore, our [repository](https://github.com/ydb-platform/ydb-terraform) with ready-made Terraform scenarios is organized as follows:
+Modules, just like blocks, are placed one after another in the root `main.tf` file of the project. The main advantage of the modular approach to project organization is the ability to manage logically related sets of resources easily. Therefore, our [repository](https://github.com/ydb-platform/ydb-terraform) with ready-made Terraform scenarios is organized as follows:
 ```txt
 .
 ├── README.md
 ├── README_RU.md
 ├── aws
-│   ├── README.md
-│   ├── README_RU.md
-│   ├── main.tf
-│   ├── modules
-│   │   ├── dns
-│   │   ├── eip
-│   │   ├── instance
-│   │   ├── key_pair
-│   │   ├── security
-│   │   └── vpc
-│   └── variables.tf
+│   ├── README.md
+│   ├── README_RU.md
+│   ├── main.tf
+│   ├── modules
+│   │   ├── dns
+│   │   ├── eip
+│   │   ├── instance
+│   │   ├── key_pair
+│   │   ├── security
+│   │   └── vpc
+│   └── variables.tf
 ├── azure
-│   ├── README.md
-│   ├── README_RU.md
-│   ├── main.tf
-│   ├── modules
-│   │   ├── dns
-│   │   ├── resource_group
-│   │   ├── security
-│   │   ├── vm
-│   │   └── vpc
-│   └── variables.tf
+│   ├── README.md
+│   ├── README_RU.md
+│   ├── main.tf
+│   ├── modules
+│   │   ├── dns
+│   │   ├── resource_group
+│   │   ├── security
+│   │   ├── vm
+│   │   └── vpc
+│   └── variables.tf
 ├── ...
 ```
 
-The subdirectories contain readme files, a file `variables.td` with local module variables and a main file `main.tf`, which includes modules from the `modules` subdirectory. The set of modules depends on the cloud provider. Basic modules, functionally the same for all providers, have the same names:
+The subdirectories contain readme files, a file `variables.td` with local module variables and a central file `main.tf`, which includes modules from the `modules` subdirectory. The set of modules depends on the cloud provider. Basic modules, functionally the same for all providers, have the same names:
 
 * `vpc` – cloud network and subnet management module.
 * `dns` – DNS zone and DNS records management module.
@@ -107,7 +107,7 @@ provider_installation {
   }
 ```
 
-If you are already using Terraform providers provided in the [official repository](https://registry.terraform.io/browse/providers), they will continue to work.
+If you already use Terraform providers provided in the [official repository](https://registry.terraform.io/browse/providers), they will continue to work.
 
 ## Deployment overview
 
@@ -116,9 +116,9 @@ The following are step-by-step instructions for creating infrastructure in [AWS]
 * 9 VMs in three availability zones (16 vCPU, 32 GB RAM, additional 200GB disk for data).
 * Cloud network, public and private subnets (per subnet per availability zone).
 * Private DNS zone.
-* Security groups allowing ICMP and traffic on ports: 22, 65535, 19001, 8765, 2135.
+* Security groups allowing ICMP and traffic on ports: 22, 65535, 19001, 8765, and 2135.
 
-Most cluster parameters are adjustable (number of VMs, size and type of connected disks, number of networks, DNS zone domain name, etc.), but please note that the defaults are minimum recommended values so changing them downwards may lead to issues.
+Most cluster parameters are adjustable (number of VMs, size and type of connected disks, number of networks, DNS zone domain name, etc.), but please note that the defaults are minimum recommended values, so changing them downwards may cause issues.
 
 ## Create infrastructure in AWS to deploy {{ ydb-short-name }} cluster {#aws-cluster}
 

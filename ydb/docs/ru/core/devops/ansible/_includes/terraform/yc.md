@@ -1,4 +1,5 @@
 Для создания инфраструктуры в Yandex Cloud с помощью Terraform нужно: 
+
 1. Подготовить облако к работе:
     * [Зарегистрироваться](https://console.cloud.yandex.ru/) в Yandex Cloud.
     * [Подключить](https://cloud.yandex.com/ru/docs/billing/concepts/billing-account) платежный аккаунт. 
@@ -39,6 +40,16 @@
     * `profile` – название профиля из файла `~/.aws/config`.
     * `folder_id` – ID Cloud folder. Можно получить командой `yc resource-manager folder list`.
 
-Теперь, находясь в директории `yandex_cloud`, можно выполните команду `terraform init` для установки провайдера и инициализации модулей. Далее нужно выполнить серию команд:
-* `terraform plan` – создание плана будущей инфраструктуры.
-* `terraform init` (повторный вызов) – создание ресурсов в облаке.
+Теперь, находясь в поддиректории `yandex_cloud`, можно выполнить последовательность следующих команд для установки провайдера, инициализации модулей и создания инфраструктуры:
+
+1. `terraform init` – установка провайдера и инициализация модулей.
+2. `terraform plan` – создание плана будущей инфраструктуры.
+3. `terraform apply` (повторное выполнение) – создание ресурсов в облаке. 
+
+Далее используются команды `terraform plan`, `terraform apply` и `terraform destroy` (уничтожение созданной инфраструктуры).
+
+{% note info %}
+
+С помощью Yandex Cloud провайдера можно не только создавать инфраструктуру для дальнейшего развертывания на ней {{ ydb-short-name }} кластера с помощью [Ansible](../../initial-deployment.md), но и управлять [serverless или dedicated](https://cloud.yandex.ru/ru/services/ydb) версией {{ ydb-short-name }} прямо из Terraform. О возможностях работы с {{ ydb-short-name }} в Yandex Cloud читайте в разделе [Работа с YDB через Terraform](https://cloud.yandex.ru/ru/docs/ydb/terraform/intro) документации Yandex Cloud.
+
+{% endnote %}

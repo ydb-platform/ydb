@@ -2,7 +2,7 @@
 
 This guide outlines the process of deploying a {{ ydb-short-name }} cluster on a group of servers using Ansible. {{ ydb-short-name }} can be deployed on any desired number of servers, but the minimum number of servers in the cluster should not be less than eight for the `block-4-2` redundancy model and nine servers for the `mirror-3-dc` redundancy model. You can learn about redundancy models from the article [{#T}](../../deploy/configuration/config.md#domains-blob).
 
-During operation, the cluster can be [expanded](../../maintenance/manual/cluster_expansion.md) without suspending access to the databases for users.
+During operation, the cluster can be [expanded](../../maintenance/manual/cluster_expansion.md) without suspending user access to the databases.
 
 {% note info %}
 
@@ -14,11 +14,11 @@ During operation, the cluster can be [expanded](../../maintenance/manual/cluster
 * SSH access;
 * Network connectivity between machines in the cluster.
 * OS: Ubuntu 18+, Debian 9+. 
-* Internet access for updating repositories and downloading necessary packages.
+* Internet access is needed to update repositories and download necessary packages.
 
 {% endnote %}
 
-You can download the repository with the playbook for installing {{ ydb-short-name }} on the cluster from GitHub – `git clone https://github.com/ydb-platform/ydb-ansible-examples.git`. This repository contains: installation templates for deploying {{ ydb-short-name }} on a cluster of eight servers – `8-nodes-block-4-2`, and nine servers – `9-nodes-mirror-3-dc`, as well as scripts for generating TLS certificates and requirement files for installing necessary Python packages.
+You can download the repository with the playbook for installing {{ ydb-short-name }} on the cluster from GitHub – `git clone https://github.com/ydb-platform/ydb-ansible-examples.git`. This repository contains installation templates for deploying {{ ydb-short-name }} on a cluster of eight servers – `8-nodes-block-4-2`, and nine servers – `9-nodes-mirror-3-dc`, as well as scripts for generating TLS certificates and requirement files for installing necessary Python packages.
 
 {% cut "Repository Structure" %}
 
@@ -27,14 +27,14 @@ You can download the repository with the playbook for installing {{ ydb-short-na
 {% endcut %}
 
 
-To work with the project on a local (intermediate or installation) machine, you will need: Python 3 version 3.10+ and Ansible core version 2.15.2 or higher. Ansible can be installed and run globally (installed in the system) or in a virtual environment. If Ansible is already installed – you can move on to the step ["Configuring the Ansible project"](#ansible-project-setup), if Ansible is not yet installed, install it using one of the following methods:
+To work with the project on a local (intermediate or installation) machine, you will need: Python 3 version 3.10+ and Ansible core version 2.15.2 or higher. Ansible can be installed and run globally (installed in the system) or in a virtual environment. If Ansible is already installed – you can move on to the step ["Configuring the Ansible project"](#ansible-project-setup); if Ansible is not yet installed, install it using one of the following methods:
 
 {% list tabs %}
 
 - Installing Ansible globally (in the system)
 
-  * Update the apt package list – `sudo apt update`.
-  * Upgrade packages – `sudo apt upgrade`.
+  * Update the apt package list with `sudo apt update`.
+  * Upgrade packages with `sudo apt upgrade`.
   * Install the `software-properties-common` package to manage your distribution's software sources – `sudo apt install software-properties-common`.
   * Add a new PPA to apt – `sudo add-apt-repository --yes --update ppa:ansible/ansible`.
   * Install Ansible – `sudo apt install ansible-core`.
@@ -184,7 +184,6 @@ The default {{ ydb-short-name }} configuration file already includes almost all 
 
 The rest of the sections and settings in the configuration file can remain unchanged.
 
-
 ## Deploying the {{ ydb-short-name }} cluster {#erasure-setup}
 
 {% note info %}
@@ -195,14 +194,14 @@ In `mirror-3-dc` servers should be distributed across three availability zones o
 
 {% endnote %}
 
-The [repository](https://github.com/ydb-platform/ydb-ansible-examples) contains two ready sets of templates for deploying a {{ ydb-short-name }} cluster of eight (redundancy model `block-4-2`) and nine servers (`mirror-3-dc`). Either of the provided options can be scaled to any required number of servers, taking into account a number of technical requirements.
+The [repository](https://github.com/ydb-platform/ydb-ansible-examples) contains two ready sets of templates for deploying a {{ ydb-short-name }} cluster of eight (redundancy model `block-4-2`) and nine servers (`mirror-3-dc`). Both options can be scaled to any required number of servers, considering a number of technical requirements.
 
-To prepare your own template, you can follow the instructions below:
+To prepare your template, you can follow the instructions below:
 1. Create a copy of the directory with the ready example (`9-nodes-mirror-3-dc` or `8-nodes-block-4-2`).
 2. Specify the FQDNs of the servers in the file `TLS/ydb-ca-nodes.txt` and execute the script `ydb-ca-update.sh` to generate sets of TLS certificates.
-3. Make changes to the inventory files of the template according to the [instructions](#inventory-edit).
+3. Change the template's inventory files according to the [instructions](#inventory-edit).
 4. Make changes to the {{ ydb-short-name }} configuration file according to the [instructions](#ydb-config-prepare).
-5. Execute the command `ansible-playbook setup_playbook.yaml`, while in the directory of the cloned template.
+5. In the directory of the cloned template, execute the command `ansible-playbook setup_playbook.yaml`.
 
 
 ## Installation script execution plan for {{ ydb-short-name }} {#ydb-playbook-run}
@@ -246,6 +245,7 @@ The `VDisks` indicators should be green, and the `state` status (found in the to
 You can test the cluster using the built-in load tests in YDB CLI. To do this, download YDB CLI version [2.5.0](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/linux/amd64/ydb) to the machine where Ansible is installed. For example, using wget: `wget https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/linux/amd64/ydb`.
 
 Make the downloaded binary file executable – `chmod +x ydb` and execute the connection check command:
+
 ```shell
 ./ydb \
 config profile create <profile name> \
@@ -256,6 +256,7 @@ config profile create <profile name> \
 --password-file <path to vault password file>/ansible_vault_password_file
 ```
 Command parameters and their values:
+
 * `config profile create` – This command is used to create a connection profile. You specify the profile name. More detailed information on how to create and modify profiles can be found in the article [{#T}](../../reference/ydb-cli/profile/create.md).
 * `-e` – Endpoint, a string in the format `protocol://host:port`. You can specify the FQDN of any cluster node and omit the port. By default, port 2135 is used.
 * `--ca-file` – Path to the root certificate for connections to the database using `grpcs`. The certificate is created by the `ydb-ca-update.sh` script in the `TLS` directory and is located at the path `TLS/CA/certs/` relative to the root of the ydb-ansible-examples repository.
@@ -267,14 +268,15 @@ You can check if the profile has been created using the command `./ydb config pr
 To execute a YQL query, you can use the command `./ydb yql -s 'select 1;'`, which will return the result of the `select 1` command in table form to the terminal. After checking the connection, you can create a test table with the command:
 `./ydb workload kv init --init-upserts 1000 --cols 4`. This will create a test table `kv_test` consisting of 4 columns and 1000 rows. You can verify that the `kv_test` table was created and filled with test data by using the command `./ydb yql -s 'select * from kv_test limit 10;'`.
 
-The terminal will display a table of 10 rows. Now you can perform cluster performance testing. The article [{#T}](../../reference/ydb-cli/workload-kv.md) describes 5 types of workloads (`upsert`, `insert`, `select`, `read-rows`, `mixed`) and the parameters for their execution. An example of executing the `upsert` test workload with the parameter to print the execution time `--print-timestamp` and standard execution parameters is: `./ydb workload kv run upsert --print-timestamp`.
+The terminal will display a table of 10 rows. Now, you can perform cluster performance testing. The article [{#T}](../../reference/ydb-cli/workload-kv.md) describes 5 types of workloads (`upsert`, `insert`, `select`, `read-rows`, `mixed`) and the parameters for their execution. An example of executing the `upsert` test workload with the parameter to print the execution time `--print-timestamp` and standard execution parameters is: `./ydb workload kv run upsert --print-timestamp`.
 
 A report of the following type will be displayed in the terminal:
+
 ```
-Window	Txs/Sec	Retries	Errors	p50(ms)	p95(ms)	p99(ms)	pMax(ms)	Timestamp
-1	    727	0	0	11	27	71	116	2024-02-14T12:56:39Z
-2	    882	0	0	10	21	29	38	2024-02-14T12:56:40Z
-3	    848	0	0	10	22	30	105	2024-02-14T12:56:41Z
+Window Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)        Timestamp
+1          727 0       0       11      27      71      116     2024-02-14T12:56:39Z
+2          882 0       0       10      21      29      38      2024-02-14T12:56:40Z
+3          848 0       0       10      22      30      105     2024-02-14T12:56:41Z
 ...
 ```
 

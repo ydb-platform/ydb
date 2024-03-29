@@ -1,4 +1,4 @@
-To create infrastructure in Yandex Cloud using Terraform you need:
+To create infrastructure in Yandex Cloud using Terraform, you need:
 
 1. Prepare the cloud for work:
      * [Register](https://console.cloud.yandex.ru/) in Yandex Cloud.
@@ -20,7 +20,7 @@ To create infrastructure in Yandex Cloud using Terraform you need:
      Copy `access_key.id` and `secret`. The values of these fields will be needed later when working with AWS CLI.
 5. [Download](https://aws.amazon.com/ru/cli/) AWS CLI.
 6. Set up the AWS CLI environment:
-     * Run the `aws configure` command and sequentially enter the previously saved `access_key.id` and `secret`. For the region value use `ru-central1`:
+     * Run the `aws configure` command and sequentially enter the previously saved `access_key.id` and `secret`. For the region value, use `ru-central1`:
      ```
      aws configure
      AWS Access Key ID [None]: AKIAIOSFODNN********
@@ -34,12 +34,16 @@ To create infrastructure in Yandex Cloud using Terraform you need:
      * Add `[Yandex]` before the secret information about connection keys.
 8. [Configure](https://cloud.yandex.com/ru/docs/tutorials/infrastructure-management/terraform-quickstart#configure-provider) Yandex Cloud Terraform provider.
 9. Download this repository with the command `git clone https://github.com/ydb-platform/ydb-terraform.git`.
-10. Go to the `yandex_cloud` directory (directory in the downloaded repository) and make changes to the following variables in the `variables.tf` file:
+10. Go to the `yandex_cloud` directory in the downloaded repository and make changes to the following variables in the `variables.tf` file:
      * `key_path` – path to the SA key generated using the CLI.
      * `cloud_id` – cloud ID. You can get a list of available clouds with the command `yc resource-manager cloud list`.
      * `profile` – profile name from the file `~/.aws/config`.
      * `folder_id` – Cloud folder ID. Can be obtained with the command `yc resource-manager folder list`.
 
-Now, being in the `yandex_cloud` directory, you can run the `terraform init` command to install the provider and initialize the modules. Next you need to run a series of commands:
-* `terraform plan` – creating a plan for future infrastructure.
-* `terraform init` (re-call) – creating resources in the cloud.
+Now, being in the `yandex_cloud` subdirectory, you can run the following sequence of commands to install the provider, initialize modules, and create the infrastructure:
+
+1. `terraform init` – installing the provider and initializing modules.
+2. `terraform plan` – creating a plan for future infrastructure.
+3. `terraform init` – create resources in the cloud.
+
+Next, use the commands `terraform plan`, `terraform init`, and `terraform destroy` (destruction of the created infrastructure) to apply further changes as necessary.

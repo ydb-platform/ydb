@@ -1,10 +1,19 @@
-Create an [account](https://portal.azure.com/#home) in Azure and top up your [account](https://portal.azure.com/#view/Microsoft_Azure_GTM/ModernBillingMenuBlade/~/BillingAccounts) account with the amount , sufficient to operate nine VMs. You can calculate the approximate cost of maintaining infrastructure depending on the region and other circumstances using [calculator](https://azure.com/e/26977c150e854617a888fb3a7d1a399d).
+Create an [account](https://portal.azure.com/#home) in Azure and top up your [account](https://portal.azure.com/#view/Microsoft_Azure_GTM/ModernBillingMenuBlade/~/BillingAccounts) account with the amount, sufficient to operate 9 VMs. You can estimate the approximate cost of maintaining infrastructure depending on the region and other circumstances using [calculator](https://azure.com/e/26977c150e854617a888fb3a7d1a399d).
 
-Authentication to the Azure Provider for Terraform is done through the CLI. You can download, install and configure the Azure CLI by following [this](https://learn.microsoft.com/ru-ru/cli/azure/install-azure-cli) instructions. You can log in to Azure using the Azure CLI interactively with the `az login` command, and the easiest way to create a pair of SSH keys (Linux, macOS) is to use the `ssh-keygen` command.
+Authentication to the Azure Provider for Terraform goes through the CLI:
+1. You can download, install, and configure the Azure CLI by following [these instructions](https://learn.microsoft.com/ru-ru/cli/azure/install-azure-cli).
+2. Log in using the Azure CLI interactively with the `az login` command.
+3. The easiest way to create a pair of SSH keys (Linux, macOS) is to use the `ssh-keygen` command.
 
 After logging into Azure and generating SSH keys, you need to change the default value of the following variables in the root file `variables.tf`:
 
-* `auth_location` – name of the region where the infrastructure will be deployed. A list of available regions depending on the subscription can be obtained with the command `az account list-locations | grep "displayName"`.
-* `ssh_key_path` – path to the public part of the generated SSH key.
+1. `auth_location`—the name of the region where the infrastructure will be deployed. The command `az account list-locations | grep "displayName"` can obtain a list of available regions depending on the subscription.
+2. `ssh_key_path` – path to the public part of the generated SSH key.
 
-The values of the remaining variables can be left unchanged. While in the root directory of the Terraform script, run the `terraform init` command - the Terraform provider will be installed and the modules will be initialized. Then run the `terraform plan` command to create an infrastructure plan and then run the `terraform apply` command to create the infrastructure in the Azure cloud.
+Now, being in the `azure` subdirectory, you can run the following sequence of commands to install the provider, initialize modules, and create the infrastructure:
+
+1. `terraform init` – installing the provider and initializing modules.
+2. `terraform plan` – creating a plan for future infrastructure.
+3. `terraform init` – create resources in the cloud.
+
+Next, use the commands `terraform plan`, `terraform init`, and `terraform destroy` (destruction of the created infrastructure) to apply further changes as necessary.

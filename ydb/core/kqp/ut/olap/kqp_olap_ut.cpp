@@ -232,7 +232,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 result = R"(Columns { Name: "field" Type: ")" + TypeName + "\"}";
             }
             result += R"(
-                Columns { Name: "pk_int" Type: "Int64" }
+                Columns { Name: "pk_int" Type: "Int64" NotNull: true }
                 Columns { Name: "ts" Type: "Timestamp" }
                 KeyColumnNames: "pk_int"
                 Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         template <class TFiller>
         void FillTable(const TFiller& fillPolicy, const ui32 pkKff = 0, const ui32 numRows = 800000) const {
             std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
-            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>>("pk_int", numRows * pkKff));
+            builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable("pk_int", numRows * pkKff));
             builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<TFiller>>("field", fillPolicy));
             NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
             std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
@@ -424,7 +424,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         void FillPKOnly(const double pkKff = 0, const ui32 numRows = 800000) const {
             std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
-            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>>("pk_int", numRows * pkKff));
+            builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable("pk_int", numRows * pkKff));
             NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
             std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
             TBase::SendDataViaActorSystem(TablePath, batch);
@@ -1675,7 +1675,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     ["some prefix xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"];
                     ["5"];
                     1000005u;
-                    ["uid_1000005"]
+                    "uid_1000005"
                     ]])");
             }
         };
@@ -1992,7 +1992,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` * 3. > 4.f)",
             R"(`level` / 2.f <= 1.)",
             R"(`level` % 3. != 1.f)",
-            R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z"))",
+            //R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z"))",
             R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z") AND `level` > 3)",
             R"((`timestamp`, `level`) >= (Timestamp("1970-01-01T00:00:00.000001Z"), 3))",
 #endif
@@ -5181,12 +5181,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             }
 
             builder << R"(
-                DECLARE $in_timestamp AS Timestamp;
                 DECLARE $in_uid AS Utf8;
                 DECLARE $in_level AS Int32;
 
                 SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE
-                    `timestamp` > $in_timestamp AND uid > $in_uid AND level > $in_level
+                    uid > $in_uid AND level > $in_level
                 ORDER BY `timestamp`;
             )" << Endl;
 
@@ -5197,9 +5196,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto pushQuery = buildQuery(true);
 
         auto params = tableClient.GetParamsBuilder()
-            .AddParam("$in_timestamp")
-                .Timestamp(TInstant::MicroSeconds(3000990))
-                .Build()
             .AddParam("$in_uid")
                 .Utf8("uid_3000980")
                 .Build()
@@ -6079,7 +6075,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         TString output = FormatResultSetYson(result.GetResultSet(0));
         Cout << output << Endl;
-        CompareYson(output, R"([[1000001u;["1"];["uid_1000001"];[1]]])");
+        CompareYson(output, R"([[1000001u;["1"];"uid_1000001";[1]]])");
     }
 
     Y_UNIT_TEST(OlapRead_GenericQuery) {

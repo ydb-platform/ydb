@@ -18,6 +18,33 @@ struct TEvQueryRequestRemote: public TEventPB<TEvQueryRequestRemote, NKikimrKqp:
     TKqpEvents::EvQueryRequest> {
 };
 
+struct TQueryRequestSettings {
+    TQueryRequestSettings& SetKeepSession(bool flag) {
+        KeepSession = flag;
+        return *this;
+    }
+
+    TQueryRequestSettings& SetUseCancelAfter(bool flag) {
+        UseCancelAfter = flag;
+        return *this;
+    }
+
+    TQueryRequestSettings& SetSyntax(const ::Ydb::Query::Syntax& syntax) {
+        Syntax = syntax;
+        return *this;
+    }
+
+    TQueryRequestSettings& SetSupportStreamTrailingResult(bool flag) {
+        SupportsStreamTrailingResult = flag;
+        return *this;
+    }
+
+    bool KeepSession = false;
+    bool UseCancelAfter = true;
+    ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
+    bool SupportsStreamTrailingResult = false;
+};
+
 struct TEvQueryRequest: public NActors::TEventLocal<TEvQueryRequest, TKqpEvents::EvQueryRequest> {
 public:
     TEvQueryRequest(
@@ -33,10 +60,7 @@ public:
         const ::Ydb::Table::QueryStatsCollection::Mode collectStats,
         const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
         const ::Ydb::Operations::OperationParams* operationParams,
-        bool keepSession = false,
-        bool useCancelAfter = true,
-        const ::Ydb::Query::Syntax syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED,
-        bool supportsStreamTrailingResult = false);
+        const TQueryRequestSettings& querySettings = TQueryRequestSettings());
 
     TEvQueryRequest() = default;
 
@@ -67,7 +91,7 @@ public:
     }
 
     bool GetKeepSession() const {
-        return RequestCtx ? KeepSession : Record.GetRequest().GetKeepSession();
+        return RequestCtx ? QuerySettings.KeepSession : Record.GetRequest().GetKeepSession();
     }
 
     TDuration GetCancelAfter() const {
@@ -103,7 +127,7 @@ public:
     }
 
     Ydb::Query::Syntax GetSyntax() const {
-        return RequestCtx ? Syntax : Record.GetRequest().GetSyntax();
+        return RequestCtx ? QuerySettings.Syntax : Record.GetRequest().GetSyntax();
     }
 
     bool HasPreparedQuery() const {
@@ -288,7 +312,7 @@ public:
     }
 
     bool GetSupportsStreamTrailingResult() const {
-        return SupportsStreamTrailingResult;
+        return QuerySettings.SupportsStreamTrailingResult;
     }
 
     TDuration GetProgressStatsPeriod() const {
@@ -317,13 +341,11 @@ private:
     const ::Ydb::Table::QueryStatsCollection::Mode CollectStats = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     const ::Ydb::Table::QueryCachePolicy* QueryCachePolicy = nullptr;
     const bool HasOperationParams = false;
-    bool KeepSession = false;
+    const TQueryRequestSettings QuerySettings = TQueryRequestSettings();
     TDuration OperationTimeout;
     TDuration CancelAfter;
-    const ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     TDuration ProgressStatsPeriod;
-    bool SupportsStreamTrailingResult = false;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

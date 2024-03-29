@@ -1,6 +1,7 @@
 #include "flat_page_btree_index.h"
 #include "flat_page_btree_index_writer.h"
 #include "test/libs/table/test_writer.h"
+#include "ydb/core/tx/datashard/datashard.h"
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -505,11 +506,10 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
         builder.AddChild(child);
 
         TWriterBundle pager(1, TLogoBlobID());
-        auto result = builder.Flush(pager, true);
-        UNIT_ASSERT(result);
+        auto result = builder.Finish(pager);
 
         TBtreeIndexMeta expected{child, 0, 0};
-        UNIT_ASSERT_EQUAL_C(*result, expected, "Got " + result->ToString());
+        UNIT_ASSERT_EQUAL_C(result, expected, "Got " + result.ToString());
     }
 
     Y_UNIT_TEST(OneNode) {
@@ -536,15 +536,14 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
         }
 
         TWriterBundle pager(1, TLogoBlobID());
-        auto result = builder.Flush(pager, true);
-        UNIT_ASSERT(result);
+        auto result = builder.Finish(pager);
 
-        Dump(*result, builder.GroupInfo, pager.Back());
+        Dump(result, builder.GroupInfo, pager.Back());
 
         TBtreeIndexMeta expected{{0, 1155, 11055, 385}, 1, 595};
-        UNIT_ASSERT_EQUAL_C(*result, expected, "Got " + result->ToString());
+        UNIT_ASSERT_EQUAL_C(result, expected, "Got " + result.ToString());
 
-        CheckKeys(result->PageId, keys, builder.GroupInfo, pager.Back());
+        CheckKeys(result.PageId, keys, builder.GroupInfo, pager.Back());
     }
 
     Y_UNIT_TEST(FewNodes) {
@@ -569,16 +568,21 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
             TSerializedCellVec deserialized(keys[i]);
             builder.AddKey(deserialized.GetCells());
             builder.AddChild(children[i + 1]);
-            UNIT_ASSERT(!builder.Flush(pager, false));
+            builder.Flush(pager);
         }
 
-        auto result = builder.Flush(pager, true);
-        UNIT_ASSERT(result);
+        auto result = builder.Finish(pager);
 
-        Dump(*result, builder.GroupInfo, pager.Back());
+        Dump(result, builder.GroupInfo, pager.Back());
         
-        UNIT_ASSERT_VALUES_EQUAL(result->LevelCount, 3);
-        
+        TBtreeIndexMeta expected{{9, 0, 0, 0}, 3, 1550};
+        for (auto c : children) {
+            expected.RowCount += c.RowCount;
+            expected.DataSize += c.DataSize;
+            expected.ErasedRowCount += c.ErasedRowCount;
+        }
+        UNIT_ASSERT_EQUAL_C(result, expected, "Got " + result.ToString());
+
         auto checkKeys = [&](TPageId pageId, const TVector<TString>& keys) {
             CheckKeys(pageId, keys, builder.GroupInfo, pager.Back());
         };
@@ -624,14 +628,6 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
         checkKeys(9, {
             keys[8]
         });
-
-        TBtreeIndexMeta expected{{9, 0, 0, 0}, 3, 1550};
-        for (auto c : children) {
-            expected.RowCount += c.RowCount;
-            expected.DataSize += c.DataSize;
-            expected.ErasedRowCount += c.ErasedRowCount;
-        }
-        UNIT_ASSERT_EQUAL_C(*result, expected, "Got " + result->ToString());
     }
 
     Y_UNIT_TEST(SplitBySize) {
@@ -656,16 +652,15 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
             TSerializedCellVec deserialized(keys[i]);
             builder.AddKey(deserialized.GetCells());
             builder.AddChild(children[i + 1]);
-            UNIT_ASSERT(!builder.Flush(pager, false));
+            builder.Flush(pager);
         }
 
-        auto result = builder.Flush(pager, true);
-        UNIT_ASSERT(result);
+        auto result = builder.Finish(pager);
 
-        Dump(*result, builder.GroupInfo, pager.Back());
+        Dump(result, builder.GroupInfo, pager.Back());
         
         TBtreeIndexMeta expected{{15, 15150, 106050, 8080}, 3, 10270};
-        UNIT_ASSERT_EQUAL_C(*result, expected, "Got " + result->ToString());
+        UNIT_ASSERT_EQUAL_C(result, expected, "Got " + result.ToString());
     }
 
 }

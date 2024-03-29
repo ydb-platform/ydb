@@ -1,6 +1,9 @@
 #include "special_keys.h"
 #include "permutations.h"
+#include "size_calcer.h"
+
 #include "reader/read_filter_merger.h"
+
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
@@ -30,6 +33,10 @@ TString TSpecialKeys::SerializeToString() const {
 
 TString TSpecialKeys::SerializeToStringDataOnlyNoCompression() const {
     return NArrow::SerializeBatchNoCompression(Data);
+}
+
+ui64 TSpecialKeys::GetMemoryBytes() const {
+    return Data ? NArrow::GetBatchDataSize(Data) : 0;
 }
 
 TFirstLastSpecialKeys::TFirstLastSpecialKeys(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<TString>& columnNames /*= {}*/) {

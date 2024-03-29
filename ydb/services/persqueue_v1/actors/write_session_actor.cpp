@@ -1,7 +1,4 @@
-#ifndef WRITE_SESSION_ACTOR_IMPL
 #include "write_session_actor.h"
-#error "Do not include this file directly"
-#endif
 
 #include "codecs.h"
 #include "helpers.h"
@@ -70,6 +67,10 @@ ECodec<UseMigrationProtocol> CodecByName(const TString& codec) {
     }
     return codecIt->second;
 }
+
+//explicit instantation
+template Ydb::PersQueue::V1::Codec CodecByName<true>(const TString& codec);
+template i32 CodecByName<false>(const TString& codec);
 
 template <>
 inline void FillExtraFieldsForDataChunk(
@@ -1530,6 +1531,10 @@ void TWriteSessionActor<UseMigrationProtocol>::RecheckACL(const TActorContext& c
         LogSession(ctx);
     }
 }
+
+//explicit instantation
+template class TWriteSessionActor<true>;
+template class TWriteSessionActor<false>;
 
 }
 }

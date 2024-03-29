@@ -28,7 +28,7 @@ protected:
     }
 
     virtual std::vector<TPartialReadResult> DoExtractReadyResults(const int64_t maxRowsInBatch) override;
-    virtual bool DoReadNextInterval() override;
+    virtual TConclusion<bool> DoReadNextInterval() override;
 
     virtual void DoAbort() override {
         AbortedFlag = true;

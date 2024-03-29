@@ -33,7 +33,7 @@ public:
     TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
         const std::shared_ptr<IStoragesManager>& storagesManager, const TComputeShardingPolicy& computeShardingPolicy,
         ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie,
-        ui64 tabletId, TDuration timeout, std::vector<TReadMetadataBase::TConstPtr>&& readMetadataList,
+        ui64 tabletId, TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange,
         NKikimrDataEvents::EDataFormat dataFormat, const NColumnShard::TScanCounters& scanCountersPool);
 
     void Bootstrap(const TActorContext& ctx);
@@ -55,8 +55,6 @@ private:
         }
     }
 
-    bool ReadNextBlob();
-
     void HandleScan(NConveyor::TEvExecution::TEvTaskProcessedResult::TPtr& ev);
 
     void HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev);
@@ -74,8 +72,6 @@ private:
 
 private:
     void MakeResult(size_t reserveRows = 0);
-
-    void NextReadMetadata();
 
     void AddRow(const TConstArrayRef<TCell>& row) override;
 
@@ -101,9 +97,9 @@ private:
 
     bool SendResult(bool pageFault, bool lastBatch);
 
-    void SendScanError(TString reason = {});
+    void SendScanError(const TString& reason);
 
-    void SendAbortExecution(TString reason = {});
+    void SendAbortExecution(const TString& reason);
 
     void Finish(const NColumnShard::TScanCounters::EStatusFinish status);
 
@@ -123,8 +119,7 @@ private:
     const NKikimrDataEvents::EDataFormat DataFormat;
     const ui64 TabletId;
 
-    std::vector<TReadMetadataBase::TConstPtr> ReadMetadataRanges;
-    ui32 ReadMetadataIndex;
+    TReadMetadataBase::TConstPtr ReadMetadataRange;
     std::unique_ptr<TScanIteratorBase> ScanIterator;
 
     std::vector<std::pair<TString, NScheme::TTypeInfo>> KeyYqlSchema;

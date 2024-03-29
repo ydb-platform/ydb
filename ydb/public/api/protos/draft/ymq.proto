@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 import "ydb/public/api/protos/ydb_operation.proto";
-import "ydb/public/api/protos/draft/field_transformation.proto"
+import "ydb/public/api/protos/draft/field_transformation.proto";
 
 import "google/protobuf/descriptor.proto";
 
@@ -31,7 +31,7 @@ message ChangeMessageVisibilityBatchRequestEntry {
 message ChangeMessageVisibilityBatchRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     repeated ChangeMessageVisibilityBatchRequestEntry entries = 2;
-    queue_url = 3;
+    string queue_url = 3;
 }
 
 message ChangeMessageVisibilityBatchResponse {
@@ -96,8 +96,7 @@ message DeleteMessageBatchResultEntry {
 
 message DeleteMessageBatchResult {
     repeated BatchResultErrorEntry failed = 1;
-    repeated failed = 1;
-    repeated successful = 2;
+    repeated DeleteMessageBatchResultEntry successful = 2;
 }
 
 message DeleteQueueRequest {
@@ -115,7 +114,7 @@ message DeleteQueueResult {
 message GetQueueAttributesRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     repeated string attribute_names = 2;
-    string queue_url;
+    string queue_url = 3;
 }
 
 message GetQueueAttributesResponse {

@@ -86,7 +86,7 @@ public:
     std::optional<TPartialReadResult> GetBatch() override;
     virtual void PrepareResults() override;
 
-    virtual bool ReadNextInterval() override;
+    virtual TConclusion<bool> ReadNextInterval() override;
 
 private:
     void FillReadyResults();

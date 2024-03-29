@@ -24,7 +24,7 @@ void TColumnShardScanIterator::PrepareResults() {
     FillReadyResults();
 }
 
-bool TColumnShardScanIterator::ReadNextInterval() {
+TConclusion<bool> TColumnShardScanIterator::ReadNextInterval() {
     return IndexedData->ReadNextInterval();
 }
 

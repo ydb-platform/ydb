@@ -265,8 +265,9 @@ protected:
     {
         NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, NotNullColumns);
         batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
-        if (!batchBuilder.Start(YdbSchema)) {
-            errorMessage = "Cannot make Arrow batch from rows";
+        TString startErrors;
+        if (!batchBuilder.Start(YdbSchema, &startErrors)) {
+            errorMessage = "Cannot make Arrow batch from rows: " + startErrors;
             return {};
         }
 

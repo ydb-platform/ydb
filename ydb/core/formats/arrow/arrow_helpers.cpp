@@ -75,18 +75,22 @@ std::shared_ptr<arrow::DataType> GetCSVArrowType(NScheme::TTypeInfo typeId) {
     }
 }
 
-std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, const std::set<std::string>& notNullColumns) {
+std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, const std::set<std::string>& notNullColumns, std::vector<std::string>* errors) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.reserve(columns.size());
     for (auto& [name, ydbType] : columns) {
         std::string colName(name.data(), name.size());
-        fields.emplace_back(std::make_shared<arrow::Field>(colName, GetArrowType(ydbType), !notNullColumns.contains(colName)));
+        auto arrowType = GetArrowType(ydbType);
+        if (arrowType->id() == arrow::Type::NA && errors) {
+            errors->emplace_back(std::string("unsupported type ") + NKikimr::NScheme::TypeName(ydbType.GetTypeId()) + " for column " + colName);
+        }
+        fields.emplace_back(std::make_shared<arrow::Field>(colName, arrowType, !notNullColumns.contains(colName)));
     }
     return fields;
 }
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::set<std::string>& notNullColumns) {
-    return std::make_shared<arrow::Schema>(MakeArrowFields(ydbColumns, notNullColumns));
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::set<std::string>& notNullColumns, std::vector<std::string>* errors) {
+    return std::make_shared<arrow::Schema>(MakeArrowFields(ydbColumns, notNullColumns, errors));
 }
 
 TString SerializeSchema(const arrow::Schema& schema) {

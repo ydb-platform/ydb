@@ -5771,6 +5771,34 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[]");
     }
 
+    Y_UNIT_TEST(BulkError) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Uuid).SetNullable(true)
+        };
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (size_t i = 0; i < 10; ++i) {
+                rows.AddListItem()
+                    .BeginStruct()
+                    .AddMember("id").Int32(i)
+                    .AddMember("level").Uuid(TUuidValue(i, i))
+                    .EndStruct();
+            }
+            rows.EndList();
+            auto result = testHelper.GetKikimr().GetTableClient().BulkUpsert("/Root/ColumnTableTest", rows.Build()).GetValueSync();
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+            result.Out(Cerr);
+        }
+    }
     Y_UNIT_TEST(DropColumn) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;

@@ -155,8 +155,7 @@ public:
                ui64 maxRowsInBlock, ui64 maxBytesInBlock, TString& err) override {
         Y_UNUSED(maxRowsInBlock);
         Y_UNUSED(maxBytesInBlock);
-        Y_UNUSED(err);
-        return Start(columns);
+        return Start(columns, &err);
     }
 
     void AddRow(const NKikimr::TDbTupleRef& key, const NKikimr::TDbTupleRef& value) override;
@@ -175,7 +174,7 @@ public:
         return NumBytes;
     }
 
-    bool Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
+    bool Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, TString* err = nullptr);
     std::shared_ptr<arrow::RecordBatch> FlushBatch(bool reinitialize);
     std::shared_ptr<arrow::RecordBatch> GetBatch() const { return Batch; }
 

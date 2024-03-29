@@ -3029,6 +3029,14 @@ bool TItemExprType::Validate(TPositionHandle position, TExprContext& ctx) const 
     return Validate(ctx.GetPosition(position), ctx);
 }
 
+const TItemExprType* TItemExprType::GetCleanItem(bool isVirtual, TExprContext& ctx) const {
+    if (!isVirtual) {
+        return this;
+    }
+
+    return ctx.MakeType<TItemExprType>(Name.SubStr(YqlVirtualPrefix.size()), ItemType);
+}
+
 bool TMultiExprType::Validate(TPosition position, TExprContext& ctx) const {
     if (Items.size() > Max<ui16>()) {
         ctx.AddError(TIssue(position, TStringBuilder() << "Too many elements: " << Items.size()));

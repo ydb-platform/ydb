@@ -117,6 +117,16 @@ public:
             AddColumn(items, ctx, c.Name, c.UdtType);
         }
 
+        const auto relKind = NPg::LookupStaticTable(NPg::TTableInfoKey{ cluster, TString(tableName) }).Kind;
+        if (relKind == NPg::ERelKind::Relation) {
+            AddColumn(items, ctx, "_yql_virtual_tableoid", "oid");
+            AddColumn(items, ctx, "_yql_virtual_xmin", "xid");
+            AddColumn(items, ctx, "_yql_virtual_cmin", "cid");
+            AddColumn(items, ctx, "_yql_virtual_xmax", "xid");
+            AddColumn(items, ctx, "_yql_virtual_cmax", "cid");
+            AddColumn(items, ctx, "_yql_virtual_ctid", "tid");
+        }
+
         TVector<TString> columnOrder;
         for (const auto& item : items) {
             columnOrder.emplace_back(TString(item->GetName()));

@@ -13985,6 +13985,13 @@
             "uri": "https://{canondata_backend}/1942173/cb2fdcf9620011c608e9c76afbfe1a17bdd9d6f4/resource.tar.gz#test_sql2yql.test_pg_catalog-pg_type_syntax_yql_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg_catalog-system_columns]": [
+        {
+            "checksum": "de61a6966af369b0cff9d3b65fb48b99",
+            "size": 1136,
+            "uri": "https://{canondata_backend}/1936997/664bdce7dcb090ac953e59b66dae38f4a1fa9bd2/resource.tar.gz#test_sql2yql.test_pg_catalog-system_columns_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg_catalog-table_constraints]": [
         {
             "checksum": "036fce68a853ccc7236f6ce01754eaf8",

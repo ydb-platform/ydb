@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package Ydb.FieldTransformation
+package Ydb.FieldTransformation;
 
 enum EFieldTransformationType {
     TRANSFORM_NONE = 0;

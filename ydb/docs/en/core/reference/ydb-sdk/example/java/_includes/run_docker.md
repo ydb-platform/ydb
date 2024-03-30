@@ -1,4 +1,4 @@
-To connect to a locally deployed YDB database according to the [Docker](../../../../../getting_started/self_hosted/ydb_docker.md) use case, run the following command in the default configuration:
+To connect to a locally deployed {{ ydb-short-name }} database according to the [Docker](../../../../../quickstart.md) use case, run the following command in the default configuration:
 
 ```bash
 (cd ydb-java-examples/basic_example/target && \

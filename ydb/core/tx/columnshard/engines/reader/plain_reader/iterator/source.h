@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/engines/insert_table/data.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap {
 class IDataReader;
@@ -162,9 +163,13 @@ public:
         return *StageData;
     }
 
-    ui32 GetRecordsCount() const {
+    ui32 GetRecordsCountVerified() const {
         AFL_VERIFY(RecordsCount);
         return *RecordsCount;
+    }
+
+    const std::optional<ui32>& GetRecordsCountOptional() const {
+        return RecordsCount;
     }
 
     void RegisterInterval(TFetchingInterval& interval);
@@ -217,6 +222,12 @@ private:
         return result;
     }
 
+    virtual NJson::TJsonValue DebugJsonForMemory() const override {
+        NJson::TJsonValue result = TBase::DebugJsonForMemory();
+        result.InsertValue("raw", Portion->GetTotalRawBytes());
+        result.InsertValue("blob", Portion->GetTotalBlobBytes());
+        return result;
+    }
     virtual void DoAbort() override;
     virtual ui64 GetPathId() const override {
         return Portion->GetPathId();

@@ -24,7 +24,7 @@ std::shared_ptr<NKikimr::NOlap::NReader::NPlain::IFetchingStep> TSpecialReadCont
     const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);
     auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][exclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0];
     if (!result) {
-        return std::make_shared<TBuildFakeSpec>(source->GetRecordsCount(), "fake");
+        return std::make_shared<TBuildFakeSpec>(source->GetRecordsCountVerified(), "fake");
     }
     return result;
 }

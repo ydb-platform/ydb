@@ -60,4 +60,4 @@ std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
 
 std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(const std::shared_ptr<IBaseOptimizerNode> internal);
 
-}
+} // namespace NYql::NDq

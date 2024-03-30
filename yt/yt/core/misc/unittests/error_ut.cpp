@@ -687,10 +687,10 @@ TEST(TErrorTest, YTExceptionWithAttributesToError)
 {
     try {
         throw TSimpleException("message")
-            << TExceptionAttribute("Int64 value", static_cast<i64>(42))
-            << TExceptionAttribute("double value", 7.77)
-            << TExceptionAttribute("bool value", false)
-            << TExceptionAttribute("String value", "FooBar");
+            << TExceptionAttribute{"Int64 value", static_cast<i64>(42)}
+            << TExceptionAttribute{"double value", 7.77}
+            << TExceptionAttribute{"bool value", false}
+            << TExceptionAttribute{"String value", "FooBar"};
     } catch (const std::exception& ex) {
         TError error(ex);
         EXPECT_EQ(NYT::EErrorCode::Generic, error.GetCode());

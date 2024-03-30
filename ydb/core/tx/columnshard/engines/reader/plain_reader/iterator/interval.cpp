@@ -107,7 +107,7 @@ protected:
                 AFL_VERIFY(merger->IsEmpty())("merging_context_finish", MergingContext->GetFinish().DebugJson().GetStringRobust())("merger", merger->DebugString());
             }
         } else {
-            auto rbBuilder = std::make_shared<NIndexedReader::TRecordBatchBuilder>(Context->GetProgramInputColumns()->GetSchema()->fields());
+            auto rbBuilder = std::make_shared<NArrow::NMerger::TRecordBatchBuilder>(Context->GetProgramInputColumns()->GetSchema()->fields());
             merger->DrainCurrentTo(*rbBuilder, MergingContext->GetFinish(), MergingContext->GetIncludeFinish(), &lastResultPosition);
             Context->GetCommonContext()->GetCounters().OnLinearScanInterval(rbBuilder->GetRecordsCount());
             ResultBatch = rbBuilder->Finalize();

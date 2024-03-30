@@ -56,6 +56,7 @@ protected:
 public:
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
 
+    virtual ui64 GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
     const NArrow::TReplaceKey& GetStartReplaceKey() const {
@@ -217,6 +218,9 @@ private:
     }
 
     virtual void DoAbort() override;
+    virtual ui64 GetPathId() const override {
+        return Portion->GetPathId();
+    }
 public:
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const override {
         return Portion->HasIndexes(indexIds);
@@ -275,6 +279,9 @@ private:
         result.InsertValue("type", "commit");
         result.InsertValue("info", CommittedBlob.DebugString());
         return result;
+    }
+    virtual ui64 GetPathId() const override {
+        return 0;
     }
 public:
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {

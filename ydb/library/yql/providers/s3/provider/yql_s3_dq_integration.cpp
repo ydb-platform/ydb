@@ -1,6 +1,8 @@
 #include "yql_s3_dq_integration.h"
 #include "yql_s3_mkql_compiler.h"
 
+#include <ydb/core/base/appdata.h>
+
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
@@ -17,6 +19,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <library/cpp/json/writer/json_value.h>
+
 
 namespace NYql {
 
@@ -494,23 +497,33 @@ public:
 
                 YQL_CLOG(DEBUG, ProviderS3) << " hasDirectories=" << hasDirectories << ", consumersCount=" << consumersCount;
 
-                auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(NDq::CreateS3FileQueueActor(
-                    0ul,
-                    std::move(paths),
-                    fileQueuePrefetchSize,
-                    fileSizeLimit,
-                    useRuntimeListing,
-                    consumersCount,
-                    fileQueueBatchSizeLimit,
-                    fileQueueBatchObjectCountLimit,
-                    State_->Gateway,
-                    connect.Url,
-                    GetAuthInfo(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
-                    pathPattern,
-                    pathPatternVariant,
-                    NS3Lister::ES3PatternType::Wildcard
-                ));
-                srcDesc.MutableSettings()->insert({"fileQueueActor", fileQueueActor.ToString()});
+                auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(
+                    NDq::CreateS3FileQueueActor(
+                        0ul,
+                        std::move(paths),
+                        fileQueuePrefetchSize,
+                        fileSizeLimit,
+                        useRuntimeListing,
+                        consumersCount,
+                        fileQueueBatchSizeLimit,
+                        fileQueueBatchObjectCountLimit,
+                        State_->Gateway,
+                        connect.Url,
+                        GetAuthInfo(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
+                        pathPattern,
+                        pathPatternVariant,
+                        NS3Lister::ES3PatternType::Wildcard
+                    ),
+                    NActors::TMailboxType::HTSwap,
+                    NKikimr::AppData()->UserPoolId
+                );
+
+                NActorsProto::TActorId protoId;
+                ActorIdToProto(fileQueueActor, &protoId);
+                TString stringId;
+                google::protobuf::TextFormat::PrintToString(protoId, &stringId);
+
+                srcDesc.MutableSettings()->insert({"fileQueueActor", stringId});
             }
 #endif
             protoSettings.PackFrom(srcDesc);

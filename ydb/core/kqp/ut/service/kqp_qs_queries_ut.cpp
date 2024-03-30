@@ -2186,7 +2186,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                     SELECT $i;
                 END DO;
             )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {

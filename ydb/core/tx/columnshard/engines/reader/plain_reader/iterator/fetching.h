@@ -116,11 +116,12 @@ public:
 class TFakeStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
-public:
+protected:
     virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& /*source*/, const std::shared_ptr<IFetchingStep>& /*step*/) const override {
         return true;
     }
 
+public:
     TFakeStep()
         : TBase("FAKE")
     {
@@ -143,33 +144,38 @@ public:
     }
 };
 
-class TBlobsFetchingStep: public IFetchingStep {
+class TColumnBlobsFetchingStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     std::shared_ptr<TColumnsSet> Columns;
+protected:
+    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step) const override;
+    virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const override;
+    virtual TString DoDebugString() const override {
+        return TStringBuilder() << "columns=" << Columns->DebugString() << ";";
+    }
+public:
+    TColumnBlobsFetchingStep(const std::shared_ptr<TColumnsSet>& columns, const TString& nameBranch = "")
+        : TBase("FETCHING_COLUMNS", nameBranch)
+        , Columns(columns) {
+        AFL_VERIFY(Columns);
+        AFL_VERIFY(Columns->GetColumnsCount());
+    }
+};
+
+class TIndexBlobsFetchingStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
     std::shared_ptr<TIndexesSet> Indexes;
 protected:
     virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step) const override;
     virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const override;
     virtual TString DoDebugString() const override {
-        TStringBuilder sb;
-        if (Columns) {
-            sb << "columns=" << Columns->DebugString() << ";";
-        } else {
-            sb << "indexes=" << Indexes->DebugString() << ";";
-        }
-        return sb;
+        return TStringBuilder() << "indexes=" << Indexes->DebugString() << ";";
     }
 public:
-    TBlobsFetchingStep(const std::shared_ptr<TColumnsSet>& columns, const TString& nameBranch = "")
-        : TBase("FETCHING", nameBranch)
-        , Columns(columns) {
-        AFL_VERIFY(Columns);
-        AFL_VERIFY(Columns->GetColumnsCount());
-    }
-
-    TBlobsFetchingStep(const std::shared_ptr<TIndexesSet>& indexes, const TString& nameBranch = "")
-        : TBase("FETCHING", nameBranch)
+    TIndexBlobsFetchingStep(const std::shared_ptr<TIndexesSet>& indexes, const TString& nameBranch = "")
+        : TBase("FETCHING_INDEXES", nameBranch)
         , Indexes(indexes) {
         AFL_VERIFY(Indexes);
         AFL_VERIFY(Indexes->GetIndexesCount());
@@ -185,11 +191,12 @@ private:
     }
 public:
     virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const override;
-    TAssemblerStep(const std::shared_ptr<TColumnsSet>& columns)
-        : TBase("ASSEMBLER")
+    TAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
+        : TBase("ASSEMBLER" + (specName ? "::" + specName : ""))
         , Columns(columns)
     {
         AFL_VERIFY(Columns);
+        AFL_VERIFY(Columns->GetColumnsCount());
     }
 };
 
@@ -197,6 +204,8 @@ class TFilterProgramStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     std::shared_ptr<NSsa::TProgramStep> Step;
+protected:
+    virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const override;
 public:
     virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step) const override;
     TFilterProgramStep(const std::shared_ptr<NSsa::TProgramStep>& step)

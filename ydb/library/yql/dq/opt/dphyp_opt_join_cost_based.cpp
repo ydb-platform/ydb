@@ -1,18 +1,18 @@
-#include "dq_opt_join_cost_based.h"
-#include "dq_opt_dphyp_solver.h"
-#include "dq_opt_make_join_hypergraph.h"
+#include "dphyp_opt_join_cost_based.h"
+#include "dphyp_dphyp_solver.h"
+#include "dphyp_make_join_hypergraph.h"
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/utils/log/log.h>
 
-namespace NYql::NDq {
+namespace NYql::NDq::NDphyp {
 
 using namespace NYql::NNodes;
 
-/*
+/**
  * Collects EquiJoin inputs with statistics for cost based optimization
- */
+*/
 bool DqCollectJoinRelationsWithStats(
     TVector<std::shared_ptr<TRelOptimizerNode>>& rels,
     TTypeAnnotationContext& typesCtx,
@@ -186,74 +186,24 @@ TExprBase RearrangeEquiJoinTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
         .Done();
 }
 
-/*
- * Recursively computes statistics for a join tree
- */
-void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProviderContext& ctx) {
-    if (join->LeftArg->Kind == EOptimizerNodeKind::JoinNodeType) {
-        ComputeStatistics(static_pointer_cast<TJoinOptimizerNode>(join->LeftArg), ctx);
-    }
-    if (join->RightArg->Kind == EOptimizerNodeKind::JoinNodeType) {
-        ComputeStatistics(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), ctx);
-    }
-    join->Stats = std::make_shared<TOptimizerStatistics>(
-        ComputeJoinStats(
-            *join->LeftArg->Stats, 
-            *join->RightArg->Stats,
-            join->LeftJoinKeys, 
-            join->RightJoinKeys, 
-            EJoinAlgoType::GraceJoin, 
-            ctx
-        )
-    );
-}
-
-class TOptimizerNativeNew: public IOptimizerNew {
+class TOptimizerNativeNewDpHyp: public IOptimizerNew {
 public:
-    TOptimizerNativeNew(IProviderContext& ctx, ui32 maxDPhypDPTableSize)
-        : IOptimizerNew(ctx)
-        , MaxDPhypTableSize_(maxDPhypDPTableSize)
+    using TNodeSet = std::bitset<128>;
+
+    TOptimizerNativeNewDpHyp(IProviderContext& ctx)
+        : IOptimizerNew(ctx) 
     {}
 
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(const std::shared_ptr<TJoinOptimizerNode>& joinTree) override {
-        auto relsCount = joinTree->Labels().size();
-
-        if (relsCount <= 64) { // The algorithm is more efficient.
-            return JoinSearchImpl<TNodeSet64>(joinTree);
-        }
-
-        if (64 < relsCount && relsCount <= 128) {
-            JoinSearchImpl<TNodeSet128>(joinTree);
-        }
-
-        ComputeStatistics(joinTree, this->Pctx);
-        return joinTree;
-    }
-
-private:
-    using TNodeSet64 = std::bitset<64>;
-    using TNodeSet128 = std::bitset<128>;
-
-    template <typename TNodeSet>
-    std::shared_ptr<TJoinOptimizerNode> JoinSearchImpl(const std::shared_ptr<TJoinOptimizerNode>& joinTree) {
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree);
-        TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx);
+        TDPHypSolver solver(hypergraph, this->Pctx);
 
-        if (solver.CountCC(MaxDPhypTableSize_) >= MaxDPhypTableSize_) {
-            ComputeStatistics(joinTree, this->Pctx);
-            return joinTree;
-        }
+        Y_ASSERT(hypergraph.GetNodeCount() > 0 && hypergraph.GetEdges().size() > 0);
 
         auto bestJoinOrder = solver.Solve();
         return ConvertFromInternal(bestJoinOrder);
     }
-private:
-    ui32 MaxDPhypTableSize_;
 };
-
-IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& ctx, const ui32 maxDPhypDPTableSize) {
-    return new TOptimizerNativeNew(ctx, maxDPhypDPTableSize);
-}
 
 TExprBase DqOptimizeEquiJoinWithCosts(
     const TExprBase& node,
@@ -303,7 +253,8 @@ TExprBase DqOptimizeEquiJoinWithCosts(
         YQL_CLOG(TRACE, CoreDq) << str.str();
     }
 
-    joinTree = opt.JoinSearch(joinTree);
+    auto optik = TOptimizerNativeNewDpHyp(opt.Pctx);
+    joinTree = optik.JoinSearch(joinTree);
 
     // rewrite the join tree and record the output statistics
     TExprBase res = RearrangeEquiJoinTree(ctx, equiJoin, joinTree);

@@ -1,16 +1,16 @@
 #pragma once
-#include <ydb/library/accessor/accessor.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
-#include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/formats/arrow/permutations.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
-#include <ydb/library/actors/core/log.h>
-#include <util/generic/hash.h>
-#include <util/string/join.h>
-#include <set>
 
-namespace NKikimr::NOlap::NIndexedReader {
+#include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/log.h>
+
+#include <library/cpp/json/writer/json_value.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <util/system/types.h>
+
+namespace NKikimr::NArrow::NMerger {
 
 class TRecordBatchBuilder;
 
@@ -245,7 +245,7 @@ public:
 
     static std::optional<TFoundPosition> FindPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound, const bool needGreater, const std::optional<ui32> includedStartPosition);
     static std::optional<TSortableBatchPosition::TFoundPosition> FindPosition(TSortableBatchPosition& position, const ui64 posStart, const ui64 posFinish, const TSortableBatchPosition& forFound, const bool greater);
-    TSortableBatchPosition::TFoundPosition SkipToLower(const TSortableBatchPosition & forFound);
+    TSortableBatchPosition::TFoundPosition SkipToLower(const TSortableBatchPosition& forFound);
 
     const TSortableScanData& GetData() const {
         return *Data;
@@ -270,8 +270,7 @@ public:
 
     TSortableBatchPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 position, const std::vector<std::string>& sortingColumns, const std::vector<std::string>& dataColumns, const bool reverseSort)
         : Position(position)
-        , ReverseSort(reverseSort)
-    {
+        , ReverseSort(reverseSort) {
         Y_ABORT_UNLESS(batch);
         Y_ABORT_UNLESS(batch->num_rows());
         RecordsCount = batch->num_rows();
@@ -324,7 +323,7 @@ public:
         } else {
             return false;
         }
-        
+
     }
 
 };

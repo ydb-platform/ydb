@@ -3,8 +3,8 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-std::shared_ptr<NKikimr::NOlap::NIndexedReader::TMergePartialStream> TSpecialReadContext::BuildMerger() const {
-    return std::make_shared<NIndexedReader::TMergePartialStream>(ReadMetadata->GetReplaceKey(), ProgramInputColumns->GetSchema(), CommonContext->IsReverse());
+std::shared_ptr<NArrow::NMerger::TMergePartialStream> TSpecialReadContext::BuildMerger() const {
+    return std::make_shared<NArrow::NMerger::TMergePartialStream>(ReadMetadata->GetReplaceKey(), ProgramInputColumns->GetSchema(), CommonContext->IsReverse(), IIndexInfo::GetSpecialColumnNames());
 }
 
 ui64 TSpecialReadContext::GetMemoryForSources(const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const bool isExclusive) {

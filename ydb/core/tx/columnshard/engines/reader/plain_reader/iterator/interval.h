@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include "source.h"
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -8,14 +9,14 @@ class TScanHead;
 
 class TMergingContext {
 protected:
-    YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Start);
-    YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Finish);
+    YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Start);
+    YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Finish);
     YDB_READONLY(bool, IncludeFinish, true);
     YDB_READONLY(bool, IncludeStart, false);
     YDB_READONLY(ui32, IntervalIdx, 0);
     bool IsExclusiveIntervalFlag = false;
 public:
-    TMergingContext(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
+    TMergingContext(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& finish,
         const ui32 intervalIdx, const bool includeFinish, const bool includeStart, const bool isExclusiveInterval)
         : Start(start)
         , Finish(finish)
@@ -63,6 +64,14 @@ protected:
     virtual void DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) override;
 
 public:
+    std::set<ui64> GetPathIds() const {
+        std::set<ui64> result;
+        for (auto&& i : Sources) {
+            result.emplace(i.second->GetPathId());
+        }
+        return result;
+    }
+
     ui32 GetIntervalIdx() const {
         return IntervalIdx;
     }
@@ -93,9 +102,18 @@ public:
         return result;
     }
 
+    NJson::TJsonValue DebugJsonForMemory() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        auto& jsonSources = result.InsertValue("sources", NJson::JSON_ARRAY);
+        for (auto&& [_, i] : Sources) {
+            jsonSources.AppendValue(i->DebugJsonForMemory());
+        }
+        return result;
+    }
+
     void OnSourceFetchStageReady(const ui32 sourceIdx);
 
-    TFetchingInterval(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
+    TFetchingInterval(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& finish,
         const ui32 intervalIdx, const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,
         const bool includeFinish, const bool includeStart, const bool isExclusiveInterval);
 };

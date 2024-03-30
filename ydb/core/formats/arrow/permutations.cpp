@@ -1,5 +1,6 @@
-#include "arrow_helpers.h"
 #include "permutations.h"
+
+#include "arrow_helpers.h"
 #include "replace_key.h"
 #include "size_calcer.h"
 #include "hash/calcer.h"

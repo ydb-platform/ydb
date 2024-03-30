@@ -8,7 +8,7 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-class TBlobsFetcherTask: public NBlobOperations::NRead::ITask {
+class TBlobsFetcherTask: public NBlobOperations::NRead::ITask, public NColumnShard::TMonitoringObjectsCounter<TBlobsFetcherTask> {
 private:
     using TBase = NBlobOperations::NRead::ITask;
     const std::shared_ptr<IDataSource> Source;

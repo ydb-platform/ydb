@@ -58,7 +58,13 @@ void MakeJoinHypergraphRec(
 
     subtreeNodes[joinTree] = subtreeNodes[joinNode->LeftArg] | subtreeNodes[joinNode->RightArg];
 
-    TNodeSet conditionUsedRels = graph.GetNodesByRelNames(GetConditionUsedRelationNames(joinNode));
+    TNodeSet conditionUsedRels{};
+    if (joinNode->JoinType == EJoinKind::Cross) {
+        conditionUsedRels = graph.GetNodesByRelNames(joinTree->Labels());
+    } else {
+        conditionUsedRels = graph.GetNodesByRelNames(GetConditionUsedRelationNames(joinNode));
+    }
+
     graph.AddEdge(MakeHyperedge<TNodeSet>(joinNode, conditionUsedRels, subtreeNodes));
 }
 

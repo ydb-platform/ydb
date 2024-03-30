@@ -1654,6 +1654,7 @@ private:
         state->Configuration->AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
         state->Configuration->Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
         state->Gateway = FederatedQuerySetup->HttpGateway;
+        state->ExecutorPoolId = AppData()->UserPoolId;
 
         auto dataSource = NYql::CreateS3DataSource(state);
         auto dataSink = NYql::CreateS3DataSink(state);

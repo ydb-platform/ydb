@@ -1,8 +1,6 @@
 #include "yql_s3_dq_integration.h"
 #include "yql_s3_mkql_compiler.h"
 
-#include <ydb/core/base/appdata.h>
-
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
@@ -19,7 +17,6 @@
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <library/cpp/json/writer/json_value.h>
-
 
 namespace NYql {
 
@@ -515,7 +512,7 @@ public:
                         NS3Lister::ES3PatternType::Wildcard
                     ),
                     NActors::TMailboxType::HTSwap,
-                    NKikimr::AppData()->UserPoolId
+                    State_->ExecutorPoolId
                 );
 
                 NActorsProto::TActorId protoId;

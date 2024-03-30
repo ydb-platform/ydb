@@ -194,7 +194,7 @@ bool TColumnShardScan::ProduceResults() noexcept {
     auto resultConclusion = ScanIterator->GetBatch();
     if (resultConclusion.IsFail()) {
         ACFL_ERROR("stage", "got error")("iterator", ScanIterator->DebugString())("message", resultConclusion.GetErrorMessage());
-        SendAbortExecution(resultConclusion.GetErrorMessage());
+        SendScanError(resultConclusion.GetErrorMessage());
 
         ScanIterator.reset();
         Finish(NColumnShard::TScanCounters::EStatusFinish::IteratorInternalErrorResult);
@@ -375,8 +375,7 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
 
 void TColumnShardScan::SendScanError(const TString& reason) {
     AFL_VERIFY(reason);
-    TString msg = TStringBuilder() << "Scan failed at tablet " << TabletId;
-    msg += ", reason: " + reason;
+    const TString msg = TStringBuilder() << "Scan failed at tablet " << TabletId << ", reason: " + reason;
 
     auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(ScanGen, TabletId);
     ev->Record.SetStatus(Ydb::StatusIds::GENERIC_ERROR);
@@ -384,15 +383,6 @@ void TColumnShardScan::SendScanError(const TString& reason) {
     NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
 
     Send(ScanComputeActorId, ev.Release());
-}
-
-void TColumnShardScan::SendAbortExecution(const TString& reason) {
-    AFL_VERIFY(reason);
-    auto status = NYql::NDqProto::StatusIds::PRECONDITION_FAILED;
-    TString msg = TStringBuilder() << "Scan failed at tablet " << TabletId;
-    msg += ", reason: " + reason;
-
-    Send(ScanComputeActorId, new NKqp::TEvKqp::TEvAbortExecution(status, msg));
 }
 
 void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish status) {

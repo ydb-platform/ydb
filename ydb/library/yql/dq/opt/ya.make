@@ -24,6 +24,10 @@ SRCS(
     dq_opt_stat_transformer_base.cpp
     dq_opt_join_cost_based.cpp
     dq_opt_predicate_selectivity.cpp
+
+    dphyp_conflict_rules_collector.cpp
+    dphyp_join_tree_node.cpp
+    dphyp_opt_join_cost_based.cpp
 )
 
 YQL_LAST_ABI_VERSION()

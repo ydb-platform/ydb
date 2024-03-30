@@ -139,7 +139,7 @@ public:
     }
 
     TSimpleSerializationStat GetSerializationStat() const {
-        return TSimpleSerializationStat(BlobRange.Size, Meta.GetNumRowsVerified(), Meta.GetRawBytesVerified());
+        return TSimpleSerializationStat(BlobRange.Size, Meta.GetNumRows(), Meta.GetRawBytes());
     }
 
     const TChunkMeta& GetMeta() const {
@@ -202,7 +202,7 @@ protected:
         return Data;
     }
     virtual ui32 DoGetRecordsCountImpl() const override {
-        return ColumnRecord.GetMeta().GetNumRowsVerified();
+        return ColumnRecord.GetMeta().GetNumRows();
     }
     virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& /*saver*/, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/,
                                                                                 const std::vector<ui64>& /*splitSizes*/) const override {

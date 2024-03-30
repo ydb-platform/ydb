@@ -1,9 +1,7 @@
-#include "read_filter_merger.h"
-#include <ydb/core/formats/arrow/permutations.h>
-#include <ydb/library/actors/core/log.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
+#include "merger.h"
+#include "result_builder.h"
 
-namespace NKikimr::NOlap::NIndexedReader {
+namespace NKikimr::NArrow::NMerger {
 
 void TMergePartialStream::PutControlPoint(std::shared_ptr<TSortableBatchPosition> point) {
     Y_ABORT_UNLESS(point);
@@ -24,11 +22,11 @@ void TMergePartialStream::AddSource(std::shared_ptr<arrow::RecordBatch> batch, s
 
 void TMergePartialStream::AddNewToHeap(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter) {
     if (!filter || filter->IsTotalAllowFilter()) {
-        SortHeap.Push(TBatchIterator(batch, nullptr, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse));
+        SortHeap.Push(TBatchIterator(batch, nullptr, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames));
     } else if (filter->IsTotalDenyFilter()) {
         return;
     } else {
-        SortHeap.Push(TBatchIterator(batch, filter, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse));
+        SortHeap.Push(TBatchIterator(batch, filter, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames));
     }
 }
 
@@ -197,14 +195,14 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> TMergePartialStream::DrainAllPa
 {
     std::vector<std::shared_ptr<arrow::RecordBatch>> result;
     for (auto&& i : positions) {
-        NIndexedReader::TRecordBatchBuilder indexesBuilder(resultFields);
+        TRecordBatchBuilder indexesBuilder(resultFields);
         DrainCurrentTo(indexesBuilder, i.first, i.second);
         result.emplace_back(indexesBuilder.Finalize());
         if (result.back()->num_rows() == 0) {
             result.pop_back();
         }
     }
-    NIndexedReader::TRecordBatchBuilder indexesBuilder(resultFields);
+    TRecordBatchBuilder indexesBuilder(resultFields);
     DrainAll(indexesBuilder);
     result.emplace_back(indexesBuilder.Finalize());
     if (result.back()->num_rows() == 0) {
@@ -218,20 +216,6 @@ NJson::TJsonValue TMergePartialStream::TBatchIterator::DebugJson() const {
     result["is_cp"] = IsControlPoint();
     result["key"] = KeyColumns.DebugJson();
     return result;
-}
-
-void TRecordBatchBuilder::ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema) {
-    AFL_VERIFY(IsSameFieldsSequence(schema->fields(), Fields));
-}
-
-void TRecordBatchBuilder::AddRecord(const TSortableBatchPosition& position) {
-    Y_DEBUG_ABORT_UNLESS(position.GetData().GetColumns().size() == Builders.size());
-    Y_DEBUG_ABORT_UNLESS(IsSameFieldsSequence(position.GetData().GetFields(), Fields));
-//    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "record_add_on_read")("record", position.DebugJson());
-    for (ui32 i = 0; i < position.GetData().GetColumns().size(); ++i) {
-        NArrow::Append(*Builders[i], *position.GetData().GetColumns()[i], position.GetPosition());
-    }
-    ++RecordsCount;
 }
 
 }

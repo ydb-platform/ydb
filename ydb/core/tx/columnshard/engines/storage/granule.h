@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap {
 
@@ -210,7 +211,7 @@ public:
         return OptimizerPlanner->SerializeToJsonVisual();
     }
 
-    std::vector<NIndexedReader::TSortableBatchPosition> GetBucketPositions() const {
+    std::vector<NArrow::NMerger::TSortableBatchPosition> GetBucketPositions() const {
         return OptimizerPlanner->GetBucketPositions();
     }
 

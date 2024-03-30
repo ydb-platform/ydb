@@ -14,6 +14,7 @@
 #include <util/generic/hash.h>
 #include <util/system/types.h>
 #include <util/generic/hash_set.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NBuckets {
 
@@ -824,15 +825,15 @@ public:
         TSaverContext saverContext(storagesManager);
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portions, saverContext);
         if (MainPortion) {
-            NIndexedReader::TSortableBatchPosition pos(MainPortion->IndexKeyStart().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyStart().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, true, false);
         }
         if (!nextBorder && MainPortion) {
-            NIndexedReader::TSortableBatchPosition pos(MainPortion->IndexKeyEnd().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyEnd().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, true, false);
         }
         if (stopPoint) {
-            NIndexedReader::TSortableBatchPosition pos(stopPoint->ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition pos(stopPoint->ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, false, false);
         }
         return result;
@@ -1095,10 +1096,10 @@ public:
         }
     }
 
-    std::vector<NIndexedReader::TSortableBatchPosition> GetBucketPositions() const {
-        std::vector<NIndexedReader::TSortableBatchPosition> result;
+    std::vector<NArrow::NMerger::TSortableBatchPosition> GetBucketPositions() const {
+        std::vector<NArrow::NMerger::TSortableBatchPosition> result;
         for (auto&& i : Buckets) {
-            NIndexedReader::TSortableBatchPosition pos(i.second->GetPortion()->IndexKeyStart().ToBatch(PrimaryKeysSchema), 0, PrimaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition pos(i.second->GetPortion()->IndexKeyStart().ToBatch(PrimaryKeysSchema), 0, PrimaryKeysSchema->field_names(), {}, false);
             result.emplace_back(pos);
         }
         return result;
@@ -1159,7 +1160,7 @@ protected:
         return Buckets.SerializeToJson();
     }
 public:
-    virtual std::vector<NIndexedReader::TSortableBatchPosition> GetBucketPositions() const override {
+    virtual std::vector<NArrow::NMerger::TSortableBatchPosition> GetBucketPositions() const override {
         return Buckets.GetBucketPositions();
     }
 

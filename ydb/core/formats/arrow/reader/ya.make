@@ -8,7 +8,10 @@ PEERDIR(
 )
 
 SRCS(
-    read_filter_merger.cpp
+    merger.cpp
+    position.cpp
+    heap.cpp
+    result_builder.cpp
 )
 
 END()

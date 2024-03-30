@@ -2,8 +2,8 @@
 #include "abstract/abstract.h"
 #include "with_appended.h"
 #include <ydb/core/tx/columnshard/engines/insert_table/data.h>
-#include <ydb/core/formats/arrow/reader/read_filter_merger.h>
 #include <util/generic/hash.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap {
 
@@ -34,7 +34,7 @@ protected:
     }
 
 public:
-    THashMap<ui64, std::vector<NIndexedReader::TSortableBatchPosition>> PathToGranule; // pathId -> positions (sorted by pk)
+    THashMap<ui64, std::vector<NArrow::NMerger::TSortableBatchPosition>> PathToGranule; // pathId -> positions (sorted by pk)
 public:
     TInsertColumnEngineChanges(std::vector<NOlap::TInsertedData>&& dataToIndex, const TSaverContext& saverContext)
         : TBase(saverContext, StaticTypeName())

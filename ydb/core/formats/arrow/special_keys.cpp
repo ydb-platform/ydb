@@ -2,7 +2,7 @@
 #include "permutations.h"
 #include "size_calcer.h"
 
-#include "reader/read_filter_merger.h"
+#include "reader/position.h"
 
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
@@ -60,9 +60,9 @@ TMinMaxSpecialKeys::TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch
     Y_ABORT_UNLESS(batch->num_rows());
     Y_ABORT_UNLESS(schema);
 
-    NOlap::NIndexedReader::TSortableBatchPosition record(batch, 0, schema->field_names(), {}, false);
-    std::optional<NOlap::NIndexedReader::TSortableBatchPosition> minValue;
-    std::optional<NOlap::NIndexedReader::TSortableBatchPosition> maxValue;
+    NMerger::TSortableBatchPosition record(batch, 0, schema->field_names(), {}, false);
+    std::optional<NMerger::TSortableBatchPosition> minValue;
+    std::optional<NMerger::TSortableBatchPosition> maxValue;
     while (true) {
         if (!minValue || minValue->Compare(record) == std::partial_ordering::greater) {
             minValue = record;

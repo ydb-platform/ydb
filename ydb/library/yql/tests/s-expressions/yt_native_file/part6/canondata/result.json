@@ -4093,9 +4093,9 @@
     ],
     "test.test[Optimizers-ExtendAndFlatmapExchange-Plan]": [
         {
-            "checksum": "4236a1d7484695987b17252da96d6694",
-            "size": 6569,
-            "uri": "https://{canondata_backend}/1814674/cea98a57490eb7af3de0acfe4b9a25d9375d2977/resource.tar.gz#test.test_Optimizers-ExtendAndFlatmapExchange-Plan_/plan.txt"
+            "checksum": "de29bd45fca6b66d33a77d9e4511c09d",
+            "size": 5457,
+            "uri": "https://{canondata_backend}/1924537/86f955e66cd55d7ab9d6a2f939fb3765daff9a93/resource.tar.gz#test.test_Optimizers-ExtendAndFlatmapExchange-Plan_/plan.txt"
         }
     ],
     "test.test[Optimizers-ExtendAndFlatmapExchange-Results]": [

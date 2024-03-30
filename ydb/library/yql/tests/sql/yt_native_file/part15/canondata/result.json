@@ -1330,9 +1330,9 @@
     ],
     "test.test[lineage-union_all_tablerow-default.txt-Lineage]": [
         {
-            "checksum": "b0de4513ba7d24f66c3315a23fc82da3",
-            "size": 1781,
-            "uri": "https://{canondata_backend}/1923547/61458c9c64b8429a1ff4c80acb29f295ac160173/resource.tar.gz#test.test_lineage-union_all_tablerow-default.txt-Lineage_/results.txt"
+            "checksum": "5a344204ea86aeb249a36889600c4a4a",
+            "size": 1796,
+            "uri": "https://{canondata_backend}/1917492/6fdd2f40ede96545dccdab848206666a7cc3bd98/resource.tar.gz#test.test_lineage-union_all_tablerow-default.txt-Lineage_/results.txt"
         }
     ],
     "test.test[lineage-union_all_tablerow-default.txt-Plan]": [

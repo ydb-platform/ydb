@@ -1464,6 +1464,17 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
         }
     }
 
+    if (node->Head().IsCallable(Ordered ? "OrderedExtend" : "Extend")) {
+        if (AllOf(node->Head().ChildrenList(), [](const auto& child) { return child->IsCallable(Ordered ? "OrderedFlatMap" : "FlatMap"); })) {
+            TExprNodeList newChildren;
+            for (auto child : node->Head().ChildrenList()) {
+                newChildren.push_back(ctx.ChangeChild(*node, TCoFlatMapBase::idx_Input, std::move(child)));
+            }
+            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
+            return ctx.ChangeChildren(node->Head(), std::move(newChildren));
+        }
+    }
+
     return node;
 }
 

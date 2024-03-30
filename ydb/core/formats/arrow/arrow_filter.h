@@ -62,6 +62,10 @@ public:
         return Filter.capacity() * sizeof(ui32) + Count * sizeof(bool);
     }
 
+    static ui64 GetPredictedMemorySize(const ui32 recordsCount) {
+        return 2 /* capacity */ * recordsCount * (sizeof(ui32) + sizeof(bool));
+    }
+
     class TIterator {
     private:
         i64 InternalPosition = 0;

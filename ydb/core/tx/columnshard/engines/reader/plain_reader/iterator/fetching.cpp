@@ -38,21 +38,25 @@ bool TStepAction::DoExecute() {
     return true;
 }
 
-bool TBlobsFetchingStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step) const {
-    AFL_VERIFY((!!Columns) ^ (!!Indexes));
-
-    const bool startFetchingColumns = Columns ? source->StartFetchingColumns(source, step, Columns) : false;
-    const bool startFetchingIndexes = Indexes ? source->StartFetchingIndexes(source, step, Indexes) : false;
-    return !startFetchingColumns && !startFetchingIndexes;
+bool TColumnBlobsFetchingStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step) const {
+    return !source->StartFetchingColumns(source, step, Columns);
 }
 
-ui64 TBlobsFetchingStep::DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const {
-    if (Columns) {
-        return source->GetColumnRawBytes(Columns->GetColumnIds());
+ui64 TColumnBlobsFetchingStep::DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const {
+    const ui64 result = source->GetColumnRawBytes(Columns->GetColumnIds());
+    if (!result) {
+        return Columns->GetColumnIds().size() * source->GetRecordsCountVerified() * sizeof(ui32); // null for all records for all columns in future will be
     } else {
-        AFL_VERIFY(Indexes);
-        return source->GetIndexRawBytes(Indexes->GetIndexIdsSet());
+        return result;
     }
+}
+
+bool TIndexBlobsFetchingStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step) const {
+    return !source->StartFetchingIndexes(source, step, Indexes);
+}
+
+ui64 TIndexBlobsFetchingStep::DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const {
+    return source->GetIndexRawBytes(Indexes->GetIndexIdsSet());
 }
 
 bool TAssemblerStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const {
@@ -67,6 +71,10 @@ bool TFilterProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& so
     auto filter = Step->BuildFilter(source->GetStageData().GetTable());
     source->MutableStageData().AddFilter(filter);
     return true;
+}
+
+ui64 TFilterProgramStep::DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const {
+    return NArrow::TColumnFilter::GetPredictedMemorySize(source->GetRecordsCountOptional().value_or(0));
 }
 
 bool TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const {

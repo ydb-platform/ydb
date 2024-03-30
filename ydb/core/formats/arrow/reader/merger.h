@@ -1,133 +1,11 @@
 #pragma once
-#include <ydb/library/accessor/accessor.h>
-#include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
+#include "position.h"
+#include "heap.h"
+#include "result_builder.h"
+
 #include <ydb/core/formats/arrow/arrow_filter.h>
-#include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/switch/switch_type.h>
-#include <ydb/core/formats/arrow/reader/read_filter_merger.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
-#include <util/generic/hash.h>
-#include <util/string/join.h>
-#include <set>
 
-namespace NKikimr::NOlap::NIndexedReader {
-
-class TRecordBatchBuilder;
-
-template <class TSortCursor>
-class TSortingHeap {
-public:
-    TSortingHeap() = default;
-
-    template <typename TCursors>
-    TSortingHeap(TCursors& cursors, bool notNull) {
-        Queue.reserve(cursors.size());
-        for (auto& cur : cursors) {
-            if (!cur.Empty()) {
-                Queue.emplace_back(TSortCursor(&cur, notNull));
-            }
-        }
-        std::make_heap(Queue.begin(), Queue.end());
-    }
-
-    const TSortCursor& Current() const { return Queue.front(); }
-    TSortCursor& MutableCurrent() { return Queue.front(); }
-    size_t Size() const { return Queue.size(); }
-    bool Empty() const { return Queue.empty(); }
-    TSortCursor& NextChild() { return Queue[NextChildIndex()]; }
-
-    void Next() {
-        Y_ABORT_UNLESS(Size());
-
-        if (Queue.front().Next()) {
-            UpdateTop();
-        } else {
-            RemoveTop();
-        }
-    }
-
-    void RemoveTop() {
-        std::pop_heap(Queue.begin(), Queue.end());
-        Queue.pop_back();
-        NextIdx = 0;
-    }
-
-    void Push(TSortCursor&& cursor) {
-        Queue.emplace_back(cursor);
-        std::push_heap(Queue.begin(), Queue.end());
-        NextIdx = 0;
-    }
-
-    NJson::TJsonValue DebugJson() const {
-        NJson::TJsonValue result = NJson::JSON_ARRAY;
-        for (auto&& i : Queue) {
-            result.AppendValue(i.DebugJson());
-        }
-        return result;
-    }
-
-    /// This is adapted version of the function __sift_down from libc++.
-    /// Why cannot simply use std::priority_queue?
-    /// - because it doesn't support updating the top element and requires pop and push instead.
-    /// Also look at "Boost.Heap" library.
-    void UpdateTop() {
-        size_t size = Queue.size();
-        if (size < 2)
-            return;
-
-        auto begin = Queue.begin();
-
-        size_t child_idx = NextChildIndex();
-        auto child_it = begin + child_idx;
-
-        /// Check if we are in order.
-        if (*child_it < *begin)
-            return;
-
-        NextIdx = 0;
-
-        auto curr_it = begin;
-        auto top(std::move(*begin));
-        do {
-            /// We are not in heap-order, swap the parent with it's largest child.
-            *curr_it = std::move(*child_it);
-            curr_it = child_it;
-
-            // recompute the child based off of the updated parent
-            child_idx = 2 * child_idx + 1;
-
-            if (child_idx >= size)
-                break;
-
-            child_it = begin + child_idx;
-
-            if ((child_idx + 1) < size && *child_it < *(child_it + 1)) {
-                /// Right child exists and is greater than left child.
-                ++child_it;
-                ++child_idx;
-            }
-
-            /// Check if we are in order.
-        } while (!(*child_it < top));
-        *curr_it = std::move(top);
-    }
-private:
-    std::vector<TSortCursor> Queue;
-    /// Cache comparison between first and second child if the order in queue has not been changed.
-    size_t NextIdx = 0;
-
-    size_t NextChildIndex() {
-        if (NextIdx == 0) {
-            NextIdx = 1;
-            if (Queue.size() > 2 && Queue[1] < Queue[2]) {
-                ++NextIdx;
-            }
-        }
-
-        return NextIdx;
-    }
-
-};
+namespace NKikimr::NArrow::NMerger {
 
 class TMergePartialStream {
 private:
@@ -135,6 +13,12 @@ private:
     std::optional<TSortableBatchPosition> CurrentKeyColumns;
 #endif
     bool PossibleSameVersionFlag = true;
+
+    std::shared_ptr<arrow::Schema> SortSchema;
+    std::shared_ptr<arrow::Schema> DataSchema;
+    const bool Reverse;
+    const std::vector<std::string> VersionColumnNames;
+    ui32 ControlPoints = 0;
 
     class TBatchIterator {
     private:
@@ -182,10 +66,10 @@ private:
         }
 
         TBatchIterator(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter,
-            const std::vector<std::string>& keyColumns, const std::vector<std::string>& dataColumns, const bool reverseSort)
+            const std::vector<std::string>& keyColumns, const std::vector<std::string>& dataColumns, const bool reverseSort, const std::vector<std::string>& versionColumnNames)
             : ControlPointFlag(false)
             , KeyColumns(batch, 0, keyColumns, dataColumns, reverseSort)
-            , VersionColumns(batch, 0, IIndexInfo::GetSpecialColumnNames(), {}, false)
+            , VersionColumns(batch, 0, versionColumnNames, {}, false)
             , RecordsCount(batch->num_rows())
             , ReverseSortKff(reverseSort ? -1 : 1)
             , Filter(filter)
@@ -264,6 +148,8 @@ private:
         }
     };
 
+    TSortingHeap<TBatchIterator> SortHeap;
+
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
 #ifndef NDEBUG
@@ -275,21 +161,17 @@ private:
         return result;
     }
 
-    TSortingHeap<TBatchIterator> SortHeap;
-    std::shared_ptr<arrow::Schema> SortSchema;
-    std::shared_ptr<arrow::Schema> DataSchema;
-    const bool Reverse;
-    ui32 ControlPoints = 0;
-
     std::optional<TSortableBatchPosition> DrainCurrentPosition();
 
     void AddNewToHeap(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter);
     void CheckSequenceInDebug(const TSortableBatchPosition& nextKeyColumnsPosition);
 public:
-    TMergePartialStream(std::shared_ptr<arrow::Schema> sortSchema, std::shared_ptr<arrow::Schema> dataSchema, const bool reverse)
+    TMergePartialStream(std::shared_ptr<arrow::Schema> sortSchema, std::shared_ptr<arrow::Schema> dataSchema, const bool reverse, const std::vector<std::string>& versionColumnNames)
         : SortSchema(sortSchema)
         , DataSchema(dataSchema)
-        , Reverse(reverse) {
+        , Reverse(reverse)
+        , VersionColumnNames(versionColumnNames)
+    {
         Y_ABORT_UNLESS(SortSchema);
         Y_ABORT_UNLESS(SortSchema->num_fields());
         Y_ABORT_UNLESS(!DataSchema || DataSchema->num_fields());
@@ -359,65 +241,6 @@ public:
     bool DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TSortableBatchPosition>* lastResultPosition = nullptr);
     std::vector<std::shared_ptr<arrow::RecordBatch>> DrainAllParts(const std::map<TSortableBatchPosition, bool>& positions,
         const std::vector<std::shared_ptr<arrow::Field>>& resultFields);
-};
-
-class TRecordBatchBuilder {
-private:
-    std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::Field>>, Fields);
-    YDB_READONLY(ui32, RecordsCount, 0);
-
-    bool IsSameFieldsSequence(const std::vector<std::shared_ptr<arrow::Field>>& f1, const std::vector<std::shared_ptr<arrow::Field>>& f2) {
-        if (f1.size() != f2.size()) {
-            return false;
-        }
-        for (ui32 i = 0; i < f1.size(); ++i) {
-            if (!f1[i]->Equals(f2[i])) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-public:
-    ui32 GetBuildersCount() const {
-        return Builders.size();
-    }
-
-    TString GetColumnNames() const {
-        TStringBuilder result;
-        for (auto&& f : Fields) {
-            result << f->name() << ",";
-        }
-        return result;
-    }
-
-    TRecordBatchBuilder(const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::optional<ui32> rowsCountExpectation = {}, const THashMap<std::string, ui64>& fieldDataSizePreallocated = {})
-        : Fields(fields) {
-        Y_ABORT_UNLESS(Fields.size());
-        for (auto&& f : fields) {
-            Builders.emplace_back(NArrow::MakeBuilder(f));
-            auto it = fieldDataSizePreallocated.find(f->name());
-            if (it != fieldDataSizePreallocated.end()) {
-                NArrow::ReserveData(*Builders.back(), it->second);
-            }
-            if (rowsCountExpectation) {
-                NArrow::TStatusValidator::Validate(Builders.back()->Reserve(*rowsCountExpectation));
-            }
-        }
-    }
-
-    std::shared_ptr<arrow::RecordBatch> Finalize() {
-        auto schema = std::make_shared<arrow::Schema>(Fields);
-        std::vector<std::shared_ptr<arrow::Array>> columns;
-        for (auto&& i : Builders) {
-            columns.emplace_back(NArrow::TStatusValidator::GetValid(i->Finish()));
-        }
-        return arrow::RecordBatch::Make(schema, columns.front()->length(), columns);
-    }
-
-    void AddRecord(const TSortableBatchPosition& position);
-    void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema);
 };
 
 }

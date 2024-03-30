@@ -1,7 +1,7 @@
-#include "read_filter_merger.h"
-#include <ydb/library/actors/core/log.h>
+#include "position.h"
+#include <util/string/join.h>
 
-namespace NKikimr::NOlap::NIndexedReader {
+namespace NKikimr::NArrow::NMerger {
 
 NJson::TJsonValue TSortableBatchPosition::DebugJson() const {
     NJson::TJsonValue result;

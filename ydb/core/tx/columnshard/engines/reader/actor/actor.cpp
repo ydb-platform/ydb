@@ -1,8 +1,8 @@
 #include "actor.h"
 #include <ydb/core/tx/columnshard/blobs_reader/read_coordinator.h>
-#include <ydb/core/formats/arrow/reader/read_filter_merger.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/actor.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap::NReader {
 constexpr i64 DEFAULT_READ_AHEAD_BYTES = (i64)2 * 1024 * 1024 * 1024;
@@ -238,8 +238,8 @@ bool TColumnShardScan::ProduceResults() noexcept {
         ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetBatchDataSize(batch))("num_rows", numRows)("batch_columns", JoinSeq(",", batch->schema()->field_names()));
     }
     if (CurrentLastReadKey) {
-        NIndexedReader::TSortableBatchPosition pNew(result.GetLastReadKey(), 0, result.GetLastReadKey()->schema()->field_names(), {}, false);
-        NIndexedReader::TSortableBatchPosition pOld(CurrentLastReadKey, 0, CurrentLastReadKey->schema()->field_names(), {}, false);
+        NArrow::NMerger::TSortableBatchPosition pNew(result.GetLastReadKey(), 0, result.GetLastReadKey()->schema()->field_names(), {}, false);
+        NArrow::NMerger::TSortableBatchPosition pOld(CurrentLastReadKey, 0, CurrentLastReadKey->schema()->field_names(), {}, false);
         AFL_VERIFY(pOld < pNew)("old", pOld.DebugJson().GetStringRobust())("new", pNew.DebugJson().GetStringRobust());
     }
     CurrentLastReadKey = result.GetLastReadKey();

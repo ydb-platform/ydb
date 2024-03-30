@@ -24,8 +24,8 @@ class IFetchingStep;
 class IDataSource {
 private:
     YDB_READONLY(ui32, SourceIdx, 0);
-    YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Start);
-    YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Finish);
+    YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Start);
+    YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Finish);
     NArrow::TReplaceKey StartReplaceKey;
     NArrow::TReplaceKey FinishReplaceKey;
     YDB_READONLY_DEF(std::shared_ptr<TSpecialReadContext>, Context);
@@ -128,6 +128,14 @@ public:
         DoAbort();
     }
 
+    virtual NJson::TJsonValue DebugJsonForMemory() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        if (RecordsCount) {
+            result.InsertValue("count", *RecordsCount);
+        }
+        return result;
+    }
+
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("source_idx", SourceIdx);
@@ -219,11 +227,11 @@ public:
     }
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnsIds) const override {
-        return Portion->GetColumnRawBytes(columnsIds);
+        return Portion->GetColumnRawBytes(columnsIds, false);
     }
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const override {
-        return Portion->GetIndexRawBytes(indexIds);
+        return Portion->GetIndexRawBytes(indexIds, false);
     }
 
     const TPortionInfo& GetPortionInfo() const {

@@ -59,16 +59,16 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds,
         bool itFinished = false;
         for (auto&& c : columnChunks) {
             Y_ABORT_UNLESS(!itFinished);
-            if (!itFilter.IsBatchForSkip(c->GetMeta().GetNumRowsVerified())) {
+            if (!itFilter.IsBatchForSkip(c->GetMeta().GetNumRows())) {
                 auto reading = blobsAction.GetReading(Schema->GetIndexInfo().GetColumnStorageId(c->GetColumnId(), Portion->GetMeta().GetTierName()));
                 reading->SetIsBackgroundProcess(false);
                 reading->AddRange(Portion->RestoreBlobRange(c->BlobRange));
                 ++fetchedChunks;
             } else {
-                nullBlocks.emplace(c->GetAddress(), c->GetMeta().GetNumRowsVerified());
+                nullBlocks.emplace(c->GetAddress(), c->GetMeta().GetNumRows());
                 ++nullChunks;
             }
-            itFinished = !itFilter.Next(c->GetMeta().GetNumRowsVerified());
+            itFinished = !itFilter.Next(c->GetMeta().GetNumRows());
         }
         AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Portion->NumRows(i));
     }

@@ -79,7 +79,7 @@ protected:
             ResultBatch = NArrow::MakeEmptyBatch(Context->GetProgramInputColumns()->GetSchema());
             return true;
         }
-        std::shared_ptr<NIndexedReader::TMergePartialStream> merger = Context->BuildMerger();
+        std::shared_ptr<NArrow::NMerger::TMergePartialStream> merger = Context->BuildMerger();
         for (auto&& [_, i] : Sources) {
             if (auto rb = i->GetStageResult().GetBatch()) {
                 merger->AddSource(rb, i->GetStageResult().GetNotAppliedFilter());
@@ -96,7 +96,7 @@ protected:
 
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExecute")("interval_idx", MergingContext->GetIntervalIdx());
         merger->SkipToLowerBound(MergingContext->GetStart(), MergingContext->GetIncludeStart());
-        std::optional<NIndexedReader::TSortableBatchPosition> lastResultPosition;
+        std::optional<NArrow::NMerger::TSortableBatchPosition> lastResultPosition;
         if (merger->GetSourcesCount() == 1) {
             ResultBatch = merger->SingleSourceDrain(MergingContext->GetFinish(), MergingContext->GetIncludeFinish(), &lastResultPosition);
             if (ResultBatch) {
@@ -168,7 +168,7 @@ void TFetchingInterval::OnSourceFetchStageReady(const ui32 /*sourceIdx*/) {
     ConstructResult();
 }
 
-TFetchingInterval::TFetchingInterval(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
+TFetchingInterval::TFetchingInterval(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& finish,
     const ui32 intervalIdx, const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,
     const bool includeFinish, const bool includeStart, const bool isExclusiveInterval)
     : TTaskBase(0, context->GetMemoryForSources(sources, isExclusiveInterval), "", context->GetCommonContext()->GetResourcesTaskContext())

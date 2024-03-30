@@ -16,14 +16,29 @@ bool OperatorIsCommut(EJoinKind joinKind) {
     Y_UNREACHABLE();
 }
 
+EJoinKind GetEquivalentbyOrderingJoin(EJoinKind joinKind) {
+    switch (joinKind) {
+        case EJoinKind::Exclusion:
+            return EJoinKind::InnerJoin;
+        case EJoinKind::LeftOnly:
+            return EJoinKind::LeftJoin;
+        default:
+            return joinKind;
+    }    
+}
+
 bool OperatorsAreAssoc(EJoinKind lhs, EJoinKind rhs) {
+    lhs = GetEquivalentbyOrderingJoin(lhs);
+    rhs = GetEquivalentbyOrderingJoin(rhs);
+
     static THashMap<EJoinKind, THashSet<EJoinKind>> ASSOC_TABLE = {
-        {EJoinKind::InnerJoin, {EJoinKind::InnerJoin, EJoinKind::LeftJoin, EJoinKind::LeftSemi}},
+        {EJoinKind::Cross, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
+        {EJoinKind::InnerJoin, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
         {EJoinKind::LeftJoin, {EJoinKind::LeftJoin}},
         {EJoinKind::OuterJoin, {EJoinKind::LeftJoin, EJoinKind::OuterJoin}}
     };
 
-    if (!(ASSOC_TABLE.contains(lhs) && ASSOC_TABLE.contains(rhs))) {
+    if (!(ASSOC_TABLE.contains(lhs))) {
         return false;
     }
 
@@ -31,14 +46,18 @@ bool OperatorsAreAssoc(EJoinKind lhs, EJoinKind rhs) {
 }
 
 bool OperatorsAreLeftAsscom(EJoinKind lhs, EJoinKind rhs) {
+    lhs = GetEquivalentbyOrderingJoin(lhs);
+    rhs = GetEquivalentbyOrderingJoin(rhs);
+
     static THashMap<EJoinKind, THashSet<EJoinKind>> LASSCOM_TABLE = {
-        {EJoinKind::InnerJoin, {EJoinKind::InnerJoin, EJoinKind::LeftJoin}},
-        {EJoinKind::LeftSemi, {EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
-        {EJoinKind::LeftJoin, {EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin, EJoinKind::OuterJoin}},
+        {EJoinKind::Cross, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
+        {EJoinKind::InnerJoin, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
+        {EJoinKind::LeftSemi, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
+        {EJoinKind::LeftJoin, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin, EJoinKind::OuterJoin}},
         {EJoinKind::OuterJoin, {EJoinKind::LeftJoin, EJoinKind::OuterJoin}}
     };
 
-    if (!(LASSCOM_TABLE.contains(lhs) && LASSCOM_TABLE.contains(rhs))) {
+    if (!(LASSCOM_TABLE.contains(lhs))) {
         return false;
     }
 
@@ -46,17 +65,20 @@ bool OperatorsAreLeftAsscom(EJoinKind lhs, EJoinKind rhs) {
 }
 
 bool OperatorsAreRightAsscom(EJoinKind lhs, EJoinKind rhs) {
+    lhs = GetEquivalentbyOrderingJoin(lhs);
+    rhs = GetEquivalentbyOrderingJoin(rhs);
+
     static THashMap<EJoinKind, THashSet<EJoinKind>> RASSCOM_TABLE = {
-        {EJoinKind::InnerJoin, {EJoinKind::InnerJoin}},
-        {EJoinKind::LeftJoin, {}},
+        {EJoinKind::Cross, {EJoinKind::Cross, EJoinKind::InnerJoin}},
+        {EJoinKind::InnerJoin, {EJoinKind::Cross, EJoinKind::InnerJoin}},
         {EJoinKind::OuterJoin, {EJoinKind::OuterJoin}}
     };
 
-    if (!(RASSCOM_TABLE.contains(lhs) && RASSCOM_TABLE.contains(lhs))) {
+    if (!(RASSCOM_TABLE.contains(lhs))) {
         return false;
     }
 
     return RASSCOM_TABLE[lhs].contains(rhs);
 }
 
-}
+} // namespace NYql::NDq

@@ -41,4 +41,4 @@ std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(const std::shared_ptr<IB
     return newJoin;
 }
 
-}
+} // namespace NYql::NDq

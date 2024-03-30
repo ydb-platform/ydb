@@ -379,9 +379,9 @@
     ],
     "test.test[aggregate-group_by_rollup_grouping--Debug]": [
         {
-            "checksum": "992fd1ef3b3b217da5e51c02f12fbaa4",
-            "size": 14285,
-            "uri": "https://{canondata_backend}/1889210/a6f1d19efb8c2d66757fb3f23bc191e0ff7fca4e/resource.tar.gz#test.test_aggregate-group_by_rollup_grouping--Debug_/opt.yql_patched"
+            "checksum": "eea6e00ca41e1fd5668b2d8dfb162151",
+            "size": 14239,
+            "uri": "https://{canondata_backend}/1814674/77221a1890722d7efdf88ac3b78cc39181bff88d/resource.tar.gz#test.test_aggregate-group_by_rollup_grouping--Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-group_by_rollup_grouping--Plan]": [

@@ -209,7 +209,7 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsg(const TNodeSet
             TNodeSet s2{};
             s2[i] = 1;
 
-            if (auto* edge = Graph_.FindEdgeBetween(s1, s2); edge != nullptr) {
+            if (auto* edge = Graph_.FindEdgeBetween(s1, s2)) {
                 EmitCsgCmp(s1, s2, *edge);
             }
 
@@ -232,7 +232,7 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCmpRec(const 
         next = NextBitset(prev, neighs);
 
         if (DpTable_.contains(s2 | next)) {
-            if (auto* edge = Graph_.FindEdgeBetween(s1, s2 | next); edge != nullptr) {
+            if (auto* edge = Graph_.FindEdgeBetween(s1, s2 | next)) {
                 EmitCsgCmp(s1, s2 | next, *edge);
             }
         }

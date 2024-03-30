@@ -1,6 +1,8 @@
 #include "dq_opt_join.h"
 #include "dq_opt_phy.h"
 
+#include "dphyp_opt_join_cost_based.h"
+
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
@@ -1336,6 +1338,8 @@ public:
 TExprBase DqOptimizeEquiJoinWithCosts(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx,
     ui32 optLevel, IOptimizerNew& opt,
     const std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)>& providerCollect) {
+
+    return NDphyp::DqOptimizeEquiJoinWithCosts(node, ctx, typesCtx, optLevel, opt, providerCollect);
 
     if (optLevel==0) {
         return node;

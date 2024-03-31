@@ -1015,7 +1015,7 @@ Information about which messages have already been processed can be [saved on th
 
 - C++
 
-Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceivedEvent` represents a batch of read messages.
+  Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceivedEvent` represents a batch of read messages.
 
 - Go
 
@@ -1137,7 +1137,7 @@ If commit fails with error, application should log it and continue, it makes no 
 
 - C++
 
-Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceivedEvent` represents a batch of read messages.
+  Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceivedEvent` represents a batch of read messages.
 
 - Go
 

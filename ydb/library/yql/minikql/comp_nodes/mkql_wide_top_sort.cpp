@@ -84,8 +84,11 @@ struct TMyValueCompare {
 
 using TAsyncWriteOperation = std::optional<NThreading::TFuture<ISpiller::TKey>>;
 using TAsyncReadOperation = std::optional<NThreading::TFuture<std::optional<TRope>>>;
+using TStorage = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>>;
 
 struct TSpilledData {
+    using TPtr = TSpilledData*;
+
     TSpilledData(std::unique_ptr<TWideUnboxedValuesSpillerAdapter> &&spiller)
     : Spiller(std::move(spiller)) {}
 
@@ -99,9 +102,106 @@ struct TSpilledData {
         return AsyncWriteOperation;
     }
 
+    TAsyncReadOperation Read(TStorage &buffer, TComputationContext& ctx) {
+        if (AsyncReadOperation) {
+            if (AsyncReadOperation->HasValue()) {
+                Spiller->AsyncReadCompleted(AsyncReadOperation->ExtractValue().value(), ctx.HolderFactory);
+                AsyncReadOperation = std::nullopt;
+            } else {
+                return AsyncReadOperation;
+            }
+        }
+        if (Spiller->Empty()) {
+            IsFinished = true;
+            return std::nullopt;
+        }
+        AsyncReadOperation = Spiller->ExtractWideItem(buffer);
+        return AsyncReadOperation;
+    }
+
+    bool Empty() const {
+        return IsFinished;
+    }
+
     std::unique_ptr<TWideUnboxedValuesSpillerAdapter> Spiller;
     TAsyncWriteOperation AsyncWriteOperation = std::nullopt;
     TAsyncReadOperation AsyncReadOperation = std::nullopt;
+    bool IsFinished = false;
+};
+
+class TSpilledUnboxedValuesIterator {
+private:
+    TStorage Data;
+    TSpilledData::TPtr SpilledData;
+    std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)> LessFunc;
+    ui32 Width_;
+    TComputationContext* Ctx;
+    bool HasValue = false;
+public:
+    // EFetchResult FindBuffer() {
+    //     Data->clear();
+    //     if (SpilledData->Pop(*Data)) {
+    //         return EFetchResult::One;
+    //     }
+
+    //     return SpilledData->IsFinished() ? EFetchResult::Finish : EFetchResult::Yield;
+    // }
+
+    TSpilledUnboxedValuesIterator(
+        const std::function<bool(const NUdf::TUnboxedValuePod*,const NUdf::TUnboxedValuePod*)>& lessFunc,
+        TSpilledData::TPtr spilledData,
+        size_t dataWidth,
+        TComputationContext* ctx
+        )
+        : SpilledData(spilledData)
+        , LessFunc(lessFunc)
+        , Width_(dataWidth)
+        , Ctx(ctx)
+    {
+        Data.resize(Width_);
+    }
+
+    EFetchResult Read() {
+        if (!HasValue) {
+            if (SpilledData->Read(Data, *Ctx)) {
+                return EFetchResult::Yield;
+            }
+            if (SpilledData->Empty()) {
+                return EFetchResult::Finish;
+            }
+        }
+        HasValue = true;
+        return EFetchResult::One;
+    }
+
+    bool IsInitialized() {
+        Read();
+        return HasValue;
+    }
+
+    bool IsFinished() const {
+        return SpilledData->Empty();
+    }
+
+    bool operator<(const TSpilledUnboxedValuesIterator& item) const {
+        return !LessFunc(GetValue(), item.GetValue());
+    }
+
+    ui32 Width() const {
+        return Width_;
+    }
+
+    void Pop() {
+        HasValue = false;
+        Read();
+    }
+
+    NKikimr::NUdf::TUnboxedValue* GetValue() {
+        return &*Data.begin();
+    }
+    const NKikimr::NUdf::TUnboxedValue* GetValue() const {
+        return &*Data.begin();
+    }
 };
 
 using TComparePtr = int(*)(const bool*, const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*);
@@ -124,7 +224,6 @@ template <bool Sort, bool HasCount>
 class TState : public TComputationValue<TState<Sort, HasCount>>, public ITopSortState {
 using TBase = TComputationValue<TState<Sort, HasCount>>;
 private:
-    using TStorage = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>>;
     using TFields = std::vector<NUdf::TUnboxedValue*, TMKQLAllocator<NUdf::TUnboxedValue*, EMemorySubPool::Temporary>>;
     using TPointers = std::vector<NUdf::TUnboxedValuePod*, TMKQLAllocator<NUdf::TUnboxedValuePod*, EMemorySubPool::Temporary>>;
 
@@ -347,14 +446,15 @@ public:
                 case EFetchResult::Yield:
                     return EFetchResult::Yield;
                 case EFetchResult::Finish:
+                {
+                    if (!SpilledStates.empty()) {
+                        SwitchMode(EOperatingMode::Spilling, ctx);
+                        return EFetchResult::Yield;
+                    }
                     Seal();
                     break;
+                }
             }
-        }
-
-        if (!SpilledStates.empty()) {
-            SwitchMode(EOperatingMode::ProcessSpilled, ctx);
-            return EFetchResult::Yield;
         }
 
         if (auto extract = Extract()) {
@@ -374,14 +474,39 @@ public:
             return EFetchResult::Yield;
         }
         ResetFields();
-        SwitchMode(EOperatingMode::InMemory, ctx);
+        auto nextMode = (IsReadFromChannelFinished() ? EOperatingMode::ProcessSpilled : EOperatingMode::InMemory);
+        SwitchMode(nextMode, ctx);
         return EFetchResult::Yield;
     }
 
-    EFetchResult ProcessSpilledData(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-        Y_UNUSED(ctx);
-        Y_UNUSED(output);
-        return EFetchResult::Finish;
+    EFetchResult ProcessSpilledData(NUdf::TUnboxedValue*const* output) {
+            switch (InputStatus = ReadSpilledData(output)) {
+                case EFetchResult::Yield:
+                    return EFetchResult::Yield;
+                case EFetchResult::Finish:
+                    return EFetchResult::Finish;
+                case EFetchResult::One:
+                {
+                    // for (const auto index : Indexes)
+                    // {
+                    //     if (const auto to = output[index])
+                    //         *to = std::move(*tmp++);
+                    //     else
+                    //         ++tmp;
+                    // }
+                    return EFetchResult::One;
+                }
+            }
+            Y_UNREACHABLE();
+        // if (auto extract = Extract()) {
+        //     for (const auto index : Indexes)
+        //         if (const auto to = output[index])
+        //             *to = std::move(*extract++);
+        //         else
+        //             ++extract;
+        //     return EFetchResult::One;
+        // }
+        // return EFetchResult::Finish;
     }
 
     virtual EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) override {
@@ -402,7 +527,7 @@ public:
                     break;
                 }
                 case EOperatingMode::ProcessSpilled: {
-                    return ProcessSpilledData(ctx, output);
+                    return ProcessSpilledData(output);
                 }
 
             }
@@ -456,7 +581,13 @@ public:
 private:
     bool HasMemoryForProcessing() const {
         // return !TlsAllocState->IsMemoryYellowZoneEnabled();
+        if (Storage.size() < 4 * Indexes.size())
+            return true;
         return false;
+    }
+
+    bool IsReadFromChannelFinished() const {
+        return InputStatus == EFetchResult::Finish;
     }
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
@@ -466,12 +597,20 @@ private:
             case EOperatingMode::Spilling:
             {
                 auto spiller = ctx.SpillerFactory->CreateSpiller();
-                const size_t packSize = 2;
+                const size_t packSize = 1_KB;
                 SpilledStates.emplace_back(std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, SortKeysMultiType, packSize));
                 break;
             }
             case EOperatingMode::ProcessSpilled:
+            {
+                SpilledUnboxedValuesIterators.reserve(SpilledStates.size());
+                for (auto &state: SpilledStates) {
+                    SpilledUnboxedValuesIterators.emplace_back(LessFunc, &state, Indexes.size(), &ctx);
+                }
+                Storage.resize(SpilledStates.size() * Indexes.size());
+                IsReadFromSpilled.resize(SpilledStates.size());
                 break;
+            }
         }
         Mode = mode;
     }
@@ -487,6 +626,11 @@ private:
             lastSpilledState.AsyncWriteOperation = std::nullopt;
         } else {
             Seal();
+            if (Full.empty()) {
+                // Nothing to spill
+                SpilledStates.pop_back();
+                return true;
+            }
         }
 
         while (auto extract = Extract()) {
@@ -505,6 +649,58 @@ private:
         return true;
     }
 
+    EFetchResult ReadSpilledData(NUdf::TUnboxedValue*const* output) {
+        if (SpilledUnboxedValuesIterators.empty()) {
+            return EFetchResult::Finish;
+        }
+
+        for (auto &spilledUnboxedValuesIterator : SpilledUnboxedValuesIterators) {
+            if (!spilledUnboxedValuesIterator.IsInitialized()) {
+                return EFetchResult::Yield;
+            }
+        }
+        if (!IsHeapBuilt) {
+            std::make_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
+            IsHeapBuilt = true;
+        } else {
+            std::push_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
+        }
+
+        std::pop_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
+        auto &currentIt = SpilledUnboxedValuesIterators.back();
+        NKikimr::NUdf::TUnboxedValue* res = currentIt.GetValue();
+        for (const auto index : Indexes)
+        {
+            if (const auto to = output[index])
+                *to = std::move(*res++);
+            else
+                ++res;
+        }
+        currentIt.Pop();
+        if (currentIt.IsFinished()) {
+            SpilledUnboxedValuesIterators.pop_back();
+        }
+        return EFetchResult::One;
+        // for (size_t i = 0; i < SpilledStates.size(); ++i) {
+        //     if (IsReadFromSpilled[i]) {
+        //         continue;
+        //     }
+
+        //     TStorage tmpStorage(Indexes.size());
+        //     auto readOp = SpilledStates[i].Read(tmpStorage, ctx.HolderFactory);
+        //     if (readOp) {
+        //         isAllRead = false;
+        //     } else {
+        //         size_t storageIndex = i * Indexes.size();
+        //         for (auto &tmpValue : tmpStorage) {
+        //             Storage[storageIndex++] = tmpValue;
+        //         }
+        //         IsReadFromSpilled[i] = true;
+        //     }
+        // }
+        // return isAllRead;
+    }
+
     const ui64 Count;
     const std::vector<ui32> Indexes;
     const std::vector<bool> Directions;
@@ -513,8 +709,12 @@ private:
     TPointers Free, Full;
     TFields Fields;
     TMultiType* SortKeysMultiType;
-    std::list<TSpilledData> SpilledStates;
+    std::vector<TSpilledData> SpilledStates;
     EOperatingMode Mode;
+    std::vector<bool> IsReadFromSpilled;
+    std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators;
+    bool IsSpilledDataSorted = false;
+    bool IsHeapBuilt = false;
 };
 
 #ifndef MKQL_DISABLE_CODEGEN

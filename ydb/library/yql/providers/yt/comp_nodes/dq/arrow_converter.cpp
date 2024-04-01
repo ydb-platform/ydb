@@ -439,6 +439,11 @@ struct TYsonBlockReaderTraits {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Yson reader not implemented for block resources";
     }   
+
+    static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
+        Y_UNUSED(isOptional);
+        ythrow yexception() << "Yson reader not implemented for block tz dates";
+    }   
 };
 
 template<bool IsDictionary>

@@ -405,8 +405,12 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
                     Self->SnapshotManager.GetCompleteEdge(),
                     Self->SnapshotManager.GetUnprotectedReadEdge());
             if (version <= completeEdge) {
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                    "Adding BlockingImmediateOps for op " << *op << " at " << Self->TabletID());
                 op->SetFlag(TTxFlags::BlockingImmediateOps);
             } else if (version <= Self->SnapshotManager.GetIncompleteEdge()) {
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                    "Adding BlockingImmediateWrites for op " << *op << " at " << Self->TabletID());
                 op->SetFlag(TTxFlags::BlockingImmediateWrites);
             }
         }
@@ -415,10 +419,14 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
         Y_ABORT_UNLESS(pr.first == std::prev(ActivePlannedOps.end()), "AddActiveOp must always add transactions in order");
         bool isComplete = op->HasFlag(TTxFlags::BlockingImmediateOps);
         if (ActivePlannedOpsLogicallyCompleteEnd == ActivePlannedOps.end() && !isComplete) {
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Operation " << *op << " is the new logically complete end at " << Self->TabletID());
             ActivePlannedOpsLogicallyCompleteEnd = pr.first;
         }
         bool isIncomplete = isComplete || op->HasFlag(TTxFlags::BlockingImmediateWrites);
         if (ActivePlannedOpsLogicallyIncompleteEnd == ActivePlannedOps.end() && !isIncomplete) {
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Operation " << *op << " is the new logically incomplete end at " << Self->TabletID());
             ActivePlannedOpsLogicallyIncompleteEnd = pr.first;
         }
     }

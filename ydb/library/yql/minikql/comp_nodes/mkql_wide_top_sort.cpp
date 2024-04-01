@@ -584,10 +584,8 @@ private:
     EOperatingMode GetMode() const { return Mode; }
 
     bool HasMemoryForProcessing() const {
-        // return !TlsAllocState->IsMemoryYellowZoneEnabled();
-        if (Storage.size() < 4 * Indexes.size())
-            return true;
-        return false;
+        // TODO: Change to enable spilling
+        return true;
     }
 
     bool IsReadFromChannelFinished() const {

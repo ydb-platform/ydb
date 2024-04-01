@@ -42,9 +42,9 @@ protected:
 
     void PrintField(const NProtoBuf::Message& proto, const NProtoBuf::FieldDescriptor& field,
                     NProtobufJson::IJsonOutput& json, TStringBuf key = {}) override {
-        if (field.options().HasExtension(Ydb::DataStreams::V1::FieldTransformer)) {
-            if (field.options().GetExtension(Ydb::DataStreams::V1::FieldTransformer) ==
-                Ydb::DataStreams::V1::TRANSFORM_BASE64) {
+        if (field.options().HasExtension(Ydb::FieldTransformation::FieldTransformer)) {
+            if (field.options().GetExtension(Ydb::FieldTransformation::FieldTransformer) ==
+                Ydb::FieldTransformation::TRANSFORM_BASE64) {
                 Y_ENSURE(field.cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_STRING,
                          "Base64 is only supported for strings");
                 if (!key) {
@@ -71,8 +71,8 @@ protected:
                 return;
             }
 
-            if (field.options().GetExtension(Ydb::DataStreams::V1::FieldTransformer) ==
-                Ydb::DataStreams::V1::TRANSFORM_DOUBLE_S_TO_INT_MS) {
+            if (field.options().GetExtension(Ydb::FieldTransformation::FieldTransformer) ==
+                Ydb::FieldTransformation::TRANSFORM_DOUBLE_S_TO_INT_MS) {
                 Y_ENSURE(field.cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_INT64,
                          "Double S to Int MS is only supported for int64 timestamps");
 
@@ -92,8 +92,8 @@ protected:
                 return;
             }
 
-            if (field.options().GetExtension(Ydb::DataStreams::V1::FieldTransformer) ==
-                Ydb::DataStreams::V1::TRANSFORM_EMPTY_TO_NOTHING) {
+            if (field.options().GetExtension(Ydb::FieldTransformation::FieldTransformer) ==
+                Ydb::FieldTransformation::TRANSFORM_EMPTY_TO_NOTHING) {
                 Y_ENSURE(field.cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_STRING,
                          "Empty to nothing is only supported for strings");
 
@@ -155,28 +155,28 @@ inline void JsonToProto(const NJson::TJsonValue& jsonValue, NProtoBuf::Message* 
             "Unexpected json key: " << key
         );
         Y_ENSURE(fieldDescriptor, "Unexpected json key: " + key);
-        auto transformer = Ydb::DataStreams::V1::TRANSFORM_NONE;
-        if (fieldDescriptor->options().HasExtension(Ydb::DataStreams::V1::FieldTransformer)) {
-            transformer = fieldDescriptor->options().GetExtension(Ydb::DataStreams::V1::FieldTransformer);
+        auto transformer = Ydb::FieldTransformation::TRANSFORM_NONE;
+        if (fieldDescriptor->options().HasExtension(Ydb::FieldTransformation::FieldTransformer)) {
+            transformer = fieldDescriptor->options().GetExtension(Ydb::FieldTransformation::FieldTransformer);
         }
 
         if (value.IsArray()) {
             Y_ENSURE(fieldDescriptor->is_repeated());
             for (auto& elem : value.GetArray()) {
                 switch (transformer) {
-                    case Ydb::DataStreams::V1::TRANSFORM_BASE64: {
+                    case Ydb::FieldTransformation::TRANSFORM_BASE64: {
                         Y_ENSURE(fieldDescriptor->cpp_type() ==
                                  google::protobuf::FieldDescriptor::CPPTYPE_STRING,
                                  "Base64 transformer is only applicable to strings");
                         reflection->AddString(message, fieldDescriptor, Base64Decode(elem.GetString()));
                         break;
                     }
-                    case Ydb::DataStreams::V1::TRANSFORM_DOUBLE_S_TO_INT_MS: {
+                    case Ydb::FieldTransformation::TRANSFORM_DOUBLE_S_TO_INT_MS: {
                         reflection->AddInt64(message, fieldDescriptor, elem.GetDouble() * 1000);
                         break;
                     }
-                    case Ydb::DataStreams::V1::TRANSFORM_EMPTY_TO_NOTHING:
-                    case Ydb::DataStreams::V1::TRANSFORM_NONE: {
+                    case Ydb::FieldTransformation::TRANSFORM_EMPTY_TO_NOTHING:
+                    case Ydb::FieldTransformation::TRANSFORM_NONE: {
                         switch (fieldDescriptor->cpp_type()) {
                             case google::protobuf::FieldDescriptor::CPPTYPE_INT32:
                                 reflection->AddInt32(message, fieldDescriptor, elem.GetInteger());
@@ -233,19 +233,19 @@ inline void JsonToProto(const NJson::TJsonValue& jsonValue, NProtoBuf::Message* 
             }
         } else {
             switch (transformer) {
-                case Ydb::DataStreams::V1::TRANSFORM_BASE64: {
+                case Ydb::FieldTransformation::TRANSFORM_BASE64: {
                     Y_ENSURE(fieldDescriptor->cpp_type() ==
                              google::protobuf::FieldDescriptor::CPPTYPE_STRING,
                              "Base64 transformer is applicable only to strings");
                     reflection->SetString(message, fieldDescriptor, Base64Decode(value.GetString()));
                     break;
                 }
-                case Ydb::DataStreams::V1::TRANSFORM_DOUBLE_S_TO_INT_MS: {
+                case Ydb::FieldTransformation::TRANSFORM_DOUBLE_S_TO_INT_MS: {
                     reflection->SetInt64(message, fieldDescriptor, value.GetDouble() * 1000);
                     break;
                 }
-                case Ydb::DataStreams::V1::TRANSFORM_EMPTY_TO_NOTHING:
-                case Ydb::DataStreams::V1::TRANSFORM_NONE: {
+                case Ydb::FieldTransformation::TRANSFORM_EMPTY_TO_NOTHING:
+                case Ydb::FieldTransformation::TRANSFORM_NONE: {
                     switch (fieldDescriptor->cpp_type()) {
                         case google::protobuf::FieldDescriptor::CPPTYPE_INT32:
                             reflection->SetInt32(message, fieldDescriptor, value.GetInteger());
@@ -313,16 +313,16 @@ inline void NlohmannJsonToProto(const nlohmann::json& jsonValue, NProtoBuf::Mess
     for (const auto& [key, value] : jsonValue.get<std::unordered_map<std::string, nlohmann::json>>()) {
         auto* fieldDescriptor = desc->FindFieldByName(NNaming::CamelToSnakeCase(key.c_str()));
         Y_ENSURE(fieldDescriptor, "Unexpected json key: " + key);
-        auto transformer = Ydb::DataStreams::V1::TRANSFORM_NONE;
-        if (fieldDescriptor->options().HasExtension(Ydb::DataStreams::V1::FieldTransformer)) {
-            transformer = fieldDescriptor->options().GetExtension(Ydb::DataStreams::V1::FieldTransformer);
+        auto transformer = Ydb::FieldTransformation::TRANSFORM_NONE;
+        if (fieldDescriptor->options().HasExtension(Ydb::FieldTransformation::FieldTransformer)) {
+            transformer = fieldDescriptor->options().GetExtension(Ydb::FieldTransformation::FieldTransformer);
         }
 
         if (value.is_array()) {
             Y_ENSURE(fieldDescriptor->is_repeated());
             for (auto& elem : value) {
                 switch (transformer) {
-                    case Ydb::DataStreams::V1::TRANSFORM_BASE64: {
+                    case Ydb::FieldTransformation::TRANSFORM_BASE64: {
                         Y_ENSURE(fieldDescriptor->cpp_type() ==
                                  google::protobuf::FieldDescriptor::CPPTYPE_STRING,
                                  "Base64 transformer is only applicable to strings");
@@ -333,12 +333,12 @@ inline void NlohmannJsonToProto(const nlohmann::json& jsonValue, NProtoBuf::Mess
                         }
                         break;
                     }
-                    case Ydb::DataStreams::V1::TRANSFORM_DOUBLE_S_TO_INT_MS: {
+                    case Ydb::FieldTransformation::TRANSFORM_DOUBLE_S_TO_INT_MS: {
                         reflection->AddInt64(message, fieldDescriptor, elem.get<double>() * 1000);
                         break;
                     }
-                    case Ydb::DataStreams::V1::TRANSFORM_EMPTY_TO_NOTHING:
-                    case Ydb::DataStreams::V1::TRANSFORM_NONE: {
+                    case Ydb::FieldTransformation::TRANSFORM_EMPTY_TO_NOTHING:
+                    case Ydb::FieldTransformation::TRANSFORM_NONE: {
                         switch (fieldDescriptor->cpp_type()) {
                             case google::protobuf::FieldDescriptor::CPPTYPE_INT32:
                                 reflection->AddInt32(message, fieldDescriptor, elem.get<i32>());
@@ -395,7 +395,7 @@ inline void NlohmannJsonToProto(const nlohmann::json& jsonValue, NProtoBuf::Mess
             }
         } else {
             switch (transformer) {
-                case Ydb::DataStreams::V1::TRANSFORM_BASE64: {
+                case Ydb::FieldTransformation::TRANSFORM_BASE64: {
                     Y_ENSURE(fieldDescriptor->cpp_type() ==
                              google::protobuf::FieldDescriptor::CPPTYPE_STRING,
                              "Base64 transformer is applicable only to strings");
@@ -406,12 +406,12 @@ inline void NlohmannJsonToProto(const nlohmann::json& jsonValue, NProtoBuf::Mess
                     }
                     break;
                 }
-                case Ydb::DataStreams::V1::TRANSFORM_DOUBLE_S_TO_INT_MS: {
+                case Ydb::FieldTransformation::TRANSFORM_DOUBLE_S_TO_INT_MS: {
                     reflection->SetInt64(message, fieldDescriptor, value.get<double>() * 1000);
                     break;
                 }
-                case Ydb::DataStreams::V1::TRANSFORM_EMPTY_TO_NOTHING:
-                case Ydb::DataStreams::V1::TRANSFORM_NONE: {
+                case Ydb::FieldTransformation::TRANSFORM_EMPTY_TO_NOTHING:
+                case Ydb::FieldTransformation::TRANSFORM_NONE: {
                     switch (fieldDescriptor->cpp_type()) {
                         case google::protobuf::FieldDescriptor::CPPTYPE_INT32:
                             reflection->SetInt32(message, fieldDescriptor, value.get<i32>());

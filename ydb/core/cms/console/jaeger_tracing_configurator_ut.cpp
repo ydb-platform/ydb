@@ -1,8 +1,12 @@
-#include "jaeger_tracing_configurator.h"
-#include "library/cpp/testing/unittest/registar.h"
 #include "ut_helpers.h"
-#include "util/generic/ptr.h"
-#include "ydb/core/jaeger_tracing/request_discriminator.h"
+#include "jaeger_tracing_configurator.h"
+
+#include <ydb/core/jaeger_tracing/request_discriminator.h>
+
+#include <util/generic/ptr.h>
+#include <util/random/random.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 
@@ -77,6 +81,10 @@ void ConfigureAndWaitUpdate(TTenantTestRuntime& runtime, const NKikimrConfig::TT
     WaitForUpdate(runtime);
 }
 
+auto& RandomChoice(auto& Container) {
+    return Container[RandomNumber<size_t>() % Container.size()];
+}
+
 class TTracingControls {
 public:
     enum ETraceState {
@@ -85,16 +93,12 @@ public:
         EXTERNAL,
     };
 
-    TTracingControls(
-        TVector<TIntrusivePtr<TSamplingThrottlingControl>> controls,
-        TIntrusivePtr<IRandomProvider>& rng
-    )
+    TTracingControls(TVector<TIntrusivePtr<TSamplingThrottlingControl>> controls)
         : Controls(std::move(controls))
-        , Rng(rng->GenRand64())
     {}
 
     std::pair<ETraceState, ui8> HandleTracing(bool isExternal, TRequestDiscriminator discriminator) {
-        auto& control = Controls[Rng.GenRand64() % Controls.size()];
+        auto& control = RandomChoice(Controls);
         
         NWilson::TTraceId traceId;
         if (isExternal) {
@@ -119,7 +123,6 @@ public:
 
 private:
     TVector<TIntrusivePtr<TSamplingThrottlingControl>> Controls;
-    TReallyFastRng32 Rng;
 };
 
 std::pair<TTracingControls, TSamplingThrottlingConfigurator>
@@ -131,7 +134,7 @@ std::pair<TTracingControls, TSamplingThrottlingConfigurator>
         controls.emplace_back(configurator.GetControl());
     }
 
-    return {TTracingControls(std::move(controls), randomProvider), std::move(configurator)};
+    return {TTracingControls(std::move(controls)), std::move(configurator)};
 }
 
 struct TTimeProviderMock : public ITimeProvider {
@@ -207,7 +210,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
             size_t sampled = 0;
             size_t traced = 0;
             for (size_t i = 0; i < 1000; ++i) {
-                auto [state, level] = controls.HandleTracing(true, discriminators[i % discriminators.size()]);
+                auto [state, level] = controls.HandleTracing(true, RandomChoice(discriminators));
 
                 switch (state) {
                 case TTracingControls::OFF:
@@ -229,7 +232,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
 
         {
             for (size_t i = 0; i < 100; ++i) {
-                auto [state, _] = controls.HandleTracing(true, discriminators[i % discriminators.size()]);
+                auto [state, _] = controls.HandleTracing(true, RandomChoice(discriminators));
                 UNIT_ASSERT_EQUAL(state, TTracingControls::EXTERNAL);
                 timeProvider->Advance(TDuration::Seconds(1));
             }
@@ -239,7 +242,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
         {
             size_t sampled = 0;
             for (size_t i = 0; i < 750; ++i) {
-                auto [state, level] = controls.HandleTracing(false, discriminators[i % discriminators.size()]);
+                auto [state, level] = controls.HandleTracing(false, RandomChoice(discriminators));
                 UNIT_ASSERT_UNEQUAL(state, TTracingControls::EXTERNAL);
                 if (state == TTracingControls::SAMPLED) {
                     ++sampled;
@@ -272,11 +275,11 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
         UNIT_ASSERT_EQUAL(controls.HandleTracing(true, {}).first, TTracingControls::OFF); // No request type
         UNIT_ASSERT_EQUAL(controls.HandleTracing(true, {.RequestType = ERequestType::KEYVALUE_READ}).first,
                           TTracingControls::OFF); // Wrong request type
-        TRequestDiscriminator executeTransactionDiscriminators[] = {
-            {
+        std::array executeTransactionDiscriminators{
+            TRequestDiscriminator{
                 .RequestType = ERequestType::KEYVALUE_EXECUTETRANSACTION,
             },
-            {
+            TRequestDiscriminator{
                 .RequestType = ERequestType::KEYVALUE_EXECUTETRANSACTION,
                 .Database = "/Root/test",
             }
@@ -284,20 +287,20 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
 
         for (size_t i = 0; i < 6; ++i) {
             UNIT_ASSERT_EQUAL(
-                controls.HandleTracing(true, executeTransactionDiscriminators[i % 2]).first,
+                controls.HandleTracing(true, RandomChoice(executeTransactionDiscriminators)).first,
                 TTracingControls::EXTERNAL);
         }
         UNIT_ASSERT_EQUAL(
-            controls.HandleTracing(true, executeTransactionDiscriminators[0]).first,
+            controls.HandleTracing(true, RandomChoice(executeTransactionDiscriminators)).first,
             TTracingControls::OFF);
         timeProvider->Advance(TDuration::MilliSeconds(1500));
         for (size_t i = 0; i < 3; ++i) {
             UNIT_ASSERT_EQUAL(
-                controls.HandleTracing(true, executeTransactionDiscriminators[(i + 1) & 1]).first,
+                controls.HandleTracing(true, RandomChoice(executeTransactionDiscriminators)).first,
                 TTracingControls::EXTERNAL);
         }
         UNIT_ASSERT_EQUAL(
-            controls.HandleTracing(true, executeTransactionDiscriminators[1]).first,
+            controls.HandleTracing(true, RandomChoice(executeTransactionDiscriminators)).first,
             TTracingControls::OFF);
 
         WaitForUpdate(runtime); // Initial update
@@ -307,10 +310,10 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
 
         for (size_t i = 0; i < 3; ++i) {
             UNIT_ASSERT_EQUAL(
-                controls.HandleTracing(true, executeTransactionDiscriminators[i & 1]).first,
+                controls.HandleTracing(true, RandomChoice(executeTransactionDiscriminators)).first,
                 TTracingControls::EXTERNAL);
         }
-        auto [state, _] = controls.HandleTracing(true, executeTransactionDiscriminators[1]);
+        auto [state, _] = controls.HandleTracing(true, RandomChoice(executeTransactionDiscriminators));
         UNIT_ASSERT_EQUAL(
             state,
             TTracingControls::OFF);
@@ -318,21 +321,21 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
         timeProvider->Advance(TDuration::Seconds(12));
         for (size_t i = 0; i < 2; ++i) {
             UNIT_ASSERT_EQUAL(
-                controls.HandleTracing(true, executeTransactionDiscriminators[i & 1]).first,
+                controls.HandleTracing(true, RandomChoice(executeTransactionDiscriminators)).first,
                 TTracingControls::EXTERNAL);
         }
         UNIT_ASSERT_EQUAL(
-            controls.HandleTracing(true, executeTransactionDiscriminators[0]).first,
+            controls.HandleTracing(true, RandomChoice(executeTransactionDiscriminators)).first,
             TTracingControls::OFF);
 
         timeProvider->Advance(TDuration::Seconds(60));
         for (size_t i = 0; i < 3; ++i) {
             UNIT_ASSERT_EQUAL(
-                controls.HandleTracing(true, executeTransactionDiscriminators[i & 1]).first,
+                controls.HandleTracing(true, RandomChoice(executeTransactionDiscriminators)).first,
                 TTracingControls::EXTERNAL);
         }
         UNIT_ASSERT_EQUAL(
-            controls.HandleTracing(true, executeTransactionDiscriminators[1]).first,
+            controls.HandleTracing(true, RandomChoice(executeTransactionDiscriminators)).first,
             TTracingControls::OFF);
     }
 
@@ -361,11 +364,11 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
             UNIT_ASSERT_EQUAL(controls.HandleTracing(false, {.RequestType = ERequestType::KEYVALUE_READ}).first,
                               TTracingControls::OFF); // Wrong request type
         }
-        TRequestDiscriminator executeTransactionDiscriminators[] = {
-            {
+        std::array executeTransactionDiscriminators{
+            TRequestDiscriminator {
                 .RequestType = ERequestType::KEYVALUE_EXECUTETRANSACTION,
             },
-            {
+            TRequestDiscriminator {
                 .RequestType = ERequestType::KEYVALUE_EXECUTETRANSACTION,
                 .Database = "/Root/test",
             }
@@ -374,7 +377,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
         {
             uint64_t sampled = 0;
             for (size_t i = 0; i < 1000; ++i) {
-                auto [state, level] = controls.HandleTracing(false, executeTransactionDiscriminators[i % 2]);
+                auto [state, level] = controls.HandleTracing(false, RandomChoice(executeTransactionDiscriminators));
                 UNIT_ASSERT_UNEQUAL(state, TTracingControls::EXTERNAL);
                 if (state == TTracingControls::SAMPLED) {
                     ++sampled;
@@ -388,7 +391,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
         {
             uint64_t sampled = 0;
             for (size_t i = 0; i < 1000; ++i) {
-                auto [state, level] = controls.HandleTracing(false, executeTransactionDiscriminators[i % 2]);
+                auto [state, level] = controls.HandleTracing(false, RandomChoice(executeTransactionDiscriminators));
                 UNIT_ASSERT_UNEQUAL(state, TTracingControls::EXTERNAL);
                 if (state == TTracingControls::SAMPLED) {
                     ++sampled;
@@ -399,10 +402,10 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
             UNIT_ASSERT(sampled >= 190 && sampled <= 260);
         }
         for (size_t i = 0; i < 50; ++i) {
-            controls.HandleTracing(false, executeTransactionDiscriminators[i % 2]);
+            controls.HandleTracing(false, RandomChoice(executeTransactionDiscriminators));
         }
         for (size_t i = 0; i < 50; ++i) {
-            UNIT_ASSERT_EQUAL(controls.HandleTracing(false, executeTransactionDiscriminators[i % 2]).first, TTracingControls::OFF);
+            UNIT_ASSERT_EQUAL(controls.HandleTracing(false, RandomChoice(executeTransactionDiscriminators)).first, TTracingControls::OFF);
         }
         timeProvider->Advance(TDuration::Seconds(10));
 
@@ -417,23 +420,23 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
         }
         ConfigureAndWaitUpdate(runtime, cfg, 1);
 
-        TRequestDiscriminator readRangeDiscriminators[] = {
-            {
+        std::array readRangeDiscriminators{
+            TRequestDiscriminator{
                 .RequestType = ERequestType::KEYVALUE_READRANGE,
             },
-            {
+            TRequestDiscriminator{
                 .RequestType = ERequestType::KEYVALUE_READRANGE,
                 .Database = "/Root/test2",
             }
         };
 
         for (size_t i = 0; i < 20; ++i) {
-            UNIT_ASSERT_EQUAL(controls.HandleTracing(false, executeTransactionDiscriminators[i & 1]).first, TTracingControls::OFF);
+            UNIT_ASSERT_EQUAL(controls.HandleTracing(false, RandomChoice(executeTransactionDiscriminators)).first, TTracingControls::OFF);
         }
         {
             uint64_t sampled = 0;
             for (size_t i = 0; i < 1000; ++i) {
-                auto [state, level] = controls.HandleTracing(false, readRangeDiscriminators[i % 2]);
+                auto [state, level] = controls.HandleTracing(false, RandomChoice(readRangeDiscriminators));
                 UNIT_ASSERT_UNEQUAL(state, TTracingControls::EXTERNAL);
                 if (state == TTracingControls::SAMPLED) {
                     ++sampled;
@@ -534,7 +537,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
         {
             size_t traced = 0;
             for (size_t i = 0; i < 100; ++i) {
-                auto [state, _] = controls.HandleTracing(true, discriminators[i % discriminators.size()]);
+                auto [state, _] = controls.HandleTracing(true, RandomChoice(discriminators));
                 UNIT_ASSERT_UNEQUAL(state, TTracingControls::SAMPLED);
                 if (state == TTracingControls::EXTERNAL) {
                     ++traced;
@@ -544,7 +547,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
             UNIT_ASSERT_EQUAL(traced, 100);
 
             for (size_t i = 0; i < 12; ++i) {
-                auto [state, _] = controls.HandleTracing(true, discriminators[i % discriminators.size()]);
+                auto [state, _] = controls.HandleTracing(true, RandomChoice(discriminators));
                 UNIT_ASSERT_UNEQUAL(state, TTracingControls::SAMPLED);
                 if (state == TTracingControls::EXTERNAL) {
                     ++traced;
@@ -624,7 +627,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
         {
             size_t sampled = 0;
             for (size_t i = 0; i < 1000; ++i) {
-                auto [state, level] = controls.HandleTracing(false, discriminators[i % discriminators.size()]);
+                auto [state, level] = controls.HandleTracing(false, RandomChoice(discriminators));
                 UNIT_ASSERT_UNEQUAL(state, TTracingControls::EXTERNAL);
                 if (state == TTracingControls::SAMPLED) {
                     UNIT_ASSERT_EQUAL(level, 0);
@@ -638,7 +641,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
         {
             size_t sampled = 0;
             for (size_t i = 0; i < 60; ++i) {
-                auto [state, level] = controls.HandleTracing(false, discriminators[i % discriminators.size()]);
+                auto [state, level] = controls.HandleTracing(false, RandomChoice(discriminators));
                 UNIT_ASSERT_UNEQUAL(state, TTracingControls::EXTERNAL);
                 if (state == TTracingControls::SAMPLED) {
                     UNIT_ASSERT_EQUAL(level, 0);
@@ -694,5 +697,121 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
             }
         }
     }
+
+    Y_UNIT_TEST(SharedThrottlingLimits) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        auto timeProvider = MakeIntrusive<TTimeProviderMock>(TInstant::Now());
+        auto [controls, configurator] = CreateSamplingThrottlingConfigurator(10, timeProvider);
+        NKikimrConfig::TTracingConfig cfg;
+        {
+            auto rule = cfg.AddExternalThrottling();
+            rule->SetMaxTracesBurst(10);
+            rule->SetMaxTracesPerMinute(60);
+            auto scope = rule->MutableScope();
+            scope->AddRequestTypes("Table.DropTable");
+            scope->AddRequestTypes("Table.ReadRows");
+            scope->AddRequestTypes("Table.AlterTable");
+        }
+        InitJaegerTracingConfigurator(runtime, std::move(configurator), cfg);
+
+        std::array matchingDiscriminators{
+            TRequestDiscriminator{
+                .RequestType = ERequestType::TABLE_DROPTABLE,
+            },
+            TRequestDiscriminator{
+                .RequestType = ERequestType::TABLE_ALTERTABLE,
+                .Database = "/Root/db1",
+            },
+            TRequestDiscriminator{
+                .RequestType = ERequestType::TABLE_READROWS,
+                .Database = "/Root/db2",
+            },
+        };
+
+        std::array notMatchingDiscriminators{
+            TRequestDiscriminator{},
+            TRequestDiscriminator{
+                .RequestType = ERequestType::TABLE_KEEPALIVE,
+            },
+        };
+
+        for (size_t i = 0; i < 21; ++i) {
+            UNIT_ASSERT_EQUAL(controls.HandleTracing(false, RandomChoice(matchingDiscriminators)).first, TTracingControls::OFF);
+            UNIT_ASSERT_EQUAL(controls.HandleTracing(true, RandomChoice(matchingDiscriminators)).first, TTracingControls::EXTERNAL);
+            UNIT_ASSERT_EQUAL(controls.HandleTracing(true, RandomChoice(notMatchingDiscriminators)).first, TTracingControls::OFF);
+            timeProvider->Advance(TDuration::MilliSeconds(500));
+        }
+        UNIT_ASSERT_EQUAL(controls.HandleTracing(true, RandomChoice(matchingDiscriminators)).first, TTracingControls::OFF);
+    }
+
+    Y_UNIT_TEST(SharedSamplingLimits) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        auto timeProvider = MakeIntrusive<TTimeProviderMock>(TInstant::Now());
+        auto [controls, configurator] = CreateSamplingThrottlingConfigurator(10, timeProvider);
+        NKikimrConfig::TTracingConfig cfg;
+        {
+            auto rule = cfg.AddSampling();
+            rule->SetMaxTracesBurst(10);
+            rule->SetMaxTracesPerMinute(60);
+            rule->SetLevel(8);
+            rule->SetFraction(0.5);
+            auto scope = rule->MutableScope();
+            scope->AddRequestTypes("Table.DropTable");
+            scope->AddRequestTypes("Table.ReadRows");
+            scope->AddRequestTypes("Table.AlterTable");
+        }
+        InitJaegerTracingConfigurator(runtime, std::move(configurator), cfg);
+
+        std::array matchingDiscriminators{
+            TRequestDiscriminator{
+                .RequestType = ERequestType::TABLE_DROPTABLE,
+            },
+            TRequestDiscriminator{
+                .RequestType = ERequestType::TABLE_ALTERTABLE,
+                .Database = "/Root/db1",
+            },
+            TRequestDiscriminator{
+                .RequestType = ERequestType::TABLE_READROWS,
+                .Database = "/Root/db2",
+            },
+        };
+
+        std::array notMatchingDiscriminators{
+            TRequestDiscriminator{},
+            TRequestDiscriminator{
+                .RequestType = ERequestType::TABLE_KEEPALIVE,
+            },
+        };
+
+        {
+            size_t sampled = 0;
+            for (size_t i = 0; i < 1000; ++i) {
+                auto [state, level] = controls.HandleTracing(false, RandomChoice(matchingDiscriminators));
+                UNIT_ASSERT_UNEQUAL(state, TTracingControls::EXTERNAL);
+                if (state == TTracingControls::SAMPLED) {
+                    UNIT_ASSERT_EQUAL(level, 8);
+                    ++sampled;
+                }
+                UNIT_ASSERT_EQUAL(controls.HandleTracing(false, RandomChoice(notMatchingDiscriminators)).first, TTracingControls::OFF);
+                timeProvider->Advance(TDuration::Seconds(1));
+            }
+            UNIT_ASSERT(sampled >= 400 && sampled <= 600);
+        }
+        timeProvider->Advance(TDuration::Minutes(1));
+
+        {
+            size_t sampled = 0;
+            for (size_t i = 0; i < 65; ++i) {
+                auto [state, level] = controls.HandleTracing(false, RandomChoice(matchingDiscriminators));
+                UNIT_ASSERT_UNEQUAL(state, TTracingControls::EXTERNAL);
+                if (state == TTracingControls::SAMPLED) {
+                    UNIT_ASSERT_EQUAL(level, 8);
+                    ++sampled;
+                }
+            }
+            UNIT_ASSERT_EQUAL(sampled, 11);
+        }
+    }
+
 }
 } // namespace NKikimr

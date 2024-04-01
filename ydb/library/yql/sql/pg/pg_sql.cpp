@@ -495,6 +495,8 @@ public:
             return ParseTransactionStmt(CAST_NODE(TransactionStmt, node));
         case T_IndexStmt:
             return ParseIndexStmt(CAST_NODE(IndexStmt, node)) != nullptr;
+        case T_CreateSeqStmt:
+            return ParseCreateSeqStmt(CAST_NODE(CreateSeqStmt, node)) != nullptr;
         default:
             NodeNotImplemented(value, node);
             return false;
@@ -2650,6 +2652,91 @@ public:
         return State.Statements.back();
     }
 
+    [[nodiscard]]
+    TAstNode* ParseCreateSeqStmt(const CreateSeqStmt* value) {
+
+        std::vector<TAstNode*> options;
+
+        if (value->accessMethod) {
+            AddError("USING not supported");
+            return nullptr;
+        }
+
+        if (value->if_not_exists) {
+            TString mode = (ctx.ifNotExists) ? "create_if_not_exists" : "create";
+            options.push_back(QL(QA("mode"), QA(mode)));
+        }
+
+        auto [sink, key] = ParseWriteRangeVar(value->sequence, true);
+
+        if (!sink || !key) {
+            return nullptr;
+        }
+
+        for (int i = 0; i < ListLength(value->options); ++i) {
+            auto rawNode = ListNodeNth(value->options, i);
+
+            switch (NodeTag(rawNode)) {
+                case T_DefElem:
+                    auto defElem = CAST_NODE(ColumnDef, rawNode);
+                        return nullptr;
+                    }
+                    break;
+
+                default:
+                    NodeNotImplemented(value, rawNode);
+                    return nullptr;
+            }
+        }
+
+        TString mode = (ctx.ifNotExists) ? "create_if_not_exists" : "create";
+        options.push_back(QL(QA("mode"), QA(mode)));
+        options.push_back(QL(QA("columns"), BuildColumnsOptions(ctx)));
+        if (!ctx.PrimaryKey.empty()) {
+            options.push_back(QL(QA("primarykey"), QVL(ctx.PrimaryKey.data(), ctx.PrimaryKey.size())));
+        }
+        for (auto& uniq : ctx.UniqConstr) {
+            auto columns = QVL(uniq.data(), uniq.size());
+            options.push_back(QL(QA("index"), QL(
+                                  QL(QA("indexName")),
+                                  QL(QA("indexType"), QA("syncGlobalUnique")),
+                                  QL(QA("dataColumns"), QL()),
+                                  QL(QA("indexColumns"), columns))));
+        }
+        if (ctx.isTemporary) {
+            options.push_back(QL(QA("temporary")));
+        }
+
+        for (int i = 0; i < ListLength(value->tableElts); ++i) {
+            auto rawNode = ListNodeNth(value->tableElts, i);
+
+            switch (NodeTag(rawNode)) {
+                case T_ColumnDef:
+                    if (!AddColumn(ctx, CAST_NODE(ColumnDef, rawNode))) {
+                        return nullptr;
+                    }
+                    break;
+
+                case T_Constraint:
+                    if (!AddConstraint(ctx, CAST_NODE(Constraint, rawNode))) {
+                        return nullptr;
+                    }
+                    break;
+
+                default:
+                    NodeNotImplemented(value, rawNode);
+                    return nullptr;
+            }
+        }
+
+        State.Statements.push_back(
+                L(A("let"), A("world"),
+                  L(A("Write!"), A("world"), sink, key, L(A("Void")),
+                    BuildCreateTableOptions(ctx))));
+
+        return State.Statements.back();
+    }
+
     TFromDesc ParseFromClause(const Node* node) {
         switch (NodeTag(node)) {
         case T_RangeVar:
@@ -4760,7 +4847,7 @@ TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQ
     TConverter converter(results, settings, query, stmtParseInfo, true);
     NYql::PGParse(query, converter);
     for (auto& res : results) {
-        res.ActualSyntaxType = NYql::ESyntaxType::Pg; 
+        res.ActualSyntaxType = NYql::ESyntaxType::Pg;
     }
     return results;
 }

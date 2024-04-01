@@ -104,7 +104,7 @@ class Settings:
                         cluster_name='ydb_integration_test',
                         host_internal=endpoint_determiner.get_container_name('ydb'),
                         port_internal=2136,
-                        dbname="/local",
+                        dbname="local",
                         username='user',
                         password='password',
                     )

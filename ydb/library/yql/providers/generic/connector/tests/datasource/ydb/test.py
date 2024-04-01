@@ -20,7 +20,7 @@ def test_select(
         generic_settings=GenericSettings(
             clickhouse_clusters=[],
             postgresql_clusters=[],
-            ydb_clusters=[GenericSettings.YdbCluster(database="/local")],
+            ydb_clusters=[GenericSettings.YdbCluster(database="local")],
             date_time_format=EDateTimeFormat.YQL_FORMAT,
         ),
     )

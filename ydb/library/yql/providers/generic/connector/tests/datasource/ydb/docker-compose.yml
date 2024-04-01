@@ -2,16 +2,23 @@ version: '3.4'
 services:
   ydb:
      image: cr.yandex/yc/yandex-docker-local-ydb:23.3.17@sha256:bf9001c849cc6c4c9b56f32f5440a6e8390c4e841937c9f9caf929fd70a689c8
+     #image: ghcr.io/ydb-platform/local-ydb:nightly
      container_name: fq-tests-ydb-ydb
      hostname: fq-tests-ydb-ydb
      environment:
-       YDB_DEFAULT_LOG_LEVEL: NOTICE
+       YDB_DEFAULT_LOG_LEVEL: INFO
        POSTGRES_USER: user
        POSTGRES_PASSWORD: password
+     volumes:
+       - ./init/init_ydb:/init_ydb
+       - ./init/01_basic.sh:/01_basic.sh
 
   fq-connector-go:
     container_name: fq-tests-ydb-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.2.10@sha256:b2ef1cfbfea52c71f753806fd2a893794e0443e41041463df80f7c3626dec852
+    #image: ghcr.io/ydb-platform/fq-connector-go:v0.2.10@sha256:b2ef1cfbfea52c71f753806fd2a893794e0443e41041463df80f7c3626dec852
+    build:
+      context: /home/vitalyisaev/projects/fq-connector-go
+      dockerfile: Dockerfile.release
     volumes:
       - ../../fq-connector-go/:/opt/ydb/cfg/
     ports:

@@ -425,13 +425,20 @@ public:
         std::vector<TString> partitionedBy;
         TString projection;
         {
-            THashSet<TStringBuf> columns;
+            TS3Object s3Object(input->Child(TS3ReadObject::idx_Object));
+            auto format = s3Object.Format().StringValue();
+
             const TStructExprType* structRowType = rowType->Cast<TStructExprType>();
+
+            if (format == "raw"sv && structRowType->GetSize() > 1) {
+                ctx.AddError(TIssue(ctx.GetPosition(rowTypeNode.Pos()), "Only one field (in schema) supported in raw format"));
+                return TStatus::Error;
+            }
+            THashSet<TStringBuf> columns;
             for (const TItemExprType* item : structRowType->GetItems()) {
                 columns.emplace(item->GetName());
             }
-
-            TS3Object s3Object(input->Child(TS3ReadObject::idx_Object));
+            
             if (TMaybeNode<TExprBase> settings = s3Object.Settings()) {
                 for (auto& settingNode : settings.Raw()->ChildrenList()) {
                     const TStringBuf name = settingNode->Head().Content();

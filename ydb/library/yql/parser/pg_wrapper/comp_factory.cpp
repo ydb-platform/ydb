@@ -505,7 +505,7 @@ public:
     class TSystemColumnFiller {
     public:
         TSystemColumnFiller(TStructType* itemType, const TString& cluster, const TString& table) {
-            const auto& info = NPg::LookupStaticTable(NPg::TTableInfoKey(cluster, table));
+            const auto& info = NPg::LookupStaticTable(NPg::TTableInfoKey{cluster, table});
             TableOid = info.Oid;
             if (info.Kind != NPg::ERelKind::Relation) {
                 return;

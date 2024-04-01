@@ -13,12 +13,12 @@
 namespace NFq {
 
 inline std::shared_ptr<NYdb::NTable::TTableClient> CreateNewTableClient(const TString& scope,
-                                                                 const NFq::TComputeConfig& computeConfig,
-                                                                 const NFq::NConfig::TYdbStorageConfig& connection,
+                                                                 const ::NFq::TComputeConfig& computeConfig,
+                                                                 const ::NFq::NConfig::TYdbStorageConfig& connection,
                                                                  const TYqSharedResources::TPtr& yqSharedResources,
                                                                  const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory) {
     
-    NFq::NConfig::TYdbStorageConfig computeConnection = computeConfig.GetExecutionConnection(scope);
+    ::NFq::NConfig::TYdbStorageConfig computeConnection = computeConfig.GetExecutionConnection(scope);
     computeConnection.set_endpoint(connection.endpoint());
     computeConnection.set_database(connection.database());
     computeConnection.set_usessl(connection.usessl());
@@ -81,6 +81,6 @@ private:
     std::unique_ptr<IPlanStatProcessor> Processor;
 };
 
-TString GetStatViewName(const NFq::TRunActorParams& params);
+TString GetStatViewName(const ::NFq::TRunActorParams& params);
 
 } // namespace NFq

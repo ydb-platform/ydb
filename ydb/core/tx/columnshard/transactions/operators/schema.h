@@ -113,6 +113,24 @@ namespace NKikimr::NColumnShard {
         }
 
         TConclusionStatus ValidateTableSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) const {
+            static const THashSet<NScheme::TTypeId> pkSupportedTypes = {
+                NTypeIds::Timestamp,
+                NTypeIds::Int8,
+                NTypeIds::Int16,
+                NTypeIds::Int32,
+                NTypeIds::Int64,
+                NTypeIds::Uint8,
+                NTypeIds::Uint16,
+                NTypeIds::Uint32,
+                NTypeIds::Uint64,
+                NTypeIds::Date,
+                NTypeIds::Datetime,
+                //NTypeIds::Interval,
+                //NTypeIds::Float,
+                //NTypeIds::Double,
+                NTypeIds::String,
+                NTypeIds::Utf8
+            };
             if (!schema.HasEngine() ||
                 schema.GetEngine() != NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES) {
                 return TConclusionStatus::Fail("Invalid scheme engine: " + (schema.HasEngine() ? NKikimrSchemeOp::EColumnTableEngine_Name(schema.GetEngine()) : TString("No")));
@@ -127,7 +145,7 @@ namespace NKikimr::NColumnShard {
             for (const NKikimrSchemeOp::TOlapColumnDescription& column : schema.GetColumns()) {
                 TString name = column.GetName();
                 NScheme::TTypeInfo schemeType(column.GetTypeId());
-                if (keyColumns.contains(name) && !NArrow::IsPrimitiveYqlType(schemeType)) {
+                if (keyColumns.contains(name) && !pkSupportedTypes.contains(schemeType)) {
                     columnErrors.emplace_back("key column " + name + " has unsupported type "  + NScheme::TypeName(column.GetTypeId()));
                 }
                 auto arrowType = NArrow::GetArrowType(schemeType);

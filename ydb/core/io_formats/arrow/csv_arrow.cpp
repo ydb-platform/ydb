@@ -42,6 +42,26 @@ public:
 
 }
 
+arrow::Result<TArrowCSV> TArrowCSV::Create(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, bool header, const std::set<std::string>& notNullColumns) {
+        TVector<TString> errors;
+        for (auto& [name, type] : columns) {
+            const auto arrowType = NArrow::GetArrowType(type);
+            if (!arrowType.ok()) {
+                errors.emplace_back("column " + name + ": " + arrowType.status().ToString());
+                continue;
+            }
+            const auto csvArrowType = NArrow::GetCSVArrowType(type);
+            if (!csvArrowType.ok()) {
+                errors.emplace_back("column " + name + ": " + csvArrowType.status().ToString());
+                continue;
+            }
+        }
+        if (!errors.empty()) {
+            return arrow::Status::TypeError("Columns errors: " + JoinSeq("; ", errors));
+        }
+        return TArrowCSV(columns, header, notNullColumns);
+}
+
 TArrowCSV::TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, bool header, const std::set<std::string>& notNullColumns)
     : ReadOptions(arrow::csv::ReadOptions::Defaults())
     , ParseOptions(arrow::csv::ParseOptions::Defaults())
@@ -63,8 +83,8 @@ TArrowCSV::TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& colu
         for (auto& [name, type] : columns) {
             ResultColumns.push_back(name);
             std::string columnName(name.data(), name.size());
-            ConvertOptions.column_types[columnName] = NArrow::GetCSVArrowType(type).ValueOr(std::make_shared<arrow::NullType>());
-            OriginalColumnTypes[columnName] = NArrow::GetArrowType(type).ValueOr(std::make_shared<arrow::NullType>());
+            ConvertOptions.column_types[columnName] = NArrow::GetCSVArrowType(type).ValueOrDie();
+            OriginalColumnTypes[columnName] = NArrow::GetArrowType(type).ValueOrDie();
         }
     } else if (!columns.empty()) {
         // !autogenerate + !column_names.empty() => specified columns
@@ -73,8 +93,8 @@ TArrowCSV::TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& colu
         for (auto& [name, type] : columns) {
             std::string columnName(name.data(), name.size());
             ReadOptions.column_names.push_back(columnName);
-            ConvertOptions.column_types[columnName] = NArrow::GetCSVArrowType(type).ValueOr(std::make_shared<arrow::NullType>());
-            OriginalColumnTypes[columnName] = NArrow::GetArrowType(type).ValueOr(std::make_shared<arrow::NullType>());
+            ConvertOptions.column_types[columnName] = NArrow::GetCSVArrowType(type).ValueOrDie();
+            OriginalColumnTypes[columnName] = NArrow::GetArrowType(type).ValueOrDie();
         }
 #if 0
     } else {

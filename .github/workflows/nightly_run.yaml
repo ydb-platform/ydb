@@ -15,7 +15,7 @@ jobs:
     secrets: inherit
     with:
       runner_label: auto-provisioned
-      build_preset: ${{ matrix.build_preset }}
+      build_preset: relwithdebinfo
       build_target: ydb/
       run_build: true
       run_tests: true

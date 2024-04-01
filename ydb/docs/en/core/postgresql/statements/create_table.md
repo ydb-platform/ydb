@@ -3,10 +3,11 @@
 
 {% include [alert_preview](../_includes/alert_preview.md) %}
 
+
 The `CREATE TABLE` statement is used to create an empty table in the current database. The syntax of the command is:
 
 
-{% include [syntax](../../../_includes/postgresql/statements/create_table/syntax.md) %}
+{% include [syntax](../_includes/statements/create_table/syntax.md) %}
 
 
 When creating a table, you can specify:
@@ -28,11 +29,11 @@ When creating a table, you can specify:
 || 
 
 
-{% include [create_table_people](../../../../_includes/postgresql/statements/create_table/create_table_people.md) %}
+{% include [create_table_people](../_includes/statements/create_table/create_table_people.md) %}
 
 | 
 
-{% include [create_table_social_card](../../../../_includes/postgresql/statements/create_table/create_table_social_card.md) %}
+{% include [create_table_social_card](../_includes/statements/create_table/create_table_social_card.md) %}
 
 ||
 |#
@@ -43,7 +44,7 @@ In this example, we used the pseudo data type `Serial` – it's a convenient and
 
 ## Creating a table with constraints {#create_table_constraint_table}
 
-{% include [create_table_people_const](../../../../_includes/postgresql/statements/create_table/create_table_people_const.md) %}
+{% include [create_table_people_const](../_includes/statements/create_table/create_table_people_const.md) %}
 
 In this example, we created the "people" table with a constraint block (`CONSTRAINT`), where we defined a primary key (`PRIMARY KEY`) consisting of the "id" column. An alternative notation could look like this: `PRIMARY KEY(id)` without mentioning the `CONSTRAINT` keyword.
 
@@ -57,14 +58,14 @@ The temporary table functionality is not fully implemented. Temporary tables may
 
 {% endnote %}
 
-{% include [create_table_temp](../../../../_includes/postgresql/statements/create_table/create_table_temp.md) %}
+{% include [create_table_temp](../_includes/statements/create_table/create_table_temp.md) %}
 
 The temporary table is defined using the `TEMPORARY` keyword. It exists until the end of the session or the completion of the transaction, after which it is automatically deleted.
 
 
 ## Creating a table with sorting conditions {#create_table_collate}
 
-{% include [create_table_sort_cond](../../../../_includes/postgresql/statements/create_table/create_table_sort_cond.md) %}
+{% include [create_table_sort_cond](../_includes/statements/create_table/create_table_sort_cond.md) %}
 
 In this example, the "name" and "lastname" columns use sorting with `en_US` localization.
 

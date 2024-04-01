@@ -1903,6 +1903,16 @@ private:
     bool ConvertLength = false;
 };
 
+const i32 PgDateShift = 10957;
+const i64 PgTimestampShift = 946684800000000ll;
+
+inline i32 Date2Pg(ui16 value) {
+    return i32(value) - PgDateShift;
+}
+
+inline i64 Timestamp2Pg(ui64 value) {
+    return i64(value) - PgTimestampShift;
+}
 
 template <NUdf::EDataSlot Slot>
 NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUdf::EDataSlot> actualSlot = {}) {
@@ -1933,6 +1943,19 @@ NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUd
         const auto& ref = value.AsStringRef();
         return PointerDatumToPod((Datum)MakeVar(ref));
     }
+    case NUdf::EDataSlot::Date: {
+        auto res = Date2Pg(value.Get<ui16>());
+        return ScalarDatumToPod(res);
+    }
+    case NUdf::EDataSlot::Datetime: {
+        auto res = Timestamp2Pg(value.Get<ui32>() * 1000000ull);
+        return ScalarDatumToPod(res);
+    }
+    case NUdf::EDataSlot::Timestamp: {
+        auto res = Timestamp2Pg(value.Get<ui64>());
+        return ScalarDatumToPod(res);
+    }
+
     default:
         ythrow yexception() << "Unexpected data slot in ConvertToPgValue: " << Slot;
     }
@@ -2549,9 +2572,8 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeFromPgKernel(TType* inputType,
 }
 
 struct TToPgExec {
-    TToPgExec(ui32 targetId)
-        : TargetId(targetId)
-        , IsCString(NPg::LookupType(targetId).TypeLen == -2)
+    TToPgExec(NUdf::EDataSlot sourceDataSlot)
+        : SourceDataSlot(sourceDataSlot)
     {}
 
     arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
@@ -2559,8 +2581,8 @@ struct TToPgExec {
         Y_ENSURE(inputDatum.is_array());
         const auto& array= *inputDatum.array();
         size_t length = array.length;
-        switch (TargetId) {
-        case BOOLOID: {
+        switch (SourceDataSlot) {
+        case NUdf::EDataSlot::Bool: {
             auto inputPtr = array.GetValues<ui8>(1);
             auto outputPtr = res->array()->GetMutableValues<ui64>(1);
             for (size_t i = 0; i < length; ++i) {
@@ -2568,7 +2590,7 @@ struct TToPgExec {
             }
             break;
         }
-        case INT2OID: {
+        case NUdf::EDataSlot::Int16: {
             auto inputPtr = array.GetValues<i16>(1);
             auto outputPtr = res->array()->GetMutableValues<ui64>(1);
             for (size_t i = 0; i < length; ++i) {
@@ -2576,7 +2598,7 @@ struct TToPgExec {
             }
             break;
         }
-        case INT4OID: {
+        case NUdf::EDataSlot::Int32: {
             auto inputPtr = array.GetValues<i32>(1);
             auto outputPtr = res->array()->GetMutableValues<ui64>(1);
             for (size_t i = 0; i < length; ++i) {
@@ -2584,7 +2606,7 @@ struct TToPgExec {
             }
             break;
         }
-        case INT8OID: {
+        case NUdf::EDataSlot::Int64: {
             auto inputPtr = array.GetValues<i64>(1);
             auto outputPtr = res->array()->GetMutableValues<ui64>(1);
             for (size_t i = 0; i < length; ++i) {
@@ -2592,7 +2614,7 @@ struct TToPgExec {
             }
             break;
         }
-        case FLOAT4OID: {
+        case NUdf::EDataSlot::Float: {
             auto inputPtr = array.GetValues<float>(1);
             auto outputPtr = res->array()->GetMutableValues<ui64>(1);
             for (size_t i = 0; i < length; ++i) {
@@ -2600,7 +2622,7 @@ struct TToPgExec {
             }
             break;
         }
-        case FLOAT8OID: {
+        case NUdf::EDataSlot::Double: {
             auto inputPtr = array.GetValues<double>(1);
             auto outputPtr = res->array()->GetMutableValues<ui64>(1);
             for (size_t i = 0; i < length; ++i) {
@@ -2608,8 +2630,8 @@ struct TToPgExec {
             }
             break;
         }
-        case TEXTOID:
-        case BYTEAOID: {
+        case NUdf::EDataSlot::Utf8:
+        case NUdf::EDataSlot::String: {
             NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
             NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
             for (size_t i = 0; i < length; ++i) {
@@ -2627,43 +2649,67 @@ struct TToPgExec {
             *res = builder.Build(true);
             break;
         }
+        case NUdf::EDataSlot::Date: {
+            auto inputPtr = array.GetValues<ui16>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int32GetDatum(Date2Pg(inputPtr[i]));
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Datetime: {
+            auto inputPtr = array.GetValues<ui32>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int64GetDatum(Timestamp2Pg(inputPtr[i] * 1000000ull));
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Timestamp: {
+            auto inputPtr = array.GetValues<ui64>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int64GetDatum(Timestamp2Pg(inputPtr[i]));
+            }
+            break;
+        }
         default:
-            ythrow yexception() << "Unsupported type: " << NPg::LookupType(TargetId).Name;
+            ythrow yexception() << "Unsupported type: " << NUdf::GetDataTypeInfo(SourceDataSlot).Name;
         }
         return arrow::Status::OK();
     }
 
-    const ui32 TargetId;
-    const bool IsCString;
+    const NUdf::EDataSlot SourceDataSlot;
 };
 
-std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, TType* resultType, ui32 targetId) {
+std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, TType* resultType, NUdf::EDataSlot dataSlot) {
     const TVector<TType*> argTypes = { inputType };
 
     std::shared_ptr<arrow::DataType> returnArrowType;
     MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
-    auto exec = std::make_shared<TToPgExec>(targetId);
+    auto exec = std::make_shared<TToPgExec>(dataSlot);
     auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
         [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         return exec->Exec(ctx, batch, res);
     });
 
-    switch (targetId) {
-    case BOOLOID:
-    case INT2OID:
-    case INT4OID:
-    case INT8OID:
-    case FLOAT4OID:
-    case FLOAT8OID:
+    switch (dataSlot) {
+    case NUdf::EDataSlot::Bool:
+    case NUdf::EDataSlot::Int16:
+    case NUdf::EDataSlot::Int32:
+    case NUdf::EDataSlot::Int64:
+    case NUdf::EDataSlot::Float:
+    case NUdf::EDataSlot::Double:
+    case NUdf::EDataSlot::Date:
+    case NUdf::EDataSlot::Datetime:
+    case NUdf::EDataSlot::Timestamp:
         break;
-    case TEXTOID:
-    case VARCHAROID:
-    case BYTEAOID:
-    case CSTRINGOID:
+    case NUdf::EDataSlot::String:
+    case NUdf::EDataSlot::Utf8:
         kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
         break;
     default:
-        ythrow yexception() << "Unsupported type: " << NPg::LookupType(targetId).Name;
+        ythrow yexception() << "Unsupported type: " << NUdf::GetDataTypeInfo(dataSlot).Name;
     }
 
     return kernel;
@@ -2882,36 +2928,53 @@ TComputationNodeFactory GetPgFactory() {
 
             if (name == "ToPg") {
                 auto arg = LocateNode(ctx.NodeLocator, callable, 0);
-                auto returnType = callable.GetType()->GetReturnType();
-                auto targetId = AS_TYPE(TPgType, returnType)->GetTypeId();
-                switch (targetId) {
-                case BOOLOID:
+                auto inputType = callable.GetInput(0).GetStaticType();
+                auto argType = inputType;
+                if (argType->IsOptional()) {
+                    argType = AS_TYPE(TOptionalType, argType)->GetItemType();
+                }
+
+                auto sourceDataSlot = AS_TYPE(TDataType, argType)->GetDataSlot();
+                switch (*sourceDataSlot) {
+                case NUdf::EDataSlot::Bool:
                     return new TToPg<NUdf::EDataSlot::Bool>(ctx.Mutables, arg);
-                case INT2OID:
+                case NUdf::EDataSlot::Int16:
                     return new TToPg<NUdf::EDataSlot::Int16>(ctx.Mutables, arg);
-                case INT4OID:
+                case NUdf::EDataSlot::Int32:
                     return new TToPg<NUdf::EDataSlot::Int32>(ctx.Mutables, arg);
-                case INT8OID:
+                case NUdf::EDataSlot::Int64:
                     return new TToPg<NUdf::EDataSlot::Int64>(ctx.Mutables, arg);
-                case FLOAT4OID:
+                case NUdf::EDataSlot::Float:
                     return new TToPg<NUdf::EDataSlot::Float>(ctx.Mutables, arg);
-                case FLOAT8OID:
+                case NUdf::EDataSlot::Double:
                     return new TToPg<NUdf::EDataSlot::Double>(ctx.Mutables, arg);
-                case TEXTOID:
+                case NUdf::EDataSlot::Utf8:
                     return new TToPg<NUdf::EDataSlot::Utf8>(ctx.Mutables, arg);
-                case BYTEAOID:
+                case NUdf::EDataSlot::String:
                     return new TToPg<NUdf::EDataSlot::String>(ctx.Mutables, arg);
+                case NUdf::EDataSlot::Date:
+                    return new TToPg<NUdf::EDataSlot::Date>(ctx.Mutables, arg);
+                case NUdf::EDataSlot::Datetime:
+                    return new TToPg<NUdf::EDataSlot::Datetime>(ctx.Mutables, arg);
+                case NUdf::EDataSlot::Timestamp:
+                    return new TToPg<NUdf::EDataSlot::Timestamp>(ctx.Mutables, arg);
                 default:
-                    ythrow yexception() << "Unsupported type: " << NPg::LookupType(targetId).Name;
+                    ythrow yexception() << "Unsupported type: " << NUdf::GetDataTypeInfo(*sourceDataSlot).Name;
                 }
             }
 
             if (name == "BlockToPg") {
                 auto arg = LocateNode(ctx.NodeLocator, callable, 0);
                 auto inputType = callable.GetInput(0).GetStaticType();
+                auto argType = AS_TYPE(TBlockType, inputType)->GetItemType();
+                if (argType->IsOptional()) {
+                    argType = AS_TYPE(TOptionalType, argType)->GetItemType();
+                }
+
+                auto sourceDataSlot = AS_TYPE(TDataType, argType)->GetDataSlot();
                 auto returnType = callable.GetType()->GetReturnType();
                 auto targetId = AS_TYPE(TPgType, AS_TYPE(TBlockType, returnType)->GetItemType())->GetTypeId();
-                auto kernel = MakeToPgKernel(inputType, returnType, targetId);
+                auto kernel = MakeToPgKernel(inputType, returnType, *sourceDataSlot);
                 return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), { arg }, { inputType }, *kernel, kernel);
             }
 

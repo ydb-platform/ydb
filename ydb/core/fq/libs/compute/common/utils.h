@@ -31,6 +31,7 @@ inline std::shared_ptr<NYdb::NTable::TTableClient> CreateNewTableClient(const TS
 TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage = nullptr);
 TString GetV1StatFromV2PlanV2(const TString& plan);
 TString GetPrettyStatistics(const TString& statistics);
+THashMap<TString, i64> AggregateStats(TStringBuf plan);
 
 TString FormatDurationMs(ui64 durationMs);
 TString FormatDurationUs(ui64 durationUs);

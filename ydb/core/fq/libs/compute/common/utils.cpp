@@ -471,6 +471,93 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage) {
     return NJson2Yson::ConvertYson2Json(out.Str());
 }
 
+namespace {
+
+struct StatsAggregator {
+    bool TryExtractAggregates(const NJson::TJsonValue& node, const TString& name) {
+        auto dstAggr = Aggregates.find(name);
+        if (dstAggr != Aggregates.end()) {
+            if (auto sum = node.GetValueByPath("Sum")) {
+                dstAggr->second += sum->GetIntegerSafe();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool TryExtractSourceStats(const NJson::TJsonValue& node, const TString& name) {
+        constexpr TStringBuf prefix = "Ingress=";
+        if (name.StartsWith(prefix)) {
+            if (auto ingress = node.GetValueByPath("Ingress.Bytes.Sum")) {
+                auto source = name.substr(prefix.size());
+                Aggregates[source] += ingress->GetIntegerSafe();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    THashMap<TString, i64> Aggregates{std::pair<TString, i64>
+        {"IngressBytes", 0},
+        {"EgressBytes", 0},
+        {"InputBytes", 0},
+        {"OutputBytes", 0},
+        {"CpuTimeUs", 0},
+    };
+};
+
+void TraverseStats(const NJson::TJsonValue& node, const TString& name, StatsAggregator& aggregator) {
+    auto type = node.GetType();
+    if (type == NJson::JSON_MAP) {
+        if (!aggregator.TryExtractAggregates(node, name) && !aggregator.TryExtractSourceStats(node, name)) {
+            for (const auto& [key, value] : node.GetMapSafe()) {
+                TraverseStats(value, key, aggregator);
+            }
+        }
+    } else if (type == NJson::JSON_ARRAY) {
+        for (const auto& subNode : node.GetArray()) {
+            if (auto nameNode = subNode.GetValueByPath("Name")) {
+                TraverseStats(subNode, name + "=" + nameNode->GetStringSafe(), aggregator);
+            }
+        }
+    }
+}
+
+void TraversePlans(const NJson::TJsonValue& node, StatsAggregator& aggregator) {
+    if (auto* plans = node.GetValueByPath("Plans")) {
+        for (const auto& plan : plans->GetArray()) {
+            TraversePlans(plan, aggregator);
+        }
+    }
+
+    if (auto stats = node.GetValueByPath("Stats")) {
+        TraverseStats(*stats, "", aggregator);
+    }
+}
+}
+
+THashMap<TString, i64> AggregateStats(TStringBuf plan) {
+    StatsAggregator aggregator;
+
+    NJson::TJsonReaderConfig jsonConfig;
+    NJson::TJsonValue root;
+    if (!NJson::ReadJsonTree(plan, &jsonConfig, &root)) {
+        return std::move(aggregator.Aggregates);
+    }
+    NJson::TJsonValue* plans = nullptr;
+    if (plans = root.GetValueByPath("Plan.Plans"); !plans) {
+        return std::move(aggregator.Aggregates);
+    }
+
+    for (const auto& subPlan : plans->GetArray()) {
+        if (!subPlan.GetValueByPath("Node Type")) {
+            continue;
+        }
+        TraversePlans(subPlan, aggregator);
+    }
+    return std::move(aggregator.Aggregates);
+}
+
 std::optional<ui64> WriteMetric(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const TString& column, const TString& name, const TString& tag) {
     std::optional<ui64> value;
     if (auto* subNode = node.GetValueByPath(name)) {

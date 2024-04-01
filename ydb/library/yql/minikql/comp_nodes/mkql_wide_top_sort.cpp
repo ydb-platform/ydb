@@ -199,21 +199,8 @@ public:
 using TComparePtr = int(*)(const bool*, const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*);
 using TCompareFunc = std::function<int(const bool*, const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)>;
 
-class ITopSortState {
-public:
-    ITopSortState(IComputationWideFlowNode *const flow)
-        : Flow(flow) {}
-
-    virtual ~ITopSortState() {}
-
-    virtual EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) = 0;
-
-protected:
-    IComputationWideFlowNode *const Flow;
-};
-
 template <bool Sort, bool HasCount>
-class TState : public TComputationValue<TState<Sort, HasCount>>, public ITopSortState {
+class TState : public TComputationValue<TState<Sort, HasCount>> {
 using TBase = TComputationValue<TState<Sort, HasCount>>;
 private:
     using TFields = std::vector<NUdf::TUnboxedValue*, TMKQLAllocator<NUdf::TUnboxedValue*, EMemorySubPool::Temporary>>;
@@ -238,7 +225,7 @@ private:
 public:
     TState(TMemoryUsageInfo* memInfo, ui64 count, const bool* directons, size_t keyWidth, const TCompareFunc& compare, const std::vector<ui32>& indexes, IComputationWideFlowNode *const flow)
         : TBase(memInfo)
-        , ITopSortState(flow)
+        , Flow(flow)
         , Count(count)
         , Indexes(indexes)
         , Directions(directons, directons + keyWidth)
@@ -265,7 +252,7 @@ public:
             InputStatus = EFetchResult::Finish;
     }
 
-    virtual EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) override {
+    virtual EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
         while (EFetchResult::Finish != InputStatus) {
             switch (InputStatus = Flow->FetchValues(ctx, GetFields())) {
                 case EFetchResult::One:
@@ -367,6 +354,7 @@ public:
     NUdf::TUnboxedValuePod* Tongue = nullptr;
     NUdf::TUnboxedValuePod* Throat = nullptr;
 private:
+    IComputationWideFlowNode *const Flow;
     const ui64 Count;
     const std::vector<ui32> Indexes;
     const std::vector<bool> Directions;
@@ -377,7 +365,7 @@ private:
 };
 
 template <bool Sort, bool HasCount>
-class TSpillingSupportState : public TComputationValue<TSpillingSupportState<Sort, HasCount>>, public ITopSortState {
+class TSpillingSupportState : public TComputationValue<TSpillingSupportState<Sort, HasCount>> {
 using TBase = TComputationValue<TSpillingSupportState<Sort, HasCount>>;
 private:
     using TStorage = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>>;
@@ -409,7 +397,7 @@ public:
     TSpillingSupportState(TMemoryUsageInfo* memInfo, ui64 count, const bool* directons, size_t keyWidth, const TCompareFunc& compare,
         const std::vector<ui32>& indexes, IComputationWideFlowNode *const flow, TMultiType* sortKeysMultiType)
         : TBase(memInfo)
-        , ITopSortState(flow)
+        , Flow(flow)
         , Count(count)
         , Indexes(indexes)
         , Directions(directons, directons + keyWidth)
@@ -424,7 +412,7 @@ public:
         throw yexception() << "Spilling doesn't support TopSort.";
     }
 
-    virtual EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) override {
+    virtual EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
         while (true) {
             switch(GetMode()) {
                 case EOperatingMode::InMemory: {
@@ -642,6 +630,7 @@ private:
     }
 
     EFetchResult InputStatus = EFetchResult::One;
+    IComputationWideFlowNode *const Flow;
     const ui64 Count;
     const std::vector<ui32> Indexes;
     const std::vector<bool> Directions;
@@ -736,8 +725,16 @@ public:
             }
         }
 
-        if (const auto ptr = dynamic_cast<ITopSortState*>(state.AsBoxed().Get())) {
-            return ptr->DoCalculate(ctx, output);
+        // To avoid dynamic_cast implementation in LLVM implementation
+        // This is temporary solution. Final result will have just one state here.
+        if (!ctx.ExecuteLLVM) {
+            if (const auto ptr = static_cast<TSpillingSupportState<Sort, HasCount>*>(state.AsBoxed().Get())) {
+                return ptr->DoCalculate(ctx, output);
+            }
+        } else {
+            if (const auto ptr = static_cast<TState<Sort, HasCount>*>(state.AsBoxed().Get())) {
+                return ptr->DoCalculate(ctx, output);
+            }
         }
 
         Y_UNREACHABLE();

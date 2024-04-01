@@ -28,6 +28,7 @@ struct TS3State : public TThrRefBase
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     IHTTPGateway::TPtr Gateway;
+    ui32 ExecutorPoolId = 0;
 };
 
 TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr, bool allowLocalFiles = false);

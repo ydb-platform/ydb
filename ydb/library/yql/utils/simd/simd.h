@@ -482,6 +482,18 @@ struct Perfomancer {
 
             return align_ptr + number_of_regs * (Trait::SIZE / pack * pack);
         }
+        void MemoryCopy(size_t sizes[4], i8* data, long long length, i8* storage[4]) {
+            i8* ptr = data;
+            size_t pack = sizes[0] + sizes[1] + sizes[2] + sizes[3];
+            i8* pointers[4]{storage[0], storage[1], storage[2], storage[3]};
+
+            while ((ptr - data + pack) <= static_cast<size_t>(length)) {
+                for (int k = 0; k < 4; ++k) {
+                    memcpy(pointers[k], ptr, sizes[k]);
+                    ptr += sizes[k];
+                }
+            }
+        }
     };
 
     template <typename Trait>

@@ -512,14 +512,14 @@ struct TReaderTraits {
         }
     }
 
-    template<typename TTzDate>
-    static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
-        if (isOptional) {
-            return std::make_unique<TTzDateReader<TTzDate, true>>();
-        } else {
-            return std::make_unique<TTzDateReader<TTzDate, false>>();
-        }
-    }
+    // template<typename TTzDate>
+    // static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
+    //     if (isOptional) {
+    //         return std::make_unique<TTzDateReader<TTzDate, true>>();
+    //     } else {
+    //         return std::make_unique<TTzDateReader<TTzDate, false>>();
+    //     }
+    // }
 };
 
 template <typename TTraits>
@@ -547,6 +547,15 @@ std::unique_ptr<typename TTraits::TResult> MakeStringBlockReaderImpl(bool isOpti
         return std::make_unique<typename TTraits::template TStrings<T, true, TOriginal>>();
     } else {
         return std::make_unique<typename TTraits::template TStrings<T, false, TOriginal>>();
+    }
+}
+
+template <typename TTraits, typename T, NKikimr::NUdf::EDataSlot TOriginal>
+std::unique_ptr<typename TTraits::TResult> MakeTzDateBlockReaderImpl(bool isOptional) {
+    if (isOptional) {
+        return std::make_unique<typename TTraits::template TTzDateReader<T, true>>();
+    } else {
+        return std::make_unique<typename TTraits::template TTzDateReader<T, false>>();
     }
 }
 
@@ -657,12 +666,12 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
             return MakeStringBlockReaderImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Utf8>(isOptional);
         case NUdf::EDataSlot::Json:
             return MakeStringBlockReaderImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Json>(isOptional);
-        case NUdf::EDataSlot::TzDate:
-            return TTraits::template MakeTzDate<TTzDate>(isOptional);
-        case NUdf::EDataSlot::TzDatetime:
-            return TTraits::template MakeTzDate<TTzDatetime>(isOptional);
-        case NUdf::EDataSlot::TzTimestamp:
-            return TTraits::template MakeTzDate<TTzTimestamp>(isOptional);
+        // case NUdf::EDataSlot::TzDate:
+        //     return TTraits::template MakeTzDate<TTzDate>(isOptional);
+        // case NUdf::EDataSlot::TzDatetime:
+        //     return TTraits::template MakeTzDate<TTzDatetime>(isOptional);
+        // case NUdf::EDataSlot::TzTimestamp:
+        //     return TTraits::template MakeTzDate<TTzTimestamp>(isOptional);
         default:
             Y_ENSURE(false, "Unsupported data slot");
         }

@@ -2490,6 +2490,14 @@ struct THasherTraits {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Hasher not implemented for block resources";
     }
+    
+    // static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
+    //     if (isOptional) {
+    //         return std::make_unique<TFixedSize<T, true>>();
+    //     } else {
+    //         return std::make_unique<TFixedSize<T, false>>();
+    //     }
+    // }
 };
 
 NUdf::IBlockItemComparator::TPtr TBlockTypeHelper::MakeComparator(NUdf::TType* type) const {

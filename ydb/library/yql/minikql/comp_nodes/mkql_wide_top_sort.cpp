@@ -138,14 +138,6 @@ private:
     TComputationContext* Ctx;
     bool HasValue = false;
 public:
-    // EFetchResult FindBuffer() {
-    //     Data->clear();
-    //     if (SpilledData->Pop(*Data)) {
-    //         return EFetchResult::One;
-    //     }
-
-    //     return SpilledData->IsFinished() ? EFetchResult::Finish : EFetchResult::Yield;
-    // }
 
     TSpilledUnboxedValuesIterator(
         const std::function<bool(const NUdf::TUnboxedValuePod*,const NUdf::TUnboxedValuePod*)>& lessFunc,

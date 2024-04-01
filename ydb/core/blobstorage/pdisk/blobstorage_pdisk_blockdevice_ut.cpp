@@ -185,7 +185,7 @@ void RunTestMultipleRequestsFromCompletionAction() {
         NPDisk::TBuffer::TPtr alignedBuffer(bufferPool->Pop());
         memset(alignedBuffer->Data(), 0, dataSize);
         THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, 0, *mon, 0, 0, 4,
-                NPDisk::TDeviceMode::LockFile, 2 << generations, nullptr));
+                NPDisk::TDeviceMode::LockFile, 2 << generations, nullptr, nullptr, 100'000, 60'000, 60'000));
         device->Initialize(creator.GetActorSystem(), {});
 
         (new TWriter(*device, alignedBuffer.Get(), (i32)generations, &counter))->Exec(nullptr);
@@ -218,7 +218,7 @@ void RunTestDestructionWithMultipleFlushesFromCompletionAction() {
 
     TActorSystemCreator creator;
     THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, 0, *mon, 0, 0, 4,
-                NPDisk::TDeviceMode::LockFile, 2 << generations, nullptr));
+                NPDisk::TDeviceMode::LockFile, 2 << generations, nullptr, nullptr, 100'000, 60'000, 60'000));
     device->Initialize(creator.GetActorSystem(), {});
 
     (new TFlusher(*device, generations, &counter))->Exec(nullptr);

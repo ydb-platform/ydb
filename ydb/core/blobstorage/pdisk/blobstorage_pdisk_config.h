@@ -152,6 +152,11 @@ struct TPDiskConfig : public TThrRefBase {
 
     NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
+    // Slowdown detection
+    ui64 DeviceCriticalOverestimationRatio = 100'000;
+    ui64 DeviceCriticalOverestimationTimeMs = 60'000;
+    ui64 MaxNoResponseDeviceTimeMs = 60'000;
+
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
     {}

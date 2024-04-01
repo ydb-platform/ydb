@@ -16,13 +16,14 @@ public:
     THolder<TTempDir> TempDir;
 
     using EDiskMode = NPDisk::NSectorMap::EDiskMode;
-    TTestContext(bool makeTempDir, bool useSectorMap, EDiskMode diskMode = EDiskMode::DM_NONE, ui64 sectorMapSize = 0) {
+    TTestContext(bool makeTempDir, bool useSectorMap, EDiskMode diskMode = EDiskMode::DM_NONE, ui64 diskSize = 0) {
         if (makeTempDir) {
             TempDir.Reset(new TTempDir);
             Dir = TempDir->Name().c_str();
+            MakeDirIfNotExist(Dir);
         }
         if (useSectorMap) {
-            SectorMap = new NPDisk::TSectorMap(sectorMapSize, diskMode);
+            SectorMap = new NPDisk::TSectorMap(diskSize, diskMode);
         }
     }
 

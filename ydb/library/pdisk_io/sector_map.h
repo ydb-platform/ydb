@@ -190,7 +190,8 @@ public:
 
     TTicketLock MapLock;
     std::atomic<bool> IsLocked;
-    std::optional<std::pair<TDuration, TDuration>> ImitateRandomWait;
+    std::atomic<bool> ImitateRandomWait;
+    std::optional<std::pair<TDuration, TDuration>> RandomWaitInterval;
     std::atomic<double> ImitateIoErrorProbability;
     std::atomic<double> ImitateReadIoErrorProbability;
 
@@ -199,6 +200,7 @@ public:
     TSectorMap(ui64 deviceSize = 0, NSectorMap::EDiskMode diskMode = NSectorMap::DM_NONE)
       : DeviceSize(deviceSize)
       , IsLocked(false)
+      , ImitateRandomWait(false)
       , ImitateIoErrorProbability(0.0)
       , ImitateReadIoErrorProbability(0.0)
       , AllocatedBytes(0)
@@ -323,9 +325,9 @@ public:
         str << "Serial# " << Serial.Quote() << "\n";
         str << "DeviceSize# " << DeviceSize << "\n";
         str << "IsLocked# " << IsLocked.load() << "\n";
-        if (ImitateRandomWait) {
-            str << "ImitateRandomWait# [" << ImitateRandomWait->first << ", "
-                << ImitateRandomWait->first + ImitateRandomWait->second << ")" << "\n";
+        if (RandomWaitInterval) {
+            str << "RandomWaitInterval# [" << RandomWaitInterval->first << ", "
+                << RandomWaitInterval->first + RandomWaitInterval->second << ")" << "\n";
         }
         str << "ImitateReadIoErrorProbability# " << ImitateReadIoErrorProbability.load() << "\n";
         str << "ImitateIoErrorProbability# " << ImitateIoErrorProbability.load() << "\n";

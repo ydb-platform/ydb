@@ -101,6 +101,8 @@ struct TPDiskMon {
             ErrorDeviceSerialMismatch,
             ErrorFake,
             BootingReencryptingFormat,
+            ErrorPermanentBadDevice,
+            ErrorTransientBadDevice,
         };
 
         static TString StateToStr(i64 val) {

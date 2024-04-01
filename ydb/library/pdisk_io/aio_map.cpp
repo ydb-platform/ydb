@@ -103,6 +103,7 @@ class TRandomWaitThreadPool : public IThreadPool {
     TThread WorkThread;
     std::atomic<bool> StopFlag;
     std::pair<TDuration, TDuration> WaitParams;
+    const std::atomic<bool>& IsWaitEnabled;
 
     ///////    Thread working part    /////
     static void *Proc(void* that) {
@@ -173,8 +174,12 @@ class TRandomWaitThreadPool : public IThreadPool {
             return false;
         }
         auto op = static_cast<TAsyncIoOperationMap*>(obj);
-        op->Deadline = TInstant::Now() + WaitParams.first
-            + TDuration::MicroSeconds(RandomNumber<ui32>(WaitParams.second.MicroSeconds()));
+        if (IsWaitEnabled.load()) {
+            op->Deadline = TInstant::Now() + WaitParams.first
+                + TDuration::MicroSeconds(RandomNumber<ui32>(WaitParams.second.MicroSeconds()));
+        } else {
+            op->Deadline = TInstant::Now();
+        }
         IncomingQueue.Push(op);
         return true;
     }
@@ -195,10 +200,11 @@ class TRandomWaitThreadPool : public IThreadPool {
 
 
 public:
-    TRandomWaitThreadPool(const std::pair<TDuration, TDuration>& waitParams)
+    TRandomWaitThreadPool(const std::pair<TDuration, TDuration>& waitParams, const std::atomic<bool>& isWaitEnabled)
         : WorkThread(TThread::TParams(Proc, this))
         , StopFlag(false)
         , WaitParams(waitParams)
+        , IsWaitEnabled(isWaitEnabled)
     {
         WorkThread.Start();
     }
@@ -329,8 +335,8 @@ public:
             }
         }
         MaxEvents = maxEvents;
-        if (SectorMap->ImitateRandomWait) {
-            Queue = new TRandomWaitThreadPool(*SectorMap->ImitateRandomWait);
+        if (SectorMap->RandomWaitInterval) {
+            Queue = new TRandomWaitThreadPool(*SectorMap->RandomWaitInterval, SectorMap->ImitateRandomWait);
         } else {
             Queue = new TThreadPool();
             Queue->Start(1, MaxEvents);

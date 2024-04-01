@@ -15,26 +15,16 @@ VERSION(3.19.0)
 
 ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v3.19.0.tar.gz)
 
-IF (OPENSOURCE_REPLACE_PROTOBUF)
-
-    OPENSOURCE_EXPORT_REPLACEMENT(
-        CMAKE Protobuf
-        CMAKE_TARGET protobuf::libprotobuf protobuf::libprotoc
-        CONAN protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan_require_tool" protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan_import \"bin, protoc* -> ./bin\" && vanilla_protobuf"
-    )
-
-ELSE() # IF (OPENSOURCE_REPLACE_PROTOBUF)
-
-    ADDINCL(
-        GLOBAL contrib/libs/protobuf/src
-        GLOBAL FOR proto contrib/libs/protobuf/src
-    )
-
-ENDIF() # ELSE() # IF (OPENSOURCE_REPLACE_PROTOBUF)
-
 PEERDIR(
     contrib/libs/zlib
     library/cpp/sanitizer/include
+)
+
+ADDINCL(
+    GLOBAL contrib/libs/protobuf/src
+    GLOBAL FOR
+    proto
+    contrib/libs/protobuf/src
 )
 
 NO_COMPILER_WARNINGS()

@@ -16,6 +16,6 @@ jobs:
     with:
       runner_label: auto-provisioned
       build_preset: relwithdebinfo
-      build_target: ydb/
+      build_target: ydb/tests/functional/large_serializable
       run_build: true
       run_tests: true

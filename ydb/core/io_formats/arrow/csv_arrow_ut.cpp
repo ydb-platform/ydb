@@ -74,7 +74,7 @@ TestReadSingleBatch(const TVector<std::pair<TString, NScheme::TTypeInfo>>& colum
         reader->SetEscaping(true, *escape);
     }
 
-    return TestReadSingleBatch(reader, columns, data, numRows);
+    return TestReadSingleBatch(*reader, columns, data, numRows);
 }
 
 }

@@ -5,6 +5,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/value_parsing.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NFormats {
 

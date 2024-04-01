@@ -113,6 +113,7 @@ namespace NKikimr::NColumnShard {
         }
 
         TConclusionStatus ValidateTableSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) const {
+            namespace NTypeIds = NScheme::NTypeIds;
             static const THashSet<NScheme::TTypeId> pkSupportedTypes = {
                 NTypeIds::Timestamp,
                 NTypeIds::Int8,
@@ -145,7 +146,7 @@ namespace NKikimr::NColumnShard {
             for (const NKikimrSchemeOp::TOlapColumnDescription& column : schema.GetColumns()) {
                 TString name = column.GetName();
                 NScheme::TTypeInfo schemeType(column.GetTypeId());
-                if (keyColumns.contains(name) && !pkSupportedTypes.contains(schemeType)) {
+                if (keyColumns.contains(name) && !pkSupportedTypes.contains(column.GetTypeId())) {
                     columnErrors.emplace_back("key column " + name + " has unsupported type "  + NScheme::TypeName(column.GetTypeId()));
                 }
                 auto arrowType = NArrow::GetArrowType(schemeType);

@@ -285,7 +285,7 @@ private:
                                    TUserInfoBase& userInfo,
                                    const TActorContext& ctx);
 
-    void SendCalcPredicateResult(TTransaction& tx, bool result);
+    void SetPredicateResultAndRespond(TTransaction& tx, bool result);
 
     void ScheduleReplyOk(const ui64 dst);
     void ScheduleReplyGetClientOffsetOk(const ui64 dst,

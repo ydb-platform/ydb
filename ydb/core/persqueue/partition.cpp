@@ -1096,32 +1096,32 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorCo
 
     Y_ABORT_UNLESS(TxInProgress);
     auto& knownSrcIds = SourceIdStorage.GetInMemorySourceIds();
-    auto& currTx = GetUserActionAndTransactionEventsFront<TTransaction>();
+    auto& currTx = GetCurrentTransaction();
 
     for (auto& s : srcIdInfo) {
         auto ins = currTx.AffectedSourcesIds.insert(s.first).second;
         if (!ins) {
-            return SendCalcPredicateResult(currTx, false);
+            return SetPredicateResultAndRespond(currTx, false);
         }
         auto existing = knownSrcIds.find(s.first);
         if (existing.IsEnd())
             continue;
         if (s.second.MinSeqNo <= existing->second.SeqNo) {
-            return SendCalcPredicateResult(currTx, false);
+            return SetPredicateResultAndRespond(currTx, false);
         }
         //SourceIdStorage.
     }
     currTx.WriteInfo = ev->Release();
-    return SendCalcPredicateResult(currTx, true);
+    return SetPredicateResultAndRespond(currTx, true);
 }
 
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr&, const TActorContext&) {
     Y_ABORT_UNLESS(TxInProgress);
     auto& currTx = GetUserActionAndTransactionEventsFront<TTransaction>();
-    return SendCalcPredicateResult(currTx, false);
+    return SetPredicateResultAndRespond(currTx, false);
 }
 
-void TPartition::SendCalcPredicateResult(TTransaction& tx, bool result) {
+void TPartition::SetPredicateResultAndRespond(TTransaction& tx, bool result) {
     tx.Predicate = result;
     Send(Tablet, MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(tx.Tx->Step,
                                                              tx.Tx->TxId,
@@ -1590,7 +1590,6 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     if (response.GetStatusResultSize()) {
         DiskIsFull = !diskIsOk;
     }
-
     const auto writeDuration = ctx.Now() - WriteStartTime;
     const auto minWriteLatency = TDuration::MilliSeconds(AppData(ctx)->PQConfig.GetMinWriteLatencyMs());
     if (writeDuration > minWriteLatency) {
@@ -1798,14 +1797,14 @@ TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TTransacti
         }
 
         t.Predicate = BeginTransaction(*t.Tx, ctx);
-        if (t.Tx->SupportivePartitionActor) {
+        if (t.Tx->SupportivePartitionActor && t.Predicate.GetOrElse(true)) {
             Send(t.Tx->SupportivePartitionActor, new TEvPQ::TEvGetWriteInfoRequest());
         } else {
-            ctx.Send(Tablet,
-                    MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(t.Tx->Step,
-                                                                t.Tx->TxId,
-                                                                Partition,
-                                                                *t.Predicate).Release());
+            Send(Tablet,
+                MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(t.Tx->Step,
+                                                            t.Tx->TxId,
+                                                            Partition,
+                                                            *t.Predicate).Release());
         }
         TxInProgress = true;
 
@@ -1820,10 +1819,10 @@ TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TTransacti
         PendingPartitionConfig = GetPartitionConfig(t.ProposeConfig->Config);
         //Y_VERIFY_DEBUG_S(PendingPartitionConfig, "Partition " << Partition << " config not found");
 
-        ctx.Send(Tablet,
-                 MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(t.ProposeConfig->Step,
-                                                                    t.ProposeConfig->TxId,
-                                                                    Partition).Release());
+        Send(Tablet,
+             MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(t.ProposeConfig->Step,
+                                                                t.ProposeConfig->TxId,
+                                                                Partition).Release());
 
         TxInProgress = true;
 

@@ -260,7 +260,7 @@ protected:
     void SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force = true);
     void SendWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data,
                    bool ignoreQuotaDeadline = false, ui64 seqNo = 0);
-    void SendGetWriteInfo(ui32 internalPartitionId);
+    void SendGetWriteInfo();
     void ShadowPartitionCountersTest(bool isFirstClass);
 
     void TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration, bool ignoreQuotaDeadline);
@@ -270,6 +270,7 @@ protected:
 
     void EmulateKVTablet();
     void SetWriteInfoObserver(bool success, const NPQ::TSourceIdMap& srcIdInfo = {});
+    void EmulateKVTablet();
 
     TMaybe<TTestContext> Ctx;
     TMaybe<TFinalizer> Finalizer;
@@ -617,8 +618,7 @@ void TPartitionFixture::SendChangeOwner(const ui64 cookie, const TString& owner,
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TPartitionFixture::SendGetWriteInfo(const ui32 internalPartitionId) {
-    Y_UNUSED(internalPartitionId);
+void TPartitionFixture::SendGetWriteInfo() {
     auto event = MakeHolder<TEvPQ::TEvGetWriteInfoRequest>();
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
@@ -730,7 +730,6 @@ void TPartitionFixture::SendDiskStatusResponse(TMaybe<ui64>* cookie)
     if (cookie && cookie->Defined()) {
         event->Record.SetCookie(cookie->GetRef());
     }
-
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
     auto result = event->Record.AddGetStatusResult();
@@ -1080,7 +1079,7 @@ void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
     }
     TVector<ui64> msgSizesExpected{2, 2, 1, 1, 1, 1, 1, 1};
     CompareVectors(msgSizesExpected, finalCounters.GetMessagesSizes());
-    SendGetWriteInfo(100'001);
+    SendGetWriteInfo();
     {
         auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoResponse>(TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
@@ -1105,6 +1104,14 @@ void TPartitionFixture::WaitKeyValueRequest(TMaybe<ui64>& cookie)
     } else {
         cookie = Nothing();
     }
+}
+
+void TPartitionFixture::EmulateKVTablet()
+{
+     TMaybe<ui64> cookie;
+     WaitKeyValueRequest(cookie);
+     SendDiskStatusResponse(&cookie);
+     Cerr << "Send disk status response with cookie: " << cookie.GetOrElse(0) << Endl;
 }
 
 void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration, bool ignoreQuotaDeadline)
@@ -1176,9 +1183,6 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration
         UNIT_ASSERT_EQUAL(NMsgBusProxy::MSTATUS_OK, event->Response->GetStatus());
     }
 }
-
-
-
 
 Y_UNIT_TEST_F(Batching, TPartitionFixture)
 {
@@ -1418,7 +1422,6 @@ Y_UNIT_TEST_F(CorrectRange_Commit, TPartitionFixture)
 
     CreatePartition({.Partition=partition, .Begin=begin, .End=end, .PlanStep=step, .TxId=10000});
     CreateSession(client, session);
-
 
     SendCalcPredicate(step, txId, client, 0, 2);
     WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=true});
@@ -1891,7 +1894,7 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoSuccess, TPartitionFixture) {
         auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
     }
-    SendGetWriteInfo(100'001);
+    SendGetWriteInfo();
     {
         {
             auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
@@ -1947,7 +1950,7 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoError, TPartitionFixture) {
 
     SendWrite(++cookie, 0, ownerCookie, 100, data, false, 1);
     {
-        SendGetWriteInfo(100'001);
+        SendGetWriteInfo();
         auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
     }
@@ -1957,7 +1960,7 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoError, TPartitionFixture) {
         UNIT_ASSERT(event != nullptr);
     }
     {
-        SendGetWriteInfo(100'001);
+        SendGetWriteInfo();
         auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
     }
@@ -2006,11 +2009,6 @@ Y_UNIT_TEST_F(DataTxCalcPredicateOk, TPartitionFixture)
     CreateSession("client", "session");
     i64 cookie = 1;
 
-    SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
-    auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
-    UNIT_ASSERT(ownerEvent != nullptr);
-    auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
-
     const ui64 step = 12345;
     ui64 txId_1 = 67890;
     ui64 txId_2 = txId_1 + 1;
@@ -2025,22 +2023,34 @@ Y_UNIT_TEST_F(DataTxCalcPredicateOk, TPartitionFixture)
     info.MinSeqNo = 1;
     TSourceIdMap srcIds = {{"src1", info}};
 
-    Cerr << "Wait second predicate result " << Endl;
     SetWriteInfoObserver(true, srcIds);
     SendCalcPredicate(step, txId_2, {}, 0, 0, Ctx->Edge);
     SendCommitTx(step, txId_1);
+    Cerr << "Wait second predicate result " << Endl;
     WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=true});
+    SendCommitTx(step, txId_2);
+    Cerr << "Wait kv request for second tx\n";
+    EmulateKVTablet();
 
     TString data = "data for write";
+
+    SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
+    auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
+    UNIT_ASSERT(ownerEvent != nullptr);
+    auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+    Cerr << "Send write" << Endl;
+
     SendWrite(++cookie, 0, ownerCookie, 11, data, false, 5);
-    SendDiskStatusResponse();
+    Cerr << "Send status response" << Endl;
+    EmulateKVTablet();
+    WaitProxyResponse({.Cookie=cookie});
+
     info.MinSeqNo = 6;
     srcIds.insert(std::make_pair("SourceId", info));
 
     Cerr << "Wait third predicate result " << Endl;
     SetWriteInfoObserver(true, srcIds);
     SendCalcPredicate(step, txId_3, {}, 0, 0, Ctx->Edge);
-    SendCommitTx(step, txId_2);
     WaitCalcPredicateResult({.Step=step, .TxId=txId_3, .Partition=partition, .Predicate=true});
     SendCommitTx(step, txId_3);
 }
@@ -2066,21 +2076,27 @@ Y_UNIT_TEST_F(DataTxCalcPredicateError, TPartitionFixture)
     SetWriteInfoObserver(false, {});
     SendCalcPredicate(step, txId_1, {}, 0, 0, Ctx->Edge);
     WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=partition, .Predicate=false});
+    SendRollbackTx(step, txId_1);
+    Cerr << "Wait tx write request\n";
+    EmulateKVTablet();
 
     TSourceIdInfo info {10, 10, TInstant::Zero()};
     info.MinSeqNo = 1;
     TSourceIdMap srcIds = {{"src1", info}};
 
     TString data = "data for write";
+    Cerr << "Send write\n";
     SendWrite(++cookie, 0, ownerCookie, 11, data, false, 5);
-    SendDiskStatusResponse();
+    Cerr << "Wait write response\n";
+    EmulateKVTablet();
+    WaitProxyResponse({.Cookie=cookie});
+
     info.MinSeqNo = 3;
     srcIds.insert(std::make_pair("SourceId", info));
 
-    Cerr << "Wait third predicate result " << Endl;
+    Cerr << "Wait second predicate result " << Endl;
     SetWriteInfoObserver(true, srcIds);
     SendCalcPredicate(step, txId_2, {}, 0, 0, Ctx->Edge);
-    SendRollbackTx(step, txId_1);
     WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=false});
 }
 

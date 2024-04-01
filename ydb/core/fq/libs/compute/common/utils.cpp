@@ -224,7 +224,7 @@ TString FormatInstant(TInstant instant) {
     return builder;
 }
 
-void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const TString& name, TTotalStatistics& totals) {
+void WriteNamedNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& name, TTotalStatistics& totals) {
     switch (node.GetType()) {
         case NJson::JSON_INTEGER:
         case NJson::JSON_DOUBLE:
@@ -427,48 +427,301 @@ void EnumeratePlans(NYson::TYsonWriter& writer, NJson::TJsonValue& value, ui32& 
     }
 }
 
-TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage) {
-    TStringStream out;
-    NYson::TYsonWriter writer(&out);
-    writer.OnBeginMap();
-    NJson::TJsonReaderConfig jsonConfig;
-    NJson::TJsonValue stat;
-    if (NJson::ReadJsonTree(plan, &jsonConfig, &stat)) {
-        if (auto* topNode = stat.GetValueByPath("Plan")) {
-            if (auto* subNode = topNode->GetValueByPath("Plans")) {
-                for (auto plan : subNode->GetArray()) {
-                    if (auto* typeNode = plan.GetValueByPath("Node Type")) {
-                        auto nodeType = typeNode->GetStringSafe();
-                        TTotalStatistics totals;
-                        ui32 stageViewIndex = 0;
-                        writer.OnKeyedItem(nodeType);
-                        writer.OnBeginMap();
-                        EnumeratePlans(writer, plan, stageViewIndex, totals);
-                        totals.MaxMemoryUsage.Write(writer, "MaxMemoryUsage");
-                        totals.CpuTimeUs.Write(writer, "CpuTimeUs");
-                        totals.SourceCpuTimeUs.Write(writer, "SourceCpuTimeUs");
-                        if (cpuUsage) {
-                            *cpuUsage = (totals.CpuTimeUs.Sum + totals.SourceCpuTimeUs.Sum) / 1000000.0;
-                        }
-                        totals.InputBytes.Write(writer, "InputBytes");
-                        totals.InputRows.Write(writer, "InputRows");
-                        totals.OutputBytes.Write(writer, "OutputBytes");
-                        totals.OutputRows.Write(writer, "OutputRows");
-                        totals.ResultBytes.Write(writer, "ResultBytes");
-                        totals.ResultRows.Write(writer, "ResultRows");
-                        totals.IngressBytes.Write(writer, "IngressBytes");
-                        totals.IngressRows.Write(writer, "IngressRows");
-                        totals.EgressBytes.Write(writer, "EgressBytes");
-                        totals.EgressRows.Write(writer, "EgressRows");
-                        totals.Tasks.Write(writer, "Tasks");
-                        writer.OnEndMap();
-                    }
-                }
+class IPlanVisitor {
+public:
+    virtual ~IPlanVisitor() = default;
+
+    // Visit*Pre methods are called on entry and Visit*Post are called after traversing node.
+    // If Visit*Pre returns false, that node will not be visited
+
+    virtual bool VisitRootPre(const NJson::TJsonValue& /*planRoot*/) { return true; }
+    virtual void VisitRootPost(const NJson::TJsonValue& /*planRoot*/) {}
+
+    virtual bool VisitPlanPre(const NJson::TJsonValue& /*plan*/) { return true; }
+    virtual void VisitPlanPost(const NJson::TJsonValue& /*plan*/) {}
+
+    virtual bool VisitStatsPre(const NJson::TJsonValue& /*stats*/) { return true; }
+    virtual void VisitStatsPost(const NJson::TJsonValue& /*stats*/) {}
+
+    virtual bool VisitArrayPre(const NJson::TJsonValue& /*array*/, TStringBuf /*name*/) { return true; }
+    virtual void VisitArrayPost(const NJson::TJsonValue& /*array*/, TStringBuf /*name*/) {}
+
+    virtual bool VisitMapPre(const NJson::TJsonValue& /*map*/, TStringBuf /*name*/) { return true; }
+    virtual void VisitMapPost(const NJson::TJsonValue& /*map*/, TStringBuf /*name*/) {}
+
+    virtual void OnInteger(const NJson::TJsonValue& /*integer*/, TStringBuf /*name*/) {}
+};
+
+class TPlanTraverser {
+public:
+    void Traverse(TStringBuf plan, IPlanVisitor& visitor) {
+        if (!NJson::ReadJsonTree(plan, &ReaderConfig_, &PlanRoot_)) {
+            return;
+        }
+
+        Traverse(visitor);
+    }
+
+    void Traverse(IPlanVisitor& visitor) {
+        if (!visitor.VisitRootPre(PlanRoot_)) {
+            return;
+        }
+
+        const NJson::TJsonValue::TArray* plans = nullptr;
+        if (auto plansNode = PlanRoot_.GetValueByPath("Plan.Plans")) {
+            plansNode->GetArrayPointer(&plans);
+        }
+        if (!plans) {
+            return;
+        }
+
+        for (const auto& plan : *plans) {
+            TraversePlan(plan, visitor);
+        }
+
+        visitor.VisitRootPost(PlanRoot_);
+    }
+
+private:
+    void TraversePlan(const NJson::TJsonValue& plan, IPlanVisitor& visitor) {
+        if (!visitor.VisitPlanPre(plan)) { // TODO make callable once
+            return;
+        }
+
+        if (auto* subNode = plan.GetValueByPath("Plans")) {
+            for (auto plan : subNode->GetArray()) {
+                TraversePlan(plan, visitor);
             }
         }
+
+        if (auto* statsNode = plan.GetValueByPath("Stats")) {
+            TraverseStats(*statsNode, visitor);
+        }
+
+        visitor.VisitPlanPost(plan); // TODO: this too
     }
-    writer.OnEndMap();
-    return NJson2Yson::ConvertYson2Json(out.Str());
+
+    void TraverseStats(const NJson::TJsonValue& stats, IPlanVisitor& visitor) {
+        if (!visitor.VisitStatsPre(stats)) {
+            return;
+        }
+        TraverseNodes(stats, "", visitor);
+
+        visitor.VisitStatsPost(stats);
+    }
+
+    void TraverseNodes(const NJson::TJsonValue& node, const TString& name, IPlanVisitor& visitor) {
+        switch (node.GetType()) {
+            case NJson::JSON_INTEGER:
+            case NJson::JSON_DOUBLE:
+            case NJson::JSON_UINTEGER:
+                if (name) {
+                    visitor.OnInteger(node, name);
+                }
+                break;
+            case NJson::JSON_ARRAY: {
+                if (!visitor.VisitArrayPre(node, name)) {
+                    break;
+                }
+                for (auto item : node.GetArray()) {
+                    if (auto* subNode = item.GetValueByPath("Name")) {
+                        TraverseNodes(item, name + "=" + subNode->GetStringSafe(), visitor);
+                    }
+                }
+                visitor.VisitArrayPost(node, name);
+                break;
+            }
+            case NJson::JSON_MAP: {
+                if (!visitor.VisitMapPre(node, name)) {
+                    break;
+                }
+                for (auto& [key, value] : node.GetMapSafe()) {
+                    TraverseNodes(value, key, visitor);
+                }
+                visitor.VisitMapPost(node, name);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+protected:
+    NJson::TJsonReaderConfig ReaderConfig_;
+    NJson::TJsonValue PlanRoot_;
+};
+
+class TStatsConvertingVisitor : public IPlanVisitor {
+public:
+    TStatsConvertingVisitor(double* cpuUsage)
+        : CpuUsage_{cpuUsage}
+    {}
+
+    bool VisitRootPre(const NJson::TJsonValue&) {
+        if (!Out_) {
+            Out_ = std::make_unique<TStringStream>();
+        } else {
+            Out_->Clear();
+        }
+        Writer_.emplace(Out_.get());
+        writer().OnBeginMap();
+        return true;
+    }
+
+    void VisitRootPost(const NJson::TJsonValue&) {
+        writer().OnEndMap();
+        Result_ = NJson2Yson::ConvertYson2Json(Out_->Str());
+    }
+
+    bool VisitPlanPre(const NJson::TJsonValue& plan) {
+        if (PlanDepth_++) {
+            return true;
+        }
+        NJson::TJsonValue typeNode;
+        if (!plan.GetValue("Node Type", &typeNode)) {
+            return false;
+        }
+
+        Totals_ = {};
+        StageViewIndex_ = 0;
+        writer().OnKeyedItem(typeNode.GetStringSafe());
+        writer().OnBeginMap();
+
+        if (auto* idNode = plan.GetValueByPath("PlanNodeId")) {
+            IdNode_ = idNode->GetIntegerSafe();
+        }
+        if (auto* typeNode = plan.GetValueByPath("Node Type")) {
+            NodeType_ = typeNode->GetStringSafe();
+        }
+        return true;
+    }
+
+    void VisitPlanPost(const NJson::TJsonValue&) {
+        if (--PlanDepth_) {
+            return;
+        }
+        Totals_.MaxMemoryUsage.Write(writer(), "MaxMemoryUsage");
+        Totals_.CpuTimeUs.Write(writer(), "CpuTimeUs");
+        Totals_.SourceCpuTimeUs.Write(writer(), "SourceCpuTimeUs");
+        if (CpuUsage_) {
+            *CpuUsage_ = (Totals_.CpuTimeUs.Sum + Totals_.SourceCpuTimeUs.Sum) / 1000000.0;
+        }
+        Totals_.InputBytes.Write(writer(), "InputBytes");
+        Totals_.InputRows.Write(writer(), "InputRows");
+        Totals_.OutputBytes.Write(writer(), "OutputBytes");
+        Totals_.OutputRows.Write(writer(), "OutputRows");
+        Totals_.ResultBytes.Write(writer(), "ResultBytes");
+        Totals_.ResultRows.Write(writer(), "ResultRows");
+        Totals_.IngressBytes.Write(writer(), "IngressBytes");
+        Totals_.IngressRows.Write(writer(), "IngressRows");
+        Totals_.EgressBytes.Write(writer(), "EgressBytes");
+        Totals_.EgressRows.Write(writer(), "EgressRows");
+        Totals_.Tasks.Write(writer(), "Tasks");
+        writer().OnEndMap();
+
+        IdNode_.reset();
+        NodeType_.clear();
+    }
+
+    bool VisitStatsPre(const NJson::TJsonValue& stats) {
+        TStringBuilder builder;
+        StageViewIndex_++;
+        if (StageViewIndex_ < 10) {
+            builder << '0';
+        }
+        builder << StageViewIndex_;
+        if (IdNode_) {
+            builder << '_' << *IdNode_;
+        }
+        if (NodeType_) {
+            builder << '_' << NodeType_;
+        }
+
+        writer().OnKeyedItem(builder);
+        writer().OnBeginMap();
+            WriteNamedNode(writer(), stats, "", Totals_);
+        writer().OnEndMap();
+        return true;
+    }
+
+    const TString& GetResult() const noexcept { return Result_; }
+
+private:
+    NYson::TYsonWriter& writer() noexcept { return *Writer_; }
+
+private:
+    double* CpuUsage_ = nullptr;
+    std::unique_ptr<TStringStream> Out_;
+    std::optional<NYson::TYsonWriter> Writer_;
+    TString Result_;
+
+    TTotalStatistics Totals_;
+    ui32 StageViewIndex_ = 0;
+    ui32 PlanDepth_ = 0;
+    std::optional<i64> IdNode_;
+    TString NodeType_;
+};
+
+TString GetV1StatFromV2Plan(TStringBuf plan, double* cpuUsage) {
+    TPlanTraverser traverser;
+    TStatsConvertingVisitor visitor{cpuUsage};
+    traverser.Traverse(plan, visitor);
+    return visitor.GetResult();
+}
+
+class TStatAggregatingVisitor : public IPlanVisitor {
+public:
+    bool VisitMapPre(const NJson::TJsonValue& map, TStringBuf name) override {
+        if (TryExtractAggregate(map, name)) {
+            return false;
+        } else if (TryExtractSourceIngress(map, name)) {
+            return false;
+        }
+        return true;
+    }
+
+    const THashMap<std::string, i64>& GetResult() const noexcept {
+        return Aggregates_;
+    }
+
+private:
+    bool TryExtractSourceIngress(const NJson::TJsonValue& map, TStringBuf name) {
+        constexpr TStringBuf prefix = "Ingress=";
+        if (name.starts_with(prefix)) {
+            if (auto ingress = map.GetValueByPath("Ingress.Bytes.Sum")) {
+                auto source = std::string{name.substr(prefix.size())};
+                Aggregates_[source] += ingress->GetIntegerSafe();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool TryExtractAggregate(const NJson::TJsonValue& map, TStringBuf name) {
+        auto dstAggr = Aggregates_.find(std::string{name});
+        if (dstAggr == Aggregates_.end()) {
+            return false;
+        }
+        if (auto sum = map.GetValueByPath("Sum")) {
+            dstAggr->second += sum->GetIntegerSafe();
+            return true;
+        }
+        return false;
+    }
+
+    THashMap<std::string, i64> Aggregates_{std::pair<std::string, i64>
+        {"IngressBytes", 0},
+        {"EgressBytes", 0},
+        {"InputBytes", 0},
+        {"OutputBytes", 0},
+        {"CpuTimeUs", 0},
+    };
+};
+
+THashMap<std::string, i64> AggregateStats(TStringBuf plan) {
+    TPlanTraverser traverser;
+    TStatAggregatingVisitor visitor;
+    traverser.Traverse(plan, visitor);
+    return visitor.GetResult();
 }
 
 std::optional<ui64> WriteMetric(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const TString& column, const TString& name, const TString& tag) {
@@ -913,7 +1166,7 @@ std::optional<int> Sum(const std::optional<int>& a, const std::optional<int>& b)
     return *a + *b;
 }
 
-TPublicStat GetPublicStat(const TString& statistics) {
+TPublicStat GetPublicStat(TStringBuf statistics) {
     TPublicStat counters;
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue stat;
@@ -942,17 +1195,21 @@ struct TNoneStatProcessor : IPlanStatProcessor {
         return Ydb::Query::StatsMode::STATS_MODE_NONE;
     }
 
-    TString ConvertPlan(TString& plan) override {
+    TString ConvertPlan(const TString& plan) override {
         return plan;
     }
 
-    TString GetQueryStat(TString&, double& cpuUsage) override {
+    TString GetQueryStat(TStringBuf, double& cpuUsage) override {
         cpuUsage = 0.0;
         return "";
     }
 
-    TPublicStat GetPublicStat(TString&) override {
+    TPublicStat GetPublicStat(TStringBuf) override {
         return TPublicStat{};
+    }
+
+    THashMap<std::string, i64> GetPlainStat(TStringBuf) override {
+        return {};
     }
 };
 
@@ -967,16 +1224,20 @@ struct TFullStatProcessor : IPlanStatProcessor {
         return Ydb::Query::StatsMode::STATS_MODE_FULL;
     }
 
-    TString ConvertPlan(TString& plan) override {
+    TString ConvertPlan(const TString& plan) override {
         return plan;
     }
 
-    TString GetQueryStat(TString& plan, double& cpuUsage) override {
+    TString GetQueryStat(TStringBuf plan, double& cpuUsage) override {
         return GetV1StatFromV2Plan(plan, &cpuUsage);
     }
 
-    TPublicStat GetPublicStat(TString& stat) override {
+    TPublicStat GetPublicStat(TStringBuf stat) override {
         return NFq::GetPublicStat(stat);
+    }
+
+    THashMap<std::string, i64> GetPlainStat(TStringBuf plan) override {
+        return AggregateStats(plan);
     }
 };
 
@@ -987,7 +1248,7 @@ struct TProfileStatProcessor : TFullStatProcessor {
 };
 
 struct TProdStatProcessor : TFullStatProcessor {
-    TString GetQueryStat(TString& plan, double& cpuUsage) override {
+    TString GetQueryStat(TStringBuf plan, double& cpuUsage) override {
         return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage));
     }
 };

@@ -2459,6 +2459,8 @@ struct TComparatorTraits {
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = NUdf::TStringBlockItemComparator<TStringType, Nullable>;
     using TExtOptional = NUdf::TExternalOptionalBlockItemComparator;
+    template <typename T, bool Nullable>
+    using TTzDateComparator = NUdf::TTzDateBlockItemComparator<T, Nullable>;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -2468,6 +2470,15 @@ struct TComparatorTraits {
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Comparator not implemented for block resources: ";
+    }
+
+    template<typename TTzDate>
+    static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
+        if (isOptional) {
+            return std::make_unique<TTzDateComparator<TTzDate, true>>();
+        } else {
+            return std::make_unique<TTzDateComparator<TTzDate, false>>();
+        }
     }
 };
 
@@ -2480,6 +2491,8 @@ struct THasherTraits {
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = NUdf::TStringBlockItemHasher<TStringType, Nullable>;
     using TExtOptional = NUdf::TExternalOptionalBlockItemHasher;
+    template <typename T, bool Nullable>
+    using TTzDateHasher = NYql::NUdf::TTzDateBlockItemHasher<T, Nullable>;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -2491,13 +2504,14 @@ struct THasherTraits {
         ythrow yexception() << "Hasher not implemented for block resources";
     }
     
-    // static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
-    //     if (isOptional) {
-    //         return std::make_unique<TFixedSize<T, true>>();
-    //     } else {
-    //         return std::make_unique<TFixedSize<T, false>>();
-    //     }
-    // }
+    template<typename TTzDate>
+    static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
+        if (isOptional) {
+            return std::make_unique<TTzDateHasher<TTzDate, true>>();
+        } else {
+            return std::make_unique<TTzDateHasher<TTzDate, false>>();
+        }
+    }
 };
 
 NUdf::IBlockItemComparator::TPtr TBlockTypeHelper::MakeComparator(NUdf::TType* type) const {

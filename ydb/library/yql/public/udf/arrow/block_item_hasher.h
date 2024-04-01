@@ -49,6 +49,17 @@ public:
     }
 };
 
+template <typename T, bool Nullable>
+class TTzDateBlockItemHasher : public TBlockItemHasherBase<TTzDateBlockItemHasher<T, Nullable>, Nullable> {
+public:
+    ui64 DoHash(TBlockItem value) const {
+        using TLayout = TDataType<T>::TLayout;
+        TUnboxedValuePod uv {value.As<TLayout>()};
+        uv.SetTimezoneId(value.GetTimezoneId());
+        return GetValueHash<TDataType<T>::Slot>(uv);
+    }
+};
+
 template <typename TStringType, bool Nullable>
 class TStringBlockItemHasher : public TBlockItemHasherBase<TStringBlockItemHasher<TStringType, Nullable>, Nullable> {
 public:

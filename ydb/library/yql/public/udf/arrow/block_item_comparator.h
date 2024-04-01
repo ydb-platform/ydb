@@ -148,6 +148,48 @@ public:
     }
 };
 
+template<typename TTzType, bool Nullable>
+class TTzDateBlockItemComparator : public TBlockItemComparatorBase<TTzDateBlockItemComparator<TTzType, Nullable>, Nullable> {
+    using TLayout = TDataType<TTzType>::TLayout;
+
+public:
+    bool DoCompare(TBlockItem lhs, TBlockItem rhs) const {
+        const auto x = lhs.Get<TLayout>();
+        const auto y = rhs.Get<TLayout>();
+        
+        if (x == y) {
+            const auto tx = lhs.GetTimezoneId();
+            const auto ty = rhs.GetTimezoneId();
+            return (tx == ty) ? 0 : (tx < ty ? -1 : 1);
+        }
+
+        if (x < y) {
+            return -1;
+        }
+
+        return 1;
+    }
+
+    bool DoEquals(TBlockItem lhs, TBlockItem rhs) const {
+        return lhs.Get<TLayout>() == rhs.Get<TLayout>() && lhs.GetTimezoneId() == rhs.GetTimezoneId();
+    }
+    
+    
+    bool DoLess(TBlockItem lhs, TBlockItem rhs) const {
+        const auto x = lhs.Get<TLayout>();
+        const auto y = rhs.Get<TLayout>();
+        
+        if (x == y) {
+            const auto tx = lhs.GetTimezoneId();
+            const auto ty = rhs.GetTimezoneId();
+            return tx < ty;
+        }
+        
+        return x < y;
+    }
+};
+
+
 template <bool Nullable>
 class TTupleBlockItemComparator : public TBlockItemComparatorBase<TTupleBlockItemComparator<Nullable>, Nullable> {
 public:

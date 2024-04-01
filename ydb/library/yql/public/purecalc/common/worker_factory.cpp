@@ -13,6 +13,8 @@
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/config/yql_config_provider.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
@@ -92,7 +94,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     if (options.TranslationMode_ == ETranslationMode::Mkql) {
         SerializedProgram_ = TString{options.Query};
     } else {
-        ExprRoot_ = Compile(options.Query, ETranslationMode::SQL == options.TranslationMode_,
+        ExprRoot_ = Compile(options.Query, options.TranslationMode_,
             options.ModuleResolver, options.SyntaxVersion_, options.Modules, options.OutputSpec, processorMode);
 
         // Deduce output type if it wasn't provided by output spec
@@ -109,13 +111,17 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
 template <typename TBase>
 TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     TStringBuf query,
-    bool sql,
+    ETranslationMode mode,
     IModuleResolver::TPtr moduleResolver,
     ui16 syntaxVersion,
     const THashMap<TString, TString>& modules,
     const TOutputSpecBase& outputSpec,
     EProcessorMode processorMode
 ) {
+    if (mode == ETranslationMode::PG && processorMode != EProcessorMode::PullList) {
+        ythrow TCompileError("", "") << "only PullList mode is compatible to PostgreSQL syntax";
+    }
+
     // Prepare type annotation context
 
     TTypeAnnotationContextPtr typeContext;
@@ -128,6 +134,8 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     typeContext->UdfResolver = NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get());
     typeContext->UserDataStorage = MakeIntrusive<TUserDataStorage>(nullptr, UserData_, nullptr, nullptr);
     typeContext->Modules = moduleResolver;
+    auto configProvider = CreateConfigProvider(*typeContext, nullptr, "");
+    typeContext->AddDataSource(ConfigProviderName, configProvider);
     typeContext->Initialize(ExprContext_);
 
     if (auto modules = dynamic_cast<TModuleResolver*>(moduleResolver.get())) {
@@ -138,10 +146,14 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
 
     TAstParseResult astRes;
 
-    if (sql) {
+    if (mode == ETranslationMode::SQL || mode == ETranslationMode::PG) {
         NSQLTranslation::TTranslationSettings settings;
 
         typeContext->DeprecatedSQL = (syntaxVersion == 0);
+        if (mode == ETranslationMode::PG) {
+            settings.PgParser = true;
+        }
+
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
@@ -164,7 +176,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     }
 
     if (!astRes.IsOk()) {
-        ythrow TCompileError(TString(query), astRes.Issues.ToString()) << "failed to parse " << (sql ? ETranslationMode::SQL : ETranslationMode::SExpr);
+        ythrow TCompileError(TString(query), astRes.Issues.ToString()) << "failed to parse " << mode;
     }
 
     ExprContext_.IssueManager.AddIssues(astRes.Issues);
@@ -250,6 +262,17 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             }, ctx, TOptimizeExprSettings(nullptr));
         }), "Unordered", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
         "Unordered optimizations");
+    pipeline.Add(CreateFunctorTransformer(
+        [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+            return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
+                if (node->IsCallable("Right!") && node->Head().IsCallable("Cons!")) {
+                    return node->Head().ChildPtr(1);
+                }
+
+                return node;
+            }, ctx, TOptimizeExprSettings(nullptr));
+        }), "Cons", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
+        "Cons optimizations");
     pipeline.Add(MakeOutputColumnsFilter(outputSpec.GetOutputColumnsFilter()),
                  "Filter", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Filter output columns");

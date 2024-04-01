@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     common.h
+    common.cpp
 )
 
 PEERDIR(

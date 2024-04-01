@@ -19,11 +19,11 @@ public:
         return {};
     }
     virtual bool Finished() const = 0;
-    virtual std::optional<TPartialReadResult> GetBatch() = 0;
+    virtual TConclusion<std::optional<TPartialReadResult>> GetBatch() = 0;
     virtual void PrepareResults() {
 
     }
-    virtual bool ReadNextInterval() { return false; }
+    virtual TConclusion<bool> ReadNextInterval() { return false; }
     virtual TString DebugString(const bool verbose = false) const {
         Y_UNUSED(verbose);
         return "NO_DATA";

@@ -1386,15 +1386,20 @@ protected:
 
             taskMeta.ReadInfo.ResultColumnsTypes.reserve(resultColsCount);
             for (ui32 i = 0; i < resultColsCount; ++i) {
+                taskMeta.ReadInfo.ResultColumnsTypes.emplace_back();
                 auto memberType = resultStructType->GetMemberType(i);
-                if (memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Optional) {
-                    memberType = static_cast<NKikimr::NMiniKQL::TOptionalType*>(memberType)->GetItemType();
+                if (memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Pg) {
+                    const auto memberPgType = static_cast<NKikimr::NMiniKQL::TPgType*>(memberType);
+                    taskMeta.ReadInfo.ResultColumnsTypes.back() = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(memberPgType->GetTypeId()));
+                } else {
+                    if (memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Optional) {
+                        memberType = static_cast<NKikimr::NMiniKQL::TOptionalType*>(memberType)->GetItemType();
+                    }
+                    YQL_ENSURE(memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Data,
+                        "Expected simple data types to be read from column shard");
+                    const auto memberDataType = static_cast<NKikimr::NMiniKQL::TDataType*>(memberType);
+                    taskMeta.ReadInfo.ResultColumnsTypes.back() = NScheme::TTypeInfo(memberDataType->GetSchemeType());
                 }
-                // TODO: support pg types
-                YQL_ENSURE(memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Data,
-                    "Expected simple data types to be read from column shard");
-                auto memberDataType = static_cast<NKikimr::NMiniKQL::TDataType*>(memberType);
-                taskMeta.ReadInfo.ResultColumnsTypes.push_back(NScheme::TTypeInfo(memberDataType->GetSchemeType()));
             }
         }
         if (!readOlapRange || readOlapRange->GetOlapProgram().empty()) {

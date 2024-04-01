@@ -20,23 +20,28 @@ description: "В статье приведены примеры кода под�
 
   import (
     "context"
-    "os"
 
     "github.com/ydb-platform/ydb-go-sdk/v3"
   )
 
   func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+
     db, err := ydb.Open(ctx, "grpc://localhost:2136/local")
     if err != nil {
-        log.Fatal(err)
+        panic(err)
     }
-    ...
+    defer db.Close()
+
+    // ...
   }
   ```
 
 - Go (database/sql)
 
   {% cut "С помощью коннектора (рекомендуемый способ)" %}
+
     ```golang
     package main
 
@@ -51,6 +56,7 @@ description: "В статье приведены примеры кода под�
     func main() {
       ctx, cancel := context.WithCancel(context.Background())
       defer cancel()
+
       nativeDriver, err := ydb.Open(ctx,
         os.Getenv("YDB_CONNECTION_STRING"),
       )
@@ -58,15 +64,20 @@ description: "В статье приведены примеры кода под�
         panic(err)
       }
       defer nativeDriver.Close(ctx)
+
       connector, err := ydb.Connector(nativeDriver)
       if err != nil {
         panic(err)
       }
+      defer connector.Close()
+
       db := sql.OpenDB(connector)
       defer db.Close()
-      ...
+
+      // ...
     }
     ```
+
   {% endcut %}
 
   {% cut "С помощью строки подключения" %}
@@ -76,9 +87,7 @@ description: "В статье приведены примеры кода под�
     package main
 
     import (
-      "context"
       "database/sql"
-      "os"
 
       _ "github.com/ydb-platform/ydb-go-sdk/v3"
     )
@@ -86,11 +95,14 @@ description: "В статье приведены примеры кода под�
     func main() {
       db, err := sql.Open("ydb", "grpc://localhost:2136/local")
       if err != nil {
-          log.Fatal(err)
+        panic(err)
       }
-      ...
+      defer db.Close()
+
+      // ...
     }
     ```
+
   {% endcut %}
 
 - Java

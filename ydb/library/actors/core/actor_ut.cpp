@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TAtomic actorsAlive = 0;
         THPTimer Timer;
 
-        ui64 eventsPerPair = 100000000 * 4 / 60;
+        ui64 eventsPerPair = 100000 * 4 / 60;
         //ui64 eventsPerPair = TSettings::TotalEventsAmountPerThread * 4 / 60;
 
         Timer.Reset();
@@ -265,7 +265,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TAtomic actorsAlive = 0;
         THPTimer Timer;
 
-        ui64 eventsPerPair = 100000000 * 4 / 60;
+        ui64 eventsPerPair = 100000 * 4 / 60;
         //ui64 eventsPerPair = TSettings::TotalEventsAmountPerThread * 4 / 60;
 
         Timer.Reset();

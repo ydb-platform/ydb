@@ -1605,7 +1605,7 @@ struct TCatalog {
             "lo_close",
             "lo_unlink"
         }),
-        StaticTables({
+        AllStaticTables({
 #include "pg_class.generated.h"
         }),
         AllStaticColumns({
@@ -1643,9 +1643,10 @@ struct TCatalog {
             );
         }
         THashSet<ui32> usedTableOids;
-        for (const auto& t : StaticTables) {
+        for (const auto& t : AllStaticTables) {
             StaticColumns.insert(std::make_pair(t, TVector<TColumnInfo>()));
             Y_ENSURE(usedTableOids.insert(t.Oid).first);
+            StaticTables.insert(std::make_pair(TTableInfoKey(t), t));
         }
 
         for (const auto& c: AllStaticColumns) {
@@ -1865,8 +1866,9 @@ struct TCatalog {
     THashMap<TString, TVector<ui32>> AggregationsByName;
     THashSet<TString> ProhibitedProcs;
 
-    TVector<TTableInfo> StaticTables;
+    TVector<TTableInfo> AllStaticTables;
     TVector<TColumnInfo> AllStaticColumns;
+    THashMap<TTableInfoKey, TTableInfo> StaticTables;
     THashMap<TTableInfoKey, TVector<TColumnInfo>> StaticColumns;
 };
 
@@ -3110,12 +3112,23 @@ void EnumLanguages(std::function<void(ui32, const TLanguageDesc&)> f) {
 
 const TVector<TTableInfo>& GetStaticTables() {
     const auto& catalog = TCatalog::Instance();
-    return catalog.StaticTables;
+    return catalog.AllStaticTables;
 }
 
 const THashMap<TTableInfoKey, TVector<TColumnInfo>>& GetStaticColumns() {
     const auto& catalog = TCatalog::Instance();
     return catalog.StaticColumns;
 }
+
+const TTableInfo& LookupStaticTable(const TTableInfoKey& tableKey) {
+    const auto& catalog = TCatalog::Instance();
+    auto tablePtr = catalog.StaticTables.FindPtr(tableKey);
+    if (!tablePtr) {
+        throw yexception() << "No such table: " << tableKey.Schema << "." << tableKey.Name;
+    }
+
+    return *tablePtr;
+}
+
 
 }

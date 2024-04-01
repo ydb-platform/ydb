@@ -47,13 +47,13 @@ void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVer
     RequestsMeta.erase(cookie);
 }
 
-void TInFlightReadsTracker::AddToInFlightRequest(const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index) {
+TConclusionStatus TInFlightReadsTracker::AddToInFlightRequest(const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index) {
     RequestsMeta[cookie].push_back(readMetaBase);
 
     auto readMeta = std::dynamic_pointer_cast<const NOlap::NReader::NPlain::TReadMetadata>(readMetaBase);
 
     if (!readMeta) {
-        return;
+        return TConclusionStatus::Success();
     }
 
     auto selectInfo = readMeta->SelectInfo;
@@ -69,7 +69,10 @@ void TInFlightReadsTracker::AddToInFlightRequest(const ui64 cookie, NOlap::NRead
     }
 
     for (auto&& i : portionBlobIds) {
-        auto storage = StoragesManager->GetOperatorVerified(i.first);
+        auto storage = StoragesManager->GetOperatorOptional(i.first);
+        if (!storage) {
+            return TConclusionStatus::Fail("blobs storage info not ready for '" + i.first + "'");
+        }
         auto tracker = storage->GetBlobsTracker();
         for (auto& blobId : i.second) {
             tracker->UseBlob(blobId);
@@ -81,6 +84,7 @@ void TInFlightReadsTracker::AddToInFlightRequest(const ui64 cookie, NOlap::NRead
     for (const auto& committedBlob : readMeta->CommittedBlobs) {
         tracker->UseBlob(committedBlob.GetBlobRange().GetBlobId());
     }
+    return TConclusionStatus::Success();
 }
 
 }

@@ -73,4 +73,7 @@ message TAlterRecord {
 
 message TSchemeChanges {
     repeated TAlterRecord Delta = 1;
+    // If the flag bellow is set, delete all scheme blobs before this
+    // Note that an old version will ignore the flag and will not delete anything
+    optional bool Rewrite = 2 [default = false];
 };

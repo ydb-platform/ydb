@@ -156,11 +156,10 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
     settingsBuilder.SetSqlVersion(sqlVersion);
     if (isSql) {
         auto settings = settingsBuilder.Build(ctx);
-        ui16 actualSyntaxVersion = 0;
         NYql::TStmtParseInfo stmtParseInfo;
-        auto ast = NSQLTranslation::SqlToYql(queryText, settings, nullptr, &actualSyntaxVersion, &stmtParseInfo);
-        deprecatedSQL = (actualSyntaxVersion == 0);
-        sqlVersion = actualSyntaxVersion;
+        auto ast = NSQLTranslation::SqlToYql(queryText, settings, nullptr, &stmtParseInfo);
+        deprecatedSQL = (ast.ActualSyntaxType == NYql::ESyntaxType::YQLv0);
+        sqlVersion = ast.ActualSyntaxType == NYql::ESyntaxType::YQLv1 ? 1 : 0;
         keepInCache = stmtParseInfo.KeepInCache;
         return std::move(ast);
     } else {

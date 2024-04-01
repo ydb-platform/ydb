@@ -2,8 +2,8 @@
 #include "columns_set.h"
 #include "fetching.h"
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
-#include <ydb/core/tx/columnshard/engines/reader/common/read_filter_merger.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/read_metadata.h>
+#include <ydb/core/formats/arrow/reader/merger.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -33,7 +33,7 @@ public:
         return ReadMetadata;
     }
 
-    std::shared_ptr<NIndexedReader::TMergePartialStream> BuildMerger() const;
+    std::shared_ptr<NArrow::NMerger::TMergePartialStream> BuildMerger() const;
 
     TString DebugString() const {
         return TStringBuilder() <<

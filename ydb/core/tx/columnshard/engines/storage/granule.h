@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap {
 
@@ -23,8 +24,8 @@ public:
     }
 
     void AddPortion(const TPortionInfo& info) {
-        const auto sizes = info.BlobsSizes();
-        PortionsSize += sizes.first;
+        ColumnPortionsSize += info.GetColumnBlobBytes();
+        TotalPortionsSize += info.GetTotalBlobBytes();
         RecordsCount += info.NumRows();
         ++PortionsCount;
 
@@ -39,9 +40,10 @@ public:
     }
 
     void RemovePortion(const TPortionInfo& info) {
-        const auto sizes = info.BlobsSizes();
-        PortionsSize -= sizes.first;
-        Y_ABORT_UNLESS(PortionsSize >= 0);
+        ColumnPortionsSize -= info.GetColumnBlobBytes();
+        Y_ABORT_UNLESS(ColumnPortionsSize >= 0);
+        TotalPortionsSize -= info.GetTotalBlobBytes();
+        Y_ABORT_UNLESS(TotalPortionsSize >= 0);
         RecordsCount -= info.NumRows();
         Y_ABORT_UNLESS(RecordsCount >= 0);
         --PortionsCount;
@@ -86,7 +88,7 @@ public:
             }
         } else {
             if (GetInserted().GetPortionsCount() > 1 &&
-                (GetInserted().GetPortionsSize() >= limits.GranuleIndexedPortionsSizeLimit ||
+                (GetInserted().GetColumnPortionsSize() >= limits.GranuleIndexedPortionsSizeLimit ||
                     GetInserted().GetPortionsCount() >= limits.GranuleIndexedPortionsCountLimit)) {
                 return ECompactionClass::Internal;
             }
@@ -105,7 +107,7 @@ public:
         return Compacted;
     }
     ui64 GetGranuleSize() const {
-        return Inserted.GetPortionsSize() + Compacted.GetPortionsSize();
+        return Inserted.GetTotalPortionsSize() + Compacted.GetTotalPortionsSize();
     }
     ui64 GetActivePortionsCount() const {
         return Inserted.GetPortionsCount() + Compacted.GetPortionsCount();
@@ -209,7 +211,7 @@ public:
         return OptimizerPlanner->SerializeToJsonVisual();
     }
 
-    std::vector<NIndexedReader::TSortableBatchPosition> GetBucketPositions() const {
+    std::vector<NArrow::NMerger::TSortableBatchPosition> GetBucketPositions() const {
         return OptimizerPlanner->GetBucketPositions();
     }
 

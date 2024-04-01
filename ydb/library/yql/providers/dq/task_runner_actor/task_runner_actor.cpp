@@ -726,7 +726,7 @@ private:
 
     void CreateSpillingStorage(ui64 channelId, TActorSystem* actorSystem, bool enableSpilling) {
         TSpillingStorageInfo::TPtr spillingStorageInfo = nullptr;
-        auto channelStorage = ExecCtx->CreateChannelStorage(channelId, enableSpilling, actorSystem, true /*isConcurrent*/);
+        auto channelStorage = ExecCtx->CreateChannelStorage(channelId, enableSpilling, actorSystem);
 
         if (channelStorage) {
             auto spillingIt = SpillingStoragesInfos.find(channelId);

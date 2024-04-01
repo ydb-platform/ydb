@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/engines/insert_table/data.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap {
 class IDataReader;
@@ -24,8 +25,8 @@ class IFetchingStep;
 class IDataSource {
 private:
     YDB_READONLY(ui32, SourceIdx, 0);
-    YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Start);
-    YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Finish);
+    YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Start);
+    YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Finish);
     NArrow::TReplaceKey StartReplaceKey;
     NArrow::TReplaceKey FinishReplaceKey;
     YDB_READONLY_DEF(std::shared_ptr<TSpecialReadContext>, Context);
@@ -56,6 +57,7 @@ protected:
 public:
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
 
+    virtual ui64 GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
     const NArrow::TReplaceKey& GetStartReplaceKey() const {
@@ -73,6 +75,7 @@ public:
     void SetIsReady();
 
     void Finalize() {
+        TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT");
         StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
     }
 
@@ -109,7 +112,7 @@ public:
         ++IntervalsCount;
     }
 
-    virtual ui64 GetRawBytes(const std::set<ui32>& columnIds) const = 0;
+    virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnIds) const = 0;
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const = 0;
 
     bool IsMergingStarted() const {
@@ -125,6 +128,14 @@ public:
         AbortedFlag = true;
         Intervals.clear();
         DoAbort();
+    }
+
+    virtual NJson::TJsonValue DebugJsonForMemory() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        if (RecordsCount) {
+            result.InsertValue("count", *RecordsCount);
+        }
+        return result;
     }
 
     NJson::TJsonValue DebugJson() const {
@@ -152,9 +163,13 @@ public:
         return *StageData;
     }
 
-    ui32 GetRecordsCount() const {
+    ui32 GetRecordsCountVerified() const {
         AFL_VERIFY(RecordsCount);
         return *RecordsCount;
+    }
+
+    const std::optional<ui32>& GetRecordsCountOptional() const {
+        return RecordsCount;
     }
 
     void RegisterInterval(TFetchingInterval& interval);
@@ -207,7 +222,16 @@ private:
         return result;
     }
 
+    virtual NJson::TJsonValue DebugJsonForMemory() const override {
+        NJson::TJsonValue result = TBase::DebugJsonForMemory();
+        result.InsertValue("raw", Portion->GetTotalRawBytes());
+        result.InsertValue("blob", Portion->GetTotalBlobBytes());
+        return result;
+    }
     virtual void DoAbort() override;
+    virtual ui64 GetPathId() const override {
+        return Portion->GetPathId();
+    }
 public:
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const override {
         return Portion->HasIndexes(indexIds);
@@ -217,12 +241,12 @@ public:
         return Portion->DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
     }
 
-    virtual ui64 GetRawBytes(const std::set<ui32>& columnIds) const override {
-        return Portion->GetRawBytes(columnIds);
+    virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnsIds) const override {
+        return Portion->GetColumnRawBytes(columnsIds, false);
     }
 
-    virtual ui64 GetIndexRawBytes(const std::set<ui32>& columnIds) const override {
-        return Portion->GetIndexRawBytes(columnIds);
+    virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const override {
+        return Portion->GetIndexRawBytes(indexIds, false);
     }
 
     const TPortionInfo& GetPortionInfo() const {
@@ -267,6 +291,9 @@ private:
         result.InsertValue("info", CommittedBlob.DebugString());
         return result;
     }
+    virtual ui64 GetPathId() const override {
+        return 0;
+    }
 public:
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
         THashMap<TChunkAddress, TString> result;
@@ -282,7 +309,7 @@ public:
         return false;
     }
 
-    virtual ui64 GetRawBytes(const std::set<ui32>& /*columnIds*/) const override {
+    virtual ui64 GetColumnRawBytes(const std::set<ui32>& /*columnIds*/) const override {
         return CommittedBlob.GetBlobRange().Size;
     }
 

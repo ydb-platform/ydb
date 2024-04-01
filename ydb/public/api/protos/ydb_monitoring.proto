@@ -202,4 +202,5 @@ message SelfCheckResult {
     SelfCheck.Result self_check_result = 1;
     repeated IssueLog issue_log = 2;
     repeated DatabaseStatus database_status = 3;
+    LocationNode location = 4;
 }

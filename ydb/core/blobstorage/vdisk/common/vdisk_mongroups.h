@@ -518,6 +518,10 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(PutTotalBytes, true);
                 COUNTER_INIT_IF_EXTENDED(GetTotalBytes, true);
             }
+                
+            void MinHugeBlobInBytes(ui32 size) {
+                GroupCounters->GetNamedCounter("MinHugeBlobInBytes", ToString(size), false)->Inc();
+            }
 
             COUNTER_DEF(MovedPatchMsgs);
             COUNTER_DEF(PatchStartMsgs);

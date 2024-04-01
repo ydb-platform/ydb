@@ -1,8 +1,8 @@
 #include "actor.h"
 #include <ydb/core/tx/columnshard/blobs_reader/read_coordinator.h>
-#include <ydb/core/formats/arrow/reader/read_filter_merger.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/actor.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap::NReader {
 constexpr i64 DEFAULT_READ_AHEAD_BYTES = (i64)2 * 1024 * 1024 * 1024;
@@ -45,7 +45,7 @@ void TColumnShardScan::PassAway() {
 
 TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId, const std::shared_ptr<IStoragesManager>& storagesManager, 
     const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, 
-    ui64 tabletId, TDuration timeout, std::vector<TReadMetadataBase::TConstPtr>&& readMetadataList,
+    ui64 tabletId, TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange,
     NKikimrDataEvents::EDataFormat dataFormat, const NColumnShard::TScanCounters& scanCountersPool)
     : StoragesManager(storagesManager)
     , ColumnShardActorId(columnShardActorId)
@@ -57,15 +57,14 @@ TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TAc
     , RequestCookie(requestCookie)
     , DataFormat(dataFormat)
     , TabletId(tabletId)
-    , ReadMetadataRanges(std::move(readMetadataList))
-    , ReadMetadataIndex(0)
+    , ReadMetadataRange(readMetadataRange)
     , Deadline(TInstant::Now() + (timeout ? timeout + SCAN_HARD_TIMEOUT_GAP : SCAN_HARD_TIMEOUT))
     , ScanCountersPool(scanCountersPool)
     , Stats(NTracing::TTraceClient::GetLocalClient("SHARD", ::ToString(TabletId)/*, "SCAN_TXID:" + ::ToString(TxId)*/))
     , ComputeShardingPolicy(computeShardingPolicy)
 {
-    AFL_VERIFY(ReadMetadataRanges.size() == 1);
-    KeyYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetKeyYqlSchema();
+    AFL_VERIFY(ReadMetadataRange);
+    KeyYqlSchema = ReadMetadataRange->GetKeyYqlSchema();
 }
 
 void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
@@ -81,8 +80,8 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
     ReadCoordinatorActorId = ctx.Register(new NBlobOperations::NRead::TReadCoordinatorActor(TabletId, SelfId()));
 
     std::shared_ptr<TReadContext> context = std::make_shared<TReadContext>(StoragesManager, ScanCountersPool,
-        ReadMetadataRanges[ReadMetadataIndex], SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy);
-    ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
+        ReadMetadataRange, SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy);
+    ScanIterator = ReadMetadataRange->StartScan(context);
 
     // propagate self actor id // TODO: FlagSubscribeOnSession ?
     Send(ScanComputeActorId, new NKqp::TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen, TabletId), IEventHandle::FlagTrackDelivery);
@@ -90,12 +89,6 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
     Become(&TColumnShardScan::StateScan);
     StartInstant = TMonotonic::Now();
     ContinueProcessing();
-}
-
-bool TColumnShardScan::ReadNextBlob() {
-    while (ScanIterator->ReadNextInterval()) {
-    }
-    return true;
 }
 
 void TColumnShardScan::HandleScan(NConveyor::TEvExecution::TEvTaskProcessedResult::TPtr& ev) {
@@ -198,20 +191,23 @@ bool TColumnShardScan::ProduceResults() noexcept {
         return false;
     }
 
-    auto resultOpt = ScanIterator->GetBatch();
+    auto resultConclusion = ScanIterator->GetBatch();
+    if (resultConclusion.IsFail()) {
+        ACFL_ERROR("stage", "got error")("iterator", ScanIterator->DebugString())("message", resultConclusion.GetErrorMessage());
+        SendScanError(resultConclusion.GetErrorMessage());
+
+        ScanIterator.reset();
+        Finish(NColumnShard::TScanCounters::EStatusFinish::IteratorInternalErrorResult);
+        return false;
+    }
+
+    std::optional<TPartialReadResult> resultOpt = resultConclusion.DetachResult();
     if (!resultOpt) {
         ACFL_DEBUG("stage", "no data is ready yet")("iterator", ScanIterator->DebugString());
         return false;
     }
-    auto& result = *resultOpt;
-    if (!result.ErrorString.empty()) {
-        ACFL_ERROR("stage", "got error")("iterator", ScanIterator->DebugString())("message", result.ErrorString);
-        SendAbortExecution(TString(result.ErrorString.data(), result.ErrorString.size()));
 
-        ScanIterator.reset();
-        Finish(NColumnShard::TScanCounters::EStatusFinish::IteratorInternalError);
-        return false;
-    }
+    auto& result = *resultOpt;
 
     if (!result.GetRecordsCount()) {
         ACFL_DEBUG("stage", "got empty batch")("iterator", ScanIterator->DebugString());
@@ -242,8 +238,8 @@ bool TColumnShardScan::ProduceResults() noexcept {
         ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetBatchDataSize(batch))("num_rows", numRows)("batch_columns", JoinSeq(",", batch->schema()->field_names()));
     }
     if (CurrentLastReadKey) {
-        NIndexedReader::TSortableBatchPosition pNew(result.GetLastReadKey(), 0, result.GetLastReadKey()->schema()->field_names(), {}, false);
-        NIndexedReader::TSortableBatchPosition pOld(CurrentLastReadKey, 0, CurrentLastReadKey->schema()->field_names(), {}, false);
+        NArrow::NMerger::TSortableBatchPosition pNew(result.GetLastReadKey(), 0, result.GetLastReadKey()->schema()->field_names(), {}, false);
+        NArrow::NMerger::TSortableBatchPosition pOld(CurrentLastReadKey, 0, CurrentLastReadKey->schema()->field_names(), {}, false);
         AFL_VERIFY(pOld < pNew)("old", pOld.DebugJson().GetStringRobust())("new", pNew.DebugJson().GetStringRobust());
     }
     CurrentLastReadKey = result.GetLastReadKey();
@@ -263,14 +259,27 @@ void TColumnShardScan::ContinueProcessing() {
     while (ScanIterator && ProduceResults()) {
     }
 
-    // Switch to the next range if the current one is finished
-    if (ScanIterator && ScanIterator->Finished() && ChunksLimiter.HasMore()) {
-        NextReadMetadata();
-    }
-
     if (ScanIterator) {
-        // Make read-ahead requests for the subsequent blobs
-        ReadNextBlob();
+        // Switch to the next range if the current one is finished
+        if (ScanIterator->Finished() && ChunksLimiter.HasMore()) {
+            auto g = Stats->MakeGuard("Finish");
+            MakeResult();
+            SendResult(false, true);
+            ScanIterator.reset();
+            Finish(NColumnShard::TScanCounters::EStatusFinish::Success);
+        } else {
+            while (true) {
+                TConclusion<bool> hasMoreData = ScanIterator->ReadNextInterval();
+                if (hasMoreData.IsFail()) {
+                    ACFL_ERROR("event", "ContinueProcessing")("error", hasMoreData.GetErrorMessage());
+                    ScanIterator.reset();
+                    SendScanError("iterator_error:" + hasMoreData.GetErrorMessage());
+                    return Finish(NColumnShard::TScanCounters::EStatusFinish::IteratorInternalErrorScan);
+                } else if (!*hasMoreData) {
+                    break;
+                }
+            }
+        }
     }
     AFL_VERIFY(!ScanIterator || !ChunksLimiter.HasMore() || InFlightReads || ScanCountersPool.InWaiting())("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)
         ("debug", ScanIterator->DebugString());
@@ -284,21 +293,6 @@ void TColumnShardScan::MakeResult(size_t reserveRows /*= 0*/) {
             Result->Rows.reserve(reserveRows);
         }
     }
-}
-
-void TColumnShardScan::NextReadMetadata() {
-    auto g = Stats->MakeGuard("NextReadMetadata");
-    if (++ReadMetadataIndex == ReadMetadataRanges.size()) {
-        // Send empty batch with "finished" flag
-        MakeResult();
-        SendResult(false, true);
-        ScanIterator.reset();
-        return Finish(NColumnShard::TScanCounters::EStatusFinish::Success);
-    }
-
-    auto context = std::make_shared<TReadContext>(StoragesManager, ScanCountersPool, ReadMetadataRanges[ReadMetadataIndex], SelfId(),
-        ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy);
-    ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
 }
 
 void TColumnShardScan::AddRow(const TConstArrayRef<TCell>& row) {
@@ -379,11 +373,9 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     return true;
 }
 
-void TColumnShardScan::SendScanError(TString reason /*= {}*/) {
-    TString msg = TStringBuilder() << "Scan failed at tablet " << TabletId;
-    if (!reason.empty()) {
-        msg += ", reason: " + reason;
-    }
+void TColumnShardScan::SendScanError(const TString& reason) {
+    AFL_VERIFY(reason);
+    const TString msg = TStringBuilder() << "Scan failed at tablet " << TabletId << ", reason: " + reason;
 
     auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(ScanGen, TabletId);
     ev->Record.SetStatus(Ydb::StatusIds::GENERIC_ERROR);
@@ -391,16 +383,6 @@ void TColumnShardScan::SendScanError(TString reason /*= {}*/) {
     NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
 
     Send(ScanComputeActorId, ev.Release());
-}
-
-void TColumnShardScan::SendAbortExecution(TString reason /*= {}*/) {
-    auto status = NYql::NDqProto::StatusIds::PRECONDITION_FAILED;
-    TString msg = TStringBuilder() << "Scan failed at tablet " << TabletId;
-    if (!reason.empty()) {
-        msg += ", reason: " + reason;
-    }
-
-    Send(ScanComputeActorId, new NKqp::TEvKqp::TEvAbortExecution(status, msg));
 }
 
 void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish status) {

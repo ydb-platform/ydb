@@ -30,7 +30,7 @@ using namespace NSchemeShard;
 using namespace NTabletFlatExecutor;
 
 // NOTE: We really want to batch log records by default in datashards!
-// But in unittests we want to test both scenarios
+// But in unit tests we want to test both scenarios
 bool gAllowLogBatchingDefaultValue = true;
 
 TDuration gDbStatsReportInterval = TDuration::Seconds(10);

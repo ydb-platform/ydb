@@ -239,9 +239,9 @@
     ],
     "test.test[aggregate-group_by_cube_expr_trio--Debug]": [
         {
-            "checksum": "6ca9255ae644f6d59757a02eb775f9f2",
-            "size": 13883,
-            "uri": "https://{canondata_backend}/212715/b9f267b2022a251b638e7a1f1ebeb788c308ed2f/resource.tar.gz#test.test_aggregate-group_by_cube_expr_trio--Debug_/opt.yql_patched"
+            "checksum": "6101689a751d536de66f7dcbfc344a55",
+            "size": 13837,
+            "uri": "https://{canondata_backend}/1689644/3467843cd9bd4f373d544fd5c4a5775f6e475bc8/resource.tar.gz#test.test_aggregate-group_by_cube_expr_trio--Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-group_by_cube_expr_trio--Plan]": [
@@ -295,9 +295,9 @@
     ],
     "test.test[aggregate-group_by_mul_gs_gs--Debug]": [
         {
-            "checksum": "416cf82557a4c58e790bc944159137ee",
-            "size": 16209,
-            "uri": "https://{canondata_backend}/212715/b9f267b2022a251b638e7a1f1ebeb788c308ed2f/resource.tar.gz#test.test_aggregate-group_by_mul_gs_gs--Debug_/opt.yql_patched"
+            "checksum": "58a8475a58a8545d32b5bb65e6144ba9",
+            "size": 16192,
+            "uri": "https://{canondata_backend}/1689644/3467843cd9bd4f373d544fd5c4a5775f6e475bc8/resource.tar.gz#test.test_aggregate-group_by_mul_gs_gs--Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-group_by_mul_gs_gs--Plan]": [
@@ -2167,20 +2167,6 @@
             "checksum": "c1f2d837c3623c81dd596a9877913fb8",
             "size": 948,
             "uri": "https://{canondata_backend}/1936842/51593b2a750dbb036388d012a30fa937edaab5f0/resource.tar.gz#test.test_pg_catalog-pg_trigger-default.txt-Plan_/plan.txt"
-        }
-    ],
-    "test.test[pg_catalog-pgadmin_compat1-default.txt-Debug]": [
-        {
-            "checksum": "9b0895a932637e293595c010b727e825",
-            "size": 365,
-            "uri": "https://{canondata_backend}/1903885/16603c507edf7cd65c3cbb9508a7af0bd78e4ae2/resource.tar.gz#test.test_pg_catalog-pgadmin_compat1-default.txt-Debug_/opt.yql_patched"
-        }
-    ],
-    "test.test[pg_catalog-pgadmin_compat1-default.txt-Plan]": [
-        {
-            "checksum": "b4dd508a329723c74293d80f0278c705",
-            "size": 505,
-            "uri": "https://{canondata_backend}/1903885/16603c507edf7cd65c3cbb9508a7af0bd78e4ae2/resource.tar.gz#test.test_pg_catalog-pgadmin_compat1-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[produce-process_with_assume--Debug]": [

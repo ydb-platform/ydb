@@ -1426,14 +1426,10 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
         type = arrow::uint32();
         return true;
     case NUdf::EDataSlot::Int32:
-    case NUdf::EDataSlot::Date32:
         type = arrow::int32();
         return true;
     case NUdf::EDataSlot::Int64:
     case NUdf::EDataSlot::Interval:
-    case NUdf::EDataSlot::Interval64:
-    case NUdf::EDataSlot::Datetime64:
-    case NUdf::EDataSlot::Timestamp64:
         type = arrow::int64();
         return true;
     case NUdf::EDataSlot::Uint64:
@@ -1522,6 +1518,11 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
             type = arrow::binary();
         }
 
+        return true;
+    }
+
+    if (unpacked->IsResource()) {
+        type = arrow::fixed_size_binary(sizeof(NYql::NUdf::TUnboxedValuePod));
         return true;
     }
 
@@ -2345,6 +2346,10 @@ size_t CalcMaxBlockItemSize(const TType* type) {
         }
     }
 
+    if (type->IsResource()) {
+        return sizeof(NYql::NUdf::TUnboxedValue);
+    }
+
     if (type->IsData()) {
         auto slot = *AS_TYPE(TDataType, type)->GetDataSlot();
         switch (slot) {
@@ -2402,6 +2407,11 @@ struct TComparatorTraits {
         Y_UNUSED(pgBuilder);
         return std::unique_ptr<TResult>(MakePgItemComparator(desc.TypeId).Release());
     }
+
+    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
+        Y_UNUSED(isOptional);
+        ythrow yexception() << "Comparator not implemented for block resources: ";
+    }
 };
 
 struct THasherTraits {
@@ -2417,6 +2427,11 @@ struct THasherTraits {
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
         return std::unique_ptr<TResult>(MakePgItemHasher(desc.TypeId).Release());
+    }
+
+    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
+        Y_UNUSED(isOptional);
+        ythrow yexception() << "Hasher not implemented for block resources";
     }
 };
 

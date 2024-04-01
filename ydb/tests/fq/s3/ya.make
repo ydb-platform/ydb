@@ -34,6 +34,7 @@ TEST_SRCS(
     test_size_limit.py
     test_statistics.py
     test_test_connection.py
+    test_ydb_over_fq.py
     test_yq_v2.py
 )
 

@@ -156,11 +156,15 @@ namespace NActors {
         TAtomic ThreadCount;
         TMutex ChangeThreadsLock;
 
-        i16 MinThreadCount;
-        i16 MaxThreadCount;
-        i16 DefaultThreadCount;
+        float MinThreadCount;
+        i16 MinFullThreadCount;
+        float MaxThreadCount;
+        i16 MaxFullThreadCount;
+        float DefaultThreadCount;
+        i16 DefaultFullThreadCount;
         IHarmonizer *Harmonizer;
         ui64 SoftProcessingDurationTs = 0;
+        bool HasOwnSharedThread = false;
 
         const i16 Priority = 0;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
@@ -209,7 +213,8 @@ namespace NActors {
                            i16 minThreadCount = 0,
                            i16 maxThreadCount = 0,
                            i16 defaultThreadCount = 0,
-                           i16 priority = 0);
+                           i16 priority = 0,
+                           bool hasOwnSharedThread = false);
         explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer);
         ~TBasicExecutorPool();
 
@@ -240,11 +245,16 @@ namespace NActors {
 
         void SetRealTimeMode() const override;
 
-        i16 GetThreadCount() const override;
-        void SetThreadCount(i16 threads) override;
-        i16 GetDefaultThreadCount() const override;
-        i16 GetMinThreadCount() const override;
-        i16 GetMaxThreadCount() const override;
+        ui32 GetThreads() const override;
+        float GetThreadCount() const override;
+        i16 GetFullThreadCount() const override;
+        void SetFullThreadCount(i16 threads) override;
+        float GetDefaultThreadCount() const override;
+        i16 GetDefaultFullThreadCount() const override;
+        float GetMinThreadCount() const override;
+        i16 GetMinFullThreadCount() const override;
+        float GetMaxThreadCount() const override;
+        i16 GetMaxFullThreadCount() const override;
         TCpuConsumption GetThreadCpuConsumption(i16 threadIdx) override;
         i16 GetBlockingThreadCount() const override;
         i16 GetPriority() const override;

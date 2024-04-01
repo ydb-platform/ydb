@@ -506,14 +506,15 @@ namespace NActors {
     }
 
     TGenericExecutorThread::TProcessingResult TSharedExecutorThread::ProcessSharedExecutorPool(TExecutorPoolBaseMailboxed *pool) {
+        TWorkerId workerId = (pool == ThreadCtx->ExecutorPools[0].load(std::memory_order_relaxed) ? -1 : -2);
         Ctx.Switch(
             pool,
             pool->MailboxTable.Get(),
             NHPTimer::GetClockRate() * TimePerMailbox.SecondsFloat(),
             EventsPerMailbox,
-            GetCycleCountFast() + SoftProcessingDurationTs,
+            (workerId == -1 ? -1 : GetCycleCountFast() + SoftProcessingDurationTs),
             &SharedStats[pool->PoolId]);
-        Ctx.WorkerId = (pool == ThreadCtx->ExecutorPools[0].load(std::memory_order_relaxed) ? -1 : -2);
+        Ctx.WorkerId = workerId;
         return ProcessExecutorPool(pool);
     }
 

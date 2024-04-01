@@ -14,6 +14,7 @@
 #include <util/generic/hash.h>
 #include <util/system/types.h>
 #include <util/generic/hash_set.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NBuckets {
 
@@ -43,12 +44,12 @@ public:
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
-        Bytes += p->GetBlobBytes();
+        Bytes += p->GetTotalBlobBytes();
         Count += 1;
         RecordsCount += p->NumRows();
     }
     void RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
-        Bytes -= p->GetBlobBytes();
+        Bytes -= p->GetTotalBlobBytes();
         Count -= 1;
         RecordsCount -= p->NumRows();
         AFL_VERIFY(Bytes >= 0);
@@ -556,7 +557,7 @@ public:
 /*
         const ui64 count = BucketInfo.GetCount() + ((mainPortion && !isFinal) ? 1 : 0);
         //        const ui64 recordsCount = BucketInfo.GetRecordsCount() + ((mainPortion && !isFinal) ? mainPortion->GetRecordsCount() : 0);
-        const ui64 sumBytes = BucketInfo.GetBytes() + ((mainPortion && !isFinal) ? mainPortion->GetBlobBytes() : 0);
+        const ui64 sumBytes = BucketInfo.GetBytes() + ((mainPortion && !isFinal) ? mainPortion->GetTotalBlobBytes() : 0);
         if (count <= 1) {
             return 0;
         }
@@ -573,7 +574,7 @@ public:
 /*
         const ui64 count = BucketInfo.GetCount() + ((mainPortion && !isFinal) ? 1 : 0);
         //        const ui64 recordsCount = BucketInfo.GetRecordsCount() + ((mainPortion && !isFinal) ? mainPortion->GetRecordsCount() : 0);
-        const ui64 sumBytes = BucketInfo.GetBytes() + ((mainPortion && !isFinal) ? mainPortion->GetBlobBytes() : 0);
+        const ui64 sumBytes = BucketInfo.GetBytes() + ((mainPortion && !isFinal) ? mainPortion->GetTotalBlobBytes() : 0);
         if (count > 1 && (sumBytes > 32 * 1024 * 1024 || !isFinal || count > 100)) {
             return (10000000000.0 * count - sumBytes) * (isFinal ? 1 : 10);
         } else {
@@ -583,7 +584,7 @@ public:
 
         const ui64 count = BucketInfo.GetCount() + ((mainPortion && !isFinal) ? 1 : 0);
         const ui64 recordsCount = BucketInfo.GetRecordsCount() + ((mainPortion && !isFinal) ? mainPortion->GetRecordsCount() : 0);
-        const ui64 sumBytes = BucketInfo.GetBytes() + ((mainPortion && !isFinal) ? mainPortion->GetBlobBytes() : 0);
+        const ui64 sumBytes = BucketInfo.GetBytes() + ((mainPortion && !isFinal) ? mainPortion->GetTotalBlobBytes() : 0);
         if (NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Disable) {
             return 0;
         }
@@ -813,7 +814,7 @@ public:
         AFL_VERIFY(portions.size() > 1);
         ui64 size = 0;
         for (auto&& i : portions) {
-            size += i->GetBlobBytes();
+            size += i->GetTotalBlobBytes();
             if (locksManager->IsLocked(*i)) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("info", Others.DebugString())("event", "skip_optimization")("reason", "busy");
                 return nullptr;
@@ -824,15 +825,15 @@ public:
         TSaverContext saverContext(storagesManager);
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portions, saverContext);
         if (MainPortion) {
-            NIndexedReader::TSortableBatchPosition pos(MainPortion->IndexKeyStart().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyStart().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, true, false);
         }
         if (!nextBorder && MainPortion) {
-            NIndexedReader::TSortableBatchPosition pos(MainPortion->IndexKeyEnd().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyEnd().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, true, false);
         }
         if (stopPoint) {
-            NIndexedReader::TSortableBatchPosition pos(stopPoint->ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition pos(stopPoint->ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, false, false);
         }
         return result;
@@ -1026,7 +1027,7 @@ public:
     }
 
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
-        if (portion->GetBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector(SmallPortionDetectSizeLimit)) {
+        if (portion->GetTotalBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector(SmallPortionDetectSizeLimit)) {
             Counters->SmallPortions->RemovePortion(portion);
         }
         if (!RemoveBucket(portion)) {
@@ -1060,7 +1061,7 @@ public:
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TInstant now) {
-        if (portion->GetBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector(SmallPortionDetectSizeLimit)) {
+        if (portion->GetTotalBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector(SmallPortionDetectSizeLimit)) {
             Counters->SmallPortions->AddPortion(portion);
             AddOther(portion, now);
             return;
@@ -1095,10 +1096,10 @@ public:
         }
     }
 
-    std::vector<NIndexedReader::TSortableBatchPosition> GetBucketPositions() const {
-        std::vector<NIndexedReader::TSortableBatchPosition> result;
+    std::vector<NArrow::NMerger::TSortableBatchPosition> GetBucketPositions() const {
+        std::vector<NArrow::NMerger::TSortableBatchPosition> result;
         for (auto&& i : Buckets) {
-            NIndexedReader::TSortableBatchPosition pos(i.second->GetPortion()->IndexKeyStart().ToBatch(PrimaryKeysSchema), 0, PrimaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition pos(i.second->GetPortion()->IndexKeyStart().ToBatch(PrimaryKeysSchema), 0, PrimaryKeysSchema->field_names(), {}, false);
             result.emplace_back(pos);
         }
         return result;
@@ -1159,7 +1160,7 @@ protected:
         return Buckets.SerializeToJson();
     }
 public:
-    virtual std::vector<NIndexedReader::TSortableBatchPosition> GetBucketPositions() const override {
+    virtual std::vector<NArrow::NMerger::TSortableBatchPosition> GetBucketPositions() const override {
         return Buckets.GetBucketPositions();
     }
 

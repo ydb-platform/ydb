@@ -23,7 +23,6 @@ items:
 # Main
 - { name: Практические руководства,                include: { mode: link, path: operations/toc_p.yaml } }
 - { name: Рекомендации,                            include: { mode: link, path: best_practices/toc_p.yaml } }
-- { name: Управление кластером,                    include: { mode: link, path: cluster/toc_p.yaml } }
 
 
 - name: Справка

@@ -12,4 +12,4 @@ items:
 - name: Вручную
   include:
     mode: link
-    path: ../cluster/toc_p.yaml
+    path: manual/toc_p.yaml

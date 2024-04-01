@@ -1,0 +1,4 @@
+items:
+- include:
+    mode: link
+    path: ../../cluster/toc_p.yaml

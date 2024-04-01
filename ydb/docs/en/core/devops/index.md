@@ -1,4 +1,4 @@
-# {{ ydb-short-name }} for SRE
+# {{ ydb-short-name }} for DevOps Engineers
 
 This section of {{ ydb-short-name }} documentation covers everything you need to know to run a production-grade {{ ydb-short-name }} cluster. It is subdivided based on what's your preferred approach to managing infrastructure:
 

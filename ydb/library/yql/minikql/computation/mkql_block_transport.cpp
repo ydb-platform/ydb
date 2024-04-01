@@ -520,7 +520,7 @@ struct TSerializerTraits {
     template<typename TTzDate>
     static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
         Y_UNUSED(isOptional);
-        ythrow yexception() << "Deserializer not implemented for block resources";
+        ythrow yexception() << "Serializer not implemented for block resources";
     }
 };
 

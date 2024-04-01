@@ -37,6 +37,8 @@ common:
     to: /devops/ansible/initial-deployment.md
   - from: /getting_started/yql.md
     to: /yql/reference/index.md
+  - from: /troubleshooting/system_views_cluster.md
+    to: /devops/manuakl/system-views.md
 
 # Redirects from db to dba
   - from: /db/index.md

@@ -1,7 +1,0 @@
-items:
-- name: Системные таблицы
-  href: system_views_cluster.md
-- name: Мониторинг
-  href: monitoring.md
-
-  

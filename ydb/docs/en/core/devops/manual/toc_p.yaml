@@ -2,3 +2,5 @@ items:
 - include:
     mode: link
     path: ../../cluster/toc_p.yaml
+- name: System views
+  href: system-views.md

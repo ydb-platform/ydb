@@ -1,3 +1,17 @@
+# Cluster system views
+
+To enable internal introspection of the cluster state, the user can make queries to special system views. These tables are accessible from the cluster's root directory and use the `.sys` system path prefix.
+
+Cloud database users usually don't have access to cluster system tables, as cluster support and timely diagnostics are the prerogatives of the cloud team.
+
+Hereinafter, in the descriptions of available fields, the **Key** column contains the corresponding table's primary key field index.
+
+{% note info %}
+
+There are also similar system views describing what's happening inside a given database, they are covered in a [separate article for DBAs](../../dba/system-views.md).
+
+{% endnote %}
+
 ## Distributed Storage
 
 Information about the operation of distributed storage is contained in several interconnected tables, each of which is responsible for describing its entity, such as:
@@ -101,3 +115,9 @@ Unlike other tables that show physical entities, the `ds_storage_stats` table sh
 
 It should be noted that AvailableGroupsToCreate shows the maximum number of groups that can be created if no other types of groups are created. So when extending a storage pool, the count of AvailableGroupsToCreate in several rows of statistics may change.
 
+
+{% note info %}
+
+Loads caused by accessing system views are more analytical in nature. Making frequent queries to them in large DBs will consume a lot of system resources. The recommended load is no more than 1-2 RPS.
+
+{% endnote %}

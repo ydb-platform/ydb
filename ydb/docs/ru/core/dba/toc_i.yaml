@@ -1,7 +1,7 @@
 items:
 - name: Резервное копирование и восстановление
   href: backup-and-recovery.md
-- name: Системные таблицы БД
+- name: Системные таблицы
   href: system-views.md
 - name: Terraform
   href: terraform.md

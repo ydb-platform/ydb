@@ -1563,7 +1563,9 @@
   ```
 
   {% note warning %}
+
   При обработке событий `events` не нужно явно подтверждать обработку для событий типа `TDataReceivedEvent`.
+
   {% endnote %}
 
   Подтверждение обработки события `TStopPartitionSessionEvent` надо делать после вызова `Commit`.

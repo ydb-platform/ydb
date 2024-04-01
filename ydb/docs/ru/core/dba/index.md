@@ -7,3 +7,4 @@
 - [Резервное копирование и восстановление](backup-and-recovery.md)
 - [Системные таблицы базы данных](system-views.md)
 - [Управление {{ ydb-short-name }} с помощью Terraform](terraform.md)
+- [Пользовательские атрибуты таблиц](custom-attributes.md)

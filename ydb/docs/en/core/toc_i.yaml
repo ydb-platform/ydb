@@ -20,7 +20,6 @@ items:
     mode: link
     path: contributor/toc_p.yaml
 
-- { name: Tutorials,                             include: { mode: link, path: operations/toc_p.yaml } }
 - { name: Recommendations,                       include: { mode: link, path: best_practices/toc_p.yaml } }
 
 - name: Reference

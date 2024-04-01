@@ -38,9 +38,9 @@ common:
   - from: /getting_started/yql.md
     to: /yql/reference/index.md
   - from: /troubleshooting/system_views_cluster.md
-    to: /devops/manuakl/system-views.md
+    to: /devops/manual/system-views.md
 
-# Redirects from db to dba
+# DBA-related redirects
   - from: /db/index.md
     to: /dba/index.md
   - from: /maintenance/backup_and_recovery.md
@@ -49,8 +49,12 @@ common:
     to: /dba/system-views.md
   - from: /troubleshooting/system_views_db.md
     to: /dba/system-views.md
+  - from: /operations/manage-users-attr.md
+    to: /dba/custom-attributes.md
+  - from: /operations/query_plans_optimization.md
+    to: /dba/query-plans-optimization.md
 
-# Redirects from development to contributor
+# Contributors-related redirects
   - from: /development/build-ya.md
     to: /contributor/build-ya.md
   - from: /development/datashard-locks-and-change-visibility.md

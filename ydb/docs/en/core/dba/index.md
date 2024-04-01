@@ -6,3 +6,4 @@ The creation and management of databases are out of the scope of this section be
 
 - [Backup and recovery](backup-and-recovery.md)
 - [Database system views](system-views.md)
+- [Custom attributes](custom-attributes.md)

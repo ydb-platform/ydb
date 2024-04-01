@@ -1,7 +1,11 @@
 items:
 - name: Резервное копирование и восстановление
   href: backup-and-recovery.md
+- name: Оптимизация планов запросов
+  href: query-plans-optimization.md
 - name: Системные таблицы
   href: system-views.md
 - name: Terraform
   href: terraform.md
+- name: Пользовательские атрибуты
+  href: custom-attributes.md

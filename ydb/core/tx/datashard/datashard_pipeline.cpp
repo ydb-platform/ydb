@@ -401,17 +401,25 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
         if (Self->IsMvccEnabled()) {
             TStepOrder stepOrder = op->GetStepOrder();
             TRowVersion version(stepOrder.Step, stepOrder.TxId);
-            TRowVersion completeEdge = Max(
-                    Self->SnapshotManager.GetCompleteEdge(),
-                    Self->SnapshotManager.GetUnprotectedReadEdge());
-            if (version <= completeEdge) {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Adding BlockingImmediateOps for op " << *op << " at " << Self->TabletID());
-                op->SetFlag(TTxFlags::BlockingImmediateOps);
-            } else if (version <= Self->SnapshotManager.GetIncompleteEdge()) {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Adding BlockingImmediateWrites for op " << *op << " at " << Self->TabletID());
-                op->SetFlag(TTxFlags::BlockingImmediateWrites);
+            if (version <= Self->SnapshotManager.GetCompleteEdge() ||
+                version < Self->SnapshotManager.GetImmediateWriteEdge() ||
+                version < Self->SnapshotManager.GetUnprotectedReadEdge())
+            {
+                // This transaction would have been marked as logically complete
+                if (!op->HasFlag(TTxFlags::BlockingImmediateOps)) {
+                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                        "Adding BlockingImmediateOps for op " << *op << " at " << Self->TabletID());
+                    op->SetFlag(TTxFlags::BlockingImmediateOps);
+                }
+            } else if (version <= Self->SnapshotManager.GetIncompleteEdge() ||
+                       version <= Self->SnapshotManager.GetUnprotectedReadEdge())
+            {
+                // This transaction would have been marked as logically incomplete
+                if (!op->HasFlag(TTxFlags::BlockingImmediateWrites)) {
+                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                        "Adding BlockingImmediateWrites for op " << *op << " at " << Self->TabletID());
+                    op->SetFlag(TTxFlags::BlockingImmediateWrites);
+                }
             }
         }
         auto pr = ActivePlannedOps.emplace(op->GetStepOrder(), op);

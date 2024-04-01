@@ -2,9 +2,9 @@
 
 ## Введение {#introduction}
 
-[Liquibase](https://www.liquibase.com/) – это библиотека с открытым исходным кодом для отслеживания, управления и применения изменений схемы базы данных. Liquibase расширяется диалектами для различных СУБД.
+[Liquibase](https://www.liquibase.com/) – это библиотека с открытым исходным кодом для отслеживания, управления и применения изменений схемы базы данных. Она расширяется диалектами для различных систем управления базами данных (СУБД), включая {{ ydb-short-name }}.
 
-Диалект - это основная сущность в фреймворке Liquibase, которая помогают формировать SQL запросы к базе данных, учитывая специфику той или иной СУБД.
+Диалект - это основная сущность в фреймворке Liquibase, которая помогает формировать SQL запросы к базе данных, учитывая специфику той или иной СУБД.
 
 ## Возможности диалекта {{ ydb-short-name }} {#ydb-dialect}
 
@@ -18,7 +18,7 @@ Changeset `createTable` отвечает за создание таблицы. �
 
 {% note info %}
 
-Также можно явно указывать оригинальное название, например, такие типы как `Int32`, `Json`, `JsonDocument`, `Bytes`, `Interval`. Но в таком случае теряется переносимость схемы.
+Вы также можете явно указать имя исходного типа, например `Int32`, `Json`, `Json Document`, `Bytes` или `Interval`. Однако в этом случае схема не будет переносимой.
 
 {% endnote %}
 
@@ -36,51 +36,248 @@ Changeset `createTable` отвечает за создание таблицы. �
 | `bigint`, `java.sql.Types.BIGINT`, `java.math.BigInteger`, `java.lang.Long`, `integer8`, `bigserial`, `long`                                                                                                                                                                                                                                                                                                                                                                                                  | `Int64`                    |
 | `java.sql.Types.SMALLINT`, `int2`, `smallserial`, `smallint`                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `Int16`                    |
 | `java.sql.Types.TINYINT`, `tinyint`                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `Int8`                     |
-| `char`, `java.sql.Types.CHAR`, `bpchar`, `character`, `nchar`, `java.sql.Types.NCHAR`, `nchar2`, `text`, `varchar`, `java.sql.Types.VARCHAR`, `java.lang.String`, `varchar2`, `character varying`, `nvarchar`, `java.sql.Types.NVARCHAR`, `nvarchar2`, `national`, `clob`, `longvarchar`, `longtext`, `java.sql.Types.LONGVARCHAR`, `java.sql.Types.CLOB`, `nclob`, `longnvarchar`, `ntext`, `java.sql.Types.LONGNVARCHAR`, `java.sql.Types.NCLOB`, `tinytext`, `mediumtext`, `long varchar`, `long nvarchar` | `Text`                     |
+| `char`, `java.sql.Types.CHAR`, `bpchar`, `character`, `nchar`, `java.sql.Types.NCHAR`, `nchar2`, `text`, `varchar`, `java.sql.Types.VARCHAR`, `java.lang.String`, `varchar2`, `character varying`, `nvarchar`, `java.sql.Types.NVARCHAR`, `nvarchar2`, `national`, `clob`, `longvarchar`, `longtext`, `java.sql.Types.LONGVARCHAR`, `java.sql.Types.CLOB`, `nclob`, `longnvarchar`, `ntext`, `java.sql.Types.LONGNVARCHAR`, `java.sql.Types.NCLOB`, `tinytext`, `mediumtext`, `long varchar`, `long nvarchar` | `Text` (синоним `Utf8`)    |
 | `timestamp`, `java.sql.Types.TIMESTAMP`, `java.sql.TIMESTAMP`                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `Timestamp`                |
-| `java.util.Date`, `time`, `java.sql.Types.TIME`, `java.sql.Time`                                                                                                                                                                                                                                                                                                                                                                                                                                              | `Datetime`                 |
+| `time`, `java.sql.Types.TIME`, `java.sql.Time`                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `Datetime`                 |
 
 {% note info %}
 
-Регистр типа данных не имеет значения.
+Имена типов не чувствительны к регистру.
 
 {% endnote %}
-
-### Изменение структуры таблицы
 
 `dropTable` - удаление таблицы. Пример: `<dropTable tableName="episodes"/>`
 
+### Изменение структуры таблицы
+
 `addColumn` - добавление колонки. Пример:
 
-```xml
+{% list tabs %}
 
-<addColumn tableName="seasons">
-    <column name="is_deleted" type="bool"/>
-</addColumn>
-```
+- xml
 
-`createIndex` - создание индекса. Пример:
+  ```xml
+  <addColumn tableName="seasons">
+      <column name="is_deleted" type="bool"/>
+  </addColumn>
+  ```
 
-```xml
+- json
 
-<createIndex tableName="episodes" indexName="episodes_index" unique="false">
-    <column name="title"/>
-</createIndex>
-```
+  ```json
+  "changes": [
+      {
+        "addColumn": {
+          "tableName": "seasons",
+          "columns": [
+            {
+              "column": {
+                "name": "is_deleted",
+                "type": "bool"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  ```
 
-{% note info %}
+- yaml
 
-Создание асинхронных индексов нужно делать через нативные SQL миграции.
+  ```yaml
+  changes:
+  - addColumn:
+      tableName: seasons
+      columns:
+      - column:
+          name: is_deleted
+          type: bool
+  ```
+
+`createIndex` - создание вторичного индекса. Пример:
+
+{% list tabs %}
+
+- xml
+
+  ```xml
+  <createIndex tableName="episodes" indexName="episodes_index" unique="false">
+      <column name="title"/>
+  </createIndex>
+  ```
+
+- json
+
+  ```json
+  "changes": [
+      {
+        "createIndex": {
+          "tableName": "episodes",
+          "indexName": "episodes_index",
+          "unique": "false",
+          "columns": {
+            "column": {
+              "name": "title"
+            }
+          }
+        }
+      }
+  ```
+
+- yaml
+
+  ```yaml
+  changes:
+  - createIndex:
+      tableName: episodes
+      indexName: episodes_index
+      unique: false
+      columns:
+      - column:
+          name: title
+  ```
+
+{% endlist %}
+
+{% note warning %}
+
+YDB не поддерживает уникальный вторичный индекс
 
 {% endnote %}
 
-`dropIndex` - удаление индекса. Пример: `<dropIndex tableName="series" indexName="series_index"/>`
+{% note info %}
 
-### Вставка данных в таблицу
+Создание асинхронных индексов нужно делать через [нативные SQL миграции](https://docs.liquibase.com/concepts/changelogs/sql-format.html)..
 
-`loadData`, `loadUpdateData` - загрузка данных из CSV файла. *loadUpdate* загружает данные командой UPSERT. Данные будут автоматически приведены к нужным типам, учитывая строгую типизацию {{ ydb-short-name }}.
+{% endnote %}
 
-`insert` - changeset, который осуществляет единичный insert в таблицу. Значение можно объявлять в поле value, например `<column name="timestamp_column" value="2023-07-31T17:00:00.123123Z"/>`.
+`dropIndex` - удаление вторичного индекса. Пример:
+
+{% list tabs %}
+
+- xml
+
+  ```xml
+  <dropIndex tableName="series" indexName="series_index"/>
+  ```
+
+- json
+
+  ```json
+  "changes": [
+    {
+      "dropIndex": {
+        "tableName": "series",
+        "indexName": "series_index"
+      }
+    }
+  ]
+  ```
+
+- yaml
+
+  ```yaml
+  changes:
+  - dropIndex:
+      tableName: series
+      indexName: series_index
+  ```
+
+{% endlist %}
+
+### Ввод данных в таблицу
+
+`loadData`, `loadUpdateData` - загрузка данных из CSV файла. *loadUpdateData* загружает данные командой [UPSERT](../yql/reference/yql-core/syntax/upsert_into.md). Данные будут автоматически преобразованы в требуемые типы с учетом строгой типизации в {{ ydb-short-name }}.
+
+`insert` - changeset, который осуществляет единичный insert в таблицу командой [INSERT](../yql/reference/yql-core/syntax/insert_into.md). Например:
+
+{% list tabs %}
+
+- xml
+
+  ```xml
+  <insert tableName="episodes">
+      <column name="series_id" valueNumeric="1"/>
+      <column name="season_id" valueNumeric="1"/>
+      <column name="episode_id" valueNumeric="1"/>
+      <column name="title" value="Yesterday's Jam"/>
+      <column name="air_date" valueDate="2023-04-03T08:46:23.456"/>
+  </insert>
+  ```
+
+  - json
+
+    ```json
+    "changes": [
+      {
+        "insert": {
+          "tableName": "episodes",
+          "columns": [
+            {
+              "column": {
+                "name": "series_id",
+                "valueNumeric": "1"
+              }
+            },
+            {
+              "column": {
+                "name": "season_id",
+                "valueNumeric": "1"
+              }
+            },
+            {
+              "column": {
+                "name": "episode_id",
+                "valueNumeric": "1"
+              }
+            },
+            {
+              "column": {
+                "name": "title",
+                "value": "Yesterday's Jam"
+              }
+            },
+            {
+              "column": {
+                "name": "air_date",
+                "valueDate": "2023-04-03T08:46:23.456"
+              }
+            }
+          ]
+        }
+      }
+    ]
+    ```
+
+- yaml
+
+  ```yaml
+  changes:
+  - insert:
+      tableName: episodes
+      columns:
+        - column:
+            name: series_id
+            valueNumeric: 1
+        - column:
+            name: season_id
+            valueNumeric: 1
+        - column:
+            name: episode_id
+            valueNumeric: 1
+        - column:
+            name: title
+            value: Yesterday's Jam
+        - column:
+            name: air_date
+            valueDate: 2023-04-03T08:46:23.456
+  ```
+
+{% endlist %}
+
+Вы также можете указать любое значение в поле `value`. Если значение имеет тип time, оно будет преобразовано в соответствующий тип (DATE, DATETIME или TIMESTAMP) на основе типа, указанного в определении столбца. Например: `<column name="timestamp_column" value="2023-07-31T17:00:00.123123Z"/>` будет конвертирован в `TIMESTAMP('2023-07-31T17:00:00.123123Z')`.
+
+Все строковые значения будут преобразованы в соответствующий тип.
 
 {% note warning %}
 
@@ -90,7 +287,7 @@ Changeset `createTable` отвечает за создание таблицы. �
 
 {% note tip %}
 
-Важно отметить, что кастомные инструкции YQL можно применять через нативные SQL запросы.
+Важно отметить, что кастомные инструкции YQL могут быть применены с помощью [нативных SQL-запросов](https://docs.liquibase.com/concepts/changelogs/sql-format.html).
 
 {% endnote %}
 
@@ -102,11 +299,11 @@ Changeset `createTable` отвечает за создание таблицы. �
 
 - Программно из Java / Kotlin приложения
 
-  Как воспользоваться из Java / Kotlin подробно описано в [README](https://github.com/ydb-platform/ydb-java-dialects/tree/main/liquibase-dialect) проекта, там же есть ссылка на пример Spring Boot приложения.
+  Как воспользоваться из Java / Kotlin подробно описано в [README](https://github.com/ydb-platform/ydb-java-dialects/tree/main/liquibase-dialect) проекта. Также есть [пример приложения Spring Boot](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-liquibase-app), использующего его.
 
 - Liquibase CLI
 
-  Для начала нужно установить саму утилиту liquibase [любым из рекомендуемых способов](https://docs.liquibase.com/start/install/home.html). Затем нужно подложить актуальные .jar архивы [{{ ydb-short-name }} JDBC драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases) и Liquibase [диалекта {{ ydb-short-name }}](https://mvnrepository.com/artifact/tech.ydb.dialects/liquibase-ydb-dialect/1.0.0).
+  Для начала нужно установить саму утилиту liquibase [любым из рекомендуемых способов](https://docs.liquibase.com/start/install/home.html). Затем нужно подложить актуальные .jar архивы [{{ ydb-short-name }} JDBC драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases) и Liquibase [диалекта {{ ydb-short-name }}](https://mvnrepository.com/artifact/tech.ydb.dialects/liquibase-ydb-dialect/1.0.0) в папку `internal/lib`.
 
   ```bash
   # $(which liquibase)
@@ -118,9 +315,9 @@ Changeset `createTable` отвечает за создание таблицы. �
   curl -L -o liquibase-ydb-dialect.jar https://repo1.maven.org/maven2/tech/ydb/dialects/liquibase-ydb-dialect/1.0.0/liquibase-ydb-dialect-1.0.0.jar
   ```
 
-  Более подробное описание в разделе [Manual library management](https://docs.liquibase.com/start/install/home.html). 
-  
-  Теперь liquibase утилитой можно пользоваться стандартными способами.
+  Более подробное описание в разделе [Manual library management](https://docs.liquibase.com/start/install/home.html) в документации Liquibase.
+
+  Теперь утилиту командной строки liquibase можно использовать с {{ ydb-short-name }}.
 
 {% endlist %}
 
@@ -203,9 +400,8 @@ Liquibase command 'update' was executed successfully.
 ```sql
 --liquibase formatted sql
 
---changeset kurdyukov-kir:10
-CREATE
-TOPIC `my_topic` (
+--changeset kurdyukov-kir:create-a-topic
+CREATE TOPIC `my_topic` (
     CONSUMER my_consumer
     ) WITH (retention_period = Interval('P1D')
 );

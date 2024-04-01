@@ -210,6 +210,8 @@ inline bool IsPrimitiveYqlType(const NScheme::TTypeInfo& typeInfo) {
         case NScheme::NTypeIds::Double:
         case NScheme::NTypeIds::Timestamp:
         case NScheme::NTypeIds::Interval:
+        case NScheme::NTypeIds::String:
+        case NScheme::NTypeIds::Utf8:
             return true;
         default:
             break;

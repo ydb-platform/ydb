@@ -53,7 +53,7 @@ template <typename T, bool Nullable>
 class TTzDateBlockItemHasher : public TBlockItemHasherBase<TTzDateBlockItemHasher<T, Nullable>, Nullable> {
 public:
     ui64 DoHash(TBlockItem value) const {
-        using TLayout = TDataType<T>::TLayout;
+        using TLayout = typename TDataType<T>::TLayout;
         TUnboxedValuePod uv {value.As<TLayout>()};
         uv.SetTimezoneId(value.GetTimezoneId());
         return GetValueHash<TDataType<T>::Slot>(uv);

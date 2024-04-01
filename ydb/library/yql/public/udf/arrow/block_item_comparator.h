@@ -150,7 +150,7 @@ public:
 
 template<typename TTzType, bool Nullable>
 class TTzDateBlockItemComparator : public TBlockItemComparatorBase<TTzDateBlockItemComparator<TTzType, Nullable>, Nullable> {
-    using TLayout = TDataType<TTzType>::TLayout;
+    using TLayout = typename TDataType<TTzType>::TLayout;
 
 public:
     bool DoCompare(TBlockItem lhs, TBlockItem rhs) const {

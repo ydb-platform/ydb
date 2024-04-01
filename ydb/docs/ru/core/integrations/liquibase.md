@@ -191,7 +191,7 @@ YDB не поддерживает уникальный вторичный инд
 
 `loadData`, `loadUpdateData` - загрузка данных из CSV файла. *loadUpdateData* загружает данные командой [{#T}](./../yql/reference/yql-core/syntax/upsert_into.md). Данные будут автоматически преобразованы в требуемые типы с учетом строгой типизации в {{ ydb-short-name }}.
 
-`insert` - changeset, который осуществляет единичный insert в таблицу командой [{#T}](./../yql/reference/yql-core/syntax/insert_into.md). Например:
+`insert` - changeset, который осуществляет единичный insert в таблицу командой [{#T}](./../../yql/reference/yql-core/syntax/insert_into.md). Например:
 
 {% list tabs %}
 

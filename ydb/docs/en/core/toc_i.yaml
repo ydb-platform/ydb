@@ -15,7 +15,11 @@ items:
   include:
     mode: link
     path: dba/toc_p.yaml
-- name: For contributors
+- name: For Developers
+  include:
+    mode: link
+    path: dev/toc_p.yaml
+- name: For Contributors
   include:
     mode: link
     path: contributor/toc_p.yaml

@@ -15,6 +15,10 @@ items:
   include:
     mode: link
     path: dba/toc_p.yaml
+- name: Для разработчиков
+  include:
+    mode: link
+    path: dev/toc_p.yaml
 - name: Для контрибьюторов
   include:
     mode: link

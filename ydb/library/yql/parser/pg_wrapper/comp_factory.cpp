@@ -39,6 +39,7 @@ extern "C" {
 #include "catalog/pg_namespace_d.h"
 #include "catalog/pg_tablespace_d.h"
 #include "catalog/pg_type_d.h"
+#include "datatype/timestamp.h"
 #include "utils/builtins.h"
 #include "utils/memutils.h"
 #include "utils/array.h"
@@ -1914,6 +1915,14 @@ inline i64 Timestamp2Pg(ui64 value) {
     return i64(value) - PgTimestampShift;
 }
 
+inline Interval* Interval2Pg(i64 value) {
+    auto ret = (Interval*)palloc(sizeof(Interval));
+    ret->time = value % 86400000000ll;
+    ret->day = value / 86400000000ll;
+    ret->month = 0;
+    return ret;
+}
+
 template <NUdf::EDataSlot Slot>
 NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUdf::EDataSlot> actualSlot = {}) {
 #ifndef NDEBUG
@@ -1954,6 +1963,10 @@ NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUd
     case NUdf::EDataSlot::Timestamp: {
         auto res = Timestamp2Pg(value.Get<ui64>());
         return ScalarDatumToPod(res);
+    }
+    case NUdf::EDataSlot::Interval: {
+        auto res = Interval2Pg(value.Get<i64>());
+        return PointerDatumToPod(PointerGetDatum(res));
     }
 
     default:
@@ -2673,6 +2686,27 @@ struct TToPgExec {
             }
             break;
         }
+        case NUdf::EDataSlot::Interval: {
+            NUdf::TFixedSizeBlockReader<i64, true> reader;
+            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                Interval pgInterval;
+                pgInterval.time = item.Get<i64>() % 86400000000ll;
+                pgInterval.day = item.Get<i64>() / 86400000000ll;
+                pgInterval.month = 0;
+                auto ref = NUdf::TStringRef((const char*)&pgInterval, sizeof(Interval));
+                builder.AddPgItem<false, 0>(ref);
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
         default:
             ythrow yexception() << "Unsupported type: " << NUdf::GetDataTypeInfo(SourceDataSlot).Name;
         }
@@ -2706,6 +2740,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, T
         break;
     case NUdf::EDataSlot::String:
     case NUdf::EDataSlot::Utf8:
+    case NUdf::EDataSlot::Interval:
         kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
         break;
     default:
@@ -2958,6 +2993,8 @@ TComputationNodeFactory GetPgFactory() {
                     return new TToPg<NUdf::EDataSlot::Datetime>(ctx.Mutables, arg);
                 case NUdf::EDataSlot::Timestamp:
                     return new TToPg<NUdf::EDataSlot::Timestamp>(ctx.Mutables, arg);
+                case NUdf::EDataSlot::Interval:
+                    return new TToPg<NUdf::EDataSlot::Interval>(ctx.Mutables, arg);
                 default:
                     ythrow yexception() << "Unsupported type: " << NUdf::GetDataTypeInfo(*sourceDataSlot).Name;
                 }

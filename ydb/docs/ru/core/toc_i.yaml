@@ -11,7 +11,7 @@ items:
   include:
     mode: link
     path: devops/toc_p.yaml
-- name: For DBA
+- name: Для DBA
   include:
     mode: link
     path: dba/toc_p.yaml

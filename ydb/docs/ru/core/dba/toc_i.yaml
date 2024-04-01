@@ -1,6 +1,6 @@
 items:
 - name: Резервное копирование и восстановление
-  href: ../maintenance/backup_and_recovery.md
+  href: backup-and-recovery.md
 - name: Диагностика
   hidden: true
   include: { mode: link, path: ../troubleshooting/toc_p.yaml }

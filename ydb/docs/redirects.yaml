@@ -39,9 +39,10 @@ common:
     to: /yql/reference/index.md
 
 # Redirects from db to dba
-
   - from: /db/index.md
     to: /dba/index.md
+  - from: /maintenance/backup_and_recovery.md
+    to: /dba/backup-and-recovery.md
 
 # Redirects from development to contributor
   - from: /development/build-ya.md

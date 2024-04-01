@@ -294,6 +294,7 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
         w->SetUncompressedSize(record.Value ? record.Value->size() : 0);
         w->SetClientDC(clientDC);
         w->SetIgnoreQuotaDeadline(true);
+        w->SetExternalOperation(true);
 
         totalSize += record.Value ? record.Value->size() : 0;
     }

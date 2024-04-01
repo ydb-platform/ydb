@@ -433,6 +433,7 @@ public:
         read->SetTimeoutMs(0);
         read->SetBytes(Min<ui32>(maxBytes, FetchRequestBytesLeft));
         read->SetReadTimestampMs(readTimestampMs);
+        read->SetExternalOperation(true);
         NTabletPipe::SendData(ctx, jt->second.PipeClient, preq.Release());
     }
 

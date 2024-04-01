@@ -53,9 +53,10 @@ TPublicStat GetPublicStat(const TString& statistics);
 struct IPlanStatProcessor {
     virtual ~IPlanStatProcessor() = default;
     virtual Ydb::Query::StatsMode GetStatsMode() = 0;
-    virtual TString ConvertPlan(TString& plan)  = 0;
-    virtual TString GetQueryStat(TString& plan, double& cpuUsage) = 0;
-    virtual TPublicStat GetPublicStat(TString& stat) = 0;
+    virtual TString ConvertPlan(const TString& plan)  = 0;
+    virtual TString GetQueryStat(const TString& plan, double& cpuUsage) = 0;
+    virtual TPublicStat GetPublicStat(const TString& stat) = 0;
+    virtual THashMap<TString, i64> GetFlatStat(TStringBuf plan) = 0;
 };
 
 std::unique_ptr<IPlanStatProcessor> CreateStatProcessor(const TString& statViewName);

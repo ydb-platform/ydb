@@ -473,6 +473,14 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage) {
 
 namespace {
 
+void SerializeStats(google::protobuf::RepeatedPtrField<Ydb::ValuePair>& dest, const THashMap<TString, i64>& stats) {
+    for (const auto& [name, stat] : stats) {
+        auto& elem = *dest.Add();
+        elem.mutable_key()->set_text_value(name);
+        elem.mutable_payload()->set_int64_value(stat);
+    }
+}
+
 struct StatsAggregator {
     bool TryExtractAggregates(const NJson::TJsonValue& node, const TString& name) {
         auto dstAggr = Aggregates.find(name);
@@ -1029,17 +1037,21 @@ struct TNoneStatProcessor : IPlanStatProcessor {
         return Ydb::Query::StatsMode::STATS_MODE_NONE;
     }
 
-    TString ConvertPlan(TString& plan) override {
+    TString ConvertPlan(const TString& plan) override {
         return plan;
     }
 
-    TString GetQueryStat(TString&, double& cpuUsage) override {
+    TString GetQueryStat(const TString&, double& cpuUsage) override {
         cpuUsage = 0.0;
         return "";
     }
 
-    TPublicStat GetPublicStat(TString&) override {
+    TPublicStat GetPublicStat(const TString&) override {
         return TPublicStat{};
+    }
+
+    THashMap<TString, i64> GetFlatStat(TStringBuf) override {
+        return {};
     }
 };
 
@@ -1054,16 +1066,20 @@ struct TFullStatProcessor : IPlanStatProcessor {
         return Ydb::Query::StatsMode::STATS_MODE_FULL;
     }
 
-    TString ConvertPlan(TString& plan) override {
+    TString ConvertPlan(const TString& plan) override {
         return plan;
     }
 
-    TString GetQueryStat(TString& plan, double& cpuUsage) override {
+    TString GetQueryStat(const TString& plan, double& cpuUsage) override {
         return GetV1StatFromV2Plan(plan, &cpuUsage);
     }
 
-    TPublicStat GetPublicStat(TString& stat) override {
+    TPublicStat GetPublicStat(const TString& stat) override {
         return NFq::GetPublicStat(stat);
+    }
+
+    THashMap<TString, i64> GetFlatStat(TStringBuf plan) override {
+        return AggregateStats(plan);
     }
 };
 
@@ -1074,7 +1090,7 @@ struct TProfileStatProcessor : TFullStatProcessor {
 };
 
 struct TProdStatProcessor : TFullStatProcessor {
-    TString GetQueryStat(TString& plan, double& cpuUsage) override {
+    TString GetQueryStat(const TString& plan, double& cpuUsage) override {
         return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage));
     }
 };
@@ -1152,6 +1168,7 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
         auto stat = Processor->GetQueryStat(plan, CpuUsage);
         pingTaskRequest.set_statistics(stat);
         pingTaskRequest.set_dump_raw_statistics(true);
+        SerializeStats(*pingTaskRequest.mutable_flat_stats(), Processor->GetFlatStat(plan));
         PublicStat = Processor->GetPublicStat(stat);
     } catch(const NJson::TJsonException& ex) {
         Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error stat conversion: " << ex.what()));

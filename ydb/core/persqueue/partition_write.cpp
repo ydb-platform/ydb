@@ -79,6 +79,11 @@ void TPartition::ReplyWrite(
     ctx.Send(Tablet, response.Release());
 }
 
+void TPartition::UpdateAvailableSize(const TActorContext& ctx) {
+    FilterDeadlinedWrites(ctx);
+    ScheduleUpdateAvailableSize(ctx);
+}
+
 void TPartition::HandleOnIdle(TEvPQ::TEvUpdateAvailableSize::TPtr&, const TActorContext& ctx)
 {
     UpdateAvailableSize(ctx);

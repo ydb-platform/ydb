@@ -297,7 +297,10 @@ namespace NYql::NDq {
 
         NConnector::NApi::TSelect CreateSelect(const NKikimr::NMiniKQL::TUnboxedValueVector& keys) {
             NConnector::NApi::TSelect select;
-            *select.mutable_data_source_instance() = DataSource; //std::move
+            *select.mutable_data_source_instance() = DataSource;
+            //Note: returned token may be stale and we have no way to check or recover here
+            //Consider to redesign ICredentialsProvider
+            TokenProvider->MaybeFillToken(*select.mutable_data_source_instance());
 
             for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {
                 auto c = select.mutable_what()->add_items()->mutable_column();

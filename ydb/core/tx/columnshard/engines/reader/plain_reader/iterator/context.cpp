@@ -3,8 +3,8 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-std::shared_ptr<NKikimr::NOlap::NIndexedReader::TMergePartialStream> TSpecialReadContext::BuildMerger() const {
-    return std::make_shared<NIndexedReader::TMergePartialStream>(ReadMetadata->GetReplaceKey(), ProgramInputColumns->GetSchema(), CommonContext->IsReverse());
+std::shared_ptr<NArrow::NMerger::TMergePartialStream> TSpecialReadContext::BuildMerger() const {
+    return std::make_shared<NArrow::NMerger::TMergePartialStream>(ReadMetadata->GetReplaceKey(), ProgramInputColumns->GetSchema(), CommonContext->IsReverse(), IIndexInfo::GetSpecialColumnNames());
 }
 
 ui64 TSpecialReadContext::GetMemoryForSources(const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const bool isExclusive) {
@@ -24,7 +24,7 @@ std::shared_ptr<NKikimr::NOlap::NReader::NPlain::IFetchingStep> TSpecialReadCont
     const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);
     auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][exclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0];
     if (!result) {
-        return std::make_shared<TBuildFakeSpec>(source->GetRecordsCount(), "fake");
+        return std::make_shared<TBuildFakeSpec>(source->GetRecordsCountVerified(), "fake");
     }
     return result;
 }
@@ -34,7 +34,7 @@ std::shared_ptr<NKikimr::NOlap::NReader::NPlain::IFetchingStep> TSpecialReadCont
     std::shared_ptr<IFetchingStep> current = result;
     const bool partialUsageByPredicate = partialUsageByPredicateExt && PredicateColumns->GetColumnsCount();
     if (!!IndexChecker && useIndexes) {
-        current = current->AttachNext(std::make_shared<TBlobsFetchingStep>(std::make_shared<TIndexesSet>(IndexChecker->GetIndexIds())));
+        current = current->AttachNext(std::make_shared<TIndexBlobsFetchingStep>(std::make_shared<TIndexesSet>(IndexChecker->GetIndexIds())));
         current = current->AttachNext(std::make_shared<TApplyIndexStep>(IndexChecker));
     }
     if (!EFColumns->GetColumnsCount() && !partialUsageByPredicate) {
@@ -46,8 +46,8 @@ std::shared_ptr<NKikimr::NOlap::NReader::NPlain::IFetchingStep> TSpecialReadCont
             columnsFetch = columnsFetch + *PKColumns + *SpecColumns;
         }
         if (columnsFetch.GetColumnsCount()) {
-            current = current->AttachNext(std::make_shared<TBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsFetch), "simple"));
-            current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsFetch)));
+            current = current->AttachNext(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsFetch), "simple"));
+            current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsFetch), "LAST"));
         } else {
             return nullptr;
         }
@@ -60,20 +60,20 @@ std::shared_ptr<NKikimr::NOlap::NReader::NPlain::IFetchingStep> TSpecialReadCont
             columnsFetch = columnsFetch + *PredicateColumns;
         }
         AFL_VERIFY(columnsFetch.GetColumnsCount());
-        current = current->AttachNext(std::make_shared<TBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsFetch), "ef"));
+        current = current->AttachNext(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsFetch), "ef"));
 
         if (needSnapshots || FFColumns->Cross(*SpecColumns)) {
-            current = current->AttachNext(std::make_shared<TAssemblerStep>(SpecColumns));
+            current = current->AttachNext(std::make_shared<TAssemblerStep>(SpecColumns, "SPEC"));
             current = current->AttachNext(std::make_shared<TSnapshotFilter>());
             columnsFetch = columnsFetch - *SpecColumns;
         }
         if (partialUsageByPredicate) {
-            current = current->AttachNext(std::make_shared<TAssemblerStep>(PredicateColumns));
+            current = current->AttachNext(std::make_shared<TAssemblerStep>(PredicateColumns, "PREDICATE"));
             current = current->AttachNext(std::make_shared<TPredicateFilter>());
             columnsFetch = columnsFetch - *PredicateColumns;
         }
         if (columnsFetch.GetColumnsCount()) {
-            current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsFetch)));
+            current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsFetch), "EF"));
         }
         for (auto&& i : ReadMetadata->GetProgram().GetSteps()) {
             if (!i->IsFilterOnly()) {
@@ -86,23 +86,25 @@ std::shared_ptr<NKikimr::NOlap::NReader::NPlain::IFetchingStep> TSpecialReadCont
             columnsAdditionalFetch = columnsAdditionalFetch - *PredicateColumns;
         }
         if (columnsAdditionalFetch.GetColumnsCount()) {
-            current = current->AttachNext(std::make_shared<TBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch)));
-            current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch)));
+            current = current->AttachNext(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch)));
+            current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch), "LAST"));
         }
     } else {
         TColumnsSet columnsFetch = *MergeColumns + *EFColumns;
         AFL_VERIFY(columnsFetch.GetColumnsCount());
-        current = current->AttachNext(std::make_shared<TBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsFetch), "full"));
-        current = current->AttachNext(std::make_shared<TAssemblerStep>(SpecColumns));
+        current = current->AttachNext(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsFetch), "full"));
+        current = current->AttachNext(std::make_shared<TAssemblerStep>(SpecColumns, "SPEC"));
         if (needSnapshots) {
             current = current->AttachNext(std::make_shared<TSnapshotFilter>());
         }
-        current = current->AttachNext(std::make_shared<TAssemblerStep>(PKColumns));
+        current = current->AttachNext(std::make_shared<TAssemblerStep>(PKColumns, "PK"));
         if (partialUsageByPredicate) {
             current = current->AttachNext(std::make_shared<TPredicateFilter>());
         }
         const TColumnsSet columnsFetchEF = columnsFetch - *SpecColumns - *PKColumns;
-        current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsFetchEF)));
+        if (columnsFetchEF.GetColumnsCount()) {
+            current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsFetchEF), "EF"));
+        }
         for (auto&& i : ReadMetadata->GetProgram().GetSteps()) {
             if (!i->IsFilterOnly()) {
                 break;
@@ -111,8 +113,8 @@ std::shared_ptr<NKikimr::NOlap::NReader::NPlain::IFetchingStep> TSpecialReadCont
         }
         const TColumnsSet columnsAdditionalFetch = *FFColumns - *EFColumns - *SpecColumns - *PKColumns - *PredicateColumns;
         if (columnsAdditionalFetch.GetColumnsCount()) {
-            current = current->AttachNext(std::make_shared<TBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch)));
-            current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch)));
+            current = current->AttachNext(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch)));
+            current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch), "LAST"));
         }
     }
     return result->GetNextStep();

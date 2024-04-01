@@ -53,6 +53,8 @@ namespace NSQLTranslationPG {
 
 using namespace NYql;
 
+static const THashSet<TString> SystemColumns = { "tableoid", "xmin", "cmin", "xmax", "cmax", "ctid" };
+
 template <typename T>
 const T* CastNode(const void* nodeptr, int tag) {
     Y_ENSURE(nodeTag(nodeptr) == tag);
@@ -1790,6 +1792,10 @@ private:
 
     bool AddColumn(TCreateTableCtx& ctx, const ColumnDef* node) {
         TColumnInfo cinfo{.Name = node->colname};
+        if (SystemColumns.contains(to_lower(cinfo.Name))) {
+            AddError(TStringBuilder() << "system column can't be used: " << node->colname);
+            return false;
+        }
 
         if (node->constraints) {
             for (int i = 0; i < ListLength(node->constraints); ++i) {

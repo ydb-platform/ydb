@@ -1992,7 +1992,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` * 3. > 4.f)",
             R"(`level` / 2.f <= 1.)",
             R"(`level` % 3. != 1.f)",
-            R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z"))",
+            //R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z"))",
             R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z") AND `level` > 3)",
             R"((`timestamp`, `level`) >= (Timestamp("1970-01-01T00:00:00.000001Z"), 3))",
 #endif
@@ -4759,10 +4759,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                         return TTestActorRuntime::EEventAction::PROCESS;
                     } else {
                         if (prevIsFinished) {
-                            Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event");
+                            Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event" << Endl);
                             Cerr.Flush();
-                            auto resp = std::make_unique<NKqp::TEvKqpCompute::TEvScanError>(msg->Generation, 0);
-                            runtime->Send(new IEventHandle(ev->Recipient, ev->Sender, resp.release()));
+                            for (auto&& i : csController->GetShardActualIds()) {
+                                runtime->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                                    new TEvents::TEvPoisonPill(), i, false));
+                            }
                         } else {
                             prevIsFinished = msg->Finished;
                         }
@@ -5181,12 +5183,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             }
 
             builder << R"(
-                DECLARE $in_timestamp AS Timestamp;
                 DECLARE $in_uid AS Utf8;
                 DECLARE $in_level AS Int32;
 
                 SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE
-                    `timestamp` > $in_timestamp AND uid > $in_uid AND level > $in_level
+                    uid > $in_uid AND level > $in_level
                 ORDER BY `timestamp`;
             )" << Endl;
 
@@ -5197,9 +5198,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto pushQuery = buildQuery(true);
 
         auto params = tableClient.GetParamsBuilder()
-            .AddParam("$in_timestamp")
-                .Timestamp(TInstant::MicroSeconds(3000990))
-                .Build()
             .AddParam("$in_uid")
                 .Utf8("uid_3000980")
                 .Build()

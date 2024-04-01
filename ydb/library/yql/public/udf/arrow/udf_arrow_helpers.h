@@ -83,6 +83,7 @@ public:
         , Pos_(GetSourcePosition(builder))
         , Name_(name)
         , OutputType_(outputType)
+        , NullDatum_(arrow::Datum(std::make_shared<arrow::NullScalar>()))
     {
         TypeInfoHelper_ = builder.TypeInfoHelper();
         Kernel_.null_handling = nullHandling;
@@ -123,6 +124,14 @@ public:
             for (ui32 i = 0; i < ArgArrowTypes_.size(); ++i) {
                 bool isScalar;
                 ui64 length;
+                // If no value is given to the UDF, pass the Null datum as an
+                // optional argument value to the fixed-arg kernel.
+                // XXX: Use bool operator for TUnboxedValuePod object instead
+                // of its HasValue method due to just(null) semantics.
+                if (!args[i]) {
+                    argDatums[i] = NullDatum_;
+                    continue;
+                }
                 ui32 chunkCount = valueBuilder->GetArrowBlockChunks(args[i], isScalar, length);
                 if (isScalar) {
                     ArrowArray a;
@@ -222,7 +231,18 @@ private:
     arrow::compute::ScalarKernel Kernel_;
     std::vector<arrow::ValueDescr> ArgsValuesDescr_;
     TVector<const TType*> ArgTypes_;
+    const arrow::Datum NullDatum_;
 };
+
+inline void SetCallableArgumentAttributes(IFunctionArgTypesBuilder& argsBuilder,
+    const TCallableTypeInspector& callableInspector, const ui32 index) {
+    if (callableInspector.GetArgumentName(index).Size() > 0) {
+        argsBuilder.Name(callableInspector.GetArgumentName(index));
+    }
+    if (callableInspector.GetArgumentFlags(index) != 0) {
+        argsBuilder.Flags(callableInspector.GetArgumentFlags(index));
+    }
+}
 
 inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* signature, TType* userType, TExec exec, bool typesOnly,
     const TString& name, arrow::compute::NullHandling::type nullHandling = arrow::compute::NullHandling::type::COMPUTED_NO_PREALLOCATE) {
@@ -235,7 +255,9 @@ inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* sign
     Y_ENSURE(userTypeInspector.GetElementsCount() == 3);
     TTupleTypeInspector argsInspector(*typeInfoHelper, userTypeInspector.GetElementType(0));
     Y_ENSURE(argsInspector);
-    Y_ENSURE(argsInspector.GetElementsCount() == callableInspector.GetArgsCount());
+    Y_ENSURE(argsInspector.GetElementsCount() <= callableInspector.GetArgsCount());
+    const ui32 omitted = callableInspector.GetArgsCount() - argsInspector.GetElementsCount();
+    Y_ENSURE(omitted <= callableInspector.GetOptionalArgsCount());
 
     bool hasBlocks = false;
     bool onlyScalars = true;
@@ -263,20 +285,30 @@ inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* sign
         auto type = callableInspector.GetArgType(i);
         auto argBlockType = builder.Block(blockInspector.IsScalar())->Item(type).Build();
         argsBuilder->Add(argBlockType);
-        if (callableInspector.GetArgumentName(i).Size() > 0) {
-            argsBuilder->Name(callableInspector.GetArgumentName(i));
-        }
-
-        if (callableInspector.GetArgumentFlags(i) != 0) {
-            argsBuilder->Flags(callableInspector.GetArgumentFlags(i));
-        }
-
+        SetCallableArgumentAttributes(*argsBuilder, callableInspector, i);
         argBlockTypes.emplace_back(argBlockType);
     }
 
+    // XXX: Append the Block types for the omitted arguments to preserve the
+    // fixed-arg kernel signature. Unlikely to the required arguments,
+    // initialized above, the type of the omitted argument has to be passed to
+    // the specialized UDF signature builder (i.e. argsBuilder) as an original
+    // TOptional parameter type. At the same time, all of omitted arguments have
+    // to be substituted with Null datums, so all the original types of the
+    // optional parameters are wrapped type with the Block type with the Scalar
+    // shape in the UDFKernel signature (i.e. argBlockTypes).
+    for (ui32 i = argsInspector.GetElementsCount(); i < callableInspector.GetArgsCount(); i++) {
+        auto optType = callableInspector.GetArgType(i);
+        argsBuilder->Add(optType);
+        SetCallableArgumentAttributes(*argsBuilder, callableInspector, i);
+        argBlockTypes.emplace_back(builder.Block(true)->Item(optType).Build());
+    }
+
     builder.Returns(builder.Block(onlyScalars)->Item(callableInspector.GetReturnType()).Build());
-    if (callableInspector.GetOptionalArgsCount() > 0) {
-        builder.OptionalArgs(callableInspector.GetOptionalArgsCount());
+    // XXX: Only the omitted parameters should be specified as optional
+    // arguments in this context.
+    if (omitted) {
+        builder.OptionalArgs(omitted);
     }
 
     if (callableInspector.GetPayload().Size() > 0) {
@@ -560,7 +592,7 @@ public:
 }
 }
 
-#define BEGIN_ARROW_UDF(udfNameBlocks, signatureFunc) \
+#define BEGIN_ARROW_UDF(udfNameBlocks, signatureFunc, optArgc) \
     class udfNameBlocks { \
     public: \
         typedef bool TTypeAwareMarker; \
@@ -569,7 +601,7 @@ public:
             return name; \
         } \
         static ::NYql::NUdf::TType* GetSignatureType(::NYql::NUdf::IFunctionTypeInfoBuilder& builder) { \
-            return builder.SimpleSignatureType<signatureFunc>(); \
+            return builder.SimpleSignatureType<signatureFunc>(optArgc); \
         } \
         static bool DeclareSignature(\
             const ::NYql::NUdf::TStringRef& name, \
@@ -579,12 +611,16 @@ public:
     };
 
 #define BEGIN_SIMPLE_ARROW_UDF(udfName, signatureFunc) \
-    BEGIN_ARROW_UDF(udfName##_BlocksImpl, signatureFunc) \
+    BEGIN_ARROW_UDF(udfName##_BlocksImpl, signatureFunc, 0) \
     UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks();, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define BEGIN_SIMPLE_STRICT_ARROW_UDF(udfName, signatureFunc) \
-    BEGIN_ARROW_UDF(udfName##_BlocksImpl, signatureFunc) \
+    BEGIN_ARROW_UDF(udfName##_BlocksImpl, signatureFunc, 0) \
     UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().IsStrict();, ;, ;, "", "", udfName##_BlocksImpl)
+
+#define BEGIN_SIMPLE_ARROW_UDF_WITH_OPTIONAL_ARGS(udfName, signatureFunc, optArgc) \
+    BEGIN_ARROW_UDF(udfName##_BlocksImpl, signatureFunc, optArgc) \
+    UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().OptionalArgs(optArgc).SupportsBlocks();, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define END_ARROW_UDF(udfNameBlocks, exec) \
     inline bool udfNameBlocks::DeclareSignature(\

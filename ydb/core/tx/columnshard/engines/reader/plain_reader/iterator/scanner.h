@@ -2,6 +2,7 @@
 #include "source.h"
 #include "interval.h"
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -35,10 +36,11 @@ public:
 
 class TScanHead {
 private:
+    static const inline ui64 MemoryIntervalLimit = ((ui64)1) << 30;
     std::shared_ptr<TSpecialReadContext> Context;
-    std::map<NIndexedReader::TSortableBatchPosition, TDataSourceEndpoint> BorderPoints;
+    std::map<NArrow::NMerger::TSortableBatchPosition, TDataSourceEndpoint> BorderPoints;
     std::map<ui32, std::shared_ptr<IDataSource>> CurrentSegments;
-    std::optional<NIndexedReader::TSortableBatchPosition> CurrentStart;
+    std::optional<NArrow::NMerger::TSortableBatchPosition> CurrentStart;
     std::map<ui32, std::shared_ptr<TFetchingInterval>> FetchingIntervals;
     THashMap<ui32, std::shared_ptr<TPartialReadResult>> ReadyIntervals;
     ui32 SegmentIdxCounter = 0;
@@ -69,7 +71,7 @@ public:
 
     TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context);
 
-    bool BuildNextInterval();
+    [[nodiscard]] TConclusion<bool> BuildNextInterval();
 
 };
 

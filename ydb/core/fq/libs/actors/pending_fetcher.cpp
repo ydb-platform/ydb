@@ -107,6 +107,38 @@ constexpr auto CLEANUP_PERIOD = TDuration::Seconds(60);
 } // namespace
 
 class TPendingFetcher : public NActors::TActorBootstrapped<TPendingFetcher> {
+    struct TRequestCounters {
+        const TString Name;
+
+        ::NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::TDynamicCounters::TCounterPtr InFly;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Ok;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Error;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Retry;
+        ::NMonitoring::THistogramPtr LatencyMs;
+
+        explicit TRequestCounters(const TString& name, const ::NMonitoring::TDynamicCounterPtr& counters = nullptr)
+            : Name(name)
+            , Counters(counters)
+        { 
+            Register();
+        }
+
+        void Register() {
+            ::NMonitoring::TDynamicCounterPtr subgroup = Counters->GetSubgroup("request", Name);
+            InFly = subgroup->GetCounter("InFly", false);
+            Ok = subgroup->GetCounter("Ok", true);
+            Error = subgroup->GetCounter("Error", true);
+            Retry = subgroup->GetCounter("Retry", true);
+            LatencyMs = subgroup->GetHistogram("LatencyMs", GetLatencyHistogramBuckets());
+        }
+
+    private:
+        static ::NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets() {
+            return ::NMonitoring::ExplicitHistogram({0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000, 500000});
+        }
+    };
+
 public:
     TPendingFetcher(
         const NFq::TYqSharedResources::TPtr& yqSharedResources,
@@ -133,6 +165,7 @@ public:
         , RandomProvider(randomProvider)
         , DqCompFactory(dqCompFactory)
         , ServiceCounters(serviceCounters, "pending_fetcher")
+        , GetTaskCounters("GetTask", ServiceCounters.Counters)
         , CredentialsFactory(credentialsFactory)
         , S3Gateway(s3Gateway)
         , ConnectorClient(connectorClient)
@@ -203,10 +236,14 @@ private:
     void Handle(TEvInternalService::TEvGetTaskResponse::TPtr& ev) {
         HasRunningRequest = false;
         LOG_T("Got GetTask response from PrivateApi");
+        GetTaskCounters.LatencyMs->Collect((TInstant::Now() - StartGetTaskTime).MilliSeconds());
+        GetTaskCounters.InFly->Dec();
         if (!ev->Get()->Status.IsSuccess()) {
+            GetTaskCounters.Error->Inc();
             LOG_E("Error with GetTask: "<< ev->Get()->Status.GetIssues().ToString());
             return;
         }
+        GetTaskCounters.Ok->Inc();
 
         const auto& res = ev->Get()->Result;
 
@@ -278,6 +315,8 @@ private:
         request.set_owner_id(GetOwnerId());
         request.set_host(HostName());
         request.set_tenant(TenantName);
+        GetTaskCounters.InFly->Inc();
+        StartGetTaskTime = TInstant::Now();
         Send(InternalServiceId, new TEvInternalService::TEvGetTaskRequest(request));
     }
 
@@ -437,6 +476,8 @@ private:
     NKikimr::NMiniKQL::TComputationNodeFactory DqCompFactory;
     TIntrusivePtr<IDqGateway> DqGateway;
     ::NYql::NCommon::TServiceCounters ServiceCounters;
+    TRequestCounters GetTaskCounters;
+    TInstant StartGetTaskTime;
 
     IModuleResolver::TPtr ModuleResolver;
 

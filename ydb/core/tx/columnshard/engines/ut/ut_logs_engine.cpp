@@ -206,10 +206,9 @@ public:
         std::string Message;
     };
 
-    TBuilder() {
-        auto schema = NArrow::MakeArrowSchema(testColumns);
-        UNIT_ASSERT_C(schema.ok(), schema.status().ToString());
-        Schema = schema.ValueUnsafe(); 
+    TBuilder()
+        : Schema(NArrow::MakeArrowSchema(testColumns))
+    {
         auto status = arrow::RecordBatchBuilder::Make(Schema, arrow::default_memory_pool(), &BatchBuilder);
         Y_ABORT_UNLESS(status.ok());
     }
@@ -232,7 +231,7 @@ public:
     }
 
 private:
-    std::shared_ptr<arrow::Schema> Schema;
+    std::shared_ptr<arrow::Schema> Schema = NArrow::MakeArrowSchema(testColumns);
     std::unique_ptr<arrow::RecordBatchBuilder> BatchBuilder;
 };
 

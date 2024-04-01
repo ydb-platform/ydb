@@ -53,7 +53,9 @@ TestReadSingleBatch(TArrowCSV& reader,
 
     for (size_t i = 0; i < columns.size(); ++i) {
         UNIT_ASSERT_EQUAL(columns[i].first, batch->schema()->field(i)->name());
-        UNIT_ASSERT(NArrow::GetArrowType(columns[i].second)->Equals(batch->schema()->field(i)->type()));
+        auto arrowType = NArrow::GetArrowType(columns[i].second);
+        UNIT_ASSERT_C(arrowType.ok(), arrowType.status().ToString());
+        UNIT_ASSERT(arrowType.ValueUnsafe()->Equals(batch->schema()->field(i)->type()));
         // TODO: check data
     }
     return batch;

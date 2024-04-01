@@ -1,7 +1,6 @@
 #include "arrow_batch_builder.h"
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
-#include <util/string/join.h>
 namespace NKikimr::NArrow {
 
 namespace {
@@ -195,22 +194,18 @@ TArrowBatchBuilder::TArrowBatchBuilder(arrow::Compression::type codec, const std
     WriteOptions.use_threads = false;
 }
 
-bool TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, TString* err) {
+arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns) {
     YdbSchema = ydbColumns;
-    std::vector<std::string> errors;
-    auto schema = MakeArrowSchema(ydbColumns, NotNullColumns, &errors);
-    if (!errors.empty()) {
-        if (err) {
-            *err = "Cannot make arrow schema: " + JoinSeq(", ", errors);
-        }
-        return false;
+    auto schema = MakeArrowSchema(ydbColumns, NotNullColumns);
+    if (!schema.ok()) {
+        return arrow::Status::FromArgs(schema.status().code(), "Cannot make arrow schema: ", schema.status().ToString());
     }
-    auto status = arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), RowsToReserve, &BatchBuilder);
+    auto status = arrow::RecordBatchBuilder::Make(*schema, arrow::default_memory_pool(), RowsToReserve, &BatchBuilder);
     NumRows = NumBytes = 0;
-    if (!status.ok() && err) {
-        *err = "Cannot make arrow builder: " + status.ToString();
+    if (!status.ok()) {
+        return arrow::Status::FromArgs(schema.status().code(), "Cannot make arrow builder: ", status.ToString());
     }
-    return status.ok();
+    return arrow::Status::OK();
 }
 
 void TArrowBatchBuilder::AppendCell(const TCell& cell, ui32 colNum) {

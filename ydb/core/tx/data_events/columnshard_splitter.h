@@ -174,7 +174,9 @@ private:
                 col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
             columns.emplace_back(col.GetName(), typeInfoMod.TypeInfo);
         }
-        return NArrow::MakeArrowSchema(columns);
+        auto result = NArrow::MakeArrowSchema(columns);
+        Y_ABORT_UNLESS(result.ok(), "%s", result.status().ToString().c_str());
+        return result.MoveValueUnsafe();
     }
 };
 }

@@ -131,7 +131,8 @@ std::vector<TString> MakeData(const std::vector<ui64>& ts, ui32 portionSize, ui3
     ui32 numRows = portionSize + (ts.size() - 1) * (portionSize - overlapSize);
     TString testData = MakeTestBlob({0, numRows}, ydbSchema);
     auto schema = NArrow::MakeArrowSchema(ydbSchema);
-    auto testBatch = NArrow::DeserializeBatch(testData, schema);
+    UNIT_ASSERT_C(schema.ok(), schema.status().ToString());
+    auto testBatch = NArrow::DeserializeBatch(testData, schema.ValueUnsafe());
 
     std::vector<TString> data;
     data.reserve(ts.size());

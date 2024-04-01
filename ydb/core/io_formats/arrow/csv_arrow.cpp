@@ -63,8 +63,8 @@ TArrowCSV::TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& colu
         for (auto& [name, type] : columns) {
             ResultColumns.push_back(name);
             std::string columnName(name.data(), name.size());
-            ConvertOptions.column_types[columnName] = NArrow::GetCSVArrowType(type);
-            OriginalColumnTypes[columnName] = NArrow::GetArrowType(type);
+            ConvertOptions.column_types[columnName] = NArrow::GetCSVArrowType(type).ValueOr(std::make_shared<arrow::NullType>());
+            OriginalColumnTypes[columnName] = NArrow::GetArrowType(type).ValueOr(std::make_shared<arrow::NullType>());
         }
     } else if (!columns.empty()) {
         // !autogenerate + !column_names.empty() => specified columns
@@ -73,8 +73,8 @@ TArrowCSV::TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& colu
         for (auto& [name, type] : columns) {
             std::string columnName(name.data(), name.size());
             ReadOptions.column_names.push_back(columnName);
-            ConvertOptions.column_types[columnName] = NArrow::GetCSVArrowType(type);
-            OriginalColumnTypes[columnName] = NArrow::GetArrowType(type);
+            ConvertOptions.column_types[columnName] = NArrow::GetCSVArrowType(type).ValueOr(std::make_shared<arrow::NullType>());
+            OriginalColumnTypes[columnName] = NArrow::GetArrowType(type).ValueOr(std::make_shared<arrow::NullType>());
         }
 #if 0
     } else {

@@ -126,7 +126,9 @@ bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId,
                               const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds) {
     NLongTxService::TLongTxId longTxId;
     UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
-    return WriteDataImpl(runtime, sender, shardId, tableId, longTxId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds);
+    auto arrowSchema = NArrow::MakeArrowSchema(ydbSchema);
+    UNIT_ASSERT(arrowSchema.ok());
+    return WriteDataImpl(runtime, sender, shardId, tableId, longTxId, writeId, data, arrowSchema.ValueUnsafe(), writeIds);
 
 }
 
@@ -134,11 +136,13 @@ bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId,
                               const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult, std::vector<ui64>* writeIds) {
     NLongTxService::TLongTxId longTxId;
     UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
+    auto arrowSchema = NArrow::MakeArrowSchema(ydbSchema);
+    UNIT_ASSERT(arrowSchema.ok());
     if (writeIds) {
-        return WriteDataImpl(runtime, sender, TTestTxConfig::TxTablet0, tableId, longTxId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds);
+        return WriteDataImpl(runtime, sender, TTestTxConfig::TxTablet0, tableId, longTxId, writeId, data, arrowSchema.ValueUnsafe(), writeIds);
     }
     std::vector<ui64> ids;
-    return WriteDataImpl(runtime, sender, TTestTxConfig::TxTablet0, tableId, longTxId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), waitResult ? &ids : nullptr);
+    return WriteDataImpl(runtime, sender, TTestTxConfig::TxTablet0, tableId, longTxId, writeId, data, arrowSchema.ValueUnsafe(), waitResult ? &ids : nullptr);
 }
 
 std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId,
@@ -146,7 +150,9 @@ std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, cons
                               const std::vector<NArrow::NTest::TTestColumn>& ydbSchema)
 {
     auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, longTxId, tableId, "0", data, writePartId);
-    write->SetArrowSchema(NArrow::SerializeSchema(*NArrow::MakeArrowSchema(ydbSchema)));
+    auto arrowSchema = NArrow::MakeArrowSchema(ydbSchema);
+    UNIT_ASSERT(arrowSchema.ok());
+    write->SetArrowSchema(NArrow::SerializeSchema(*arrowSchema.ValueUnsafe()));
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, write.release());
     TAutoPtr<IEventHandle> handle;
@@ -460,6 +466,8 @@ namespace NKikimr::NColumnShard {
         reader.SetReplyColumns(fields);
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
-        return rb ? rb : NArrow::MakeEmptyBatch(NArrow::MakeArrowSchema(schema));
+        auto arrowSchema = NArrow::MakeArrowSchema(schema);
+        UNIT_ASSERT(arrowSchema.ok());
+        return rb ? rb : NArrow::MakeEmptyBatch(arrowSchema.ValueUnsafe());
     }
 }

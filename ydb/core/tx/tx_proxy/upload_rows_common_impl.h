@@ -265,9 +265,9 @@ protected:
     {
         NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, NotNullColumns);
         batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
-        TString startErrors;
-        if (!batchBuilder.Start(YdbSchema, &startErrors)) {
-            errorMessage = "Cannot make Arrow batch from rows: " + startErrors;
+        const auto startStatus = batchBuilder.Start(YdbSchema);
+        if (!startStatus.ok()) {
+            errorMessage = "Cannot make Arrow batch from rows: " + startStatus.ToString();
             return {};
         }
 
@@ -358,7 +358,11 @@ private:
     static bool SameDstType(NScheme::TTypeInfo type1, NScheme::TTypeInfo type2, bool allowConvert) {
         bool res = (type1 == type2);
         if (!res && allowConvert) {
-            res = (NArrow::GetArrowType(type1)->id() == NArrow::GetArrowType(type2)->id());
+            auto arrowType1 = NArrow::GetArrowType(type1);
+            auto arrowType2 = NArrow::GetArrowType(type2);
+            if (arrowType1.ok() && arrowType2.ok()) {
+                res = (arrowType1.ValueUnsafe()->id() == arrowType2.ValueUnsafe()->id());
+            }
         }
         return res;
     }

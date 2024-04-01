@@ -50,7 +50,7 @@ App code snippet for creating a session:
 
 {% list tabs %}
 
-- Using Query Service
+- Query Service
     
   ```ts
   const result = await driver.queryClient.do({
@@ -61,7 +61,7 @@ App code snippet for creating a session:
   });
   ```
 
-- Using Table Service
+- Table Service
     
   ```ts
   await driver.tableClient.withSession(async (session) => {
@@ -75,7 +75,7 @@ App code snippet for creating a session:
 
 {% list tabs %}
 
-- Using Query Service
+- Query Service
     
   ```ts
   async function createTables(driver: Driver, logger: Logger) {
@@ -123,7 +123,7 @@ App code snippet for creating a session:
   }
   ```
     
-- Using Table Service
+- Table Service
     
   To create tables, use the `Session.CreateTable()` method:
   
@@ -231,7 +231,7 @@ Code snippet for data insert/update:
 
 {% list tabs %}
 
-- Using Query Service
+- Query Service
     
     ```ts
     async function upsertSimple(driver: Driver, logger: Logger): Promise<void> {
@@ -249,7 +249,7 @@ Code snippet for data insert/update:
     }
     ```
     
-- Using Table Service
+- Table Service
     
     ```ts
     async function upsertSimple(session: Session, logger: Logger): Promise<void> {
@@ -269,7 +269,7 @@ Code snippet for data insert/update:
 
 {% list tabs %}
 
-- Using Query Service
+- Query Service
   
   - {% list tabs %}
 
@@ -340,7 +340,7 @@ Code snippet for data insert/update:
 
 {% endlist %}
 
-- Using Table Service
+- Table Service
     
   To execute YQL queries, use the `Session.executeQuery()` method.
   

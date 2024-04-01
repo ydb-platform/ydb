@@ -263,70 +263,76 @@ _Прим.:_ Query Service не поддерживает функциональ�
 
 {% list tabs %}
 
-- Используя Query Service (rowMode: RowType.Native)
+- Используя Query Service
 
-    Для выполнения YQL-запросов используется метод `QuerySession.execute()`.
-    
-    В зависимости оп параметра rowMode данные можно получить в javascript форме или как YDB структуры.  
-
-    ```ts
-    async function selectNativeSimple(driver: Driver, logger: Logger): Promise<void> {
-        logger.info('Making a simple native select...');
-        const result = await driver.queryClient.do({
-            fn: async (session) => {
-                const {resultSets} =
-                    await session.execute({
-                        // rowMode: RowType.Native, // Result set cols and rows returned as native javascript values. It's default behaviour
-                        text: `
-                            SELECT series_id,
-                                   title,
-                                   release_date
-                            FROM ${SERIES_TABLE}
-                            WHERE series_id = 1;`,
-                    });
-                const {value: resultSet1} = await resultSets.next();
-                const rows: any[][] = []
-                for await (const row of resultSet1.rows) rows.push(row);
-                return {cols: resultSet1.columns, rows};
-            }
-        });
-        logger.info(`selectNativeSimple cols: ${JSON.stringify(result.cols, null, 2)}`);
-        logger.info(`selectNativeSimple rows: ${JSON.stringify(result.rows, null, 2)}`);
-    }
-    ```
-
-- Используя Query Service (rowMode: RowType.Ydb)
-
-    Для выполнения YQL-запросов используется метод `QuerySession.execute()`.
-    
-    В зависимости оп параметра rowMode данные можно получить в javascript форме иил как YDB структуры.  
-    
-    ```ts
-    async function selectTypedSimple(driver: Driver, logger: Logger): Promise<void> {
-        logger.info('Making a simple typed select...');
-        const result = await driver.queryClient.do({
-            fn: async (session) => {
-                const {resultSets} =
-                    await session.execute({
-                        rowMode: RowType.Ydb, // enables typedRows() on result sets
-                        text: `
-                            SELECT series_id,
-                                   title,
-                                   release_date
-                            FROM ${SERIES_TABLE}
-                            WHERE series_id = 1;`,
-                    });
-                const {value: resultSet1} = await resultSets.next();
-                const rows: Series[] = [];
-                // Note: resultSet1.rows will iterate YDB IValue structures
-                for await (const row of resultSet1.typedRows(Series)) rows.push(row);
-                return {cols: resultSet1.columns, rows};
-            }
-        });
-        logger.info(`selectTypedSimple cols: ${JSON.stringify(result.cols, null, 2)}`);
-        logger.info(`selectTypedSimple rows: ${JSON.stringify(result.rows, null, 2)}`);
-    }
-    ```
+  {% list tabs %}
+  
+  - rowMode: RowType.Native
+  
+      Для выполнения YQL-запросов используется метод `QuerySession.execute()`.
+      
+      В зависимости оп параметра rowMode данные можно получить в javascript форме или как YDB структуры.  
+  
+      ```ts
+      async function selectNativeSimple(driver: Driver, logger: Logger): Promise<void> {
+          logger.info('Making a simple native select...');
+          const result = await driver.queryClient.do({
+              fn: async (session) => {
+                  const {resultSets} =
+                      await session.execute({
+                          // rowMode: RowType.Native, // Result set cols and rows returned as native javascript values. It's default behaviour
+                          text: `
+                              SELECT series_id,
+                                     title,
+                                     release_date
+                              FROM ${SERIES_TABLE}
+                              WHERE series_id = 1;`,
+                      });
+                  const {value: resultSet1} = await resultSets.next();
+                  const rows: any[][] = []
+                  for await (const row of resultSet1.rows) rows.push(row);
+                  return {cols: resultSet1.columns, rows};
+              }
+          });
+          logger.info(`selectNativeSimple cols: ${JSON.stringify(result.cols, null, 2)}`);
+          logger.info(`selectNativeSimple rows: ${JSON.stringify(result.rows, null, 2)}`);
+      }
+      ```
+  
+    - rowMode: RowType.Ydb
+  
+        Для выполнения YQL-запросов используется метод `QuerySession.execute()`.
+      
+        В зависимости оп параметра rowMode данные можно получить в javascript форме иил как YDB структуры.  
+      
+        ```ts
+        async function selectTypedSimple(driver: Driver, logger: Logger): Promise<void> {
+            logger.info('Making a simple typed select...');
+            const result = await driver.queryClient.do({
+                fn: async (session) => {
+                    const {resultSets} =
+                        await session.execute({
+                            rowMode: RowType.Ydb, // enables typedRows() on result sets
+                            text: `
+                                SELECT series_id,
+                                       title,
+                                       release_date
+                                FROM ${SERIES_TABLE}
+                                WHERE series_id = 1;`,
+                        });
+                    const {value: resultSet1} = await resultSets.next();
+                    const rows: Series[] = [];
+                    // Note: resultSet1.rows will iterate YDB IValue structures
+                    for await (const row of resultSet1.typedRows(Series)) rows.push(row);
+                    return {cols: resultSet1.columns, rows};
+                }
+            });
+            logger.info(`selectTypedSimple cols: ${JSON.stringify(result.cols, null, 2)}`);
+            logger.info(`selectTypedSimple rows: ${JSON.stringify(result.rows, null, 2)}`);
+        }
+        ```
+  
+  {% endlist %}
 
 - Используя Table Service
 
@@ -505,65 +511,71 @@ _Прим.:_ Query Service не поддерживает функциональ�
 
 {% list tabs %}
 
-- Используя Query Service do()
-    
-    ```ts
-    async function explicitTcl(driver: Driver, ids: ThreeIds, logger: Logger) {
-        logger.info('Running prepared query with explicit transaction control...');
-        await driver.queryClient.do({
-            fn: async (session) => {
-                await session.beginTransaction({serializableReadWrite: {}});
-                const [seriesId, seasonId, episodeId] = ids;
-                const episode = new Episode({seriesId, seasonId, episodeId, title: '', airDate: new Date()});
-                await session.execute({
-                    parameters: {
-                        '$seriesId': episode.getTypedValue('seriesId'),
-                        '$seasonId': episode.getTypedValue('seasonId'),
-                        '$episodeId': episode.getTypedValue('episodeId')
-                    },
-                    text: `
-                        UPDATE episodes
-                        SET air_date = CurrentUtcDate()
-                        WHERE series_id = $seriesId
-                          AND season_id = $seasonId
-                          AND episode_id = $episodeId;`
-                })
-                const txId = session.txId;
-                await session.commitTransaction();
-                logger.info(`TxId ${txId} committed.`);
-            }
-        });
-    }
-    ```
+- Используя Query Service
 
-- Используя Query Service doTx()
+  {% list tabs %}
 
-    ```ts
-    async function transactionPerWholeDo(driver: Driver, ids: ThreeIds, logger: Logger) {
-        logger.info('Running query with one transaction per whole doTx()...');
-        await driver.queryClient.doTx({
-            txSettings: {serializableReadWrite: {}},
-            fn: async (session) => {
-                const [seriesId, seasonId, episodeId] = ids;
-                const episode = new Episode({seriesId, seasonId, episodeId, title: '', airDate: new Date()});
-                await session.execute({
-                    parameters: {
-                        '$seriesId': episode.getTypedValue('seriesId'),
-                        '$seasonId': episode.getTypedValue('seasonId'),
-                        '$episodeId': episode.getTypedValue('episodeId')
-                    },
-                    text: `
-                        UPDATE episodes
-                        SET air_date = CurrentUtcDate()
-                        WHERE series_id = $seriesId
-                          AND season_id = $seasonId
-                          AND episode_id = $episodeId;`
-                })
-                logger.info(`TxId ${session.txId} will be committed by doTx().`);
-            }
-        });
-    }
-    ```
+  - do()
+      
+      ```ts
+      async function explicitTcl(driver: Driver, ids: ThreeIds, logger: Logger) {
+          logger.info('Running prepared query with explicit transaction control...');
+          await driver.queryClient.do({
+              fn: async (session) => {
+                  await session.beginTransaction({serializableReadWrite: {}});
+                  const [seriesId, seasonId, episodeId] = ids;
+                  const episode = new Episode({seriesId, seasonId, episodeId, title: '', airDate: new Date()});
+                  await session.execute({
+                      parameters: {
+                          '$seriesId': episode.getTypedValue('seriesId'),
+                          '$seasonId': episode.getTypedValue('seasonId'),
+                          '$episodeId': episode.getTypedValue('episodeId')
+                      },
+                      text: `
+                          UPDATE episodes
+                          SET air_date = CurrentUtcDate()
+                          WHERE series_id = $seriesId
+                            AND season_id = $seasonId
+                            AND episode_id = $episodeId;`
+                  })
+                  const txId = session.txId;
+                  await session.commitTransaction();
+                  logger.info(`TxId ${txId} committed.`);
+              }
+          });
+      }
+      ```
+  
+    - doTx()
+  
+        ```ts
+        async function transactionPerWholeDo(driver: Driver, ids: ThreeIds, logger: Logger) {
+            logger.info('Running query with one transaction per whole doTx()...');
+            await driver.queryClient.doTx({
+                txSettings: {serializableReadWrite: {}},
+                fn: async (session) => {
+                    const [seriesId, seasonId, episodeId] = ids;
+                    const episode = new Episode({seriesId, seasonId, episodeId, title: '', airDate: new Date()});
+                    await session.execute({
+                        parameters: {
+                            '$seriesId': episode.getTypedValue('seriesId'),
+                            '$seasonId': episode.getTypedValue('seasonId'),
+                            '$episodeId': episode.getTypedValue('episodeId')
+                        },
+                        text: `
+                            UPDATE episodes
+                            SET air_date = CurrentUtcDate()
+                            WHERE series_id = $seriesId
+                              AND season_id = $seasonId
+                              AND episode_id = $episodeId;`
+                    })
+                    logger.info(`TxId ${session.txId} will be committed by doTx().`);
+                }
+            });
+        }
+        ```
+
+  {% endlist %}
 
 - Используя Table Service
 

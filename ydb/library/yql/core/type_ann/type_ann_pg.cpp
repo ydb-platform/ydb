@@ -4182,13 +4182,13 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                 bool leftSideIsOptional = (joinType == "right" || joinType == "full");
                                 bool rightSideIsOptional = (joinType == "left" || joinType == "full");
                                 if (leftSideIsOptional) {
-                                    for (ui32 j = 0; j < inputIndex; ++j) {
+                                    for (ui32 j = 0; j + 1 < groupInputs.size(); ++j) {
                                         MakeOptionalColumns(groupInputs[j].Type, ctx.Expr);
                                     }
                                 }
 
                                 if (rightSideIsOptional) {
-                                    MakeOptionalColumns(groupInputs[inputIndex].Type, ctx.Expr);
+                                    MakeOptionalColumns(groupInputs.back().Type, ctx.Expr);
                                 }
                             }
 

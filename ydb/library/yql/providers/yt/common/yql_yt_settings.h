@@ -102,6 +102,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TString, false> _ImpersonationUser;
     NCommon::TConfSetting<EInferSchemaMode, false> InferSchemaMode;
     NCommon::TConfSetting<ui32, false> BatchListFolderConcurrency;
+    NCommon::TConfSetting<bool, false> ForceTmpSecurity;
 
     // Job runtime
     NCommon::TConfSetting<TString, true> Pool;

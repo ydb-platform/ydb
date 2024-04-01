@@ -139,7 +139,7 @@
 **Функциональность:**
 
 * Добавлен интерактивный режим выполнения запросов. Для перехода в интерактивный режим выполните команду [ydb yql](reference/ydb-cli/yql.md) без аргументов. Режим экспериментальный, обратная совместимость пока не гарантируется.
-* Добавлена команда [ydb index rename](reference/ydb-cli/commands/secondary_index.md#rename) для [атомарной замены](best_practices/secondary_indexes.md#atomic-index-replacement) или переименования вторичного индекса.
+* Добавлена команда [ydb index rename](reference/ydb-cli/commands/secondary_index.md#rename) для [атомарной замены](dba/secondary-indexes.md#atomic-index-replacement) или переименования вторичного индекса.
 * Добавлена команда `ydb workload topic` для запуска нагрузки, которая читает и записывает сообщения в топики.
 * Для команды `ydb scheme rmdir` добавлен параметр [--recursive](reference/ydb-cli/commands/dir.md#rmdir-options), который позволяет рекурсивно удалить директорию вместе со всем содержимым.
 * Для команды [ydb scheme describe](reference/ydb-cli/commands/scheme-describe.md) добавлена поддержка типов `topic` и `coordination node`.

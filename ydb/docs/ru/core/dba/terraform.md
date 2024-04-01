@@ -402,7 +402,7 @@ resource "ydb_table_changefeed" "ydb_table_changefeed" {
 
 #### consumer {#consumer}
 
-Аргумент `consumer` описывает [читателя](../best_practices/cdc.md#read) потока изменений.
+Аргумент `consumer` описывает [читателя](cdc.md#read) потока изменений.
 
 * `name` — (обязательный) имя читателя.
 * `supported_codecs` — (необязательный) поддерживаемые кодек данных.

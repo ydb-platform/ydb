@@ -53,6 +53,26 @@ common:
     to: /dba/custom-attributes.md
   - from: /operations/query_plans_optimization.md
     to: /dba/query-plans-optimization.md
+  - from: /best_practices/cdc.md
+    to: /dba/cdc.md
+  - from: /best_practices/pk-olap-scalability.md
+    to: /dba/primary-key/row-oriented.md
+  - from: /best_practices/pk-olap-scalability.md
+    to: /dba/primary-key/column-oriented.md
+  - from: /best_practices/schema_design.md
+    to: /dba/primary-key/index.md
+  - from: /best_practices/secondary_indexes.md
+    to: /dba/secondary-indexes.md
+  - from: /best_practices/table_sharding.md
+    to:  /dba/primary-key/index.md
+
+# Dev-related redirects
+  - from: /best_practices/batch_upload.md
+    to: /dev/batch-upload.md
+  - from: /best_practices/paging.md
+    to: /dev/paging.md
+  - from: /best_practices/timeouts.md
+    to: /dev/timeouts.md
 
 # Contributors-related redirects
   - from: /development/build-ya.md

@@ -24,9 +24,6 @@ items:
     mode: link
     path: contributor/toc_p.yaml
 
-- { name: Рекомендации,                            include: { mode: link, path: best_practices/toc_p.yaml } }
-
-
 - name: Справка
   include:
     mode: link

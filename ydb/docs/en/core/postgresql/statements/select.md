@@ -105,7 +105,7 @@ The result of executing an SQL query using `LEFT JOIN` without one record in the
 #### RIGHT JOIN {#right_join}
 Returns all rows from the right table and the matching rows from the left table. If there are no matches, it returns `NULL` for all columns of the left table. This type of `JOIN` is rarely used, as its functionality can be replaced by `LEFT JOIN`, and swapping the tables. Example of using `RIGHT JOIN`:
 
-{% include [select_right_join](../../../_includes/postgresql/statements/select/select_right_join.md) %}
+{% include [select_right_join](../_includes/statements/select/select_right_join.md) %}
 
 The result of executing an SQL query using `RIGHT JOIN` without one record in the left table `people`:
 

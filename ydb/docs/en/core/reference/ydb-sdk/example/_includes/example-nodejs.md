@@ -11,7 +11,7 @@ App code snippet for driver initialization:
 
 {% list tabs %}
 
-- Using _connectionString_
+- Using connectionString
     
   ```ts
   const authService = getCredentialsFromEnv();
@@ -24,7 +24,7 @@ App code snippet for driver initialization:
   }
   ```
   
-- Using _endpoint_ and _database_
+- Using endpoint and database
     
   ```ts
   const authService = getCredentialsFromEnv();

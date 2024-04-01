@@ -11,7 +11,7 @@
 
 {% list tabs %}
  
-- Используя _connectionString_
+- Используя connectionString
 
   ```ts
   const authService = getCredentialsFromEnv();
@@ -24,7 +24,7 @@
   }
   ```
 
-- Используя _endpoint_ и _database_
+- Используя endpoint и database
 
   ```ts
   const authService = getCredentialsFromEnv();

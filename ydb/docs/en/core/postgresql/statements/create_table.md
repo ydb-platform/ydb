@@ -23,9 +23,13 @@ When creating a table, you can specify:
 #|
 || **Table people** | **Table social_card** ||
 || 
+
 {% include [create_table_people.md](../../../_includes/postgresql/statements/create_table/create_table_people.md) %}
+
 | 
+
 {% include [create_table_social_card.md](../../../_includes/postgresql/statements/create_table/create_table_social_card.md) %}
+
 ||
 |#
 

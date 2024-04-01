@@ -865,8 +865,7 @@ All the metadata provided when writing a message is sent to a consumer with the 
   analyzeCommitStatus(commitStatus);
   ```
 
-  Transaction requirements:
-  It should be an active transaction (that has id) from one of YDB services. I.e. Table or Query.
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
 - Java (async)
 
@@ -933,8 +932,7 @@ All the metadata provided when writing a message is sent to a consumer with the 
   analyzeCommitStatus(commitStatus);
   ```
 
-  Transaction requirements:
-  It should be an active transaction (that has an id) from one of {{ ydb-short-name }} services. I.e., Table or Query.
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
 {% endlist %}
 
@@ -1546,8 +1544,7 @@ Reading progress is usually saved on a server for each Consumer. However, such p
   A message received this way will be automatically committed with the provided transaction and shouldn't be committed directly.
   The `receive` method sends the `sendUpdateOffsetsInTransaction` request on the server to link the message offset with this transaction and blocks until a response is received.
 
-  Transaction requirements:
-  It should be an active transaction (that has id) from one of YDB services. I.e. Table or Query.
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
 - Java (async)
 
@@ -1593,8 +1590,7 @@ Reading progress is usually saved on a server for each Consumer. However, such p
   }
   ```
 
-  Transaction requirements:
-  It should be an active transaction (that has an id) from one of {{ ydb-short-name }} services. I.e., Table or Query.
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
 {% endlist %}
 

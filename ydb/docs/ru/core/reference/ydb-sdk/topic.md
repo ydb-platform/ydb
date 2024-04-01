@@ -867,8 +867,7 @@
   analyzeCommitStatus(commitStatus);
   ```
 
-  Требование к транзакции:
-  Это должна быть активная (имеющая идентификатор) транзакция в одном из сервисов YDB. Например, Table или Query.
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
 - Java (async)
 
@@ -930,8 +929,7 @@
   analyzeCommitStatus(commitStatus);
   ```
 
-  Требование к транзакции:
-  Это должна быть активная (имеющая идентификатор) транзакция в одном из сервисов YDB. Например, Table или Query.
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
 {% endlist %}
 
@@ -1564,7 +1562,9 @@
       auto commitResult = Transaction.Commit(commitSettings).GetValueSync();
   ```
 
+  {% note warning %}
   При обработке событий `events` не нужно явно подтверждать обработку для событий типа `TDataReceivedEvent`.
+  {% endnote %}
 
   Подтверждение обработки события `TStopPartitionSessionEvent` надо делать после вызова `Commit`.
 
@@ -1603,8 +1603,7 @@
   Тогда полученное сообщение будет закоммичено вместе с транзакцией. Коммитить его отдельно не нужно.
   Метод `receive` свяжет на сервере оффсеты сообщения с транзакцией вызовом `sendUpdateOffsetsInTransaction` и вернёт управление, когда получит ответ на него.
 
-  Требование к транзакции:
-  Это должна быть активная (имеющая идентификатор) транзакция в одном из сервисов YDB. Например, Table или Query.
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
 - Java (async)
 
@@ -1649,8 +1648,7 @@
   }
   ```
 
-  Требование к транзакции:
-  Это должна быть активная (имеющая идентификатор) транзакция в одном из сервисов YDB. Например, Table или Query.
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
 {% endlist %}
 

@@ -1,10 +1,7 @@
 items:
 - name: Резервное копирование и восстановление
   href: backup-and-recovery.md
-- name: Диагностика
-  hidden: true
-  include: { mode: link, path: ../troubleshooting/toc_p.yaml }
 - name: Системные таблицы БД
-  href: ../troubleshooting/system_views_db.md
+  href: system-views.md
 - name: Terraform
   href: terraform.md

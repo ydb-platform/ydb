@@ -43,6 +43,10 @@ common:
     to: /dba/index.md
   - from: /maintenance/backup_and_recovery.md
     to: /dba/backup-and-recovery.md
+  - from: /troubleshooting/system_views.md
+    to: /dba/system-views.md
+  - from: /troubleshooting/system_views_db.md
+    to: /dba/system-views.md
 
 # Redirects from development to contributor
   - from: /development/build-ya.md

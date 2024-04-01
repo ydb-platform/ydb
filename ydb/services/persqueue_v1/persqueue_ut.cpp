@@ -3676,6 +3676,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                           {
                               "BytesWrittenOriginal",
                               "CompactedBytesWrittenOriginal",
+                              "DiscardedBytes",
+                              "DiscardedMessages",
                               "MessagesWrittenOriginal",
                               "UncompressedBytesWrittenOriginal"
                           },

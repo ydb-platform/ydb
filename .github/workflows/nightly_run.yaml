@@ -13,9 +13,6 @@ jobs:
     name: Build/test x86_64 using YA
     uses: ./.github/workflows/build_and_test_ya_provisioned.yml
     secrets: inherit
-    strategy:
-      matrix: ${{ fromJSON(vars.NIGHTLY_YA_X64_MATRIX) }}
-      fail-fast: false
     with:
       runner_label: auto-provisioned
       build_preset: ${{ matrix.build_preset }}

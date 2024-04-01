@@ -54,9 +54,10 @@ struct TTransaction {
         Y_ABORT_UNLESS(ChangeConfig);
     }
 
-    explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> proposeConfig) :
-        ProposeConfig(proposeConfig)
+    explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> proposeConfig)
+        : ProposeConfig(proposeConfig)
     {
+
         Y_ABORT_UNLESS(ProposeConfig);
     }
 
@@ -65,8 +66,11 @@ struct TTransaction {
 
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
     bool SendReply;
-
     TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> ProposeConfig;
+
+    //Data Tx
+    THashSet<TString> AffectedSourcesIds;
+    THolder<TEvPQ::TEvGetWriteInfoResponse> WriteInfo;
 };
 
 class TPartition : public TActorBootstrapped<TPartition> {
@@ -153,10 +157,13 @@ private:
     void Handle(TEvPQ::TEvUpdateWriteTimestamp::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
+
     void Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& ctx);
+
     void Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvReportPartitionError::TPtr& ev, const TActorContext& ctx);
@@ -218,6 +225,8 @@ private:
     void RequestBlobQuota(size_t quotaSize);
     void ConsumeBlobQuota();
     void UpdateAfterWriteCounters(bool writeComplete);
+
+
     void UpdateUserInfoEndOffset(const TInstant& now);
     void UpdateWriteBufferIsFullState(const TInstant& now);
 
@@ -275,6 +284,8 @@ private:
     void EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
                                    TUserInfoBase& userInfo,
                                    const TActorContext& ctx);
+
+    void SendCalcPredicateResult(TTransaction& tx, bool result);
 
     void ScheduleReplyOk(const ui64 dst);
     void ScheduleReplyGetClientOffsetOk(const ui64 dst,
@@ -339,7 +350,8 @@ private:
     void EmplacePendingRequest(T&& body, const TActorContext& ctx) {
         const auto now = ctx.Now();
         PendingRequests.emplace_back(body, now - TInstant::Zero());
-    }
+     }
+
     void EmplaceResponse(TMessage&& message, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActorContext& ctx);
@@ -673,7 +685,6 @@ private:
     //
     //
     //
-
     std::deque<std::pair<TString, ui64>> UpdateUserInfoTimestamp;
     bool ReadingTimestamp;
     TString ReadingForUser;
@@ -744,10 +755,10 @@ private:
     TInstant WriteTimestampEstimate;
     bool ManageWriteTimestampEstimate = true;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
-
     //ToDo - counters.
     THolder<TPercentileCounter> InputTimeLag;
     TPartitionHistogramWrapper MessageSize;
+
     TPercentileCounter WriteLatency;
 
     NKikimr::NPQ::TMultiCounter SLIBigLatency;

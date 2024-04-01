@@ -1081,17 +1081,52 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
     response->BlobsFromHead = std::move(GetReadRequestFromHead(0, 0, std::numeric_limits<ui32>::max(),
                                                                std::numeric_limits<ui32>::max(), 0, &rcount, &rsize,
                                                                &insideHeadOffset, 0));
-
-
     response->BytesWrittenGrpc = BytesWrittenGrpc.Value();
     response->BytesWrittenUncompressed = BytesWrittenUncompressed.Value();
     response->BytesWrittenTotal = BytesWrittenTotal.Value();
-
     response->MessagesWrittenTotal = MsgsWrittenTotal.Value();
     response->MessagesWrittenGrpc = MsgsWrittenGrpc.Value();
     response->MessagesSizes = std::move(MessageSize.GetValues());
 
     ctx.Send(ev->Sender, response);
+}
+
+void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext&) {
+    auto& srcIdInfo = ev->Get()->SrcIdInfo;
+
+    Y_ABORT_UNLESS(TxInProgress);
+    auto& knownSrcIds = SourceIdStorage.GetInMemorySourceIds();
+    auto& currTx = GetUserActionAndTransactionEventsFront<TTransaction>();
+
+    for (auto& s : srcIdInfo) {
+        auto ins = currTx.AffectedSourcesIds.insert(s.first).second;
+        if (!ins) {
+            return SendCalcPredicateResult(currTx, false);
+        }
+        auto existing = knownSrcIds.find(s.first);
+        if (existing.IsEnd())
+            continue;
+        if (s.second.MinSeqNo <= existing->second.SeqNo) {
+            return SendCalcPredicateResult(currTx, false);
+        }
+        //SourceIdStorage.
+    }
+    currTx.WriteInfo = ev->Release();
+    return SendCalcPredicateResult(currTx, true);
+}
+
+void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr&, const TActorContext&) {
+    Y_ABORT_UNLESS(TxInProgress);
+    auto& currTx = GetUserActionAndTransactionEventsFront<TTransaction>();
+    return SendCalcPredicateResult(currTx, false);
+}
+
+void TPartition::SendCalcPredicateResult(TTransaction& tx, bool result) {
+    tx.Predicate = result;
+    Send(Tablet, MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(tx.Tx->Step,
+                                                             tx.Tx->TxId,
+                                                             Partition,
+                                                             *tx.Predicate).Release());
 }
 
 void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorContext& ctx) {
@@ -1762,19 +1797,16 @@ TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TTransacti
             return EProcessResult::Break;
         }
 
-        if (t.Tx->SupportivePartitionActor != TActorId()) {
-            ctx.Send(t.Tx->SupportivePartitionActor,
-                     MakeHolder<TEvPQ::TEvGetWriteInfoRequest>(0).Release());
+        t.Predicate = BeginTransaction(*t.Tx, ctx);
+        if (t.Tx->SupportivePartitionActor) {
+            Send(t.Tx->SupportivePartitionActor, new TEvPQ::TEvGetWriteInfoRequest());
         } else {
-            t.Predicate = BeginTransaction(*t.Tx, ctx);
-
             ctx.Send(Tablet,
-                     MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(t.Tx->Step,
-                                                                 t.Tx->TxId,
-                                                                 Partition,
-                                                                 *t.Predicate).Release());
+                    MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(t.Tx->Step,
+                                                                t.Tx->TxId,
+                                                                Partition,
+                                                                *t.Predicate).Release());
         }
-
         TxInProgress = true;
 
         result = EProcessResult::Abort;
@@ -2871,7 +2903,6 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
     // Metrics
     TopicQuotaWaitTimeForCurrentBlob = ev->Get()->AccountQuotaWaitTime;
     PartitionQuotaWaitTimeForCurrentBlob = ev->Get()->PartitionQuotaWaitTime;
-
     if (TopicWriteQuotaWaitCounter) {
         TopicWriteQuotaWaitCounter->IncFor(TopicQuotaWaitTimeForCurrentBlob.MilliSeconds());
     }

@@ -92,6 +92,8 @@ namespace {
 
         const auto pos = insertData.Ref().Pos();
 
+        auto prevEval = exprCtx.Step.IsDone(NYql::TExprStep::ExprEval);
+        exprCtx.Step.Done(NYql::TExprStep::ExprEval);
         auto typeTransformer = NYql::TTransformationPipeline(&typeCtx)
             .AddServiceTransformers()
             .AddPreTypeAnnotation()
@@ -101,6 +103,10 @@ namespace {
 
         auto insertDataPtr = insertData.Ptr();
         const auto transformResult = NYql::SyncTransform(*typeTransformer, insertDataPtr, exprCtx);
+        if (!prevEval) {
+            exprCtx.Step.Repeat(NYql::TExprStep::ExprEval);
+        }
+
         if (transformResult != NYql::IGraphTransformer::TStatus::Ok) {
             return std::nullopt;
         }

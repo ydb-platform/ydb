@@ -38,6 +38,11 @@ common:
   - from: /getting_started/yql.md
     to: /yql/reference/index.md
 
+# Redirects from db to dba
+
+  - from: /db/index.md
+    to: /dba/index.md
+
 # Redirects from development to contributor
   - from: /development/build-ya.md
     to: /contributor/build-ya.md
@@ -105,3 +110,5 @@ ru:
     to: /concepts/datamodel/table.md
   - from: /postgresql/index.md
     to: /postgresql/intro.md
+  - from: /db/terraform.md
+    to: /dba/terraform.md

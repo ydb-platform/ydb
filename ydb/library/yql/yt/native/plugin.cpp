@@ -400,7 +400,12 @@ public:
             };
         }
 
+        if (DefaultCluster_ && !usedClusters->contains(*DefaultCluster_)) {
+            usedClusters->insert(*DefaultCluster_);
+        }
+
         std::vector<TString> clustersList(usedClusters->begin(), usedClusters->end());
+
         return TClustersResult{
             .Clusters = clustersList,
         };

@@ -202,10 +202,21 @@ void TAbortTransactionCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TGenerateTimestampCommand::Register(TRegistrar registrar)
+{
+    registrar.ParameterWithUniversalAccessor<std::optional<TCellTag>>(
+        "clock_cluster_tag",
+        [] (TThis* command) -> auto& {
+            return command->Options.ClockClusterTag;
+        })
+        .Optional(/*init*/ false);
+}
+
 void TGenerateTimestampCommand::DoExecute(ICommandContextPtr context)
 {
     auto timestampProvider = context->GetClient()->GetTimestampProvider();
-    auto timestamp = WaitFor(timestampProvider->GenerateTimestamps())
+    auto clockClusterTag = Options.ClockClusterTag.value_or(InvalidCellTag);
+    auto timestamp = WaitFor(timestampProvider->GenerateTimestamps(1, clockClusterTag))
         .ValueOrThrow();
 
     ProduceSingleOutputValue(context, "timestamp", timestamp);

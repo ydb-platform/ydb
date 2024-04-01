@@ -49,7 +49,7 @@ namespace NKikimr {
 
         Span.EndOk();
         const auto& vCtx = hull.GetHullCtx()->VCtx;
-        SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vCtx->VDiskLogPrefix, vCtx->OOSMonGroup);
+        SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vCtx);
     }
 
     NWilson::TTraceId TLoggedRecVPut::GetTraceId() const {
@@ -126,7 +126,7 @@ namespace NKikimr {
                 << " Marker# BSVSLR03");
         Span.EndOk();
         const auto& vCtx = hull.GetHullCtx()->VCtx;
-        SendVDiskResponse(ctx, msg->OrigClient, msg->Result.release(), msg->OrigCookie, vCtx->VDiskLogPrefix, vCtx->OOSMonGroup);
+        SendVDiskResponse(ctx, msg->OrigClient, msg->Result.release(), msg->OrigCookie, vCtx);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -153,7 +153,7 @@ namespace NKikimr {
     void TLoggedRecVBlock::Replay(THull &hull, const TActorContext &ctx) {
         const auto& vCtx = hull.GetHullCtx()->VCtx;
         auto replySender = [&ctx, &vCtx] (const TActorId &id, ui64 cookie, NWilson::TTraceId, IEventBase *msg) {
-            SendVDiskResponse(ctx, id, msg, cookie, vCtx->VDiskLogPrefix, vCtx->OOSMonGroup);
+            SendVDiskResponse(ctx, id, msg, cookie, vCtx);
         };
 
         hull.AddBlockCmd(ctx, TabletId, Gen, IssuerGuid, Seg.Point(), replySender);
@@ -161,7 +161,7 @@ namespace NKikimr {
         LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BLOCK, hull.GetHullCtx()->VCtx->VDiskLogPrefix
                 << "TEvVBlock: result# " << Result->ToString()
                 << " Marker# BSVSLR04");
-        SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vCtx->VDiskLogPrefix, vCtx->OOSMonGroup);
+        SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vCtx);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -189,7 +189,7 @@ namespace NKikimr {
                 << " Marker# BSVSLR05");
         Span.EndOk();
         const auto& vCtx = hull.GetHullCtx()->VCtx;
-        SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx->VDiskLogPrefix, vCtx->OOSMonGroup);
+        SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -209,7 +209,7 @@ namespace NKikimr {
     void TLoggedRecLocalSyncData::Replay(THull &hull, const TActorContext &ctx) {
         const auto& vCtx = hull.GetHullCtx()->VCtx;
         auto replySender = [&ctx, &vCtx] (const TActorId &id, ui64 cookie, NWilson::TTraceId, IEventBase *msg) {
-            SendVDiskResponse(ctx, id, msg, cookie, vCtx->VDiskLogPrefix, vCtx->OOSMonGroup);
+            SendVDiskResponse(ctx, id, msg, cookie, vCtx);
         };
 
 #ifdef UNPACK_LOCALSYNCDATA
@@ -218,7 +218,7 @@ namespace NKikimr {
         hull.AddSyncDataCmd(ctx, OrigEv->Get()->Data, Seg, replySender);
 #endif
         Span.EndOk();        
-        SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx->VDiskLogPrefix, vCtx->OOSMonGroup);
+        SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -227,7 +227,7 @@ namespace NKikimr {
     TLoggedRecAnubisOsirisPut::TLoggedRecAnubisOsirisPut(
             TLsnSeg seg,
             bool confirmSyncLogAlso,
-            const TEvAnubisOsirisPut::THullDbInsert &insert,
+            const THullDbInsert &insert,
             std::unique_ptr<TEvAnubisOsirisPutResult> result,
             TEvAnubisOsirisPut::TPtr origEv)
         : ILoggedRec(seg, confirmSyncLogAlso)
@@ -237,9 +237,9 @@ namespace NKikimr {
     {}
 
     void TLoggedRecAnubisOsirisPut::Replay(THull &hull, const TActorContext &ctx) {
-        hull.AddAnubisOsirisLogoBlob(ctx, Insert.Id, Insert.Ingress, Seg);
+        hull.AddLogoBlob(ctx, Insert.Id, Insert.Ingress, Seg);
         const auto& vCtx = hull.GetHullCtx()->VCtx;
-        SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx->VDiskLogPrefix, vCtx->OOSMonGroup);
+        SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -266,18 +266,21 @@ namespace NKikimr {
     TLoggedRecDelLogoBlobDataSyncLog::TLoggedRecDelLogoBlobDataSyncLog(
             TLsnSeg seg,
             bool confirmSyncLogAlso,
+            const THullDbInsert &insert,
             std::unique_ptr<TEvDelLogoBlobDataSyncLogResult> result,
             const TActorId &recipient,
             ui64 recipientCookie)
         : ILoggedRec(seg, confirmSyncLogAlso)
+        , Insert(insert)
         , Result(std::move(result))
         , Recipient(recipient)
         , RecipientCookie(recipientCookie)
     {}
 
     void TLoggedRecDelLogoBlobDataSyncLog::Replay(THull &hull, const TActorContext &ctx) {
+        hull.AddLogoBlob(ctx, Insert.Id, Insert.Ingress, Seg);
         const auto& vCtx = hull.GetHullCtx()->VCtx;
-        SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vCtx->VDiskLogPrefix, vCtx->OOSMonGroup);
+        SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vCtx);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -294,7 +297,7 @@ namespace NKikimr {
     void TLoggedRecAddBulkSst::Replay(THull &hull, const TActorContext &ctx) {
         hull.AddBulkSst(ctx, OrigEv->Get()->Essence, Seg);
         const auto& vCtx = hull.GetHullCtx()->VCtx;
-        SendVDiskResponse(ctx, OrigEv->Sender, new TEvAddBulkSstResult, OrigEv->Cookie, vCtx->VDiskLogPrefix, vCtx->OOSMonGroup);
+        SendVDiskResponse(ctx, OrigEv->Sender, new TEvAddBulkSstResult, OrigEv->Cookie, vCtx);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////

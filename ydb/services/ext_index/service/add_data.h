@@ -3,6 +3,7 @@
 #include <ydb/services/ext_index/common/service.h>
 #include <ydb/services/metadata/ds_table/scheme_describe.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include "add_index.h"
 
 namespace NKikimr::NCSIndex {

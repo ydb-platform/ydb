@@ -8,14 +8,15 @@ LICENSE(
     BSL-1.0 AND
     MIT AND
     NCSA AND
+    Public-Domain AND
     Unicode
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2023-06-02)
+VERSION(2023-10-05)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/308c816de5a47dd7d08a29f91b68381b45ed3552.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/dc129d6f715cf83a2072fc8de8b4e4c70bca6935.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxx/include
@@ -222,6 +223,7 @@ SRCS(
     src/chrono.cpp
     src/condition_variable.cpp
     src/condition_variable_destructor.cpp
+    src/error_category.cpp
     src/exception.cpp
     src/filesystem/directory_entry.cpp
     src/filesystem/directory_iterator.cpp
@@ -267,6 +269,13 @@ IF (NOT OS_WINDOWS)
         src/new.cpp
         src/new_handler.cpp
         src/new_helpers.cpp
+    )
+ENDIF()
+
+IF (OS_LINUX)
+    SRCS(
+        src/tz.cpp
+        src/tzdb_list.cpp
     )
 ENDIF()
 

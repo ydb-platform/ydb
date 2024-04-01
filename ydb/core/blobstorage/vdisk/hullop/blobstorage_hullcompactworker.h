@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "blobstorage_readbatch.h"
 #include "blobstorage_hullcompactdeferredqueue.h"
-#include <ydb/core/blobstorage/vdisk/handoff/handoff_map.h>
+#include <ydb/core/blobstorage/vdisk/balance/handoff_map.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullwritesst.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/blobstorage_hullgcmap.h>
 #include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
@@ -65,8 +65,8 @@ namespace NKikimr {
             }
 
         public:
-            TDeferredItemQueue(TRopeArena& arena, TBlobStorageGroupType gtype)
-                : TDeferredItemQueueBase<TDeferredItemQueue>(arena, gtype)
+            TDeferredItemQueue(TRopeArena& arena, TBlobStorageGroupType gtype, bool addHeader)
+                : TDeferredItemQueueBase<TDeferredItemQueue>(arena, gtype, addHeader)
             {}
         };
 
@@ -283,12 +283,12 @@ namespace NKikimr {
             , LastLsn(lastLsn)
             , It(it)
             , IsFresh(isFresh)
-            , IndexMerger(GType)
+            , IndexMerger(GType, HullCtx->AddHeader)
             , ReadBatcher(PDiskCtx->Dsk->ReadBlockSize,
                     PDiskCtx->Dsk->SeekTimeUs * PDiskCtx->Dsk->ReadSpeedBps / 1000000,
                     HullCtx->HullCompReadBatchEfficiencyThreshold)
             , Arena(&TRopeArenaBackend::Allocate)
-            , DeferredItems(Arena, HullCtx->VCtx->Top->GType)
+            , DeferredItems(Arena, HullCtx->VCtx->Top->GType, HullCtx->AddHeader)
             , Statistics(HullCtx)
             , RestoreDeadline(restoreDeadline)
             , PartitionKey(partitionKey)
@@ -316,7 +316,7 @@ namespace NKikimr {
 
         // main cycle function; return true if compaction is finished and compaction actor can proceed to index load;
         // when there is more work to do, return false; MUST NOT return true unless all pending requests are finished
-        bool MainCycle(TVector<std::unique_ptr<IEventBase>>& msgsForYard, const TActorContext& ctx) {
+        bool MainCycle(TVector<std::unique_ptr<IEventBase>>& msgsForYard) {
             for (;;) {
                 switch (State) {
                     case EState::Invalid:
@@ -339,7 +339,7 @@ namespace NKikimr {
                             IndexMerger.SetLoadDataMode(GcmpIt.KeepData());
                             It.PutToMerger(&IndexMerger);
 
-                            const bool haveToProcessItem = PreprocessItem(ctx);
+                            const bool haveToProcessItem = PreprocessItem();
                             if (haveToProcessItem) {
                                 State = EState::TryProcessItem;
                             } else {
@@ -466,7 +466,7 @@ namespace NKikimr {
                         parts[numParts++] = std::move(item.Parts[i]);
                     }
                     DeferredItems.AddReadDiskBlob(item.Cookie, TDiskBlob::CreateFromDistinctParts(&parts[0],
-                        &parts[numParts], item.Needed, item.BlobId.BlobSize(), Arena), item.Needed);
+                        &parts[numParts], item.Needed, item.BlobId.BlobSize(), Arena, HullCtx->AddHeader), item.Needed);
                     return ProcessReadBatcher(now);
                 }
 
@@ -535,7 +535,7 @@ namespace NKikimr {
 
         // start item processing; this function transforms item using handoff map and adds collected huge blobs, if any
         // it returns true if we should keep this item; otherwise it returns false
-        bool PreprocessItem(const TActorContext& ctx) {
+        bool PreprocessItem() {
             const TKey key = It.GetCurKey();
 
             // finish merging data for this item
@@ -546,7 +546,7 @@ namespace NKikimr {
             if (GcmpIt.KeepItem()) {
                 const bool keepData = GcmpIt.KeepData();
                 ++(keepData ? Statistics.KeepItemsWithData : Statistics.KeepItemsWOData);
-                TransformedItem = Hmp->Transform(ctx, key, &IndexMerger.GetMemRec(), IndexMerger.GetDataMerger(), keepData);
+                TransformedItem = Hmp->Transform(key, &IndexMerger.GetMemRec(), IndexMerger.GetDataMerger(), keepData);
             } else {
                 ++Statistics.DontKeepItems;
             }
@@ -574,7 +574,8 @@ namespace NKikimr {
                 WriterPtr = std::make_unique<TWriter>(HullCtx->VCtx, IsFresh ? EWriterDataType::Fresh : EWriterDataType::Comp,
                         ChunksToUse, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
                         (ui32)PDiskCtx->Dsk->ChunkSize, PDiskCtx->Dsk->AppendBlockSize,
-                        (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(), false, ReservedChunks, Arena);
+                        (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(), false, ReservedChunks, Arena,
+                        HullCtx->AddHeader);
             }
 
             // if we have PartitionKey, check it is time to split partitions by PartitionKey
@@ -603,7 +604,8 @@ namespace NKikimr {
             ui32 inplacedDataSize = 0;
             const NMatrix::TVectorType partsToStore = TransformedItem->MemRec->GetLocalParts(GType);
             if (TransformedItem->DataMerger->GetType() == TBlobType::DiskBlob && !partsToStore.Empty()) {
-                inplacedDataSize = TDiskBlob::CalculateBlobSize(GType, TransformedItem->Key.LogoBlobID(), partsToStore);
+                inplacedDataSize = TDiskBlob::CalculateBlobSize(GType, TransformedItem->Key.LogoBlobID(), partsToStore,
+                    HullCtx->AddHeader);
             }
 
             // try to push item into SST; in case of failure there is not enough space to fit this item

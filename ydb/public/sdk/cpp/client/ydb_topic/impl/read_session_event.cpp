@@ -1,5 +1,6 @@
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session_impl.ipp>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/read_session.h>
 
 namespace NYdb::NTopic {
 
@@ -177,7 +178,7 @@ bool TMessage::HasException() const {
 }
 
 void TMessage::Commit() {
-    static_cast<NPersQueue::TPartitionStreamImpl<false>*>(PartitionSession.Get())
+    static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())
         ->Commit(Information.Offset, Information.Offset + 1);
 }
 
@@ -211,7 +212,7 @@ ui64 TCompressedMessage::GetUncompressedSize() const {
 }
 
 void TCompressedMessage::Commit() {
-    static_cast<NPersQueue::TPartitionStreamImpl<false>*>(PartitionSession.Get())
+    static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())
         ->Commit(Information.Offset, Information.Offset + 1);
 }
 
@@ -246,7 +247,7 @@ TDataReceivedEvent::TDataReceivedEvent(TVector<TMessage> messages, TVector<TComp
 
 void TDataReceivedEvent::Commit() {
     for (auto [from, to] : OffsetRanges) {
-        static_cast<NPersQueue::TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
+        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
     }
 }
 
@@ -299,7 +300,7 @@ TStartPartitionSessionEvent::TStartPartitionSessionEvent(TPartitionSession::TPtr
 
 void TStartPartitionSessionEvent::Confirm(TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset) {
     if (PartitionSession) {
-        static_cast<NPersQueue::TPartitionStreamImpl<false>*>(PartitionSession.Get())
+        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())
             ->ConfirmCreate(readOffset, commitOffset);
     }
 }
@@ -324,7 +325,7 @@ TStopPartitionSessionEvent::TStopPartitionSessionEvent(TPartitionSession::TPtr p
 
 void TStopPartitionSessionEvent::Confirm() {
     if (PartitionSession) {
-        static_cast<NPersQueue::TPartitionStreamImpl<false>*>(PartitionSession.Get())->ConfirmDestroy();
+        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->ConfirmDestroy();
     }
 }
 
@@ -387,7 +388,7 @@ template<>
 void TPrintable<TSessionClosedEvent>::DebugString(TStringBuilder& ret, bool) const {
     const auto* self = static_cast<const TSessionClosedEvent*>(this);
     ret << "SessionClosed { Status: " << self->GetStatus()
-        << " Issues: \"" << NPersQueue::IssuesSingleLineString(self->GetIssues())
+        << " Issues: \"" << IssuesSingleLineString(self->GetIssues())
         << "\" }";
 }
 

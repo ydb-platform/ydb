@@ -14,6 +14,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/chunks/null_column.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
+#include <ydb/core/formats/arrow/reader/merger.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
@@ -22,7 +23,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(TCon
     auto resultSchema = context.SchemaVersions.GetLastSchema();
     {
         auto resultDataSchema = resultSchema->GetIndexInfo().ArrowSchemaWithSpecials();
-        NIndexedReader::TMergePartialStream mergeStream(resultSchema->GetIndexInfo().GetReplaceKey(), resultDataSchema, false);
+        NArrow::NMerger::TMergePartialStream mergeStream(resultSchema->GetIndexInfo().GetReplaceKey(), resultDataSchema, false, IIndexInfo::GetSpecialColumnNames());
         for (auto&& i : portions) {
             auto dataSchema = context.SchemaVersions.GetSchema(i.GetPortionInfo().GetMinSnapshot());
             auto batch = i.GetBatch(dataSchema, *resultSchema);
@@ -65,7 +66,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
             indexFields.emplace_back(i);
         }
         auto dataSchema = std::make_shared<arrow::Schema>(indexFields);
-        NIndexedReader::TMergePartialStream mergeStream(resultSchema->GetIndexInfo().GetReplaceKey(), dataSchema, false);
+        NArrow::NMerger::TMergePartialStream mergeStream(resultSchema->GetIndexInfo().GetReplaceKey(), dataSchema, false, IIndexInfo::GetSpecialColumnNames());
         ui32 idx = 0;
         for (auto&& i : portions) {
             auto dataSchema = context.SchemaVersions.GetSchema(i.GetPortionInfo().GetMinSnapshot());
@@ -212,13 +213,13 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     i64 otherPortionsSize = 0;
     for (auto&& i : SwitchedPortions) {
         if (i.GetMeta().GetProduced() == TPortionMeta::EProduced::INSERTED) {
-            insertedPortionsSize += i.GetBlobBytes();
+            insertedPortionsSize += i.GetTotalBlobBytes();
         } else if (i.GetMeta().GetProduced() == TPortionMeta::EProduced::SPLIT_COMPACTED) {
-            compactedPortionsSize += i.GetBlobBytes();
+            compactedPortionsSize += i.GetTotalBlobBytes();
         } else {
-            otherPortionsSize += i.GetBlobBytes();
+            otherPortionsSize += i.GetTotalBlobBytes();
         }
-        portionsSize += i.GetBlobBytes();
+        portionsSize += i.GetTotalBlobBytes();
         ++portionsCount;
     }
     NChanges::TGeneralCompactionCounters::OnPortionsKind(insertedPortionsSize, compactedPortionsSize, otherPortionsSize);
@@ -264,14 +265,14 @@ void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TC
 void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
     auto& g = *GranuleMeta;
-    self.CSCounters.OnSplitCompactionInfo(g.GetAdditiveSummary().GetCompacted().GetPortionsSize(), g.GetAdditiveSummary().GetCompacted().GetPortionsCount());
+    self.CSCounters.OnSplitCompactionInfo(g.GetAdditiveSummary().GetCompacted().GetTotalPortionsSize(), g.GetAdditiveSummary().GetCompacted().GetPortionsCount());
 }
 
 NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {
     return isSuccess ? NColumnShard::COUNTER_COMPACTION_SUCCESS : NColumnShard::COUNTER_COMPACTION_FAIL;
 }
 
-void TGeneralCompactColumnEngineChanges::AddCheckPoint(const NIndexedReader::TSortableBatchPosition& position, const bool include, const bool validationDuplications) {
+void TGeneralCompactColumnEngineChanges::AddCheckPoint(const NArrow::NMerger::TSortableBatchPosition& position, const bool include, const bool validationDuplications) {
     AFL_VERIFY(CheckPoints.emplace(position, include).second || !validationDuplications);
 }
 
@@ -291,10 +292,10 @@ ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPorti
         SumMemoryFix += i.BlobRange.Size;
         auto it = maxChunkSizeByColumn.find(i.GetColumnId());
         if (it == maxChunkSizeByColumn.end()) {
-            maxChunkSizeByColumn.emplace(i.GetColumnId(), i.GetMeta().GetRawBytesVerified());
+            maxChunkSizeByColumn.emplace(i.GetColumnId(), i.GetMeta().GetRawBytes());
         } else {
-            if (it->second < i.GetMeta().GetRawBytesVerified()) {
-                it->second = i.GetMeta().GetRawBytesVerified();
+            if (it->second < i.GetMeta().GetRawBytes()) {
+                it->second = i.GetMeta().GetRawBytes();
             }
         }
     }

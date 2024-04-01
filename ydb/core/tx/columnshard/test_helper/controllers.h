@@ -26,6 +26,21 @@ protected:
     virtual bool DoOnStartCompaction(std::shared_ptr<NKikimr::NOlap::TColumnEngineChanges>& changes) override;
     virtual bool DoOnWriteIndexComplete(const NKikimr::NOlap::TColumnEngineChanges& changes, const NKikimr::NColumnShard::TColumnShard& /*shard*/) override;
     virtual bool DoOnWriteIndexStart(const ui64 /*tabletId*/, const TString& changeClassName) override;
+    virtual bool NeedForceCompactionBacketsConstruction() const override {
+        return true;
+    }
+    virtual ui64 GetSmallPortionSizeDetector(const ui64 /*def*/) const override {
+        return 0;
+    }
+    virtual TDuration GetOptimizerFreshnessCheckDuration(const TDuration /*defaultValue*/) const override {
+        return TDuration::Zero();
+    }
+    virtual TDuration GetLagForCompactionBeforeTierings(const TDuration /*def*/) const override {
+        return TDuration::Zero();
+    }
+    virtual TDuration GetTTLDefaultWaitingDuration(const TDuration /*defaultValue*/) const override {
+        return TDuration::Seconds(1);
+    }
 public:
     ui32 GetFinishedExportsCount() const {
         return ExportsFinishedCount.Val();

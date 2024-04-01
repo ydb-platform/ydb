@@ -586,10 +586,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         TServiceCfg hasKeyValue = services.empty();
         names["keyvalue"] = &hasKeyValue;
 
-        if (hasTableService || hasYql) {
-            hasQueryService = true;
-        }
-
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
             enabled.insert(name);
@@ -641,6 +637,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasExport || hasImport) {
             hasExport = true;
             hasImport = true;
+        }
+
+        if (hasTableService || hasYql) {
+            hasQueryService = true;
         }
 
         // Enable RL for all services if enabled list is empty
@@ -1716,10 +1716,6 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         SqsHttp->Shutdown();
     }
 
-    if (YdbDriver) {
-        YdbDriver->Stop(true);
-    }
-
     if (Monitoring) {
         Monitoring->Stop();
     }
@@ -1759,6 +1755,10 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         if (ModuleFactories->DataShardExportFactory) {
             ModuleFactories->DataShardExportFactory->Shutdown();
         }
+    }
+
+    if (YdbDriver) {
+        YdbDriver->Stop(true);
     }
 }
 

@@ -2,8 +2,8 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federated_topic_impl.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/callback_context.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/read_session.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session.h>
 
@@ -118,7 +118,7 @@ private:
     std::shared_ptr<TFederatedDbState> FederationState;
 };
 
-class TFederatedReadSessionImpl : public NPersQueue::TEnableSelfContext<TFederatedReadSessionImpl> {
+class TFederatedReadSessionImpl : public NTopic::TEnableSelfContext<TFederatedReadSessionImpl> {
     friend class TFederatedTopicClient::TImpl;
     friend class TFederatedReadSession;
 
@@ -199,7 +199,7 @@ private:
 
 
 class TFederatedReadSession : public IFederatedReadSession,
-                              public NPersQueue::TContextOwner<TFederatedReadSessionImpl> {
+                              public NTopic::TContextOwner<TFederatedReadSessionImpl> {
     friend class TFederatedTopicClient::TImpl;
 
 public:

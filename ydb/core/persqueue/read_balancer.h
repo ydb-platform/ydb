@@ -10,8 +10,6 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/tablet_flat/flat_dbase_scheme.h>
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -52,91 +50,10 @@ enum EPartitionState {
 
 class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTabletExecutedFlat {
 
-    struct Schema : NIceDb::Schema {
-        struct Data : Table<32> {
-            struct Key : Column<32, NScheme::NTypeIds::Uint32> {};
-            struct PathId : Column<33, NScheme::NTypeIds::Uint64> {};
-            struct Topic : Column<34, NScheme::NTypeIds::Utf8> {};
-            struct Path : Column<35, NScheme::NTypeIds::Utf8> {};
-            struct Version : Column<36, NScheme::NTypeIds::Uint32> {};
-            struct Config : Column<40, NScheme::NTypeIds::Utf8> {};
-            struct MaxPartsPerTablet : Column<41, NScheme::NTypeIds::Uint32> {};
-            struct SchemeShardId : Column<42, NScheme::NTypeIds::Uint64> {};
-            struct NextPartitionId : Column<43, NScheme::NTypeIds::Uint64> {};
-            struct SubDomainPathId : Column<44, NScheme::NTypeIds::Uint64> {};
-
-            using TKey = TableKey<Key>;
-            using TColumns = TableColumns<Key, PathId, Topic, Path, Version, Config, MaxPartsPerTablet, SchemeShardId, NextPartitionId, SubDomainPathId>;
-        };
-
-        struct Partitions : Table<33> {
-            struct Partition : Column<32, NScheme::NTypeIds::Uint32> {};
-            struct TabletId : Column<33, NScheme::NTypeIds::Uint64> {};
-
-            struct State : Column<34, NScheme::NTypeIds::Uint32> {};
-            struct DataSize : Column<35, NScheme::NTypeIds::Uint64> {};
-            struct UsedReserveSize : Column<36, NScheme::NTypeIds::Uint64> {};
-
-            using TKey = TableKey<Partition>;
-            using TColumns = TableColumns<Partition, TabletId, State, DataSize, UsedReserveSize>;
-        };
-
-        struct Groups : Table<34> {
-            struct GroupId : Column<32, NScheme::NTypeIds::Uint32> {};
-            struct Partition : Column<33, NScheme::NTypeIds::Uint32> {};
-
-            using TKey = TableKey<GroupId, Partition>;
-            using TColumns = TableColumns<GroupId, Partition>;
-        };
-
-        struct Tablets : Table<35> {
-            struct Owner : Column<32, NScheme::NTypeIds::Uint64> {};
-            struct Idx : Column<33, NScheme::NTypeIds::Uint64> {};
-            struct TabletId : Column<34, NScheme::NTypeIds::Uint64> {};
-
-            using TKey = TableKey<TabletId>;
-            using TColumns = TableColumns<Owner, Idx, TabletId>;
-        };
-
-        struct Operations : Table<36> {
-            struct Idx : Column<33, NScheme::NTypeIds::Uint64> {};
-            struct State : Column<34, NScheme::NTypeIds::Utf8> {}; //serialzed protobuf
-
-            using TKey = TableKey<Idx>;
-            using TColumns = TableColumns<Idx, State>;
-        };
-
-        using TTables = SchemaTables<Data, Partitions, Groups, Tablets, Operations>;
-    };
-
-
-    struct TTxPreInit : public ITransaction {
-        TPersQueueReadBalancer * const Self;
-
-        TTxPreInit(TPersQueueReadBalancer *self)
-            : Self(self)
-        {}
-
-        bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-
-        void Complete(const TActorContext& ctx) override;
-    };
-
+    struct TTxPreInit;
     friend struct TTxPreInit;
 
-
-    struct TTxInit : public ITransaction {
-        TPersQueueReadBalancer * const Self;
-
-        TTxInit(TPersQueueReadBalancer *self)
-            : Self(self)
-        {}
-
-        bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-
-        void Complete(const TActorContext& ctx) override;
-    };
-
+    struct TTxInit;
     friend struct TTxInit;
 
     struct TPartInfo {
@@ -156,113 +73,19 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         ui64 Idx;
     };
 
-    struct TTxWrite : public ITransaction {
-        TPersQueueReadBalancer * const Self;
-        TVector<ui32> DeletedPartitions;
-        TVector<TPartInfo> NewPartitions;
-        TVector<std::pair<ui64, TTabletInfo>> NewTablets;
-        TVector<std::pair<ui32, ui32>> NewGroups;
-        TVector<std::pair<ui64, TTabletInfo>> ReallocatedTablets;
-
-        TTxWrite(TPersQueueReadBalancer *self, TVector<ui32>&& deletedPartitions, TVector<TPartInfo>&& newPartitions,
-                 TVector<std::pair<ui64, TTabletInfo>>&& newTablets, TVector<std::pair<ui32, ui32>>&& newGroups,
-                 TVector<std::pair<ui64, TTabletInfo>>&& reallocatedTablets)
-            : Self(self)
-            , DeletedPartitions(std::move(deletedPartitions))
-            , NewPartitions(std::move(newPartitions))
-            , NewTablets(std::move(newTablets))
-            , NewGroups(std::move(newGroups))
-            , ReallocatedTablets(std::move(reallocatedTablets))
-        {}
-
-        bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-
-        void Complete(const TActorContext &ctx) override;
-    };
-
+    struct TTxWrite;
     friend struct TTxWrite;
 
-    void HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, TStringBuilder() << "TPersQueueReadBalancer::HandleWakeup");
+    void HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx);
+    void HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx);
 
-        GetStat(ctx); //TODO: do it only on signals from outerspace right now
+    void Die(const TActorContext& ctx) override;
+    void OnActivateExecutor(const TActorContext &ctx) override;
+    void OnDetach(const TActorContext &ctx) override;
+    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext &ctx) override;
+    void DefaultSignalTabletActive(const TActorContext &) override;
 
-        auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
-        ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
-    }
-
-    void HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx) {
-        GetACL(ctx);
-    }
-
-    void Die(const TActorContext& ctx) override {
-        StopFindSubDomainPathId();
-        StopWatchingSubDomainPathId();
-
-        for (auto& pipe : TabletPipes) {
-            NTabletPipe::CloseClient(ctx, pipe.second.PipeActor);
-        }
-        TabletPipes.clear();
-        TActor<TPersQueueReadBalancer>::Die(ctx);
-    }
-
-    void OnActivateExecutor(const TActorContext &ctx) override {
-        ResourceMetrics = Executor()->GetResourceMetrics();
-        Become(&TThis::StateWork);
-        if (Executor()->GetStats().IsFollower)
-            Y_ABORT("is follower works well with Balancer?");
-        else
-            Execute(new TTxPreInit(this), ctx);
-    }
-
-    void OnDetach(const TActorContext &ctx) override {
-        Die(ctx);
-    }
-
-    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext &ctx) override {
-        Die(ctx);
-    }
-
-    void DefaultSignalTabletActive(const TActorContext &) override {
-        // must be empty
-    }
-
-    void InitDone(const TActorContext &ctx) {
-        if (SubDomainPathId) {
-            StartWatchingSubDomainPathId();
-        } else {
-            StartFindSubDomainPathId(true);
-        }
-
-        StartPartitionIdForWrite = NextPartitionIdForWrite = rand() % TotalGroups;
-
-        TStringBuilder s;
-        s << "BALANCER INIT DONE for " << Topic << ": ";
-        for (auto& p : PartitionsInfo) {
-            s << "(" << p.first << ", " << p.second.TabletId << ") ";
-        }
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, s);
-        for (auto& [_, clientInfo] : ClientsInfo) {
-            for (auto& [_, groupInfo] : clientInfo.ClientGroupsInfo) {
-                groupInfo.Balance(ctx);
-            }
-        }
-
-        for (auto &ev : UpdateEvents) {
-            ctx.Send(ctx.SelfID, ev.Release());
-        }
-        UpdateEvents.clear();
-
-        for (auto &ev : RegisterEvents) {
-            ctx.Send(ctx.SelfID, ev.Release());
-        }
-        RegisterEvents.clear();
-
-        auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
-        ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
-
-        ctx.Send(ctx.SelfID, new TEvPersQueue::TEvUpdateACL());
-    }
+    void InitDone(const TActorContext &ctx);
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
     TString GenerateStat();
@@ -666,6 +489,8 @@ public:
     }
 
 };
+
+NKikimrPQ::EConsumerScalingSupport DefaultScalingSupport();
 
 }
 }

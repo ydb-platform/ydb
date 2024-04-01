@@ -47,6 +47,11 @@ public:
 };
 
 class TPortionInfo {
+public:
+    using TRuntimeFeatures = ui8;
+    enum class ERuntimeFeature: TRuntimeFeatures {
+        Optimized = 1 /* "optimized" */
+    };
 private:
     TPortionInfo() = default;
     ui64 PathId = 0;
@@ -57,9 +62,36 @@ private:
     TPortionMeta Meta;
     ui64 DeprecatedGranuleId = 0;
     YDB_READONLY_DEF(std::vector<TIndexChunk>, Indexes);
+    YDB_READONLY(TRuntimeFeatures, RuntimeFeatures, 0);
     std::vector<TUnifiedBlobId> BlobIds;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
 public:
+    void InitRuntimeFeature(const ERuntimeFeature feature, const bool activity) {
+        if (activity) {
+            AddRuntimeFeature(feature);
+        } else {
+            RemoveRuntimeFeature(feature);
+        }
+    }
+
+    void AddRuntimeFeature(const ERuntimeFeature feature) {
+        RuntimeFeatures |= (TRuntimeFeatures)feature;
+    }
+
+    void RemoveRuntimeFeature(const ERuntimeFeature feature) {
+        RuntimeFeatures &= (Max<TRuntimeFeatures>() - (TRuntimeFeatures)feature);
+    }
+
+    bool HasRuntimeFeature(const ERuntimeFeature feature) const {
+        if (feature == ERuntimeFeature::Optimized) {
+            if ((RuntimeFeatures & (TRuntimeFeatures)feature)) {
+                return true;
+            } else {
+                return GetTierNameDef(NOlap::NBlobOperations::TGlobal::DefaultStorageId) != NOlap::NBlobOperations::TGlobal::DefaultStorageId;
+            }
+        }
+        return (RuntimeFeatures & (TRuntimeFeatures)feature);
+    }
 
     void FullValidation() const;
 
@@ -255,7 +287,7 @@ public:
     std::optional<TEntityChunk> GetEntityRecord(const TChunkAddress& address) const {
         for (auto&& c : GetRecords()) {
             if (c.GetAddress() == address) {
-                return TEntityChunk(c.GetAddress(), c.GetMeta().GetNumRowsVerified(), c.GetMeta().GetRawBytesVerified(), c.GetBlobRange());
+                return TEntityChunk(c.GetAddress(), c.GetMeta().GetNumRows(), c.GetMeta().GetRawBytes(), c.GetBlobRange());
             }
         }
         for (auto&& c : GetIndexes()) {
@@ -400,26 +432,24 @@ public:
         Y_ABORT_UNLESS(!wasValid || RemoveSnapshot.Valid());
     }
 
-    std::pair<ui32, ui32> BlobsSizes() const {
-        ui32 sum = 0;
-        ui32 max = 0;
-        for (const auto& rec : Records) {
-            sum += rec.BlobRange.Size;
-            max = Max(max, rec.BlobRange.Size);
-        }
-        return {sum, max};
-    }
-
-    ui64 GetBlobBytes() const noexcept {
+    ui64 GetIndexBlobBytes() const noexcept {
         ui64 sum = 0;
-        for (const auto& rec : Records) {
-            sum += rec.BlobRange.Size;
+        for (const auto& rec : Indexes) {
+            sum += rec.GetBlobRange().Size;
         }
         return sum;
     }
 
-    ui64 BlobsBytes() const noexcept {
-        return GetBlobBytes();
+    ui64 GetColumnBlobBytes() const noexcept {
+        ui64 sum = 0;
+        for (const auto& rec : Records) {
+            sum += rec.GetBlobRange().Size;
+        }
+        return sum;
+    }
+
+    ui64 GetTotalBlobBytes() const noexcept {
+        return GetIndexBlobBytes() + GetColumnBlobBytes();
     }
 
     bool IsVisible(const TSnapshot& snapshot) const {
@@ -487,7 +517,7 @@ public:
         std::optional<ui32> columnIdFirst;
         for (auto&& i : Records) {
             if (!columnIdFirst || *columnIdFirst == i.ColumnId) {
-                result += i.GetMeta().GetNumRowsVerified();
+                result += i.GetMeta().GetNumRows();
                 columnIdFirst = i.ColumnId;
             }
         }
@@ -502,28 +532,28 @@ public:
         ui32 result = 0;
         for (auto&& i : Records) {
             if (columnId == i.ColumnId) {
-                result += i.GetMeta().GetNumRowsVerified();
+                result += i.GetMeta().GetNumRows();
             }
         }
         return result;
     }
 
-    ui64 GetIndexRawBytes(const std::set<ui32>& columnIds) const;
+    ui64 GetIndexRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
+    ui64 GetIndexRawBytes() const;
 
-    ui64 GetRawBytes(const std::vector<ui32>& columnIds) const;
-    ui64 GetRawBytes(const std::set<ui32>& columnIds) const;
-    ui64 GetRawBytes() const {
+    ui64 GetColumnRawBytes(const std::vector<ui32>& columnIds, const bool validation = true) const;
+    ui64 GetColumnRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
+    ui64 GetColumnRawBytes() const {
         ui64 result = 0;
         for (auto&& i : Records) {
-            result += i.GetMeta().GetRawBytesVerified();
+            result += i.GetMeta().GetRawBytes();
         }
         return result;
     }
 
-    ui64 RawBytesSum() const {
-        return GetRawBytes();
+    ui64 GetTotalRawBytes() const {
+        return GetColumnRawBytes() + GetIndexRawBytes();
     }
-
 public:
     class TAssembleBlobInfo {
     private:

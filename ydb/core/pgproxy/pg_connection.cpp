@@ -610,6 +610,11 @@ protected:
                 }
             } else {
                 SendErrorResponse(ev->Get()->ErrorFields);
+                if (ev->Get()->DropConnection) {
+                    CloseConnection = true;
+                    FlushAndPoll();
+                    return;
+                }
             }
             if (ev->Get()->ReadyForQuery) {
                 BecomeReadyForQuery();
@@ -641,6 +646,11 @@ protected:
                 }
             } else {
                 SendErrorResponse(ev->Get()->ErrorFields);
+                if (ev->Get()->DropConnection) {
+                    CloseConnection = true;
+                    FlushAndPoll();
+                    return;
+                }
             }
             ++OutgoingSequenceNumber;
             BecomeReadyForQuery();
@@ -678,6 +688,11 @@ protected:
                 }
             } else {
                 SendErrorResponse(ev->Get()->ErrorFields);
+                if (ev->Get()->DropConnection) {
+                    CloseConnection = true;
+                    FlushOutput();
+                    return;
+                }
             }
             if (ev->Get()->ReadyForQuery) {
                 ++OutgoingSequenceNumber;
@@ -695,6 +710,11 @@ protected:
                 SendStream(parseComplete);
             } else {
                 SendErrorResponse(ev->Get()->ErrorFields);
+                if (ev->Get()->DropConnection) {
+                    CloseConnection = true;
+                    FlushOutput();
+                    return;
+                }
             }
             ++OutgoingSequenceNumber;
             BecomeReadyForQuery();

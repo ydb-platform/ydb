@@ -139,7 +139,9 @@ namespace {
             .Col(params.Groups ? 3 : 0, 4,  NScheme::NTypeIds::String)
             .Key({0, 1});
 
+        // these tests are based on comparison of flat and b-tree indexes
         conf.WriteBTreeIndex = true;
+        conf.WriteFlatIndex = true;
         
         TPartCook cook(lay, conf);
         

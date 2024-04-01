@@ -1,12 +1,12 @@
 Registering pre-existing tables
-	onek
-	int4_tbl
 	INT4_TBL
-	tenk1
-	text_tbl
 	road
+	text_tbl
 	TEXT_TBL
+	int4_tbl
 	int8_tbl
+	onek
+	tenk1
 <sql-statement>
 --
 -- SUBSELECT
@@ -212,10 +212,10 @@ from int8_tbl group by q1 order by q1;
 </sql-statement>
 -stdin-:<main>: Fatal: Optimization
 
-    -stdin-:<main>:1:1: Fatal: ydb/library/yql/core/common_opt/yql_co_pgselect.cpp:3241  ExpandPgSelectImpl(): requirement order failed
+    -stdin-:<main>:1:1: Fatal: ydb/library/yql/core/common_opt/yql_co_pgselect.cpp:3565  ExpandPgSelectImpl(): requirement order failed
     	select q1, float8(count(*)) / (select count(*) from int8_tbl)
 	^
-    -stdin-:<main>: Fatal: ydb/library/yql/core/common_opt/yql_co_pgselect.cpp:704  RewriteSubLinksPartial(): requirement status.Level != IGraphTransformer::TStatus::Error failed
+    -stdin-:<main>: Fatal: ydb/library/yql/core/common_opt/yql_co_pgselect.cpp:727  RewriteSubLinksPartial(): requirement status.Level != IGraphTransformer::TStatus::Error failed
     
 <sql-statement>
 -- Unspecified-type literals in output columns should resolve as text

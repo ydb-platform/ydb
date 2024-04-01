@@ -1,16 +1,16 @@
 Registering pre-existing tables
-	onek
-	int4_tbl
 	INT4_TBL
-	tenk1
-	text_tbl
-	float8_tbl
 	INT2_TBL
-	tenk2
-	int2_tbl
-	TEXT_TBL
+	text_tbl
 	FLOAT8_TBL
+	tenk2
+	TEXT_TBL
+	int4_tbl
 	int8_tbl
+	onek
+	float8_tbl
+	tenk1
+	int2_tbl
 <sql-statement>
 --
 -- JOIN
@@ -217,56 +217,39 @@ SELECT *
 SELECT *
   FROM J1_TBL INNER JOIN J2_TBL USING (i);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
-    	--
-	^
 <sql-statement>
 -- Same as above, slightly different syntax
 SELECT *
   FROM J1_TBL JOIN J2_TBL USING (i);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
-    	-- Same as above, slightly different syntax
-	^
 <sql-statement>
 SELECT *
   FROM J1_TBL t1 (a, b, c) JOIN J2_TBL t2 (a, d) USING (a)
   ORDER BY a, d;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
-    	SELECT *
-	^
 <sql-statement>
 SELECT *
   FROM J1_TBL t1 (a, b, c) JOIN J2_TBL t2 (a, b) USING (b)
   ORDER BY b, t1.a;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	SELECT *
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: a
+        	SELECT *
 	^
 <sql-statement>
 -- test join using aliases
 SELECT * FROM J1_TBL JOIN J2_TBL USING (i) WHERE J1_TBL.t = 'one';  -- ok
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
-    	-- test join using aliases
-	^
 <sql-statement>
 SELECT * FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 'one';  -- ok
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
     	SELECT * FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 'one';  -- ok
 	^
 <sql-statement>
@@ -282,7 +265,7 @@ SELECT * FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE x.i = 1;  -- ok
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
     	SELECT * FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE x.i = 1;  -- ok
 	^
 <sql-statement>
@@ -290,7 +273,7 @@ SELECT * FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE x.t = 'one';  -- error
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
     	SELECT * FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE x.t = 'one';  -- error
 	^
 <sql-statement>
@@ -306,7 +289,7 @@ SELECT * FROM J1_TBL a1 JOIN J2_TBL a2 USING (i) AS a1;  -- error
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
     	SELECT * FROM J1_TBL a1 JOIN J2_TBL a2 USING (i) AS a1;  -- error
 	^
 <sql-statement>
@@ -314,7 +297,7 @@ SELECT x.* FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 'one';
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
     	SELECT x.* FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 'one';
 	^
 <sql-statement>
@@ -322,7 +305,7 @@ SELECT ROW(x.*) FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 'one';
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
     	SELECT ROW(x.*) FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 'one';
 	^
 <sql-statement>
@@ -330,7 +313,7 @@ SELECT row_to_json(x.*) FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
     	SELECT row_to_json(x.*) FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 'one';
 	^
 <sql-statement>
@@ -426,77 +409,45 @@ SELECT *
   FROM J1_TBL LEFT OUTER JOIN J2_TBL USING (i)
   ORDER BY i, k, t;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
-    	--
-	^
 <sql-statement>
 SELECT *
   FROM J1_TBL LEFT JOIN J2_TBL USING (i)
   ORDER BY i, k, t;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
-    	SELECT *
-	^
 <sql-statement>
 SELECT *
   FROM J1_TBL RIGHT OUTER JOIN J2_TBL USING (i);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
-    	SELECT *
-	^
 <sql-statement>
 SELECT *
   FROM J1_TBL RIGHT JOIN J2_TBL USING (i);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
-    	SELECT *
-	^
 <sql-statement>
 SELECT *
   FROM J1_TBL FULL OUTER JOIN J2_TBL USING (i)
   ORDER BY i, k, t;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
-    	SELECT *
-	^
 <sql-statement>
 SELECT *
   FROM J1_TBL FULL JOIN J2_TBL USING (i)
   ORDER BY i, k, t;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
-    	SELECT *
-	^
 <sql-statement>
 SELECT *
   FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (k = 1);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
-    	SELECT *
-	^
 <sql-statement>
 SELECT *
   FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (i = 1);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	SELECT *
 	^
+        -stdin-:<main>:2:49: Error: Column reference is ambiguous: i
+        	  FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (i = 1);
+	                                                ^
 <sql-statement>
 --
 -- semijoin selectivity for <>
@@ -551,10 +502,13 @@ INSERT INTO t3 VALUES ( 'dd', 33 );
 <sql-statement>
 SELECT * FROM t1 FULL JOIN t2 USING (name) FULL JOIN t3 USING (name);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	SELECT * FROM t1 FULL JOIN t2 USING (name) FULL JOIN t3 USING (name);
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: n
+        	SELECT * FROM t1 FULL JOIN t2 USING (name) FULL JOIN t3 USING (name);
 	^
 <sql-statement>
 --
@@ -567,10 +521,13 @@ INNER JOIN
 (SELECT * FROM t3) s3
 USING (name);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	--
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: n
+        	--
 	^
 <sql-statement>
 SELECT * FROM
@@ -579,10 +536,13 @@ LEFT JOIN
 (SELECT * FROM t3) s3
 USING (name);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	SELECT * FROM
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: n
+        	SELECT * FROM
 	^
 <sql-statement>
 SELECT * FROM
@@ -591,10 +551,13 @@ FULL JOIN
 (SELECT * FROM t3) s3
 USING (name);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	SELECT * FROM
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: n
+        	SELECT * FROM
 	^
 <sql-statement>
 -- Cases with non-nullable expressions in subquery results;
@@ -787,11 +750,6 @@ select count(*) from tenk1 a where unique1 in
   (select unique1 from tenk1 b join tenk1 c using (unique1)
    where b.unique2 = 42);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:5:44: Error: JoinExpr: unsupported using
-    	select count(*) from tenk1 a where unique1 in
-	                                           ^
 <sql-statement>
 --
 -- regression test: check for failure to generate a plan with multiple
@@ -878,9 +836,9 @@ order by 1, 2;
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	select * from int8_tbl i1 left join (int8_tbl i2 join
 	^
-        -stdin-:<main>:2:35: Error: No such column: x
-        	  (select 123 as x) ss on i2.q1 = x) on i1.q2 = i2.q2
-	                                  ^
+        -stdin-:<main>:1:1: Error: Duplicated member: q1
+        	select * from int8_tbl i1 left join (int8_tbl i2 join
+	^
 <sql-statement>
 --
 -- regression test: check a case where join_clause_is_movable_into() gives
@@ -1131,7 +1089,7 @@ select foo.*, unnamed_join.* from
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
     	select foo.*, unnamed_join.* from
 	^
 <sql-statement>
@@ -1141,7 +1099,7 @@ select foo.*, unnamed_join.* from
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
     	select foo.*, unnamed_join.* from
 	^
 <sql-statement>
@@ -1836,11 +1794,14 @@ SELECT qq, unique1
   USING (qq)
   INNER JOIN tenk1 c ON qq = unique2;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	SELECT qq, unique1
 	^
+        -stdin-:<main>:7:25: Error: Column reference is ambiguous: qq
+        	  INNER JOIN tenk1 c ON qq = unique2;
+	                        ^
 <sql-statement>
 --
 -- nested nestloops can require nested PlaceHolderVars
@@ -2165,14 +2126,6 @@ select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
   on (subq1.y1 = t2.unique1)
 where t1.unique2 < 42 and t1.stringu1 > t2.stringu2;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
-    	select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
-	^
-        -stdin-:<main>:8:17: Error: Unknown alias: subq1
-        	    on (i1.f1 = subq1.x2)
-	                ^
 <sql-statement>
 -- variant that isn't quite a star-schema case
 select ss1.d1 from
@@ -2231,14 +2184,6 @@ select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
   on (subq1.y1 = t2.unique1)
 where t1.unique2 < 42 and t1.stringu1 > t2.stringu2;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
-    	select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
-	^
-        -stdin-:<main>:8:17: Error: Unknown alias: subq1
-        	    on (i1.f1 = subq1.x2)
-	                ^
 <sql-statement>
 -- Here's a variant that we can't fold too aggressively, though,
 -- or we end up with noplace to evaluate the lateral PHV
@@ -2776,11 +2721,6 @@ left join
   ) foo3
 using (join_key);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: JoinExpr: unsupported using
-    	select foo1.join_key as foo1_id, foo3.join_key AS foo3_id, bug_field from
-	^
 <sql-statement>
 --
 -- test successful handling of nested outer joins with degenerate join quals
@@ -2816,15 +2756,12 @@ select t1.* from
 </sql-statement>
 -stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin
     	select t1.* from
 	^
-        -stdin-:<main>:6:11: Error: Unknown alias: i8
-        	      on (i8.q1 = b2.q1)
-	          ^
-        -stdin-:<main>:6:19: Error: Unknown alias: b2
-        	      on (i8.q1 = b2.q1)
-	                  ^
+        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_b2.d2 has type: pgint4, b._alias_b1.q2 has type: pgint8)
+        	select t1.* from
+	^
 <sql-statement>
 explain (verbose, costs off)
 select t1.* from
@@ -2857,15 +2794,12 @@ select t1.* from
 </sql-statement>
 -stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin
     	select t1.* from
 	^
-        -stdin-:<main>:6:11: Error: Unknown alias: i8
-        	      on (i8.q1 = b2.q1)
-	          ^
-        -stdin-:<main>:6:19: Error: Unknown alias: b2
-        	      on (i8.q1 = b2.q1)
-	                  ^
+        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_b2.d2 has type: pgint4, b._alias_b1.q2 has type: pgint8)
+        	select t1.* from
+	^
 <sql-statement>
 explain (verbose, costs off)
 select t1.* from
@@ -2900,15 +2834,12 @@ select t1.* from
 </sql-statement>
 -stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin
     	select t1.* from
 	^
-        -stdin-:<main>:7:11: Error: Unknown alias: i8
-        	      on (i8.q1 = b2.q1)
-	          ^
-        -stdin-:<main>:7:19: Error: Unknown alias: b2
-        	      on (i8.q1 = b2.q1)
-	                  ^
+        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_b2.d2 has type: pgint4, b._alias_b1.q2 has type: pgint8)
+        	select t1.* from
+	^
 <sql-statement>
 explain (verbose, costs off)
 select * from
@@ -3095,9 +3026,9 @@ select * from
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	select * from
 	^
-        -stdin-:<main>:4:68: Error: Unknown alias: yy
-        	    (tenk1 as a1 full join (select 1 as id) as yy on (a1.unique1 = yy.id))
-	                                                                   ^
+        -stdin-:<main>:1:1: Error: Duplicated member: id
+        	select * from
+	^
 <sql-statement>
 --
 -- test ability to push constants through outer join clauses
@@ -5028,11 +4959,14 @@ select * from j1
 inner join j2 on j1.id1 = j2.id1 and j1.id2 = j2.id2
 where j1.id1 % 1000 = 1 and j2.id1 % 1000 = 1 and j2.id1 = any (array[1]);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:3:58: Error: A_Expr_Kind unsupported value: 1
-    	where j1.id1 % 1000 = 1 and j2.id1 % 1000 = 1 and j2.id1 = any (array[1]);
-	                                                         ^
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from j1
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: id1
+        	select * from j1
+	^
 <sql-statement>
 -- Exercise array keys "find extreme element" B-Tree code
 explain (costs off) select * from j1
@@ -5049,11 +4983,14 @@ select * from j1
 inner join j2 on j1.id1 = j2.id1 and j1.id2 = j2.id2
 where j1.id1 % 1000 = 1 and j2.id1 % 1000 = 1 and j2.id1 >= any (array[1,5]);
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:3:58: Error: A_Expr_Kind unsupported value: 1
-    	where j1.id1 % 1000 = 1 and j2.id1 % 1000 = 1 and j2.id1 >= any (array[1,5]);
-	                                                         ^
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from j1
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: id1
+        	select * from j1
+	^
 <sql-statement>
 reset enable_nestloop;
 </sql-statement>

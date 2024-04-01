@@ -82,6 +82,9 @@ public:
     ui16 Chunk = 0;
     TBlobRangeLink16 BlobRange;
 
+    void ResetBlobRange() {
+        BlobRange = TBlobRangeLink16();
+    }
 
     void RegisterBlobIdx(const ui16 blobIdx) {
 //        AFL_VERIFY(!BlobRange.BlobId.GetTabletId())("original", BlobRange.BlobId.ToStringNew())("new", blobId.ToStringNew());
@@ -136,7 +139,7 @@ public:
     }
 
     TSimpleSerializationStat GetSerializationStat() const {
-        return TSimpleSerializationStat(BlobRange.Size, Meta.GetNumRowsVerified(), Meta.GetRawBytesVerified());
+        return TSimpleSerializationStat(BlobRange.Size, Meta.GetNumRows(), Meta.GetRawBytes());
     }
 
     const TChunkMeta& GetMeta() const {
@@ -185,14 +188,21 @@ private:
     YDB_READONLY_DEF(TString, Data);
 protected:
     virtual TString DoDebugString() const override {
-        return TStringBuilder() << "column_id=" << GetColumnId() << ";chunk=" << GetChunkIdx() << ";data_size=" << Data.size() << ";";
+        TStringBuilder sb;
+        sb << "column_id=" << GetColumnId() << ";data_size=" << Data.size() << ";";
+        if (GetChunkIdxOptional()) {
+            sb << "chunk=" << GetChunkIdxVerified() << ";";
+        } else {
+            sb << "chunk=NO_INITIALIZED;";
+        }
+        return sb;
     }
 
     virtual const TString& DoGetData() const override {
         return Data;
     }
     virtual ui32 DoGetRecordsCountImpl() const override {
-        return ColumnRecord.GetMeta().GetNumRowsVerified();
+        return ColumnRecord.GetMeta().GetNumRows();
     }
     virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& /*saver*/, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/,
                                                                                 const std::vector<ui64>& /*splitSizes*/) const override {

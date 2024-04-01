@@ -111,6 +111,15 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
     }
 
+    Y_UNIT_TEST(CreateTableStmt_SystemColumns) {
+        auto res = PgSqlToYql("CREATE TABLE t(XMIN int)");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_EQUAL(res.Issues.Size(), 1);
+
+        auto issue = *(res.Issues.begin());
+        UNIT_ASSERT(issue.GetMessage().find("system column") != TString::npos);
+    }
+
     Y_UNIT_TEST(CreateTableStmt_NotNull) {
         auto res = PgSqlToYql("CREATE TABLE t (a int NOT NULL, b text)");
         UNIT_ASSERT(res.Root);

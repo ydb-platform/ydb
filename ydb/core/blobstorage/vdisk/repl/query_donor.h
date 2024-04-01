@@ -12,19 +12,16 @@ namespace NKikimr {
         TActorId ParentId;
         std::deque<std::pair<TVDiskID, TActorId>> Donors;
         TDynBitMap UnresolvedItems;
-        TString VDiskLogPrefix;
-        std::shared_ptr<NMonGroup::TOutOfSpaceGroup> OOSMonGroup;
+        TIntrusivePtr<TVDiskContext> VCtx;
 
     public:
-        TDonorQueryActor(TEvBlobStorage::TEvEnrichNotYet& msg, std::deque<std::pair<TVDiskID, TActorId>> donors,
-                        const TString& vDiskLogPrefix, std::shared_ptr<NMonGroup::TOutOfSpaceGroup> monGroup)
+        TDonorQueryActor(TEvBlobStorage::TEvEnrichNotYet& msg, std::deque<std::pair<TVDiskID, TActorId>> donors, const TIntrusivePtr<TVDiskContext>& vCtx)
             : Query(msg.Query->Release().Release())
             , Sender(msg.Query->Sender)
             , Cookie(msg.Query->Cookie)
             , Result(std::move(msg.Result))
             , Donors(std::move(donors))
-            , VDiskLogPrefix(vDiskLogPrefix)
-            , OOSMonGroup(std::move(monGroup))
+            , VCtx(vCtx)
         {
             Y_ABORT_UNLESS(!Query->Record.HasRangeQuery());
         }
@@ -113,7 +110,7 @@ namespace NKikimr {
         void PassAway() override {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " finished query");
             Send(ParentId, new TEvents::TEvActorDied);
-            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, Result.release(), Cookie, VDiskLogPrefix, OOSMonGroup);
+            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, Result.release(), Cookie, VCtx);
             TActorBootstrapped::PassAway();
         }
 

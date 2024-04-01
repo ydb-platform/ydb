@@ -64,49 +64,73 @@ std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
     return result;
 }
 
-ui64 TPortionInfo::GetRawBytes(const std::vector<ui32>& columnIds) const {
+ui64 TPortionInfo::GetColumnRawBytes(const std::vector<ui32>& columnIds, const bool validation) const {
     ui64 sum = 0;
-    const ui32 numRows = NumRows();
+    const ui32 recordsCount = GetRecordsCount();
     for (auto&& i : columnIds) {
+        bool found = false;
         if (TIndexInfo::IsSpecialColumn(i)) {
-            sum += numRows * TIndexInfo::GetSpecialColumnByteWidth(i);
+            sum += recordsCount * TIndexInfo::GetSpecialColumnByteWidth(i);
+            found = true;
         } else {
             for (auto&& r : Records) {
                 if (r.ColumnId == i) {
-                    sum += r.GetMeta().GetRawBytesVerified();
+                    sum += r.GetMeta().GetRawBytes();
+                    found = true;
                 }
             }
         }
+        AFL_VERIFY(!validation || found)("event", "id_not_found")("column_id", i);
     }
     return sum;
 }
 
-ui64 TPortionInfo::GetRawBytes(const std::set<ui32>& entityIds) const {
+ui64 TPortionInfo::GetColumnRawBytes(const std::set<ui32>& entityIds, const bool validation) const {
     ui64 sum = 0;
-    const ui32 numRows = NumRows();
+    const ui32 recordsCount = GetRecordsCount();
+    std::set<ui32> readyIds;
     for (auto&& i : TIndexInfo::GetSpecialColumnIds()) {
         if (entityIds.contains(i)) {
-            sum += numRows * TIndexInfo::GetSpecialColumnByteWidth(i);
+            sum += recordsCount * TIndexInfo::GetSpecialColumnByteWidth(i);
+            if (validation) {
+                readyIds.emplace(i);
+            }
         }
     }
     for (auto&& r : Records) {
         if (entityIds.contains(r.ColumnId)) {
-            sum += r.GetMeta().GetRawBytesVerified();
+            sum += r.GetMeta().GetRawBytes();
+            if (validation) {
+                readyIds.emplace(r.ColumnId);
+            }
         }
     }
+    AFL_VERIFY(!validation || readyIds.size() == entityIds.size())("requested", JoinSeq(",", entityIds))("found", JoinSeq(",", readyIds));
     return sum;
 }
 
-ui64 TPortionInfo::GetIndexRawBytes(const std::set<ui32>& entityIds) const {
+ui64 TPortionInfo::GetIndexRawBytes(const std::set<ui32>& entityIds, const bool validation) const {
     ui64 sum = 0;
     std::set<ui32> readyIndexes;
     for (auto&& r : Indexes) {
         if (entityIds.contains(r.GetIndexId())) {
             sum += r.GetRawBytes();
-            readyIndexes.emplace(r.GetIndexId());
+            if (validation) {
+                readyIndexes.emplace(r.GetIndexId());
+            }
         }
     }
-    AFL_VERIFY(readyIndexes.size() == entityIds.size())("requested", JoinSeq(",", entityIds))("found", JoinSeq(",", readyIndexes));
+    AFL_VERIFY(!validation || readyIndexes.size() == entityIds.size())("requested", JoinSeq(",", entityIds))("found", JoinSeq(",", readyIndexes));
+    return sum;
+}
+
+ui64 TPortionInfo::GetIndexRawBytes() const {
+    ui64 sum = 0;
+    std::set<ui32> readyIndexes;
+    for (auto&& r : Indexes) {
+        sum += r.GetRawBytes();
+        readyIndexes.emplace(r.GetIndexId());
+    }
     return sum;
 }
 
@@ -123,7 +147,8 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
             "to:" << IndexKeyEnd().DebugString() << ";";
     }
     sb <<
-        "size:" << BlobsBytes() << ";" <<
+        "column_size:" << GetColumnBlobBytes() << ";" <<
+        "index_size:" << GetIndexBlobBytes() << ";" <<
         "meta:(" << Meta.DebugString() << ");";
     if (RemoveSnapshot.Valid()) {
         sb << "remove_snapshot:(" << RemoveSnapshot.DebugString() << ");";
@@ -154,7 +179,7 @@ std::vector<const NKikimr::NOlap::TColumnRecord*> TPortionInfo::GetColumnChunksP
     for (auto&& c : Records) {
         if (c.ColumnId == columnId) {
             Y_ABORT_UNLESS(c.Chunk == result.size());
-            Y_ABORT_UNLESS(c.GetMeta().GetNumRowsVerified());
+            Y_ABORT_UNLESS(c.GetMeta().GetNumRows());
             result.emplace_back(&c);
         }
     }
@@ -212,9 +237,9 @@ std::vector<NKikimr::NOlap::TPortionInfo::TPage> TPortionInfo::BuildPages() cons
             currentSize = 0;
             currentId = i.GetColumnId();
         }
-        currentSize += i.GetMeta().GetNumRowsVerified();
+        currentSize += i.GetMeta().GetNumRows();
         ++currentCursor[currentSize];
-        entities[i.GetColumnId()].emplace_back(&i, i.GetMeta().GetNumRowsVerified());
+        entities[i.GetColumnId()].emplace_back(&i, i.GetMeta().GetNumRows());
     }
     for (auto&& i : Indexes) {
         if (currentId != i.GetIndexId()) {
@@ -460,7 +485,7 @@ THashMap<TString, THashMap<NKikimr::NOlap::TUnifiedBlobId, std::vector<NKikimr::
         const TString& storageId = GetColumnStorageId(c.GetColumnId(), indexInfo);
         auto& storageRecords = result[storageId];
         auto& blobRecords = storageRecords[GetBlobId(c.GetBlobRange().GetBlobIdxVerified())];
-        blobRecords.emplace_back(TEntityChunk(c.GetAddress(), c.GetMeta().GetNumRowsVerified(), c.GetMeta().GetRawBytesVerified(), c.GetBlobRange()));
+        blobRecords.emplace_back(TEntityChunk(c.GetAddress(), c.GetMeta().GetNumRows(), c.GetMeta().GetRawBytes(), c.GetBlobRange()));
     }
     for (auto&& c : GetIndexes()) {
         const TString& storageId = indexInfo.GetIndexStorageId(c.GetIndexId());

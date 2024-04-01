@@ -532,12 +532,12 @@ namespace NTable {
                 if (WriteBTreeIndex) {
                     Current.BTreeGroupIndexes.reserve(Groups.size());
                     for (auto& g : Groups) {
-                        Current.BTreeGroupIndexes.push_back(g.BTreeIndex.Flush(Pager, true).value());
+                        Current.BTreeGroupIndexes.push_back(g.BTreeIndex.Finish(Pager));
                     }
                     if (Current.HistoryWritten > 0) {
                         Current.BTreeHistoricIndexes.reserve(Histories.size());
                         for (auto& g : Histories) {
-                            Current.BTreeHistoricIndexes.push_back(g.BTreeIndex.Flush(Pager, true).value());
+                            Current.BTreeHistoricIndexes.push_back(g.BTreeIndex.Finish(Pager));
                         }
                     }
                 }
@@ -807,7 +807,7 @@ namespace NTable {
                     } else {
                         g.BTreeIndex.AddShortChild({page, dataPage->Count, raw.size()});
                     }
-                    g.BTreeIndex.Flush(Pager, false);
+                    g.BTreeIndex.Flush(Pager);
                 }
 
                 // N.B. hack to save the last row/key for the main group

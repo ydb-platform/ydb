@@ -1,15 +1,15 @@
 Registering pre-existing tables
-	int4_tbl
 	INT4_TBL
-	tenk1
-	text_tbl
 	VARCHAR_TBL
-	float8_tbl
+	text_tbl
+	FLOAT8_TBL
 	CHAR_TBL
 	TEXT_TBL
-	FLOAT8_TBL
+	int4_tbl
 	varchar_tbl
 	int8_tbl
+	float8_tbl
+	tenk1
 <sql-statement>
 --
 -- UNION (also INTERSECT, EXCEPT)
@@ -673,11 +673,14 @@ ORDER BY q2,q1;
 -- This should fail, because q2 isn't a name of an EXCEPT output column
 SELECT q1 FROM int8_tbl EXCEPT SELECT q2 FROM int8_tbl ORDER BY q2 LIMIT 1;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: SelectStmt: limit should be used only on top
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
     	-- This should fail, because q2 isn't a name of an EXCEPT output column
 	^
+        -stdin-:<main>:2:65: Error: No such column: q2
+        	SELECT q1 FROM int8_tbl EXCEPT SELECT q2 FROM int8_tbl ORDER BY q2 LIMIT 1;
+	                                                                ^
 <sql-statement>
 -- But this should work:
 SELECT q1 FROM int8_tbl EXCEPT (((SELECT q2 FROM int8_tbl ORDER BY q2 LIMIT 1))) ORDER BY 1;

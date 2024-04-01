@@ -3618,6 +3618,13 @@
             "uri": "https://{canondata_backend}/937458/c3cedafe8207dd0107fc3000ea9aa601cd29a81f/resource.tar.gz#test_sql2yql.test_blocks-pg_sort_/sql.yql"
         }
     ],
+    "test_sql2yql.test[blocks-pg_to_dates]": [
+        {
+            "checksum": "fadfccc18e5845a1b121f04bf6c9032b",
+            "size": 1518,
+            "uri": "https://{canondata_backend}/1775059/da44f71e237a007832278fd3d7afc8b69720284d/resource.tar.gz#test_sql2yql.test_blocks-pg_to_dates_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[blocks-pg_tofrom]": [
         {
             "checksum": "b826f6b175ed015c94598bd63781d9d7",
@@ -11057,6 +11064,13 @@
             "checksum": "da56d47b840e2b9bf597764ec08a99a3",
             "size": 453,
             "uri": "https://{canondata_backend}/1942525/5cdf0ba3049785966a0674a8dafb8d0f042b065d/resource.tar.gz#test_sql2yql.test_pg-current_database_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg-dates_to_pg]": [
+        {
+            "checksum": "5f5098ef994c09670efe2e4cc798d7f7",
+            "size": 1836,
+            "uri": "https://{canondata_backend}/1775059/da44f71e237a007832278fd3d7afc8b69720284d/resource.tar.gz#test_sql2yql.test_pg-dates_to_pg_/sql.yql"
         }
     ],
     "test_sql2yql.test[pg-def_column_name_func]": [
@@ -21713,6 +21727,13 @@
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_blocks-pg_sort_/formatted.sql"
         }
     ],
+    "test_sql_format.test[blocks-pg_to_dates]": [
+        {
+            "checksum": "72cdd32d0531f7e42c25233bb5e6ec04",
+            "size": 87,
+            "uri": "https://{canondata_backend}/1775059/da44f71e237a007832278fd3d7afc8b69720284d/resource.tar.gz#test_sql_format.test_blocks-pg_to_dates_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[blocks-pg_tofrom]": [
         {
             "checksum": "25c9751ead91546896ba8aec437b67e0",
@@ -29061,6 +29082,13 @@
             "checksum": "353d7ecf96f7faf7001813e769f6cfaa",
             "size": 661,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_pg-compare_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[pg-dates_to_pg]": [
+        {
+            "checksum": "92646dba58b92aad2214026601384213",
+            "size": 259,
+            "uri": "https://{canondata_backend}/1775059/da44f71e237a007832278fd3d7afc8b69720284d/resource.tar.gz#test_sql_format.test_pg-dates_to_pg_/formatted.sql"
         }
     ],
     "test_sql_format.test[pg-in_sorted]": [

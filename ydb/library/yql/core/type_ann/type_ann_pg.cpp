@@ -456,6 +456,13 @@ const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNo
     case NUdf::EDataSlot::Utf8:
         pgType = "text";
         break;
+    case NUdf::EDataSlot::Date:
+        pgType = "date";
+        break;
+    case NUdf::EDataSlot::Datetime:
+    case NUdf::EDataSlot::Timestamp:
+        pgType = "timestamp";
+        break;
     default:
         ctx.AddError(TIssue(ctx.GetPosition(pos),
             TStringBuilder() << "Unsupported type: " << dataType->GetName()));

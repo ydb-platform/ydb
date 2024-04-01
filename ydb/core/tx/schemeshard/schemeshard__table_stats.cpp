@@ -515,11 +515,11 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
                                                      << " rowCount " << rowCount
                                                      << " cpuUsage " << tabletMetrics.GetCPU()/10000.0);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Got periodic table stats at tablet " << TabletID()
                                                      << " from shard " << datashardId
                                                      << " pathId " << pathId
-                                                     << " raw table stats:\n" << tableStats.DebugString());
+                                                     << " raw table stats:\n" << tableStats.ShortDebugString());
 
     TStatsId statsId(pathId, datashardId);
 

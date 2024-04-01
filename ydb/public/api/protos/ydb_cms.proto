@@ -96,7 +96,7 @@ message DatabaseQuotas {
     uint32 ttl_min_run_internal_seconds = 4;
     
     message StorageQuotas {
-        // in theory an arbitrary string, but in practice HDD or SSD
+        // in theory an arbitrary string, but in practice "hdd" or "ssd"
         string unit_kind = 1;
         uint64 data_size_hard_quota = 2;
         uint64 data_size_soft_quota = 3;

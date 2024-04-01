@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(Metrics) {
     Y_UNIT_TEST(OnlyOneItem) {
         auto issue = NYql::TIssue{"compile error"};
         issue.SetCode(NYql::TIssuesIds::KIKIMR_COMPILE_ERROR, NYql::TSeverityIds::S_ERROR);
-        UNIT_ASSERT_VALUES_EQUAL(NFq::MetricsSuffixFromIssues(NYql::TIssues{issue}), "__KIKIMR_COMPILE_ERROR__S_ERROR");
+        UNIT_ASSERT_VALUES_EQUAL(NFq::MetricsSuffixFromIssues(NYql::TIssues{issue}), "__KIKIMR_COMPILE_ERROR__E");
     }
 
     Y_UNIT_TEST(SeveralTopItems) {
@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(Metrics) {
             issues.AddIssue(issue);
         }
        
-        UNIT_ASSERT_VALUES_EQUAL(NFq::MetricsSuffixFromIssues(issues), "__KIKIMR_COMPILE_ERROR__S_ERROR__DQ_OPTIMIZE_ERROR__S_ERROR__DEFAULT_ERROR__S_WARNING");
+        UNIT_ASSERT_VALUES_EQUAL(NFq::MetricsSuffixFromIssues(issues), "__KIKIMR_COMPILE_ERROR__E__DQ_OPTIMIZE_ERROR__E__DEFAULT_ERROR__W");
     }
 
     Y_UNIT_TEST(MoreThanFiveItems) {
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(Metrics) {
             issues.AddIssue(issue);
         }
        
-        UNIT_ASSERT_VALUES_EQUAL(NFq::MetricsSuffixFromIssues(issues), "__KIKIMR_COMPILE_ERROR__S_ERROR__KIKIMR_COMPILE_ERROR__S_ERROR__KIKIMR_COMPILE_ERROR__S_ERROR__KIKIMR_COMPILE_ERROR__S_ERROR__KIKIMR_COMPILE_ERROR__S_ERROR");
+        UNIT_ASSERT_VALUES_EQUAL(NFq::MetricsSuffixFromIssues(issues), "__KIKIMR_COMPILE_ERROR__E__KIKIMR_COMPILE_ERROR__E__KIKIMR_COMPILE_ERROR__E__KIKIMR_COMPILE_ERROR__E__KIKIMR_COMPILE_ERROR__E");
     }
 
     Y_UNIT_TEST(SeveralSubItems) {
@@ -73,7 +73,7 @@ Y_UNIT_TEST_SUITE(Metrics) {
         issues.AddIssue(*topLevelIssue);
         issues.back().SetCode(NYql::TIssuesIds::DEFAULT_ERROR, NYql::TSeverityIds::S_WARNING);
 
-        UNIT_ASSERT_VALUES_EQUAL(NFq::MetricsSuffixFromIssues(issues), "__DEFAULT_ERROR__S_WARNING__DQ_OPTIMIZE_ERROR__S_ERROR__KIKIMR_COMPILE_ERROR__S_ERROR");
+        UNIT_ASSERT_VALUES_EQUAL(NFq::MetricsSuffixFromIssues(issues), "__DEFAULT_ERROR__W__DQ_OPTIMIZE_ERROR__E__KIKIMR_COMPILE_ERROR__E");
     }
 
     Y_UNIT_TEST(CombineSubItems) {
@@ -114,6 +114,6 @@ Y_UNIT_TEST_SUITE(Metrics) {
             issues.AddIssue(issue);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(NFq::MetricsSuffixFromIssues(issues), "__DEFAULT_ERROR__S_WARNING__KIKIMR_SCHEME_ERROR__S_ERROR__JSONPATH_PARSE_ERROR__S_ERROR__CORE_EXEC__S_WARNING__DQ_OPTIMIZE_ERROR__S_ERROR");
+        UNIT_ASSERT_VALUES_EQUAL(NFq::MetricsSuffixFromIssues(issues), "__DEFAULT_ERROR__W__KIKIMR_SCHEME_ERROR__E__JSONPATH_PARSE_ERROR__E__CORE_EXEC__W__DQ_OPTIMIZE_ERROR__E");
     }
 }

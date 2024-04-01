@@ -1178,9 +1178,10 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
 }
 
 TString GetStatViewName(const TRunActorParams& params) {
-    auto p = params.Sql.find("--fq_dev_hint_");
+    static TStringBuf hint("--fq_dev_hint_");
+    auto p = params.Sql.find(hint);
     if (p != params.Sql.npos) {
-        p += 14;
+        p += hint.size();
         auto p1 = params.Sql.find("\n", p);
         TString mode = params.Sql.substr(p, p1 == params.Sql.npos ? params.Sql.npos : p1 - p);
         if (mode) {

@@ -6,7 +6,29 @@
 
 #include <queue>
 
+
+
 namespace NFq {
+
+namespace {
+
+TString SeverityToString(NYql::ESeverity severity) {
+    switch (severity) {
+        case NYql::TSeverityIds::S_FATAL:
+            return "F";
+        case NYql::TSeverityIds::S_ERROR:
+            return "E";
+        case NYql::TSeverityIds::S_INFO:
+            return "I";
+        case NYql::TSeverityIds::S_WARNING:
+            return "W";
+        case NYql::TSeverityIds_ESeverityId_TSeverityIds_ESeverityId_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case NYql::TSeverityIds_ESeverityId_TSeverityIds_ESeverityId_INT_MAX_SENTINEL_DO_NOT_USE_:
+            return "U";
+    }
+}
+
+}
 
 TStatusCodeCounters::TStatusCodeCounters(const TString& name, const ::NMonitoring::TDynamicCounterPtr& counters)
     : Name(name)
@@ -52,7 +74,7 @@ TString MetricsSuffixFromIssues(const NYql::TIssues& issues) {
         }
 
         builder << "__" << NYql::TIssuesIds::EIssueCode_Name(issue.GetCode())
-            << "__" << NYql::TSeverityIds::ESeverityId_Name(issue.GetSeverity());
+            << "__" << NFq::SeverityToString(issue.GetSeverity());
     }
 
     return builder;

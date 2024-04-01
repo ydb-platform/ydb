@@ -676,6 +676,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvFinalStatus
         LOG_YQ_AUDIT_SERVICE_INFO("FinalFailedStatus: cloud id: [" << event.CloudId  << "], scope: [" << event.Scope << "], query id: [" <<
                                 event.QueryId << "], job id: [" << event.JobId << "], "
                                 "status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status) <<
+                                ", label: " << NYql::NDqProto::StatusIds::StatusCode_Name(event.StatusCode) << MetricsSuffixFromIssues(event.Issues) <<
                                 ", status code: " << NYql::NDqProto::StatusIds::StatusCode_Name(event.StatusCode) <<
                                 ", issues: " << event.Issues.ToOneLineString() <<
                                 ", transient issues " << event.TransientIssues.ToOneLineString());

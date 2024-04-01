@@ -11,7 +11,10 @@ items:
   include:
     mode: link
     path: devops/toc_p.yaml
-
+- name: For contributors
+  include:
+    mode: link
+    path: contributor/toc_p.yaml
 
 - { name: Tutorials,                             include: { mode: link, path: operations/toc_p.yaml } }
 - { name: Recommendations,                       include: { mode: link, path: best_practices/toc_p.yaml } }
@@ -22,17 +25,17 @@ items:
   include:
     mode: link
     path: reference/toc_p.yaml
-
-
 - name: Questions and answers
   include:
     mode: link
     path: faq/toc_p.yaml
-- name: For contributors
+- name: Downloads
   include:
     mode: link
-    path: development/toc_p.yaml
-- include: { mode: link, path: downloads/toc_p.yaml }
+    path: downloads/toc_p.yaml
 - name: Public talks
   href: public-talks.md
-- { name: Changelog,                                     include: { mode: link, path: toc_changelog.yaml } }
+- name: Changelog
+  include:
+    mode: link
+    path: toc_changelog.yaml

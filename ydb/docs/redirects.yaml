@@ -38,7 +38,41 @@ common:
   - from: /getting_started/yql.md
     to: /yql/reference/index.md
 
-# Redirects for ydb-dstoo
+# Redirects from development to contributor
+  - from: /development/build-ya.md
+    to: /contributor/build-ya.md
+  - from: /development/datashard-locks-and-change-visibility.md
+    to: /contributor/datashard-locks-and-change-visibility.md
+  - from: /development/index.md
+    to: /contributor/index.md
+  - from: /development/load-actors-key-value.md
+    to: /contributor/load-actors-key-value.md
+  - from: /development/load-actors-kqp.md
+    to: /contributor/load-actors-kqp.md
+  - from: /development/load-actors-memory.md
+    to: /contributor/load-actors-memory.md
+  - from: /development/load-actors-overview.md
+    to: /contributor/load-actors-overview.md
+  - from: /development/load-actors-pdisk-log.md
+    to: /contributor/load-actors-pdisk-log.md
+  - from: /development/load-actors-pdisk-read.md
+    to: /contributor/load-actors-pdisk-read.md
+  - from: /development/load-actors-pdisk-write.md
+    to: /contributor/load-actors-pdisk-write.md
+  - from: /development/load-actors-stop.md
+    to: /contributor/load-actors-stop.md
+  - from: /development/load-actors-storage.md
+    to: /contributor/load-actors-storage.md
+  - from: /development/load-actors-vdisk.md
+    to: /contributor/load-actors-vdisk.md
+  - from: /development/localdb-uncommitted-txs.md
+    to: /contributor/localdb-uncommitted-txs.md
+  - from: /development/manage-releases.md
+    to: /contributor/manage-releases.md
+  - from: /development/suggest-change.md
+    to: /contributor/suggest-change.md
+
+# Redirects for ydb-dstool
   - from: /administration/ydb-dstool-device-list.md
     to: /reference/ydb-dstool/device-list.md
   - from: /administration/ydb-dstool-global-options.md
@@ -48,7 +82,7 @@ common:
   - from: /administration/ydb-dstool-setup.md
     to: /reference/ydb-dstool/install.md
 
-# Redirect from export_import to export-import   
+# Redirects from export_import to export-import   
   - from: /reference/ydb-cli/export_import/s3_conn.md
     to: /reference/ydb-cli/export-import/auth-s3.md
   - from: /reference/ydb-cli/export_import/s3_export.md

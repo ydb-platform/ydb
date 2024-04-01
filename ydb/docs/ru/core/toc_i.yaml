@@ -11,6 +11,10 @@ items:
   include:
     mode: link
     path: devops/toc_p.yaml
+- name: Для контрибьюторов
+  include:
+    mode: link
+    path: contributor/toc_p.yaml
 
 # Main
 - { name: Практические руководства,                include: { mode: link, path: operations/toc_p.yaml } }
@@ -29,11 +33,13 @@ items:
   include:
     mode: link
     path: faq/toc_p.yaml
-- name: Для контрибьюторов
+- name: Загрузки
   include:
     mode: link
-    path: development/toc_p.yaml
-- include: { mode: link, path: downloads/toc_p.yaml }
+    path: downloads/toc_p.yaml
 - name: Публичные материалы
   href: public-talks.md
-- { name: Список изменений,                        include: { mode: link, path: toc_changelog.yaml } }
+- name: Список изменений
+  include:
+    mode: link
+    path: toc_changelog.yaml

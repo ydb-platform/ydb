@@ -28,8 +28,6 @@ items:
   include:
     mode: link
     path: reference/toc_p.yaml
-
-# Footer
 - name: Вопросы и ответы
   include:
     mode: link

@@ -39,6 +39,8 @@ common:
     to: /yql/reference/index.md
   - from: /troubleshooting/system_views_cluster.md
     to: /devops/manual/system-views.md
+  - from: /concepts/datatypes.md
+    to: /yql/reference/types/index.md
 
 # DBA-related redirects
   - from: /db/index.md

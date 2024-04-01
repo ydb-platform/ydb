@@ -1,12 +1,14 @@
 IF (YQL_PACKAGED)
+    PACKAGE()
 
     FROM_SANDBOX(
         FILE {FILE_RESOURCE_ID} OUT_NOAUTO
-            mrjob EXECUTABLE
+            mrjob
+            EXECUTABLE
     )
 
+    END()
 ELSE()
-
     PROGRAM(mrjob)
 
     ALLOCATOR(J)
@@ -39,7 +41,6 @@ ELSE()
     YQL_LAST_ABI_VERSION()
 
     END()
-
 ENDIF()
 
 RECURSE_FOR_TESTS(

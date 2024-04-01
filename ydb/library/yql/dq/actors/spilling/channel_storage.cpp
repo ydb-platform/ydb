@@ -63,7 +63,7 @@ public:
 
         ActorSystem_->Send(ChannelStorageActorId_, new TEvDqChannelSpilling::TEvPut(blobId, std::move(blob), std::move(promise)), /*flags*/0, cookie);
 
-        WritingBlobs_.emplace(blobId, TWritingBlobInfo(blobSize, std::move(future)));
+        WritingBlobs_.emplace(blobId, TWritingBlobInfo{blobSize, std::move(future)});
         WritingBlobsTotalSize_ += blobSize;
     }
 

@@ -6,10 +6,12 @@ services:
      hostname: fq-tests-ydb-ydb
      environment:
        YDB_DEFAULT_LOG_LEVEL: NOTICE
+       POSTGRES_USER: user
+       POSTGRES_PASSWORD: password
 
   fq-connector-go:
     container_name: fq-tests-ydb-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.2.9@sha256:53458405f4cc0057873eab9f11eebc088c04bd9ed021757e860bdf6022e2f47c
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.2.10@sha256:b2ef1cfbfea52c71f753806fd2a893794e0443e41041463df80f7c3626dec852
     volumes:
       - ../../fq-connector-go/:/opt/ydb/cfg/
     ports:

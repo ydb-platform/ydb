@@ -21,7 +21,7 @@ LOGGER = make_logger(__name__)
 
 
 class GatewaysConfRenderer:
-    template_: Final = '''
+    _template: Final = '''
 Generic {
     Connector {
         Endpoint {
@@ -33,7 +33,6 @@ Generic {
 
 {% set CLICKHOUSE = 'CLICKHOUSE' %}
 {% set POSTGRESQL = 'POSTGRESQL' %}
-{% set YDB = 'YDB' %}
 
 {% macro data_source(kind, cluster, host, port, username, password, protocol, database, schema) -%}
     ClusterMapping {
@@ -45,12 +44,10 @@ Generic {
             port: {{port}}
         }
         Credentials {
-            {% if username and password %}
             basic {
                 username: "{{username}}"
                 password: "{{password}}"
             }
-            {% endif %}
         }
         UseSsl: false
         Protocol: {{protocol}}
@@ -105,17 +102,23 @@ Generic {
 {% endfor %}
 
 {% for cluster in generic_settings.ydb_clusters %}
-{{ data_source(
-    YDB,
-    settings.ydb.cluster_name,
-    settings.ydb.host_internal,
-    settings.ydb.port_internal,
-    NONE,
-    NONE,
-    NATIVE,
-    cluster.database,
-    NONE)
-}}
+    ClusterMapping {
+        Kind: YDB
+        Name: "{{settings.ydb.cluster_name}}"
+        DatabaseName: "{{cluster.database}}"
+        Credentials {
+            basic {
+                username: "{{settings.ydb.username}}"
+                password: "{{settings.ydb.password}}"
+            }
+        }
+        Endpoint {
+            host: "{{settings.ydb.host_internal}}"
+            port: {{settings.ydb.port_internal}}
+        }
+        UseSsl: false
+        Protocol: NATIVE
+    }
 {% endfor %}
 
     DefaultSettings {
@@ -126,7 +129,6 @@ Generic {
         Value: "YQL"
         {% endif %}
     }
-
 }
 
 Dq {
@@ -184,7 +186,7 @@ Dq {
 
     def __init__(self):
         self.template = jinja2.Environment(loader=jinja2.BaseLoader, undefined=jinja2.DebugUndefined).from_string(
-            self.template_
+            self._template
         )
         self.template.globals['EProtocol'] = EProtocol
         self.template.globals['EDateTimeFormat'] = EDateTimeFormat

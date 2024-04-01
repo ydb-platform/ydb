@@ -40,7 +40,7 @@ class Settings:
         dbname: str
         cluster_name: str
         username: str
-        password: Optional[str]
+        password: Optional[str] # TODO: why optional?
         host_external: str
         host_internal: str
         port_external: int
@@ -52,8 +52,12 @@ class Settings:
     class Ydb:
         dbname: str
         cluster_name: str
+        username: str
+        password: str
         host_internal: str
         port_internal: int
+
+    ydb: Ydb
 
     @classmethod
     def from_env(cls, docker_compose_dir: pathlib.Path, data_source_kinds: Sequence[EDataSourceKind]) -> 'Settings':
@@ -100,7 +104,9 @@ class Settings:
                         cluster_name='ydb_integration_test',
                         host_internal=endpoint_determiner.get_container_name('ydb'),
                         port_internal=2136,
-                        dbname="/local"
+                        dbname="/local",
+                        username='user',
+                        password='password',
                     )
                 case _:
                     raise Exception(f'invalid data source: {data_source_kind}')
@@ -114,6 +120,7 @@ class Settings:
             ),
             clickhouse=data_sources.get(EDataSourceKind.CLICKHOUSE),
             postgresql=data_sources.get(EDataSourceKind.POSTGRESQL),
+            ydb=data_sources.get(EDataSourceKind.YDB),
         )
 
     def get_cluster_name(self, data_source_kind: EDataSourceKind) -> str:
@@ -147,5 +154,11 @@ class GenericSettings:
         schema: str
 
     postgresql_clusters: Sequence[PostgreSQLCluster]
+
+    @dataclass
+    class YdbCluster:
+        database: str
+
+    ydb_clusters: Sequence[YdbCluster]
 
     date_time_format: EDateTimeFormat

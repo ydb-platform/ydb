@@ -1074,7 +1074,7 @@ struct TFullStatProcessor : IPlanStatProcessor {
         return GetV1StatFromV2Plan(plan, &cpuUsage);
     }
 
-    TPublicStat GetPublicStat(TString& stat) override {
+    TPublicStat GetPublicStat(const TString& stat) override {
         return ::NFq::GetPublicStat(stat);
     }
 

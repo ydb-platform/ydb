@@ -58,7 +58,7 @@ arrow::Result<TArrowCSV> TArrowCSV::Create(const TVector<std::pair<TString, NSch
                 errors.emplace_back("column " + name + ": " + csvArrowType.status().ToString());
                 continue;
             }
-            convertedColumns.emplace_back(name, *arrowType, *csvArrowType);
+            convertedColumns.emplace_back(TColumnInfo{name, *arrowType, *csvArrowType});
         }
         if (!errors.empty()) {
             return arrow::Status::TypeError(ErrorPrefix() + "columns errors: " + JoinSeq("; ", errors));

@@ -181,30 +181,6 @@ std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& s
     return result;
 }
 
-bool THashConstructor::BuildHashUI64(std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName) {
-    if (fieldNames.size() == 0) {
-        return false;
-    }
-    Y_ABORT_UNLESS(!batch->GetColumnByName(hashFieldName));
-    if (fieldNames.size() == 1) {
-        auto column = batch->GetColumnByName(fieldNames.front());
-        if (!column) {
-            AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "cannot_build_hash")("reason", "field_not_found")("field_name", fieldNames.front());
-            return false;
-        }
-        Y_ABORT_UNLESS(column);
-        if (column->type()->id() == arrow::Type::UINT64 || column->type()->id() == arrow::Type::UINT32 || column->type()->id() == arrow::Type::INT64 || column->type()->id() == arrow::Type::INT32) {
-            batch = TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), std::make_shared<arrow::Field>(hashFieldName, column->type()), column));
-            return true;
-        }
-    }
-    std::shared_ptr<arrow::Array> hashColumn = NArrow::NHash::TXX64(fieldNames, NArrow::NHash::TXX64::ENoColumnPolicy::Verify, 34323543)
-        .ExecuteToArray(batch, hashFieldName);
-    batch = TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), std::make_shared<arrow::Field>(hashFieldName, hashColumn->type()), 
-        std::make_shared<arrow::ChunkedArray>(hashColumn)));
-    return true;
-}
-
 ui64 TShardedRecordBatch::GetMemorySize() const {
     return NArrow::GetTableMemorySize(RecordBatch);
 }

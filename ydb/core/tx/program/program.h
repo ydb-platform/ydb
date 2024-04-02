@@ -98,7 +98,8 @@ public:
         }
     }
 
-    inline arrow::Status ApplyProgram(std::shared_ptr<arrow::Table>& batch) const {
+    template <class TDataContainer>
+    inline arrow::Status ApplyProgram(std::shared_ptr<TDataContainer>& batch) const {
         if (Program) {
             return Program->ApplyTo(batch, NArrow::GetCustomExecContext());
         } else if (OverrideProcessingColumnsVector) {

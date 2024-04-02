@@ -10,7 +10,31 @@ namespace NKikimr::NArrow {
 
 class THashConstructor {
 public:
-    static bool BuildHashUI64(std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName);
+    template <class TDataContainer>
+    static bool BuildHashUI64(std::shared_ptr<TDataContainer>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName) {
+        if (fieldNames.size() == 0) {
+            return false;
+        }
+        Y_ABORT_UNLESS(!batch->GetColumnByName(hashFieldName));
+        if (fieldNames.size() == 1) {
+            auto column = batch->GetColumnByName(fieldNames.front());
+            if (!column) {
+                AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "cannot_build_hash")("reason", "field_not_found")("field_name", fieldNames.front());
+                return false;
+            }
+            Y_ABORT_UNLESS(column);
+            if (column->type()->id() == arrow::Type::UINT64 || column->type()->id() == arrow::Type::UINT32 || column->type()->id() == arrow::Type::INT64 || column->type()->id() == arrow::Type::INT32) {
+                batch = TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), std::make_shared<arrow::Field>(hashFieldName, column->type()), column));
+                return true;
+            }
+        }
+        std::shared_ptr<arrow::Array> hashColumn = NArrow::NHash::TXX64(fieldNames, NArrow::NHash::TXX64::ENoColumnPolicy::Verify, 34323543)
+            .ExecuteToArray(batch, hashFieldName);
+        batch = TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), std::make_shared<arrow::Field>(hashFieldName, hashColumn->type()),
+            std::make_shared<arrow::ChunkedArray>(hashColumn)));
+        return true;
+    }
+
 };
 
 class TShardedRecordBatch {
@@ -137,8 +161,10 @@ public:
     std::shared_ptr<arrow::UInt64Array> BuildPermutation() const;
 
     std::vector<std::shared_ptr<arrow::Table>> Apply(const std::shared_ptr<arrow::Table>& input);
-
     static TShardedRecordBatch Apply(const ui32 shardsCount, const std::shared_ptr<arrow::Table>& input, const std::string& hashColumnName);
+    static TShardedRecordBatch Apply(const ui32 shardsCount, const std::shared_ptr<arrow::RecordBatch>& input, const std::string& hashColumnName) {
+        return Apply(shardsCount, arrow::Table::FromRecordBatches(input.schema(), {input}));
+    }
 };
 
 std::shared_ptr<arrow::UInt64Array> MakePermutation(const int size, const bool reverse = false);

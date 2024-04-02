@@ -528,6 +528,13 @@ namespace NKikimr::NColumnShard {
             Y_ABORT_UNLESS(Builders.size() == schema->fields().size());
         }
 
+        TTableUpdatesBuilder(arrow::Result<std::shared_ptr<arrow::Schema>> schema) {
+            UNIT_ASSERT_C(schema.ok(), schema.status().ToString());
+            Schema = schema.ValueUnsafe();
+            Builders = NArrow::MakeBuilders(Schema);
+            Y_ABORT_UNLESS(Builders.size() == Schema->fields().size());
+        }
+
         TRowBuilder AddRow() {
             ++RowsCount;
             return TRowBuilder(0, *this);

@@ -37,9 +37,9 @@ struct TNumMulInterval {
     {
         const auto lv = static_cast<typename TOutput::TLayout>(left.template Get<typename TLeft::TLayout>());
         const auto rv = static_cast<typename TOutput::TLayout>(right.template Get<typename TRight::TLayout>());
-        i64 overflowMin = (rv > 0) ? std::numeric_limits<i64>::min() : std::numeric_limits<i64>::max();
-        i64 overflowMax = (rv > 0) ? std::numeric_limits<i64>::max() : std::numeric_limits<i64>::min();
-        if (rv != 0 && (lv < overflowMin / rv || lv > overflowMax / rv)) {
+        i64 lvAbs = (lv > 0) ? lv : -lv;
+        i64 rvAbs = (rv > 0) ? rv : -rv;
+        if (rvAbs != 0 && (std::numeric_limits<i64>::max() / rvAbs < lvAbs)) {
             return NUdf::TUnboxedValuePod();
         }
         const auto ret = lv * rv;
@@ -55,33 +55,34 @@ struct TNumMulInterval {
         const auto rhs = StaticCast<typename TRight::TLayout, i64>(
                 GetterFor<typename TRight::TLayout>(right, context, block), context, block);
         const auto mul = BinaryOperator::CreateMul(lhs, rhs, "mul", block);
-        const auto full = SetterFor<typename TOutput::TLayout>(mul, context, block);
+        const auto result = SetterFor<typename TOutput::TLayout>(mul, context, block);
 
         const auto zero = ConstantInt::get(Type::getInt64Ty(context), 0);
-        const auto rhsNonZero = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, rhs, zero, "rhsNonZero", block);
-        const auto rhsPos = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, rhs, zero, "rhsPos", block);
-        const auto overflowMin = SelectInst::Create(rhsPos,
-                ConstantInt::get(Type::getInt64Ty(context), std::numeric_limits<i64>::min()),
-                ConstantInt::get(Type::getInt64Ty(context), std::numeric_limits<i64>::max()),
-                "overflowMin", block);
-        const auto overflowMax = SelectInst::Create(rhsPos,
-                ConstantInt::get(Type::getInt64Ty(context), std::numeric_limits<i64>::max()),
-                ConstantInt::get(Type::getInt64Ty(context), std::numeric_limits<i64>::min()),
-                "overflowMax", block);
-        const auto isOverflowMin = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT,
-                lhs, BinaryOperator::CreateSDiv(overflowMin, rhs, "overflowMinDivRhs", block), "isOverflowMin", block);
-        const auto isOverflowMax = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT,
-                lhs, BinaryOperator::CreateSDiv(overflowMax, rhs, "overflowMaxDivRhs", block), "isOverflowMax", block);
+        const auto lhsAbs = SelectInst::Create(
+                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, lhs, zero, "lhsPos", block),
+                lhs,
+                BinaryOperator::CreateNeg(lhs, "lhsNeg", block),
+                "lhsAbs", block);
+        const auto rhsAbs = SelectInst::Create(
+                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, rhs, zero, "rhsPos", block),
+                rhs,
+                SelectInst::Create(
+                    CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, rhs, zero, "rhsZero", block),
+                    ConstantInt::get(Type::getInt64Ty(context), 1),
+                    BinaryOperator::CreateNeg(rhs, "rhsNeg", block),
+                    "rhsNegZero", block),
+                "rhsAbs", block);
+
+        const auto i64Max = ConstantInt::get(Type::getInt64Ty(context), std::numeric_limits<i64>::max());
+        const auto div = BinaryOperator::CreateSDiv(i64Max, rhsAbs, "div", block);
+        const auto overflow = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, lhsAbs, div, "overflow", block);
         
         const auto bad = BinaryOperator::CreateOr(
-                BinaryOperator::CreateAnd(
-                    rhsNonZero,
-                    BinaryOperator::CreateOr(isOverflowMin, isOverflowMax, "overflowMinMax", block),
-                    "overflow", block),
+                overflow,
                 GenIsBadInterval<TOutput>(mul, context, block),
                 "bad", block);
         const auto null = ConstantInt::get(Type::getInt128Ty(context), 0);
-        return SelectInst::Create(bad, null, full, "sel", block);
+        return SelectInst::Create(bad, null, result, "sel", block);
     }
 #endif
 };

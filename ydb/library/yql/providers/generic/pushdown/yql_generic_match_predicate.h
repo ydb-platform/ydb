@@ -7,6 +7,6 @@
 
 namespace NYql {
 
-bool MatchPredicate(const TMap<TString, TColumnStatistics>& columns, const NYql::NConnector::NApi::TPredicate& predicate);
+    bool MatchPredicate(const TMap<TString, TColumnStatistics>& columns, const NYql::NConnector::NApi::TPredicate& predicate);
 
 } // namespace NYql

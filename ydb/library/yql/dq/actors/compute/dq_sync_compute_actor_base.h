@@ -223,7 +223,11 @@ protected:
 
         TDqTaskRunnerMemoryLimits limits;
         limits.ChannelBufferSize = this->MemoryLimits.ChannelBufferSize;
-        limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
+        limits.OutputChunkMaxSize = this->MemoryLimits.OutputChunkMaxSize;
+
+        if (!limits.OutputChunkMaxSize) {
+            limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
+	}
 
         TaskRunner->Prepare(this->Task, limits, execCtx);
 

@@ -285,6 +285,7 @@ private:
 
         ui64 txId = msg.GetTxId();
         bool isScan = msg.HasSnapshot();
+        const ui64 outputChunkMaxSize = msg.GetOutputChunkMaxSize();
 
         YQL_ENSURE(msg.GetStartAllOrFail()); // todo: support partial start
 
@@ -437,6 +438,7 @@ private:
                     inputChannelsCount += i.ChannelsSize();
                 }
                 memoryLimits.ChannelBufferSize = std::max<ui32>(taskCtx.ChannelSize / std::max<ui32>(1, inputChannelsCount), Config.GetMinChannelBufferSize());
+                memoryLimits.OutputChunkMaxSize = outputChunkMaxSize;
                 AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "channel_info")
                     ("ch_size", taskCtx.ChannelSize)("ch_count", taskCtx.Channels)("ch_limit", memoryLimits.ChannelBufferSize)
                     ("inputs", dqTask.InputsSize())("input_channels_count", inputChannelsCount);

@@ -360,6 +360,7 @@ struct TComputeMemoryLimits {
 
     ui64 MinMemAllocSize = 30_MB;
     ui64 MinMemFreeSize = 30_MB;
+    ui64 OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
 
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
 };

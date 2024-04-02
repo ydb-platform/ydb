@@ -167,6 +167,9 @@ message ExecuteQueryRequest {
     // For queries with multiple result sets, some of them may be computed concurrently.
     // If true, parts of different results sets may be interleaved in response stream.
     bool concurrent_result_sets = 8;
+
+    // Allows to set size limitation (in bytes) for one result part
+    int64 response_part_limit_bytes = 9 [(Ydb.value) = "[0; 33554432]"];
 }
 
 message ResultSetMeta {

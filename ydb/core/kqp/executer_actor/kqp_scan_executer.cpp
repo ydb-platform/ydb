@@ -337,7 +337,8 @@ private:
             .AsyncIoFactory = nullptr,
             .AllowSinglePartitionOpt = false,
             .UserRequestContext = GetUserRequestContext(),
-            .FederatedQuerySetup = std::nullopt
+            .FederatedQuerySetup = std::nullopt,
+            .OutputChunkMaxSize = Request.OutputChunkMaxSize
         });
 
         LOG_D("Execute scan tx, PendingComputeTasks: " << TasksGraph.GetTasks().size());

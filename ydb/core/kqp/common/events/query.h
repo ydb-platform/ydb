@@ -39,6 +39,12 @@ struct TQueryRequestSettings {
         return *this;
     }
 
+    TQueryRequestSettings& SetOutputChunkMaxSize(ui64 size) {
+        OutputChunkMaxSize = size;
+        return *this;
+    }
+
+    ui64 OutputChunkMaxSize = 0;
     bool KeepSession = false;
     bool UseCancelAfter = true;
     ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
@@ -313,6 +319,10 @@ public:
 
     bool GetSupportsStreamTrailingResult() const {
         return QuerySettings.SupportsStreamTrailingResult;
+    }
+
+    ui64 GetOutputChunkMaxSize() const {
+        return QuerySettings.OutputChunkMaxSize;
     }
 
     TDuration GetProgressStatsPeriod() const {

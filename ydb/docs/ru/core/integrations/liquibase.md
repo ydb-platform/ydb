@@ -18,7 +18,7 @@ Changeset `createTable` отвечает за создание таблицы. �
 
 {% note info %}
 
-Вы также можете явно указать имя исходного типа, например `Int32`, `Json`, `Json Document`, `Bytes` или `Interval`. Однако в этом случае схема не будет переносимой.
+Вы также можете явно указать имя исходного типа, например `Int32`, `Json`, `JsonDocument`, `Bytes` или `Interval`. Однако в этом случае схема не будет переносимой.
 
 {% endnote %}
 
@@ -149,7 +149,7 @@ YDB не поддерживает уникальный вторичный инд
 
 {% note info %}
 
-Создание асинхронных индексов нужно делать через [нативные SQL миграции](https://docs.liquibase.com/concepts/changelogs/sql-format.html)..
+Создание асинхронных индексов нужно делать через [нативные SQL миграции](https://docs.liquibase.com/concepts/changelogs/sql-format.html).
 
 {% endnote %}
 
@@ -207,49 +207,49 @@ YDB не поддерживает уникальный вторичный инд
   </insert>
   ```
 
-  - json
+- json
 
-    ```json
-    "changes": [
-      {
-        "insert": {
-          "tableName": "episodes",
-          "columns": [
-            {
-              "column": {
-                "name": "series_id",
-                "valueNumeric": "1"
-              }
-            },
-            {
-              "column": {
-                "name": "season_id",
-                "valueNumeric": "1"
-              }
-            },
-            {
-              "column": {
-                "name": "episode_id",
-                "valueNumeric": "1"
-              }
-            },
-            {
-              "column": {
-                "name": "title",
-                "value": "Yesterday's Jam"
-              }
-            },
-            {
-              "column": {
-                "name": "air_date",
-                "valueDate": "2023-04-03T08:46:23.456"
-              }
+  ```json
+  "changes": [
+    {
+      "insert": {
+        "tableName": "episodes",
+        "columns": [
+          {
+            "column": {
+              "name": "series_id",
+              "valueNumeric": "1"
             }
-          ]
-        }
+          },
+          {
+            "column": {
+              "name": "season_id",
+              "valueNumeric": "1"
+            }
+          },
+          {
+            "column": {
+              "name": "episode_id",
+              "valueNumeric": "1"
+            }
+          },
+          {
+            "column": {
+              "name": "title",
+              "value": "Yesterday's Jam"
+            }
+          },
+          {
+            "column": {
+              "name": "air_date",
+              "valueDate": "2023-04-03T08:46:23.456"
+            }
+          }
+        ]
       }
-    ]
-    ```
+    }
+  ]
+  ```
 
 - yaml
 

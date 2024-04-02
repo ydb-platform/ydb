@@ -18,7 +18,7 @@ The `сreateTable` changeset is responsible for creating a table. The descriptio
 
 {% note info %}
 
-You can also explicitly specify the original type name, such as `Int32`, `Json`, `Json Document`, `Bytes`, or `Interval`. However, in this case, the schema won't be portable.
+You can also explicitly specify the original type name, such as `Int32`, `Json`, `JsonDocument`, `Bytes`, or `Interval`. However, in this case, the schema won't be portable.
 
 {% endnote %}
 
@@ -207,49 +207,49 @@ Asynchronous indexes should be created using [native SQL migrations](https://doc
   </insert>
   ```
 
-  - json
+- json
   
-    ```json
-    "changes": [
-      {
-        "insert": {
-          "tableName": "episodes",
-          "columns": [
-            {
-              "column": {
-                "name": "series_id",
-                "valueNumeric": "1"
-              }
-            },
-            {
-              "column": {
-                "name": "season_id",
-                "valueNumeric": "1"
-              }
-            },
-            {
-              "column": {
-                "name": "episode_id",
-                "valueNumeric": "1"
-              }
-            },
-            {
-              "column": {
-                "name": "title",
-                "value": "Yesterday's Jam"
-              }
-            },
-            {
-              "column": {
-                "name": "air_date",
-                "valueDate": "2023-04-03T08:46:23.456"
-              }
+  ```json
+  "changes": [
+    {
+      "insert": {
+        "tableName": "episodes",
+        "columns": [
+          {
+            "column": {
+              "name": "series_id",
+              "valueNumeric": "1"
             }
-          ]
-        }
+          },
+          {
+            "column": {
+              "name": "season_id",
+              "valueNumeric": "1"
+            }
+          },
+          {
+            "column": {
+              "name": "episode_id",
+              "valueNumeric": "1"
+            }
+          },
+          {
+            "column": {
+              "name": "title",
+              "value": "Yesterday's Jam"
+            }
+          },
+          {
+            "column": {
+              "name": "air_date",
+              "valueDate": "2023-04-03T08:46:23.456"
+            }
+          }
+        ]
       }
-    ]
-    ```
+    }
+  ]
+  ```
 
 - yaml
 

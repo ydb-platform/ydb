@@ -1352,7 +1352,6 @@ keyword_compat: (
   | RESPECT
   | RESTRICT
   | RESULT
-//  | RETURNING
   | REVERT
   | REVOKE
   | RIGHT

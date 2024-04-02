@@ -22,11 +22,12 @@ public:
         ResultBatch.Cut(limit);
     }
 
-    const arrow::RecordBatch& GetResultBatch() const {
+    const arrow::Table& GetResultBatch() const {
         return *ResultBatch.GetRecordBatch();
     }
 
-    const std::shared_ptr<arrow::RecordBatch>& GetResultBatchPtrVerified() const {
+    const std::shared_ptr<arrow::Table>& GetResultBatchPtrVerified() const {
+        AFL_VERIFY(ResultBatch.GetRecordBatch());
         return ResultBatch.GetRecordBatch();
     }
 

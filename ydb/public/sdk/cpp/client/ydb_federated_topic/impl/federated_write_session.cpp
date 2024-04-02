@@ -60,8 +60,10 @@ void TFederatedWriteSessionImpl::Start() {
         Y_UNUSED(f);
         if (auto self = selfCtx->LockShared()) {
             with_lock(self->Lock) {
-                self->FederationState = self->Observer->GetState();
-                self->OnFederatedStateUpdateImpl();
+                if (!self->Closing) {
+                    self->FederationState = self->Observer->GetState();
+                    self->OnFederatedStateUpdateImpl();
+                }
             }
         }
     });
@@ -111,7 +113,9 @@ void TFederatedWriteSessionImpl::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db)
         .SessionClosedHandler([selfCtx = SelfContext](const NTopic::TSessionClosedEvent & ev) {
             if (auto self = selfCtx->LockShared()) {
                 with_lock(self->Lock) {
-                    self->ClientEventsQueue->PushEvent(ev);
+                    if (!self->Closing) {
+                        self->CloseImpl(ev);
+                    }
                 }
             }
         });
@@ -305,17 +309,25 @@ bool TFederatedWriteSessionImpl::PrepareDeferredWrite(TDeferredWrite& deferred) 
     return true;
 }
 
-void TFederatedWriteSessionImpl::CloseImpl(EStatus statusCode, NYql::TIssues&& issues) {
+void TFederatedWriteSessionImpl::CloseImpl(EStatus statusCode, NYql::TIssues&& issues, TDuration timeout) {
+    CloseImpl(TPlainStatus(statusCode, std::move(issues)), timeout);
+}
+
+void TFederatedWriteSessionImpl::CloseImpl(NTopic::TSessionClosedEvent const& ev, TDuration timeout) {
+    if (Closing) {
+        return;
+    }
     Closing = true;
     if (Subsession) {
-        Subsession->Close(TDuration::Zero());
+        Subsession->Close(timeout);
     }
-    ClientEventsQueue->Close(TSessionClosedEvent(statusCode, std::move(issues)));
+    ClientEventsQueue->Close(ev);
+    NTopic::Cancel(UpdateStateDelayContext);
 }
 
 bool TFederatedWriteSessionImpl::Close(TDuration timeout) {
-    if (Subsession) {
-        return Subsession->Close(timeout);
+    with_lock (Lock) {
+        CloseImpl(EStatus::SUCCESS, {}, timeout);
     }
     return true;
 }

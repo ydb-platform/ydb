@@ -86,7 +86,8 @@ private:
     void WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& message);
     bool PrepareDeferredWrite(TDeferredWrite& deferred);
 
-    void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
+    void CloseImpl(EStatus statusCode, NYql::TIssues&& issues, TDuration timeout = TDuration::Zero());
+    void CloseImpl(NTopic::TSessionClosedEvent const& ev, TDuration timeout = TDuration::Zero());
 
     TStringBuilder GetLogPrefix() const;
 

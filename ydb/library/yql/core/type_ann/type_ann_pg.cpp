@@ -915,24 +915,14 @@ IGraphTransformer::TStatus PgAggWrapper(const TExprNode::TPtr& input, TExprNode:
 }
 
 IGraphTransformer::TStatus PgNullIfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
-    auto pred = ctx.Expr.Builder(input->Pos())
-        .Callable("Coalesce")
-            .Callable(0, "FromPg")
-                .Callable( 0, "PgOp")
-                    .Atom(0, "=")
-                    .Add(1, input->Child(0))
-                    .Add(2, input->Child(1))
-                .Seal()
-            .Seal()
-            .Callable( 1, "Bool")
-                .Atom(0, "false")
-            .Seal()
-        .Seal().Build();
-    const NPg::TTypeDesc* commonType;
+
     TVector<ui32> types(2);
+    bool replaced = false;
+
     for (ui32 i = 0; i < 2; ++i) {
         auto* item = input->Child(i);
         auto type = item->GetTypeAnn();
@@ -942,8 +932,20 @@ IGraphTransformer::TStatus PgNullIfWrapper(const TExprNode::TPtr& input, TExprNo
         if (!ExtractPgType(type, argType, convertToPg, pos, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
+
+        if (convertToPg) {
+            replaced = true;
+            input->ChildRef(i) = ctx.Expr.NewCallable(input->Child(2)->Pos(), "ToPg", { input->ChildPtr(i) });
+        }
+
         types[i] = argType;
     }
+
+    if (replaced) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    const NPg::TTypeDesc* commonType;
     if (const auto issue = NPg::LookupCommonType(types,
         [&input, &ctx](size_t i) {
             return ctx.Expr.GetPosition(input->Child(i)->Pos());
@@ -953,17 +955,13 @@ IGraphTransformer::TStatus PgNullIfWrapper(const TExprNode::TPtr& input, TExprNo
         return IGraphTransformer::TStatus::Error;
     }
 
-    auto resultOutput = ctx.Expr.Builder(input->Pos())
-        .Callable("If")
-            .Add(0, pred)
-            .Callable(1, "Null").Seal()
-            .Add(2, input->Child(0))
-        .Seal().Build();
-    if (types[0] != commonType->TypeId) {
-        resultOutput = WrapWithPgCast(std::move(resultOutput), commonType->TypeId, ctx.Expr);
+    if (commonType->TypeId != types[0]) {
+        input->ChildRef(0) = WrapWithPgCast(std::move(input->ChildRef(0)), commonType->TypeId, ctx.Expr);
+        return IGraphTransformer::TStatus::Repeat;
     }
-    output = resultOutput;
-    return IGraphTransformer::TStatus::Repeat;
+    
+    input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(commonType->TypeId));
+    return IGraphTransformer::TStatus::Ok;
 }
 
 IGraphTransformer::TStatus PgQualifiedStarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {

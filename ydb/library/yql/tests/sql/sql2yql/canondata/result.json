@@ -11362,9 +11362,9 @@
     ],
     "test_sql2yql.test[pg-nullif]": [
         {
-            "checksum": "3ed0174cbb26b72882ce6458f12bc4df",
-            "size": 579,
-            "uri": "https://{canondata_backend}/1931696/984849471ca01b0355dede8f7fbdf8a2230dff70/resource.tar.gz#test_sql2yql.test_pg-nullif_/sql.yql"
+            "checksum": "837cf57df36e37931f6588e2e1c40f88",
+            "size": 709,
+            "uri": "https://{canondata_backend}/1784826/8d8e9a66bc4fe3a521aa6cfc407ae7d62d9ae91d/resource.tar.gz#test_sql2yql.test_pg-nullif_/sql.yql"
         }
     ],
     "test_sql2yql.test[pg-order_by_agg_extra_for_keys]": [

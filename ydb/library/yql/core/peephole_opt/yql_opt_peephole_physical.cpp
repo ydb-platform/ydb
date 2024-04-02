@@ -2625,6 +2625,28 @@ TExprNode::TPtr ExpandPgArrayOp(const TExprNode::TPtr& input, TExprContext& ctx)
         .Build();
 }
 
+TExprNode::TPtr ExpandPgNullIf(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto pred = ctx.Builder(input->Pos())
+        .Callable("Coalesce")
+            .Callable(0, "FromPg")
+                .Callable( 0, "PgOp")
+                    .Atom(0, "=")
+                    .Add(1, input->Child(0))
+                    .Add(2, input->Child(1))
+                .Seal()
+            .Seal()
+            .Callable( 1, "Bool")
+                .Atom(0, "false")
+            .Seal()
+        .Seal().Build();
+    return ctx.Builder(input->Pos())
+        .Callable("If")
+            .Add(0, pred)
+            .Callable(1, "Null").Seal()
+            .Add(2, input->Child(0))
+        .Seal().Build();
+}
+
 template <bool Flat, bool List>
 TExprNode::TPtr ExpandContainerIf(const TExprNode::TPtr& input, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content();
@@ -7868,6 +7890,7 @@ struct TPeepHoleRules {
         {"Contains", &RewriteSearchByKeyForTypesMismatch<true>},
         {"ListHas", &ExpandListHas},
         {"PgAnyResolvedOp", &ExpandPgArrayOp},
+        {"PgNullIf", &ExpandPgNullIf},
         {"PgAllResolvedOp", &ExpandPgArrayOp},
         {"Map", &CleckClosureOnUpperLambdaOverList},
         {"OrderedMap", &CleckClosureOnUpperLambdaOverList},

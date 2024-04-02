@@ -537,7 +537,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             THashMap<TString, NScheme::TTypeInfo> cc;
             cc["json_data"] = TTypeInfo(NTypeIds::JsonDocument);
             auto convertResult = NArrow::ConvertColumns(batch, cc);
-            UNIT_ASSERT_C(convertResult.ok(), convertResult.ToString);
+            UNIT_ASSERT_C(convertResult.ok(), convertResult.status().ToString());
             batch = *convertResult;
             Cerr << batch->ToString() << Endl;
         }
@@ -731,7 +731,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             THashMap<TString, NScheme::TTypeInfo> cc;
             cc["json_data"] = TTypeInfo(NTypeIds::JsonDocument);
             auto convertResult = NArrow::ConvertColumns(batch, cc);
-            UNIT_ASSERT_C(convertResult.ok(), convertResult.ToString);
+            UNIT_ASSERT_C(convertResult.ok(), convertResult.status().ToString());
             batch = *convertResult;
             Cerr << batch->ToString() << Endl;
         }

@@ -52,7 +52,7 @@ public:
         const bool WithSpilling;
         const TMaybe<NKikimrKqp::TRlPath>& RlPath;
         NWilson::TSpan& ExecuterSpan;
-        TVector<NKikimrKqp::TKqpNodeResources>&& ResourcesSnapshot;
+        TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
         const bool UseDataQueryPool;
         const bool LocalComputeTasks;

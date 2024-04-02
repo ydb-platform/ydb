@@ -53,10 +53,6 @@ namespace NKikimr::NConfig {
 constexpr TStringBuf NODE_KIND_YDB = "ydb";
 constexpr TStringBuf NODE_KIND_YQ = "yq";
 
-constexpr TStringBuf WORKLOAD_HYBRID = "hybrid";
-constexpr TStringBuf WORKLOAD_ANALYTICAL = "analytical";
-constexpr TStringBuf WORKLOAD_OPERATIONAL = "operational";
-
 constexpr static ui32 DefaultLogLevel = NActors::NLog::PRI_WARN; // log settings
 constexpr static ui32 DefaultLogSamplingLevel = NActors::NLog::PRI_DEBUG; // log settings
 constexpr static ui32 DefaultLogSamplingRate = 0; // log settings
@@ -330,7 +326,7 @@ struct TCommonAppOptions {
     bool SysLogEnabled = false;
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
-    TString Workload = TString(WORKLOAD_HYBRID); 
+    EWorkload Workload = EWorkload::Hybrid; 
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
@@ -422,8 +418,7 @@ struct TCommonAppOptions {
         opts.AddLongOption("tiny-mode", "Start in a tiny mode")
             .NoArgument().SetFlag(&TinyMode);
 
-        opts.AddLongOption("workload", Sprintf("Workload to be served by this node, allowed values are {'%s', '%s', '%s'}",
-                           WORKLOAD_HYBRID.data(), WORKLOAD_ANALYTICAL.data(), WORKLOAD_OPERATIONAL.data()))
+        opts.AddLongOption("workload", Sprintf("Workload to be served by this node, allowed values are %s", GetEnumAllNames<EWorkload>().data()))
             .RequiredArgument("NAME").StoreResult(&Workload);
     }
 
@@ -624,18 +619,16 @@ struct TCommonAppOptions {
         }
 
         if (TenantName) {
-            if (Workload == WORKLOAD_OPERATIONAL) {
-                ApplyDisableColumnShards(appConfig, ConfigUpdateTracer);
-            } else if (Workload == WORKLOAD_ANALYTICAL) {
-                ApplyEnableOnlyColumnShards(appConfig, ConfigUpdateTracer);
-            } else if (Workload == WORKLOAD_HYBRID) {
-                // default
-            } else {
-                ythrow yexception() << "wrong '--workload' value '" << Workload
-                                    << "', allowed values are {'"
-                                    << WORKLOAD_HYBRID << "', '"
-                                    << WORKLOAD_ANALYTICAL << "', '"
-                                    << WORKLOAD_OPERATIONAL << "'}";
+            switch (Workload) {
+                case EWorkload::Operational:
+                    ApplyDisableColumnShards(appConfig, ConfigUpdateTracer);
+                    break;
+                case EWorkload::Analyitical:
+                    ApplyEnableOnlyColumnShards(appConfig, ConfigUpdateTracer);
+                    break;
+                case EWorkload::Hybrid:
+                    // default, do nothing 
+                    break;
             }
         }
     }

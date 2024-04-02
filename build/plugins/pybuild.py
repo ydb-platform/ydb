@@ -12,6 +12,7 @@ YA_IDE_VENV_VAR = 'YA_IDE_VENV'
 PY_NAMESPACE_PREFIX = 'py/namespace'
 BUILTIN_PROTO = 'builtin_proto'
 DEFAULT_FLAKE8_FILE_PROCESSING_TIME = "1.5"  # in seconds
+DEFAULT_BLACK_FILE_PROCESSING_TIME = "1.5"  # in seconds
 
 
 def _split_macro_call(macro_call, data, item_size, chunk_size=1024):
@@ -227,6 +228,10 @@ def add_python_lint_checks(unit, py_ver, files):
             params = ['black', 'tools/black_linter/black_linter']
             params += ['FILES'] + resolved_files
             params += ['CONFIGS', black_cfg]
+            params += [
+                "FILE_PROCESSING_TIME",
+                unit.get("BLACK_FILE_PROCESSING_TIME") or DEFAULT_BLACK_FILE_PROCESSING_TIME,
+            ]
             unit.on_add_linter_check(params)
 
 

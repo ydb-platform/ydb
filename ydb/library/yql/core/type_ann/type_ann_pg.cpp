@@ -463,6 +463,9 @@ const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNo
     case NUdf::EDataSlot::Timestamp:
         pgType = "timestamp";
         break;
+    case NUdf::EDataSlot::Interval:
+        pgType = "interval";
+        break;
     default:
         ctx.AddError(TIssue(ctx.GetPosition(pos),
             TStringBuilder() << "Unsupported type: " << dataType->GetName()));

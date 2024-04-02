@@ -95,6 +95,8 @@ TDqConfiguration::TDqConfiguration() {
                 EnableDqReplicate = true;
             }
         });
+
+    REGISTER_SETTING(*this, _MaxAttachmentsSize);
 }
 
 } // namespace NYql

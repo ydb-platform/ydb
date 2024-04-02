@@ -1384,7 +1384,7 @@ bool ValidateCompressionForOutput(std::string_view format, std::string_view comp
 
 bool ValidateFormatForInput(
     std::string_view format,
-    const TStructExprType* schemaSructRowType,
+    const TStructExprType* schemaStructRowType,
     const std::vector<TString>& partitionedBy,
     TExprContext& ctx) {
     if (format.empty()) {
@@ -1397,12 +1397,12 @@ bool ValidateFormatForInput(
         return false;
     }
     
-    if (schemaSructRowType && format == TStringBuf("raw")) {
+    if (schemaStructRowType && format == TStringBuf("raw")) {
         TSet<TString> partitionedByColumns{partitionedBy.begin(), partitionedBy.end()};
         ui64 realSchemaRowCount = 0;
         const TTypeAnnotationNode* rowType= nullptr; 
 
-        for (const TItemExprType* item : schemaSructRowType->GetItems()) {
+        for (const TItemExprType* item : schemaStructRowType->GetItems()) {
             if (partitionedByColumns.contains(item->GetName())) {
                 continue;
             }

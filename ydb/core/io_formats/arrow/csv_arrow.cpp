@@ -5,6 +5,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/value_parsing.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NFormats {
 
@@ -42,7 +43,30 @@ public:
 
 }
 
-TArrowCSV::TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, bool header, const std::set<std::string>& notNullColumns)
+arrow::Result<TArrowCSV> TArrowCSV::Create(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, bool header, const std::set<std::string>& notNullColumns) {
+        TVector<TString> errors;
+        TColummns convertedColumns;
+        convertedColumns.reserve(columns.size());
+        for (auto& [name, type] : columns) {
+            const auto arrowType = NArrow::GetArrowType(type);
+            if (!arrowType.ok()) {
+                errors.emplace_back("column " + name + ": " + arrowType.status().ToString());
+                continue;
+            }
+            const auto csvArrowType = NArrow::GetCSVArrowType(type);
+            if (!csvArrowType.ok()) {
+                errors.emplace_back("column " + name + ": " + csvArrowType.status().ToString());
+                continue;
+            }
+            convertedColumns.emplace_back(name, *arrowType, *csvArrowType);
+        }
+        if (!errors.empty()) {
+            return arrow::Status::TypeError(ErrorPrefix() + "columns errors: " + JoinSeq("; ", errors));
+        }
+        return TArrowCSV(convertedColumns, header, notNullColumns);
+}
+
+TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::string>& notNullColumns)
     : ReadOptions(arrow::csv::ReadOptions::Defaults())
     , ParseOptions(arrow::csv::ParseOptions::Defaults())
     , ConvertOptions(arrow::csv::ConvertOptions::Defaults())
@@ -60,21 +84,19 @@ TArrowCSV::TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& colu
         // !autogenerate + column_names.empty() => read from CSV
         ResultColumns.reserve(columns.size());
 
-        for (auto& [name, type] : columns) {
-            ResultColumns.push_back(name);
-            std::string columnName(name.data(), name.size());
-            ConvertOptions.column_types[columnName] = NArrow::GetCSVArrowType(type);
-            OriginalColumnTypes[columnName] = NArrow::GetArrowType(type);
+        for (const auto& col: columns) {
+            ResultColumns.push_back(col.Name);
+            ConvertOptions.column_types[col.Name] = col.CsvArrowType;
+            OriginalColumnTypes[col.Name] = col.ArrowType;
         }
     } else if (!columns.empty()) {
         // !autogenerate + !column_names.empty() => specified columns
         ReadOptions.column_names.reserve(columns.size());
 
-        for (auto& [name, type] : columns) {
-            std::string columnName(name.data(), name.size());
-            ReadOptions.column_names.push_back(columnName);
-            ConvertOptions.column_types[columnName] = NArrow::GetCSVArrowType(type);
-            OriginalColumnTypes[columnName] = NArrow::GetArrowType(type);
+        for (const auto& col: columns) {
+            ResultColumns.push_back(col.Name);
+            ConvertOptions.column_types[col.Name] = col.CsvArrowType;
+            OriginalColumnTypes[col.Name] = col.ArrowType;
         }
 #if 0
     } else {

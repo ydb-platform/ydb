@@ -174,7 +174,7 @@ private:
                 col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
             columns.emplace_back(col.GetName(), typeInfoMod.TypeInfo);
         }
-        return NArrow::MakeArrowSchema(columns);
+        return NArrow::TStatusValidator::GetValid(NArrow::MakeArrowSchema(columns));
     }
 };
 }

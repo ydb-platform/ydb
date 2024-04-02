@@ -10,16 +10,18 @@ from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 impo
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 
 import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
-from ydb.library.yql.providers.generic.connector.tests.utils.runner import Result, Runner
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings, GenericSettings
+
+from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
+from ydb.library.yql.providers.generic.connector.tests.utils.run.result import Result
 
 LOGGER = make_logger(__name__)
 
 
 class GatewaysConfRenderer:
-    template_: Final = '''
+    _template: Final = '''
 Generic {
     Connector {
         Endpoint {
@@ -99,6 +101,26 @@ Generic {
 }}
 {% endfor %}
 
+{% for cluster in generic_settings.ydb_clusters %}
+    ClusterMapping {
+        Kind: YDB
+        Name: "{{settings.ydb.cluster_name}}"
+        DatabaseName: "{{cluster.database}}"
+        Credentials {
+            basic {
+                username: "{{settings.ydb.username}}"
+                password: "{{settings.ydb.password}}"
+            }
+        }
+        Endpoint {
+            host: "{{settings.ydb.host_internal}}"
+            port: {{settings.ydb.port_internal}}
+        }
+        UseSsl: false
+        Protocol: NATIVE
+    }
+{% endfor %}
+
     DefaultSettings {
         Name: "DateTimeFormat"
         {% if generic_settings.date_time_format == EDateTimeFormat.STRING_FORMAT %}
@@ -107,7 +129,6 @@ Generic {
         Value: "YQL"
         {% endif %}
     }
-
 }
 
 Dq {
@@ -165,7 +186,7 @@ Dq {
 
     def __init__(self):
         self.template = jinja2.Environment(loader=jinja2.BaseLoader, undefined=jinja2.DebugUndefined).from_string(
-            self.template_
+            self._template
         )
         self.template.globals['EProtocol'] = EProtocol
         self.template.globals['EDateTimeFormat'] = EDateTimeFormat

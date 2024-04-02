@@ -93,3 +93,6 @@ class EndpointDeterminer:
             return out
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"docker-compose error: {e.output} (code {e.returncode})")
+
+    def get_container_name(self, service_name: str) -> str:
+        return self.docker_compose_yml_data['services'][service_name]['container_name']

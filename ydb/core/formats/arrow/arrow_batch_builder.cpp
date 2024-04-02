@@ -1,4 +1,5 @@
 #include "arrow_batch_builder.h"
+#include "switch/switch_type.h"
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
 namespace NKikimr::NArrow {
@@ -264,7 +265,7 @@ void TArrowBatchBuilder::ReserveData(ui32 columnNo, size_t size) {
     Y_ABORT_UNLESS(columnNo < YdbSchema.size());
     auto type = YdbSchema[columnNo].second;
 
-    SwitchYqlTypeToArrowType(type, [&](const auto& type) {
+    Y_ABORT_UNLESS(SwitchYqlTypeToArrowType(type, [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
 
@@ -275,7 +276,7 @@ void TArrowBatchBuilder::ReserveData(ui32 columnNo, size_t size) {
             Y_ABORT_UNLESS(status.ok());
         }
         return true;
-    });
+    }));
 }
 
 std::shared_ptr<arrow::RecordBatch> TArrowBatchBuilder::FlushBatch(bool reinitialize) {

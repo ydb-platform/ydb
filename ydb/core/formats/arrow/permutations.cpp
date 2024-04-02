@@ -181,7 +181,7 @@ std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& s
     return result;
 }
 
-bool THashConstructor::BuildHashUI64(std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName) {
+bool THashConstructor::BuildHashUI64(std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName) {
     if (fieldNames.size() == 0) {
         return false;
     }
@@ -194,26 +194,28 @@ bool THashConstructor::BuildHashUI64(std::shared_ptr<arrow::RecordBatch>& batch,
         }
         Y_ABORT_UNLESS(column);
         if (column->type()->id() == arrow::Type::UINT64 || column->type()->id() == arrow::Type::UINT32 || column->type()->id() == arrow::Type::INT64 || column->type()->id() == arrow::Type::INT32) {
-            batch = TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), hashFieldName, column));
+            batch = TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), std::make_shared<arrow::Field>(hashFieldName, column->type()), column));
             return true;
         }
     }
-    std::shared_ptr<arrow::Array> hashColumn = NArrow::NHash::TXX64(fieldNames, NArrow::NHash::TXX64::ENoColumnPolicy::Verify, 34323543).ExecuteToArray(batch, hashFieldName);
-    batch = TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), hashFieldName, hashColumn));
+    std::shared_ptr<arrow::Array> hashColumn = NArrow::NHash::TXX64(fieldNames, NArrow::NHash::TXX64::ENoColumnPolicy::Verify, 34323543)
+        .ExecuteToArray(batch, hashFieldName);
+    batch = TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), std::make_shared<arrow::Field>(hashFieldName, hashColumn->type()), 
+        std::make_shared<arrow::ChunkedArray>(hashColumn)));
     return true;
 }
 
 ui64 TShardedRecordBatch::GetMemorySize() const {
-    return NArrow::GetBatchMemorySize(RecordBatch);
+    return NArrow::GetTableMemorySize(RecordBatch);
 }
 
-TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch)
+TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::Table>& batch)
     : RecordBatch(batch)
 {
     AFL_VERIFY(RecordBatch);
 }
 
-TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch, std::vector<std::vector<ui32>>&& splittedByShards)
+TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::Table>& batch, std::vector<std::vector<ui32>>&& splittedByShards)
     : RecordBatch(batch)
     , SplittedByShards(std::move(splittedByShards))
 {
@@ -221,13 +223,13 @@ TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatc
     AFL_VERIFY(SplittedByShards.size());
 }
 
-std::vector<std::shared_ptr<arrow::RecordBatch>> TShardingSplitIndex::Apply(const std::shared_ptr<arrow::RecordBatch>& input) {
+std::vector<std::shared_ptr<arrow::Table>> TShardingSplitIndex::Apply(const std::shared_ptr<arrow::Table>& input) {
     AFL_VERIFY(input);
     AFL_VERIFY(input->num_rows() == RecordsCount);
     auto permutation = BuildPermutation();
-    auto resultBatch = NArrow::TStatusValidator::GetValid(arrow::compute::Take(input, *permutation)).record_batch();
+    auto resultBatch = NArrow::TStatusValidator::GetValid(arrow::compute::Take(input, *permutation)).table();
     AFL_VERIFY(resultBatch->num_rows() == RecordsCount);
-    std::vector<std::shared_ptr<arrow::RecordBatch>> result;
+    std::vector<std::shared_ptr<arrow::Table>> result;
     ui64 startIndex = 0;
     for (auto&& i : Remapping) {
         result.emplace_back(resultBatch->Slice(startIndex, i.size()));
@@ -237,7 +239,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> TShardingSplitIndex::Apply(cons
     return result;
 }
 
-NKikimr::NArrow::TShardedRecordBatch TShardingSplitIndex::Apply(const ui32 shardsCount, const std::shared_ptr<arrow::RecordBatch>& input, const std::string& hashColumnName) {
+NKikimr::NArrow::TShardedRecordBatch TShardingSplitIndex::Apply(const ui32 shardsCount, const std::shared_ptr<arrow::Table>& input, const std::string& hashColumnName) {
     AFL_VERIFY(input);
     if (shardsCount == 1) {
         return TShardedRecordBatch(input);
@@ -281,6 +283,12 @@ std::shared_ptr<arrow::RecordBatch> ReverseRecords(const std::shared_ptr<arrow::
     AFL_VERIFY(batch);
     auto permutation = NArrow::MakePermutation(batch->num_rows(), true);
     return NArrow::TStatusValidator::GetValid(arrow::compute::Take(batch, permutation)).record_batch();
+}
+
+std::shared_ptr<arrow::Table> ReverseRecords(const std::shared_ptr<arrow::Table>& batch) {
+    AFL_VERIFY(batch);
+    auto permutation = NArrow::MakePermutation(batch->num_rows(), true);
+    return NArrow::TStatusValidator::GetValid(arrow::compute::Take(batch, permutation)).table();
 }
 
 }

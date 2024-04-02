@@ -38,7 +38,7 @@ public:
         for (size_t i = 0; i < Columns.size(); ++i) {
             arrow::ArrayBuilder& builder = *Columns[i];
             for (auto& [srcColumn, rowPosition] : Rows) {
-                Append(builder, *srcColumn->at(i), rowPosition);
+                Y_ABORT_UNLESS(Append(builder, *srcColumn->at(i), rowPosition));
             }
         }
         Rows.clear();

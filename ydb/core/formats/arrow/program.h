@@ -44,6 +44,7 @@ struct TDatumBatch {
 
     arrow::Status AddColumn(const std::string& name, arrow::Datum&& column);
     arrow::Result<arrow::Datum> GetColumnByName(const std::string& name) const;
+    std::shared_ptr<arrow::Table> ToTable() const;
     std::shared_ptr<arrow::RecordBatch> ToRecordBatch() const;
     static std::shared_ptr<TDatumBatch> FromRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch);
     static std::shared_ptr<TDatumBatch> FromTable(const std::shared_ptr<arrow::Table>& batch);
@@ -355,7 +356,7 @@ public:
         return sb;
     }
 
-    std::set<std::string> GetColumnsInUsage() const;
+    std::set<std::string> GetColumnsInUsage(const bool originalOnly = false) const;
 
     const std::set<ui32>& GetFilterOriginalColumnIds() const;
 
@@ -405,6 +406,7 @@ public:
     }
 
     std::shared_ptr<NArrow::TColumnFilter> BuildFilter(const std::shared_ptr<arrow::Table>& t) const;
+    std::shared_ptr<NArrow::TColumnFilter> BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& t) const;
 };
 
 struct TProgram {
@@ -418,17 +420,21 @@ public:
         : Steps(std::move(steps))
     {}
 
-    arrow::Status ApplyTo(std::shared_ptr<arrow::RecordBatch>& batch, arrow::compute::ExecContext* ctx) const {
-        try {
-            for (auto& step : Steps) {
-                auto status = step->Apply(batch, ctx);
-                if (!status.ok()) {
-                    return status;
+    arrow::Status ApplyTo(std::shared_ptr<arrow::Table>& table, arrow::compute::ExecContext* ctx) const {
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches = NArrow::SliceToRecordBatches(table);
+        for (auto&& i : batches) {
+            try {
+                for (auto& step : Steps) {
+                    auto status = step->Apply(i, ctx);
+                    if (!status.ok()) {
+                        return status;
+                    }
                 }
+            } catch (const std::exception& ex) {
+                return arrow::Status::Invalid(ex.what());
             }
-        } catch (const std::exception& ex) {
-            return arrow::Status::Invalid(ex.what());
         }
+        table = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));
         return arrow::Status::OK();
     }
 
@@ -447,7 +453,7 @@ public:
 };
 
 inline arrow::Status ApplyProgram(
-    std::shared_ptr<arrow::RecordBatch>& batch,
+    std::shared_ptr<arrow::Table>& batch,
     const TProgram& program,
     arrow::compute::ExecContext* ctx = nullptr)
 {

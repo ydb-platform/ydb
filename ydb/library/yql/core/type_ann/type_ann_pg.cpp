@@ -914,6 +914,58 @@ IGraphTransformer::TStatus PgAggWrapper(const TExprNode::TPtr& input, TExprNode:
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus PgNullIfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    auto pred = ctx.Expr.Builder(input->Pos())
+        .Callable("Coalesce")
+            .Callable(0, "FromPg")
+                .Callable( 0, "PgOp")
+                    .Atom(0, "=")
+                    .Add(1, input->Child(0))
+                    .Add(2, input->Child(1))
+                .Seal()
+            .Seal()
+            .Callable( 1, "Bool")
+                .Atom(0, "false")
+            .Seal()
+        .Seal().Build();
+    const NPg::TTypeDesc* commonType;
+    TVector<ui32> types(2);
+    for (ui32 i = 0; i < 2; ++i) {
+        auto* item = input->Child(i);
+        auto type = item->GetTypeAnn();
+        ui32 argType;
+        bool convertToPg;
+        const auto pos = item->Pos();
+        if (!ExtractPgType(type, argType, convertToPg, pos, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        types[i] = argType;
+    }
+    if (const auto issue = NPg::LookupCommonType(types,
+        [&input, &ctx](size_t i) {
+            return ctx.Expr.GetPosition(input->Child(i)->Pos());
+        }, commonType))
+    {
+        ctx.Expr.AddError(*issue);
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto resultOutput = ctx.Expr.Builder(input->Pos())
+        .Callable("If")
+            .Add(0, pred)
+            .Callable(1, "Null").Seal()
+            .Add(2, input->Child(0))
+        .Seal().Build();
+    if (types[0] != commonType->TypeId) {
+        resultOutput = WrapWithPgCast(std::move(resultOutput), commonType->TypeId, ctx.Expr);
+    }
+    output = resultOutput;
+    return IGraphTransformer::TStatus::Repeat;
+}
+
 IGraphTransformer::TStatus PgQualifiedStarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 1, ctx.Expr)) {

@@ -51,7 +51,7 @@ void TStatusCodeByScopeCounters::IncByScopeAndStatusCode(const TString& scope, N
     with_lock (Mutex) {
         auto it = StatusCodeCountersByScope.find(scope);
         if (it == StatusCodeCountersByScope.end()) {
-            it = StatusCodeCountersByScope.insert({scope, MakeIntrusive<TStatusCodeCounters>(Counters->GetSubgroup("scope", scope))}).first;
+            it = StatusCodeCountersByScope.insert({scope, MakeIntrusive<TStatusCodeCounters>(SubComponentCounters->GetSubgroup("scope", scope))}).first;
         }
         it->second->IncByStatusCode(statusCode, issues);
     }

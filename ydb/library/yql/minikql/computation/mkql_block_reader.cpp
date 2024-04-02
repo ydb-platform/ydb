@@ -198,7 +198,7 @@ private:
 template <typename TTzDate, bool Nullable>
 class TTzDateBlockItemConverter : public IBlockItemConverter {
 public:
-    using TLayout = NYql::NUdf::TDataType<TTzDate>::TLayout;
+    using TLayout = typename NYql::NUdf::TDataType<TTzDate>::TLayout;
 
     NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
         Y_UNUSED(holderFactory);

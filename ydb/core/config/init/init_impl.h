@@ -625,6 +625,7 @@ struct TCommonAppOptions {
                     break;
                 case EWorkload::Analyitical:
                     ApplyEnableOnlyColumnShards(appConfig, ConfigUpdateTracer);
+                    ApplyDontStartGrpcProxy(appConfig, ConfigUpdateTracer);
                     break;
                 case EWorkload::Hybrid:
                     // default, do nothing 
@@ -673,6 +674,11 @@ struct TCommonAppOptions {
         }
 
         configUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::DynamicNodeConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+    }
+
+    void ApplyDontStartGrpcProxy(NKikimrConfig::TAppConfig& appConfig, IConfigUpdateTracer& configUpdateTracer) const {
+        appConfig.MutableGRpcConfig()->SetStartGRpcProxy(false);
+        configUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
     }
 
     ui32 DeduceNodeId(const NKikimrConfig::TAppConfig& appConfig, IEnv& env) const {

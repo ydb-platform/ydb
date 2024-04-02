@@ -136,7 +136,7 @@ namespace {
     struct TUuidHolder {
         union {
             ui16 Array[8];
-            ui64 Halves[2];
+            char Str[16];
         } Buf;
     };
 
@@ -188,11 +188,7 @@ namespace {
     }
 
     TStringBuf UuidToStringBuf(const TUuidHolder& uuid) {
-        char uuidBuf[16];
-
-        NUuid::UuidHalfsToBytes(uuidBuf, 16, uuid.Buf.Halves[1], uuid.Buf.Halves[0]);
-
-        return TStringBuf(uuidBuf, 16);
+        return TStringBuf(uuid.Buf.Str, 16);
     }
 
     template <typename T, typename U = T>
@@ -385,6 +381,8 @@ bool MakeCell(TCell& cell, const NJson::TJsonValue& value, NScheme::TTypeInfo ty
             return TCellMaker<TMaybe<TString>, TStringBuf>::Make(cell, value.GetStringSafe(), pool, err, &DyNumberToStringBuf);
         case NScheme::NTypeIds::Decimal:
             return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value.GetStringSafe(), pool, err, &Int128ToPair);
+        case NScheme::NTypeIds::Uuid:
+            return TCellMaker<TUuidHolder, TStringBuf>::Make(cell, value.GetStringSafe(), pool, err, &UuidToStringBuf);
         default:
             return false;
         }

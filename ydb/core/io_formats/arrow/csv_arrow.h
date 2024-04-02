@@ -50,7 +50,13 @@ public:
     void SetNullValue(const TString& null = "");
 
 private:
-    TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, bool header, const std::set<std::string>& notNullColumns);
+    struct TColumnInfo {
+        TString Name;
+        std::shared_ptr<arrow::DataType> ArrowType;
+        std::shared_ptr<arrow::DataType>CsvArrowType;
+    };
+    using TColummns = TVector<TColumnInfo>;
+    TArrowCSV(const TColummns& columns, bool header, const std::set<std::string>& notNullColumns);
     arrow::csv::ReadOptions ReadOptions;
     arrow::csv::ParseOptions ParseOptions;
     arrow::csv::ConvertOptions ConvertOptions;

@@ -5783,23 +5783,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
         testHelper.CreateTable(testTable, NYdb::EStatus::SCHEME_ERROR);
-/*
-        {
-            NYdb::TValueBuilder rows;
-            rows.BeginList();
-            for (size_t i = 0; i < 10; ++i) {
-                rows.AddListItem()
-                    .BeginStruct()
-                    .AddMember("id").Int32(i)
-                    .AddMember("level").Uuid(TUuidValue(i, i))
-                    .EndStruct();
-            }
-            rows.EndList();
-            auto result = testHelper.GetKikimr().GetTableClient().BulkUpsert("/Root/ColumnTableTest", rows.Build()).GetValueSync();
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-            result.Out(Cerr);
-        }
-*/
     }
     Y_UNIT_TEST(DropColumn) {
         TKikimrSettings runnerSettings;

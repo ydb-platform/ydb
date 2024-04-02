@@ -446,7 +446,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         // There is no point in having more than 1 active garbage collection request at the moment
         constexpr static ui32 MaxGarbageCollectionsInFlight = 1;
 
-        std::shared_ptr<NJaegerTracing::TThrottler> TracingThrottler;
+        TIntrusivePtr<NJaegerTracing::TThrottler> TracingThrottler;
 
     public:
         TTabletWriter(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
@@ -457,7 +457,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 TIntervalGenerator garbageCollectIntervalGen,
                 TDuration scriptedRoundDuration, TVector<TReqInfo>&& scriptedRequests,
                 const TInitialAllocation& initialAllocation,
-                const std::shared_ptr<NJaegerTracing::TThrottler>& tracingThrottler)
+                const TIntrusivePtr<NJaegerTracing::TThrottler>& tracingThrottler)
             : Self(self)
             , TagCounters(counters->GetSubgroup("tag", Sprintf("%" PRIu64, Self.Tag)))
             , Counters(TagCounters->GetSubgroup("channel", Sprintf("%" PRIu32, channel)))
@@ -1227,12 +1227,12 @@ public:
 
             TIntervalGenerator garbageCollectIntervalGen(profile.GetFlushIntervals());
 
-            std::shared_ptr<NJaegerTracing::TThrottler> tracingThrottler;
+            TIntrusivePtr<NJaegerTracing::TThrottler> tracingThrottler;
 
             ui32 throttlerRate = profile.GetTracingThrottlerRate();
             if (throttlerRate) {
-                tracingThrottler.reset(new NJaegerTracing::TThrottler(throttlerRate, profile.GetTracingThrottlerBurst(),
-                        TAppData::TimeProvider));
+                tracingThrottler = MakeIntrusive<NJaegerTracing::TThrottler>(throttlerRate, profile.GetTracingThrottlerBurst(),
+                        TAppData::TimeProvider);
             }
 
             for (const auto& tablet : profile.GetTablets()) {

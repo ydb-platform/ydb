@@ -1382,13 +1382,23 @@ bool ValidateCompressionForOutput(std::string_view format, std::string_view comp
     return false;
 }
 
-bool ValidateFormatForInput(std::string_view format, TExprContext& ctx) {
-    if (format.empty() || IsIn(FormatsForInput, format)) {
+bool ValidateFormatForInput(std::string_view format, const TStructExprType* schemaSructRowType, TExprContext& ctx) {
+    if (format.empty()) {
         return true;
     }
-    ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << format
-        << ". Use one of: " << JoinSeq(", ", FormatsForInput)));
-    return false;
+
+    if (!IsIn(FormatsForInput, format)) {
+        ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << format
+            << ". Use one of: " << JoinSeq(", ", FormatsForInput)));
+        return false;
+    }
+    
+    if (schemaSructRowType && format == TStringBuf("raw") && schemaSructRowType->GetSize() > 1) {
+        ctx.AddError(TIssue(TStringBuilder() << "Only one field in schema supported in raw format (you have " 
+            << schemaSructRowType->GetSize() << " fields)"));
+        return false;
+    }
+    return true;
 }
 
 bool ValidateFormatForOutput(std::string_view format, TExprContext& ctx) {

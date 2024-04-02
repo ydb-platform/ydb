@@ -345,7 +345,7 @@ public:
         }
 
         if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_Format), ctx) ||
-            !NCommon::ValidateFormatForInput(input->Child(TS3ParseSettings::idx_Format)->Content(), ctx))
+            !NCommon::ValidateFormatForInput(input->Child(TS3ParseSettings::idx_Format)->Content(), nullptr, ctx))
         {
             return TStatus::Error;
         }
@@ -426,12 +426,10 @@ public:
         TString projection;
         {
             TS3Object s3Object(input->Child(TS3ReadObject::idx_Object));
-            auto format = s3Object.Format().StringValue();
-
+            auto format = s3Object.Format().Ref().Content();
             const TStructExprType* structRowType = rowType->Cast<TStructExprType>();
 
-            if (format == "raw"sv && structRowType->GetSize() > 1) {
-                ctx.AddError(TIssue(ctx.GetPosition(rowTypeNode.Pos()), "Only one field (in schema) supported in raw format"));
+            if (!NCommon::ValidateFormatForInput(format, structRowType, ctx)) {
                 return TStatus::Error;
             }
             THashSet<TStringBuf> columns;
@@ -531,7 +529,7 @@ public:
         }
 
         const auto format = input->Child(TS3Object::idx_Format)->Content();
-        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) || !NCommon::ValidateFormatForInput(format, ctx)) {
+        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) || !NCommon::ValidateFormatForInput(format, nullptr, ctx)) {
             return TStatus::Error;
         }
 

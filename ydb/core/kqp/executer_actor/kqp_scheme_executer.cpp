@@ -110,7 +110,7 @@ public:
                         default:
                             YQL_ENSURE(false, "Unexpected operation type");
                     }
-                    tableDesc->SetName(CanonizePath(JoinPath({".tmp", SessionId, Database, tableDesc->GetPath(), tableDesc->GetName()})));
+                    tableDesc->SetName(CanonizePath(JoinPath({".tmp", "sessions", SessionId, Database, tableDesc->GetPath(), tableDesc->GetName()})));
                     tableDesc->SetPath(Database);
                     YQL_ENSURE(KqpTempTablesAgentActor != TActorId(),
                         "Create temp table with empty KqpTempTablesAgentActor");

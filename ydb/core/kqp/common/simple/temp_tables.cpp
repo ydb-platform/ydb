@@ -8,7 +8,7 @@ TKqpTempTablesState::FindInfo(const std::string_view& path, bool withSessionId) 
         return TempTables.find(path);
     }
 
-    const auto temporaryStoragePrefix = Database + "/.tmp/" + SessionId + "/";
+    const auto temporaryStoragePrefix = Database + "/.tmp/sessions/" + SessionId + "/";
 
     if (path.size() < temporaryStoragePrefix.size()) {
         return TempTables.end();

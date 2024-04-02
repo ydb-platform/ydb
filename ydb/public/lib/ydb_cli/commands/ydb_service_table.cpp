@@ -613,16 +613,26 @@ namespace {
             }
         } else if constexpr (std::is_same_v<TClient, NQuery::TQueryClient>) {
             if (params) {
+                Cerr << "HERE2" << Endl;
                 return client.StreamExecuteQuery(
                     query,
+<<<<<<< HEAD
                     (TxMode == "notx" ? NQuery::TTxControl::NoTx() : NQuery::TTxControl::BeginTx(txSettings).CommitTx()),
+=======
+                    NQuery::TTxControl::NoTx(),
+>>>>>>> 43abe4caf3 (sessions)
                     *params,
                     settings
                 );
             } else {
+                Cerr << "HERE3" << Endl;
                 return client.StreamExecuteQuery(
                     query,
+<<<<<<< HEAD
                     (TxMode == "notx" ? NQuery::TTxControl::NoTx() : NQuery::TTxControl::BeginTx(txSettings).CommitTx()),
+=======
+                    NQuery::TTxControl::NoTx(),
+>>>>>>> 43abe4caf3 (sessions)
                     settings
                 );
             }
@@ -919,9 +929,10 @@ int TCommandExplain::Run(TConfig& config) {
             settings.ExecMode(NQuery::EExecMode::Explain);
         }
 
+        Cerr << "HERE1" << Endl;
         auto result = client.StreamExecuteQuery(
             Query,
-            NQuery::TTxControl::BeginTx().CommitTx(),
+            NQuery::TTxControl::NoTx(),
             settings).GetValueSync();
         ThrowOnError(result);
 

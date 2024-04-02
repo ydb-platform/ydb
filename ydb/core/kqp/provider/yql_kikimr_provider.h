@@ -335,7 +335,7 @@ public:
             if (TempTablesState) {
                 auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
                 if (tempTableInfoIt != TempTablesState->TempTables.end()) {
-                    table = NKikimr::CanonizePath(NKikimr::JoinPath({TempTablesState->Database, ".tmp", TempTablesState->SessionId, tempTableInfoIt->first}));
+                    table = NKikimr::CanonizePath(NKikimr::JoinPath({TempTablesState->Database, ".tmp", "sessions", TempTablesState->SessionId, tempTableInfoIt->first}));
                 }
             }
 

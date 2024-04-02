@@ -1,5 +1,4 @@
 # CREATE TABLE
-# CREATE TABLE
 
 {% if feature_olap_tables %}
 

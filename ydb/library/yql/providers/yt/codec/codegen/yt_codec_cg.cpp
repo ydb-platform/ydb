@@ -179,14 +179,15 @@ public:
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
             CallInst::Create(funType, funcPtr, { typeConst, flagsConst, elemPtr, buf }, "", Block_);
         } else {
+            const auto flagsConst = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags);
             const auto funcAddr = ConstantInt::get(Type::getInt64Ty(context), (ui64)&NYql::NCommon::WriteYsonContainerValue);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {
-                Type::getInt64Ty(context), PointerType::getUnqual(valType),
+                Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(valType),
                 PointerType::getUnqual(Type::getInt8Ty(context))
             }, false);
 
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
-            CallInst::Create(funType, funcPtr, { typeConst, elemPtr, buf }, "", Block_);
+            CallInst::Create(funType, funcPtr, { typeConst, flagsConst, elemPtr, buf }, "", Block_);
         }
         if constexpr (!Flat) {
             TCodegenContext ctx(*Codegen_);

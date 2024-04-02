@@ -15,6 +15,7 @@ SET(ORIG_SOURCES
     mkql_block_agg_some.cpp
     mkql_block_agg_sum.cpp
     mkql_block_coalesce.cpp
+    mkql_block_exists.cpp
     mkql_block_if.cpp
     mkql_block_just.cpp
     mkql_block_logical.cpp

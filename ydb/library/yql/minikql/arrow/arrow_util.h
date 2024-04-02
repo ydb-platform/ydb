@@ -9,6 +9,7 @@
 #include <arrow/util/bitmap.h>
 
 #include <ydb/library/yql/minikql/mkql_node.h>
+#include <ydb/library/yql/minikql/arrow/mkql_bit_utils.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
 
 namespace NKikimr::NMiniKQL {
@@ -51,6 +52,12 @@ inline arrow::Datum MakeFalseArray(arrow::MemoryPool* pool, int64_t len) {
 
 inline arrow::Datum MakeTrueArray(arrow::MemoryPool* pool, int64_t len) {
     return MakeUint8Array(pool, 1, len);
+}
+
+inline arrow::Datum MakeBitmapArray(arrow::MemoryPool* pool, int64_t len, int64_t offset, const ui8* bitmap) {
+    std::shared_ptr<arrow::Buffer> data = ARROW_RESULT(arrow::AllocateBuffer(len, pool));
+    DecompressToSparseBitmap(data->mutable_data(), bitmap, offset, len);
+    return arrow::ArrayData::Make(arrow::uint8(), len, { std::shared_ptr<arrow::Buffer>{}, data });
 }
 
 template<typename T>

@@ -9,6 +9,7 @@ class TMergeTask: public IDataTasksProcessor::ITask {
 private:
     using TBase = IDataTasksProcessor::ITask;
     std::shared_ptr<arrow::RecordBatch> ResultBatch;
+    std::shared_ptr<arrow::Table> ResultBatch;
     std::shared_ptr<arrow::RecordBatch> LastPK;
     const NColumnShard::TCounterGuard Guard;
     std::shared_ptr<TSpecialReadContext> Context;

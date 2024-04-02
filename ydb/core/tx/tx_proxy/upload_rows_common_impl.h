@@ -1256,7 +1256,7 @@ private:
             RaiseIssue(NYql::TIssue(ErrorMessage));
         }
 
-        retrun ReplyWithResult(Status, ctx);
+        return ReplyWithResult(Status, ctx);
     }
 
     void ReplyWithError(::Ydb::StatusIds::StatusCode status, const TString& message, const TActorContext& ctx) {

@@ -1,8 +1,9 @@
 # App in Node.js
 
 This page contains a detailed description of the code of
-[basic-example-v2-with-query-service](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v2-with-query-service) and 
-[basic-example-v1-with-table-service](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v1-with-table-service) 
+[basic-example-v2-with-query-service](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v2-with-query-service)
+and
+[basic-example-v1-with-table-service](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v1-with-table-service)
 those are available as part of the {{ ydb-short-name }} [Node.js SDK](https://github.com/ydb-platform/ydb-nodejs-sdk).
 
 {% include [init.md](steps/01_init.md) %}
@@ -12,7 +13,7 @@ App code snippet for driver initialization:
 {% list tabs %}
 
 - Using connectionString
-    
+
   ```ts
   const authService = getCredentialsFromEnv();
   logger.debug('Driver initializing...');
@@ -23,9 +24,9 @@ App code snippet for driver initialization:
       process.exit(1);
   }
   ```
-  
+
 - Using endpoint and database
-    
+
   ```ts
   const authService = getCredentialsFromEnv();
   logger.debug('Driver initializing...');
@@ -36,12 +37,13 @@ App code snippet for driver initialization:
       process.exit(1);
   }
   ```
-    
+
 {% endlist %}
 
 {% note warning %}
 
-Many operations on YDB can be performed either through Table Service or Query Service. Both options are available in the documentation.
+Many operations on YDB can be performed either through Table Service or Query Service. Both options are available in the
+documentation.
 It is recommended to use Query Service when developing new software.
 
 {% endnote %}
@@ -51,7 +53,7 @@ App code snippet for creating a session:
 {% list tabs %}
 
 - Query Service
-    
+
   ```ts
   const result = await driver.queryClient.do({
       ...
@@ -62,13 +64,13 @@ App code snippet for creating a session:
   ```
 
 - Table Service
-    
+
   ```ts
   await driver.tableClient.withSession(async (session) => {
       ...
   });
   ```
-  
+
 {% endlist %}
 
 {% include [create_table.md](steps/02_create_table.md) %}
@@ -76,7 +78,7 @@ App code snippet for creating a session:
 {% list tabs %}
 
 - Query Service
-    
+
   ```ts
   async function createTables(driver: Driver, logger: Logger) {
       logger.info('Dropping old tables and create new ones...');
@@ -122,11 +124,11 @@ App code snippet for creating a session:
       });
   }
   ```
-    
+
 - Table Service
-    
+
   To create tables, use the `Session.CreateTable()` method:
-  
+
   ```ts
   async function createTables(session: Session, logger: Logger) {
       logger.info('Creating tables...');
@@ -205,10 +207,11 @@ App code snippet for creating a session:
       );
   }
   ```
-    
+
 {% endlist %}
 
-You can use the `TableSession.describeTable()` method to view information about the table structure and make sure that it was properly created:
+You can use the `TableSession.describeTable()` method to view information about the table structure and make sure that
+it was properly created:
 
 ```ts
 async function describeTable(session: Session, tableName: string, logger: Logger) {
@@ -232,37 +235,37 @@ Code snippet for data insert/update:
 {% list tabs %}
 
 - Query Service
-    
-    ```ts
-    async function upsertSimple(driver: Driver, logger: Logger): Promise<void> {
-        logger.info('Making an upsert...');
-        await driver.queryClient.do({
-            fn: async (session) => {
-                 await session.execute({
-                     text: `
-                        UPSERT INTO ${EPISODES_TABLE} (series_id, season_id, episode_id, title)
-                        VALUES (2, 6, 1, "TBD");`,
-               })
-            }
-        });
-        logger.info('Upsert completed.')
-    }
-    ```
-    
+
+  ```ts
+  async function upsertSimple(driver: Driver, logger: Logger): Promise<void> {
+      logger.info('Making an upsert...');
+      await driver.queryClient.do({
+          fn: async (session) => {
+               await session.execute({
+                   text: `
+                      UPSERT INTO ${EPISODES_TABLE} (series_id, season_id, episode_id, title)
+                      VALUES (2, 6, 1, "TBD");`,
+             })
+          }
+      });
+      logger.info('Upsert completed.')
+  }
+  ```
+
 - Table Service
-    
-    ```ts
-    async function upsertSimple(session: Session, logger: Logger): Promise<void> {
-        const query = `
-    ${SYNTAX_V1}
-    UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES
-    (2, 6, 1, "TBD");`;
-        logger.info('Making an upsert...');
-        await session.executeQuery(query);
-        logger.info('Upsert completed');
-    }
-    ```
-    
+
+  ```ts
+  async function upsertSimple(session: Session, logger: Logger): Promise<void> {
+      const query = `
+  ${SYNTAX_V1}
+  UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES
+  (2, 6, 1, "TBD");`;
+      logger.info('Making an upsert...');
+      await session.executeQuery(query);
+      logger.info('Upsert completed');
+  }
+  ```
+
 {% endlist %}
 
 {% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
@@ -270,15 +273,15 @@ Code snippet for data insert/update:
 {% list tabs %}
 
 - Query Service
-  
-  - {% list tabs %}
+
+  {% list tabs %}
 
   - rowMode: RowType.Native
-    
+
     The `QuerySession.execute()` method is used to execute YQL queries.
-    
+
     Depending on the rowMode parameter, the data can be retrieved in javascript form or as YDB structures.
-    
+
     ```ts
     async function selectNativeSimple(driver: Driver, logger: Logger): Promise<void> {
         logger.info('Making a simple native select...');
@@ -304,13 +307,13 @@ Code snippet for data insert/update:
         logger.info(`selectNativeSimple rows: ${JSON.stringify(result.rows, null, 2)}`);
     }
     ```
-    
+
   - rowMode: RowType.Ydb
 
     The `QuerySession.execute()` method is used to execute YQL queries.
-    
+
     Depending on the rowMode parameter, the data can be retrieved in javascript form or as YDB structures.
-    
+
     ```ts
     async function selectTypedSimple(driver: Driver, logger: Logger): Promise<void> {
         logger.info('Making a simple typed select...');
@@ -338,12 +341,12 @@ Code snippet for data insert/update:
     }
     ```
 
-{% endlist %}
+  {% endlist %}
 
 - Table Service
-    
+
   To execute YQL queries, use the `Session.executeQuery()` method.
-  
+
   ```ts
   async function selectSimple(session: Session, logger: Logger): Promise<void> {
       const query = `
@@ -359,7 +362,7 @@ Code snippet for data insert/update:
       logger.info(`selectSimple result: ${JSON.stringify(result, null, 2)}`);
   }
   ```
-    
+
 {% endlist %}
 
 {% include [param_queries.md](steps/06_param_queries.md) %}
@@ -371,8 +374,9 @@ prepared by `Session.prepareQuery()`.
 
 - Query Service
 
-  There is no explicit Prepared Query option in the Query Service.  YDB determines the necessity of using this mode by itself.
-  
+  There is no explicit Prepared Query option in the Query Service. YDB determines the necessity of using this mode by
+  itself.
+
   ```ts
   async function selectWithParameters(driver: Driver, data: ThreeIds[], logger: Logger): Promise<void> {
        
@@ -405,7 +409,7 @@ prepared by `Session.prepareQuery()`.
   ```
 
 - Table Service
-    
+
   ```ts
   async function selectPrepared(session: Session, data: ThreeIds[], logger: Logger): Promise<void> {
       const query = `
@@ -436,7 +440,7 @@ prepared by `Session.prepareQuery()`.
       await withRetries(select);
   }
   ```
-  
+
 {% endlist %}
 
 {% include [scan-query.md](steps/08_scan_query.md) %}
@@ -446,7 +450,7 @@ prepared by `Session.prepareQuery()`.
 - Query Service
 
   In Query Service, the `QuerySession.execute()` method is used to retrieve data by a stream.
-  
+
   ```ts
   async function selectWithParametrs(driver: Driver, data: ThreeIds[], logger: Logger): Promise<void> {
       logger.info('Selecting prepared query...');
@@ -481,9 +485,9 @@ prepared by `Session.prepareQuery()`.
       });
   }
   ```
-    
+
 - Table Service
-    
+
   ```ts
   async function executeScanQueryWithParams(session: Session, logger: Logger): Promise<void> {
       const query = `
@@ -513,7 +517,8 @@ prepared by `Session.prepareQuery()`.
 
 {% include [transaction-control.md](steps/10_transaction_control.md) %}
 
-Here's a code sample that demonstrates how to explicitly use the `Session.beginTransaction()` and `Session.сommitTransaction()` calls to create and terminate a transaction:
+Here's a code sample that demonstrates how to explicitly use the `Session.beginTransaction()`
+and `Session.сommitTransaction()` calls to create and terminate a transaction:
 
 {% list tabs %}
 
@@ -522,7 +527,7 @@ Here's a code sample that demonstrates how to explicitly use the `Session.beginT
   {% list tabs %}
 
   - do()
-    
+
     ```ts
     async function explicitTcl(driver: Driver, ids: ThreeIds, logger: Logger) {
         logger.info('Running prepared query with explicit transaction control...');
@@ -553,7 +558,7 @@ Here's a code sample that demonstrates how to explicitly use the `Session.beginT
     ```
 
   - doTx()
-    
+
     ```ts
     async function transactionPerWholeDo(driver: Driver, ids: ThreeIds, logger: Logger) {
         logger.info('Running query with one transaction per whole doTx()...');
@@ -584,7 +589,7 @@ Here's a code sample that demonstrates how to explicitly use the `Session.beginT
   {% endlist %}
 
 - Table Service
-    
+
   ```ts
   async function explicitTcl(session: Session, ids: ThreeIds, logger: Logger) {
       const query = `
@@ -616,7 +621,7 @@ Here's a code sample that demonstrates how to explicitly use the `Session.beginT
       await withRetries(update);
   }
   ```
-    
+
 {% endlist %}
 
 {% include [error-handling.md](steps/50_error_handling.md) %}

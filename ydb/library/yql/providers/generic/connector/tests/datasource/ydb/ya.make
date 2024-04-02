@@ -40,8 +40,9 @@ IF (OPENSOURCE)
 ENDIF()
 
 TEST_SRCS(
-    test.py
+    collection.py
     conftest.py
+    test.py
 )
 
 PEERDIR(

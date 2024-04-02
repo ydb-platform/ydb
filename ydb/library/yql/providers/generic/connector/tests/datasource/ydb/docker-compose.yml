@@ -2,7 +2,6 @@ version: '3.4'
 services:
   ydb:
      image: cr.yandex/yc/yandex-docker-local-ydb:23.3.17@sha256:bf9001c849cc6c4c9b56f32f5440a6e8390c4e841937c9f9caf929fd70a689c8
-     #image: ghcr.io/ydb-platform/local-ydb:nightly
      container_name: fq-tests-ydb-ydb
      hostname: fq-tests-ydb-ydb
      environment:
@@ -15,6 +14,7 @@ services:
 
   fq-connector-go:
     image: ghcr.io/ydb-platform/fq-connector-go:v0.2.11@sha256:3f78cf7b1f50eb903635febcc8cb7dd813e673f615fa9ddc4e2d6d5432cac8ae
+    container_name: fq-tests-ydb-fq-connector-go
     volumes:
       - ../../fq-connector-go/:/opt/ydb/cfg/
     ports:

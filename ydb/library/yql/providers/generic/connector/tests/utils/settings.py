@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Sequence
 import pathlib
 
@@ -135,6 +135,8 @@ class Settings:
 
 @dataclass
 class GenericSettings:
+    date_time_format: EDateTimeFormat
+
     @dataclass
     class ClickHouseCluster:
         def __hash__(self) -> int:
@@ -143,7 +145,7 @@ class GenericSettings:
         database: str
         protocol: EProtocol
 
-    clickhouse_clusters: Sequence[ClickHouseCluster]
+    clickhouse_clusters: Sequence[ClickHouseCluster] = field(default_factory=list)
 
     @dataclass
     class PostgreSQLCluster:
@@ -153,12 +155,10 @@ class GenericSettings:
         database: str
         schema: str
 
-    postgresql_clusters: Sequence[PostgreSQLCluster]
+    postgresql_clusters: Sequence[PostgreSQLCluster] = field(default_factory=list)
 
     @dataclass
     class YdbCluster:
         database: str
 
-    ydb_clusters: Sequence[YdbCluster]
-
-    date_time_format: EDateTimeFormat
+    ydb_clusters: Sequence[YdbCluster] = field(default_factory=list)

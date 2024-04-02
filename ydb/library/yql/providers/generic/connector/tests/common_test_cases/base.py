@@ -34,7 +34,13 @@ class BaseTestCase:
         In general, we cannot use test case name as table name because of special symbols,
         so we provide a random table name instead.
         '''
-        return 't' + hashlib.sha256(str(random.randint(0, 65536)).encode('ascii')).hexdigest()[:8]
+        match self.data_source_kind:
+            case EDataSourceKind.POSTGRESQL: 
+                return 't' + hashlib.sha256(str(random.randint(0, 65536)).encode('ascii')).hexdigest()[:8]
+            case EDataSourceKind.CLICKHOUSE:
+                return 't' + hashlib.sha256(str(random.randint(0, 65536)).encode('ascii')).hexdigest()[:8]
+            case EDataSourceKind.YDB:
+                return self.name
 
     @property
     def sql_table_name(self) -> str:
@@ -68,6 +74,11 @@ class BaseTestCase:
                     date_time_format=EDateTimeFormat.YQL_FORMAT,
                     clickhouse_clusters=[],
                     postgresql_clusters=[GenericSettings.PostgreSQLCluster(database=self.database.name, schema=None)],
+                )
+            case EDataSourceKind.YDB:
+                return GenericSettings(
+                    date_time_format=EDateTimeFormat.YQL_FORMAT,
+                    ydb_clusters=[GenericSettings.YdbCluster(database=self.database.name)],
                 )
             case _:
                 raise Exception(f'invalid data source: {self.data_source_kind}')

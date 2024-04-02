@@ -9,6 +9,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Set
 from ydb.library.yql.providers.generic.connector.tests.utils.generate import generate_table_data
 import ydb.library.yql.providers.generic.connector.tests.utils.types.clickhouse as clickhouse
 import ydb.library.yql.providers.generic.connector.tests.utils.types.postgresql as postgresql
+import ydb.library.yql.providers.generic.connector.tests.utils.types.ydb as Ydb
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     Schema,
     Column,
@@ -68,12 +69,12 @@ class Factory:
                 Column(
                     name='COL1',
                     ydb_type=Type.INT32,
-                    data_source_type=DataSourceType(ch=clickhouse.Int32(), pg=postgresql.Int4()),
+                    data_source_type=DataSourceType(ch=clickhouse.Int32(), pg=postgresql.Int4(), ydb=Ydb.Int32()),
                 ),
                 Column(
                     name='col2',
                     ydb_type=Type.INT32,
-                    data_source_type=DataSourceType(ch=clickhouse.Int32(), pg=postgresql.Int4()),
+                    data_source_type=DataSourceType(ch=clickhouse.Int32(), pg=postgresql.Int4(), ydb=Ydb.Int32()),
                 ),
             )
         )
@@ -90,6 +91,7 @@ class Factory:
                 (
                     EDataSourceKind.CLICKHOUSE,
                     EDataSourceKind.POSTGRESQL,
+                    EDataSourceKind.YDB,
                 ),
             ),
             # SELECT COL1 FROM table
@@ -102,6 +104,7 @@ class Factory:
                 (
                     EDataSourceKind.CLICKHOUSE,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
+                    EDataSourceKind.YDB,
                 ),
             ),
             # SELECT col1 FROM table
@@ -123,6 +126,7 @@ class Factory:
                 (
                     EDataSourceKind.CLICKHOUSE,
                     EDataSourceKind.POSTGRESQL,
+                    EDataSourceKind.YDB,
                 ),
             ),
             # SELECT col2, COL1 FROM table
@@ -135,6 +139,7 @@ class Factory:
                 (
                     EDataSourceKind.CLICKHOUSE,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
+                    EDataSourceKind.YDB,
                 ),
             ),
             # SELECT col2, col1 FROM table
@@ -157,6 +162,7 @@ class Factory:
                 (
                     EDataSourceKind.CLICKHOUSE,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
+                    EDataSourceKind.YDB,
                 ),
             ),
             # Select the same column multiple times with different aliases
@@ -176,6 +182,7 @@ class Factory:
                 (
                     EDataSourceKind.CLICKHOUSE,
                     EDataSourceKind.POSTGRESQL,
+                    EDataSourceKind.YDB,
                 ),
             ),
         )
@@ -235,7 +242,6 @@ class Factory:
         )
 
         data_in = generate_table_data(schema=schema, bytes_soft_limit=table_size)
-        print("BIRD", data_in)
 
         # Assuming that request will look something like:
         #
@@ -272,14 +278,20 @@ class Factory:
         protocols = {
             EDataSourceKind.CLICKHOUSE: [EProtocol.NATIVE, EProtocol.HTTP],
             EDataSourceKind.POSTGRESQL: [EProtocol.NATIVE],
+            EDataSourceKind.YDB: [EProtocol.NATIVE],
         }
 
-        base_test_cases = list(
-            itertools.chain(
-                self._column_selection(),
-                self._large_table(),
+        base_test_cases = None
+
+        if data_source_kind == EDataSourceKind.YDB:
+            base_test_cases = self._column_selection()
+        else:
+            base_test_cases = list(
+                itertools.chain(
+                    self._column_selection(),
+                    self._large_table(),
+                )
             )
-        )
 
         test_cases = []
         for base_tc in base_test_cases:

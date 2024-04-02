@@ -1159,7 +1159,7 @@ TVector<std::unique_ptr<TArrayBuilderBase>> Children_;
 
 template<typename TDate, bool Nullable>
 class TTzDateArrayBuilder final : public TTupleArrayBuilderBase<Nullable, TTzDateArrayBuilder<TDate, Nullable>> {
-    using TDateLayout = TDataType<TDate>::TLayout;
+    using TDateLayout = typename TDataType<TDate>::TLayout;
 
     static std::shared_ptr<arrow::DataType> GetArrowTypeForLayout() {
         if constexpr (std::is_same_v<TDate, TTzDate>) {

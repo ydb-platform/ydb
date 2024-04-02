@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/aliases.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session_impl.ipp>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session_impl.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/counters_logger.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/persqueue_impl.h>
 

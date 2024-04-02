@@ -1,21 +1,18 @@
 LIBRARY()
 
 SRCS(
-    callback_context.h
     common.h
     common.cpp
     counters_logger.h
     deferred_commit.cpp
     event_handlers.cpp
-    log_lazy.h
     read_session_event.cpp
-    read_session_impl.ipp
+    read_session_impl.cpp
     read_session.h
     read_session.cpp
     topic_impl.h
     topic_impl.cpp
     topic.cpp
-    trace_lazy.h
     write_session_impl.h
     write_session_impl.cpp
     write_session.h
@@ -34,6 +31,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_common_client/impl
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_topic/common
+    ydb/public/sdk/cpp/client/ydb_topic/include
     ydb/public/sdk/cpp/client/ydb_proto
 )
 

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/codecs/codecs.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session_impl.ipp>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session_impl.h>
 
 namespace NYdb::NPersQueue {
 

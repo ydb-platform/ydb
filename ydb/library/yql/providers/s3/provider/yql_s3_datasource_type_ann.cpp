@@ -345,7 +345,7 @@ public:
         }
 
         if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_Format), ctx) ||
-            !NCommon::ValidateFormatForInput(input->Child(TS3ParseSettings::idx_Format)->Content(), nullptr, ctx))
+            !NCommon::ValidateFormatForInput(input->Child(TS3ParseSettings::idx_Format)->Content(), nullptr, {}, ctx))
         {
             return TStatus::Error;
         }
@@ -429,9 +429,6 @@ public:
             auto format = s3Object.Format().Ref().Content();
             const TStructExprType* structRowType = rowType->Cast<TStructExprType>();
 
-            if (!NCommon::ValidateFormatForInput(format, structRowType, ctx)) {
-                return TStatus::Error;
-            }
             THashSet<TStringBuf> columns;
             for (const TItemExprType* item : structRowType->GetItems()) {
                 columns.emplace(item->GetName());
@@ -453,12 +450,15 @@ public:
                             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Table contains no columns except partitioning columns"));
                             return TStatus::Error;
                         }
-
                     }
                     if (name == "projection"sv) {
                         projection = settingNode->Tail().Content();
                     }
                 }
+            }
+
+            if (!NCommon::ValidateFormatForInput(format, structRowType, partitionedBy, ctx)) {
+                return TStatus::Error;
             }
         }
 
@@ -529,7 +529,7 @@ public:
         }
 
         const auto format = input->Child(TS3Object::idx_Format)->Content();
-        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) || !NCommon::ValidateFormatForInput(format, nullptr, ctx)) {
+        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) || !NCommon::ValidateFormatForInput(format, nullptr, {}, ctx)) {
             return TStatus::Error;
         }
 

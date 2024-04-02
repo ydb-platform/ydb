@@ -1382,7 +1382,11 @@ bool ValidateCompressionForOutput(std::string_view format, std::string_view comp
     return false;
 }
 
-bool ValidateFormatForInput(std::string_view format, const TStructExprType* schemaSructRowType, TExprContext& ctx) {
+bool ValidateFormatForInput(
+    std::string_view format,
+    const TStructExprType* schemaSructRowType,
+    const std::vector<TString>& partitionedBy,
+    TExprContext& ctx) {
     if (format.empty()) {
         return true;
     }
@@ -1393,10 +1397,27 @@ bool ValidateFormatForInput(std::string_view format, const TStructExprType* sche
         return false;
     }
     
-    if (schemaSructRowType && format == TStringBuf("raw") && schemaSructRowType->GetSize() > 1) {
-        ctx.AddError(TIssue(TStringBuilder() << "Only one field in schema supported in raw format (you have " 
-            << schemaSructRowType->GetSize() << " fields)"));
-        return false;
+    if (schemaSructRowType && format == TStringBuf("raw")) {
+        TSet<TString> partitionedByColumns{partitionedBy.begin(), partitionedBy.end()};
+        ui64 realSchemaRowCount = 0;
+        const TTypeAnnotationNode* rowType= nullptr; 
+
+        for (const TItemExprType* item : schemaSructRowType->GetItems()) {
+            if (partitionedByColumns.contains(item->GetName())) {
+                continue;
+            }
+            rowType = item->GetItemType();
+            ++realSchemaRowCount;
+        }
+
+        if (realSchemaRowCount > 1) {
+            ctx.AddError(TIssue(TStringBuilder() << "Only one field in schema supported in raw format (you have " 
+                << realSchemaRowCount << " fields)"));
+            return false;
+        } else if (realSchemaRowCount == 1 && rowType != ctx.MakeType<TDataExprType>(EDataSlot::String)) {
+            ctx.AddError(TIssue(TStringBuilder() << "Only string type field in schema supported in raw format"));
+            return false;
+        }
     }
     return true;
 }

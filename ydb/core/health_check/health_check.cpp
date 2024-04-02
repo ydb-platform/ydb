@@ -898,8 +898,11 @@ public:
 
     void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
         TTabletId hiveId = TabletRequests.CompleteRequest(ev->Cookie);
+        TInstant aliveBarrier = TInstant::Now() - TDuration::Minutes(5);
         for (const NKikimrHive::THiveNodeStats& hiveStat : ev->Get()->Record.GetNodeStats()) {
-            RequestComputeNode(hiveStat.GetNodeId());
+            if (!hiveStat.HasLastAliveTimestamp() || TInstant::MilliSeconds(hiveStat.GetLastAliveTimestamp()) > aliveBarrier) {
+                RequestComputeNode(hiveStat.GetNodeId());
+            }
         }
         HiveNodeStats[hiveId] = std::move(ev->Release());
         RequestDone("TEvResponseHiveNodeStats");

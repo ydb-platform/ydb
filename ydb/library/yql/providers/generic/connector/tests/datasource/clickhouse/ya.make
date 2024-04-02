@@ -1,6 +1,5 @@
 PY3TEST()
 
-STYLE_PYTHON()
 NO_CHECK_IMPORTS()
 
 DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse/docker-compose.yml)

@@ -1,7 +1,5 @@
 PY3_LIBRARY()
 
-STYLE_PYTHON()
-
 PY_SRCS(
     base.py
     select_missing_database.py

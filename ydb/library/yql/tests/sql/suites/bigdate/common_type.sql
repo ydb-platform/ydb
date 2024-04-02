@@ -78,4 +78,3 @@ select 1, ListSort($datetime_values)
 , 2, ListSort($interval_values)
 , 3, ToSet($datetime_values)
 , 4, ToSet($interval_values);
-, 4, ToSet()

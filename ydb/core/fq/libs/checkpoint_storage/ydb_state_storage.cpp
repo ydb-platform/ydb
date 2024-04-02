@@ -21,6 +21,8 @@ using NYql::TIssues;
 
 namespace {
 
+#define LOG_STORAGE_DEBUG(context, stream) LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, "[" << context->GraphId << "] [" << context->CheckpointId << "] " << stream);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 const char* StatesTable = "states";
@@ -512,7 +514,6 @@ TFuture<IStateStorage::TGetStateResult> TStateStorage::GetState(
         return MakeFuture<IStateStorage::TGetStateResult>(result);
     }
 
-    
     auto context = MakeIntrusive<TContext>(
         NActors::TActivationContext::ActorSystem(),
         YdbConnection->TablePathPrefix,
@@ -520,7 +521,7 @@ TFuture<IStateStorage::TGetStateResult> TStateStorage::GetState(
         graphId,
         checkpointId);
 
-    LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(NActors::TActivationContext::AsActorContext(), "GetState");
+    LOG_STORAGE_DEBUG(context, "GetState, tasks: " << JoinSeq(", ", taskIds));
 
     return ListStates(context)
         .Apply([context, thisPtr = TIntrusivePtr(this)] (const TFuture<TStatus>& result) mutable {
@@ -655,7 +656,7 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
                         return status;
                     }
 
-                    LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, "ListOfStates results:");
+                    LOG_STORAGE_DEBUG(context, "ListOfStates results:");
                     try {
                         const auto& selectResult = future.GetValue();
                         TResultSetParser parser(selectResult.GetResultSet(0));
@@ -676,7 +677,7 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
                             auto& taskInfo = *taskIt;
                             TCheckpointId checkpointId(*coordinatorGeneration, *seqNo);
                             taskInfo.ListOfStatesForReading.push_back(TContext::TStateInfo{checkpointId, cnt});
-                            LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, " taskId " << taskId <<  " checkpoint id: " << checkpointId << ", rows count: " << cnt);
+                            LOG_STORAGE_DEBUG(context, "taskId " << taskId <<  " checkpoint id: " << checkpointId << ", rows count: " << cnt);
                         }
                     }
                     catch (const std::exception& e) {
@@ -799,7 +800,7 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
     Y_ENSURE(!context->Tasks.empty(), "Tasks is empty");
     auto& taskInfo = context->Tasks[context->CurrentProcessingTaskIndex];
 
-    LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, "SelectState: task_id " << taskInfo.TaskId << ", seq_no " 
+    LOG_STORAGE_DEBUG(context, "SelectState: task_id " << taskInfo.TaskId << ", seq_no " 
         << taskInfo.ListOfStatesForReading.front().CheckpointId.SeqNo << ", blob_seq_num " << taskInfo.CurrentProcessingRow);
     paramsBuilder.AddParam("$task_id").Uint64(taskInfo.TaskId).Build();
     paramsBuilder.AddParam("$graph_id").String(context->GraphId).Build();
@@ -889,7 +890,7 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
 }
 
 TFuture<TStatus> TStateStorage::SkipStatesInFuture(const TContextPtr& context) {
-    LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, "SkipStatesInFuture");
+    LOG_STORAGE_DEBUG(context, "SkipStatesInFuture");
 
     for (auto& taskInfo : context->Tasks) {
         auto it = taskInfo.ListOfStatesForReading.begin();
@@ -966,7 +967,7 @@ TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context) {
 std::vector<NYql::NDqProto::TComputeActorState> TStateStorage::ApplyIncrements(
     const TContextPtr& context,
     NYql::TIssues& issues) {
-    LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, "ApplyIncrements");
+    LOG_STORAGE_DEBUG(context, "ApplyIncrements");
 
     std::vector<NYql::NDqProto::TComputeActorState> states;
     try {

@@ -13,6 +13,21 @@ from collection import Collection
 
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as select_positive_common
 
+
+class OneTimeWaiter:
+    __launched: bool = False
+
+    def wait(self):
+        if self.__launched:
+            return
+
+        # This should be enough for tables to initialize
+        time.sleep(3)
+        self.__launched = True
+
+
+one_time_waiter = OneTimeWaiter()
+
 settings = Settings.from_env(docker_compose_dir=docker_compose_dir, data_source_kinds=[EDataSourceKind.YDB])
 tc_collection = Collection(settings)
 
@@ -25,7 +40,9 @@ def test_select_positive(
     runner_type: str,
     test_case: select_positive_common.TestCase,
 ):
-    time.sleep(2)
+    # Let YDB container initialize tables
+    one_time_waiter.wait()
+
     runner = configure_runner(runner_type=runner_type, settings=settings)
     scenario.select_positive(
         settings=settings,

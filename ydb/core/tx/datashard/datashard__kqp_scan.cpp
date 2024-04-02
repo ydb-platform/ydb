@@ -71,8 +71,8 @@ public:
                     schema.emplace_back(column.Name, column.Type);
                 }
                 BatchBuilder->Reserve(INIT_BATCH_ROWS);
-                bool started = BatchBuilder->Start(schema);
-                YQL_ENSURE(started, "Failed to start BatchBuilder");
+                auto started = BatchBuilder->Start(schema);
+                YQL_ENSURE(started.ok(), "Failed to start BatchBuilder: " + started.ToString());
             }
         }
 

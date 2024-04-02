@@ -93,6 +93,14 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
                 Context, true, true, false);
             FetchingIntervals.emplace(intervalIdx, interval);
             IntervalStats.emplace_back(CurrentSegments.size(), true);
+            if (interval->GetMemoryAllocation() > MemoryIntervalLimit) {
+                Abort();
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "next_internal_broken")
+                    ("reason", "a lot of memory need")("need", interval->GetMemoryAllocation())("limit", MemoryIntervalLimit)
+                    ("interval", interval->DebugJsonForMemory())("path_ids", JoinSeq(",", interval->GetPathIds()));
+                return TConclusionStatus::Fail("A lot of memory for interval scanner: " + 
+                    ::ToString(interval->GetMemoryAllocation()) + " path_ids: " + JoinSeq(",", interval->GetPathIds()) + ". We need wait compaction processing. Sorry.");
+            }
             NResourceBroker::NSubscribe::ITask::StartResourceSubscription(Context->GetCommonContext()->GetResourceSubscribeActorId(), interval);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_interval")("interval_idx", intervalIdx)("interval", interval->DebugJson());
         }
@@ -110,6 +118,14 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
             const ui32 intervalIdx = SegmentIdxCounter++;
             const bool isExclusiveInterval = (CurrentSegments.size() == 1) && includeStart && includeFinish;
             auto interval = std::make_shared<TFetchingInterval>(*CurrentStart, BorderPoints.begin()->first, intervalIdx, CurrentSegments, Context, includeFinish, includeStart, isExclusiveInterval);
+            if (interval->GetMemoryAllocation() > MemoryIntervalLimit) {
+                Abort();
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "next_internal_broken")
+                    ("reason", "a lot of memory need")("need", interval->GetMemoryAllocation())("limit", MemoryIntervalLimit)
+                    ("interval", interval->DebugJsonForMemory())("path_ids", JoinSeq(",", interval->GetPathIds()));
+                return TConclusionStatus::Fail("A lot of memory for interval scanner: " +
+                    ::ToString(interval->GetMemoryAllocation()) + " path_ids: " + JoinSeq(",", interval->GetPathIds()) + ". We need wait compaction processing. Sorry.");
+            }
             FetchingIntervals.emplace(intervalIdx, interval);
             IntervalStats.emplace_back(CurrentSegments.size(), false);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_interval")("interval_idx", intervalIdx)("interval", interval->DebugJson());
@@ -131,8 +147,24 @@ bool TScanHead::IsReverse() const {
 }
 
 void TScanHead::Abort() {
+    THashSet<ui32> sourceIds;
     for (auto&& i : FetchingIntervals) {
+        for (auto&& s : i.second->GetSources()) {
+            sourceIds.emplace(s.first);
+        }
         i.second->Abort();
+    }
+    for (auto&& i : BorderPoints) {
+        for (auto&& s : i.second.GetStartSources()) {
+            if (sourceIds.emplace(s->GetSourceIdx()).second) {
+                s->Abort();
+            }
+        }
+        for (auto&& s : i.second.GetFinishSources()) {
+            if (sourceIds.emplace(s->GetSourceIdx()).second) {
+                s->Abort();
+            }
+        }
     }
     FetchingIntervals.clear();
     BorderPoints.clear();

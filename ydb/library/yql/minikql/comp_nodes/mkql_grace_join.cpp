@@ -855,10 +855,6 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     }
                 }
 
-                if (resultLeft == EFetchResult::Yield || resultRight == EFetchResult::Yield) {
-                    return EFetchResult::Yield;
-                }
-
                 if (resultLeft == EFetchResult::Finish ) {
                     *HaveMoreLeftRows = false;
                 }
@@ -866,6 +862,12 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
 
                 if (resultRight == EFetchResult::Finish ) {
                     *HaveMoreRightRows = false;
+                }
+
+                if ((resultLeft == EFetchResult::Yield && (!*HaveMoreRightRows || resultRight == EFetchResult::Yield)) ||
+                    (resultRight == EFetchResult::Yield && !*HaveMoreLeftRows))
+                {
+                    return EFetchResult::Yield;
                 }
 
                 if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {

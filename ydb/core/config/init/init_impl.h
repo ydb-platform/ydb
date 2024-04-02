@@ -627,7 +627,7 @@ struct TCommonAppOptions {
                     ApplyEnableOnlyColumnShards(appConfig, ConfigUpdateTracer);
                     break;
                 case EWorkload::Hybrid:
-                    // default, do nothing 
+                    // do nothing 
                     break;
             }
         }

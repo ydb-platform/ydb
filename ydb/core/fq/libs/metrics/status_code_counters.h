@@ -5,6 +5,8 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
+#include <util/system/mutex.h>
+
 namespace NFq {
 
 class TStatusCodeCounters: public virtual TThrRefBase {
@@ -12,20 +14,34 @@ public:
     using TPtr = TIntrusivePtr<TStatusCodeCounters>;
 
 public:
-    TStatusCodeCounters(const TString& name, const ::NMonitoring::TDynamicCounterPtr& counters);
+    TStatusCodeCounters(const ::NMonitoring::TDynamicCounterPtr& counters);
 
     // This call isn't thread safe
     void IncByStatusCode(NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues);
 
-    virtual ~TStatusCodeCounters() override;
+    virtual ~TStatusCodeCounters() override = default;
 
 private:
-    TString Name;
     ::NMonitoring::TDynamicCounterPtr Counters;
-    ::NMonitoring::TDynamicCounterPtr SubGroup;
     TMap<NYql::NDqProto::StatusIds::StatusCode, ::NMonitoring::TDynamicCounters::TCounterPtr> CountersByStatusCode;
 };
 
-TString MetricsSuffixFromIssues(const NYql::TIssues& issues);
+class TStatusCodeByScopeCounters: public virtual TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<TStatusCodeByScopeCounters>;
+
+public:
+    TStatusCodeByScopeCounters(const TString& subComponentName, const ::NMonitoring::TDynamicCounterPtr& counters);
+
+    void IncByScopeAndStatusCode(const TString& scope, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues);
+
+private:
+    ::NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr SubComponentCounters;
+    TMap<TString, TStatusCodeCounters::TPtr> StatusCodeCountersByScope;
+    TMutex Mutex;
+};
+
+TString LabelNameFromStatusCodeAndIssues(NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues);
 
 } // namespace NFq

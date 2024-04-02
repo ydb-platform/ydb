@@ -7,7 +7,6 @@
 #include <queue>
 
 
-
 namespace NFq {
 
 namespace {
@@ -30,28 +29,39 @@ TString SeverityToString(NYql::ESeverity severity) {
 
 }
 
-TStatusCodeCounters::TStatusCodeCounters(const TString& name, const ::NMonitoring::TDynamicCounterPtr& counters)
-    : Name(name)
-    , Counters(counters) {
-    SubGroup = counters->GetSubgroup("subcomponent", Name);
+TStatusCodeCounters::TStatusCodeCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
+    : Counters(counters) {
 }
 
 void TStatusCodeCounters::IncByStatusCode(NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues) {
-    auto statusCodeName = NYql::NDqProto::StatusIds::StatusCode_Name(statusCode) + MetricsSuffixFromIssues(issues);
+    auto statusCodeName = LabelNameFromStatusCodeAndIssues(statusCode, issues);
     auto it = CountersByStatusCode.find(statusCode);
     if (it == CountersByStatusCode.end()) {
-        it = CountersByStatusCode.insert({statusCode, SubGroup->GetCounter(statusCodeName, true)}).first;
+        it = CountersByStatusCode.insert({statusCode, Counters->GetCounter(statusCodeName)}).first;
     }
     it->second->Inc();
 }
 
-TStatusCodeCounters::~TStatusCodeCounters() {
-    Counters->RemoveSubgroup("subcomponent", Name);
+TStatusCodeByScopeCounters::TStatusCodeByScopeCounters(const TString& subComponentName, const ::NMonitoring::TDynamicCounterPtr& counters)
+    : Counters(counters)
+    , SubComponentCounters(Counters->GetSubgroup("subcomponent", subComponentName)) {
 }
 
-TString MetricsSuffixFromIssues(const NYql::TIssues& issues) {
+void TStatusCodeByScopeCounters::IncByScopeAndStatusCode(const TString& scope, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues) {
+    with_lock (Mutex) {
+        auto it = StatusCodeCountersByScope.find(scope);
+        if (it == StatusCodeCountersByScope.end()) {
+            it = StatusCodeCountersByScope.insert({scope, MakeIntrusive<TStatusCodeCounters>(Counters->GetSubgroup("scope", scope))}).first;
+        }
+        it->second->IncByStatusCode(statusCode, issues);
+    }
+}
+
+TString LabelNameFromStatusCodeAndIssues(NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues) {
     static const size_t MAX_DEPTH = 5;
+    static const size_t MAX_LABEL_LENGTH = 180;
     TStringBuilder builder;
+    builder << NYql::NDqProto::StatusIds::StatusCode_Name(statusCode);
     std::queue<NYql::TIssue> issuesQueue;
     for (const auto& issue: issues) {
         if (issuesQueue.size() == MAX_DEPTH) {
@@ -75,9 +85,13 @@ TString MetricsSuffixFromIssues(const NYql::TIssues& issues) {
 
         builder << "__" << NYql::TIssuesIds::EIssueCode_Name(issue.GetCode())
             << "__" << NFq::SeverityToString(issue.GetSeverity());
+        
+        if (builder.size() >= MAX_LABEL_LENGTH) {
+            break;
+        }
     }
 
-    return builder;
+    return builder.resize(std::min(builder.size(), MAX_LABEL_LENGTH));
 }
 
 } // namespace NFq

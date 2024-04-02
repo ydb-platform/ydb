@@ -581,7 +581,7 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
     };
 
     TCounters Counters;
-    TStatusCodeCounters::TPtr FailedStatusCodeCounters;
+    TStatusCodeByScopeCounters::TPtr FailedStatusCodeCounters;
 
     ::NFq::TYqSharedResources::TPtr YqSharedResources;
 
@@ -608,7 +608,7 @@ public:
         const TString& tenantName)
         : TControlPlaneStorageUtils(config, s3Config, common, computeConfig)
         , Counters(counters, *Config)
-        , FailedStatusCodeCounters(MakeIntrusive<TStatusCodeCounters>("FinalFailedStatusCode", counters))
+        , FailedStatusCodeCounters(MakeIntrusive<TStatusCodeByScopeCounters>("FinalFailedStatusCode", counters->GetSubgroup("component", "QueryDiagnostic")))
         , YqSharedResources(yqSharedResources)
         , CredProviderFactory(credProviderFactory)
         , TenantName(tenantName)

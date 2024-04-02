@@ -14,10 +14,10 @@
 namespace NFq {
 
 struct TActorFactory : public IActorFactory {
-    TActorFactory(const NFq::TRunActorParams& params, const ::NYql::NCommon::TServiceCounters& serviceCounters, const ::NMonitoring::TDynamicCounterPtr& counters)
+    TActorFactory(const NFq::TRunActorParams& params, const ::NYql::NCommon::TServiceCounters& serviceCounters, const NFq::TStatusCodeByScopeCounters::TPtr& failedStatusCodeCounters)
         : Params(params)
         , ServiceCounters(serviceCounters)
-        , Counters(counters)
+        , FailedStatusCodeCounters(failedStatusCodeCounters)
     {}
 
     std::unique_ptr<NActors::IActor> CreatePinger(const NActors::TActorId& parent) const override {
@@ -55,7 +55,7 @@ struct TActorFactory : public IActorFactory {
                                                          const NActors::TActorId &connector,
                                                          const NActors::TActorId &pinger,
                                                          const NYdb::TOperation::TOperationId& operationId) const override {
-        return CreateStatusTrackerActor(Params, parent, connector, pinger, operationId, CreateStatProcessor(), ServiceCounters, Counters);
+        return CreateStatusTrackerActor(Params, parent, connector, pinger, operationId, CreateStatProcessor(), ServiceCounters, FailedStatusCodeCounters);
     }
 
     std::unique_ptr<NActors::IActor> CreateResultWriter(const NActors::TActorId& parent,
@@ -94,11 +94,11 @@ struct TActorFactory : public IActorFactory {
 private:
     NFq::TRunActorParams Params;
     ::NYql::NCommon::TServiceCounters ServiceCounters;
-    ::NMonitoring::TDynamicCounterPtr Counters;
+    NFq::TStatusCodeByScopeCounters::TPtr FailedStatusCodeCounters;
 };
 
-IActorFactory::TPtr CreateActorFactory(const NFq::TRunActorParams& params, const ::NYql::NCommon::TServiceCounters& serviceCounters, const ::NMonitoring::TDynamicCounterPtr& counters) {
-    return MakeIntrusive<TActorFactory>(params, serviceCounters, counters);
+IActorFactory::TPtr CreateActorFactory(const NFq::TRunActorParams& params, const ::NYql::NCommon::TServiceCounters& serviceCounters, const NFq::TStatusCodeByScopeCounters::TPtr& failedStatusCodeCounters) {
+    return MakeIntrusive<TActorFactory>(params, serviceCounters, failedStatusCodeCounters);
 }
 
 }

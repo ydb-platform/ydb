@@ -2,6 +2,7 @@
 
 #include <ydb/core/fq/libs/compute/common/run_actor_params.h>
 #include <ydb/core/fq/libs/compute/common/utils.h>
+#include <ydb/core/fq/libs/metrics/status_code_counters.h>
 
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
 
@@ -16,6 +17,6 @@ std::unique_ptr<NActors::IActor> CreateStatusTrackerActor(const TRunActorParams&
                                                           const NYdb::TOperation::TOperationId& operationId,
                                                           std::unique_ptr<IPlanStatProcessor>&& processor,
                                                           const ::NYql::NCommon::TServiceCounters& queryCounters,
-                                                          const ::NMonitoring::TDynamicCounterPtr& counters);
+                                                          const NFq::TStatusCodeByScopeCounters::TPtr& failedStatusCodeCounters);
 
 }

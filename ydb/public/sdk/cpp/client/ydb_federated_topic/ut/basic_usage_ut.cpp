@@ -801,6 +801,40 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteSession->Close(TDuration::MilliSeconds(10));
     }
 
+    Y_UNIT_TEST(CloseWriteSessionImmediately) {
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(
+            TEST_CASE_NAME, false, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, 2);
+
+        setup->Start(true, true);
+
+        TFederationDiscoveryServiceMock fdsMock;
+        fdsMock.Port = setup->GetGrpcPort();
+
+        ui16 newServicePort = setup->GetPortManager()->GetPort(4285);
+        auto grpcServer = setup->StartGrpcService(newServicePort, &fdsMock);
+
+        std::shared_ptr<NYdb::NTopic::IWriteSession> WriteSession;
+
+        // Create topic client.
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
+        cfg.SetDatabase("/Root");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        NYdb::TDriver driver(cfg);
+        NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver);
+
+        // Create write session.
+        auto writeSettings = NTopic::TWriteSessionSettings()
+            .DirectWriteToPartition(false)
+            .Path(setup->GetTestTopic())
+            .MessageGroupId("src_id");
+
+        WriteSession = topicClient.CreateWriteSession(writeSettings);
+        Cerr << "Session was created" << Endl;
+
+        WriteSession->Close(TDuration::MilliSeconds(10));
+    }
+
 }
 
 }

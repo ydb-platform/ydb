@@ -1622,7 +1622,15 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
             haveChanges = true;
         }
 
-        if (haveChanges) {
+        DBGTRACE_LOG("haveChanges=" << haveChanges <<
+                     ", TxIdHasChanged=" << TxIdHasChanged <<
+                     ", AffectedUsers.size=" << AffectedUsers.size() <<
+                     ", ChangeConfig=" << (void*)ChangeConfig.Get());
+        if (haveChanges || TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig) {
+            AddCmdWriteTxMeta(request->Record);
+            AddCmdWriteUserInfos(request->Record);
+            AddCmdWriteConfig(request->Record);
+
             WriteCycleStartTime = now;
             WriteStartTime = now;
             TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero();
@@ -2032,6 +2040,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
         ctx.Send(actor, reply.release());
     }
 
+    DBGTRACE_LOG("PendingUsersInfo.clear");
     PendingUsersInfo.clear();
     Replies.clear();
     AffectedUsers.clear();
@@ -2381,6 +2390,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
                 "Topic '" << TopicName() << "' partition " << Partition << " user " << user
                     << " drop done"
         );
+        DBGTRACE_LOG("PendingUsersInfo.erase");
         PendingUsersInfo.erase(user);
     } else if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE) {
         LOG_DEBUG_S(
@@ -2617,10 +2627,12 @@ void TPartition::AddCmdWriteConfig(NKikimrClient::TKeyValueRequest& request)
 TUserInfoBase& TPartition::GetOrCreatePendingUser(const TString& user,
                                                   TMaybe<ui64> readRuleGeneration)
 {
+    DBGTRACE("TPartition::GetOrCreatePendingUser");
     TUserInfoBase* userInfo = nullptr;
     auto i = PendingUsersInfo.find(user);
     if (i == PendingUsersInfo.end()) {
         auto ui = UsersInfoStorage->GetIfExists(user);
+        DBGTRACE_LOG("PendingUsersInfo.emplace");
         auto [p, _] = PendingUsersInfo.emplace(user, UsersInfoStorage->CreateUserInfo(user, readRuleGeneration));
 
         if (ui) {

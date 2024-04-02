@@ -259,7 +259,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
         void ScheduleBalance(const TActorContext& ctx);
         void Balance(const TActorContext& ctx);
-        
+
         void LockPartition(const TActorId pipe, TSessionInfo& sessionInfo, ui32 partition, const TActorContext& ctx);
         void ReleasePartition(const TActorId pipe, TSessionInfo& sessionInfo, const ui32 group, const ui32 count, const TActorContext& ctx);
         void ReleasePartition(const TActorId pipe, TSessionInfo& sessionInfo, const ui32 group, const std::set<ui32>& partitions, const TActorContext& ctx);
@@ -285,6 +285,21 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     ui32 TotalGroups;
     bool NoGroupsInBase;
 
+    struct TReadingPartitionStatus {
+        // Client had commited rad offset equals EndOffset of the partition
+        bool Commited = false;
+        // ReadSession reach EndOffset of the partition
+        bool ReadingFinished = false;
+        // ReadSession connected with new SDK with garantee of read order
+        bool NewSDK = false;
+        // ReadSession reach EndOffset of the partition by first request
+        bool FirstRead = false;
+
+        size_t Iteration = 0;
+
+        bool IsFinished() const { return Commited || (ReadingFinished && (FirstRead || NewSDK)); };
+        bool Commit() { return !std::exchange(Commited, true); };
+    };
 
     struct TClientInfo {
         constexpr static ui32 MAIN_GROUP = 0;
@@ -298,6 +313,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         const NKikimrPQ::EConsumerScalingSupport ScalingSupport_;
 
         THashMap<ui32, TClientGroupInfo> ClientGroupsInfo; //map from group to info
+        THashMap<ui32, TReadingPartitionStatus> ReadingPartitionStatus; // partitionId->status
+
         ui32 SessionsWithGroup = 0;
 
         TString ClientId;
@@ -321,11 +338,11 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         TStringBuilder GetPrefix() const;
 
         bool IsReadeable(ui32 partitionId) const;
+        bool IsFinished(ui32 partitionId) const;
+        bool Commit(ui32 partitionId);
     };
 
     THashMap<TString, TClientInfo> ClientsInfo; //map from userId -> to info
-    // the list of partitions where the consumer has read all the messages
-    std::unordered_map<TString, std::set<ui32>> ReadingFinished;
 
     THashMap<TActorId, TPipeInfo> PipesInfo;
 
@@ -408,28 +425,7 @@ public:
         return NKikimrServices::TActivity::PERSQUEUE_READ_BALANCER_ACTOR;
     }
 
-    TPersQueueReadBalancer(const TActorId &tablet, TTabletStorageInfo *info)
-        : TActor(&TThis::StateInit)
-        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-        , Inited(false)
-        , PathId(0)
-        , Generation(0)
-        , Version(-1)
-        , MaxPartsPerTablet(0)
-        , SchemeShardId(0)
-        , LastACLUpdate(TInstant::Zero())
-        , TxId(0)
-        , NumActiveParts(0)
-        , MaxIdx(0)
-        , NextPartitionId(0)
-        , NextPartitionIdForWrite(0)
-        , StartPartitionIdForWrite(0)
-        , TotalGroups(0)
-        , NoGroupsInBase(true)
-        , ResourceMetrics(nullptr)
-        , WaitingForACL(false)
-        , StatsReportRound(0)
-    {}
+    TPersQueueReadBalancer(const TActorId &tablet, TTabletStorageInfo *info);
 
     STFUNC(StateInit) {
         auto ctx(ActorContext());

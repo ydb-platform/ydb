@@ -19,6 +19,7 @@ IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, si
             case CURLE_OPERATION_TIMEDOUT:
             case CURLE_SSL_CONNECT_ERROR:
             case CURLE_BAD_DOWNLOAD_RESUME:
+            case CURLE_GOT_NOTHING:
             case CURLE_SEND_ERROR:
             case CURLE_RECV_ERROR:
             case CURLE_NO_CONNECTION_AVAILABLE:

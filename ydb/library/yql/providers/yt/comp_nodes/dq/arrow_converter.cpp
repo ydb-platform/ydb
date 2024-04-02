@@ -440,6 +440,7 @@ struct TYsonBlockReaderTraits {
         ythrow yexception() << "Yson reader not implemented for block resources";
     }   
 
+    template<typename TTzDate>
     static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Yson reader not implemented for block tz dates";

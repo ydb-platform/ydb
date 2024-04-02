@@ -51,7 +51,7 @@ In this example, we created the "people" table with a constraint block (`CONSTRA
 
 ## Creating a temporary table {#create_table_temp_table}
 
-{% include [create_table_temp.md](../../../_includes/postgresql/statements/create_table/create_table_temp.md) %}
+{% include [create_table_temp.md](../_includes/statements/create_table/create_table_temp.md) %}
 
 The temporary table is defined using the `TEMPORARY` or `TEMP` keywords.
 

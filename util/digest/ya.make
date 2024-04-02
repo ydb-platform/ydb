@@ -1,5 +1,3 @@
-SUBSCRIBER(g:util-subscribers)
-
 IF (NOT OS_EMSCRIPTEN)
     RECURSE(
         benchmark

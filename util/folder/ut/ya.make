@@ -1,7 +1,5 @@
 UNITTEST_FOR(util)
 
-SUBSCRIBER(g:util-subscribers)
-
 SRCS(
     folder/dirut_ut.cpp
     folder/filelist_ut.cpp

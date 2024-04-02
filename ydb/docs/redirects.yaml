@@ -4,27 +4,49 @@ common:
   - from: changelog.md
     to: changelog-server.md
   - from: /administration/quickstart.md
-    to: /getting_started/quickstart.md
+    to: /quickstart.md
   - from: /getting_started/create_db.md
-    to: /getting_started/quickstart.md
+    to: /quickstart.md
   - from: /getting_started/auth.md
     to: /concepts/auth.md
   - from: /getting_started/cli.md
     to: /reference/ydb-cli/index.md
   - from: /getting_started/sdk.md
     to: /reference/ydb-sdk/index.md
+  - from: /getting_started/self_hosted/ydb_docker.md
+    to: /quickstart.md
+  - from: /getting_started/self_hosted/ydb_local.md
+    to: /quickstart.md
+  - from: /getting_started/self_hosted/ydb_minikube.md
+    to: /quickstart.md
   - from: /ops/devslice-user-guide-k8s-baremetal-host.md
     to: /ops/devslice-setup-kikimr-slice.md
   - from: /deploy/orchestrated/concepts.md
-    to: /getting_started/kubernetes.md
+    to: /devops/kubernetes/initial-deployment.md
   - from: /deploy/orchestrated/yc_managed_kubernetes.md
-    to: /getting_started/kubernetes.md
+    to: /devops/kubernetes/initial-deployment.md
   - from: /deploy/orchestrated/aws_eks.md
-    to: /getting_started/kubernetes.md
+    to: /devops/kubernetes/initial-deployment.md
   - from: /deploy/orchestrated/operate.md
-    to: /getting_started/kubernetes.md
+    to: /devops/kubernetes/initial-deployment.md
   - from: /getting_started/index.md
-    to: /getting_started/quickstart.md
+    to: /quickstart.md
+  - from: /getting_started/kubernetes.md
+    to: /devops/kubernetes/initial-deployment.md
+  - from: /getting_started/ansible.md
+    to: /devops/ansible/initial-deployment.md
+  - from: /getting_started/yql.md
+    to: /yql/reference/index.md
+
+# Redirects for ydb-dstoo
+  - from: /administration/ydb-dstool-device-list.md
+    to: /reference/ydb-dstool/device-list.md
+  - from: /administration/ydb-dstool-global-options.md
+    to: /reference/ydb-dstool/global-options.md
+  - from: /administration/ydb-dstool-overview.md
+    to: /reference/ydb-dstool/index.md
+  - from: /administration/ydb-dstool-setup.md
+    to: /reference/ydb-dstool/install.md
 
 # Redirect from export_import to export-import   
   - from: /reference/ydb-cli/export_import/s3_conn.md

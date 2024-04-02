@@ -1,10 +1,13 @@
 IF (YQL_PACKAGED)
+    PACKAGE()
 
     FROM_SANDBOX(
         FILE {FILE_RESOURCE_ID} OUT_NOAUTO
-            udf_resolver EXECUTABLE
+            udf_resolver
+            EXECUTABLE
     )
 
+    END()
 ELSE()
     PROGRAM()
 
@@ -17,7 +20,6 @@ ELSE()
         # prevent external python extensions to lookup protobuf symbols (and maybe
         # other common stuff) in main binary
         EXPORTS_SCRIPT(${ARCADIA_ROOT}/ydb/library/yql/tools/exports.symlist)
-
         PEERDIR(
             contrib/libs/libc_compat
         )
@@ -39,5 +41,4 @@ ELSE()
     YQL_LAST_ABI_VERSION()
 
     END()
-
 ENDIF()

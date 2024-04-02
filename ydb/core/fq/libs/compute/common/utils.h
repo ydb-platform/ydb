@@ -31,6 +31,7 @@ inline std::shared_ptr<NYdb::NTable::TTableClient> CreateNewTableClient(const TS
 TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage = nullptr);
 TString GetV1StatFromV2PlanV2(const TString& plan);
 TString GetPrettyStatistics(const TString& statistics);
+THashMap<TString, i64> AggregateStats(TStringBuf plan);
 
 TString FormatDurationMs(ui64 durationMs);
 TString FormatDurationUs(ui64 durationUs);
@@ -52,9 +53,10 @@ TPublicStat GetPublicStat(const TString& statistics);
 struct IPlanStatProcessor {
     virtual ~IPlanStatProcessor() = default;
     virtual Ydb::Query::StatsMode GetStatsMode() = 0;
-    virtual TString ConvertPlan(TString& plan)  = 0;
-    virtual TString GetQueryStat(TString& plan, double& cpuUsage) = 0;
-    virtual TPublicStat GetPublicStat(TString& stat) = 0;
+    virtual TString ConvertPlan(const TString& plan)  = 0;
+    virtual TString GetQueryStat(const TString& plan, double& cpuUsage) = 0;
+    virtual TPublicStat GetPublicStat(const TString& stat) = 0;
+    virtual THashMap<TString, i64> GetFlatStat(TStringBuf plan) = 0;
 };
 
 std::unique_ptr<IPlanStatProcessor> CreateStatProcessor(const TString& statViewName);

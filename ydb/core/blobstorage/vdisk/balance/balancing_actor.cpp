@@ -129,6 +129,8 @@ namespace NBalancing {
 
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB08, VDISKP(Ctx->VCtx, "Keys collected"),
                 (SendOnMainParts, SendOnMainParts.size()), (TryDeleteParts, TryDeleteParts.size()));
+            Ctx->MonGroup.PlannedToSendOnMain() = SendOnMainParts.size();
+            Ctx->MonGroup.CandidatesToDelete() = TryDeleteParts.size();
 
             // register sender and deleter actors
             SenderId = TlsActivationContext->Register(CreateSenderActor(SelfId(), std::move(SendOnMainParts), QueueActorMapPtr, Ctx));

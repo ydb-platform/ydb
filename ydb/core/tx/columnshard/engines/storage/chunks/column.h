@@ -20,7 +20,7 @@ protected:
         return Data;
     }
     virtual ui32 DoGetRecordsCountImpl() const override {
-        return Record.GetMeta().GetNumRowsVerified();
+        return Record.GetMeta().GetNumRows();
     }
     virtual TString DoDebugString() const override {
         return "";

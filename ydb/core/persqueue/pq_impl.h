@@ -429,6 +429,9 @@ private:
     void DestroySession(TPipeInfo& pipeInfo);
     bool UseMediatorTimeCast = true;
 
+    TVector<TEvPersQueue::TEvStatus::TPtr> StatusRequests;
+    void ProcessStatusRequests(const TActorContext &ctx);
+
     THashMap<ui32, TVector<TEvPQ::TEvCheckPartitionStatusRequest::TPtr>> CheckPartitionStatusRequests;
     TMaybe<ui64> TabletGeneration;
 

@@ -79,6 +79,11 @@ void TPartition::ReplyWrite(
     ctx.Send(Tablet, response.Release());
 }
 
+void TPartition::UpdateAvailableSize(const TActorContext& ctx) {
+    FilterDeadlinedWrites(ctx);
+    ScheduleUpdateAvailableSize(ctx);
+}
+
 void TPartition::HandleOnIdle(TEvPQ::TEvUpdateAvailableSize::TPtr&, const TActorContext& ctx)
 {
     UpdateAvailableSize(ctx);
@@ -927,7 +932,9 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
                 );
 
                 TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
+                MsgsDiscarded.Inc();
                 TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());
+                BytesDiscarded.Inc(p.Msg.Data.size());
             } else {
                 TabletCounters.Cumulative()[COUNTER_PQ_WRITE_SMALL_OFFSET].Increment(1);
                 TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_SMALL_OFFSET].Increment(p.Msg.Data.size());

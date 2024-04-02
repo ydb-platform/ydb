@@ -251,6 +251,8 @@ private:
 
     ui64 GetUsedStorage(const TActorContext& ctx);
 
+    TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished = false);
+
     void ProcessTxsAndUserActs(const TActorContext& ctx);
     void ContinueProcessTxsAndUserActs(const TActorContext& ctx);
 
@@ -779,6 +781,9 @@ private:
     NKikimr::NPQ::TMultiCounter BytesWrittenComp;
     TPartitionCounterWrapper MsgsWrittenTotal;
     TPartitionCounterWrapper MsgsWrittenGrpc;
+
+    NKikimr::NPQ::TMultiCounter MsgsDiscarded;
+    NKikimr::NPQ::TMultiCounter BytesDiscarded;
 
     // Writing blob with topic quota variables
     ui64 TopicQuotaRequestCookie = 0;

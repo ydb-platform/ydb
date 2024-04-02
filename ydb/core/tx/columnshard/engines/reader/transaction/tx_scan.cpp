@@ -28,8 +28,8 @@ TString FromCells(const TConstArrayRef<TCell>& cells, const std::vector<std::pai
 
     NArrow::TArrowBatchBuilder batchBuilder;
     batchBuilder.Reserve(1);
-    bool ok = batchBuilder.Start(columns);
-    Y_ABORT_UNLESS(ok);
+    auto startStatus = batchBuilder.Start(columns);
+    Y_ABORT_UNLESS(startStatus.ok(), "%s", startStatus.ToString().c_str());
 
     batchBuilder.AddRow(NKikimr::TDbTupleRef(), NKikimr::TDbTupleRef(types.data(), cells.data(), cells.size()));
 
@@ -86,9 +86,13 @@ std::pair<TPredicate, TPredicate> RangePredicates(const TSerializedTableRange& r
 
     TString leftBorder = FromCells(leftCells, leftColumns);
     TString rightBorder = FromCells(rightCells, rightColumns);
+    auto leftSchema = NArrow::MakeArrowSchema(leftColumns);
+    Y_ASSERT(leftSchema.ok());
+    auto rightSchema = NArrow::MakeArrowSchema(rightColumns);
+    Y_ASSERT(rightSchema.ok());
     return std::make_pair(
-        TPredicate(fromInclusive ? NKernels::EOperation::GreaterEqual : NKernels::EOperation::Greater, leftBorder, NArrow::MakeArrowSchema(leftColumns)),
-        TPredicate(toInclusive ? NKernels::EOperation::LessEqual : NKernels::EOperation::Less, rightBorder, NArrow::MakeArrowSchema(rightColumns)));
+        TPredicate(fromInclusive ? NKernels::EOperation::GreaterEqual : NKernels::EOperation::Greater, leftBorder, leftSchema.ValueUnsafe()),
+        TPredicate(toInclusive ? NKernels::EOperation::LessEqual : NKernels::EOperation::Less, rightBorder, rightSchema.ValueUnsafe()));
 }
 
 static bool FillPredicatesFromRange(TReadDescription& read, const ::NKikimrTx::TKeyRange& keyRange,

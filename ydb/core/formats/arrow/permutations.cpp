@@ -181,6 +181,42 @@ std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& s
     return result;
 }
 
+namespace {
+
+template <class TDataContainer>
+bool BuildHashUI64Impl(std::shared_ptr<TDataContainer>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName) {
+    if (fieldNames.size() == 0) {
+        return false;
+    }
+    Y_ABORT_UNLESS(!batch->GetColumnByName(hashFieldName));
+    if (fieldNames.size() == 1) {
+        auto column = batch->GetColumnByName(fieldNames.front());
+        if (!column) {
+            AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "cannot_build_hash")("reason", "field_not_found")("field_name", fieldNames.front());
+            return false;
+        }
+        Y_ABORT_UNLESS(column);
+        if (column->type()->id() == arrow::Type::UINT64 || column->type()->id() == arrow::Type::UINT32 || column->type()->id() == arrow::Type::INT64 || column->type()->id() == arrow::Type::INT32) {
+            batch = TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), std::make_shared<arrow::Field>(hashFieldName, column->type()), column));
+            return true;
+        }
+    }
+    std::shared_ptr<arrow::Array> hashColumn = NArrow::NHash::TXX64(fieldNames, NArrow::NHash::TXX64::ENoColumnPolicy::Verify, 34323543)
+        .ExecuteToArray(batch, hashFieldName);
+    batch = NAdapter::TDataBuilderPolicy<TDataContainer>::AddColumn(batch, std::make_shared<arrow::Field>(hashFieldName, hashColumn->type()), hashColumn);
+    return true;
+}
+
+}
+
+bool THashConstructor::BuildHashUI64(std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName) {
+    return BuildHashUI64Impl(batch, fieldNames, hashFieldName);
+}
+
+bool THashConstructor::BuildHashUI64(std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName) {
+    return BuildHashUI64Impl(batch, fieldNames, hashFieldName);
+}
+
 ui64 TShardedRecordBatch::GetMemorySize() const {
     return NArrow::GetTableMemorySize(RecordBatch);
 }
@@ -238,6 +274,11 @@ NKikimr::NArrow::TShardedRecordBatch TShardingSplitIndex::Apply(const ui32 shard
     }
     auto resultBatch = NArrow::TStatusValidator::GetValid(input->RemoveColumn(input->schema()->GetFieldIndex(hashColumnName)));
     return TShardedRecordBatch(resultBatch, splitter->DetachRemapping());
+}
+
+TShardedRecordBatch TShardingSplitIndex::Apply(const ui32 shardsCount, const std::shared_ptr<arrow::RecordBatch>& input, const std::string& hashColumnName) {
+    return Apply(shardsCount, TStatusValidator::GetValid(arrow::Table::FromRecordBatches(input->schema(), {input}))
+        , hashColumnName);
 }
 
 std::shared_ptr<arrow::UInt64Array> TShardingSplitIndex::BuildPermutation() const {

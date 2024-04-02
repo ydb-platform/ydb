@@ -92,6 +92,12 @@ struct TNumDivInterval {
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
+        if constexpr (std::is_same_v<ui64, typename TRight::TLayout>) {
+            if (right.Get<ui64>() > static_cast<ui64>(std::numeric_limits<i64>::max())) {
+                return NUdf::TUnboxedValuePod();
+            }
+        }
+
         const auto lv = static_cast<typename TOutput::TLayout>(left.template Get<typename TLeft::TLayout>());
         const auto rv = static_cast<typename TOutput::TLayout>(right.template Get<typename TRight::TLayout>());
 
@@ -109,8 +115,8 @@ struct TNumDivInterval {
         auto& context = ctx.Codegen.GetContext();
         const auto lv = StaticCast<typename TLeft::TLayout, typename TOutput::TLayout>(
                 GetterFor<typename TLeft::TLayout>(left, context, block), context, block);
-        const auto rv = StaticCast<typename TRight::TLayout, typename TOutput::TLayout>(
-                GetterFor<typename TRight::TLayout>(right, context, block), context, block);
+        const auto rightValue = GetterFor<typename TRight::TLayout>(right, context, block);
+        const auto rv = StaticCast<typename TRight::TLayout, typename TOutput::TLayout>(rightValue, context, block);
         const auto type = Type::getInt128Ty(context);
         const auto zero = ConstantInt::get(type, 0);
         const auto check = CmpInst::Create(
@@ -126,7 +132,10 @@ struct TNumDivInterval {
         block = good;
         const auto div = BinaryOperator::CreateSDiv(lv, rv, "div", block);
         const auto full = SetterFor<typename TOutput::TLayout>(div, context, block);
-        const auto bad = GenIsBadInterval<TOutput>(div, context, block);
+        const auto bad = BinaryOperator::CreateOr(
+                GenIsInt64Overflow<typename TRight::TLayout>(rightValue, context, block),
+                GenIsBadInterval<TOutput>(div, context, block),
+                "bad", block);
         const auto sel = SelectInst::Create(bad, zero, full, "sel", block);
         result->addIncoming(sel, block);
         BranchInst::Create(done, block);

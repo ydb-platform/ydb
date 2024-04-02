@@ -60,10 +60,10 @@ struct TNumMulInterval {
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto lhs = StaticCast<typename TLeft::TLayout, i64>(
-                GetterFor<typename TLeft::TLayout>(left, context, block), context, block);
-        const auto rhs = StaticCast<typename TRight::TLayout, i64>(
-                GetterFor<typename TRight::TLayout>(right, context, block), context, block);
+        const auto lv = GetterFor<typename TLeft::TLayout>(left, context, block);
+        const auto lhs = StaticCast<typename TLeft::TLayout, i64>(lv, context, block);
+        const auto rv = GetterFor<typename TRight::TLayout>(right, context, block);
+        const auto rhs = StaticCast<typename TRight::TLayout, i64>(rv, context, block);
         const auto mul = BinaryOperator::CreateMul(lhs, rhs, "mul", block);
         const auto result = SetterFor<typename TOutput::TLayout>(mul, context, block);
 
@@ -85,10 +85,13 @@ struct TNumMulInterval {
 
         const auto i64Max = ConstantInt::get(Type::getInt64Ty(context), std::numeric_limits<i64>::max());
         const auto div = BinaryOperator::CreateSDiv(i64Max, rhsAbs, "div", block);
-        const auto overflow = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, lhsAbs, div, "overflow", block);
-        
+        const auto mulOverflow = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, lhsAbs, div, "mulOverflow", block);
+        const auto i64Overflow = BinaryOperator::CreateOr(
+                GenIsInt64Overflow<typename TLeft::TLayout>(lv, context, block),
+                GenIsInt64Overflow<typename TRight::TLayout>(rv, context, block),
+                "i64Overflow", block);
         const auto bad = BinaryOperator::CreateOr(
-                overflow,
+                BinaryOperator::CreateOr(i64Overflow, mulOverflow, "overflow", block),
                 GenIsBadInterval<TOutput>(mul, context, block),
                 "bad", block);
         const auto null = ConstantInt::get(Type::getInt128Ty(context), 0);

@@ -13,6 +13,7 @@
 #include <ydb/public/lib/base/msgbus.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 
 namespace NKikimr::NPQ {
@@ -248,6 +249,8 @@ void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::p
 }
 
 void PQGetPartInfo(ui64 startOffset, ui64 endOffset, TTestContext& tc) {
+    DBGTRACE("PQGetPartInfo");
+    DBGTRACE_LOG("startOffset=" << startOffset << ", endOffset=" << endOffset);
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvOffsetsResponse *result;
     THolder<TEvPersQueue::TEvOffsets> request;
@@ -536,6 +539,8 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
               bool isFirst, const TString& ownerCookie, i32 msn, i64 offset,
               bool treatWrongCookieAsError, bool treatBadOffsetAsError,
               bool disableDeduplication) {
+    DBGTRACE("CmdWrite");
+    DBGTRACE_LOG("data.size=" << data.size());
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
 

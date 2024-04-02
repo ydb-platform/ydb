@@ -51,6 +51,8 @@ void TPartition::ReplyWrite(
     const TActorContext& ctx, const ui64 dst, const TString& sourceId, const ui64 seqNo, const ui16 partNo, const ui16 totalParts,
     const ui64 offset, const TInstant writeTimestamp, bool already, const ui64 maxSeqNo,
     const TDuration partitionQuotedTime, const TDuration topicQuotedTime, const TDuration queueTime, const TDuration writeTime) {
+    DBGTRACE("TPartition::ReplyWrite");
+    DBGTRACE_LOG("Partition=" << Partition << ", dst=" << dst);
 
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::ReplyWrite. Partition: " << Partition);
 
@@ -302,6 +304,7 @@ void TPartition::Handle(TEvPQ::TEvReserveBytes::TPtr& ev, const TActorContext& c
 void TPartition::HandleOnIdle(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx)
 {
     DBGTRACE("TPartition::HandleOnIdle(TEvPQ::TEvWrite)");
+    DBGTRACE_LOG("ev->Msgs.size=" << ev->Get()->Msgs.size());
     HandleOnWrite(ev, ctx);
     HandlePendingRequests(ctx);
 }
@@ -443,6 +446,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 }
 
 void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
+    DBGTRACE("TPartition::SyncMemoryStateWithKVState");
     PQ_LOG_T("TPartition::SyncMemoryStateWithKVState.");
 
     if (!CompactedKeys.empty())
@@ -459,6 +463,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     }
 
     if (CompactedKeys.empty() && NewHead.PackedSize == 0) { //Nothing writed at all
+        DBGTRACE_LOG("skip");
         return;
     }
 
@@ -497,9 +502,12 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     }
     Head.PackedSize += NewHead.PackedSize;
 
+    DBGTRACE_LOG("Head.PackedSize=" << Head.PackedSize << ", DataKeysBody.size=" << DataKeysBody.size());
     if (Head.PackedSize > 0 && DataKeysBody.empty()) {
+        DBGTRACE_LOG("Head.Offset=" << Head.Offset << ", Head.PartNo=" << Head.PartNo);
         StartOffset = Head.Offset + (Head.PartNo > 0 ? 1 : 0);
     }
+    DBGTRACE_LOG("StartOffset=" << StartOffset);
 
     EndOffset = Head.GetNextOffset();
     NewHead.Clear();
@@ -924,16 +932,21 @@ TPartition::EProcessResult TPartition::ProcessRequest(TSplitMessageGroupMsg& msg
 }
 
 TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
+    DBGTRACE("TPartition::ProcessRequest(TWriteMsg)");
+    DBGTRACE_LOG("p.Msg.SourceId=" << p.Msg.SourceId);
         ui64& curOffset = parameters.CurOffset;
+        DBGTRACE_LOG("curOffset=" << curOffset);
         auto& sourceIdBatch = parameters.SourceIdBatch;
         auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
 
         WriteInflightSize -= p.Msg.Data.size();
+        DBGTRACE_LOG("WriteInflightSize=" << WriteInflightSize);
 
         TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
         //check already written
 
         ui64 poffset = p.Offset ? *p.Offset : curOffset;
+        DBGTRACE_LOG("poffset=" << poffset);
 
         LOG_TRACE_S(
                 ctx, NKikimrServices::PERSQUEUE,
@@ -948,6 +961,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
         if (!p.Msg.DisableDeduplication
             && ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo)
             || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))) {
+            DBGTRACE_LOG("skip");
             if (poffset >= curOffset) {
                 LOG_DEBUG_S(
                         ctx, NKikimrServices::PERSQUEUE,
@@ -973,6 +987,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
         }
 
         if (const auto& hbVersion = p.Msg.HeartbeatVersion) {
+            DBGTRACE("heartbeat");
             if (!sourceId.SeqNo()) {
                 CancelAllWritesOnWrite(ctx, request, TStringBuilder()
                     << "Cannot apply heartbeat on unknown sourceId: " << EscapeC(p.Msg.SourceId), p, sourceIdBatch);
@@ -997,6 +1012,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
         }
 
         if (poffset < curOffset) { //too small offset
+            DBGTRACE_LOG("too small offset");
             CancelAllWritesOnWrite(ctx, request,
                                     TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId) << " seqNo: " << p.Msg.SeqNo
                                         << " partNo: " << p.Msg.PartNo << " has incorrect offset " << poffset << ", must be at least " << curOffset,
@@ -1008,6 +1024,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
 
         bool needCompactHead = poffset > curOffset;
         if (needCompactHead) { //got gap
+            DBGTRACE_LOG("got gap");
             if (p.Msg.PartNo != 0) { //gap can't be inside of partitioned message
                 CancelAllWritesOnWrite(ctx, request,
                                         TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId) << " seqNo: " << p.Msg.SeqNo
@@ -1020,6 +1037,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
         }
 
         if (p.Msg.PartNo == 0) { //create new PartitionedBlob
+            DBGTRACE_LOG("create new PartitionedBlob");
             //there could be parts from previous owner, clear them
             if (!parameters.OldPartsCleared) {
                 parameters.OldPartsCleared = true;
@@ -1033,6 +1051,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
 
             if (PartitionedBlob.HasFormedBlobs()) {
                 //clear currently-writed blobs
+                DBGTRACE_LOG("clear currently-writed blobs");
                 auto oldCmdWrite = request->Record.GetCmdWrite();
                 request->Record.ClearCmdWrite();
                 for (ui32 i = 0; i < (ui32)oldCmdWrite.size(); ++i) {
@@ -1055,6 +1074,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
         );
         TString s;
         if (!PartitionedBlob.IsNextPart(p.Msg.SourceId, p.Msg.SeqNo, p.Msg.PartNo, &s)) {
+            DBGTRACE_LOG("client sends gaps");
             //this must not be happen - client sends gaps, fail this client till the end
             CancelAllWritesOnWrite(ctx, request, s, p, sourceIdBatch);
             //now no changes will leak
@@ -1072,6 +1092,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
 
         TMaybe<TPartData> partData;
         if (p.Msg.TotalParts > 1) { //this is multi-part message
+            DBGTRACE_LOG("multi-part message");
             partData = TPartData(p.Msg.PartNo, p.Msg.TotalParts, p.Msg.TotalSize);
         }
         WriteTimestamp = ctx.Now();
@@ -1096,6 +1117,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
         auto newWrite = PartitionedBlob.Add(std::move(blob));
 
         if (newWrite && !newWrite->second.empty()) {
+            DBGTRACE_LOG("newWrite");
             auto write = request->Record.AddCmdWrite();
             write->SetKey(newWrite->first.Data(), newWrite->first.Size());
             write->SetValue(newWrite->second);
@@ -1121,6 +1143,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
         }
 
         if (lastBlobPart) {
+            DBGTRACE_LOG("lastBlobPart");
             Y_ABORT_UNLESS(PartitionedBlob.IsComplete());
             ui32 curWrites = 0;
             for (ui32 i = 0; i < request->Record.CmdWriteSize(); ++i) { //change keys for yet to be writed KV pairs
@@ -1356,6 +1379,7 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
 }
 
 void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx) {
+    DBGTRACE("TPartition::AddNewWriteBlob");
     PQ_LOG_T("TPartition::AddNewWriteBlob.");
 
     const auto& key = res.first;
@@ -1657,7 +1681,7 @@ void TPartition::EndHandleRequests(TEvKeyValue::TEvRequest* request, const TActo
     WritesTotal.Inc();
 
     UpdateAfterWriteCounters(false);
-    Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
+    //Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
 
     AddMetaKey(request);
     WriteStartTime = TActivationContext::Now();

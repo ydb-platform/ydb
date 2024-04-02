@@ -12,6 +12,7 @@
 
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 
 namespace NKikimr::NPQ {
@@ -1234,6 +1235,7 @@ Y_UNIT_TEST(TestWritePQCompact) {
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        DBGTRACE("TestWritePQCompact");
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
@@ -1253,24 +1255,28 @@ Y_UNIT_TEST(TestWritePQCompact) {
             data.push_back({i + 1, ss.substr(pp)});
         }
         CmdWrite(0, "sourceid0", data, tc, false, {}, true); //now 1 blob
+        DBGTRACE_LOG("");
         PQGetPartInfo(0, 8, tc);
         data.clear();
         for (ui32 i = 0; i + s1.size() < 7_MB + 4 * s1.size(); i += s1.size()) {
             data.push_back({i + 1, s1.substr(pp)});
         }
         CmdWrite(0, "sourceid1", data, tc);
+        DBGTRACE_LOG("");
         PQGetPartInfo(0, 63 + 4, tc);
         data.clear();
         for (ui32 i = 0; i + s2.size() < s1.size(); i += s2.size()) {
             data.push_back({i + 1, s2.substr(pp)});
         }
         CmdWrite(0, "sourceid2", data, tc);
+        DBGTRACE_LOG("");
         PQGetPartInfo(8, 2 * 63 + 4, tc); //first is partial, not counted
         data.clear();
         for (ui32 i = 0; i + s3.size() + 540 < s2.size(); i += s3.size()) {
             data.push_back({i + 1, s3.substr(pp)});
         }
         CmdWrite(0, "sourceid3", data, tc); //now 1 blob and at most one
+        DBGTRACE_LOG("");
 
         PQGetPartInfo(8, 177, tc);
         data.resize(1);
@@ -1279,6 +1285,7 @@ Y_UNIT_TEST(TestWritePQCompact) {
         activeZone = true;
         CmdWrite(0, "sourceid5", data, tc); //next message just to force drop, don't wait for WakeUp
         activeZone = false;
+        DBGTRACE_LOG("");
 
         PQGetPartInfo(8, 179, tc);
 

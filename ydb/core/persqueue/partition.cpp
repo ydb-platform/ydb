@@ -436,8 +436,12 @@ bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& 
 }
 
 bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorContext& ctx) {
-    if (StartOffset == EndOffset || DataKeysBody.size() <= 1)
+    DBGTRACE("TPartition::CleanUpBlobs");
+    DBGTRACE_LOG("StartOffset=" << StartOffset << ", EndOffset=" << EndOffset << ", DataKeysBody.size=" << DataKeysBody.size());
+    if (StartOffset == EndOffset || DataKeysBody.size() <= 1) {
+        DBGTRACE_LOG("skip");
         return false;
+    }
 
     const auto& partConfig = Config.GetPartitionConfig();
     const TDuration lifetimeLimit{TDuration::Seconds(partConfig.GetLifetimeSeconds())};
@@ -484,15 +488,19 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
 
     Y_ABORT_UNLESS(!DataKeysBody.empty());
 
-    if (!hasDrop)
+    if (!hasDrop) {
+        DBGTRACE_LOG("skip");
         return false;
+    }
 
     const auto& lastKey = DataKeysBody.front().Key;
 
+    DBGTRACE_LOG("StartOffset=" << StartOffset);
     StartOffset = lastKey.GetOffset();
     if (lastKey.GetPartNo() > 0) {
         ++StartOffset;
     }
+    DBGTRACE_LOG("StartOffset=" << StartOffset);
 
     TKey firstKey(TKeyPrefix::TypeData, Partition, 0, 0, 0, 0); //will drop all that could not be dropped before of case of full disks
 
@@ -1572,7 +1580,7 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
     DBGTRACE("TPartition::ProcessTxsAndUserActs");
     DBGTRACE_LOG("Responses.size=" << Responses.size());
     bool skip = UsersInfoWriteInProgress;
-    skip |= ReserveRequests.empty() && UserActionAndTransactionEvents.empty();
+    //skip |= ReserveRequests.empty() && UserActionAndTransactionEvents.empty();
     skip |= TxInProgress;
     if (skip) {
         DBGTRACE_LOG("UsersInfoWriteInProgress=" << UsersInfoWriteInProgress <<
@@ -1624,34 +1632,36 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
             AddMetaKey(request.Get());
             ctx.Send(Tablet, request.Release());
         }
-    } else {
-        auto visitor = [this, &ctx, &request](auto& event) {
-            using T = std::decay_t<decltype(event)>;
-            if constexpr (TIsSimpleSharedPtr<T>::value) {
-                return this->ProcessUserActionOrTransaction(*event, request.Get(), ctx);
-            } else {
-                return this->ProcessUserActionOrTransaction(event, request.Get(), ctx);
-            }
-        };
 
-        FirstEvent = true;
-        for (bool stop = false; !stop && !UserActionAndTransactionEvents.empty(); ) {
-            auto& front = UserActionAndTransactionEvents.front();
+        return;
+    }
 
-            switch (std::visit(visitor, front)) {
-            case EProcessResult::Continue:
-                DBGTRACE_LOG("continue");
-                UserActionAndTransactionEvents.pop_front();
-                FirstEvent = false;
-                break;
-            case EProcessResult::Break:
-                DBGTRACE_LOG("break");
-                stop = true;
-                break;
-            case EProcessResult::Abort:
-                DBGTRACE_LOG("abort");
-                return;
-            }
+    auto visitor = [this, &ctx, &request](auto& event) {
+        using T = std::decay_t<decltype(event)>;
+        if constexpr (TIsSimpleSharedPtr<T>::value) {
+            return this->ProcessUserActionOrTransaction(*event, request.Get(), ctx);
+        } else {
+            return this->ProcessUserActionOrTransaction(event, request.Get(), ctx);
+        }
+    };
+
+    FirstEvent = true;
+    for (bool stop = false; !stop && !UserActionAndTransactionEvents.empty(); ) {
+        auto& front = UserActionAndTransactionEvents.front();
+
+        switch (std::visit(visitor, front)) {
+        case EProcessResult::Continue:
+            DBGTRACE_LOG("continue");
+            UserActionAndTransactionEvents.pop_front();
+            FirstEvent = false;
+            break;
+        case EProcessResult::Break:
+            DBGTRACE_LOG("break");
+            stop = true;
+            break;
+        case EProcessResult::Abort:
+            DBGTRACE_LOG("abort");
+            return;
         }
     }
 
@@ -2179,6 +2189,7 @@ TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TMessage& 
                                                                       const TActorContext& ctx)
 {
     DBGTRACE("TPartition::ProcessUserActionOrTransaction(TMessage)");
+    DBGTRACE_LOG("HaveWriteMsg=" << HaveWriteMsg);
     if (!HaveWriteMsg) {
         BeginHandleRequests(request, ctx);
         BeginProcessWrites(ctx);

@@ -1,0 +1,9 @@
+{"key"=1;"always_null"=#;"never_null"=11;"maybe_null"=11;};
+{"key"=2;"always_null"=#;"never_null"=22;"maybe_null"=22;};
+{"key"=3;"always_null"=#;"never_null"=33;"maybe_null"=33;};
+{"key"=4;"always_null"=#;"never_null"=44;"maybe_null"=#; };
+{"key"=5;"always_null"=#;"never_null"=55;"maybe_null"=55;};
+{"key"=6;"always_null"=#;"never_null"=66;"maybe_null"=#; };
+{"key"=7;"always_null"=#;"never_null"=77;"maybe_null"=#; };
+{"key"=8;"always_null"=#;"never_null"=88;"maybe_null"=88;};
+{"key"=9;"always_null"=#;"never_null"=99;"maybe_null"=#; };

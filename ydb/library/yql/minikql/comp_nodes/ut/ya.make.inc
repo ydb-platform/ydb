@@ -24,6 +24,7 @@ SET(ORIG_SOURCES
     mkql_test_factory.cpp
     mkql_bit_utils_ut.cpp
     mkql_block_compress_ut.cpp
+    mkql_block_exists_ut.cpp
     mkql_block_skiptake_ut.cpp
     mkql_block_top_sort_ut.cpp
     mkql_blocks_ut.cpp

@@ -35,6 +35,16 @@ struct TNumMulInterval {
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
+        if constexpr (std::is_same_v<ui64, typename TLeft::TLayout>) {
+            if (left.Get<ui64>() > static_cast<ui64>(std::numeric_limits<i64>::max())) {
+                return NUdf::TUnboxedValuePod();
+            }
+        }
+        if constexpr (std::is_same_v<ui64, typename TRight::TLayout>) {
+            if (right.Get<ui64>() > static_cast<ui64>(std::numeric_limits<i64>::max())) {
+                return NUdf::TUnboxedValuePod();
+            }
+        }
         const auto lv = static_cast<typename TOutput::TLayout>(left.template Get<typename TLeft::TLayout>());
         const auto rv = static_cast<typename TOutput::TLayout>(right.template Get<typename TRight::TLayout>());
         i64 lvAbs = (lv > 0) ? lv : -lv;

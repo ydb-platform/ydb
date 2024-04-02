@@ -8,15 +8,17 @@ TKqpTempTablesState::FindInfo(const std::string_view& path, bool withSessionId) 
         return TempTables.find(path);
     }
 
-    if (path.size() < SessionId.size()) {
-        return TempTables.end();
-    }
-    size_t pos = path.size() - SessionId.size();
-    if (path.substr(pos) != SessionId) {
+    const auto temporaryStoragePrefix = Database + "/.tmp/" + SessionId + "/";
+
+    if (path.size() < temporaryStoragePrefix.size()) {
         return TempTables.end();
     }
 
-    return TempTables.find(path.substr(0, pos));
+    if (path.substr(0, temporaryStoragePrefix.size()) != temporaryStoragePrefix) {
+        return TempTables.end();
+    }
+
+    return TempTables.find(path.substr(temporaryStoragePrefix.size() - 1));
 }
 
 } // namespace NKikimr::NKqp

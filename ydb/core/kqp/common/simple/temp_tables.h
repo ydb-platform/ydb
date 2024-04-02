@@ -18,6 +18,7 @@ struct TKqpTempTablesState {
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     };
     TString SessionId;
+    TString Database;
     THashMap<TString, TTempTableInfo> TempTables;
 
     using TConstPtr = std::shared_ptr<const TKqpTempTablesState>;

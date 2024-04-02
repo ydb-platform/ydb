@@ -1347,7 +1347,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         const auto queryCreate = Q_(R"(
             --!syntax_v1
-            CREATE TEMPORARY TABLE Temp (
+            CREATE TEMPORARY TABLE `/Root/test/Temp` (
                 Key Uint64 NOT NULL,
                 Value String,
                 PRIMARY KEY (Key)
@@ -1359,7 +1359,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             const auto querySelect = Q_(R"(
                 --!syntax_v1
-                SELECT * FROM Temp;
+                SELECT * FROM `/Root/test/Temp`;
             )");
 
             auto resultSelect = session.ExecuteQuery(
@@ -1369,7 +1369,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         const auto queryDrop = Q_(R"(
             --!syntax_v1
-            DROP TABLE Temp;
+            DROP TABLE `/Root/test/Temp`;
         )");
 
         auto resultDrop = session.ExecuteQuery(
@@ -1379,7 +1379,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             const auto querySelect = Q_(R"(
                 --!syntax_v1
-                SELECT * FROM Temp;
+                SELECT * FROM `/Root/test/Temp`;
             )");
 
             auto resultSelect = session.ExecuteQuery(
@@ -1399,7 +1399,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             const auto querySelect = Q_(R"(
                 --!syntax_v1
-                SELECT * FROM Temp;
+                SELECT * FROM `/Root/test/Temp`;
             )");
 
             auto resultSelect = sessionAnother.ExecuteQuery(

@@ -62,7 +62,7 @@ public:
             modifyScheme->SetWorkingDir(info.WorkingDir);
             modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
             auto* drop = modifyScheme->MutableDrop();
-            drop->SetName(info.Name + TempTablesState.SessionId);
+            drop->SetName(NKikimr::CanonizePath(NKikimr::JoinPath({".tmp", TempTablesState.SessionId, info.Name})));
 
             auto promise = NewPromise<IKqpGateway::TGenericResult>();
             IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, true);

@@ -6,7 +6,7 @@ from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 impo
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
-import ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_common as select_positive_common
+import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as select_positive_common
 import ydb.library.yql.providers.generic.connector.tests.utils.types.clickhouse as clickhouse
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     Schema,

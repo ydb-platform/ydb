@@ -1,19 +1,20 @@
 from pathlib import Path
-import subprocess
 from typing import Final
+import json
+import subprocess
 
 import jinja2
-
-import json
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 
 import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
-from ydb.library.yql.providers.generic.connector.tests.utils.runner import Result, Runner
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings, GenericSettings
+
+from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
+from ydb.library.yql.providers.generic.connector.tests.utils.run.result import Result
 
 LOGGER = make_logger(__name__)
 
@@ -32,8 +33,10 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     AUTH_METHOD="BASIC",
     LOGIN="{{login}}",
     PASSWORD_SECRET_NAME="{{data_source}}_local_password",
-    USE_TLS="FALSE",
-    PROTOCOL="{{protocol}}"
+    {% if protocol %}
+    PROTOCOL="{{protocol}}",
+    {% endif %}
+    USE_TLS="FALSE"
 
     {% if kind == POSTGRESQL and schema %}
         ,SCHEMA="{{schema}}"
@@ -44,6 +47,7 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
 
 {% set CLICKHOUSE = 'ClickHouse' %}
 {% set POSTGRESQL = 'PostgreSQL' %}
+{% set YDB = 'Ydb' %}
 
 {% set NATIVE = 'NATIVE' %}
 {% set HTTP = 'HTTP' %}
@@ -82,6 +86,20 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     NATIVE,
     cluster.database,
     cluster.schema)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.ydb_clusters %}
+{{ create_data_source(
+    YDB,
+    settings.ydb.cluster_name,
+    settings.ydb.host_internal,
+    settings.ydb.port_internal,
+    settings.ydb.username,
+    settings.ydb.password,
+    NONE,
+    cluster.database,
+    NONE)
 }}
 {% endfor %}
 

@@ -1,10 +1,11 @@
 PY3TEST()
 
+STYLE_PYTHON()
 NO_CHECK_IMPORTS()
 
-DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/join/docker-compose.yml)
+DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/datasource/ydb/docker-compose.yml)
 DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/fq-connector-go)
-ENV(COMPOSE_PROJECT_NAME=join)
+ENV(COMPOSE_PROJECT_NAME=ydb)
 
 IF (AUTOCHECK) 
     # Split tests to chunks only when they're running on different machines with distbuild,
@@ -41,19 +42,16 @@ ENDIF()
 TEST_SRCS(
     collection.py
     conftest.py
-    scenario.py
     test.py
-    test_case.py
 )
 
 PEERDIR(
     contrib/python/pytest
     ydb/library/yql/providers/generic/connector/api/common
-    ydb/library/yql/providers/generic/connector/api/service/protos
     ydb/library/yql/providers/generic/connector/tests/common_test_cases
     ydb/library/yql/providers/generic/connector/tests/utils
-    ydb/library/yql/providers/generic/connector/tests/utils/clients
     ydb/library/yql/providers/generic/connector/tests/utils/run
+    ydb/library/yql/providers/generic/connector/tests/utils/clients
     ydb/library/yql/providers/generic/connector/tests/utils/scenario
 )
 

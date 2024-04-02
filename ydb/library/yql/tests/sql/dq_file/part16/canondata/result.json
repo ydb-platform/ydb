@@ -440,6 +440,28 @@
         }
     ],
     "test.test[bigdate-compare_big_big-default.txt-Results]": [],
+    "test.test[bigdate-table_common_type-default.txt-Analyze]": [
+        {
+            "checksum": "c344de814c7e246e9dc80f016916fc36",
+            "size": 11921,
+            "uri": "https://{canondata_backend}/1600758/4f71a10f67b6e33415a0e548a197be96b9261557/resource.tar.gz#test.test_bigdate-table_common_type-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-table_common_type-default.txt-Debug]": [
+        {
+            "checksum": "df9fc5d168fbe2790e7c254b745c15e1",
+            "size": 7289,
+            "uri": "https://{canondata_backend}/1600758/4f71a10f67b6e33415a0e548a197be96b9261557/resource.tar.gz#test.test_bigdate-table_common_type-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[bigdate-table_common_type-default.txt-Plan]": [
+        {
+            "checksum": "c344de814c7e246e9dc80f016916fc36",
+            "size": 11921,
+            "uri": "https://{canondata_backend}/1600758/4f71a10f67b6e33415a0e548a197be96b9261557/resource.tar.gz#test.test_bigdate-table_common_type-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-table_common_type-default.txt-Results]": [],
     "test.test[blocks-combine_all_pg--Analyze]": [
         {
             "checksum": "47c82c4e3e7151597084628a6fdff498",

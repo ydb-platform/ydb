@@ -88,6 +88,7 @@ void TPartition::UpdateAvailableSize(const TActorContext& ctx) {
 void TPartition::HandleOnIdle(TEvPQ::TEvUpdateAvailableSize::TPtr&, const TActorContext& ctx)
 {
     DBGTRACE("TPartition::HandleOnIdle(TEvPQ::TEvUpdateAvailableSize)");
+    DBGTRACE_LOG("ctx.Now=" << ctx.Now());
     UpdateAvailableSize(ctx);
     HandlePendingRequests(ctx);
 }
@@ -239,6 +240,7 @@ void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
         }
 
         const ui64 currentSize = ReservedSize + WriteInflightSize + WriteCycleSize;
+        DBGTRACE_LOG("currentSize=" << currentSize);
         if (currentSize != 0 && currentSize + size > maxWriteInflightSize) {
             DBGTRACE_LOG("Reserve processing: maxWriteInflightSize riched. Partition: " << Partition);
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Reserve processing: maxWriteInflightSize riched. Partition: " << Partition);

@@ -684,6 +684,7 @@ void TPartitionFixture::SendConfigResponse(const TConfigParams& config)
         read->SetValue(out);
     }
 
+    DBGTRACE_LOG("send TEvKeyValue::TEvResponse");
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -707,6 +708,7 @@ void TPartitionFixture::SendDiskStatusResponse(TMaybe<ui64>* cookie)
     result->SetStatus(NKikimrProto::OK);
     result->SetStatusFlags(NKikimrBlobStorage::StatusIsValid);
 
+    DBGTRACE_LOG("send TEvKeyValue::TEvResponse");
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -752,6 +754,7 @@ void TPartitionFixture::SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txI
         read->SetStatus(NKikimrProto::NODATA);
     }
 
+    DBGTRACE_LOG("send TEvKeyValue::TEvResponse");
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -797,6 +800,7 @@ void TPartitionFixture::SendInfoRangeResponse(ui32 partition,
         }
     }
 
+    DBGTRACE_LOG("send TEvKeyValue::TEvResponse");
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -824,6 +828,7 @@ void TPartitionFixture::SendDataRangeResponse(ui64 begin, ui64 end)
     //pair->SetValueSize();
     pair->SetCreationUnixTime(0);
 
+    DBGTRACE_LOG("send TEvKeyValue::TEvResponse");
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 

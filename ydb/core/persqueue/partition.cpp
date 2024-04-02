@@ -1571,10 +1571,14 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 {
     DBGTRACE("TPartition::ProcessTxsAndUserActs");
     DBGTRACE_LOG("Responses.size=" << Responses.size());
-    if (UsersInfoWriteInProgress || UserActionAndTransactionEvents.empty() || TxInProgress) {
-        DBGTRACE_LOG("UsersInfoWriteInProgress=" << UsersInfoWriteInProgress);
-        DBGTRACE_LOG("UserActionAndTransactionEvents.size=" << UserActionAndTransactionEvents.size());
-        DBGTRACE_LOG("TxInProgress=" << TxInProgress);
+    bool skip = UsersInfoWriteInProgress;
+    skip |= ReserveRequests.empty() && UserActionAndTransactionEvents.empty();
+    skip |= TxInProgress;
+    if (skip) {
+        DBGTRACE_LOG("UsersInfoWriteInProgress=" << UsersInfoWriteInProgress <<
+                     ", ReserveRequests.size=" << ReserveRequests.size() <<
+                     ", UserActionAndTransactionEvents.size=" << UserActionAndTransactionEvents.size() <<
+                     ", TxInProgress=" << TxInProgress);
         return;
     }
 
@@ -1663,9 +1667,9 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
     AddCmdWriteUserInfos(request->Record);
     AddCmdWriteConfig(request->Record);
 
-    DBGTRACE_LOG("CmdDeleteRange.size=" << request->Record.CmdDeleteRangeSize());
-    DBGTRACE_LOG("CmdWrite.size=" << request->Record.CmdWriteSize());
-    DBGTRACE_LOG("CmdRename.size=" << request->Record.CmdRenameSize());
+    DBGTRACE_LOG("CmdDeleteRange.size=" << request->Record.CmdDeleteRangeSize() <<
+                 ", CmdWrite.size=" << request->Record.CmdWriteSize() <<
+                 ", CmdRename.size=" << request->Record.CmdRenameSize());
     DBGTRACE_LOG("Responses.size=" << Responses.size());
 
     if (request->Record.CmdDeleteRangeSize() || request->Record.CmdWriteSize() || request->Record.CmdRenameSize()) {
@@ -2826,10 +2830,12 @@ bool TPartition::IsQuotingEnabled() const
 void TPartition::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx)
 {
     DBGTRACE("TPartition::Handle(TEvPQ::TEvSubDomainStatus)");
+    DBGTRACE_LOG("ReserveRequests.size=" << ReserveRequests.size());
     const TEvPQ::TEvSubDomainStatus& event = *ev->Get();
 
     bool statusChanged = SubDomainOutOfSpace != event.SubDomainOutOfSpace();
     SubDomainOutOfSpace = event.SubDomainOutOfSpace();
+    DBGTRACE_LOG("statusChanged=" << statusChanged << ", SubDomainOutOfSpace=" << SubDomainOutOfSpace);
 
     if (statusChanged) {
         LOG_INFO_S(
@@ -2841,7 +2847,7 @@ void TPartition::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext
         );
 
         if (!SubDomainOutOfSpace) {
-            HandlePendingRequests(ctx);
+            ProcessTxsAndUserActs(ctx);
         }
     }
 }

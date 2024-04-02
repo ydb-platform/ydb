@@ -40,7 +40,7 @@ class Settings:
         dbname: str
         cluster_name: str
         username: str
-        password: Optional[str] # TODO: why optional?
+        password: Optional[str]  # TODO: why optional?
         host_external: str
         host_internal: str
         port_external: int

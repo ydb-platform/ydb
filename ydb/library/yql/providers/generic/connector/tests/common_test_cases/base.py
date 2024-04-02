@@ -35,7 +35,7 @@ class BaseTestCase:
         so we provide a random table name instead.
         '''
         match self.data_source_kind:
-            case EDataSourceKind.POSTGRESQL: 
+            case EDataSourceKind.POSTGRESQL:
                 return 't' + hashlib.sha256(str(random.randint(0, 65536)).encode('ascii')).hexdigest()[:8]
             case EDataSourceKind.CLICKHOUSE:
                 return 't' + hashlib.sha256(str(random.randint(0, 65536)).encode('ascii')).hexdigest()[:8]

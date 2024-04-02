@@ -19,7 +19,7 @@ class Database:
                 self.name = name[:255]
             case EDataSourceKind.YDB:
                 # We use a different way of initialization when working with YDB.
-                # There is only one preinstalled database called 
+                # There is only one preinstalled database called
                 self.name = "local"
             case _:
                 raise Exception(f'invalid data source: {self.kind}')

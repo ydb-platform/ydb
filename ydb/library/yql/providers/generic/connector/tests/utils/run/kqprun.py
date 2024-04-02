@@ -33,8 +33,10 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     AUTH_METHOD="BASIC",
     LOGIN="{{login}}",
     PASSWORD_SECRET_NAME="{{data_source}}_local_password",
-    USE_TLS="FALSE",
-    PROTOCOL="{{protocol}}"
+    {% if protocol %}
+    PROTOCOL="{{protocol}}",
+    {% endif %}
+    USE_TLS="FALSE"
 
     {% if kind == POSTGRESQL and schema %}
         ,SCHEMA="{{schema}}"
@@ -45,6 +47,7 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
 
 {% set CLICKHOUSE = 'ClickHouse' %}
 {% set POSTGRESQL = 'PostgreSQL' %}
+{% set YDB = 'Ydb' %}
 
 {% set NATIVE = 'NATIVE' %}
 {% set HTTP = 'HTTP' %}
@@ -83,6 +86,20 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     NATIVE,
     cluster.database,
     cluster.schema)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.ydb_clusters %}
+{{ create_data_source(
+    YDB,
+    settings.ydb.cluster_name,
+    settings.ydb.host_internal,
+    settings.ydb.port_internal,
+    settings.ydb.username,
+    settings.ydb.password,
+    NONE,
+    cluster.database,
+    NONE)
 }}
 {% endfor %}
 

@@ -19,3 +19,7 @@ services:
       - ../../fq-connector-go/:/opt/ydb/cfg/
     ports:
       - 2130
+    #command: >
+    #  sh -c "
+    #    echo \"$$(dig fq-tests-ydb-ydb +short) nsqd\" >> /etc/hosts; cat /etc/hosts;
+    #    /opt/ydb/bin/fq-connector-go server -c /opt/ydb/cfg/fq-connector-go.yaml"

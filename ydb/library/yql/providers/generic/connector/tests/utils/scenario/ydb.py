@@ -1,15 +1,6 @@
-from typing import Sequence
-
-import ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 as data_source_pb2
-
-import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
 from ydb.library.yql.providers.generic.connector.tests.utils.comparator import data_outs_equal
-from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
-from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger, debug_with_limit
-from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
-from ydb.library.yql.providers.generic.connector.tests.utils.sql import format_values_for_bulk_sql_insert
 
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as tc_select_positive_common
 

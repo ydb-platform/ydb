@@ -2,7 +2,6 @@ from contextlib import contextmanager
 import time
 from datetime import datetime
 from typing import Tuple
-import sys
 
 import pg8000.dbapi
 
@@ -19,7 +18,7 @@ class Client:
     def __init__(self, settings: Settings.PostgreSQL):
         self.settings = settings
         self.pools = dict()
-        LOGGER.debug(f"initializing client")
+        LOGGER.debug("initializing client")
 
     @contextmanager
     def get_cursor(self, dbname: str):

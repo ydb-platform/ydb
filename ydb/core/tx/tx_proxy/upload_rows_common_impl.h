@@ -693,15 +693,19 @@ private:
                         return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
                     }
                     if (!ColumnsToConvertInplace.empty()) {
-                        Batch = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
+                        auto convertResult = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
+                        if (!convertResult.ok()) {
+                            ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot upsert arrow batch:" << convertResult.ToString(), ctx);
+                        }
+                        Batch = *convertResult;
                     }
                     // Explicit types conversion
                     if (!ColumnsToConvert.empty()) {
-                        Batch = NArrow::ConvertColumns(Batch, ColumnsToConvert);
-                        if (!Batch) {
-                            errorMessage = "Cannot upsert arrow batch: one of data types has no conversion";
-                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
+                        auto convertResult = NArrow::ConvertColumns(Batch, ColumnsToConvert);
+                        if (!convertResult.ok()) {
+                            ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot upsert arrow batch:" << convertResult.ToString(), ctx);
                         }
+                        Batch = *convertResult;
                     }
                 } else {
                     // TUploadColumnsRPCPublic::ExtractBatch() - NOT converted JsonDocument, DynNumbers, ...

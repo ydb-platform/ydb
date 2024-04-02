@@ -423,18 +423,26 @@ public:
     arrow::Status ApplyTo(std::shared_ptr<arrow::Table>& table, arrow::compute::ExecContext* ctx) const {
         std::vector<std::shared_ptr<arrow::RecordBatch>> batches = NArrow::SliceToRecordBatches(table);
         for (auto&& i : batches) {
-            try {
-                for (auto& step : Steps) {
-                    auto status = step->Apply(i, ctx);
-                    if (!status.ok()) {
-                        return status;
-                    }
-                }
-            } catch (const std::exception& ex) {
-                return arrow::Status::Invalid(ex.what());
+            auto status = ApplyTo(i, ctx);
+            if (!status.ok()) {
+                return status;
             }
         }
         table = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));
+        return arrow::Status::OK();
+    }
+
+    arrow::Status ApplyTo(std::shared_ptr<arrow::RecordBatch>& batch, arrow::compute::ExecContext* ctx) const {
+        try {
+            for (auto& step : Steps) {
+                auto status = step->Apply(batch, ctx);
+                if (!status.ok()) {
+                    return status;
+                }
+            }
+        } catch (const std::exception& ex) {
+            return arrow::Status::Invalid(ex.what());
+        }
         return arrow::Status::OK();
     }
 
@@ -455,8 +463,14 @@ public:
 inline arrow::Status ApplyProgram(
     std::shared_ptr<arrow::Table>& batch,
     const TProgram& program,
-    arrow::compute::ExecContext* ctx = nullptr)
-{
+    arrow::compute::ExecContext* ctx = nullptr) {
+    return program.ApplyTo(batch, ctx);
+}
+
+inline arrow::Status ApplyProgram(
+    std::shared_ptr<arrow::RecordBatch>& batch,
+    const TProgram& program,
+    arrow::compute::ExecContext* ctx = nullptr) {
     return program.ApplyTo(batch, ctx);
 }
 

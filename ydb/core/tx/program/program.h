@@ -98,7 +98,7 @@ public:
         }
     }
 
-    inline arrow::Status ApplyProgram(std::shared_ptr<arrow::RecordBatch>& batch) const {
+    inline arrow::Status ApplyProgram(std::shared_ptr<arrow::Table>& batch) const {
         if (Program) {
             return Program->ApplyTo(batch, NArrow::GetCustomExecContext());
         } else if (OverrideProcessingColumnsVector) {

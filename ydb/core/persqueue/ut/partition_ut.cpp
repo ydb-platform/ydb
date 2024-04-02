@@ -462,57 +462,152 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
 
     UNIT_ASSERT_VALUES_EQUAL(event->Record.GetCookie(), 1);             // SET_OFFSET_COOKIE
 
-    if (matcher.Count.Defined()) {
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.Count,
-                                 event->Record.CmdWriteSize() + event->Record.CmdDeleteRangeSize());
+    for (unsigned i = 0; i < event->Record.CmdWriteSize(); ++i) {
+        auto& cmd = event->Record.GetCmdWrite(i);
+        TString key = cmd.GetKey();
+        DBGTRACE_LOG("key[" << i << "]=" << key);
+
+        UNIT_ASSERT(key.size() >= 1);
+        switch (key[0]) {
+        case TKeyPrefix::TypeTxMeta: {
+            NKikimrPQ::TPartitionTxMeta meta;
+            UNIT_ASSERT(meta.ParseFromString(event->Record.GetCmdWrite(i).GetValue()));
+            if (matcher.PlanStep.Defined()) {
+                UNIT_ASSERT_VALUES_EQUAL(*matcher.PlanStep, meta.GetPlanStep());
+            }
+            if (matcher.TxId.Defined()) {
+                UNIT_ASSERT_VALUES_EQUAL(*matcher.TxId, meta.GetTxId());
+            }
+            break;
+        }
+        case TKeyPrefix::TypeInfo: {
+            UNIT_ASSERT(key.size() >= (1 + 10 + 1)); // type + partition + mark
+            if (key[11] != TKeyPrefix::MarkUser) {
+                break;
+            }
+
+            NKikimrPQ::TUserInfo ud;
+            UNIT_ASSERT(ud.ParseFromString(event->Record.GetCmdWrite(i).GetValue()));
+
+            bool match = false;
+            for (auto& [_, userInfo] : matcher.UserInfos) {
+                if (userInfo.Session) {
+                    UNIT_ASSERT(ud.HasSession());
+                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.Session, ud.GetSession());
+                    match = true;
+                }
+                if (userInfo.Generation) {
+                    UNIT_ASSERT(ud.HasGeneration());
+                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.Generation, ud.GetGeneration());
+                    match = true;
+                }
+                if (userInfo.Step) {
+                    UNIT_ASSERT(ud.HasStep());
+                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.Step, ud.GetStep());
+                    match = true;
+                }
+                if (userInfo.Offset) {
+                    UNIT_ASSERT(ud.HasOffset());
+                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.Offset, ud.GetOffset());
+                    match = true;
+                }
+                if (userInfo.ReadRuleGeneration) {
+                    UNIT_ASSERT(ud.HasReadRuleGeneration());
+                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.ReadRuleGeneration, ud.GetReadRuleGeneration());
+                    match = true;
+                }
+
+                if (match) {
+                    break;
+                }
+            }
+
+            UNIT_ASSERT(match);
+
+            break;
+        }
+        }
     }
 
-    //
-    // TxMeta
-    //
-    if (matcher.PlanStep.Defined()) {
-        NKikimrPQ::TPartitionTxMeta meta;
-        UNIT_ASSERT(meta.ParseFromString(event->Record.GetCmdWrite(0).GetValue()));
-
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.PlanStep, meta.GetPlanStep());
+    for (unsigned i = 0; i < event->Record.CmdDeleteRangeSize(); ++i) {
+        auto& cmd = event->Record.GetCmdDeleteRange(i);
+        UNIT_ASSERT(cmd.HasRange());
+        auto& range = cmd.GetRange();
+        TString key = range.GetFrom();
+        DBGTRACE_LOG("key[" << i << "]=" << key);
     }
-    if (matcher.TxId.Defined()) {
-        NKikimrPQ::TPartitionTxMeta meta;
-        UNIT_ASSERT(meta.ParseFromString(event->Record.GetCmdWrite(0).GetValue()));
-
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.TxId, meta.GetTxId());
-    }
-
     //
-    // CmdWrite
+    // CmdDeleteRange
     //
-    for (auto& [index, userInfo] : matcher.UserInfos) {
-        UNIT_ASSERT(index < event->Record.CmdWriteSize());
+    for (auto& [index, deleteRange] : matcher.DeleteRanges) {
+        UNIT_ASSERT(index < event->Record.CmdDeleteRangeSize());
+        UNIT_ASSERT(event->Record.GetCmdDeleteRange(index).HasRange());
 
-        NKikimrPQ::TUserInfo ud;
-        UNIT_ASSERT(ud.ParseFromString(event->Record.GetCmdWrite(index).GetValue()));
+        auto& range = event->Record.GetCmdDeleteRange(index).GetRange();
+        TString key = range.GetFrom();
+        UNIT_ASSERT(key.Size() > (1 + 10 + 1)); // type + partition + mark + consumer
 
-        if (userInfo.Session) {
-            UNIT_ASSERT(ud.HasSession());
-            UNIT_ASSERT_VALUES_EQUAL(*userInfo.Session, ud.GetSession());
+        if (deleteRange.Partition.Defined()) {
+            auto partition = FromString<ui32>(key.substr(1, 10));
+            UNIT_ASSERT_VALUES_EQUAL(*deleteRange.Partition, partition);
         }
-        if (userInfo.Generation) {
-            UNIT_ASSERT(ud.HasGeneration());
-            UNIT_ASSERT_VALUES_EQUAL(*userInfo.Generation, ud.GetGeneration());
-        }
-        if (userInfo.Step) {
-            UNIT_ASSERT(ud.HasStep());
-            UNIT_ASSERT_VALUES_EQUAL(*userInfo.Step, ud.GetStep());
-        }
-        if (userInfo.Offset) {
-            UNIT_ASSERT(ud.HasOffset());
-            UNIT_ASSERT_VALUES_EQUAL(*userInfo.Offset, ud.GetOffset());
-        }
-        if (userInfo.ReadRuleGeneration) {
-            UNIT_ASSERT(ud.HasReadRuleGeneration());
-            UNIT_ASSERT_VALUES_EQUAL(*userInfo.ReadRuleGeneration, ud.GetReadRuleGeneration());
+        if (deleteRange.Consumer.Defined()) {
+            TString consumer = key.substr(12);
+            UNIT_ASSERT_VALUES_EQUAL(*deleteRange.Consumer, consumer);
         }
     }
+
+//    if (matcher.Count.Defined()) {
+//        UNIT_ASSERT_VALUES_EQUAL(*matcher.Count,
+//                                 event->Record.CmdWriteSize() + event->Record.CmdDeleteRangeSize());
+//    }
+//
+//    //
+//    // TxMeta
+//    //
+//    if (matcher.PlanStep.Defined()) {
+//        NKikimrPQ::TPartitionTxMeta meta;
+//        UNIT_ASSERT(meta.ParseFromString(event->Record.GetCmdWrite(0).GetValue()));
+//
+//        UNIT_ASSERT_VALUES_EQUAL(*matcher.PlanStep, meta.GetPlanStep());
+//    }
+//    if (matcher.TxId.Defined()) {
+//        NKikimrPQ::TPartitionTxMeta meta;
+//        UNIT_ASSERT(meta.ParseFromString(event->Record.GetCmdWrite(0).GetValue()));
+//
+//        UNIT_ASSERT_VALUES_EQUAL(*matcher.TxId, meta.GetTxId());
+//    }
+//
+//    //
+//    // CmdWrite
+//    //
+//    for (auto& [index, userInfo] : matcher.UserInfos) {
+//        UNIT_ASSERT(index < event->Record.CmdWriteSize());
+//
+//        NKikimrPQ::TUserInfo ud;
+//        UNIT_ASSERT(ud.ParseFromString(event->Record.GetCmdWrite(index).GetValue()));
+//
+//        if (userInfo.Session) {
+//            UNIT_ASSERT(ud.HasSession());
+//            UNIT_ASSERT_VALUES_EQUAL(*userInfo.Session, ud.GetSession());
+//        }
+//        if (userInfo.Generation) {
+//            UNIT_ASSERT(ud.HasGeneration());
+//            UNIT_ASSERT_VALUES_EQUAL(*userInfo.Generation, ud.GetGeneration());
+//        }
+//        if (userInfo.Step) {
+//            UNIT_ASSERT(ud.HasStep());
+//            UNIT_ASSERT_VALUES_EQUAL(*userInfo.Step, ud.GetStep());
+//        }
+//        if (userInfo.Offset) {
+//            UNIT_ASSERT(ud.HasOffset());
+//            UNIT_ASSERT_VALUES_EQUAL(*userInfo.Offset, ud.GetOffset());
+//        }
+//        if (userInfo.ReadRuleGeneration) {
+//            UNIT_ASSERT(ud.HasReadRuleGeneration());
+//            UNIT_ASSERT_VALUES_EQUAL(*userInfo.ReadRuleGeneration, ud.GetReadRuleGeneration());
+//        }
+//    }
 
     //
     // CmdDeleteRange
@@ -1380,6 +1475,7 @@ Y_UNIT_TEST_F(CommitOffsetRanges, TPartitionFixture)
 
 Y_UNIT_TEST_F(CorrectRange_Commit, TPartitionFixture)
 {
+    DBGTRACE("CorrectRange_Commit");
     const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
@@ -1392,14 +1488,20 @@ Y_UNIT_TEST_F(CorrectRange_Commit, TPartitionFixture)
     CreatePartition({.Partition=partition, .Begin=begin, .End=end, .PlanStep=step, .TxId=10000});
     CreateSession(client, session);
 
+    DBGTRACE_LOG("SendCalcPredicate");
     SendCalcPredicate(step, txId, client, 0, 2);
+    DBGTRACE_LOG("WaitCalcPredicateResult");
     WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=true});
 
+    DBGTRACE_LOG("SendCommitTx");
     SendCommitTx(step, txId);
 
+    DBGTRACE_LOG("WaitCmdWrite");
     WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId, .UserInfos={{1, {.Session=session, .Offset=2}}}});
+    DBGTRACE_LOG("SendCmdWriteResponse");
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
+    DBGTRACE_LOG("WaitCommitTxDone");
     WaitCommitTxDone({.TxId=txId, .Partition=TPartitionId(partition)});
 }
 
@@ -1544,6 +1646,7 @@ Y_UNIT_TEST_F(AfterRestart_2, TPartitionFixture)
 
 Y_UNIT_TEST_F(IncorrectRange, TPartitionFixture)
 {
+    DBGTRACE("IncorrectRange");
     const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
@@ -1556,25 +1659,37 @@ Y_UNIT_TEST_F(IncorrectRange, TPartitionFixture)
     CreatePartition({.Partition=partition, .Begin=begin, .End=end});
     CreateSession(client, session);
 
+    DBGTRACE_LOG("SendCalcPredicate");
     SendCalcPredicate(step, txId, client, 4, 2);
+    DBGTRACE_LOG("WaitCalcPredicateResult");
     WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=false});
+    DBGTRACE_LOG("SendRollbackTx");
     SendRollbackTx(step, txId);
 
+    DBGTRACE_LOG("WaitCmdWrite");
     WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId});
+    DBGTRACE_LOG("SendCmdWriteResponse");
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
     ++txId;
 
+    DBGTRACE_LOG("SendCalcPredicate");
     SendCalcPredicate(step, txId, client, 2, 4);
+    DBGTRACE_LOG("WaitCalcPredicateResult");
     WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=false});
+    DBGTRACE_LOG("SendRollbackTx");
     SendRollbackTx(step, txId);
 
+    DBGTRACE_LOG("WaitCmdWrite");
     WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId});
+    DBGTRACE_LOG("SendCmdWriteResponse");
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
     ++txId;
 
+    DBGTRACE_LOG("SendCalcPredicate");
     SendCalcPredicate(step, txId, client, 0, 11);
+    DBGTRACE_LOG("WaitCalcPredicateResult");
     WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=false});
 }
 

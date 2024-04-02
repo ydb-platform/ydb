@@ -649,6 +649,7 @@ void TPartition::UpdateUserInfoEndOffset(const TInstant& now) {
 }
 
 void TPartition::Handle(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvChangePartitionConfig)");
     PushBackDistrTx(ev->Release());
 
     ProcessTxsAndUserActs(ctx);
@@ -960,6 +961,7 @@ void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
 
 void TPartition::Handle(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvProposePartitionConfig)");
     PushBackDistrTx(ev->Release());
 
     ProcessTxsAndUserActs(ctx);
@@ -988,6 +990,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const 
 
 void TPartition::Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvTxCalcPredicate)");
     PushBackDistrTx(ev->Release());
 
     ProcessTxsAndUserActs(ctx);
@@ -1005,6 +1008,7 @@ void TPartition::Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx)
 
 void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvTxRollback)");
     EndTransaction(*ev->Get(), ctx);
 
     TxInProgress = false;
@@ -1579,14 +1583,14 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 {
     DBGTRACE("TPartition::ProcessTxsAndUserActs");
     DBGTRACE_LOG("Responses.size=" << Responses.size());
+    DBGTRACE_LOG("UsersInfoWriteInProgress=" << UsersInfoWriteInProgress <<
+                 //", ReserveRequests.size=" << ReserveRequests.size() <<
+                 //", UserActionAndTransactionEvents.size=" << UserActionAndTransactionEvents.size() <<
+                 ", TxInProgress=" << TxInProgress);
     bool skip = UsersInfoWriteInProgress;
     //skip |= ReserveRequests.empty() && UserActionAndTransactionEvents.empty();
     skip |= TxInProgress;
     if (skip) {
-        DBGTRACE_LOG("UsersInfoWriteInProgress=" << UsersInfoWriteInProgress <<
-                     ", ReserveRequests.size=" << ReserveRequests.size() <<
-                     ", UserActionAndTransactionEvents.size=" << UserActionAndTransactionEvents.size() <<
-                     ", TxInProgress=" << TxInProgress);
         return;
     }
 
@@ -1639,6 +1643,7 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
             BecomeWrite();
             AddMetaKey(request.Get());
             ctx.Send(Tablet, request.Release());
+            UsersInfoWriteInProgress = true;
         }
 
         return;
@@ -2783,6 +2788,7 @@ ui32 TPartition::NextChannel(bool isHead, ui32 blobSize) {
 }
 
 void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvApproveWriteQuota)");
     const ui64 cookie = ev->Get()->Cookie;
     LOG_DEBUG_S(
             ctx, NKikimrServices::PERSQUEUE,

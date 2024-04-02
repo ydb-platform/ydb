@@ -368,7 +368,6 @@ struct TLocalConfig : public TThrRefBase {
     };
 
     TMap<TTabletTypes::EType, TTabletClassInfo> TabletClassInfo;
-    TString SlotName;
 };
 
 IActor* CreateLocal(TLocalConfig *config);

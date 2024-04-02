@@ -41,12 +41,13 @@ public:
             } else {
                 Sort(servicedDomains);
             }
-            db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Local>(Local);
-            db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::ServicedDomains>(servicedDomains);
-            db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Statistics>(node.Statistics);
-
-            TString slotName = Record.GetSlotName();
-            db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::SlotName>(slotName);
+            const TString& slotName = Record.GetSlotName();
+            db.Table<Schema::Node>().Key(nodeId).Update(
+                NIceDb::TUpdate<Schema::Node::Local>(Local),
+                NIceDb::TUpdate<Schema::Node::ServicedDomains>(servicedDomains),
+                NIceDb::TUpdate<Schema::Node::Statistics>(node.Statistics),
+                NIceDb::TUpdate<Schema::Node::Name>(slotName)
+            );
  
             node.BecomeDisconnected();
             if (node.LastSeenServicedDomains != servicedDomains) {

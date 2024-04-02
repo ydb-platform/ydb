@@ -1059,7 +1059,6 @@ void TLocalServiceInitializer::InitializeServices(
 
     // setup local
     TLocalConfig::TPtr localConfig(new TLocalConfig());
-    localConfig->SlotName = Config.GetDynamicNodeConfig().GetNodeInfo().GetSlotName();
     std::unordered_map<TTabletTypes::EType, NKikimrLocal::TTabletAvailability> tabletAvailabilities;
     for (const auto& availability : Config.GetDynamicNodeConfig().GetTabletAvailability()) {
         tabletAvailabilities.emplace(availability.GetType(), availability);

@@ -448,7 +448,6 @@ private:
     }
 
     void ReplyBackAndDie() {
-        GrpcRequestBaseCtx_->FinishSpan();
         TlsActivationContext->Send(Request_->Forward(Owner_));
         PassAway();
     }

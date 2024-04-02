@@ -65,6 +65,9 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
         struct TWithDtor {
             int Payload;
             std::shared_ptr<int> DestructorCallsCnt;
+            TWithDtor(int payload, std::shared_ptr<int> destructorCallsCnt): 
+                Payload(payload), DestructorCallsCnt(std::move(destructorCallsCnt)) {
+            }
             ~TWithDtor() {
                 *DestructorCallsCnt = *DestructorCallsCnt + 1;
             }

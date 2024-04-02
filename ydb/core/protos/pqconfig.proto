@@ -618,6 +618,7 @@ message TReleasePartition {
     optional NActorsProto.TActorId PipeClient = 6;
     optional uint32 Group = 7;
     optional string Path = 8;
+    repeated uint32 Partition = 9;
 }
 
 message TPartitionReleased {
@@ -822,6 +823,7 @@ message THasDataInfoResponse { //signal
     optional uint64 Cookie = 2;
     optional uint64 SizeLag = 3;
     optional uint64 WriteTimestampEstimateMS = 4;
+    optional bool ReadingFinished = 5;
 }
 
 message TBatchHeader {

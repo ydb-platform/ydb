@@ -317,7 +317,7 @@ YDB не поддерживает уникальный вторичный инд
   curl -L -o liquibase-ydb-dialect.jar https://repo1.maven.org/maven2/tech/ydb/dialects/liquibase-ydb-dialect/1.0.0/liquibase-ydb-dialect-1.0.0.jar
   ```
 
-  Более подробное описание в разделе [Manual library management](https://docs.liquibase.com/start/install/home.html) в документации Liquibase.
+  Более подробное описание в разделе [manual library management](https://docs.liquibase.com/start/install/home.html) в документации Liquibase.
 
   Теперь утилиту командной строки liquibase можно использовать с {{ ydb-short-name }}.
 
@@ -397,7 +397,7 @@ Liquibase command 'update' was executed successfully.
 
 ### Эволюция схемы базы данных
 
-Допустим нам нужно создать {{ ydb-short-name }} топик и выключить авто партиционирования таблицы. Это можно сделать нативным SQL скриптом:
+Допустим нам нужно создать {{ ydb-short-name }} топик и выключить параметр `AUTO_PARTITIONING_BY_SIZE` таблицы. Это можно сделать нативным SQL скриптом:
 
 ```sql
 --liquibase formatted sql
@@ -452,7 +452,11 @@ Liquibase command 'update' was executed successfully.
 
 ![_assets/liquibase-step-3.png](_assets/liquibase-step-3.png)
 
-Чтобы начать использовать liquibase, требуется выполнить `liquibase generate-changelog --changelog-file=changelog.xml`.
+Чтобы начать использовать liquibase, требуется выполнить: 
+
+```bash
+liquibase generate-changelog --changelog-file=changelog.xml
+```
 
 Содержимое сгенерированного changelog.xml:
 
@@ -505,7 +509,11 @@ Liquibase command 'update' was executed successfully.
 </changeSet>
 ```
 
-Затем нужно синхронизировать сгенерированный changelog.xml файл, делается это командой `liquibase changelog-sync --changelog-file=dbchangelog.xml`.
+Затем нужно синхронизировать сгенерированный changelog.xml файл, делается это командой:
+
+```bash
+liquibase changelog-sync --changelog-file=dbchangelog.xml
+```
 
 Результатом будет синхронизация liquibase в вашем проекте:
 

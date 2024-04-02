@@ -397,7 +397,7 @@ Example contents of the `DATABASECHANGELOG` table:
 
 ### Database schema evolution
 
-Let's say we need to create a {{ydb-short-name }} topic and turn off auto partitioning of the table. This can be done with a native SQL script:
+Let's say we need to create a {{ydb-short-name }} topic and turn off the param `AUTO_PARTITIONING_BY_SIZE` of the table. This can be done with a native SQL script:
 
 ```sql
 --liquibase formatted sql
@@ -452,7 +452,11 @@ Let's suppose there's an existing project with the following database schema:
 
 ![_assets/liquibase-step-3.png](_assets/liquibase-step-3.png)
 
-In this case to start using Liquibase, you need to run `liquibase generate-changelog --changelog-file=changelog.xml` first.
+In this case to start using Liquibase, you need to run:
+
+```bash
+liquibase generate-changelog --changelog-file=changelog.xml
+```
 
 The contents of the generated changelog.xml:
 
@@ -505,7 +509,11 @@ The contents of the generated changelog.xml:
 </changeSet>
 ```
 
-Then you need to synchronize the generated changelog.xml the file, this is done by the command `liquibase changelog-sync --changelog-file=changelog.xml`.
+Then you need to synchronize the generated changelog.xml the file, this is done by the command:
+
+```bash
+liquibase changelog-sync --changelog-file=changelog.xml 
+```
 
 The result will be liquibase synchronization in your project:
 

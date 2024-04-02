@@ -14,11 +14,7 @@ services:
        - ./init/01_basic.sh:/01_basic.sh
 
   fq-connector-go:
-    container_name: fq-tests-ydb-fq-connector-go
-    #image: ghcr.io/ydb-platform/fq-connector-go:v0.2.10@sha256:b2ef1cfbfea52c71f753806fd2a893794e0443e41041463df80f7c3626dec852
-    build:
-      context: /home/vitalyisaev/projects/fq-connector-go
-      dockerfile: Dockerfile.release
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.2.11@sha256:3f78cf7b1f50eb903635febcc8cb7dd813e673f615fa9ddc4e2d6d5432cac8ae
     volumes:
       - ../../fq-connector-go/:/opt/ydb/cfg/
     ports:

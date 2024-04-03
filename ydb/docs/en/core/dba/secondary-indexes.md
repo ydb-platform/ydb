@@ -1,6 +1,6 @@
 # Secondary indexes
 
-[Indexes](https://en.wikipedia.org/wiki/Database_index) are auxiliary structures within databases that help find data by certain criteria without having to search an entire database, and retrieve sorted samples without actually sorting, which would require processing the entire dataset.
+[Indexes](https://en.wikipedia.org/wiki/Database_index) are auxiliary structures within databases that help find data by certain criteria without having to search an entire database and retrieve sorted samples without actually sorting, which would require processing the entire dataset.
 
 Data in a YDB table is always sorted by the primary key. That means that retrieving any entry from the table with specified field values comprising the primary key always takes the minimum fixed time, regardless of the total number of table entries. Indexing by the primary key makes it possible to retrieve any consecutive range of entries in ascending or descending order of the primary key. Execution time for this operation depends only on the number of retrieved entries rather than on the total number of table records.
 

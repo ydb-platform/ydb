@@ -270,6 +270,14 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
         TStringBuilder GetPrefix() const;
 
+        std::tuple<ui32, ui32, ui32> TotalPartitions() const;
+        void ReleaseExtraPartitions(ui32 desired, ui32 allowPlusOne, const TActorContext& ctx);
+        void LockMissingPartitions(ui32 desired,
+                                   ui32 allowPlusOne,
+                                   const std::function<bool (ui32 partitionId)> partitionPredicate,
+                                   const std::function<ssize_t (const TSessionInfo& sessionInfo)> actualExtractor,
+                                   const TActorContext& ctx);
+
         bool WakeupScheduled = false;
     };
 

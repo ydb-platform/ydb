@@ -1581,6 +1581,88 @@ void TPersQueueReadBalancer::TClientGroupInfo::ScheduleBalance(const TActorConte
     ctx.Send(ctx.SelfID, new TEvPersQueue::TEvWakeupClient(ClientId, Group));
 }
 
+std::tuple<ui32, ui32, ui32> TPersQueueReadBalancer::TClientGroupInfo::TotalPartitions() const {
+    ui32 totalActive = 0;
+    ui32 totalInactive = 0;
+    ui32 totalUnreadable = 0;
+
+    if (ClientInfo.ReadingPartitionStatus.empty()) {
+        totalActive = FreePartitions.size();
+    } else {
+        for (auto p : FreePartitions) {
+            if (ClientInfo.IsReadeable(p)) {
+                if (ClientInfo.IsFinished(p)) {
+                    ++totalInactive;
+                } else {
+                    ++ totalActive;
+                }
+            } else {
+                ++totalUnreadable;
+            }
+        }
+    }
+    for(auto& [_, session] : SessionsInfo) {
+        totalActive += session.NumActive - session.NumInactive;
+        totalInactive += session.NumInactive;
+    }
+
+    return {totalActive, totalInactive, totalUnreadable};
+}
+
+void TPersQueueReadBalancer::TClientGroupInfo::ReleaseExtraPartitions(ui32 desired, ui32 allowPlusOne, const TActorContext& ctx) {
+    //request partitions from sessions if needed
+    for (auto& [sessionKey, sessionInfo] : SessionsInfo) {
+        ui32 realDesired = (allowPlusOne > 0) ? desired + 1 : desired;
+        if (allowPlusOne > 0) {
+            --allowPlusOne;
+        }
+
+        i64 canRequest = ((i64)sessionInfo.NumActive) - sessionInfo.NumInactive - sessionInfo.NumSuspended - realDesired;
+        if (canRequest > 0) {
+            ReleasePartition(sessionKey.first, sessionInfo, Group, canRequest, ctx);
+        }
+    }
+}
+
+void TPersQueueReadBalancer::TClientGroupInfo::LockMissingPartitions(
+            ui32 desired,
+            ui32 allowPlusOne,
+            const std::function<bool (ui32 partitionId)> partitionPredicate,
+            const std::function<ssize_t (const TSessionInfo& sessionInfo)> actualExtractor,
+            const TActorContext& ctx) {
+
+    std::deque<ui32> freePartitions = std::move(FreePartitions);
+
+    for (auto& [sessionKey, sessionInfo] : SessionsInfo) {
+        ui32 realDesired = (allowPlusOne > 0) ? desired + 1 : desired;
+        if (allowPlusOne > 0) {
+            --allowPlusOne;
+        }
+
+        ssize_t actual = actualExtractor(sessionInfo);
+        if (actual >= realDesired) {
+            continue;
+        }
+
+
+        i64 req = ((i64)realDesired) - actual;
+        while (req > 0 && !freePartitions.empty()) {
+            auto partitionId = freePartitions.front();
+            if (partitionPredicate(partitionId)) {
+                --req;
+                LockPartition(sessionKey.first, sessionInfo, partitionId, ctx);
+            } else {
+                FreePartitions.push_back(partitionId);
+            }
+            freePartitions.pop_front();
+        }
+
+        if (!freePartitions.empty()) {
+            Y_ABORT_UNLESS(actualExtractor(sessionInfo) >= desired && actualExtractor(sessionInfo) <= desired + 1);
+        }
+    }
+}
+
 void TPersQueueReadBalancer::TClientGroupInfo::Balance(const TActorContext& ctx) {
     ui32 sessionsCount = SessionsInfo.size();
 
@@ -1588,72 +1670,32 @@ void TPersQueueReadBalancer::TClientGroupInfo::Balance(const TActorContext& ctx)
         return;
     }
 
-    ui32 totalActive = 0;
-    ui32 totalFinished = 0;
-    Y_UNUSED(totalFinished);
-
-    if (ClientInfo.ReadingPartitionStatus.empty()) {
-        totalActive = FreePartitions.size();
-    } else {
-        for (auto p : FreePartitions) {
-            if (ClientInfo.IsFinished(p)) {
-                ++totalFinished;
-            } else {
-                ++ totalActive;
-            }
-        }
-    }
-    for(auto& [_, session] : SessionsInfo) {
-        totalActive += session.NumActive - session.NumInactive;
-    }
-
+    auto [totalActive, totalInactive, totalUnreadable] = TotalPartitions();
 
     //FreePartitions and PipeInfo[].NumActive are consistent
-    ui32 desired = totalActive / sessionsCount;
-
+    ui32 desiredActive = totalActive / sessionsCount;
     ui32 allowPlusOne = totalActive % sessionsCount;
-    ui32 cur = allowPlusOne;
-    //request partitions from sessions if needed
-    for (auto& [sessionKey, sessionInfo] : SessionsInfo) {
-        ui32 realDesired = (cur > 0) ? desired + 1 : desired;
-        if (cur > 0)
-            --cur;
+    ui32 desiredInactive = totalInactive / sessionsCount + 1;
 
-        i64 canRequest = ((i64)sessionInfo.NumActive) - sessionInfo.NumInactive - sessionInfo.NumSuspended - realDesired;
-        if (canRequest > 0) {
-            ReleasePartition(sessionKey.first, sessionInfo, Group, canRequest, ctx);
-        }
-    }
+    ReleaseExtraPartitions(desiredActive, allowPlusOne, ctx);
 
     //give free partitions to starving sessions
     if (FreePartitions.empty()) {
         return;
     }
 
-    cur = allowPlusOne;
-    for (auto& [sessionKey, sessionInfo] : SessionsInfo) {
-        ui32 realDesired = (cur > 0) ? desired + 1 : desired;
-        if (cur > 0) {
-            --cur;
-        }
+    LockMissingPartitions(desiredActive, allowPlusOne,
+        [&](ui32 partitionId) { return !ClientInfo.IsFinished(partitionId) && ClientInfo.IsReadeable(partitionId); },
+        [](const TSessionInfo& sessionInfo) {return ((ssize_t)sessionInfo.NumActive) - sessionInfo.NumInactive; },
+        ctx);
 
-        ssize_t realActive = sessionInfo.NumActive - sessionInfo.NumInactive;
-        if(realActive >= realDesired) {
-            continue;
-        }
+    LockMissingPartitions(desiredInactive, 0,
+        [&](ui32 partitionId) { return ClientInfo.IsFinished(partitionId) && ClientInfo.IsReadeable(partitionId); },
+        [](const TSessionInfo& sessionInfo) {return (ssize_t)sessionInfo.NumInactive; },
+        ctx);
 
-        i64 req = ((i64)realDesired) - realActive;
-        while (req > 0 && !FreePartitions.empty()) {
-            --req;
-            LockPartition(sessionKey.first, sessionInfo, FreePartitions.front(), ctx);
-            FreePartitions.pop_front();
-            if (FreePartitions.empty())
-                return;
-        }
-        Y_ABORT_UNLESS(sessionInfo.NumActive >= desired && sessionInfo.NumActive <= desired + 1);
-    }
-
-    Y_ABORT_UNLESS(FreePartitions.empty());
+    Y_ABORT_UNLESS(FreePartitions.size() == totalUnreadable);
+    FreePartitions.clear();
 }
 
 void TPersQueueReadBalancer::TClientGroupInfo::LockPartition(const TActorId pipe, TSessionInfo& sessionInfo, ui32 partition, const TActorContext& ctx) {

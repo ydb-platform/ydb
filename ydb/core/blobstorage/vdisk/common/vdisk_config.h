@@ -221,7 +221,7 @@ namespace NKikimr {
         TVDiskConfig(const TBaseInfo &baseInfo);
         void Merge(const NKikimrBlobStorage::TVDiskConfig &update);
     private:
-        // setup borders for huge blobs depending on device type
+        // setup default borders for huge blobs depending on device type
         void SetupHugeBytes();
     };
 

@@ -1192,6 +1192,11 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
         TBlock block{};
         for (; block.OriginalSize < MaxBlockSize && i != CurrentBatch.Messages.size(); ++i) {
             auto& currMessage = CurrentBatch.Messages[i];
+
+            // If MaxBlockSize or MaxBlockMessageCount values are ever changed from infinity and 1 correspondingly,
+            // create a new block, if the existing one is non-empty AND (adding another message will overflow it OR
+            //                                                           its codec is different from the codec of the next message).
+
             auto id = currMessage.Id;
             auto createTs = currMessage.CreatedAt;
 
@@ -1287,11 +1292,15 @@ void TWriteSessionImpl::SendImpl() {
     while(IsReadyToSendNextImpl()) {
         TClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
-
-        // Sent blocks while we can without messages reordering
+        ui32 prevCodec = 0;
+        // Send blocks while we can without messages reordering.
         while (IsReadyToSendNextImpl() && clientMessage.ByteSizeLong() < GetMaxGrpcMessageSize()) {
             const auto& block = PackedMessagesToSend.top();
             Y_ABORT_UNLESS(block.Valid);
+            if (writeRequest->messages_size() > 0 && prevCodec != block.CodecID) {
+                break;
+            }
+            prevCodec = block.CodecID;
             writeRequest->set_codec(static_cast<i32>(block.CodecID));
             Y_ABORT_UNLESS(block.MessageCount == 1);
             for (size_t i = 0; i != block.MessageCount; ++i) {

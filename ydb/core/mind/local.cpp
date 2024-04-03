@@ -199,8 +199,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             }
             tabletAvailability->SetPriority(tabletInfo.Priority);
         }
-        const TString& slotName = AppData(ctx)->SlotName;
-        if (!slotName.Empty()) {
+        if (const TString& slotName = AppData(ctx)->SlotName; !slotName.Empty()) {
             request->Record.SetSlotName(slotName);
         }
 

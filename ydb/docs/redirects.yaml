@@ -107,6 +107,26 @@ common:
     to: /dev/yql-tutorial/update.md
   - from: /yql/tutorial/upsert_into.md
     to: /dev/yql-tutorial/upsert_into.md
+  - from: /reference/ydb-sdk/example/archive/example-go-v1.md
+    to: /dev/example-app/archive/example-go-v1.md
+  - from: /reference/ydb-sdk/example/archive/example-go-v2.md
+    to: /dev/example-app/archive/example-go-v2.md
+  - from: /reference/ydb-sdk/example/example-cpp.md
+    to: /dev/example-app/example-cpp.md
+  - from: /reference/ydb-sdk/example/example-dotnet.md
+    to: /dev/example-app/example-dotnet.md
+  - from: /reference/ydb-sdk/example/example-nodejs.md
+    to: /dev/example-app/example-nodejs.md
+  - from: /reference/ydb-sdk/example/example-php.md
+    to: /dev/example-app/example-php.md
+  - from: /reference/ydb-sdk/example/go/index.md
+    to: /dev/example-app/go/index.md
+  - from: /reference/ydb-sdk/example/index.md
+    to: /dev/example-app/index.md
+  - from: /reference/ydb-sdk/example/java/index.md
+    to: /dev/example-app/java/index.md
+  - from: /reference/ydb-sdk/example/python/index.md
+    to: /dev/example-app/python/index.md
 
 # Contributors-related redirects
   - from: /development/build-ya.md

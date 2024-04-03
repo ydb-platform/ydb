@@ -1288,8 +1288,8 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
 void TWriteSessionImpl::SendImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    // External cycle splits ready blocks into multiple gRPC messages. Current gRPC message size hard limit is 64MiB
-    while(IsReadyToSendNextImpl()) {
+    // External cycle splits ready blocks into multiple gRPC messages. Current gRPC message size hard limit is 64MiB.
+    while (IsReadyToSendNextImpl()) {
         TClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
         ui32 prevCodec = 0;
@@ -1307,7 +1307,6 @@ void TWriteSessionImpl::SendImpl() {
                 Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
 
                 auto& message = OriginalMessagesToSend.front();
-
                 auto* msgData = writeRequest->add_messages();
 
                 if (message.Tx) {
@@ -1318,26 +1317,23 @@ void TWriteSessionImpl::SendImpl() {
                 msgData->set_seq_no(GetSeqNoImpl(message.Id));
                 *msgData->mutable_created_at() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(message.CreatedAt.MilliSeconds());
 
-                if (!message.MessageMeta.empty()) {
-                    for (auto& [k, v] : message.MessageMeta) {
-                        auto* pair = msgData->add_metadata_items();
-                        pair->set_key(k);
-                        pair->set_value(v);
-                    }
+                for (auto& [k, v] : message.MessageMeta) {
+                    auto* pair = msgData->add_metadata_items();
+                    pair->set_key(k);
+                    pair->set_value(v);
                 }
                 SentOriginalMessages.emplace(std::move(message));
                 OriginalMessagesToSend.pop();
 
                 msgData->set_uncompressed_size(block.OriginalSize);
-                if (block.Compressed)
+                if (block.Compressed) {
                     msgData->set_data(block.Data.data(), block.Data.size());
-                else {
+                } else {
                     for (auto& buffer: block.OriginalDataRefs) {
                         msgData->set_data(buffer.data(), buffer.size());
                     }
                 }
             }
-
 
             TBlock moveBlock;
             moveBlock.Move(block);

@@ -449,8 +449,9 @@ protected:
     TColumns Columns;
 };
 
-class IComposableSource {
+class IComposableSource : private TNonCopyable {
 public:
+    virtual ~IComposableSource() = default;
     virtual void BuildProjectWindowDistinct(TNodePtr& blocks, TContext& ctx, bool ordered) = 0;
 };
 

@@ -23,7 +23,7 @@ Additionally, you'd want to set up at least one of the available ways to run ad-
 
 * [YDB CLI](../reference/ydb-cli/install.md)
 * [Embedded UI](../maintenance/embedded_monitoring/index.md)
-* Any SQL IDE that supports [JDBC](https://repo.maven.apache.org/maven2/tech/ydb/jdbc/)
+* Any SQL IDE that supports [JDBC](https://github.com/ydb-platform/ydb-jdbc-driver)
 * [psql](https://www.postgresql.org/docs/14/app-psql.html) or [pgAdmin](https://www.pgadmin.org/) for the PostgreSQL-compatible route.
 
 ## Start coding

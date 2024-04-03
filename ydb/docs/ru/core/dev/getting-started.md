@@ -23,7 +23,7 @@
 
 * [YDB CLI](../reference/ydb-cli/install.md)
 * [Встроенный пользовательский интерфейс](../maintenance/embedded_monitoring/index.md)
-* Любая среда разработки SQL, поддерживающая [JDBC] (https://repo.maven.apache.org/maven2/tech/ydb/jdbc/).
+* Любая среда разработки SQL, поддерживающая [JDBC](https://github.com/ydb-platform/ydb-jdbc-driver).
 * [psql](https://www.postgresql.org/docs/14/app-psql.html) или [pgAdmin](https://www.pgadmin.org/) для пути совместимости с PostgreSQL.
 
 ## Начать писать код

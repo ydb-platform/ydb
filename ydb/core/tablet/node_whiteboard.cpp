@@ -46,8 +46,7 @@ public:
         TabletIntrospectionData.Reset(NTracing::CreateTraceCollection(introspectionGroup));
 
         SystemStateInfo.SetHost(FQDNHostName());
-        const TString& slotName = AppData(ctx)->SlotName;
-        if (!slotName.Empty()) {
+        if (const TString& slotName = AppData(ctx)->SlotName; !slotName.Empty()) {
             SystemStateInfo.SetSlotName(slotName);
         }
         SystemStateInfo.SetNumberOfCpus(NSystemInfo::NumberOfCpus());

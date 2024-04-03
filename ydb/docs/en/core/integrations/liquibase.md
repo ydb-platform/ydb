@@ -195,7 +195,7 @@ Asynchronous indexes should be created using [native SQL migrations](https://doc
 
 ### Ingesting data into a table
 
-`loadData`, `loadUpdateData` - upload data from a CSV file into a table. `loadUpdateData` loads data using the [{#T}](../yql/reference/syntax/upsert_into.md) command.
+`loadData`, `loadUpdateData` - upload data from a `CSV` file into a table. `loadUpdateData` loads data using the [{#T}](../yql/reference/syntax/upsert_into.md) command.
 
 `insert` is a changeset that performs a single insert into a table using the [{#T}](../yql/reference/syntax/insert_into.md) command. For example:
 
@@ -283,7 +283,7 @@ Asynchronous indexes should be created using [native SQL migrations](https://doc
 
 {% endlist %}
 
-You can also specify any value in the `value` field. Data from the `insert` changeset or CSV files will be automatically converted to the required types, taking into account strict typing in {{ydb-short-name }}.
+You can also specify any value in the `value` field. Data from the `value` field in `insert` changeset or `CSV` files will be automatically converted to the required types, taking into account strict typing in {{ydb-short-name }}.
 
 The type formatting table to load into the table:
 

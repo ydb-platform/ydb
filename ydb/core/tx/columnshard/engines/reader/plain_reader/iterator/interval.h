@@ -48,10 +48,14 @@ class TFetchingInterval: public TNonCopyable, public NResourceBroker::NSubscribe
 private:
     using TTaskBase = NResourceBroker::NSubscribe::ITask;
     std::shared_ptr<TMergingContext> MergingContext;
+    bool AbortedFlag = false;
     TAtomic SourcesFinalized = 0;
+    TAtomic PartSendingWait = 0;
+    std::unique_ptr<NArrow::NMerger::TMergePartialStream> Merger;
     std::shared_ptr<TSpecialReadContext> Context;
     NColumnShard::TCounterGuard TaskGuard;
     std::map<ui32, std::shared_ptr<IDataSource>> Sources;
+
     void ConstructResult();
 
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
@@ -85,6 +89,7 @@ public:
     }
 
     void Abort() {
+        AbortedFlag = true;
         if (AtomicCas(&SourcesFinalized, 1, 0)) {
             for (auto&& i : Sources) {
                 i.second->Abort();
@@ -112,6 +117,9 @@ public:
     }
 
     void OnSourceFetchStageReady(const ui32 sourceIdx);
+    void OnPartSendingComplete();
+    void SetMerger(std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger);
+    bool HasMerger() const;
 
     TFetchingInterval(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& finish,
         const ui32 intervalIdx, const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,

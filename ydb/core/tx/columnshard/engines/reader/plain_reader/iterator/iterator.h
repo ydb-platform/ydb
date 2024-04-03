@@ -58,6 +58,8 @@ private:
     std::shared_ptr<IDataReader> IndexedData;
     ui64 ItemsRead = 0;
     const i64 MaxRowsInBatch = 5000;
+    virtual void DoOnSentDataFromInterval(const ui32 intervalIdx) const override;
+
 public:
     TColumnShardScanIterator(const std::shared_ptr<TReadContext>& context, const TReadMetadata::TConstPtr& readMetadata);
     ~TColumnShardScanIterator();

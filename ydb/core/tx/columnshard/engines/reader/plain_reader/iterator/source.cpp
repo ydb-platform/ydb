@@ -11,10 +11,10 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-void IDataSource::InitFetchingPlan(const std::shared_ptr<IFetchingStep>& fetchingFirstStep, const std::shared_ptr<IDataSource>& sourcePtr, const bool isExclusive) {
+void IDataSource::InitFetchingPlan(const std::shared_ptr<IFetchingStep>& fetchingFirstStep, const std::shared_ptr<IDataSource>& sourcePtr) {
     AFL_VERIFY(fetchingFirstStep);
     if (AtomicCas(&FilterStageFlag, 1, 0)) {
-        StageData = std::make_unique<TFetchedData>(isExclusive);
+        StageData = std::make_unique<TFetchedData>(GetExclusiveIntervalOnly() && IsSourceInMemory());
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", fetchingFirstStep->DebugString())("source_idx", SourceIdx);
         NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
         if (IsAborted()) {
@@ -170,6 +170,36 @@ void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& in
     }
 }
 
+void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) {
+    auto blobSchema = GetContext()->GetReadMetadata()->GetLoadSchema(Portion->GetMinSnapshot());
+    if (SequentialEntityIds.empty()) {
+        MutableStageData().AddBatch(Portion->PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs()).AssembleTable());
+    } else {
+        {
+            auto inMemColumns = columns->GetColumnIds();
+            for (auto&& i : SequentialEntityIds) {
+                inMemColumns.erase(i);
+            }
+            if (inMemColumns.size()) {
+                auto filteredSchema = std::make_shared<TFilteredSnapshotSchema>(columns->GetFilteredSchemaPtrVerified(), inMemColumns);
+                MutableStageData().AddBatch(Portion->PrepareForAssemble(*blobSchema, *filteredSchema, MutableStageData().MutableBlobs()).AssembleTable());
+            }
+        }
+        {
+            std::set<ui32> scanColumns;
+            for (auto&& i : columns->GetColumnIds()) {
+                if (SequentialEntityIds.contains(i)) {
+                    scanColumns.emplace(i);
+                }
+            }
+            if (scanColumns.size()) {
+                auto filteredSchema = std::make_shared<TFilteredSnapshotSchema>(columns->GetFilteredSchemaPtrVerified(), scanColumns);
+                MutableStageData().AddBatch(Portion->PrepareForAssemble(*blobSchema, *filteredSchema, MutableStageData().MutableBlobs()).AssembleForSeqAccess());
+            }
+        }
+    }
+}
+
 bool TCommittedDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TColumnsSet>& /*columns*/) {
     if (ReadStarted) {
         return false;
@@ -190,6 +220,7 @@ bool TCommittedDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSou
 }
 
 void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) {
+    TMemoryProfileGuard mGuard("SCAN_PROFILE::ASSEMBLER::COMMITTED");
     if (!GetStageData().GetTable()) {
         Y_ABORT_UNLESS(GetStageData().GetBlobs().size() == 1);
         auto bData = MutableStageData().ExtractBlob(GetStageData().GetBlobs().begin()->first);

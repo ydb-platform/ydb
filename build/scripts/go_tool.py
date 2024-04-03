@@ -294,8 +294,9 @@ def create_vet_config(args, info):
 def decode_vet_report(json_report):
     report = ''
     if json_report:
+        json_report = json_report.decode('UTF-8')
         try:
-            full_diags = json.JSONDecoder().decode(json_report.decode('UTF-8'))
+            full_diags = json.JSONDecoder().decode(json_report)
         except ValueError:
             report = json_report
         else:
@@ -893,13 +894,7 @@ if __name__ == '__main__':
         with create_strip_symlink():
             dispatch[args.mode](args)
         exit_code = 0
-    except KeyError:
-        sys.stderr.write('Unknown build mode [{}]...\n'.format(args.mode))
     except subprocess.CalledProcessError as e:
         sys.stderr.write('{} returned non-zero exit code {}.\n{}\n'.format(' '.join(e.cmd), e.returncode, e.output))
         exit_code = e.returncode
-    except AssertionError as e:
-        traceback.print_exc(file=sys.stderr)
-    except Exception as e:
-        sys.stderr.write('Unhandled exception [{}]...\n'.format(str(e)))
     sys.exit(exit_code)

@@ -333,8 +333,7 @@ private:
         TrySendAsyncChannelData(*outputChannel); // early finish (skip data)
         YQL_ENSURE(outputChannel, "task: " << Task.GetId() << ", output channelId: " << channelId);
 
-        if (outputChannel->PopStarted) {
-            InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssue("Several parallel pop operations. Please check multiple parallel TEvOutputChannelDataRequest for channel"));
+        if (outputChannel->PopStarted) { // There may be another in-flight message here
             return;
         }
 

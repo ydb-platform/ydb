@@ -693,15 +693,19 @@ private:
                         return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
                     }
                     if (!ColumnsToConvertInplace.empty()) {
-                        Batch = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
+                        auto convertResult = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
+                        if (!convertResult.ok()) {
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot upsert arrow batch:" << convertResult.status().ToString(), ctx);
+                        }
+                        Batch = *convertResult;
                     }
                     // Explicit types conversion
                     if (!ColumnsToConvert.empty()) {
-                        Batch = NArrow::ConvertColumns(Batch, ColumnsToConvert);
-                        if (!Batch) {
-                            errorMessage = "Cannot upsert arrow batch: one of data types has no conversion";
-                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
+                        auto convertResult = NArrow::ConvertColumns(Batch, ColumnsToConvert);
+                        if (!convertResult.ok()) {
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot upsert arrow batch:" << convertResult.status().ToString(), ctx);
                         }
+                        Batch = *convertResult;
                     }
                 } else {
                     // TUploadColumnsRPCPublic::ExtractBatch() - NOT converted JsonDocument, DynNumbers, ...
@@ -1130,7 +1134,7 @@ private:
         TBase::Become(&TThis::StateWaitResults);
 
         // Sanity check: don't break when we don't have any shards for some reason
-        ReplyIfDone(ctx);
+        return ReplyIfDone(ctx);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
@@ -1139,7 +1143,7 @@ private:
 
         ShardRepliesLeft.clear();
 
-        ReplyIfDone(ctx);
+        return ReplyIfDone(ctx);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
@@ -1148,7 +1152,7 @@ private:
         SetError(Ydb::StatusIds::UNAVAILABLE, Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId));
         ShardRepliesLeft.erase(ev->Get()->TabletId);
 
-        ReplyIfDone(ctx);
+        return ReplyIfDone(ctx);
     }
 
     STFUNC(StateWaitResults) {
@@ -1218,7 +1222,7 @@ private:
         ShardRepliesLeft.erase(shardId);
         ShardUploadRetryStates.erase(shardId);
 
-        ReplyIfDone(ctx);
+        return ReplyIfDone(ctx);
     }
 
     void Handle(TEvDataShard::TEvOverloadReady::TPtr& ev, const TActorContext& ctx) {
@@ -1252,7 +1256,7 @@ private:
             RaiseIssue(NYql::TIssue(ErrorMessage));
         }
 
-        ReplyWithResult(Status, ctx);
+        return ReplyWithResult(Status, ctx);
     }
 
     void ReplyWithError(::Ydb::StatusIds::StatusCode status, const TString& message, const TActorContext& ctx) {
@@ -1261,7 +1265,7 @@ private:
         SetError(status, message);
 
         Y_DEBUG_ABORT_UNLESS(ShardRepliesLeft.empty());
-        ReplyIfDone(ctx);
+        return ReplyIfDone(ctx);
     }
 
     void ReplyWithResult(::Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {

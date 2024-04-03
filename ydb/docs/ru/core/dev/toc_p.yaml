@@ -1,6 +1,10 @@
 items:
 - name: Overview
   href: index.md
+- name: Туториал по YQL
+  include:
+    mode: link
+    path: yql-tutorial/toc_p.yaml
 - name: Пакетная загрузка
   href: batch-upload.md
 - name: Постраничный вывод

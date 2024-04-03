@@ -1,6 +1,6 @@
 # Добавление данных в таблицу
 
-Наполните данными [созданные](create_demo_tables.md) таблицы с помощью конструкции [REPLACE INTO](../reference/syntax/replace_into.md).
+Наполните данными [созданные](create_demo_tables.md) таблицы с помощью конструкции [REPLACE INTO](../../yql/reference/syntax/replace_into.md).
 
 ```sql
 REPLACE INTO series (series_id, title, release_date, series_info)

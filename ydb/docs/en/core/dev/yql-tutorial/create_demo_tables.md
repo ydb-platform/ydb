@@ -1,6 +1,6 @@
 # Creating a table
 
-Create the tables and set the data schema for them using the statement [CREATE TABLE](../reference/syntax/create_table.md).
+Create the tables and set the data schema for them using the statement [CREATE TABLE](../../yql/reference/syntax/create_table.md).
 
 {% note info %}
 

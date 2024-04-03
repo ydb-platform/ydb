@@ -280,7 +280,7 @@ Check how {{ ydb-short-name }} works:
 
 ## Further steps
 
-After you have tested that the created {{ ydb-short-name }} cluster operates fine you can continue using it as you see fit. For example, if you just want to continue experimenting, you can use it to follow the [YQL tutorial](../../yql/tutorial/index.md).
+After you have tested that the created {{ ydb-short-name }} cluster operates fine you can continue using it as you see fit. For example, if you just want to continue experimenting, you can use it to follow the [YQL tutorial](../../dev/yql-tutorial/index.md).
 
 Below are a few more things to consider. 
 

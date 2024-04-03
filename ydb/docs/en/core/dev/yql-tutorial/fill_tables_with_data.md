@@ -1,6 +1,6 @@
 # Adding data to a table
 
-Populate the [created](create_demo_tables.md) tables with data using the [REPLACE INTO](../reference/syntax/replace_into.md) statement.
+Populate the [created](create_demo_tables.md) tables with data using the [REPLACE INTO](../../yql/reference/syntax/replace_into.md) statement.
 
 ```sql
 REPLACE INTO series (series_id, title, release_date, series_info)

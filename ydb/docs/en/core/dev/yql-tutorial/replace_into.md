@@ -1,6 +1,6 @@
 # Inserting and updating data with REPLACE
 
-Add data to the table using [REPLACE INTO](../reference/syntax/replace_into.md):
+Add data to the table using [REPLACE INTO](../../yql/reference/syntax/replace_into.md):
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 

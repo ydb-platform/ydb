@@ -75,6 +75,38 @@ common:
     to: /dev/paging.md
   - from: /best_practices/timeouts.md
     to: /dev/timeouts.md
+  - from: /yql/tutorial/alter_table.md
+    to: /dev/yql-tutorial/alter_table.md
+  - from: /yql/tutorial/basic_aggregation.md
+    to: /dev/yql-tutorial/basic_aggregation.md
+  - from: /yql/tutorial/basic_filter_and_sort.md
+    to: /dev/yql-tutorial/basic_filter_and_sort.md
+  - from: /yql/tutorial/conditional_values.md
+    to: /dev/yql-tutorial/conditional_values.md
+  - from: /yql/tutorial/create_demo_tables.md
+    to: /dev/yql-tutorial/create_demo_tables.md
+  - from: /yql/tutorial/delete.md
+    to: /dev/yql-tutorial/delete.md
+  - from: /yql/tutorial/delete_table.md
+    to: /dev/yql-tutorial/delete_table.md
+  - from: /yql/tutorial/fill_tables_with_data.md
+    to: /dev/yql-tutorial/fill_tables_with_data.md
+  - from: /yql/tutorial/index.md
+    to: /dev/yql-tutorial/index.md
+  - from: /yql/tutorial/insert_into.md
+    to: /dev/yql-tutorial/insert_into.md
+  - from: /yql/tutorial/join_tables.md
+    to: /dev/yql-tutorial/join_tables.md
+  - from: /yql/tutorial/replace_into.md
+    to: /dev/yql-tutorial/replace_into.md
+  - from: /yql/tutorial/select_all_columns.md
+    to: /dev/yql-tutorial/select_all_columns.md
+  - from: /yql/tutorial/select_specific_columns.md
+    to: /dev/yql-tutorial/select_specific_columns.md
+  - from: /yql/tutorial/update.md
+    to: /dev/yql-tutorial/update.md
+  - from: /yql/tutorial/upsert_into.md
+    to: /dev/yql-tutorial/upsert_into.md
 
 # Contributors-related redirects
   - from: /development/build-ya.md

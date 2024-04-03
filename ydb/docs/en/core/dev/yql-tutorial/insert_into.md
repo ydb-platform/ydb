@@ -1,6 +1,6 @@
 # Inserting data with INSERT
 
-Add data to the table using [INSERT INTO](../reference/syntax/insert_into.md):
+Add data to the table using [INSERT INTO](../../yql/reference/syntax/insert_into.md):
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 

@@ -1,6 +1,6 @@
-# Inserting and updating data with UPSERT
+# Вставка и модификация данных с помощью UPSERT
 
-Add data to the table using [UPSERT INTO](../reference/syntax/upsert_into.md):
+Добавьте данные в таблицу с помощью конструкции [UPSERT INTO](../../yql/reference/syntax/upsert_into.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
@@ -25,9 +25,8 @@ VALUES
 
 COMMIT;
 
--- View result:
+-- Посмотреть результат:
 SELECT * FROM episodes WHERE series_id = 2 AND season_id = 5;
 
 COMMIT;
 ```
-

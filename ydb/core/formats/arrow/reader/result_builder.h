@@ -12,7 +12,9 @@ private:
     std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
     YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::Field>>, Fields);
     YDB_READONLY(ui32, RecordsCount, 0);
+    YDB_ACCESSOR_DEF(std::optional<ui32>, MemoryBufferLimit);
 
+    ui64 CurrentBytesUsed = 0;
     bool IsSameFieldsSequence(const std::vector<std::shared_ptr<arrow::Field>>& f1, const std::vector<std::shared_ptr<arrow::Field>>& f2);
 
 public:
@@ -26,6 +28,9 @@ public:
 
     std::shared_ptr<arrow::RecordBatch> Finalize();
 
+    bool IsBufferExhausted() const {
+        return MemoryBufferLimit && *MemoryBufferLimit < CurrentBytesUsed;
+    }
     void AddRecord(const TSortableBatchPosition& position);
     void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema);
 };

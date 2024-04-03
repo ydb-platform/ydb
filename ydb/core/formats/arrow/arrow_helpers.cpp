@@ -1047,4 +1047,8 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
     return result;
 }
 
+std::shared_ptr<arrow::Table> ToTable(const std::shared_ptr<arrow::RecordBatch>& batch) {
+    return TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batch->schema(), {batch}));
+}
+
 }

@@ -670,7 +670,7 @@ TEST(TErrorTest, CompositeYTExceptionToError)
         try {
             throw TSimpleException("inner message");
         } catch (const std::exception& ex) {
-            throw TCompositeException(ex, "outer message");
+            throw TSimpleException(ex, "outer message");
         }
     } catch (const std::exception& ex) {
         TError outerError(ex);
@@ -680,6 +680,37 @@ TEST(TErrorTest, CompositeYTExceptionToError)
         const auto& innerError = outerError.InnerErrors()[0];
         EXPECT_EQ(NYT::EErrorCode::Generic, innerError.GetCode());
         EXPECT_EQ("inner message", innerError.GetMessage());
+    }
+}
+
+TEST(TErrorTest, YTExceptionWithAttributesToError)
+{
+    try {
+        throw TSimpleException("message")
+            << TExceptionAttribute{"Int64 value", static_cast<i64>(42)}
+            << TExceptionAttribute{"double value", 7.77}
+            << TExceptionAttribute{"bool value", false}
+            << TExceptionAttribute{"String value", "FooBar"};
+    } catch (const std::exception& ex) {
+        TError error(ex);
+        EXPECT_EQ(NYT::EErrorCode::Generic, error.GetCode());
+        EXPECT_EQ("message", error.GetMessage());
+
+        auto i64value = error.Attributes().Find<i64>("Int64 value");
+        EXPECT_TRUE(i64value);
+        EXPECT_EQ(*i64value, static_cast<i64>(42));
+
+        auto doubleValue = error.Attributes().Find<double>("double value");
+        EXPECT_TRUE(doubleValue);
+        EXPECT_EQ(*doubleValue, 7.77);
+
+        auto boolValue = error.Attributes().Find<bool>("bool value");
+        EXPECT_TRUE(boolValue);
+        EXPECT_EQ(*boolValue, false);
+
+        auto stringValue = error.Attributes().Find<TString>("String value");
+        EXPECT_TRUE(stringValue);
+        EXPECT_EQ(*stringValue, "FooBar");
     }
 }
 

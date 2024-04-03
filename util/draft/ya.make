@@ -1,7 +1,5 @@
 LIBRARY()
 
-SUBSCRIBER(g:util-subscribers)
-
 NO_UTIL()
 
 IF (TSTRING_IS_STD_STRING)

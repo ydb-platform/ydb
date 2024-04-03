@@ -32,8 +32,6 @@ tracing_config:
 
 ## Описание секций
 
-Ниже приведено описание каждой секции в конфигурации трассировки {{ ydb-short-name }}. Пример полной конфигурации приведен в [соответствующей секции](./setup.md#complete-configuration).
-
 ### Backend {#backend}
 
 #### Пример секции
@@ -159,44 +157,6 @@ tracing_config:
 Секция `sampling` не является обязательной, в случае ее отсутствия никакие запросы не будут сэмплироваться.
 
 Данную секцию можно изменять без перезагрузки узла с помощью механизма [динамической конфигурации](../../maintenance/manual/dynamic-config.md).
-
-### Пример полной конфигурации {#complete-configuration}
-
-```yaml
-tracing_config:
-  backend:
-    opentelemetry:
-      collector_url: grpc://example.com:4317
-      service_name: ydb
-  uploader:
-    max_exported_spans_per_second: 30
-    max_spans_in_batch: 100
-    max_bytes_in_batch: 10485760 # 10 MiB
-    max_export_requests_inflight: 3
-    max_batch_accumulation_milliseconds: 5000
-    span_export_timeout_seconds: 120
-  external_throttling:
-    - scope:
-        database: /Root/db1
-      max_traces_per_minute: 60
-      max_traces_burst: 3
-  sampling:
-    - fraction: 0.01
-      level: 10
-      max_traces_per_minute: 5
-      max_traces_burst: 2
-    - scope:
-        request_types:
-          - KeyValue.ExecuteTransaction
-          - KeyValue.Read
-      fraction: 0.1
-      level: 15
-      max_traces_per_minute: 5
-      max_traces_burst: 2
-```
-
-Секции `external_throttling` и `sampling` можно изменять без перезагрузки узла с помощью механизма [динамической конфигурации](../../maintenance/manual/dynamic-config.md), изменение остальных секций без перезагрузки узла пока недоступно.
-
 
 ## Семантика правил {#semantics}
 

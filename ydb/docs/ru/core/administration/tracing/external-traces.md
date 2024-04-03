@@ -13,7 +13,7 @@
 
 {% note warning %}
 
-При наличии секции [`external_throttling`](./setup.md#external-throttling) и потоке запросов, превышающем установленные лимиты, могут трассироваться не все запросы. При отсутствии секции [`external_throttling`](./setup.md#external-throttling) заголовок `traceparent` **будет игнороваться** и никакие внешние трассы не будут продолжаться.
+При наличии секции [`external_throttling`](./setup.md#external-throttling) и потоке запросов, превышающем установленные лимиты, могут трассироваться не все запросы. При отсутствии секции [`external_throttling`](./setup.md#external-throttling) заголовок `traceparent` **игноруется** и никакие внешние трассы не продолжаются.
 
 {% endnote %}
 

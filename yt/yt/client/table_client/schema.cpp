@@ -22,6 +22,8 @@
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/chunk_meta.pb.h>
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/wire_protocol.pb.h>
 
+#include <yt/yt_proto/yt/client/tablet_client/proto/lock_mask.pb.h>
+
 namespace NYT::NTableClient {
 
 using namespace NChunkClient;
@@ -110,6 +112,37 @@ TLockMask MaxMask(TLockMask lhs, TLockMask rhs)
     }
 
     return lhs;
+}
+
+void ToProto(NTabletClient::NProto::TLockMask* protoLockMask, const TLockMask& lockMask)
+{
+    auto size = lockMask.GetSize();
+    YT_VERIFY(size <= TLockMask::MaxSize);
+
+    protoLockMask->set_size(size);
+
+    const auto& bitmap = lockMask.GetBitmap();
+    auto wordCount = DivCeil(size, TLockMask::LocksPerWord);
+    YT_VERIFY(std::ssize(bitmap) >= wordCount);
+
+    protoLockMask->clear_bitmap();
+    for (int index = 0; index < wordCount; ++index) {
+        protoLockMask->add_bitmap(bitmap[index]);
+    }
+}
+
+void FromProto(TLockMask* lockMask, const NTabletClient::NProto::TLockMask& protoLockMask)
+{
+    auto size = protoLockMask.size();
+    auto wordCount = DivCeil<int>(size, TLockMask::LocksPerWord);
+
+    TLockBitmap bitmap;
+    bitmap.reserve(wordCount);
+    for (int index = 0; index < wordCount; ++index) {
+        bitmap.push_back(protoLockMask.bitmap(index));
+    }
+
+    *lockMask = TLockMask(bitmap, size);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

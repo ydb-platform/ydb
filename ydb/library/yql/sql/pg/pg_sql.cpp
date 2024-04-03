@@ -4395,10 +4395,7 @@ public:
         if (!lhs || !rhs) {
             return nullptr;
         }
-        auto pred = L(A("Coalesce"),
-                L(A("FromPg"), L(A("PgOp"), QA("="), lhs, rhs)),
-                L(A("Bool"), QA("false")));
-        return L(A("If"), pred, lhs, L(A("Null")));
+        return L(A("PgNullIf"), lhs, rhs);
     }
 
     TAstNode* ParseAExprIn(const A_Expr* value, const TExprSettings& settings) {

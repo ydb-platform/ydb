@@ -2180,9 +2180,9 @@
     ],
     "test.test[pg-nullif-default.txt-Debug]": [
         {
-            "checksum": "a19676d0aca7eeb4d766d30dbaa027a9",
-            "size": 615,
-            "uri": "https://{canondata_backend}/1937027/9074da5ec3159ab717d6f0fee0639313448b4579/resource.tar.gz#test.test_pg-nullif-default.txt-Debug_/opt.yql_patched"
+            "checksum": "15878810614467bf104f998fba1655bd",
+            "size": 737,
+            "uri": "https://{canondata_backend}/1775319/aeec36fe6eb29fa67191adf64023416d42730ad7/resource.tar.gz#test.test_pg-nullif-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-nullif-default.txt-Plan]": [

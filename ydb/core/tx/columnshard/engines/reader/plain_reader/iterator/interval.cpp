@@ -61,7 +61,7 @@ protected:
     }
     virtual bool DoExecute() override {
         if (MergingContext->IsExclusiveInterval()) {
-            ResultBatch = Sources.begin()->second->GetStageResult().GetBatch();
+            ResultBatch = NArrow::ToTable(Sources.begin()->second->GetStageResult().GetBatch());
             if (ResultBatch && ResultBatch->num_rows()) {
                 LastPK = Sources.begin()->second->GetLastPK();
                 ResultBatch = NArrow::ExtractColumnsValidate(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
@@ -77,7 +77,7 @@ protected:
             return true;
         }
         if (EmptyFiltersOnly()) {
-            ResultBatch = NArrow::MakeEmptyBatch(Context->GetProgramInputColumns()->GetSchema());
+            ResultBatch = NArrow::ToTable(NArrow::MakeEmptyBatch(Context->GetProgramInputColumns()->GetSchema()));
             return true;
         }
         std::shared_ptr<NArrow::NMerger::TMergePartialStream> merger = Context->BuildMerger();
@@ -111,7 +111,7 @@ protected:
             auto rbBuilder = std::make_shared<NArrow::NMerger::TRecordBatchBuilder>(Context->GetProgramInputColumns()->GetSchema()->fields());
             merger->DrainCurrentTo(*rbBuilder, MergingContext->GetFinish(), MergingContext->GetIncludeFinish(), &lastResultPosition);
             Context->GetCommonContext()->GetCounters().OnLinearScanInterval(rbBuilder->GetRecordsCount());
-            ResultBatch = rbBuilder->Finalize();
+            ResultBatch = NArrow::ToTable(rbBuilder->Finalize());
         }
         if (lastResultPosition) {
             LastPK = lastResultPosition->ExtractSortingPosition();

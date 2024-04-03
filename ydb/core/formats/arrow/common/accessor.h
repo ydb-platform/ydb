@@ -114,11 +114,12 @@ public:
     static TCurrentChunkAddress SelectChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position, const TChunkAccessor& accessor) {
         if (!chunkCurrent || position >= chunkCurrent->GetStartPosition() + chunkCurrent->GetLength()) {
             ui32 startIndex = 0;
+            ui64 idx = 0;
             if (chunkCurrent) {
                 AFL_VERIFY(chunkCurrent->GetChunkIndex() + 1 < accessor.GetChunksCount());
                 startIndex = chunkCurrent->GetChunkIndex() + 1;
+                idx = chunkCurrent->GetStartPosition() + chunkCurrent->GetLength();
             }
-            ui64 idx = 0;
             for (ui32 i = startIndex; i < accessor.GetChunksCount(); ++i) {
                 const ui64 nextIdx = idx + accessor.GetChunkLength(i);
                 if (idx <= position && position < nextIdx) {
@@ -131,7 +132,7 @@ public:
         } else if (position < chunkCurrent->GetStartPosition()) {
             AFL_VERIFY(chunkCurrent->GetChunkIndex() > 0);
             ui64 idx = chunkCurrent->GetStartPosition();
-            for (i32 i = chunkCurrent->GetChunkIndex() - 1; i >= 0; ++i) {
+            for (i32 i = chunkCurrent->GetChunkIndex() - 1; i >= 0; --i) {
                 AFL_VERIFY(idx >= accessor.GetChunkLength(i))("idx", idx)("length", accessor.GetChunkLength(i));
                 const ui64 nextIdx = idx - accessor.GetChunkLength(i);
                 if (nextIdx <= position && position < idx) {

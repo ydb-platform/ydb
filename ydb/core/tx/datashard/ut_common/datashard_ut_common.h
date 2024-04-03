@@ -532,6 +532,9 @@ ui64 AsyncCreateCopyTable(Tests::TServer::TPtr server,
 NKikimrTxDataShard::TEvCompactTableResult CompactTable(
     TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed = false);
 
+NKikimrTxDataShard::TEvCompactBorrowedResult CompactBorrowed(
+    TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId);
+
 using TTableInfoMap = THashMap<TString, NKikimrTxDataShard::TEvGetInfoResponse::TUserTable>;
 
 std::pair<TTableInfoMap, ui64> GetTables(Tests::TServer::TPtr server,

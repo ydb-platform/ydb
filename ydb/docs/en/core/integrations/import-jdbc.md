@@ -111,7 +111,7 @@ Sample configuration files:
 * [for IBM Db2](https://github.com/ydb-platform/ydb-importer/blob/main/scripts/sample-db2.xml)
 * [for IBM Informix](https://github.com/ydb-platform/ydb-importer/blob/main/scripts/sample-informix.xml)
 
-Below is the definition of the configuration file structure.
+Below is the explanation of the configuration file structure:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>

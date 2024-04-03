@@ -366,6 +366,9 @@ struct Schema : NIceDb::Schema {
 
         // PartCount, PartOwners & ShardState are volatile data
 
+        // Represented by NKikimrTableStats::TStoragePoolsStats.
+        struct StoragePoolsStats : Column<33, NScheme::NTypeIds::String> { using Type = TString; };
+
         using TKey = TableKey<TableOwnerId, TableLocalId, PartitionId>;
         using TColumns = TableColumns<
             TableOwnerId,
@@ -399,7 +402,8 @@ struct Schema : NIceDb::Schema {
             WriteIops,
             SearchHeight,
             FullCompactionTs,
-            MemDataSize
+            MemDataSize,
+            StoragePoolsStats
         >;
     };
 

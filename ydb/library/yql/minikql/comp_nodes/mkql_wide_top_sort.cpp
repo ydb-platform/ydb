@@ -11,8 +11,6 @@
 
 #include <ydb/library/yql/utils/sort.h>
 
-#include <list>
-
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -395,7 +393,7 @@ private:
 
 public:
     TSpillingSupportState(TMemoryUsageInfo* memInfo, ui64 count, const bool* directons, size_t keyWidth, const TCompareFunc& compare,
-        const std::vector<ui32>& indexes, IComputationWideFlowNode *const flow, TMultiType* sortKeysMultiType)
+        const std::vector<ui32>& indexes, IComputationWideFlowNode *const flow, TMultiType* tupleMultiType)
         : TBase(memInfo)
         , Flow(flow)
         , Count(count)
@@ -403,7 +401,7 @@ public:
         , Directions(directons, directons + keyWidth)
         , LessFunc(std::bind(std::less<int>(), std::bind(compare, Directions.data(), std::placeholders::_1, std::placeholders::_2), 0))
         , Fields(Indexes.size(), nullptr)
-        , SortKeysMultiType(sortKeysMultiType)
+        , TupleMultiType(tupleMultiType)
     {
         if constexpr (!HasCount) {
             ResetFields();
@@ -565,6 +563,11 @@ private:
 
     bool HasMemoryForProcessing() const {
         // TODO: Change to enable spilling
+        // return !TlsAllocState->IsMemoryYellowZoneEnabled();
+        const int SPILL_LIMIT = 2;
+        if (Storage.size() / Indexes.size() > SPILL_LIMIT) {
+            return false;
+        }
         return true;
     }
 
@@ -578,13 +581,15 @@ private:
                 break;
             case EOperatingMode::Spilling:
             {
+                // std::cerr << "!!! Switch to spilling mode !!!" << std::endl;
                 auto spiller = ctx.SpillerFactory->CreateSpiller();
-                const size_t packSize = 1_KB;
-                SpilledStates.emplace_back(std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, SortKeysMultiType, packSize));
+                const size_t PACK_SIZE = 5_MB;
+                SpilledStates.emplace_back(std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, TupleMultiType, PACK_SIZE));
                 break;
             }
             case EOperatingMode::ProcessSpilled:
             {
+                // std::cerr << "!!! Switch to process spilled mode !!!" << std::endl;
                 SpilledUnboxedValuesIterators.reserve(SpilledStates.size());
                 for (auto &state: SpilledStates) {
                     SpilledUnboxedValuesIterators.emplace_back(LessFunc, &state, Indexes.size(), &ctx);
@@ -638,7 +643,7 @@ private:
     TStorage Storage;
     TPointers Free, Full;
     TFields Fields;
-    TMultiType* SortKeysMultiType;
+    TMultiType* TupleMultiType;
     std::vector<TSpilledData> SpilledStates;
     EOperatingMode Mode;
     std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators;
@@ -692,9 +697,9 @@ class TWideTopWrapper: public TStatefulWideFlowCodegeneratorNode<TWideTopWrapper
 using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTopWrapper<Sort, HasCount>>;
 public:
     TWideTopWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, TComputationNodePtrVector&& directions, std::vector<TKeyInfo>&& keys,
-        std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations, TMultiType* sortKeysMultiType)
+        std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations, TMultiType* tupleMultiType)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed), Flow(flow), Count(count), Directions(std::move(directions)), Keys(std::move(keys))
-        , Indexes(std::move(indexes)), Representations(std::move(representations)), SortKeysMultiType(sortKeysMultiType)
+        , Indexes(std::move(indexes)), Representations(std::move(representations)), TupleMultiType(tupleMultiType)
     {
         for (const auto& x : Keys) {
             if (x.Compare || x.PresortType) {
@@ -941,7 +946,7 @@ private:
 
     void MakeSpillingSupportState(TComputationContext& ctx, NUdf::TUnboxedValue& state, ui64 count, const bool* directions) const {
         if (Sort && !HasCount && !ctx.ExecuteLLVM) {
-            state = ctx.HolderFactory.Create<TSpillingSupportState<Sort, HasCount>>(count, directions, Directions.size(), TMyValueCompare(Keys), Indexes, Flow, SortKeysMultiType);
+            state = ctx.HolderFactory.Create<TSpillingSupportState<Sort, HasCount>>(count, directions, Directions.size(), TMyValueCompare(Keys), Indexes, Flow, TupleMultiType);
             return;
         }
         state = ctx.HolderFactory.Create<TState<Sort, HasCount>>(count, directions, Directions.size(), TMyValueCompare(Keys), Indexes, Flow);
@@ -964,7 +969,7 @@ private:
     const std::vector<ui32> Indexes;
     const std::vector<EValueRepresentation> Representations;
     TKeyTypes KeyTypes;
-    TMultiType* SortKeysMultiType;
+    TMultiType* TupleMultiType;
     bool HasComplexType = false;
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -1014,10 +1019,14 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
 
     std::unordered_set<ui32> keyIndexes;
     std::vector<TKeyInfo> keys(keyWidth);
+    std::vector<TType*> tupleTypes;
+    tupleTypes.reserve(inputWideComponents.size());
+
     for (auto i = 0U; i < keyWidth; ++i) {
         const auto keyIndex = AS_VALUE(TDataLiteral, callable.GetInput(((i + 1U) << 1U) - offset))->AsValue().Get<ui32>();
         indexes[i] = keyIndex;
         keyIndexes.emplace(keyIndex);
+        tupleTypes.emplace_back(inputWideComponents[keyIndex]);
 
         bool isTuple;
         bool encoded;
@@ -1035,7 +1044,6 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
         }
     }
 
-    auto sortKeysMultiType = TMultiType::Create(inputWideComponents.size(), inputWideComponents.data(), ctx.Env);
 
     size_t payloadPos = keyWidth;
     for (auto i = 0U; i < indexes.size(); ++i) {
@@ -1044,19 +1052,21 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
         }
 
         indexes[payloadPos++] = i;
+        tupleTypes.emplace_back(inputWideComponents[i]);
     }
 
     std::vector<EValueRepresentation> representations(inputWideComponents.size());
     for (auto i = 0U; i < representations.size(); ++i)
         representations[i] = GetValueRepresentation(inputWideComponents[indexes[i]]);
 
+    auto tupleMultiType = TMultiType::Create(tupleTypes.size(),tupleTypes.data(), ctx.Env);
     TComputationNodePtrVector directions(keyWidth);
     auto index = 1U - offset;
     std::generate(directions.begin(), directions.end(), [&](){ return LocateNode(ctx.NodeLocator, callable, ++++index); });
 
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         return new TWideTopWrapper<Sort, HasCount>(ctx.Mutables, wide, count, std::move(directions), std::move(keys),
-            std::move(indexes), std::move(representations), sortKeysMultiType);
+            std::move(indexes), std::move(representations), tupleMultiType);
     }
 
     THROW yexception() << "Expected wide flow.";

@@ -13,7 +13,7 @@ namespace NKikimr::NMiniKQL {
 ///When interaction with ISpiller is required, Write and Read operations return a Future
 class TWideUnboxedValuesSpillerAdapter {
 public:
-    TWideUnboxedValuesSpillerAdapter(ISpiller::TPtr spiller, const TType* type, size_t sizeLimit)
+    TWideUnboxedValuesSpillerAdapter(ISpiller::TPtr spiller, const TMultiType* type, size_t sizeLimit)
         : Spiller(spiller)
         , ItemType(type)
         , SizeLimit(sizeLimit)
@@ -78,7 +78,7 @@ public:
 
 private:
     ISpiller::TPtr Spiller;
-    const TType* const ItemType;
+    const TMultiType* const ItemType;
     const size_t SizeLimit;
     TValuePackerTransport<false> Packer;
     std::deque<ISpiller::TKey> StoredChunks;

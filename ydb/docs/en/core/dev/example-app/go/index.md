@@ -248,12 +248,3 @@ if err != nil {
   // handling a query execution error
 }
 ```
-
-
-{% note info %}
-
-Sample code of a test app that uses archived of versions the Go SDK:
-- [github.com/yandex-cloud/ydb-go-sdk](https://github.com/yandex-cloud/ydb-go-sdk/tree/v1.5.1) is available via the [link](../archive/example-go-v1.md),
-- [github.com/yandex-cloud/ydb-go-sdk/v2](https://github.com/yandex-cloud/ydb-go-sdk/tree/v2.11.2) is available via the [link](../archive/example-go-v2.md).
-
-{% endnote %}

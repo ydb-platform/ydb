@@ -248,12 +248,3 @@ if err != nil {
   // обработка ошибки выполнения запроса
 }
 ```
-
-
-{% note info %}
-
-Разбор кода тестового приложения, использующего архивные версии Go SDK:
- - [github.com/yandex-cloud/ydb-go-sdk](https://github.com/yandex-cloud/ydb-go-sdk/tree/v1.5.1) доступен по [ссылке](../archive/example-go-v1.md),
- - [github.com/yandex-cloud/ydb-go-sdk/v2](https://github.com/yandex-cloud/ydb-go-sdk/tree/v2.11.2) доступен по [ссылке](../archive/example-go-v2.md).
-
-{% endnote %}

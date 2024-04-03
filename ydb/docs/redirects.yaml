@@ -108,9 +108,9 @@ common:
   - from: /yql/tutorial/upsert_into.md
     to: /dev/yql-tutorial/upsert_into.md
   - from: /reference/ydb-sdk/example/archive/example-go-v1.md
-    to: /dev/example-app/archive/example-go-v1.md
+    to: /dev/example-app/go/index.md
   - from: /reference/ydb-sdk/example/archive/example-go-v2.md
-    to: /dev/example-app/archive/example-go-v2.md
+    to: /dev/example-app/go/index.md
   - from: /reference/ydb-sdk/example/example-cpp.md
     to: /dev/example-app/example-cpp.md
   - from: /reference/ydb-sdk/example/example-dotnet.md

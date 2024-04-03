@@ -95,7 +95,7 @@ private:
 
         THashMap<ui32, const IDqAsyncInputBuffer*> inputTransforms;
         for (const auto inputTransformId : ev->Get()->InputTransformIds) {
-            inputTransforms[inputTransformId] = TaskRunner->GetInputTransform(inputTransformId).second.Get();
+            inputTransforms[inputTransformId] = TaskRunner->GetInputTransform(inputTransformId)->second.Get();
         }
 
         ev->Get()->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinks), std::move(inputTransforms));
@@ -231,7 +231,7 @@ private:
 
             THashMap<ui32, const IDqAsyncInputBuffer*> inputTransforms;
             for (const auto inputTransformId : st->InputTransformIds) { // TODO
-                inputTransforms[inputTransformId] = TaskRunner->GetInputTransform(inputTransformId).second.Get();
+                inputTransforms[inputTransformId] = TaskRunner->GetInputTransform(inputTransformId)->second.Get();
             }
 
             st->Stats = TDqTaskRunnerStatsView(TaskRunner->GetStats(), std::move(sinks), std::move(inputTransforms));
@@ -427,6 +427,15 @@ private:
         }
 
         TaskRunner->Prepare(settings, ev->Get()->MemoryLimits, *ev->Get()->ExecCtx);
+        
+        THashMap<ui64, std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> inputTransforms;
+        for (auto i = 0; i != inputs.size(); ++i) {
+            if (auto t = TaskRunner->GetInputTransform(i)) {
+                inputTransforms[i].first = t->first;
+                inputTransforms[i].second = t->second;
+            }
+        }
+
         auto wakeUpCallback = ev->Get()->ExecCtx->GetWakeupCallback();
         TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback));
 
@@ -435,7 +444,10 @@ private:
             TaskRunner->GetTaskParams(),
             TaskRunner->GetReadRanges(),
             TaskRunner->GetTypeEnv(),
-            TaskRunner->GetHolderFactory());
+            TaskRunner->GetHolderFactory(),
+            Alloc,
+            std::move(inputTransforms)
+        );
 
         Send(
             ParentId,

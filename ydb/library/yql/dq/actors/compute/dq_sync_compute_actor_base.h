@@ -216,7 +216,7 @@ protected:
         }
 
         for (auto& [inputIndex, transform] : this->InputTransformsMap) {
-            std::tie(transform.Input, transform.Buffer) = TaskRunner->GetInputTransform(inputIndex);
+            std::tie(transform.Input, transform.Buffer) = *TaskRunner->GetInputTransform(inputIndex);
         }
 
         for (auto& [channelId, channel] : this->OutputChannelsMap) {

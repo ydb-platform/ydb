@@ -465,6 +465,10 @@ private:
             Stat->AddCounters2(ev->Get()->Sensors);
         }
         TypeEnv = const_cast<NKikimr::NMiniKQL::TTypeEnvironment*>(&typeEnv);
+        for (auto& [inputIndex, transform] : this->InputTransformsMap) {
+            transform.Input = ev->Get()->InputTransforms.at(inputIndex).first;
+            transform.Buffer = ev->Get()->InputTransforms.at(inputIndex).second;
+        }
         FillIoMaps(holderFactory, typeEnv, secureParams, taskParams, readRanges, nullptr);
 
         {

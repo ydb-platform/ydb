@@ -1626,6 +1626,8 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
             haveChanges = true;
         }
 
+        ProcessReserveRequests(ctx);
+
         DBGTRACE_LOG("haveChanges=" << haveChanges <<
                      ", TxIdHasChanged=" << TxIdHasChanged <<
                      ", AffectedUsers.size=" << AffectedUsers.size() <<

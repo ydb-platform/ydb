@@ -2119,8 +2119,6 @@ double ComputeCpuTimes(NJson::TJsonValue& plan) {
     }
 
     if (plan.GetMapSafe().contains("Stats") && plan.GetMapSafe().contains("Operators")) {
-        YQL_CLOG(TRACE, CoreDq) << "Found Operators";
-
         auto& ops = plan.GetMapSafe().at("Operators").GetArraySafe();
 
         const auto& stats = plan.GetMapSafe().at("Stats").GetMapSafe();
@@ -2153,8 +2151,6 @@ void ComputeTotalRows(NJson::TJsonValue& plan) {
     }
 
     if (plan.GetMapSafe().contains("Stats") && plan.GetMapSafe().contains("Operators")) {
-        YQL_CLOG(TRACE, CoreDq) << "Found Operators";
-
         auto& ops = plan.GetMapSafe().at("Operators").GetArraySafe();
 
         const auto& stats = plan.GetMapSafe().at("Stats").GetMapSafe();

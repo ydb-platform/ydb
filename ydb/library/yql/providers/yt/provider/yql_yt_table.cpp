@@ -115,16 +115,16 @@ public:
         Converters.emplace(TCoInterval::CallableName(), [](const TExprNode& node) {
             return NYT::TNode(NYql::FromString<i64>(*node.Child(0), EDataSlot::Interval));
         });
-        Converters.emplace(TCoDate::CallableName(), [](const TExprNode& node) {
+        Converters.emplace(TCoDate32::CallableName(), [](const TExprNode& node) {
             return NYT::TNode((i64)NYql::FromString<i32>(*node.Child(0), EDataSlot::Date32));
         });
-        Converters.emplace(TCoDatetime::CallableName(), [](const TExprNode& node) {
+        Converters.emplace(TCoDatetime64::CallableName(), [](const TExprNode& node) {
             return NYT::TNode(NYql::FromString<i64>(*node.Child(0), EDataSlot::Datetime64));
         });
-        Converters.emplace(TCoTimestamp::CallableName(), [](const TExprNode& node) {
+        Converters.emplace(TCoTimestamp64::CallableName(), [](const TExprNode& node) {
             return NYT::TNode(NYql::FromString<i64>(*node.Child(0), EDataSlot::Timestamp64));
         });
-        Converters.emplace(TCoInterval::CallableName(), [](const TExprNode& node) {
+        Converters.emplace(TCoInterval64::CallableName(), [](const TExprNode& node) {
             return NYT::TNode(NYql::FromString<i64>(*node.Child(0), EDataSlot::Interval64));
         });
         Converters.emplace(TCoTzDate::CallableName(), [](const TExprNode& node) {
@@ -1535,7 +1535,7 @@ bool AdjacentDataNodes(NNodes::TExprBase left, NNodes::TExprBase right)
 }
 
 template <bool UpperBound>
-void ScaleDate(ui64& val, bool& includeBound, EDataSlot srcDataSlot, EDataSlot targetDataSlot) {
+void ScaleDate(i64& val, bool& includeBound, EDataSlot srcDataSlot, EDataSlot targetDataSlot) {
     switch (srcDataSlot) {
     case EDataSlot::Date:
         switch (targetDataSlot) {
@@ -1581,11 +1581,6 @@ void ScaleDate(ui64& val, bool& includeBound, EDataSlot srcDataSlot, EDataSlot t
         default:
             break;
         }
-        break;
-    case EDataSlot::Date32:
-    case EDataSlot::Datetime64:
-    case EDataSlot::Timestamp64:
-        // TODO
         break;
     default:
         break;
@@ -1963,12 +1958,15 @@ bool AdjustUpperValue(TString& upperValue, bool& upperInclude, EDataSlot upperDa
             case EDataSlot::Datetime64:
                 valMin = MIN_DATETIME64;
                 valMax = MAX_DATETIME64;
+                break;
             case EDataSlot::Timestamp64:
                 valMin = MIN_TIMESTAMP64;
                 valMax = MAX_TIMESTAMP64;
+                break;
             case EDataSlot::Interval64:
                 valMin = -MAX_INTERVAL64;
                 valMax = MAX_INTERVAL64;
+                break;
             default:
                 break;
             }

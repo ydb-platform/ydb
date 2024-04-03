@@ -993,6 +993,21 @@
             "Match": {"Type": "Callable", "Name": "Timestamp"}
         },
         {
+            "Name": "TCoDate32",
+            "Base": "TCoDateBase",
+            "Match": {"Type": "Callable", "Name": "Date32"}
+        },
+        {
+            "Name": "TCoDatetime64",
+            "Base": "TCoDateBase",
+            "Match": {"Type": "Callable", "Name": "Datetime64"}
+        },
+        {
+            "Name": "TCoTimestamp64",
+            "Base": "TCoDateBase",
+            "Match": {"Type": "Callable", "Name": "Timestamp64"}
+        },
+        {
             "Name": "TCoTzDateBase",
             "Base": "TCoDateBase",
             "Match": {"Type": "CallableBase"},
@@ -1017,6 +1032,11 @@
             "Name": "TCoInterval",
             "Base": "TCoDataCtor",
             "Match": {"Type": "Callable", "Name": "Interval"}
+        },
+        {
+            "Name": "TCoInterval64",
+            "Base": "TCoDataCtor",
+            "Match": {"Type": "Callable", "Name": "Interval64"}
         },
         {
             "Name": "TCoDecimal",

@@ -816,6 +816,7 @@ Y_UNIT_TEST(TestWaitInOwners) {
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        DBGTRACE("TestWaitInOwners");
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
@@ -831,28 +832,38 @@ Y_UNIT_TEST(TestWaitInOwners) {
         data.push_back({1, s.substr(pp)});
         data.push_back({2, s.substr(pp)});
 
+        DBGTRACE_LOG("CmdSetOwner");
         CmdSetOwner(0, tc, "owner", false);
+        DBGTRACE_LOG("CmdSetOwner");
         CmdSetOwner(0, tc, "owner", true); //will break last owner
 
+        DBGTRACE_LOG("SetOwner");
         TActorId newPipe = SetOwner(0, tc, "owner", false); //this owner will wait
 
+        DBGTRACE_LOG("CmdSetOwner");
         auto p = CmdSetOwner(0, tc, "owner", true); //will break last owner
 
         TAutoPtr<IEventHandle> handle;
         TEvPersQueue::TEvResponse *result;
         try {
+            DBGTRACE("wait for TEvPersQueue::TEvResponse");
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
         } catch (NActors::TSchedulingLimitReachedException) {
+            DBGTRACE_LOG("NActors::TSchedulingLimitReachedException");
             result = nullptr;
         }
 
         Y_ABORT_UNLESS(!result); //no answer yet
 
+        DBGTRACE_LOG("CmdSetOwner");
         CmdSetOwner(0, tc);
+        DBGTRACE_LOG("CmdSetOwner");
         CmdSetOwner(0, tc, "owner2"); //just to be dropped by next command
 
+        DBGTRACE_LOG("WritePartData p.first=" << p.first);
         WritePartData(0, "sourceid", 12, 1, 1, 5, 20, "value", tc, p.first, 0);
 
+        DBGTRACE_LOG("wait for TEvPersQueue::TEvResponse");
         result = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle, [](const TEvPersQueue::TEvResponse& ev){
                 if (ev.Record.HasPartitionResponse() && ev.Record.GetPartitionResponse().CmdWriteResultSize() > 0 || ev.Record.GetErrorCode() != NPersQueue::NErrorCode::OK)
                     return true;
@@ -864,8 +875,10 @@ Y_UNIT_TEST(TestWaitInOwners) {
         UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
 
         try {
+            DBGTRACE("wait for TEvPersQueue::TEvResponse");
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
         } catch (NActors::TSchedulingLimitReachedException) {
+            DBGTRACE_LOG("NActors::TSchedulingLimitReachedException");
             result = nullptr;
         }
 
@@ -875,16 +888,20 @@ Y_UNIT_TEST(TestWaitInOwners) {
         UNIT_ASSERT(result->Record.HasPartitionResponse());
         UNIT_ASSERT(result->Record.GetPartitionResponse().HasCmdGetOwnershipResult());
 
+        DBGTRACE_LOG("SetOwner");
         SetOwner(0, tc, "owner", false); //will wait
 
         try {
+            DBGTRACE("wait for TEvPersQueue::TEvResponse");
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
         } catch (NActors::TSchedulingLimitReachedException) {
+            DBGTRACE_LOG("NActors::TSchedulingLimitReachedException");
             result = nullptr;
         }
 
         Y_ABORT_UNLESS(!result); //no answer yet, waiting of dying of old ownership session
 
+        DBGTRACE_LOG("send TEvents::TEvPoisonPill");
         tc.Runtime->Send(new IEventHandle(newPipe, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and old session
 
         TDispatchOptions options;
@@ -892,8 +909,10 @@ Y_UNIT_TEST(TestWaitInOwners) {
         tc.Runtime->DispatchEvents(options);
 
         try {
+            DBGTRACE("wait for TEvPersQueue::TEvResponse");
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
         } catch (NActors::TSchedulingLimitReachedException) {
+            DBGTRACE_LOG("NActors::TSchedulingLimitReachedException");
             result = nullptr;
         }
 

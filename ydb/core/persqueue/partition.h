@@ -116,6 +116,10 @@ private:
     void AnswerCurrentWrites(const TActorContext& ctx);
     void CancelAllWritesOnIdle(const TActorContext& ctx);
     void CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::TEvRequest* request, const TString& errorStr, const TWriteMsg& p, TPartitionSourceManager::TModificationBatch& sourceIdBatch, NPersQueue::NErrorCode::EErrorCode errorCode = NPersQueue::NErrorCode::BAD_REQUEST);
+    void CancelOneWriteOnWrite(const TActorContext& ctx,
+                               const TString& errorStr,
+                               const TWriteMsg& p,
+                               NPersQueue::NErrorCode::EErrorCode errorCode);
     void ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue::TEvRequest* request);
     void CreateMirrorerActor();
     void DoRead(TEvPQ::TEvRead::TPtr&& ev, TDuration waitQuotaTime, const TActorContext& ctx);

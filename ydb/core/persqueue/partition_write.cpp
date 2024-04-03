@@ -159,6 +159,7 @@ void TPartition::FailBadClient(const TActorContext& ctx) {
 
 void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, const TActorContext& ctx) {
     DBGTRACE("TPartition::ProcessChangeOwnerRequest");
+    DBGTRACE_LOG("Cookie=" << ev->Cookie);
     PQ_LOG_T("TPartition::ProcessChangeOwnerRequest.");
 
     auto &owner = ev->Owner;
@@ -208,6 +209,7 @@ THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator TPartition::DropOwner(THas
 
 void TPartition::Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ctx) {
     DBGTRACE("TPartition::Handle(TEvPQ::TEvChangeOwner)");
+    DBGTRACE_LOG("Owner=" << ev->Get()->Owner);
     PQ_LOG_T("TPartition::HandleOnWrite TEvChangeOwner.");
 
     bool res = OwnerPipes.insert(ev->Get()->PipeClient).second;
@@ -306,7 +308,8 @@ void TPartition::Handle(TEvPQ::TEvReserveBytes::TPtr& ev, const TActorContext& c
 void TPartition::HandleOnIdle(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx)
 {
     DBGTRACE("TPartition::HandleOnIdle(TEvPQ::TEvWrite)");
-    DBGTRACE_LOG("ev->Msgs.size=" << ev->Get()->Msgs.size());
+    DBGTRACE_LOG("Cookie=" << ev->Get()->Cookie);
+    DBGTRACE_LOG("OwnerCookie=" << ev->Get()->OwnerCookie << ", Msgs.size=" << ev->Get()->Msgs.size());
     HandleOnWrite(ev, ctx);
     HandlePendingRequests(ctx);
 }
@@ -394,8 +397,10 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion)
                 ++offset;
         } else if (response.IsOwnership()) {
+            DBGTRACE_LOG("IsOwnership");
             const auto& r = response.GetOwnership();
             const TString& ownerCookie = r.OwnerCookie;
+            DBGTRACE_LOG("OwnerCookie=" << ownerCookie);
             auto it = Owners.find(TOwnerInfo::GetOwnerFromOwnerCookie(ownerCookie));
             if (it != Owners.end() && it->second.OwnerCookie == ownerCookie) {
                 auto sit = SourceIdStorage.GetInMemorySourceIds().find(NSourceIdEncoding::EncodeSimple(it->first));
@@ -881,6 +886,19 @@ void TPartition::ProcessChangeOwnerRequests(const TActorContext& ctx) {
     HandlePendingRequests(ctx);
 }
 
+void TPartition::CancelOneWriteOnWrite(const TActorContext& ctx,
+                                       const TString& errorStr,
+                                       const TWriteMsg& p,
+                                       NPersQueue::NErrorCode::EErrorCode errorCode)
+{
+    DBGTRACE("TPartition::CancelOneWriteOnWrite");
+    ReplyError(ctx, p.Cookie, errorCode, errorStr);
+    for (auto it = Owners.begin(); it != Owners.end();) {
+        it = DropOwner(it, ctx);
+    }
+    StartProcessChangeOwnerRequests(ctx);
+}
+
 void TPartition::CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::TEvRequest* request, const TString& errorStr, const TWriteMsg& p, TPartitionSourceManager::TModificationBatch& sourceIdBatch, NPersQueue::NErrorCode::EErrorCode errorCode) {
     PQ_LOG_T("TPartition::CancelAllWritesOnWrite.");
 
@@ -1039,12 +1057,21 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
         if (needCompactHead) { //got gap
             DBGTRACE_LOG("got gap");
             if (p.Msg.PartNo != 0) { //gap can't be inside of partitioned message
-                CancelAllWritesOnWrite(ctx, request,
-                                        TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId) << " seqNo: " << p.Msg.SeqNo
-                                            << " partNo: " << p.Msg.PartNo << " has gap inside partitioned message, incorrect offset "
-                                            << poffset << ", must be " << curOffset,
-                                            p, sourceIdBatch);
-                return EProcessResult::Abort;
+                DBGTRACE_LOG("PartNo=" << p.Msg.PartNo << ", TotalParts=" << p.Msg.TotalParts);
+//                CancelAllWritesOnWrite(ctx, request,
+//                                        TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId) << " seqNo: " << p.Msg.SeqNo
+//                                            << " partNo: " << p.Msg.PartNo << " has gap inside partitioned message, incorrect offset "
+//                                            << poffset << ", must be " << curOffset,
+//                                            p, sourceIdBatch);
+                CancelOneWriteOnWrite(ctx,
+                                      TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId) <<
+                                      " seqNo: " << p.Msg.SeqNo <<
+                                      " partNo: " << p.Msg.PartNo <<
+                                      " has gap inside partitioned message, incorrect offset " << poffset <<
+                                      ", must be " << curOffset,
+                                      p,
+                                      NPersQueue::NErrorCode::BAD_REQUEST);
+                return EProcessResult::Continue;
             }
             curOffset = poffset;
         }

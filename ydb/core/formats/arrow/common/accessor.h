@@ -61,7 +61,6 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::DataType>, DataType);
     YDB_READONLY(ui64, RecordsCount, 0);
     YDB_READONLY(EType, Type, EType::Undefined);
-    mutable std::optional<TCurrentChunkAddress> CurrentChunkAddress;
 protected:
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const = 0;
     virtual TCurrentChunkAddress DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const = 0;
@@ -101,28 +100,54 @@ protected:
             sb << accessor.GetChunkLength(i) << ",";
             recordsCountChunks += accessor.GetChunkLength(i);
         }
+        TStringBuilder chunkCurrentInfo;
         if (chunkCurrent) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("chunk_current", chunkCurrent->DebugString());
+            chunkCurrentInfo << chunkCurrent->DebugString();
         }
-        AFL_VERIFY(recordsCountChunks == GetRecordsCount())("pos", position)("count", GetRecordsCount())("chunks_map", sb);
-        AFL_VERIFY(false)("pos", position)("count", GetRecordsCount())("chunks_map", sb);
+        AFL_VERIFY(recordsCountChunks == GetRecordsCount())("pos", position)("count", GetRecordsCount())("chunks_map", sb)("chunk_current", chunkCurrentInfo);
+        AFL_VERIFY(false)("pos", position)("count", GetRecordsCount())("chunks_map", sb)("chunk_current", chunkCurrentInfo);
         return TCurrentChunkAddress(nullptr, 0, 0);
     }
 
 public:
-    virtual ~IChunkedArray() = default;
+
+    class TReader {
+    private:
+        std::shared_ptr<IChunkedArray> ChunkedArray;
+        mutable std::optional<TCurrentChunkAddress> CurrentChunkAddress;
+    public:
+        TReader(const std::shared_ptr<IChunkedArray>& data)
+            : ChunkedArray(data)
+        {
+            AFL_VERIFY(ChunkedArray);
+        }
+
+        ui64 GetRecordsCount() const {
+            return ChunkedArray->GetRecordsCount();
+        }
+
+        TAddress GetReadChunk(const ui64 position) const {
+            AFL_VERIFY(position < ChunkedArray->GetRecordsCount());
+            if (CurrentChunkAddress && position < CurrentChunkAddress->GetStartPosition() + CurrentChunkAddress->GetArray()->length() && CurrentChunkAddress->GetStartPosition() <= position) {
+                return IChunkedArray::TAddress(CurrentChunkAddress->GetArray(), position - CurrentChunkAddress->GetStartPosition());
+            } else {
+                CurrentChunkAddress = ChunkedArray->DoGetChunk(CurrentChunkAddress, position);
+                return IChunkedArray::TAddress(CurrentChunkAddress->GetArray(), position - CurrentChunkAddress->GetStartPosition());
+            }
+        }
+
+        static std::partial_ordering CompareColumns(const std::vector<TReader>& l, const ui64 lPosition, const std::vector<TReader>& r, const ui64 rPosition);
+        void AppendPositionTo(arrow::ArrayBuilder& builder, const ui64 position, ui64* recordSize) const;
+        std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;
+        std::shared_ptr<arrow::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;
+        TString DebugString(const ui32 position) const;
+    };
 
     std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const {
         return DoGetChunkedArray();
     }
-    static std::partial_ordering CompareColumns(const std::vector<std::shared_ptr<IChunkedArray>>& l, const ui64 lPosition, const std::vector<std::shared_ptr<IChunkedArray>>& r, const ui64 rPosition);
+    virtual ~IChunkedArray() = default;
 
-    TAddress GetAddress(const ui64 position) const;
-
-    void AppendPositionTo(arrow::ArrayBuilder& builder, const ui64 position, ui64* recordSize);
-    std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;
-    std::shared_ptr<arrow::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;
-    TString DebugString(const ui32 position) const;
     IChunkedArray(const ui64 recordsCount, const EType type, const std::shared_ptr<arrow::DataType>& dataType)
         : DataType(dataType)
         , RecordsCount(recordsCount)

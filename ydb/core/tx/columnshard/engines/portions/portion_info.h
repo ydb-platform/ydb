@@ -119,8 +119,25 @@ private:
     std::vector<TUnifiedBlobId> BlobIds;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
 
+    template <class TChunkInfo>
+    static void CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
+        ui32 entityId = 0;
+        ui32 chunkIdx = 0;
+        for (auto&& i : chunks) {
+            if (entityId != i.GetEntityId()) {
+                AFL_VERIFY(entityId < i.GetEntityId());
+                AFL_VERIFY(i.GetChunkIdx() == 0);
+                entityId = i.GetEntityId();
+                chunkIdx = 0;
+            } else {
+                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1);
+                chunkIdx = i.GetChunkIdx();
+            }
+        }
+    }
+
     template <class TAggregator, class TChunkInfo>
-    void AggregateIndexChunksData(const TAggregator& aggr, const std::vector<TChunkInfo>& chunks, const std::optional<std::set<ui32>>& columnIds, const bool validation) const {
+    static void AggregateIndexChunksData(const TAggregator& aggr, const std::vector<TChunkInfo>& chunks, const std::optional<std::set<ui32>>& columnIds, const bool validation) {
         if (columnIds) {
             auto itColumn = columnIds->begin();
             auto itRecord = chunks.begin();
@@ -161,6 +178,11 @@ public:
 
     void RemoveRuntimeFeature(const ERuntimeFeature feature) {
         RuntimeFeatures &= (Max<TRuntimeFeatures>() - (TRuntimeFeatures)feature);
+    }
+
+    void OnAfterLoad() const {
+        CheckChunksOrder(Records);
+        CheckChunksOrder(Indexes);
     }
 
     bool HasRuntimeFeature(const ERuntimeFeature feature) const {

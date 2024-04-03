@@ -218,7 +218,7 @@ void AggregateNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, co
 
 namespace {
 
-void AggregateStatisticsBySources(const NJson::TJsonValue& root, std::unordered_map<TString, i64>& aggregatedStats) {
+void AggregateStatisticsBySources(const NJson::TJsonValue& root, THashMap<TString, i64>& aggregatedStats) {
     for (const auto& [stageName, stageStats] : root.GetMap()) {
         if (!stageStats.IsMap()) {
             continue;
@@ -259,7 +259,7 @@ constexpr std::initializer_list<std::pair<std::string_view, std::string_view>> F
         {"CpuTimeUs", "CpuTimeUs.sum"},
         {"ExecutionTimeUs", "ExecutionTimeUs.sum"}};
 
-void CollectTotalStatistics(const NJson::TJsonValue& stats, std::unordered_map<TString, i64>& aggregatedStatistics) {
+void CollectTotalStatistics(const NJson::TJsonValue& stats, THashMap<TString, i64>& aggregatedStatistics) {
     for (const auto& [rootKey, graph] : stats.GetMap()) {
         bool isV1 = rootKey.find('=') != TString::npos;
         for (auto [field, path] : FieldToPath) {
@@ -274,7 +274,7 @@ void CollectTotalStatistics(const NJson::TJsonValue& stats, std::unordered_map<T
     }
 }
 
-void CollectDetalizationStatistics(const NJson::TJsonValue& stats, std::unordered_map<TString, i64>& aggregatedStatistics) {
+void CollectDetalizationStatistics(const NJson::TJsonValue& stats, THashMap<TString, i64>& aggregatedStatistics) {
     for (const auto& [rootKey, graph] : stats.GetMap()) {
         AggregateStatisticsBySources(graph, aggregatedStatistics);
     }
@@ -306,6 +306,19 @@ void PrintSpeeds(TStringBuilder& builder, const StatsValuesList& stats) {
 }
 }
 
+void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest,
+                              const THashMap<TString, i64>& aggregatedStats,
+                              TDuration executionTime) {
+    for (const auto& [field, stat] : aggregatedStats) {
+        auto& newStat = *dest.Add();
+        newStat.set_name(field);
+        newStat.set_value(stat);
+    }
+    auto& execTime = *dest.Add();
+    execTime.set_name("ExecutionTimeUs");
+    execTime.set_value(executionTime.MicroSeconds());
+}
+
 void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest, std::string_view statsStr, TDuration executionTime) {
     NJson::TJsonValue statsJson;
     if (!NJson::ReadJsonFastTree(statsStr, &statsJson)) {
@@ -316,16 +329,11 @@ void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery:
         return;
     }
 
-    std::unordered_map<TString, i64> aggregatedStatistics;
+    THashMap<TString, i64> aggregatedStatistics;
     CollectTotalStatistics(statsJson, aggregatedStatistics);
     CollectDetalizationStatistics(statsJson, aggregatedStatistics);
-    aggregatedStatistics["ExecutionTimeUs"] = executionTime.MicroSeconds();
 
-    for (auto [field, stat] : aggregatedStatistics) {
-        auto newStat = dest.Add();
-        newStat->set_name(TString{field});
-        newStat->set_value(stat);
-    }
+    PackStatisticsToProtobuf(dest, aggregatedStatistics, executionTime);
 }
 
 StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto) {

@@ -32,6 +32,16 @@ bool HasIssuesCode(const NYql::TIssues& issues, ::NYql::TIssuesIds::EIssueCode c
     return false;
 }
 
+THashMap<TString, i64> DeserializeFlatStats(const google::protobuf::RepeatedPtrField<Ydb::ValuePair>& src) {
+    THashMap<TString, i64> stats;
+    for (const auto& stat_pair : src) {
+        if (stat_pair.key().has_text_value() && stat_pair.payload().has_int64_value()) {
+            stats[stat_pair.key().text_value()] = stat_pair.payload().int64_value();
+        }
+    }
+    return stats;
+}
+
 }
 
 struct TPingTaskParams {
@@ -254,8 +264,11 @@ TPingTaskParams ConstructHardPingTask(
 
         if (request.statistics()) {
             TString statistics = request.statistics();
-            internal.clear_statistics();
-            PackStatisticsToProtobuf(*internal.mutable_statistics(), statistics, TInstant::Now() - NProtoInterop::CastFromProto(job.meta().created_at()));
+            if (request.flat_stats_size() == 0) {
+                internal.clear_statistics();
+                // TODO: remove once V1 and V2 stats go the same way
+                PackStatisticsToProtobuf(*internal.mutable_statistics(), statistics, TInstant::Now() - NProtoInterop::CastFromProto(job.meta().created_at()));
+            }
 
             // global dumpRawStatistics will be removed with YQv1
             if (!dumpRawStatistics && !request.dump_raw_statistics()) {
@@ -268,6 +281,12 @@ TPingTaskParams ConstructHardPingTask(
             }
             *query.mutable_statistics()->mutable_json() = statistics;
             *job.mutable_statistics()->mutable_json() = statistics;
+        }
+
+        if (request.flat_stats_size() != 0) {
+            internal.clear_statistics();
+            auto stats = DeserializeFlatStats(request.flat_stats());
+            PackStatisticsToProtobuf(*internal.mutable_statistics(), stats, TInstant::Now() - NProtoInterop::CastFromProto(job.meta().created_at()));
         }
 
         if (!request.result_set_meta().empty()) {
@@ -657,7 +676,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvFinalStatus
 
     Statistics statistics{event.Statistics};
     LOG_YQ_AUDIT_SERVICE_INFO("FinalStatus: cloud id: [" << event.CloudId  << "], scope: [" << event.Scope << "], query id: [" <<
-                              event.QueryId << "], job id: [" << event.JobId << "], " << statistics << (statistics ? ", " : "") <<
+                              event.QueryId << "], job id: [" << event.JobId << "], " << statistics << ", " <<
                               "status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status));
 }
 

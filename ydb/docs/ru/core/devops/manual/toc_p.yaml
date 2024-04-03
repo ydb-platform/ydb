@@ -1,0 +1,6 @@
+items:
+- include:
+    mode: link
+    path: ../../cluster/toc_p.yaml
+- name: Системные таблицы
+  href: system-views.md

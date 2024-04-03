@@ -3625,6 +3625,13 @@
             "uri": "https://{canondata_backend}/1775059/da44f71e237a007832278fd3d7afc8b69720284d/resource.tar.gz#test_sql2yql.test_blocks-pg_to_dates_/sql.yql"
         }
     ],
+    "test_sql2yql.test[blocks-pg_to_interval]": [
+        {
+            "checksum": "3aceb0365d1a5b1040b5e9900df64259",
+            "size": 1184,
+            "uri": "https://{canondata_backend}/1775319/adaa8bc37efcfd25d7dfdb8e0d9d14a4551711a4/resource.tar.gz#test_sql2yql.test_blocks-pg_to_interval_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[blocks-pg_tofrom]": [
         {
             "checksum": "b826f6b175ed015c94598bd63781d9d7",
@@ -11162,6 +11169,13 @@
             "checksum": "9cdcb10dda300da9ef73d0c6fffb1cec",
             "size": 588,
             "uri": "https://{canondata_backend}/1777230/1dbd9686602f9d78fffc85db08fced3180ab8411/resource.tar.gz#test_sql2yql.test_pg-insert_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg-interval_to_pg]": [
+        {
+            "checksum": "818363ceef5bc60dfeccb3c16dbee80f",
+            "size": 1437,
+            "uri": "https://{canondata_backend}/1775319/adaa8bc37efcfd25d7dfdb8e0d9d14a4551711a4/resource.tar.gz#test_sql2yql.test_pg-interval_to_pg_/sql.yql"
         }
     ],
     "test_sql2yql.test[pg-is_predicate]": [
@@ -21734,6 +21748,13 @@
             "uri": "https://{canondata_backend}/1775059/da44f71e237a007832278fd3d7afc8b69720284d/resource.tar.gz#test_sql_format.test_blocks-pg_to_dates_/formatted.sql"
         }
     ],
+    "test_sql_format.test[blocks-pg_to_interval]": [
+        {
+            "checksum": "30a575eacb617fac885c8c284519938e",
+            "size": 61,
+            "uri": "https://{canondata_backend}/1775319/adaa8bc37efcfd25d7dfdb8e0d9d14a4551711a4/resource.tar.gz#test_sql_format.test_blocks-pg_to_interval_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[blocks-pg_tofrom]": [
         {
             "checksum": "25c9751ead91546896ba8aec437b67e0",
@@ -29096,6 +29117,13 @@
             "checksum": "7e5bdc810b9ccc96b06d13b8febae04e",
             "size": 60,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_pg-in_sorted_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[pg-interval_to_pg]": [
+        {
+            "checksum": "425ade30b8636c419362e606a93d5c43",
+            "size": 133,
+            "uri": "https://{canondata_backend}/1775319/adaa8bc37efcfd25d7dfdb8e0d9d14a4551711a4/resource.tar.gz#test_sql_format.test_pg-interval_to_pg_/formatted.sql"
         }
     ],
     "test_sql_format.test[pg-pg_in_dict_key_with_stable_pickle]": [

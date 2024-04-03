@@ -10,14 +10,17 @@ namespace NKikimr::NArrow {
 
 class THashConstructor {
 public:
+    static bool BuildHashUI64(std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName);
     static bool BuildHashUI64(std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName);
+
 };
 
 class TShardedRecordBatch {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, RecordBatch);
+    YDB_READONLY_DEF(std::shared_ptr<arrow::Table>, RecordBatch);
     YDB_READONLY_DEF(std::vector<std::vector<ui32>>, SplittedByShards);
 public:
+    TShardedRecordBatch(const std::shared_ptr<arrow::Table>& batch);
     TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch);
 
     void Cut(const ui32 limit) {
@@ -34,11 +37,7 @@ public:
         return SplittedByShards.size() > 1;
     }
 
-    TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch, std::vector<std::vector<ui32>>&& splittedByShards);
-
-    void StripColumns(const std::shared_ptr<arrow::Schema>& schema) {
-        RecordBatch = NArrow::ExtractColumns(RecordBatch, schema);
-    }
+    TShardedRecordBatch(const std::shared_ptr<arrow::Table>& batch, std::vector<std::vector<ui32>>&& splittedByShards);
 
     ui64 GetMemorySize() const;
 
@@ -77,17 +76,22 @@ private:
     }
 
     template <class TIntArrowArray>
-    void Initialize(const TIntArrowArray& arrowHashArray) {
+    void Initialize(const arrow::ChunkedArray& arrowHashArrayChunked) {
         Y_ABORT_UNLESS(ShardsCount);
         Remapping.resize(ShardsCount);
-        const ui32 expectation = arrowHashArray.length() / ShardsCount + 1;
+        const ui32 expectation = arrowHashArrayChunked.length() / ShardsCount + 1;
         for (auto&& i : Remapping) {
             i.reserve(2 * expectation);
         }
-        for (ui64 i = 0; i < (ui64)arrowHashArray.length(); ++i) {
-            const i64 v = arrowHashArray.GetView(i);
-            const ui32 idx = ((v < 0) ? (-v) : v) % ShardsCount;
-            Remapping[idx].emplace_back(i);
+        for (auto&& arrowHashArrayAbstract : arrowHashArrayChunked.chunks()) {
+            auto& arrowHashArray = static_cast<const TIntArrowArray&>(*arrowHashArrayAbstract);
+            ui64 offset = 0;
+            for (ui64 i = 0; i < (ui64)arrowHashArray.length(); ++i) {
+                const i64 v = arrowHashArray.GetView(i);
+                const ui32 idx = ((v < 0) ? (-v) : v) % ShardsCount;
+                Remapping[idx].emplace_back(offset + i);
+            }
+            offset += (ui64)arrowHashArray.length();
         }
         std::deque<std::vector<ui32>*> sizeCorrection;
         for (auto&& i : Remapping) {
@@ -115,7 +119,7 @@ private:
         }
     }
 
-    TShardingSplitIndex(const ui32 shardsCount, const arrow::Array& arrowHashArray)
+    TShardingSplitIndex(const ui32 shardsCount, const arrow::ChunkedArray& arrowHashArray)
         : ShardsCount(shardsCount)
         , RecordsCount(arrowHashArray.length()) {
     }
@@ -127,16 +131,16 @@ public:
     }
 
     template <class TArrayClass>
-    static TShardingSplitIndex Build(const ui32 shardsCount, const arrow::Array& arrowHashArray) {
+    static TShardingSplitIndex Build(const ui32 shardsCount, const arrow::ChunkedArray& arrowHashArray) {
         TShardingSplitIndex result(shardsCount, arrowHashArray);
-        result.Initialize<TArrayClass>(static_cast<const TArrayClass&>(arrowHashArray));
+        result.Initialize<TArrayClass>(arrowHashArray);
         return result;
     }
 
     std::shared_ptr<arrow::UInt64Array> BuildPermutation() const;
 
-    std::vector<std::shared_ptr<arrow::RecordBatch>> Apply(const std::shared_ptr<arrow::RecordBatch>& input);
-
+    std::vector<std::shared_ptr<arrow::Table>> Apply(const std::shared_ptr<arrow::Table>& input);
+    static TShardedRecordBatch Apply(const ui32 shardsCount, const std::shared_ptr<arrow::Table>& input, const std::string& hashColumnName);
     static TShardedRecordBatch Apply(const ui32 shardsCount, const std::shared_ptr<arrow::RecordBatch>& input, const std::string& hashColumnName);
 };
 
@@ -145,6 +149,7 @@ std::shared_ptr<arrow::UInt64Array> MakeFilterPermutation(const std::vector<ui64
 std::shared_ptr<arrow::UInt64Array> MakeFilterPermutation(const std::vector<ui32>& indexes);
 std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique);
 std::shared_ptr<arrow::RecordBatch> ReverseRecords(const std::shared_ptr<arrow::RecordBatch>& batch);
+std::shared_ptr<arrow::Table> ReverseRecords(const std::shared_ptr<arrow::Table>& batch);
 
 std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& source, const std::vector<ui64>& indexes);
 std::shared_ptr<arrow::RecordBatch> CopyRecords(const std::shared_ptr<arrow::RecordBatch>& source, const std::vector<ui64>& indexes);

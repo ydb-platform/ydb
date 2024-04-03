@@ -65,7 +65,8 @@ private:
 
         }
 
-        TBatchIterator(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter,
+        template <class TDataContainer>
+        TBatchIterator(std::shared_ptr<TDataContainer> batch, std::shared_ptr<NArrow::TColumnFilter> filter,
             const std::vector<std::string>& keyColumns, const std::vector<std::string>& dataColumns, const bool reverseSort, const std::vector<std::string>& versionColumnNames)
             : ControlPointFlag(false)
             , KeyColumns(batch, 0, keyColumns, dataColumns, reverseSort)
@@ -101,7 +102,7 @@ private:
             auto result = KeyColumns.SkipToLower(pos);
             const i32 delta = IsReverse() ? (posStart - KeyColumns.GetPosition()) : (KeyColumns.GetPosition() - posStart);
             AFL_VERIFY(delta >= 0);
-            AFL_VERIFY(VersionColumns.InitPosition(KeyColumns.GetPosition()));
+            AFL_VERIFY(VersionColumns.InitPosition(KeyColumns.GetPosition()))("pos", KeyColumns.GetPosition())("size", VersionColumns.GetRecordsCount());
             if (FilterIterator && delta) {
                 AFL_VERIFY(FilterIterator->Next(delta));
             }
@@ -164,6 +165,8 @@ private:
     std::optional<TSortableBatchPosition> DrainCurrentPosition();
 
     void AddNewToHeap(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter);
+    void AddNewToHeap(std::shared_ptr<arrow::Table> batch, std::shared_ptr<NArrow::TColumnFilter> filter);
+    void AddNewToHeap(std::shared_ptr<TGeneralContainer> batch, std::shared_ptr<NArrow::TColumnFilter> filter);
     void CheckSequenceInDebug(const TSortableBatchPosition& nextKeyColumnsPosition);
 public:
     TMergePartialStream(std::shared_ptr<arrow::Schema> sortSchema, std::shared_ptr<arrow::Schema> dataSchema, const bool reverse, const std::vector<std::string>& versionColumnNames)
@@ -231,14 +234,17 @@ public:
     }
 
     void AddSource(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter);
+    void AddSource(std::shared_ptr<arrow::Table> batch, std::shared_ptr<NArrow::TColumnFilter> filter);
+    void AddSource(std::shared_ptr<TGeneralContainer> batch, std::shared_ptr<NArrow::TColumnFilter> filter);
 
     bool IsEmpty() const {
         return !SortHeap.Size();
     }
 
     bool DrainAll(TRecordBatchBuilder& builder);
-    std::shared_ptr<arrow::RecordBatch> SingleSourceDrain(const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TSortableBatchPosition>* lastResultPosition = nullptr);
+    std::shared_ptr<arrow::Table> SingleSourceDrain(const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TSortableBatchPosition>* lastResultPosition = nullptr);
     bool DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TSortableBatchPosition>* lastResultPosition = nullptr);
+    bool DrainToControlPoint(TRecordBatchBuilder& builder, const bool includeFinish, std::optional<TSortableBatchPosition>* lastResultPosition = nullptr);
     std::vector<std::shared_ptr<arrow::RecordBatch>> DrainAllParts(const std::map<TSortableBatchPosition, bool>& positions,
         const std::vector<std::shared_ptr<arrow::Field>>& resultFields);
 };

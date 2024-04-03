@@ -41,14 +41,14 @@ private:
     std::shared_ptr<TReplaceKey> PrevKey;
 
     std::vector<TSortCursorImpl> Cursors;
-    TSortingHeap Queue;
+    TLoserTree LoserTree;
 
     void Init();
-    void FetchNextBatch(const TSortCursor& current, TSortingHeap& queue);
-    void Merge(IRowsBuffer& rowsBuffer, TSortingHeap& queue);
+    void FetchNextBatch(const TSortCursor& current, TLoserTree& tree);
+    void Merge(IRowsBuffer& rowsBuffer, TLoserTree& tree);
 
     template <bool replace, bool limit>
-    void MergeImpl(IRowsBuffer& rowsBuffer, TSortingHeap& queue);
+    void MergeImpl(IRowsBuffer& rowsBuffer, TLoserTree& tree);
 };
 
 }

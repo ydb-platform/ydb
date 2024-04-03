@@ -119,7 +119,7 @@ TMergingSortedInputStream::TMergingSortedInputStream(const std::vector<IInputStr
     Header = Children.at(0)->Schema();
 }
 
-/// Read the first blocks, initialize the queue.
+/// Read the first blocks, initialize the tree.
 void TMergingSortedInputStream::Init() {
     Y_ABORT_UNLESS(First);
     First = false;
@@ -148,7 +148,7 @@ void TMergingSortedInputStream::Init() {
         ColumnSize.clear();
     }
 
-    Queue = TSortingHeap(Cursors, Description->NotNull);
+    LoserTree = TLoserTree(Cursors, Description->NotNull);
 
     /// Let's check that all source blocks have the same structure.
     for (const auto& batch : SourceBatches) {
@@ -174,7 +174,7 @@ std::shared_ptr<arrow::RecordBatch> TMergingSortedInputStream::ReadImpl() {
     if (SliceSources) {
         Y_DEBUG_ABORT_UNLESS(!Description->Reverse);
         TSlicedRowsBuffer rowsBuffer(MaxBatchSize);
-        Merge(rowsBuffer, Queue);
+        Merge(rowsBuffer, LoserTree);
         auto batch = rowsBuffer.GetBatch();
         Y_ABORT_UNLESS(batch);
         if (!batch->num_rows()) {
@@ -190,7 +190,7 @@ std::shared_ptr<arrow::RecordBatch> TMergingSortedInputStream::ReadImpl() {
 
         Y_ABORT_UNLESS(builders.size() == (size_t)Header->num_fields());
         TRowsBuffer rowsBuffer(builders, MaxBatchSize);
-        Merge(rowsBuffer, Queue);
+        Merge(rowsBuffer, LoserTree);
 
         auto arrays = NArrow::Finish(std::move(builders));
         Y_ABORT_UNLESS(arrays.size());
@@ -203,7 +203,7 @@ std::shared_ptr<arrow::RecordBatch> TMergingSortedInputStream::ReadImpl() {
 }
 
 /// Get the next block from the corresponding source, if there is one.
-void TMergingSortedInputStream::FetchNextBatch(const TSortCursor& current, TSortingHeap& queue) {
+void TMergingSortedInputStream::FetchNextBatch(const TSortCursor& current, TLoserTree& tree) {
     size_t order = current->order;
     Y_ABORT_UNLESS(order < Cursors.size() && &Cursors[order] == current.Impl);
 
@@ -212,7 +212,7 @@ void TMergingSortedInputStream::FetchNextBatch(const TSortCursor& current, TSort
         auto& batch = SourceBatches[order];
 
         if (!batch) {
-            queue.RemoveTop();
+            tree.RemoveTop();
             break;
         }
 
@@ -220,7 +220,7 @@ void TMergingSortedInputStream::FetchNextBatch(const TSortCursor& current, TSort
             Y_DEBUG_ABORT_UNLESS(batch->schema()->Equals(*Header));
 
             Cursors[order].Reset(batch);
-            queue.ReplaceTop(TSortCursor(&Cursors[order], Description->NotNull));
+            tree.ReplaceTop(TSortCursor(&Cursors[order], Description->NotNull));
             break;
         }
     }
@@ -229,10 +229,10 @@ void TMergingSortedInputStream::FetchNextBatch(const TSortCursor& current, TSort
 /// Take rows in required order and put them into `rowBuffer`,
 /// while the number of rows are no more than `max_block_size`
 template <bool replace, bool limit>
-void TMergingSortedInputStream::MergeImpl(IRowsBuffer& rowsBuffer, TSortingHeap& queue) {
+void TMergingSortedInputStream::MergeImpl(IRowsBuffer& rowsBuffer, TLoserTree& tree) {
     if constexpr (replace) {
-        if (!PrevKey && queue.IsValid()) {
-            auto current = queue.Current();
+        if (!PrevKey && tree.IsValid()) {
+            auto current = tree.Current();
             PrevKey = std::make_shared<TReplaceKey>(current->replace_columns, current->getRow());
             if (!rowsBuffer.AddRow(current)) {
                 return;
@@ -241,14 +241,14 @@ void TMergingSortedInputStream::MergeImpl(IRowsBuffer& rowsBuffer, TSortingHeap&
         }
     }
 
-    while (queue.IsValid()) {
+    while (tree.IsValid()) {
         if constexpr (limit) {
             if (rowsBuffer.Limit()) {
                 return;
             }
         }
 
-        auto current = queue.Current();
+        auto current = tree.Current();
 
         if constexpr (replace) {
             TReplaceKey key(current->replace_columns, current->getRow());
@@ -267,10 +267,10 @@ void TMergingSortedInputStream::MergeImpl(IRowsBuffer& rowsBuffer, TSortingHeap&
         }
 
         if (!current->isLast()) {
-            queue.Next();
+            tree.Next();
         } else {
             rowsBuffer.Flush();
-            FetchNextBatch(current, queue);
+            FetchNextBatch(current, tree);
         }
     }
 
@@ -279,21 +279,21 @@ void TMergingSortedInputStream::MergeImpl(IRowsBuffer& rowsBuffer, TSortingHeap&
     Finished = true;
 }
 
-void TMergingSortedInputStream::Merge(IRowsBuffer& rowsBuffer, TSortingHeap& queue) {
+void TMergingSortedInputStream::Merge(IRowsBuffer& rowsBuffer, TLoserTree& tree) {
     const bool replace = Description->Replace();
     const bool limit = rowsBuffer.HasLimit();
 
     if (replace) {
         if (limit) {
-            MergeImpl<true, true>(rowsBuffer, queue);
+            MergeImpl<true, true>(rowsBuffer, tree);
         } else {
-            MergeImpl<true, false>(rowsBuffer, queue);
+            MergeImpl<true, false>(rowsBuffer, tree);
         }
     } else {
         if (limit) {
-            MergeImpl<false, true>(rowsBuffer, queue);
+            MergeImpl<false, true>(rowsBuffer, tree);
         } else {
-            MergeImpl<false, false>(rowsBuffer, queue);
+            MergeImpl<false, false>(rowsBuffer, tree);
         }
     }
 

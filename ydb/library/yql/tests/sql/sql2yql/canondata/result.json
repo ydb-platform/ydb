@@ -2316,6 +2316,20 @@
             "uri": "https://{canondata_backend}/1942278/beab6e829114ea03a5df7881bc0d363cdf567406/resource.tar.gz#test_sql2yql.test_aggregate-group_by_ru_join_star_/sql.yql"
         }
     ],
+    "test_sql2yql.test[aggregate-group_by_ru_with_select_distinct]": [
+        {
+            "checksum": "66b8b1eea14cf9658a7e60294b73ffef",
+            "size": 2697,
+            "uri": "https://{canondata_backend}/1925842/455f0a4e786bf55f7710ef3d0b8e42af1becc974/resource.tar.gz#test_sql2yql.test_aggregate-group_by_ru_with_select_distinct_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[aggregate-group_by_ru_with_window_func]": [
+        {
+            "checksum": "bbb3d5c16fcb800ee7c6a9203a3cd4f0",
+            "size": 3008,
+            "uri": "https://{canondata_backend}/1916746/28040436e8adf35f54411fd2392bcd0557fc0b73/resource.tar.gz#test_sql2yql.test_aggregate-group_by_ru_with_window_func_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[aggregate-group_by_session]": [
         {
             "checksum": "67b3e34d907f2b3cb1c07c8121e5cecd",
@@ -20437,6 +20451,20 @@
             "checksum": "e4a4a97de8afd6e188163c71da45788d",
             "size": 205,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_aggregate-group_by_ru_join_star_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[aggregate-group_by_ru_with_select_distinct]": [
+        {
+            "checksum": "6561aa13b2247a3ee4f4aa906e01496f",
+            "size": 99,
+            "uri": "https://{canondata_backend}/1925842/455f0a4e786bf55f7710ef3d0b8e42af1becc974/resource.tar.gz#test_sql_format.test_aggregate-group_by_ru_with_select_distinct_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[aggregate-group_by_ru_with_window_func]": [
+        {
+            "checksum": "23cc7396d9f51c8694b1a02db2dcdf22",
+            "size": 159,
+            "uri": "https://{canondata_backend}/1916746/28040436e8adf35f54411fd2392bcd0557fc0b73/resource.tar.gz#test_sql_format.test_aggregate-group_by_ru_with_window_func_/formatted.sql"
         }
     ],
     "test_sql_format.test[aggregate-group_by_session]": [

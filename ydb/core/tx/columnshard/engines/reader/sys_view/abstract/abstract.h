@@ -103,11 +103,15 @@ protected:
         }
         // Leave only requested columns
         auto resultBatch = NArrow::ExtractColumns(batch, ResultSchema);
-        NArrow::TStatusValidator::Validate(ReadMetadata->GetProgram().ApplyProgram(resultBatch));
         if (!resultBatch->num_rows()) {
             return std::nullopt;
         }
-        TPartialReadResult out(resultBatch, lastKey);
+        auto table = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({resultBatch}));
+        NArrow::TStatusValidator::Validate(ReadMetadata->GetProgram().ApplyProgram(table));
+        if (!table->num_rows()) {
+            return std::nullopt;
+        }
+        TPartialReadResult out(table, lastKey, std::nullopt);
 
         return std::move(out);
     }

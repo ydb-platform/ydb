@@ -80,6 +80,12 @@ public:
     virtual bool IsTTLEnabled() const {
         return true;
     }
+    virtual ui64 GetReduceMemoryIntervalLimit(const ui64 def) const {
+        return def;
+    }
+    virtual ui64 GetRejectMemoryIntervalLimit(const ui64 def) const {
+        return def;
+    }
     virtual bool NeedForceCompactionBacketsConstruction() const {
         return false;
     }

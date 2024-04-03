@@ -27,13 +27,21 @@ private:
     std::shared_ptr<IFetchingStep> BuildColumnsFetchingPlan(const bool needSnapshotsFilter, const bool exclusiveSource, const bool partialUsageByPredicate, const bool useIndexes) const;
     std::array<std::array<std::array<std::array<std::shared_ptr<IFetchingStep>, 2>, 2>, 2>, 2> CacheFetchingScripts;
 public:
+    static const inline ui64 DefaultRejectMemoryIntervalLimit = ((ui64)3) << 30;
+    static const inline ui64 DefaultReduceMemoryIntervalLimit = DefaultRejectMemoryIntervalLimit;
+    static const inline ui64 DefaultReadSequentiallyBufferSize = ((ui64)8) << 20;
+
+    const ui64 ReduceMemoryIntervalLimit = NYDBTest::TControllers::GetColumnShardController()->GetReduceMemoryIntervalLimit(DefaultReduceMemoryIntervalLimit);
+    const ui64 RejectMemoryIntervalLimit = NYDBTest::TControllers::GetColumnShardController()->GetRejectMemoryIntervalLimit(DefaultRejectMemoryIntervalLimit);
+    const ui64 ReadSequentiallyBufferSize = DefaultReadSequentiallyBufferSize;
+
     ui64 GetMemoryForSources(const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const bool isExclusive);
 
     const TReadMetadata::TConstPtr& GetReadMetadata() const {
         return ReadMetadata;
     }
 
-    std::shared_ptr<NArrow::NMerger::TMergePartialStream> BuildMerger() const;
+    std::unique_ptr<NArrow::NMerger::TMergePartialStream> BuildMerger() const;
 
     TString DebugString() const {
         return TStringBuilder() <<
@@ -46,7 +54,7 @@ public:
 
     TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext);
 
-    std::shared_ptr<IFetchingStep> GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source, const bool exclusiveSource) const;
+    std::shared_ptr<IFetchingStep> GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) const;
 };
 
 }

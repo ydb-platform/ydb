@@ -27,7 +27,7 @@ protected:
         for (auto&& portionInfo : Portions) {
             auto blobSchema = Schemas->FindPtr(portionInfo->GetPortionId());
             THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo> blobsDataAssemble;
-            for (auto&& i : portionInfo->Records) {
+            for (auto&& i : portionInfo->GetRecords()) {
                 auto blobData = Blobs.Extract((*blobSchema)->GetIndexInfo().GetColumnStorageId(i.GetColumnId(), portionInfo->GetMeta().GetTierName()), portionInfo->RestoreBlobRange(i.BlobRange));
                 blobsDataAssemble.emplace(i.GetAddress(), blobData);
             }

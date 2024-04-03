@@ -4,6 +4,8 @@
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/special_keys.h>
+#include <ydb/core/formats/arrow/common/accessor.h>
+#include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
@@ -24,6 +26,56 @@ class TCompositeReadBlobs;
 struct TIndexInfo;
 class TVersionedIndex;
 class IDbWrapper;
+
+class TDeserializeChunkedArray: public NArrow::NAccessor::IChunkedArray {
+private:
+    using TBase = NArrow::NAccessor::IChunkedArray;
+public:
+    class TChunk {
+    private:
+        YDB_READONLY(ui32, RecordsCount, 0);
+        std::shared_ptr<arrow::Array> PredefinedArray;
+        const TString Data;
+    public:
+        TChunk(const std::shared_ptr<arrow::Array>& predefinedArray)
+            : PredefinedArray(predefinedArray) {
+            AFL_VERIFY(PredefinedArray);
+            RecordsCount = PredefinedArray->length();
+        }
+
+        TChunk(const ui32 recordsCount, const TString& data)
+            : RecordsCount(recordsCount)
+            , Data(data) {
+
+        }
+
+        std::shared_ptr<arrow::Array> GetArrayVerified(const std::shared_ptr<TColumnLoader>& loader) const {
+            if (PredefinedArray) {
+                return PredefinedArray;
+            }
+            auto result = loader->ApplyVerified(Data);
+            AFL_VERIFY(result);
+            AFL_VERIFY(result->num_columns() == 1);
+            return result->column(0);
+        }
+    };
+
+    std::shared_ptr<TColumnLoader> Loader;
+    std::vector<TChunk> Chunks;
+protected:
+    virtual TCurrentChunkAddress DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const override;
+    virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const override {
+        AFL_VERIFY(false);
+        return nullptr;
+    }
+public:
+    TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, std::vector<TChunk>&& chunks)
+        : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
+        , Loader(loader)
+        , Chunks(std::move(chunks)) {
+        AFL_VERIFY(Loader);
+    }
+};
 
 class TEntityChunk {
 private:
@@ -66,6 +118,8 @@ private:
     std::vector<TUnifiedBlobId> BlobIds;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
 public:
+    ui64 GetMinMemoryForReadColumns(const std::optional<std::set<ui32>>& columnIds) const;
+
     void InitRuntimeFeature(const ERuntimeFeature feature, const bool activity) {
         if (activity) {
             AddRuntimeFeature(feature);
@@ -557,9 +611,23 @@ public:
 public:
     class TAssembleBlobInfo {
     private:
+        YDB_READONLY_DEF(std::optional<ui32>, ExpectedRowsCount);
         ui32 NullRowsCount = 0;
         TString Data;
     public:
+        ui32 GetExpectedRowsCountVerified() const {
+            AFL_VERIFY(ExpectedRowsCount);
+            return *ExpectedRowsCount;
+        }
+
+        void SetExpectedRecordsCount(const ui32 expectedRowsCount) {
+            AFL_VERIFY(!ExpectedRowsCount);
+            ExpectedRowsCount = expectedRowsCount;
+            if (!Data) {
+                AFL_VERIFY(*ExpectedRowsCount == NullRowsCount);
+            }
+        }
+
         TAssembleBlobInfo(const ui32 rowsCount)
             : NullRowsCount(rowsCount) {
             AFL_VERIFY(NullRowsCount);
@@ -587,6 +655,7 @@ public:
         }
 
         std::shared_ptr<arrow::RecordBatch> BuildRecordBatch(const TColumnLoader& loader) const;
+        TDeserializeChunkedArray::TChunk BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const;
     };
 
     class TPreparedColumn {
@@ -614,6 +683,7 @@ public:
         }
 
         std::shared_ptr<arrow::ChunkedArray> Assemble() const;
+        std::shared_ptr<TDeserializeChunkedArray> AssembleForSeqAccess() const;
     };
 
     class TPreparedBatchData {
@@ -680,6 +750,7 @@ public:
 
         std::shared_ptr<arrow::RecordBatch> Assemble(const TAssembleOptions& options = {}) const;
         std::shared_ptr<arrow::Table> AssembleTable(const TAssembleOptions& options = {}) const;
+        std::shared_ptr<NArrow::TGeneralContainer> AssembleForSeqAccess() const;
     };
 
     class TColumnAssemblingInfo {
@@ -687,6 +758,7 @@ public:
         std::vector<TAssembleBlobInfo> BlobsInfo;
         YDB_READONLY(ui32, ColumnId, 0);
         const ui32 NumRows;
+        ui32 NumRowsByChunks = 0;
         const std::shared_ptr<TColumnLoader> DataLoader;
         const std::shared_ptr<TColumnLoader> ResultLoader;
     public:
@@ -706,8 +778,10 @@ public:
             return ResultLoader->GetField();
         }
 
-        void AddBlobInfo(const ui32 expectedChunkIdx, TAssembleBlobInfo&& info) {
+        void AddBlobInfo(const ui32 expectedChunkIdx, const ui32 expectedRecordsCount, TAssembleBlobInfo&& info) {
             AFL_VERIFY(expectedChunkIdx == BlobsInfo.size());
+            info.SetExpectedRecordsCount(expectedRecordsCount);
+            NumRowsByChunks += expectedRecordsCount;
             BlobsInfo.emplace_back(std::move(info));
         }
 
@@ -716,54 +790,15 @@ public:
                 BlobsInfo.emplace_back(TAssembleBlobInfo(NumRows));
                 return TPreparedColumn(std::move(BlobsInfo), ResultLoader);
             } else {
+                AFL_VERIFY(NumRowsByChunks == NumRows)("by_chunks", NumRowsByChunks)("expected", NumRows);
                 AFL_VERIFY(DataLoader);
                 return TPreparedColumn(std::move(BlobsInfo), DataLoader);
             }
         }
     };
 
-    template <class TExternalBlobInfo>
-    TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
-        THashMap<TChunkAddress, TExternalBlobInfo>& blobsData) const {
-        std::vector<TColumnAssemblingInfo> columns;
-        auto arrowResultSchema = resultSchema.GetSchema();
-        columns.reserve(arrowResultSchema->num_fields());
-        const ui32 rowsCount = NumRows();
-        for (auto&& i : arrowResultSchema->fields()) {
-            columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i->name()), resultSchema.GetColumnLoaderOptional(i->name()));
-        }
-        {
-            int skipColumnId = -1;
-            TColumnAssemblingInfo* currentAssembler = nullptr;
-            for (auto& rec : Records) {
-                if (skipColumnId == (int)rec.ColumnId) {
-                    continue;
-                }
-                if (!currentAssembler || rec.ColumnId != currentAssembler->GetColumnId()) {
-                    const i32 resultPos = resultSchema.GetFieldIndex(rec.ColumnId);
-                    if (resultPos < 0) {
-                        skipColumnId = rec.ColumnId;
-                        continue;
-                    }
-                    AFL_VERIFY((ui32)resultPos < columns.size());
-                    currentAssembler = &columns[resultPos];
-                }
-                auto it = blobsData.find(rec.GetAddress());
-                Y_ABORT_UNLESS(it != blobsData.end());
-                currentAssembler->AddBlobInfo(rec.Chunk, std::move(it->second));
-                blobsData.erase(it);
-            }
-        }
-
-        // Make chunked arrays for columns
-        std::vector<TPreparedColumn> preparedColumns;
-        preparedColumns.reserve(columns.size());
-        for (auto& c : columns) {
-            preparedColumns.emplace_back(c.Compile());
-        }
-
-        return TPreparedBatchData(std::move(preparedColumns), arrowResultSchema, rowsCount);
-    }
+    TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TString>& blobsData) const;
+    TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData) const;
 
     std::shared_ptr<arrow::RecordBatch> AssembleInBatch(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
         THashMap<TChunkAddress, TString>& data) const {

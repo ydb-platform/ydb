@@ -90,6 +90,20 @@ TTenantTestConfig DefaultConsoleTestConfig()
     return res;
 }
 
+TString DefaultDatabaseQuotas() {
+    return R"(
+        data_size_hard_quota: 3000
+        storage_quotas {
+            unit_kind: "hdd"
+            data_size_hard_quota: 2000
+        }
+        storage_quotas {
+            unit_kind: "hdd-1"
+            data_size_hard_quota: 1000
+        }
+    )";
+}
+
 void CheckAlterTenantSlots(TTenantTestRuntime &runtime, const TString &path,
                            ui64 generation, Ydb::StatusIds::StatusCode code,
                            TVector<TSlotRequest> add,
@@ -2026,6 +2040,58 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
     Y_UNIT_TEST(TestAlterTenantTooManyStorageResourcesForRunningExtSubdomain) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
         RunTestAlterTenantTooManyStorageResourcesForRunning(runtime);
+    }
+
+    void RunTestDatabaseQuotas(TTenantTestRuntime& runtime, const TString& quotas, bool shared = false) {
+        using EType = TCreateTenantRequest::EType;
+
+        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+            TCreateTenantRequest(TENANT1_1_NAME, shared ? EType::Shared : EType::Common)
+                .WithPools({{"hdd", 1}, {"hdd-1", 1}})
+                .WithDatabaseQuotas(quotas)
+        );
+
+        RestartTenantPool(runtime);
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, shared, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}, {"hdd-1", 1, 1}}, {});
+    }
+
+    Y_UNIT_TEST(TestDatabaseQuotas) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        RunTestDatabaseQuotas(runtime, DefaultDatabaseQuotas());
+    }
+
+    Y_UNIT_TEST(TestDatabaseQuotasBadOverallQuota) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST,
+            TCreateTenantRequest(TENANT1_1_NAME, TCreateTenantRequest::EType::Common)
+                .WithPools({{"hdd", 1}})
+                .WithDatabaseQuotas(R"(
+                        data_size_hard_quota: 1
+                        data_size_soft_quota: 1000
+                    )"
+                )
+        );
+    }
+
+    Y_UNIT_TEST(TestDatabaseQuotasBadStorageQuota) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST,
+            TCreateTenantRequest(TENANT1_1_NAME, TCreateTenantRequest::EType::Common)
+                .WithPools({{"hdd", 1}})
+                .WithDatabaseQuotas(R"(
+                        storage_quotas {
+                            unit_kind: "hdd"
+                            data_size_hard_quota: 1
+                            data_size_soft_quota: 1000
+                        }
+                    )"
+                )
+        );
     }
 }
 

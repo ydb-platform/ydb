@@ -954,8 +954,7 @@ IGraphTransformer::TStatus PgNullIfWrapper(const TExprNode::TPtr& input, TExprNo
         ctx.Expr.AddError(*issue);
         return IGraphTransformer::TStatus::Error;
     }
-
-    if (commonType->TypeId != types[0]) {
+    if (IsCastRequired(commonType->TypeId, types[0])) {
         input->ChildRef(0) = WrapWithPgCast(std::move(input->ChildRef(0)), commonType->TypeId, ctx.Expr);
         return IGraphTransformer::TStatus::Repeat;
     }

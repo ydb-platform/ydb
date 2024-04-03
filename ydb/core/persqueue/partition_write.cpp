@@ -1418,12 +1418,12 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
 
 void TPartition::SetDeadlinesForWrites(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::SetDeadlinesForWrites.");
-    auto quotaWaitDurationMs = AppData(ctx)->PQConfig.GetQuotingConfig().GetQuotaWaitDurationMs();
+    auto quotaWaitDurationMs = TDuration::MilliSeconds(AppData(ctx)->PQConfig.GetQuotingConfig().GetQuotaWaitDurationMs());
     if (!quotaWaitDurationMs && SubDomainOutOfSpace) {
-        quotaWaitDurationMs = SubDomainQuotaWaitDurationMs.MilliSeconds();
+        quotaWaitDurationMs = SubDomainQuotaWaitDurationMs;
     }
-    if (quotaWaitDurationMs > 0 && QuotaDeadline == TInstant::Zero()) {
-        QuotaDeadline = ctx.Now() + TDuration::MilliSeconds(quotaWaitDurationMs);
+    if (quotaWaitDurationMs > TDuration::Zero() && QuotaDeadline == TInstant::Zero()) {
+        QuotaDeadline = ctx.Now() + quotaWaitDurationMs;
 
         ctx.Schedule(QuotaDeadline, new TEvPQ::TEvQuotaDeadlineCheck());
     }

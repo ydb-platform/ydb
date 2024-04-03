@@ -2308,6 +2308,23 @@ void TReadSessionActor<UseMigrationProtocol>::RunAuthActor(const TActorContext& 
         TopicsHandler.GetLocalCluster(), ReadWithoutConsumer));
 }
 
+template <bool UseMigrationProtocol>
+void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx) {
+    bool newSDK = false; // TODO
+
+    auto* msg = ev->Get();
+
+    auto it = Topics.find(msg->Topic);
+    if (it == Topics.end()) {
+        // TODO SessionClose?
+        return;
+    }
+
+    auto& topic = it->second;
+    NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingFinishedRequest(ClientId, msg->PartitionId, newSDK, msg->FirstMessage));
+}
+
+
 //explicit instantation
 template struct TFormedReadResponse<PersQueue::V1::MigrationStreamingReadServerMessage>;
 template struct TFormedReadResponse<Topic::StreamReadMessage::FromServer>;

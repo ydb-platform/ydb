@@ -69,7 +69,6 @@ TPartitionActor::TPartitionActor(
     , UseMigrationProtocol(useMigrationProtocol)
     , FirstRead(true)
 {
-    Y_UNUSED(FirstRead);
 }
 
 
@@ -1049,9 +1048,15 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
         ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Partition, WTime, SizeLag, ReadOffset, EndOffset));
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                         << " ready for read with readOffset " << ReadOffset << " endOffset " << EndOffset);
+    } else if (PipeClient) {
+        WaitDataInPartition(ctx);
+    }
+
+    if (record.GetReadingFinished()) {
+        // TODO TX?
+        ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, FirstRead));
     } else {
-        if (PipeClient)
-            WaitDataInPartition(ctx);
+        FirstRead = false;
     }
 }
 

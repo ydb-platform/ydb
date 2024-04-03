@@ -243,6 +243,7 @@ private:
             HFunc(TEvPQProxy::TEvCommitDone, Handle); // from PartitionActor
             HFunc(TEvPQProxy::TEvPartitionStatus, Handle); // from partitionActor
             HFunc(TEvPQProxy::TEvUpdateSession, Handle); // from partitionActor
+            HFunc(TEvPQProxy::TEvReadingFinished, Handle); // from partitionActor
 
 
             // Balancer events
@@ -294,6 +295,7 @@ private:
     void Handle(TEvPQProxy::TEvCommitDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvUpdateSession::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx);
 
     // Balancer events
     void Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx); // can be sent to itself when reading without a consumer

@@ -196,6 +196,18 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         writeSession3->Close(TDuration::Seconds(1));
     }
 
+    Y_UNIT_TEST(PartitionSplit_ReadEmptyPartitions) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+
+        TTopicClient client = setup.MakeClient();
+        TTestReadSession ReadSession(client, 3);
+
+        ui64 txId = 1023;
+        SplitPartition(setup, ++txId, 0, "a");
+
+        ReadSession.WaitAllMessages();
+    }
 }
 
 } // namespace NKikimr

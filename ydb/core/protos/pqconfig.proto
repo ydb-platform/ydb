@@ -985,10 +985,18 @@ message TEvCheckPartitionStatusResponse {
     optional uint64 SeqNo = 2;
 };
 
-// The consumer's reading of the partition is finished
+// The consumer's reading of the partition is finished  (from the partition)
 message TEvReadingPartitionStatusRequest {
     optional string Consumer = 1;
     optional uint32 PartitionId = 2;
+};
+
+// The consumer's reading of the partition is finished (from ReadSession)
+message TEvReadingFinishedRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+    optional bool NewSDK = 3;
+    optional bool FirstMessage = 4;
 };
 
 message TTransaction {

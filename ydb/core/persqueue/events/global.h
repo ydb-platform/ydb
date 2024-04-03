@@ -50,6 +50,8 @@ struct TEvPersQueue {
         EvPeriodicTopicStats,
         EvGetPartitionsLocation,
         EvGetPartitionsLocationResponse,
+        EvReadingFinished,
+        EvWakeupClientPartition,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -206,6 +208,18 @@ struct TEvPersQueue {
         ui32 Group;
     };
 
+    struct TEvWakeupClientPartition : TEventLocal<TEvWakeupClientPartition, EvWakeupClientPartition> {
+        TEvWakeupClientPartition(const TString& consumer, const ui32 partitionId, const ui64 cookie)
+            : Consumer(consumer)
+            , PartitionId(partitionId)
+            , Cookie(cookie)
+        {}
+
+        TString Consumer;
+        ui32 PartitionId;
+        ui64 Cookie;
+    };
+
     struct TEvDescribe : public TEventPB<TEvDescribe, NKikimrPQ::TDescribe, EvDescribe> {
         TEvDescribe()
         {}
@@ -270,5 +284,16 @@ struct TEvPersQueue {
 
     using TEvProposeTransactionAttach = TEvDataShard::TEvProposeTransactionAttach;
     using TEvProposeTransactionAttachResult = TEvDataShard::TEvProposeTransactionAttachResult;
+
+    struct TEvReadingFinishedRequest : public TEventPB<TEvReadingFinishedRequest, NKikimrPQ::TEvReadingFinishedRequest, EvReadingFinished> {
+        TEvReadingFinishedRequest() = default;
+
+        TEvReadingFinishedRequest(const TString& consumer, ui32 partitionId, bool newSDK, bool firstMessage) {
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
+            Record.SetNewSDK(newSDK);
+            Record.SetFirstMessage(firstMessage);
+        }
+    };
 };
 } //NKikimr

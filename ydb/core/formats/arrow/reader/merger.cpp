@@ -194,7 +194,7 @@ std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSort
     return result;
 }
 
-bool TMergePartialStream::DrainAll(TRecordBatchBuilder& builder) {
+void TMergePartialStream::DrainAll(TRecordBatchBuilder& builder) {
     Y_ABORT_UNLESS((ui32)DataSchema->num_fields() == builder.GetBuildersCount());
     while (SortHeap.Size()) {
         if (auto currentPosition = DrainCurrentPosition()) {
@@ -202,7 +202,6 @@ bool TMergePartialStream::DrainAll(TRecordBatchBuilder& builder) {
             builder.AddRecord(*currentPosition);
         }
     }
-    return false;
 }
 
 std::optional<TSortableBatchPosition> TMergePartialStream::DrainCurrentPosition() {

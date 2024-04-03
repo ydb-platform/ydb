@@ -24,10 +24,6 @@ namespace arrow {
     class Schema;
 }
 
-namespace NKikimr::NArrow {
-    struct TSortDescription;
-}
-
 namespace NKikimr::NOlap {
 
 class TPortionInfoWithBlobs;
@@ -303,9 +299,6 @@ public:
     /// Returns whether the sorting keys defined.
     bool IsSorted() const { return true; }
     bool IsSortedColumn(const ui32 columnId) const { return GetPKFirstColumnId() == columnId; }
-
-    std::shared_ptr<NArrow::TSortDescription> SortDescription() const;
-    std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription() const;
 
     static const std::set<ui32>& GetSpecialColumnIdsSet() {
         static const std::set<ui32> result(GetSpecialColumnIds().begin(), GetSpecialColumnIds().end());

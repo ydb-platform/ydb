@@ -15,13 +15,13 @@ All operations, including metadata extraction from the source database, table cr
 
 ## Import tool installation {#install}
 
-To run the import tool, JDK 8 or later is required, with the `java` executable available in the program search path.
+To run the import tool, JDK 8 or later is required, with the `java` executable available in the program search path. The tool has been built and tested using OpenJDK 8.
 
 Import tool binary distribution is available on the [Releases page](https://github.com/ydb-platform/ydb-importer/releases). The import tool is provided as the ZIP archive, which needs to be unpacked into the local directory on the server where the tool is required to run.
 
-The import tool distribution archive contains the configuration file examples as `*.xml` files, sample tool startup script `ydb-importer.sh`, and the executable code for the tool and its dependencies (including the [YDB Java SDK](../reference/ydb-sdk/java/index.md)) as `lib/*.jar` files.
+The import tool distribution archive contains the configuration file examples as `*.xml` files, sample tool startup script `ydb-importer.sh`, and the executable code for the tool and its dependencies (including the [YDB Java SDK](../reference/ydb-sdk/index.md)) as `lib/*.jar` files.
 
-Before running the import tool, the required JDBC drivers should be put (as `*.jar` files) into the `lib` subdirectory of the tool installation directory.
+Before running the import tool, the JDBC drivers for the source databases should be put (as `*.jar` files) into the `lib` subdirectory of the tool installation directory.
 
 ## Using the import tool {#use}
 
@@ -41,6 +41,64 @@ The example command to run the tool is provided in the [ydb-importer.sh](https:/
 
 ```bash
 ./ydb-importer.sh my-import-config.xml
+```
+
+## Import tool limitations {#limitations}
+
+The tested data sources include the following database management systems:
+
+* [PostgreSQL](https://www.postgresql.org/)
+* [MySQL](https://www.mysql.com/)
+* [Oracle Database](https://www.oracle.com/database/)
+* [Microsoft SQL Server](https://www.microsoft.com/sql-server/)
+* [IBM Db2](https://www.ibm.com/products/db2)
+* [IBM Informix](https://www.ibm.com/products/informix)
+
+Other data sources will likely work, too, as the tool uses the generic JDBC APIs to retrieve data and metadata.
+
+Secondary indexes are not imported.
+
+Some data types and table structures are known to be unsupported:
+
+* the embedded tables for Oracle Database
+* spatial data type for Microsoft SQL Server
+* object data types for Informix
+
+### Handling tables without the primary key {#nopk}
+
+Each {{ ydb-short-name }} table must have a primary key. If a primary key (or at least a unique index) is defined on the source table, the tool creates the primary key for the target  {{ ydb-short-name }} table with the columns and order determined by the original primary key. When multiple unique indexes are defined on the source table, the tool prefers the index with the smallest number of columns.
+
+In case the source table has no primary key and no unique indexes, primary key columns can be configured using the import settings in the configuration file as a sequence of `key-column` elements in the `table-ref` section (see below the example in the description of the configuration file format).
+
+When no primary key is defined anywhere, the tool automatically adds the column `ydb_synth_key` to the target table and uses it as the primary key. The values of the synthetic primary key are computed as "SHA-256" hash code over the values of all row cells except the columns of the `BLOB` type.
+
+If the input table contains several rows with completely identical values, the destination table will have only one row per each set of duplicate input rows. This also means that the tool cannot import the table in which all columns are of `BLOB` type.
+
+### Importing large objects (BLOB, XML) {#blob}
+
+For each BLOB field in the source database, the import tool creates an additional {{ ydb-short-name }} target table (BLOB supplemental table) with the following schema:
+
+```sql
+CREATE TABLE `blob_table`(
+    `id` Int64,
+    `pos` Int32,
+    `val` String,
+    PRIMARY KEY(`id`, `pos`)
+)
+```
+
+The name of the BLOB supplemental table is generated based on the `table-options` / `blob-name-format` setting in the configuration file.
+
+Each BLOB field value is saved as a sequence of records in the BLOB supplemental table in {{ ydb-short-name }}. Actual data is stored in the `val` field, storing no more than 64K bytes. The order of blocks stored is defined by the values of the `pos` column, containing the integer values `1..N`.
+
+For each source BLOB value, a unique value of type `Int64` is generated and stored in the `id` field of the BLOB supplemental table.
+This identifier is also stored in the "main" target table in a field that has the same name as the BLOB field in the source table.
+
+For PostgreSQL, working with the `EXTENSION lo` BLOBS may require extra permissions for the account used to connect to the data source. An alternative option is to enable the compatibility mode on the database level using the following statement:
+
+```sql
+ALTER DATABASE dbname SET lo_compat_privileges TO on;
+```
 
 ## Configuration file format {#config}
 
@@ -130,12 +188,14 @@ Below is the definition of the configuration file structure.
         <!-- For auth-mode: SAKEY -->
         <sa-key-file>ydb-sa-keyfile.json</sa-key-file>
         <!-- Drop the already existing tables before loading the data -->
-        <replace-existing>true</replace-existing>
+        <replace-existing>false</replace-existing>
         <!-- Should the tool actually load the data after creating tables? -->
         <load-data>true</load-data>
-        <!-- Maximum rows per bulk upsert operation -->
+        <!-- Maximum rows per bulk upsert operation
+             (used for writing into the main table) -->
         <max-batch-rows>1000</max-batch-rows>
-        <!-- Maximum rows per blob bulk upsert operation -->
+        <!-- Maximum rows per blob bulk upsert operation
+             (used for writing into the supplemental BLOB fields tables) -->
         <max-blob-rows>200</max-blob-rows>
     </target>
     <!-- Table name and structure conversion rules.
@@ -156,7 +216,8 @@ Below is the definition of the configuration file structure.
         <blob-name-format>oraimp1/${schema}/${table}_${field}</blob-name-format>
         <!-- Date and timestamp data type values conversion mode.
              Possible values: DATE (use YDB Date datatype, default), INT, STR.
-             DATE does not support input values before January, 1, 1970.
+             DATE does not support input values before January, 1, 1970,
+                 and there will be import errors for such values in the source
              INT saves date as 32-bit integer YYYYMMDD for dates,
                  and as a 64-bit milliseconds since epoch for timestamps.
              STR saves dates as character strings (Utf8) in format "YYYY-MM-DD",
@@ -191,61 +252,4 @@ Below is the definition of the configuration file structure.
         <key-column>TABLE_NAME</key-column>
     </table-ref>
 </ydb-importer>
-```
-
-## Import tool limitations {#limitations}
-
-The tested data sources include the following database management systems:
-
-* [PostgreSQL](https://www.postgresql.org/)
-* [MySQL](https://www.mysql.com/)
-* [Oracle Database](https://www.oracle.com/database/)
-* [Microsoft SQL Server](https://www.microsoft.com/sql-server/)
-* [IBM Db2](https://www.ibm.com/products/db2)
-* [IBM Informix](https://www.ibm.com/products/informix)
-
-Other data sources will likely work, too, as the tool uses the generic JDBC APIs to retrieve data and metadata.
-
-Secondary indexes are not imported.
-
-Some data types and table structures are known to be unsupported:
-
-* the embedded tables for Oracle Database
-* spatial data type for Microsoft SQL Server
-* object data types for Informix
-
-### Handling tables without the primary key {#nopk}
-
-Each {{ ydb-short-name }} table must have a primary key. If a primary key (or at least a unique index) is defined on the source table, the tool creates the primary key for the target  {{ ydb-short-name }} table with the columns and order determined by the original primary key. When multiple unique indexes are defined on the source table, the tool prefers the index with the smallest number of columns.
-
-In case the source table has no primary key and no unique indexes, primary key columns can be configured using the import settings in the configuration file as a sequence of `key-column` elements in the `table-ref` section (see below the example in the description of the configuration file format).
-
-When no primary key is defined anywhere, the tool automatically adds the column `ydb_synth_key` to the target table and uses it as the primary key. The values of the synthetic primary key are computed as "SHA-256" hash code over the values of all row cells except the columns of the `BLOB` type.
-
-If the input table contains several rows with completely identical values, the destination table will have only one row per each set of duplicate input rows. This also means that the tool cannot import the table in which all columns are of `BLOB` type.
-
-### Importing large objects (BLOB, XML) {#blob}
-
-For each BLOB field in the source database, the import tool creates an additional {{ ydb-short-name }} target table (BLOB supplemental table) with the following schema:
-
-```sql
-CREATE TABLE `blob_table`(
-    `id` Int64,
-    `pos` Int32,
-    `val` String,
-    PRIMARY KEY(`id`, `pos`)
-)
-```
-
-The name of the BLOB supplemental table is generated based on the `table-options` / `blob-name-format` setting in the configuration file.
-
-Each BLOB field value is saved as a sequence of records in the BLOB supplemental table in {{ ydb-short-name }}. Actual data is stored in the `val` field, storing no more than 64K bytes. The order of blocks stored is defined by the values of the `pos` column, containing the integer values `1..N`.
-
-For each source BLOB value, a unique value of type `Int64` is generated and stored in the `id` field of the BLOB supplemental table.
-This identifier is also stored in the "main" target table in a field that has the same name as the BLOB field in the source table.
-
-For PostgreSQL, working with the `EXTENSION lo` BLOBS may require extra permissions for the account used to connect to the data source. An alternative option is to enable the compatibility mode on the database level using the following statement:
-
-```sql
-ALTER DATABASE dbname SET lo_compat_privileges TO on;
 ```

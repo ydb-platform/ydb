@@ -82,6 +82,10 @@ public:
     ui16 Chunk = 0;
     TBlobRangeLink16 BlobRange;
 
+    ui32 GetEntityId() const {
+        return ColumnId;
+    }
+
     void ResetBlobRange() {
         BlobRange = TBlobRangeLink16();
     }

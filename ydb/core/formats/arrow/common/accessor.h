@@ -32,7 +32,15 @@ public:
             , StartPosition(pos)
             , ChunkIndex(chunkIdx)
         {
+            AFL_VERIFY(arr);
+            AFL_VERIFY(arr->length());
+        }
 
+        TString DebugString() const {
+            return TStringBuilder()
+                << "start=" << StartPosition << ";"
+                << "chunk_index=" << ChunkIndex << ";"
+                << "length=" << Array->length() << ";";
         }
     };
 
@@ -57,6 +65,50 @@ private:
 protected:
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const = 0;
     virtual TCurrentChunkAddress DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const = 0;
+
+    template <class TChunkAccessor>
+    TCurrentChunkAddress SelectChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position, const TChunkAccessor& accessor) const {
+        if (!chunkCurrent || position >= chunkCurrent->GetStartPosition() + chunkCurrent->GetLength()) {
+            ui32 startIndex = 0;
+            ui64 idx = 0;
+            if (chunkCurrent) {
+                AFL_VERIFY(chunkCurrent->GetChunkIndex() + 1 < accessor.GetChunksCount());
+                startIndex = chunkCurrent->GetChunkIndex() + 1;
+                idx = chunkCurrent->GetStartPosition() + chunkCurrent->GetLength();
+            }
+            for (ui32 i = startIndex; i < accessor.GetChunksCount(); ++i) {
+                const ui64 nextIdx = idx + accessor.GetChunkLength(i);
+                if (idx <= position && position < nextIdx) {
+                    return TCurrentChunkAddress(accessor.GetArray(i), idx, i);
+                }
+                idx = nextIdx;
+            }
+        } else if (position < chunkCurrent->GetStartPosition()) {
+            AFL_VERIFY(chunkCurrent->GetChunkIndex() > 0);
+            ui64 idx = chunkCurrent->GetStartPosition();
+            for (i32 i = chunkCurrent->GetChunkIndex() - 1; i >= 0; --i) {
+                AFL_VERIFY(idx >= accessor.GetChunkLength(i))("idx", idx)("length", accessor.GetChunkLength(i));
+                const ui64 nextIdx = idx - accessor.GetChunkLength(i);
+                if (nextIdx <= position && position < idx) {
+                    return TCurrentChunkAddress(accessor.GetArray(i), nextIdx, i);
+                }
+                idx = nextIdx;
+            }
+        }
+        TStringBuilder sb;
+        ui64 recordsCountChunks = 0;
+        for (ui32 i = 0; i < accessor.GetChunksCount(); ++i) {
+            sb << accessor.GetChunkLength(i) << ",";
+            recordsCountChunks += accessor.GetChunkLength(i);
+        }
+        if (chunkCurrent) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("chunk_current", chunkCurrent->DebugString());
+        }
+        AFL_VERIFY(recordsCountChunks == GetRecordsCount())("pos", position)("count", GetRecordsCount())("chunks_map", sb);
+        AFL_VERIFY(false)("pos", position)("count", GetRecordsCount())("chunks_map", sb);
+        return TCurrentChunkAddress(nullptr, 0, 0);
+    }
+
 public:
     virtual ~IChunkedArray() = default;
 
@@ -110,42 +162,6 @@ protected:
     }
 
 public:
-    template <class TChunkAccessor>
-    static TCurrentChunkAddress SelectChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position, const TChunkAccessor& accessor) {
-        if (!chunkCurrent || position >= chunkCurrent->GetStartPosition() + chunkCurrent->GetLength()) {
-            ui32 startIndex = 0;
-            ui64 idx = 0;
-            if (chunkCurrent) {
-                AFL_VERIFY(chunkCurrent->GetChunkIndex() + 1 < accessor.GetChunksCount());
-                startIndex = chunkCurrent->GetChunkIndex() + 1;
-                idx = chunkCurrent->GetStartPosition() + chunkCurrent->GetLength();
-            }
-            for (ui32 i = startIndex; i < accessor.GetChunksCount(); ++i) {
-                const ui64 nextIdx = idx + accessor.GetChunkLength(i);
-                if (idx <= position && position < nextIdx) {
-                    return TCurrentChunkAddress(accessor.GetArray(i), idx, i);
-                }
-                idx = nextIdx;
-            }
-            AFL_VERIFY(false);
-            return TCurrentChunkAddress(nullptr, 0, 0);
-        } else if (position < chunkCurrent->GetStartPosition()) {
-            AFL_VERIFY(chunkCurrent->GetChunkIndex() > 0);
-            ui64 idx = chunkCurrent->GetStartPosition();
-            for (i32 i = chunkCurrent->GetChunkIndex() - 1; i >= 0; --i) {
-                AFL_VERIFY(idx >= accessor.GetChunkLength(i))("idx", idx)("length", accessor.GetChunkLength(i));
-                const ui64 nextIdx = idx - accessor.GetChunkLength(i);
-                if (nextIdx <= position && position < idx) {
-                    return TCurrentChunkAddress(accessor.GetArray(i), nextIdx, i);
-                }
-                idx = nextIdx;
-            }
-        }
-        AFL_VERIFY(false);
-        return TCurrentChunkAddress(nullptr, 0, 0);
-    }
-
-
     TTrivialChunkedArray(const std::shared_ptr<arrow::ChunkedArray>& data)
         : TBase(data->length(), EType::ChunkedArray, data->type())
         , Array(data) {

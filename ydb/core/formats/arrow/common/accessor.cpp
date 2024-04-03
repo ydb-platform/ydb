@@ -60,10 +60,12 @@ std::partial_ordering IChunkedArray::CompareColumns(const std::vector<std::share
 
 IChunkedArray::TAddress IChunkedArray::GetAddress(const ui64 position) const {
     AFL_VERIFY(position < RecordsCount);
-    if (!CurrentChunkAddress || position < CurrentChunkAddress->GetStartPosition() || CurrentChunkAddress->GetStartPosition() + CurrentChunkAddress->GetArray()->length() <= position) {
+    if (CurrentChunkAddress && position < CurrentChunkAddress->GetStartPosition() + CurrentChunkAddress->GetArray()->length() && CurrentChunkAddress->GetStartPosition() <= position) {
+        return IChunkedArray::TAddress(CurrentChunkAddress->GetArray(), position - CurrentChunkAddress->GetStartPosition());
+    } else {
         CurrentChunkAddress = DoGetChunk(CurrentChunkAddress, position);
+        return IChunkedArray::TAddress(CurrentChunkAddress->GetArray(), position - CurrentChunkAddress->GetStartPosition());
     }
-    return IChunkedArray::TAddress(CurrentChunkAddress->GetArray(), position - CurrentChunkAddress->GetStartPosition());
 }
 
 const std::partial_ordering IChunkedArray::TAddress::Compare(const TAddress& item) const {

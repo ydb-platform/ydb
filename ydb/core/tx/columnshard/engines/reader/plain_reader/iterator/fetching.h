@@ -23,8 +23,24 @@ protected:
     virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& /*source*/) const {
         return 0;
     }
+    virtual bool DoInitSourceSeqColumnIds(const std::shared_ptr<IDataSource>& /*source*/) const {
+        return false;
+    }
+
 public:
     virtual ~IFetchingStep() = default;
+
+    bool InitSourceSeqColumnIds(const std::shared_ptr<IDataSource>& source) const {
+        auto* current = this;
+        while (current) {
+            if (current->DoInitSourceSeqColumnIds(source)) {
+                return true;
+            } else {
+                current = current->NextStep.get();
+            }
+        }
+        return false;
+    }
 
     std::shared_ptr<IFetchingStep> AttachNext(const std::shared_ptr<IFetchingStep>& nextStep) {
         AFL_VERIFY(nextStep);
@@ -195,6 +211,25 @@ public:
         : TBase("ASSEMBLER" + (specName ? "::" + specName : ""))
         , Columns(columns)
     {
+        AFL_VERIFY(Columns);
+        AFL_VERIFY(Columns->GetColumnsCount());
+    }
+};
+
+class TOptionalAssemblerStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, Columns);
+    virtual TString DoDebugString() const override {
+        return TStringBuilder() << "columns=" << Columns->DebugString() << ";";
+    }
+protected:
+    virtual bool DoInitSourceSeqColumnIds(const std::shared_ptr<IDataSource>& source) const override;
+public:
+    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const override;
+    TOptionalAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
+        : TBase("OPTIONAL_ASSEMBLER" + (specName ? "::" + specName : ""))
+        , Columns(columns) {
         AFL_VERIFY(Columns);
         AFL_VERIFY(Columns->GetColumnsCount());
     }

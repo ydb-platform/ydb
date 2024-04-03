@@ -40,6 +40,10 @@ protected:
         return (Scanner->IsFinished() && PartialResults.empty());
     }
 public:
+    virtual void OnSentDataFromInterval(const ui32 intervalIdx) const override {
+        Scanner->OnSentDataFromInterval(intervalIdx);
+    }
+
     const TReadMetadata::TConstPtr& GetReadMetadata() const {
         return SpecialReadContext->GetReadMetadata();
     }
@@ -61,7 +65,7 @@ public:
     TPlainReadData(const std::shared_ptr<TReadContext>& context);
     ~TPlainReadData() {
         if (!AbortedFlag) {
-            Abort();
+            Abort("unexpected on destructor");
         }
     }
 };

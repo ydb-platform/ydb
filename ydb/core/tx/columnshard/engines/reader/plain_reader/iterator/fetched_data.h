@@ -2,6 +2,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
@@ -14,7 +15,7 @@ class TFetchedData {
 protected:
     using TBlobs = THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo>;
     YDB_ACCESSOR_DEF(TBlobs, Blobs);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Table>, Table);
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Table);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
     YDB_READONLY(bool, UseFilter, false);
 public:
@@ -87,15 +88,30 @@ public:
         return AddBatch(arrow::Table::Make(batch->schema(), batch->columns(), batch->num_rows()));
     }
 
+    void AddBatch(const std::shared_ptr<NArrow::TGeneralContainer>& table) {
+        AFL_VERIFY(table);
+        if (UseFilter) {
+            AddBatch(table->BuildTable());
+        } else {
+            if (!Table) {
+                Table = table;
+            } else {
+                auto mergeResult = Table->MergeColumnsStrictly(*table);
+                AFL_VERIFY(mergeResult.IsSuccess())("error", mergeResult.GetErrorMessage());
+            }
+        }
+    }
+
     void AddBatch(const std::shared_ptr<arrow::Table>& table) {
         auto tableLocal = table;
         if (Filter && UseFilter) {
             AFL_VERIFY(Filter->Apply(tableLocal));
         }
         if (!Table) {
-            Table = tableLocal;
+            Table = std::make_shared<NArrow::TGeneralContainer>(tableLocal);
         } else {
-            AFL_VERIFY(NArrow::MergeBatchColumns({Table, tableLocal}, Table));
+            auto mergeResult = Table->MergeColumnsStrictly(NArrow::TGeneralContainer(tableLocal));
+            AFL_VERIFY(mergeResult.IsSuccess())("error", mergeResult.GetErrorMessage());
         }
     }
 
@@ -103,14 +119,12 @@ public:
 
 class TFetchedResult {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Batch);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, NotAppliedFilter);
 public:
     TFetchedResult(std::unique_ptr<TFetchedData>&& data)
-        : NotAppliedFilter(data->GetNotAppliedFilter()) {
-        if (data->GetTable()) {
-            Batch = NArrow::ToBatch(data->GetTable(), true);
-        }
+        : Batch(data->GetTable())
+        , NotAppliedFilter(data->GetNotAppliedFilter()) {
     }
 };
 

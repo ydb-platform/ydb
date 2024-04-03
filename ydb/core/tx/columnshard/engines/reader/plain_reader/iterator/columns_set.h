@@ -83,6 +83,11 @@ public:
         return *FilteredSchema;
     }
 
+    const std::shared_ptr<ISnapshotSchema>& GetFilteredSchemaPtrVerified() const {
+        AFL_VERIFY(FilteredSchema);
+        return FilteredSchema;
+    }
+
     bool Contains(const std::shared_ptr<TColumnsSet>& columnsSet) const {
         if (!columnsSet) {
             return true;

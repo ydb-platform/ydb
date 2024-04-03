@@ -61,8 +61,17 @@ message TDiskSpaceUsage {
         optional uint64 UsedReserveSize = 4;
     }
 
+    message TStoragePoolUsage {
+        // in bytes
+        optional string PoolKind = 1;
+        optional uint64 TotalSize = 2;
+        optional uint64 DataSize = 3;
+        optional uint64 IndexSize = 4;
+    }
+
     optional TTables Tables = 1;
     optional TTopics Topics = 2;
+    repeated TStoragePoolUsage StoragePoolsUsage = 3;
 }
 
 message TDomainState {

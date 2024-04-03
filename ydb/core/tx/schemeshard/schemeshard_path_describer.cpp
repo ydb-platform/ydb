@@ -31,6 +31,14 @@ static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartiti
     stats->SetRangeReadRows(tableStats.RangeReadRows);
 
     stats->SetPartCount(tableStats.PartCount);
+
+    auto* storagePoolsStats = stats->MutableStoragePools()->MutablePoolsUsage();
+    for (const auto& [poolKind, stats] : tableStats.StoragePoolsStats) {
+        auto* storagePoolStats = storagePoolsStats->Add();
+        storagePoolStats->SetPoolKind(poolKind);
+        storagePoolStats->SetDataSize(stats.DataSize);
+        storagePoolStats->SetIndexSize(stats.IndexSize);
+    }
 }
 
 static void FillTableMetrics(NKikimrTabletBase::TMetrics* metrics, const TPartitionStats& tableStats) {
@@ -707,6 +715,14 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     diskSpaceUsage->MutableTopics()->SetAccountSize(subDomainInfo->GetPQAccountStorage());
     diskSpaceUsage->MutableTopics()->SetDataSize(subDomainInfo->GetDiskSpaceUsage().Topics.DataSize);
     diskSpaceUsage->MutableTopics()->SetUsedReserveSize(subDomainInfo->GetDiskSpaceUsage().Topics.UsedReserveSize);
+    auto* storagePoolsUsage = diskSpaceUsage->MutableStoragePoolsUsage();
+    for (const auto& [poolKind, usage] : subDomainInfo->GetDiskSpaceUsage().StoragePoolsUsage) {
+        auto* storagePoolUsage = storagePoolsUsage->Add();
+        storagePoolUsage->SetPoolKind(poolKind);
+        storagePoolUsage->SetDataSize(usage.DataSize);
+        storagePoolUsage->SetIndexSize(usage.IndexSize);
+        storagePoolUsage->SetTotalSize(usage.DataSize + usage.IndexSize);
+    }
 
     if (subDomainInfo->GetDeclaredSchemeQuotas()) {
         entry->MutableDeclaredSchemeQuotas()->CopyFrom(*subDomainInfo->GetDeclaredSchemeQuotas());

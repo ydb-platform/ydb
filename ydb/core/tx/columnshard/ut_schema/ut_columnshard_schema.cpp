@@ -1158,7 +1158,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             NTypeIds::Uint32,
             NTypeIds::Uint64,
             NTypeIds::Date,
-            NTypeIds::Datetime
+            NTypeIds::Datetime,
             NTypeIds::Date32,
             NTypeIds::Datetime64,
             NTypeIds::Timestamp64,

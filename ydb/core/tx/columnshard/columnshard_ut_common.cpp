@@ -264,6 +264,7 @@ TCell MakeTestCell(const TTypeInfo& typeInfo, ui32 value, std::vector<TString>& 
         const TString& str = mem.back();
         return TCell(str.data(), str.size());
     } else if (type == NTypeIds::Timestamp || type == NTypeIds::Interval ||
+                type == NTypeIds::Timestamp64 || type == NTypeIds::Interval64 ||
                 type == NTypeIds::Uint64 || type == NTypeIds::Int64) {
         return TCell::Make<ui64>(value);
     } else if (type == NTypeIds::Uint32 || type == NTypeIds::Int32 || type == NTypeIds::Datetime) {

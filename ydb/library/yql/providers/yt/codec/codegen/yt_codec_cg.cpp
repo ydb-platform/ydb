@@ -758,13 +758,14 @@ private:
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
             CallInst::Create(funType, funcPtr, { typeConst, flagsConst, holderFactoryConst, velemPtr, buf, wrapConst }, "", Block_);
         } else {
+            const auto flagsConst = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {
-                Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(Type::getInt8Ty(context)),
+                Type::getInt64Ty(context), Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(Type::getInt8Ty(context)),
                 PointerType::getUnqual(Type::getInt8Ty(context)), Type::getInt1Ty(context)
             }, false);
 
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
-            CallInst::Create(funType, funcPtr, { typeConst, holderFactoryConst, velemPtr, buf, wrapConst }, "", Block_);
+            CallInst::Create(funType, funcPtr, { typeConst, flagsConst, holderFactoryConst, velemPtr, buf, wrapConst }, "", Block_);
         }
     }
 

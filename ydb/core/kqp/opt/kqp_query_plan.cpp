@@ -2144,6 +2144,47 @@ double ComputeCpuTimes(NJson::TJsonValue& plan) {
     return currCpuTime;
 }
 
+void ComputeTotalRows(NJson::TJsonValue& plan) {
+    
+    if (plan.GetMapSafe().contains("Plans")) {
+        for (auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
+            ComputeTotalRows(p);
+        }
+    }
+
+    if (plan.GetMapSafe().contains("Stats") && plan.GetMapSafe().contains("Operators")) {
+        YQL_CLOG(TRACE, CoreDq) << "Found Operators";
+
+        auto& ops = plan.GetMapSafe().at("Operators").GetArraySafe();
+
+        const auto& stats = plan.GetMapSafe().at("Stats").GetMapSafe();
+
+        if (stats.contains("OutputRows")) {
+            auto outputRows = stats.at("OutputRows");
+            double nRows;
+            if (outputRows.IsMap()) {
+                nRows = outputRows.GetMapSafe().at("Sum").GetDouble();
+            } else {
+                nRows = outputRows.GetDouble();
+            }
+            ops[0]["A-Rows"] = nRows;
+        }
+    }
+}
+
+void RemoveStats(NJson::TJsonValue& plan) {
+
+    if (plan.GetMapSafe().contains("Plans")) {
+        for (auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
+            RemoveStats(p);
+        }
+    }
+
+    if (plan.GetMapSafe().contains("Stats")) {
+        plan.GetMapSafe().erase("Stats");
+    }
+}
+
 NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
      static const THashSet<TString> redundantNodes = {
        "UnionAll",
@@ -2170,6 +2211,8 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
     plan = ReconstructQueryPlanRec(plan, 0, planIndex, precomputes, nodeCounter);
     RemoveRedundantNodes(plan, redundantNodes);
     ComputeCpuTimes(plan);
+    ComputeTotalRows(plan);
+    RemoveStats(plan);
 
     return plan;
 }

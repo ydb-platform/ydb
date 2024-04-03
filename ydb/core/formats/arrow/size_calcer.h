@@ -133,7 +133,8 @@ ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch);
 // Return size in bytes including size of bitmap mask
 ui64 GetArrayMemorySize(const std::shared_ptr<arrow::ArrayData>& data);
 ui64 GetBatchMemorySize(const std::shared_ptr<arrow::RecordBatch>&batch);
-// Return size in bytes *not* including size of bitmap mask
+ui64 GetTableMemorySize(const std::shared_ptr<arrow::Table>& batch);
+    // Return size in bytes *not* including size of bitmap mask
 ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column);
 
 }

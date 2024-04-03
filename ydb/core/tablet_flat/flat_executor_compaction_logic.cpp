@@ -331,12 +331,10 @@ THolder<NTable::ICompactionStrategy> TCompactionLogic::CreateStrategy(
         ui32 tableId,
         NKikimrSchemeOp::ECompactionStrategy strategy)
 {
-    Y_UNUSED(Logger);
-
     switch (strategy) {
         case NKikimrSchemeOp::CompactionStrategyGenerational:
             return NTable::CreateGenCompactionStrategy(
-                    tableId, Backend, Broker, Time, TaskNameSuffix);
+                    tableId, Backend, Broker, Time, Logger, TaskNameSuffix);
 
         default:
             Y_ABORT("Unsupported strategy %s", NKikimrSchemeOp::ECompactionStrategy_Name(strategy).c_str());

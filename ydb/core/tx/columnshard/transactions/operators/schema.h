@@ -145,9 +145,14 @@ namespace NKikimr::NColumnShard {
             TVector<TString> columnErrors;
             for (const NKikimrSchemeOp::TOlapColumnDescription& column : schema.GetColumns()) {
                 TString name = column.GetName();
-                NScheme::TTypeInfo schemeType(column.GetTypeId());
+                void* typeDescr = nullptr;
+                if (column.GetTypeId() == NTypeIds::Pg && column.HasTypeInfo()) {
+                    typeDescr = NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId());
+                }
+
+                NScheme::TTypeInfo schemeType(column.GetTypeId(), typeDescr);
                 if (keyColumns.contains(name) && !pkSupportedTypes.contains(column.GetTypeId())) {
-                    columnErrors.emplace_back("key column " + name + " has unsupported type "  + NScheme::TypeName(column.GetTypeId()));
+                    columnErrors.emplace_back("key column " + name + " has unsupported type "  + column.GetTypeName());
                 }
                 auto arrowType = NArrow::GetArrowType(schemeType);
                 if (!arrowType.ok()) {

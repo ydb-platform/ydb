@@ -58,7 +58,7 @@ public:
             }
             node.Local = Local;
             node.ServicedDomains.swap(servicedDomains);
-            node.LastSeenServicedDomains = node.ServicedDomains;     
+            node.LastSeenServicedDomains = node.ServicedDomains;
             node.SlotName = slotName;
         }
         if (Record.HasSystemLocation() && Record.GetSystemLocation().HasDataCenter()) {

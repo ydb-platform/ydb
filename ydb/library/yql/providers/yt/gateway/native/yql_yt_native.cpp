@@ -3307,7 +3307,7 @@ private:
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(mapLambda, nodeCount, transform);
                 job->SetLambdaCode(mapLambda);
-                job->SetOptLLVM(execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetRef() >= nodeCount ? execCtx->Options_.OptLLVM() : "OFF");
+                job->SetOptLLVM(execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT) >= nodeCount ? execCtx->Options_.OptLLVM() : "OFF");
                 job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
                 transform.ApplyJobProps(*job);
                 transform.ApplyUserJobSpec(userJobSpec, testRun);
@@ -3520,7 +3520,7 @@ private:
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(reduceLambda, nodeCount, transform);
                 job->SetLambdaCode(reduceLambda);
-                job->SetOptLLVM(execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetRef() >= nodeCount ? execCtx->Options_.OptLLVM() : "OFF");
+                job->SetOptLLVM(execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT) >= nodeCount ? execCtx->Options_.OptLLVM() : "OFF");
                 job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
                 transform.ApplyJobProps(*job);
                 transform.ApplyUserJobSpec(userJobSpec, testRun);
@@ -3765,7 +3765,7 @@ private:
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(mapLambda, nodeCount, transform);
                 mapJob->SetLambdaCode(mapLambda);
-                mapJob->SetOptLLVM(execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetRef() >= nodeCount ? execCtx->Options_.OptLLVM() : "OFF");
+                mapJob->SetOptLLVM(execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT) >= nodeCount ? execCtx->Options_.OptLLVM() : "OFF");
                 mapJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
                 transform.ApplyJobProps(*mapJob);
                 transform.ApplyUserJobSpec(mapUserJobSpec, testRun);
@@ -3791,7 +3791,7 @@ private:
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(reduceLambda, nodeCount, transform);
                 reduceJob->SetLambdaCode(reduceLambda);
-                reduceJob->SetOptLLVM(execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetRef() >= nodeCount ? execCtx->Options_.OptLLVM() : "OFF");
+                reduceJob->SetOptLLVM(execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT) >= nodeCount ? execCtx->Options_.OptLLVM() : "OFF");
                 reduceJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
                 transform.ApplyJobProps(*reduceJob);
                 transform.ApplyUserJobSpec(reduceUserJobSpec, testRun);
@@ -3934,7 +3934,7 @@ private:
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(reduceLambda, nodeCount, transform);
                 reduceJob->SetLambdaCode(reduceLambda);
-                reduceJob->SetOptLLVM(execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetRef() >= nodeCount ? execCtx->Options_.OptLLVM() : "OFF");
+                reduceJob->SetOptLLVM(execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT) >= nodeCount ? execCtx->Options_.OptLLVM() : "OFF");
                 reduceJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
                 transform.ApplyJobProps(*reduceJob);
                 transform.ApplyUserJobSpec(reduceUserJobSpec, testRun);
@@ -4194,7 +4194,7 @@ private:
                 }
                 size_t nodeCount = 0;
                 std::tie(lambda, nodeCount) = builder.Serialize(root);
-                llvmNodeLimitExceeded = execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetRef() < nodeCount;
+                llvmNodeLimitExceeded = execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT) < nodeCount;
 
                 if (transform.CanExecuteInternally() && !testRun) {
                     const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
@@ -4769,7 +4769,7 @@ private:
             }
             size_t nodeCount = 0;
             std::tie(lambda, nodeCount) = builder.Serialize(root);
-            llvmNodeLimitExceeded = execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetRef() < nodeCount;
+            llvmNodeLimitExceeded = execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT) < nodeCount;
 
             if (transform.CanExecuteInternally()) {
                 TExploringNodeVisitor explorer;

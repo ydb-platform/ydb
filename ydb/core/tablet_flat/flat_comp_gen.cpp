@@ -417,18 +417,20 @@ bool TGenCompactionStrategy::ScheduleBorrowedCompaction() {
     }
     
     // Find if we actually have borrowed parts
-    bool haveBorrowed = false;
+    bool hasBorrowed = false;
     for (const auto& pr : KnownParts) {
         if (pr.first.TabletID() != ownerTabletId) {
-            haveBorrowed = true;
+            hasBorrowed = true;
             Y_ABORT_UNLESS(pr.second == 255,
                 "Borrowed part %s not in final parts", pr.first.ToString().c_str());
         }
     }
 
-    if (!haveBorrowed || ForcedState != EForcedState::None || FinalState.State != EState::Free || FinalCompactionId != 0) {
+    if (!hasBorrowed || ForcedState != EForcedState::None || FinalState.State != EState::Free || FinalCompactionId != 0) {
         if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
-            logl << "TGenCompactionStrategy ScheduleBorrowedCompaction nothing to compact" << ownerTabletId
+            logl << "TGenCompactionStrategy ScheduleBorrowedCompaction for " << ownerTabletId
+                << " nothing to compact "
+                << " has borrowed " << hasBorrowed << " parts " << KnownParts.size()
                 << " state: forced " << ForcedState << ", final " << FinalState.State << ", id " << FinalCompactionId;
         }
         return false;

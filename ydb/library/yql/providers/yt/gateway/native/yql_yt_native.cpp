@@ -3307,7 +3307,7 @@ private:
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(mapLambda, nodeCount, transform);
                 job->SetLambdaCode(mapLambda);
-                job->SetOptLLVM(execCtx->Options_.OptLLVM());
+                job->SetOptLLVM(execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetRef() >= nodeCount ? execCtx->Options_.OptLLVM() : "OFF");
                 job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
                 transform.ApplyJobProps(*job);
                 transform.ApplyUserJobSpec(userJobSpec, testRun);
@@ -3520,7 +3520,7 @@ private:
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(reduceLambda, nodeCount, transform);
                 job->SetLambdaCode(reduceLambda);
-                job->SetOptLLVM(execCtx->Options_.OptLLVM());
+                job->SetOptLLVM(execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetRef() >= nodeCount ? execCtx->Options_.OptLLVM() : "OFF");
                 job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
                 transform.ApplyJobProps(*job);
                 transform.ApplyUserJobSpec(userJobSpec, testRun);
@@ -3765,7 +3765,7 @@ private:
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(mapLambda, nodeCount, transform);
                 mapJob->SetLambdaCode(mapLambda);
-                mapJob->SetOptLLVM(execCtx->Options_.OptLLVM());
+                mapJob->SetOptLLVM(execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetRef() >= nodeCount ? execCtx->Options_.OptLLVM() : "OFF");
                 mapJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
                 transform.ApplyJobProps(*mapJob);
                 transform.ApplyUserJobSpec(mapUserJobSpec, testRun);
@@ -3791,7 +3791,7 @@ private:
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(reduceLambda, nodeCount, transform);
                 reduceJob->SetLambdaCode(reduceLambda);
-                reduceJob->SetOptLLVM(execCtx->Options_.OptLLVM());
+                reduceJob->SetOptLLVM(execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetRef() >= nodeCount ? execCtx->Options_.OptLLVM() : "OFF");
                 reduceJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
                 transform.ApplyJobProps(*reduceJob);
                 transform.ApplyUserJobSpec(reduceUserJobSpec, testRun);
@@ -3934,7 +3934,7 @@ private:
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(reduceLambda, nodeCount, transform);
                 reduceJob->SetLambdaCode(reduceLambda);
-                reduceJob->SetOptLLVM(execCtx->Options_.OptLLVM());
+                reduceJob->SetOptLLVM(execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetRef() >= nodeCount ? execCtx->Options_.OptLLVM() : "OFF");
                 reduceJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
                 transform.ApplyJobProps(*reduceJob);
                 transform.ApplyUserJobSpec(reduceUserJobSpec, testRun);
@@ -4172,6 +4172,8 @@ private:
 
             auto tmpFiles = std::make_shared<TTempFiles>(execCtx->FileStorage_->GetTemp());
 
+            bool llvmNodeLimitExceeded = false;
+
             bool localRun = !testRun &&
                 (execCtx->Config_->HasExecuteUdfLocallyIfPossible()
                     ? execCtx->Config_->GetExecuteUdfLocallyIfPossible() : false);
@@ -4192,6 +4194,7 @@ private:
                 }
                 size_t nodeCount = 0;
                 std::tie(lambda, nodeCount) = builder.Serialize(root);
+                llvmNodeLimitExceeded = execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetRef() < nodeCount;
 
                 if (transform.CanExecuteInternally() && !testRun) {
                     const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
@@ -4211,7 +4214,7 @@ private:
             }
 
             job->SetLambdaCode(lambda);
-            job->SetOptLLVM(execCtx->Options_.OptLLVM());
+            job->SetOptLLVM(llvmNodeLimitExceeded ? execCtx->Options_.OptLLVM() : "OFF");
             job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
             const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
             job->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
@@ -4742,6 +4745,8 @@ private:
         TIntrusivePtr<TYqlCalcJob> job;
         auto tmpFiles = std::make_shared<TTempFiles>(execCtx->FileStorage_->GetTemp());
 
+        bool llvmNodeLimitExceeded = false;
+
         bool localRun = execCtx->Config_->HasExecuteUdfLocallyIfPossible() ? execCtx->Config_->GetExecuteUdfLocallyIfPossible() : false;
         {
             TUserJobSpec userJobSpec;
@@ -4764,6 +4769,7 @@ private:
             }
             size_t nodeCount = 0;
             std::tie(lambda, nodeCount) = builder.Serialize(root);
+            llvmNodeLimitExceeded = execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetRef() < nodeCount;
 
             if (transform.CanExecuteInternally()) {
                 TExploringNodeVisitor explorer;
@@ -4814,7 +4820,7 @@ private:
             job->SetColumns(*columns);
         }
         job->SetUseResultYson(factory.UseResultYson());
-        job->SetOptLLVM(execCtx->Options_.OptLLVM());
+        job->SetOptLLVM(llvmNodeLimitExceeded ? execCtx->Options_.OptLLVM() : "OFF");
         job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
 
         mapOpSpec.AddInput(tmpTable);

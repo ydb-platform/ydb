@@ -177,6 +177,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui32, true> MaxSpeculativeJobCountPerTask;
     NCommon::TConfSetting<NSize::TSize, true> LLVMMemSize;
     NCommon::TConfSetting<NSize::TSize, true> LLVMPerNodeMemSize;
+    NCommon::TConfSetting<ui64, true> LLVMNodeCountLimit;
     NCommon::TConfSetting<NSize::TSize, true> SamplingIoBlockSize;
     NCommon::TConfSetting<NYT::TNode, true> PublishedMedia;
     NCommon::TConfSetting<NYT::TNode, true> TemporaryMedia;

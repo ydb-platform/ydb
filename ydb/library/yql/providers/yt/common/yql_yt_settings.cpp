@@ -380,6 +380,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, MaxSpeculativeJobCountPerTask);
     REGISTER_SETTING(*this, LLVMMemSize);
     REGISTER_SETTING(*this, LLVMPerNodeMemSize);
+    REGISTER_SETTING(*this, LLVMNodeCountLimit);
     REGISTER_SETTING(*this, SamplingIoBlockSize);
     REGISTER_SETTING(*this, BinaryTmpFolder);
     REGISTER_SETTING(*this, BinaryExpirationInterval);

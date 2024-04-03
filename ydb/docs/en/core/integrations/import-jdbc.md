@@ -1,17 +1,17 @@
-# Importing table structures and data from JDBC data sources
+# Importing table structures and data from JDBC data sources to {{ ydb-short-name }}
 
 ## Introduction {#intro}
 
-Table structures and data can be imported into YDB from data sources accessible via JDBC drivers using the [JDBC import tool](https://www.github.com/ydb-platform/ydb-importer/).
+Table structures and data can be imported into YDB from data sources accessible via JDBC drivers using the [JDBC import tool](https://www.github.com/ydb-platform/ydb-importer/). This can be useful for migrating from other database management systems to {{ ydb-short-name }} or just importing your real data to run some benchmarks on {{ ydb-short-name }}.
 
 Data import is performed using the following process:
 
-1. The tool connects to the source database, and determines the list of tables and custom SQL queries to be imported.
-2. The structure of target YDB tables is generated, and optionally saved as YQL script.
-3. Target database is checked for existence of the target tables. Missing tables are created, already existing ones may be left as is, or re-created.
-4. Row data is imported by reading from the source database using the SELECT statements, and written into the target YDB database using the Bulk Upsert mechanizm.
+1. The tool connects to the source database and determines the list of tables and custom SQL queries to be imported.
+2. The structure of target YDB tables is generated and optionally saved as YQL script.
+3. The target database is checked for the existence of the target tables. Missing tables are created, and already existing ones may be left as is or re-created.
+4. Row data is imported by reading from the source database using the SELECT statements and written into the target YDB database using the Bulk Upsert mechanism.
 
-All operations, including metadata extraction from the source database, table creation (and re-creation) in the target database, and row data import, are performed in parallel mode (thread-per-table), using multiple concurrent threads and multiple open connections to both source and target databases. The maximum degree of parallelizm is configurable, although the actual number of concurrent operations cannot exceed the number of tables (or custom SQL queries) being imported.
+All operations, including metadata extraction from the source database, table creation (and re-creation) in the target database, and row data import, are performed in parallel mode (thread-per-table), using multiple concurrent threads and multiple open connections to both source and target databases. The maximum degree of parallelism is configurable, although the number of concurrent operations can't exceed the number of imported tables or custom SQL queries.
 
 ## Import tool installation {#install}
 
@@ -19,44 +19,39 @@ To run the import tool, JDK 8 or later is required, with the `java` executable a
 
 Import tool binary distribution is available on the [Releases page](https://github.com/ydb-platform/ydb-importer/releases). The import tool is provided as the ZIP archive, which needs to be unpacked into the local directory on the server where the tool is required to run.
 
-The import tool distribution archive contains the configuration file examples as `*.xml` files, sample tool startup script `ydb-importer.sh`, and the executable code for the tool and its dependencies (including the YDB Java SDK) as `lib/*.jar` files.
+The import tool distribution archive contains the configuration file examples as `*.xml` files, sample tool startup script `ydb-importer.sh`, and the executable code for the tool and its dependencies (including the [YDB Java SDK](../reference/ydb-sdk/java/index.md)) as `lib/*.jar` files.
 
 Before running the import tool, the required JDBC drivers should be put (as `*.jar` files) into the `lib` subdirectory of the tool installation directory.
 
 ## Using the import tool {#use}
 
-The tool reads the XML configuration file on startup. The file name needs to be specified as a command line agrument when running the tool. Settings in the configuration file define:
+The tool reads the XML configuration file on startup. When running the tool, the file name must be specified as a free command line argument. Settings in the configuration file define:
 
 * source database type and connection preferences;
-* YDB target database connection preferences;
+* {{ ydb-short-name }} target database connection preferences;
 * (optional) file name to save the generated YQL script with YDB target tables structure;
 * the rules to filter source tables' names;
 * the list of custom SQL queries to fetch data from the data source (can be used to define custom queries to get data from all or some of the tables);
 * the rules to generate target tables' names based on the names of the source tables;
 * the degree of parallelism (which determines the worker pool size, plus the connection pool sizes for both source and target databases).
 
-The configuration file needs to be prepared before running the import tool, based on one of the provided samples.
+The configuration file based on one of the provided samples needs to be prepared before running the import tool.
 
 The example command to run the tool is provided in the [ydb-importer.sh](https://github.com/ydb-platform/ydb-importer/blob/main/scripts/ydb-importer.sh) file, which can also be used to run the tool as shown below:
 
 ```bash
 ./ydb-importer.sh my-import-config.xml
-```
-
-The name of the configuration file is provided as the command line parameter to the tool.
-
-The import tool logs its actions into the standard output. The log can be preserved, if needed, by redirecting the import tool output to the file.
 
 ## Configuration file format {#config}
 
 Sample configuration files:
 
-* [for PostgreSQL](https://github.com/ydb-platform/ydb-importer/blob/main/scripts/sample-postgres.xml);
-* [for MySQL](https://github.com/ydb-platform/ydb-importer/blob/main/scripts/sample-mysql.xml);
-* [for Oracle Database](https://github.com/ydb-platform/ydb-importer/blob/main/scripts/sample-oracle.xml);
-* [for Microsoft SQL Server](https://github.com/ydb-platform/ydb-importer/blob/main/scripts/sample-mssql.xml);
-* [for IBM Db2](https://github.com/ydb-platform/ydb-importer/blob/main/scripts/sample-db2.xml);
-* [for IBM Informix](https://github.com/ydb-platform/ydb-importer/blob/main/scripts/sample-informix.xml).
+* [for PostgreSQL](https://github.com/ydb-platform/ydb-importer/blob/main/scripts/sample-postgres.xml)
+* [for MySQL](https://github.com/ydb-platform/ydb-importer/blob/main/scripts/sample-mysql.xml)
+* [for Oracle Database](https://github.com/ydb-platform/ydb-importer/blob/main/scripts/sample-oracle.xml)
+* [for Microsoft SQL Server](https://github.com/ydb-platform/ydb-importer/blob/main/scripts/sample-mssql.xml)
+* [for IBM Db2](https://github.com/ydb-platform/ydb-importer/blob/main/scripts/sample-db2.xml)
+* [for IBM Informix](https://github.com/ydb-platform/ydb-importer/blob/main/scripts/sample-informix.xml)
 
 Below is the definition of the configuration file structure.
 
@@ -65,7 +60,7 @@ Below is the definition of the configuration file structure.
 <ydb-importer>
     <workers>
         <!-- Number of worker threads (integer starting with 1).
-             This setting defines the maximum number of source and target database sessions, too.
+             This setting also defines the maximum number of source and target database sessions.
          -->
         <pool size="4"/>
     </workers>
@@ -99,7 +94,7 @@ Below is the definition of the configuration file structure.
     <!-- Target YDB database connection parameters. -->
     <target type="ydb">
         <!-- If the following tag is defined, the tool will import
-             the YQL script to generate YDB tables into the file specified.
+             The YQL script is used to generate YDB tables in the file specified.
              It can also be used without specifying the connection string,
              if the actual target schema creation is not required.
         -->
@@ -111,7 +106,7 @@ Below is the definition of the configuration file structure.
          -->
         <connection-string>ydb-connection-string</connection-string>
         <!-- Authentication mode:
-          ENV      Configure authentication through the environment
+          ENV      Configure authentication via environment variables
           NONE     Anonymous access, or static credentials in the connection string
           STATIC   Static credentials defined as login and password properties (see below)
           SAKEY    Service account key file authentication for YDB Managed Service
@@ -136,7 +131,7 @@ Below is the definition of the configuration file structure.
         <sa-key-file>ydb-sa-keyfile.json</sa-key-file>
         <!-- Drop the already existing tables before loading the data -->
         <replace-existing>true</replace-existing>
-        <!-- Should the tool actually load the data after creating the tables? -->
+        <!-- Should the tool actually load the data after creating tables? -->
         <load-data>true</load-data>
         <!-- Maximum rows per bulk upsert operation -->
         <max-batch-rows>1000</max-batch-rows>
@@ -179,19 +174,19 @@ Below is the definition of the configuration file structure.
         <include-schemas regexp="true">.*</include-schemas>
         <!-- Schemas to exclude (of those included), as literal or regular expression -->
         <exclude-schemas>SOMESCHEMA</exclude-schemas>
-        <!-- The particular tables can be included or excluded using the
+        <!-- Particular tables can be included or excluded using the
              "include-tables" and "exclude-tables" tags,
              using literals or regular expressions as well. -->
     </table-map>
-    <!-- Table reference may refer to the particular table in the particular schema,
+    <!-- Table reference may refer to a particular table in a particular schema
          and optionally specify the query to execute. The latter option allows to import
-         the virtual tables which do not actually exist on the data source. -->
+         virtual tables that do not actually exist on the data source. -->
     <table-ref options="default">
         <schema-name>ora$sys</schema-name>
         <table-name>all_tables</table-name>
         <!-- If the query text is defined, it is executed as shown. -->
         <query-text>SELECT * FROM all_tables</query-text>
-        <!-- Primary key columns should be defined for the query.  -->
+        <!-- Primary key column names should be defined for the query result.  -->
         <key-column>OWNER</key-column>
         <key-column>TABLE_NAME</key-column>
     </table-ref>
@@ -200,38 +195,38 @@ Below is the definition of the configuration file structure.
 
 ## Import tool limitations {#limitations}
 
-Right now the tested data sources include the following:
+The tested data sources include the following database management systems:
 
-* [PostgreSQL](https://www.postgresql.org/),
-* [MySQL](https://www.mysql.com/),
-* [Oracle Database](https://www.oracle.com/database/),
-* [Microsoft SQL Server](https://www.microsoft.com/sql-server/),
-* [IBM Db2](https://www.ibm.com/products/db2),
-* [IBM Informix](https://www.ibm.com/products/informix).
+* [PostgreSQL](https://www.postgresql.org/)
+* [MySQL](https://www.mysql.com/)
+* [Oracle Database](https://www.oracle.com/database/)
+* [Microsoft SQL Server](https://www.microsoft.com/sql-server/)
+* [IBM Db2](https://www.ibm.com/products/db2)
+* [IBM Informix](https://www.ibm.com/products/informix)
 
-Other data sources will probably work, too, as the tool uses the generic JDBC APIs to retrieve data and metadata.
+Other data sources will likely work, too, as the tool uses the generic JDBC APIs to retrieve data and metadata.
 
 Secondary indexes are not imported.
 
 Some data types and table structures are known to be unsupported:
 
-* the embedded tables for Oracle Database,
-* spatial data type for Microsoft SQL Server,
-* object data types for Informix.
+* the embedded tables for Oracle Database
+* spatial data type for Microsoft SQL Server
+* object data types for Informix
 
 ### Handling tables without the primary key {#nopk}
 
-Each YDB table must have a primary key. If a primary key (or at least a unique index) is defined on the source table, the tool creates the primary key for the target YDB table with the columns and order defined by the original primary key. When having multiple unique indexes defined on the source table, the tool prefers the index with the smallest number of columns.
+Each {{ ydb-short-name }} table must have a primary key. If a primary key (or at least a unique index) is defined on the source table, the tool creates the primary key for the target  {{ ydb-short-name }} table with the columns and order determined by the original primary key. When multiple unique indexes are defined on the source table, the tool prefers the index with the smallest number of columns.
 
-In case the source table has no primary key and no unique indexes, primary key columns can be configured using the import settings in the configuration file, as a sequence of `key-column` elements in the `table-ref` section (see below the example in the description of the configuration file format).
+In case the source table has no primary key and no unique indexes, primary key columns can be configured using the import settings in the configuration file as a sequence of `key-column` elements in the `table-ref` section (see below the example in the description of the configuration file format).
 
-When there is no primary key defined anywhere, the tool automatically adds the column `ydb_synth_key` to the target table, and uses it as the primary key. The values of the synthetic primary key are computed as "SHA-256" hash code over the values of all columns of the row, except the columns of the BLOB type.
+When no primary key is defined anywhere, the tool automatically adds the column `ydb_synth_key` to the target table and uses it as the primary key. The values of the synthetic primary key are computed as "SHA-256" hash code over the values of all row cells except the columns of the `BLOB` type.
 
-If the input table contains several rows with completely identical values, the destination table will have only one row per each set of duplicate input rows. This also means that there the tool cannot import the table in which all columns are of BLOB type.
+If the input table contains several rows with completely identical values, the destination table will have only one row per each set of duplicate input rows. This also means that the tool cannot import the table in which all columns are of `BLOB` type.
 
 ### Importing large objects (BLOB, XML) {#blob}
 
-For each BLOB field in the source database the import tool creates an additional YDB target table (BLOB supplemental table), having the following structure:
+For each BLOB field in the source database, the import tool creates an additional {{ ydb-short-name }} target table (BLOB supplemental table) with the following schema:
 
 ```sql
 CREATE TABLE `blob_table`(
@@ -244,12 +239,12 @@ CREATE TABLE `blob_table`(
 
 The name of the BLOB supplemental table is generated based on the `table-options` / `blob-name-format` setting in the configuration file.
 
-Each BLOB field value is saved as a sequence if records in the BLOB supplemental table in YQB. Actual data is stored in the `val` field, storing no more than 64K bytes. The order of blocks stored is defined by the values of the `pos` column, containing the integer values `1..N`.
+Each BLOB field value is saved as a sequence of records in the BLOB supplemental table in {{ ydb-short-name }}. Actual data is stored in the `val` field, storing no more than 64K bytes. The order of blocks stored is defined by the values of the `pos` column, containing the integer values `1..N`.
 
-A unique value of type `Int64` is generated for each source BLOB value, and stored in the `id` field of the BLOB supplemental table.
-This identifier is also stored in the "main" target table in the field having the same name as the BLOB field in the source table.
+For each source BLOB value, a unique value of type `Int64` is generated and stored in the `id` field of the BLOB supplemental table.
+This identifier is also stored in the "main" target table in a field that has the same name as the BLOB field in the source table.
 
-For PostgreSQL working with the `EXTENSION lo` BLOBS may require extra permissions for the account used to connect to the data source. An alternative option is to enable the compatibility mode on the database level using the following statement:
+For PostgreSQL, working with the `EXTENSION lo` BLOBS may require extra permissions for the account used to connect to the data source. An alternative option is to enable the compatibility mode on the database level using the following statement:
 
 ```sql
 ALTER DATABASE dbname SET lo_compat_privileges TO on;

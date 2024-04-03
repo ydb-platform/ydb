@@ -362,27 +362,54 @@ bool TFederatedWriteSessionImpl::PrepareDeferredWrite(TDeferredWrite& deferred) 
     return true;
 }
 
-void TFederatedWriteSessionImpl::CloseImpl(EStatus statusCode, NYql::TIssues&& issues, TDuration timeout) {
-    CloseImpl(TPlainStatus(statusCode, std::move(issues)), timeout);
+bool TFederatedWriteSessionImpl::CloseImpl(EStatus statusCode, NYql::TIssues&& issues, TDuration timeout) {
+    return CloseImpl(TPlainStatus(statusCode, std::move(issues)), timeout);
 }
 
-void TFederatedWriteSessionImpl::CloseImpl(NTopic::TSessionClosedEvent const& ev, TDuration timeout) {
+bool TFederatedWriteSessionImpl::CloseImpl(NTopic::TSessionClosedEvent const& ev, TDuration timeout) {
     if (Closing) {
-        return;
+        return false;
     }
     Closing = true;
+    bool ready = false;
     if (Subsession) {
-        Subsession->Close(timeout);
+        ready = Subsession->Close(timeout);
     }
     ClientEventsQueue->Close(ev);
     NTopic::Cancel(UpdateStateDelayContext);
+    return ready;
 }
 
 bool TFederatedWriteSessionImpl::Close(TDuration timeout) {
-    with_lock (Lock) {
-        CloseImpl(EStatus::SUCCESS, {}, timeout);
+    auto startTime = TInstant::Now();
+    auto remaining = timeout;
+    auto step = TDuration::MilliSeconds(100);
+    bool ready = false;
+    while (remaining > TDuration::Zero()) {
+        with_lock(Lock) {
+            if (OriginalMessagesToGetAck.empty() && OriginalMessagesToPassDown.empty()) {
+                ready = true;
+            }
+            if (Closing) {
+                break;
+            }
+        }
+        if (ready) {
+            break;
+        }
+        remaining = timeout - (TInstant::Now() - startTime);
+        Sleep(Min(step, remaining));
     }
-    return true;
+    bool subsessionReady = false;
+    with_lock(Lock) {
+        subsessionReady = CloseImpl(EStatus::SUCCESS, {}, timeout);
+    }
+    if (ready && subsessionReady) {
+        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Federated write session: gracefully shut down, all writes complete");
+    } else {
+        LOG_LAZY(Log, TLOG_WARNING, GetLogPrefix() << "Federated write session: could not confirm all writes in time or session aborted, perform hard shutdown");
+    }
+    return ready && subsessionReady;
 }
 
 }  // namespace NYdb::NFederatedTopic

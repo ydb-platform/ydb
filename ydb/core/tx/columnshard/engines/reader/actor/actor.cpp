@@ -231,7 +231,7 @@ bool TColumnShardScan::ProduceResults() noexcept {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_problems")("info", ComputeShardingPolicy.DebugString());
             }
         }
-        TMemoryProfileGuard mGuard("SCAN_PROFILE::RESULT::TO_KQP");
+        TMemoryProfileGuard mGuard("SCAN_PROFILE::RESULT::TO_KQP", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
         Result->ArrowBatch = NArrow::ToBatch(shardedBatch.GetRecordBatch(), true);
         Rows += batch->num_rows();
         Bytes += NArrow::GetBatchDataSize(Result->ArrowBatch);

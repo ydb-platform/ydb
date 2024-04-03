@@ -2,14 +2,16 @@
 #include <memory>
 #include <vector>
 
+#include <ydb/core/formats/arrow/custom_registry.h>
+#include <ydb/core/formats/arrow/program.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/library/arrow_kernels/ut_common.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/exec.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
-#include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/arrow_kernels/ut_common.h>
-#include "custom_registry.h"
-#include "program.h"
-#include "arrow_helpers.h"
 
 using namespace NKikimr::NArrow;
 using namespace NKikimr::NSsa;

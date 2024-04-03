@@ -1,9 +1,10 @@
-#include "arrow_batch_builder.h"
-#include "arrow_helpers.h"
-#include "converter.h"
-#include "one_batch_input_stream.h"
-#include "merging_sorted_input_stream.h"
-#include "arrow_filter.h"
+#include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/converter.h>
+#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/permutations.h>
+#include <ydb/core/formats/arrow/reader/merger.h>
+#include <ydb/core/formats/arrow/reader/result_builder.h>
 
 #include <ydb/library/binary_json/write.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -480,13 +481,6 @@ ui32 RestoreValue(ui32 a, ui32 b, ui32 c) {
     return ui32(a) * 100 + b * 10 + c;
 }
 
-ui32 RestoreOne(const std::shared_ptr<arrow::RecordBatch>& batch, int pos) {
-    auto arrA = std::static_pointer_cast<arrow::Int8Array>(batch->GetColumnByName("i8"));
-    auto arrB = std::static_pointer_cast<arrow::Int16Array>(batch->GetColumnByName("i16"));
-    auto arrC = std::static_pointer_cast<arrow::Int32Array>(batch->GetColumnByName("i32"));
-    return RestoreValue(arrA->Value(pos), arrB->Value(pos), arrC->Value(pos));
-}
-
 bool CheckSorted1000(const std::shared_ptr<arrow::RecordBatch>& batch, bool desc = false) {
     auto arrA = std::static_pointer_cast<arrow::Int8Array>(batch->GetColumnByName("i8"));
     auto arrB = std::static_pointer_cast<arrow::Int16Array>(batch->GetColumnByName("i16"));
@@ -663,38 +657,26 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         UNIT_ASSERT(CheckSorted1000(batch));
 
         std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-        batches.push_back(batch->Slice(0, 100));    // 0..100
-        batches.push_back(batch->Slice(100, 200));  // 100..300
-        batches.push_back(batch->Slice(200, 400));  // 200..600
-        batches.push_back(batch->Slice(500, 50));   // 500..550
-        batches.push_back(batch->Slice(600, 1));    // 600..601
+        batches.push_back(batch->Slice(0, 100));    // 0..100 +100
+        batches.push_back(batch->Slice(100, 200));  // 100..300 +200
+        batches.push_back(batch->Slice(200, 400));  // 200..600 +300
+        batches.push_back(batch->Slice(500, 50));   // 500..550 +50
+        batches.push_back(batch->Slice(600, 1));    // 600..601 +1
 
-        auto descr = std::make_shared<NArrow::TSortDescription>(batch->schema());
-        descr->NotNull = true;
-
-        std::vector<std::shared_ptr<arrow::RecordBatch>> sorted;
-        {   // maxBatchSize = 500, no limit
-            std::vector<NArrow::IInputStream::TPtr> streams;
-            for (auto& batch : batches) {
-                streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch));
+        std::shared_ptr<arrow::RecordBatch> sorted;
+        {
+            NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
+            const std::vector<std::string> vColumns = {batch->schema()->field(0)->name()};
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batch->schema(), false, vColumns);
+            for (auto&& i : batches) {
+                merger->AddSource(i, nullptr);
             }
-
-            NArrow::IInputStream::TPtr mergeStream =
-                std::make_shared<NArrow::TMergingSortedInputStream>(streams, descr, 500);
-
-            while (auto batch = mergeStream->Read()) {
-                sorted.emplace_back(batch);
-            }
+            merger->DrainAll(builder);
+            sorted = builder.Finalize();
         }
-
-        UNIT_ASSERT_VALUES_EQUAL(sorted.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(sorted[0]->num_rows(), 500);
-        UNIT_ASSERT_VALUES_EQUAL(sorted[1]->num_rows(), 251);
-        UNIT_ASSERT(CheckSorted(sorted[0]));
-        UNIT_ASSERT(CheckSorted(sorted[1]));
-        UNIT_ASSERT(NArrow::IsSorted(sorted[0], descr->SortingKey));
-        UNIT_ASSERT(NArrow::IsSorted(sorted[1], descr->SortingKey));
-        UNIT_ASSERT(RestoreOne(sorted[0], 499) <= RestoreOne(sorted[1], 0));
+        UNIT_ASSERT_VALUES_EQUAL(sorted->num_rows(), 601);
+        UNIT_ASSERT(NArrow::IsSorted(sorted, batch->schema()));
+        UNIT_ASSERT(CheckSorted(sorted));
     }
 
     Y_UNIT_TEST(MergingSortedInputStreamReversed) {
@@ -702,39 +684,26 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         UNIT_ASSERT(CheckSorted1000(batch));
 
         std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-        batches.push_back(batch->Slice(0, 100));    // 0..100
-        batches.push_back(batch->Slice(100, 200));  // 100..300
-        batches.push_back(batch->Slice(200, 400));  // 200..600
-        batches.push_back(batch->Slice(500, 50));   // 500..550
-        batches.push_back(batch->Slice(600, 1));    // 600..601
+        batches.push_back(batch->Slice(0, 100));    // 0..100 +100
+        batches.push_back(batch->Slice(100, 200));  // 100..300 +200
+        batches.push_back(batch->Slice(200, 400));  // 200..600 +300
+        batches.push_back(batch->Slice(500, 50));   // 500..550 +50
+        batches.push_back(batch->Slice(600, 1));    // 600..601 +1
 
-        auto descr = std::make_shared<NArrow::TSortDescription>(batch->schema());
-        descr->NotNull = true;
-        descr->Inverse();
-
-        std::vector<std::shared_ptr<arrow::RecordBatch>> sorted;
-        {   // maxBatchSize = 500, no limit
-            std::vector<NArrow::IInputStream::TPtr> streams;
-            for (auto& batch : batches) {
-                streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch));
+        std::shared_ptr<arrow::RecordBatch> sorted;
+        {
+            NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
+            const std::vector<std::string> vColumns = {batch->schema()->field(0)->name()};
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batch->schema(), true, vColumns);
+            for (auto&& i : batches) {
+                merger->AddSource(i, nullptr);
             }
-
-            NArrow::IInputStream::TPtr mergeStream =
-                std::make_shared<NArrow::TMergingSortedInputStream>(streams, descr, 500);
-
-            while (auto batch = mergeStream->Read()) {
-                sorted.emplace_back(batch);
-            }
+            merger->DrainAll(builder);
+            sorted = builder.Finalize();
         }
-
-        UNIT_ASSERT_VALUES_EQUAL(sorted.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(sorted[0]->num_rows(), 500);
-        UNIT_ASSERT_VALUES_EQUAL(sorted[1]->num_rows(), 251);
-        UNIT_ASSERT(CheckSorted(sorted[0], true));
-        UNIT_ASSERT(CheckSorted(sorted[1], true));
-        UNIT_ASSERT(NArrow::IsSorted(sorted[0], descr->SortingKey, true));
-        UNIT_ASSERT(NArrow::IsSorted(sorted[1], descr->SortingKey, true));
-        UNIT_ASSERT(RestoreOne(sorted[0], 499) >= RestoreOne(sorted[1], 0));
+        UNIT_ASSERT_VALUES_EQUAL(sorted->num_rows(), 601);
+        UNIT_ASSERT(NArrow::IsSorted(sorted, batch->schema(), true));
+        UNIT_ASSERT(CheckSorted(sorted, true));
     }
 
     Y_UNIT_TEST(MergingSortedInputStreamReplace) {
@@ -747,79 +716,23 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         batches.push_back(AddSnapColumn(batch->Slice(400, 400), 2));
         batches.push_back(AddSnapColumn(batch->Slice(600, 400), 3));
 
-        auto sortingKey = batches[0]->schema();
-        auto replaceKey = batch->schema();
-
-        auto descr = std::make_shared<NArrow::TSortDescription>(sortingKey, replaceKey);
-        descr->Directions.back() = -1; // greater snapshot first
-        descr->NotNull = true;
-
-        std::vector<std::shared_ptr<arrow::RecordBatch>> sorted;
+        std::shared_ptr<arrow::RecordBatch> sorted;
         {
-            std::vector<NArrow::IInputStream::TPtr> streams;
-            for (auto& batch : batches) {
-                streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch));
+            NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
+            const std::vector<std::string> vColumns = {"snap"};
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batches[0]->schema(), false, vColumns);
+            for (auto&& i : batches) {
+                merger->AddSource(i, nullptr);
             }
-
-            NArrow::IInputStream::TPtr mergeStream =
-                std::make_shared<NArrow::TMergingSortedInputStream>(streams, descr, 5000);
-
-            while (auto batch = mergeStream->Read()) {
-                sorted.emplace_back(batch);
-            }
+            merger->DrainAll(builder);
+            sorted = builder.Finalize();
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(sorted.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(sorted[0]->num_rows(), 1000);
-        UNIT_ASSERT(CheckSorted1000(sorted[0]));
-        UNIT_ASSERT(NArrow::IsSortedAndUnique(sorted[0], descr->SortingKey));
+        UNIT_ASSERT_VALUES_EQUAL(sorted->num_rows(), 1000);
+        UNIT_ASSERT(CheckSorted1000(sorted));
+        UNIT_ASSERT(NArrow::IsSortedAndUnique(sorted, batch->schema()));
 
-        auto counts = CountValues(std::static_pointer_cast<arrow::UInt64Array>(sorted[0]->GetColumnByName("snap")));
-        UNIT_ASSERT_VALUES_EQUAL(counts[0], 200);
-        UNIT_ASSERT_VALUES_EQUAL(counts[1], 200);
-        UNIT_ASSERT_VALUES_EQUAL(counts[2], 200);
-        UNIT_ASSERT_VALUES_EQUAL(counts[3], 400);
-    }
-
-    Y_UNIT_TEST(MergingSortedInputStreamReplaceReversed) {
-        std::shared_ptr<arrow::RecordBatch> batch = ExtractBatch(MakeTable1000());
-        UNIT_ASSERT(CheckSorted1000(batch));
-
-        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-        batches.push_back(AddSnapColumn(batch->Slice(0, 400), 0));
-        batches.push_back(AddSnapColumn(batch->Slice(200, 400), 1));
-        batches.push_back(AddSnapColumn(batch->Slice(400, 400), 2));
-        batches.push_back(AddSnapColumn(batch->Slice(600, 400), 3));
-
-        auto sortingKey = batches[0]->schema();
-        auto replaceKey = batch->schema();
-
-        auto descr = std::make_shared<NArrow::TSortDescription>(sortingKey, replaceKey);
-        descr->Directions.back() = 1; // greater snapshot last
-        descr->NotNull = true;
-        descr->Inverse();
-
-        std::vector<std::shared_ptr<arrow::RecordBatch>> sorted;
-        {
-            std::vector<NArrow::IInputStream::TPtr> streams;
-            for (auto& batch : batches) {
-                streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch));
-            }
-
-            NArrow::IInputStream::TPtr mergeStream =
-                std::make_shared<NArrow::TMergingSortedInputStream>(streams, descr, 5000);
-
-            while (auto batch = mergeStream->Read()) {
-                sorted.emplace_back(batch);
-            }
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(sorted.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(sorted[0]->num_rows(), 1000);
-        UNIT_ASSERT(CheckSorted1000(sorted[0], true));
-        UNIT_ASSERT(NArrow::IsSortedAndUnique(sorted[0], descr->SortingKey, true));
-
-        auto counts = CountValues(std::static_pointer_cast<arrow::UInt64Array>(sorted[0]->GetColumnByName("snap")));
+        auto counts = CountValues(std::static_pointer_cast<arrow::UInt64Array>(sorted->GetColumnByName("snap")));
         UNIT_ASSERT_VALUES_EQUAL(counts[0], 200);
         UNIT_ASSERT_VALUES_EQUAL(counts[1], 200);
         UNIT_ASSERT_VALUES_EQUAL(counts[2], 200);

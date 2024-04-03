@@ -168,8 +168,8 @@ public:
         auto& context = Codegen_->GetContext();
         const auto typeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)type);
         const auto valType = Type::getInt128Ty(context);
+        const auto flagsConst = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags);
         if (nativeYtTypeFlags) {
-            const auto flagsConst = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags);
             const auto funcAddr = ConstantInt::get(Type::getInt64Ty(context), (ui64)&NYql::NCommon::WriteContainerNativeYtValue);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {
                 Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(valType),
@@ -179,7 +179,6 @@ public:
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
             CallInst::Create(funType, funcPtr, { typeConst, flagsConst, elemPtr, buf }, "", Block_);
         } else {
-            const auto flagsConst = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags);
             const auto funcAddr = ConstantInt::get(Type::getInt64Ty(context), (ui64)&NYql::NCommon::WriteYsonContainerValue);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {
                 Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(valType),
@@ -748,8 +747,8 @@ private:
         const auto typeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)type);
         const auto holderFactoryConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)&HolderFactory_);
         const auto wrapConst = ConstantInt::get(Type::getInt1Ty(context), wrapOptional);
+        const auto flagsConst = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags);
         if (nativeYtTypeFlags) {
-            const auto flagsConst = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {
                 Type::getInt64Ty(context), Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(Type::getInt8Ty(context)),
                 PointerType::getUnqual(Type::getInt8Ty(context)), Type::getInt1Ty(context)
@@ -758,7 +757,6 @@ private:
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
             CallInst::Create(funType, funcPtr, { typeConst, flagsConst, holderFactoryConst, velemPtr, buf, wrapConst }, "", Block_);
         } else {
-            const auto flagsConst = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {
                 Type::getInt64Ty(context), Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(Type::getInt8Ty(context)),
                 PointerType::getUnqual(Type::getInt8Ty(context)), Type::getInt1Ty(context)

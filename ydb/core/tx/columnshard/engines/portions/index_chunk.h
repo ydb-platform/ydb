@@ -39,6 +39,10 @@ public:
         return TChunkAddress(IndexId, ChunkIdx);
     }
 
+    ui32 GetEntityId() const {
+        return IndexId;
+    }
+
     TIndexChunk(const ui32 indexId, const ui32 chunkIdx, const ui32 recordsCount, const ui64 rawBytes, const TBlobRangeLink16& blobRange)
         : IndexId(indexId)
         , ChunkIdx(chunkIdx)

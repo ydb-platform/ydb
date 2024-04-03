@@ -152,11 +152,11 @@ TConclusionStatus TScanHead::DetectSourcesFeatureInContextIntervalScan(const std
         optimizer.AddSource(i.second, fetchingPlan);
     }
     const ui64 startMemory = optimizer.GetMemorySum();
-    if (!optimizer.Optimize(TSpecialReadContext::ReduceMemoryIntervalLimit) && TSpecialReadContext::RejectMemoryIntervalLimit < optimizer.GetMemorySum()) {
+    if (!optimizer.Optimize(Context->ReduceMemoryIntervalLimit) && Context->RejectMemoryIntervalLimit < optimizer.GetMemorySum()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "next_internal_broken")
             ("reason", "a lot of memory need")("start", startMemory)
-            ("reduce_limit", TSpecialReadContext::ReduceMemoryIntervalLimit)
-            ("reject_limit", TSpecialReadContext::RejectMemoryIntervalLimit)
+            ("reduce_limit", Context->ReduceMemoryIntervalLimit)
+            ("reject_limit", Context->RejectMemoryIntervalLimit)
             ("need", optimizer.GetMemorySum())
             ("path_ids", JoinSeq(",", optimizer.GetPathIds()));
         return TConclusionStatus::Fail("We need a lot of memory in time for interval scanner: " +
@@ -164,8 +164,8 @@ TConclusionStatus TScanHead::DetectSourcesFeatureInContextIntervalScan(const std
     } else if (optimizer.GetMemorySum() < startMemory) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "memory_reduce_active")
             ("reason", "need reduce memory")("start", startMemory)
-            ("reduce_limit", TSpecialReadContext::ReduceMemoryIntervalLimit)
-            ("reject_limit", TSpecialReadContext::RejectMemoryIntervalLimit)
+            ("reduce_limit", Context->ReduceMemoryIntervalLimit)
+            ("reject_limit", Context->RejectMemoryIntervalLimit)
             ("need", optimizer.GetMemorySum())
             ("path_ids", JoinSeq(",", optimizer.GetPathIds()));
     }

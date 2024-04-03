@@ -117,6 +117,32 @@ private:
     YDB_READONLY(TRuntimeFeatures, RuntimeFeatures, 0);
     std::vector<TUnifiedBlobId> BlobIds;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
+
+    template <class TAggregator, class TChunkInfo>
+    void AggregateIndexChunksData(const TAggregator& aggr, const std::vector<TChunkInfo>& chunks, const std::optional<std::set<ui32>>& columnIds, const bool validation) const {
+        if (columnIds) {
+            auto itColumn = columnIds->begin();
+            auto itRecord = chunks.begin();
+            ui32 recordsInEntityCount = 0;
+            while (itRecord != chunks.end() && itColumn != columnIds->end()) {
+                if (itRecord->GetEntityId() < *itColumn) {
+                    ++itRecord;
+                } else if (*itColumn < itRecord->GetEntityId()) {
+                    AFL_VERIFY(!validation || recordsInEntityCount)("problem", "validation")("reason", "no_chunks_for_column")("column_id", *itColumn);
+                    ++itColumn;
+                    recordsInEntityCount = 0;
+                } else {
+                    ++recordsInEntityCount;
+                    aggr(*itRecord);
+                    ++itRecord;
+                }
+            }
+        } else {
+            for (auto&& i : chunks) {
+                aggr(i);
+            }
+        }
+    }
 public:
     ui64 GetMinMemoryForReadColumns(const std::optional<std::set<ui32>>& columnIds) const;
 
@@ -486,26 +512,6 @@ public:
         Y_ABORT_UNLESS(!wasValid || RemoveSnapshot.Valid());
     }
 
-    ui64 GetIndexBlobBytes() const noexcept {
-        ui64 sum = 0;
-        for (const auto& rec : Indexes) {
-            sum += rec.GetBlobRange().Size;
-        }
-        return sum;
-    }
-
-    ui64 GetColumnBlobBytes() const noexcept {
-        ui64 sum = 0;
-        for (const auto& rec : Records) {
-            sum += rec.GetBlobRange().Size;
-        }
-        return sum;
-    }
-
-    ui64 GetTotalBlobBytes() const noexcept {
-        return GetIndexBlobBytes() + GetColumnBlobBytes();
-    }
-
     bool IsVisible(const TSnapshot& snapshot) const {
         if (Empty()) {
             return false;
@@ -592,17 +598,23 @@ public:
         return result;
     }
 
-    ui64 GetIndexRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
-    ui64 GetIndexRawBytes() const;
+    ui64 GetIndexRawBytes(const std::optional<std::set<ui32>>& columnIds = {}, const bool validation = true) const;
+    ui64 GetIndexBlobBytes() const noexcept {
+        ui64 sum = 0;
+        for (const auto& rec : Indexes) {
+            sum += rec.GetBlobRange().Size;
+        }
+        return sum;
+    }
 
     ui64 GetColumnRawBytes(const std::vector<ui32>& columnIds, const bool validation = true) const;
-    ui64 GetColumnRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
-    ui64 GetColumnRawBytes() const {
-        ui64 result = 0;
-        for (auto&& i : Records) {
-            result += i.GetMeta().GetRawBytes();
-        }
-        return result;
+    ui64 GetColumnRawBytes(const std::optional<std::set<ui32>>& columnIds = {}, const bool validation = true) const;
+
+    ui64 GetColumnBlobBytes(const std::vector<ui32>& columnIds, const bool validation = true) const;
+    ui64 GetColumnBlobBytes(const std::optional<std::set<ui32>>& columnIds = {}, const bool validation = true) const;
+
+    ui64 GetTotalBlobBytes() const noexcept {
+        return GetIndexBlobBytes() + GetColumnBlobBytes();
     }
 
     ui64 GetTotalRawBytes() const {

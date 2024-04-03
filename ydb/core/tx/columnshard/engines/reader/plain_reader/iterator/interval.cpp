@@ -161,7 +161,7 @@ protected:
             }
         } else {
             TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::MANY");
-            const std::optional<ui32> bufferLimit = sourcesInMemory ? std::nullopt : std::optional<ui32>(TSpecialReadContext::ReadSequentiallyBufferSize);
+            const std::optional<ui32> bufferLimit = sourcesInMemory ? std::nullopt : std::optional<ui32>(Context->ReadSequentiallyBufferSize);
             lastResultPosition = DrainMergerLinearScan(bufferLimit);
         }
         if (lastResultPosition) {
@@ -193,7 +193,7 @@ private:
 protected:
     virtual bool DoExecute() override {
         TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::CONTINUE");
-        std::optional<NArrow::NMerger::TSortableBatchPosition> lastResultPosition = DrainMergerLinearScan(TSpecialReadContext::ReadSequentiallyBufferSize);
+        std::optional<NArrow::NMerger::TSortableBatchPosition> lastResultPosition = DrainMergerLinearScan(Context->ReadSequentiallyBufferSize);
         if (lastResultPosition) {
             LastPK = lastResultPosition->ExtractSortingPosition();
         }

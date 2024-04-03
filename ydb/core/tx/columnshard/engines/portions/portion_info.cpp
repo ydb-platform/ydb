@@ -65,72 +65,37 @@ std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
 }
 
 ui64 TPortionInfo::GetColumnRawBytes(const std::vector<ui32>& columnIds, const bool validation) const {
+    return GetColumnRawBytes(std::set<ui32>(columnIds.begin(), columnIds.end()), validation);
+}
+
+ui64 TPortionInfo::GetColumnRawBytes(const std::optional<std::set<ui32>>& entityIds, const bool validation) const {
     ui64 sum = 0;
-    const ui32 recordsCount = GetRecordsCount();
-    for (auto&& i : columnIds) {
-        bool found = false;
-        if (TIndexInfo::IsSpecialColumn(i)) {
-            sum += recordsCount * TIndexInfo::GetSpecialColumnByteWidth(i);
-            found = true;
-        } else {
-            for (auto&& r : Records) {
-                if (r.ColumnId == i) {
-                    sum += r.GetMeta().GetRawBytes();
-                    found = true;
-                }
-            }
-        }
-        AFL_VERIFY(!validation || found)("event", "id_not_found")("column_id", i);
-    }
+    const auto aggr = [&](const TColumnRecord& r) {
+        sum += r.GetMeta().GetRawBytes();
+    };
+    AggregateIndexChunksData(aggr, Records, entityIds, validation);
     return sum;
 }
 
-ui64 TPortionInfo::GetColumnRawBytes(const std::set<ui32>& entityIds, const bool validation) const {
+ui64 TPortionInfo::GetColumnBlobBytes(const std::optional<std::set<ui32>>& entityIds, const bool validation) const {
     ui64 sum = 0;
-    const ui32 recordsCount = GetRecordsCount();
-    std::set<ui32> readyIds;
-    for (auto&& i : TIndexInfo::GetSpecialColumnIds()) {
-        if (entityIds.contains(i)) {
-            sum += recordsCount * TIndexInfo::GetSpecialColumnByteWidth(i);
-            if (validation) {
-                readyIds.emplace(i);
-            }
-        }
-    }
-    for (auto&& r : Records) {
-        if (entityIds.contains(r.ColumnId)) {
-            sum += r.GetMeta().GetRawBytes();
-            if (validation) {
-                readyIds.emplace(r.ColumnId);
-            }
-        }
-    }
-    AFL_VERIFY(!validation || readyIds.size() == entityIds.size())("requested", JoinSeq(",", entityIds))("found", JoinSeq(",", readyIds));
+    const auto aggr = [&](const TColumnRecord& r) {
+        sum += r.GetBlobRange().GetSize();
+    };
+    AggregateIndexChunksData(aggr, Records, entityIds, validation);
     return sum;
 }
 
-ui64 TPortionInfo::GetIndexRawBytes(const std::set<ui32>& entityIds, const bool validation) const {
-    ui64 sum = 0;
-    std::set<ui32> readyIndexes;
-    for (auto&& r : Indexes) {
-        if (entityIds.contains(r.GetIndexId())) {
-            sum += r.GetRawBytes();
-            if (validation) {
-                readyIndexes.emplace(r.GetIndexId());
-            }
-        }
-    }
-    AFL_VERIFY(!validation || readyIndexes.size() == entityIds.size())("requested", JoinSeq(",", entityIds))("found", JoinSeq(",", readyIndexes));
-    return sum;
+ui64 TPortionInfo::GetColumnBlobBytes(const std::vector<ui32>& columnIds, const bool validation) const {
+    return GetColumnBlobBytes(std::set<ui32>(columnIds.begin(), columnIds.end()), validation);
 }
 
-ui64 TPortionInfo::GetIndexRawBytes() const {
+ui64 TPortionInfo::GetIndexRawBytes(const std::optional<std::set<ui32>>& entityIds, const bool validation) const {
     ui64 sum = 0;
-    std::set<ui32> readyIndexes;
-    for (auto&& r : Indexes) {
+    const auto aggr = [&](const TIndexChunk& r) {
         sum += r.GetRawBytes();
-        readyIndexes.emplace(r.GetIndexId());
-    }
+    };
+    AggregateIndexChunksData(aggr, Indexes, entityIds, validation);
     return sum;
 }
 

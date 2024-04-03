@@ -58,6 +58,6 @@ IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     const TActorId& kqpTempTablesAgentActor);
 
 IActor* CreateKqpTempTablesManager(
-    TKqpTempTablesState tempTablesState, const TActorId& target, const TString& database);
+    TKqpTempTablesState tempTablesState, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TActorId& target, const TString& database);
 
 }  // namespace NKikimr::NKqp

@@ -1496,6 +1496,23 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
         return true;
     }
 
+    if (unpacked->IsStruct()) {
+        auto structType = AS_TYPE(TStructType, unpacked);
+        std::vector<std::shared_ptr<arrow::Field>> members;
+        for (ui32 i = 0; i < structType->GetMembersCount(); i++) {
+            std::shared_ptr<arrow::DataType> childType;
+            const TString memberName(structType->GetMemberName(i));
+            auto memberType = structType->GetMemberType(i);
+            if (!ConvertArrowType(memberType, childType)) {
+                return false;
+            }
+            members.emplace_back(std::make_shared<arrow::Field>(memberName, childType, memberType->IsOptional()));
+        }
+
+        type = std::make_shared<arrow::StructType>(members);
+        return true;
+    }
+
     if (unpacked->IsTuple()) {
         auto tupleType = AS_TYPE(TTupleType, unpacked);
         std::vector<std::shared_ptr<arrow::Field>> fields;

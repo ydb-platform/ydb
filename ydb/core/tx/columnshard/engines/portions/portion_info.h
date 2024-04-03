@@ -56,6 +56,7 @@ public:
             auto result = loader->ApplyVerified(Data);
             AFL_VERIFY(result);
             AFL_VERIFY(result->num_columns() == 1);
+            AFL_VERIFY(result->num_rows() == RecordsCount)("length", result->num_rows())("records_count", RecordsCount);
             return result->column(0);
         }
     };

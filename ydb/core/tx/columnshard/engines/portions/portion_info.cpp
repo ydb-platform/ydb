@@ -665,7 +665,7 @@ public:
 
 NArrow::NAccessor::IChunkedArray::TCurrentChunkAddress TDeserializeChunkedArray::DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const {
     TChunkAccessor accessor(Chunks, Loader);
-    return NArrow::NAccessor::TTrivialChunkedArray::SelectChunk(chunkCurrent, position, accessor);
+    return SelectChunk(chunkCurrent, position, accessor);
 }
 
 TPortionInfo::TPreparedBatchData TPortionInfo::PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TString>& blobsData) const {

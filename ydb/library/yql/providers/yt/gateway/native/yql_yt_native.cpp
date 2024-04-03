@@ -2126,6 +2126,9 @@ private:
             if (execCtx->Options_.Config()->NightlyCompress.Get(cluster).GetOrElse(false)) {
                 yqlAttrs["force_nightly_compress"] = true;
             }
+            if (auto timeout = execCtx->Options_.Config()->ExpirationTimeout.Get(cluster)) {
+                yqlAttrs["expiration_timeout"] = timeout->MilliSeconds();
+            }
         }
 
         const auto userAttrsIt = strOpts.find(EYtSettingType::UserAttrs);

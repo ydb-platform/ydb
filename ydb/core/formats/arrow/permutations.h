@@ -21,6 +21,7 @@ private:
     YDB_READONLY_DEF(std::vector<std::vector<ui32>>, SplittedByShards);
 public:
     TShardedRecordBatch(const std::shared_ptr<arrow::Table>& batch);
+    TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch);
 
     void Cut(const ui32 limit) {
         RecordBatch = RecordBatch->Slice(0, limit);

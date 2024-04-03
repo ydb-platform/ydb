@@ -221,6 +221,13 @@ ui64 TShardedRecordBatch::GetMemorySize() const {
     return NArrow::GetTableMemorySize(RecordBatch);
 }
 
+TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch)
+{
+    AFL_VERIFY(batch);
+    RecordBatch = arrow::Table::FromRecordBatches(batch->schema(), {batch});
+}
+
+
 TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::Table>& batch)
     : RecordBatch(batch)
 {

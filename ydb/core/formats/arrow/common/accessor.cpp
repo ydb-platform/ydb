@@ -46,6 +46,8 @@ TString IChunkedArray::DebugString(const ui32 position) const {
 std::partial_ordering IChunkedArray::CompareColumns(const std::vector<std::shared_ptr<IChunkedArray>>& l, const ui64 lPosition, const std::vector<std::shared_ptr<IChunkedArray>>& r, const ui64 rPosition) {
     AFL_VERIFY(l.size() == r.size());
     for (ui32 i = 0; i < l.size(); ++i) {
+        AFL_VERIFY(l[i]);
+        AFL_VERIFY(r[i]);
         const TAddress lAddress = l[i]->GetAddress(lPosition);
         const TAddress rAddress = r[i]->GetAddress(rPosition);
         auto cmp = lAddress.Compare(rAddress);
@@ -59,7 +61,7 @@ std::partial_ordering IChunkedArray::CompareColumns(const std::vector<std::share
 IChunkedArray::TAddress IChunkedArray::GetAddress(const ui64 position) const {
     AFL_VERIFY(position < RecordsCount);
     if (!CurrentChunkAddress || position < CurrentChunkAddress->GetStartPosition() || CurrentChunkAddress->GetStartPosition() + CurrentChunkAddress->GetArray()->length() <= position) {
-        CurrentChunkAddress = DoGetChunk(position);
+        CurrentChunkAddress = DoGetChunk(CurrentChunkAddress, position);
     }
     return IChunkedArray::TAddress(CurrentChunkAddress->GetArray(), position - CurrentChunkAddress->GetStartPosition());
 }
@@ -68,16 +70,31 @@ const std::partial_ordering IChunkedArray::TAddress::Compare(const TAddress& ite
     return TComparator::TypedCompare<true>(*Array, Position, *item.Array, item.Position);
 }
 
-IChunkedArray::TCurrentChunkAddress TTrivialChunkedArray::DoGetChunk(const ui64 position) const {
-    ui64 idx = 0;
-    for (auto&& i : Array->chunks()) {
-        if (idx <= position && idx + (ui64)i->length() > position) {
-            return TCurrentChunkAddress(i, idx);
-        }
-        idx += i->length();
+namespace {
+class TChunkAccessor {
+private:
+    std::shared_ptr<arrow::ChunkedArray> ChunkedArray;
+public:
+    TChunkAccessor(const std::shared_ptr<arrow::ChunkedArray>& chunkedArray)
+        : ChunkedArray(chunkedArray)
+    {
+
     }
-    AFL_VERIFY(false);
-    return TCurrentChunkAddress(nullptr, 0);
+    ui64 GetChunksCount() const {
+        return (ui64)ChunkedArray->num_chunks();
+    }
+    ui64 GetChunkLength(const ui32 idx) const {
+        return (ui64)ChunkedArray->chunk(idx)->length();
+    }
+    std::shared_ptr<arrow::Array> GetArray(const ui32 idx) const {
+        return ChunkedArray->chunk(idx);
+    }
+};
+}
+
+IChunkedArray::TCurrentChunkAddress TTrivialChunkedArray::DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const {
+    TChunkAccessor accessor(Array);
+    return SelectChunk(chunkCurrent, position, accessor);
 }
 
 }

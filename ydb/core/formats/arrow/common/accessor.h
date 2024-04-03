@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/chunked_array.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
@@ -20,10 +21,17 @@ public:
     private:
         YDB_READONLY_DEF(std::shared_ptr<arrow::Array>, Array);
         YDB_READONLY(ui64, StartPosition, 0);
+        YDB_READONLY(ui64, ChunkIndex, 0);
     public:
-        TCurrentChunkAddress(const std::shared_ptr<arrow::Array>& arr, const ui64 pos)
+        ui64 GetLength() const {
+            return Array->length();
+        }
+
+        TCurrentChunkAddress(const std::shared_ptr<arrow::Array>& arr, const ui64 pos, const ui32 chunkIdx)
             : Array(arr)
-            , StartPosition(pos) {
+            , StartPosition(pos)
+            , ChunkIndex(chunkIdx)
+        {
 
         }
     };
@@ -48,7 +56,7 @@ private:
     mutable std::optional<TCurrentChunkAddress> CurrentChunkAddress;
 protected:
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const = 0;
-    virtual TCurrentChunkAddress DoGetChunk(const ui64 position) const = 0;
+    virtual TCurrentChunkAddress DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const = 0;
 public:
     virtual ~IChunkedArray() = default;
 
@@ -76,8 +84,8 @@ private:
     using TBase = IChunkedArray;
     const std::shared_ptr<arrow::Array> Array;
 protected:
-    virtual TCurrentChunkAddress DoGetChunk(const ui64 /*position*/) const override {
-        return TCurrentChunkAddress(Array, 0);
+    virtual TCurrentChunkAddress DoGetChunk(const std::optional<TCurrentChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
+        return TCurrentChunkAddress(Array, 0, 0);
     }
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const override {
         return std::make_shared<arrow::ChunkedArray>(Array);
@@ -96,12 +104,47 @@ private:
     using TBase = IChunkedArray;
     const std::shared_ptr<arrow::ChunkedArray> Array;
 protected:
-    virtual TCurrentChunkAddress DoGetChunk(const ui64 position) const override;
+    virtual TCurrentChunkAddress DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const override {
         return Array;
     }
 
 public:
+    template <class TChunkAccessor>
+    static TCurrentChunkAddress SelectChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position, const TChunkAccessor& accessor) {
+        if (!chunkCurrent || position >= chunkCurrent->GetStartPosition() + chunkCurrent->GetLength()) {
+            ui32 startIndex = 0;
+            if (chunkCurrent) {
+                AFL_VERIFY(chunkCurrent->GetChunkIndex() + 1 < accessor.GetChunksCount());
+                startIndex = chunkCurrent->GetChunkIndex() + 1;
+            }
+            ui64 idx = 0;
+            for (ui32 i = startIndex; i < accessor.GetChunksCount(); ++i) {
+                const ui64 nextIdx = idx + accessor.GetChunkLength(i);
+                if (idx <= position && position < nextIdx) {
+                    return TCurrentChunkAddress(accessor.GetArray(i), idx, i);
+                }
+                idx = nextIdx;
+            }
+            AFL_VERIFY(false);
+            return TCurrentChunkAddress(nullptr, 0, 0);
+        } else if (position < chunkCurrent->GetStartPosition()) {
+            AFL_VERIFY(chunkCurrent->GetChunkIndex() > 0);
+            ui64 idx = chunkCurrent->GetStartPosition();
+            for (i32 i = chunkCurrent->GetChunkIndex() - 1; i >= 0; ++i) {
+                AFL_VERIFY(idx >= accessor.GetChunkLength(i))("idx", idx)("length", accessor.GetChunkLength(i));
+                const ui64 nextIdx = idx - accessor.GetChunkLength(i);
+                if (nextIdx <= position && position < idx) {
+                    return TCurrentChunkAddress(accessor.GetArray(i), nextIdx, i);
+                }
+                idx = nextIdx;
+            }
+        }
+        AFL_VERIFY(false);
+        return TCurrentChunkAddress(nullptr, 0, 0);
+    }
+
+
     TTrivialChunkedArray(const std::shared_ptr<arrow::ChunkedArray>& data)
         : TBase(data->length(), EType::ChunkedArray, data->type())
         , Array(data) {

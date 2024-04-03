@@ -15,9 +15,6 @@
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/tiering/manager.h>
 
-#include <ydb/core/formats/arrow/one_batch_input_stream.h>
-#include <ydb/core/formats/arrow/merging_sorted_input_stream.h>
-
 #include <ydb/library/conclusion/status.h>
 
 #include <library/cpp/time_provider/time_provider.h>

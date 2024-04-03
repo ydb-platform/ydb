@@ -1,6 +1,8 @@
 items:
-- name: Overview
+- name: Обзор
   href: index.md
+- name: Начало работы
+  href: getting-started.md
 - name: Примеры приложений
   include:
     mode: link

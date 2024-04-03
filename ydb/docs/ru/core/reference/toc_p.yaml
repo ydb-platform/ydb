@@ -27,3 +27,7 @@ items:
   include:
     mode: link
     path: ydb-dstool/toc_p.yaml
+- name: Observability
+  include:
+    mode: link
+    path: observability/toc_p.yaml

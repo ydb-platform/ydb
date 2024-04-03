@@ -78,7 +78,7 @@ private:
     void Start();
     void OpenSubSessionImpl(std::shared_ptr<TDbInfo> db);
 
-    std::shared_ptr<TDbInfo> SelectDatabaseImpl();
+    std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseImpl();
 
     void OnFederatedStateUpdateImpl();
     void ScheduleFederatedStateUpdateImpl(TDuration delay);
@@ -98,6 +98,7 @@ private:
     const NTopic::TTopicClientSettings SubClientSetttings;
     std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> ProvidedCodecs;
 
+    NTopic::IRetryPolicy::IRetryState::TPtr RetryState;
     std::shared_ptr<TFederatedDbObserver> Observer;
     NThreading::TFuture<void> AsyncInit;
     std::shared_ptr<TFederatedDbState> FederationState;

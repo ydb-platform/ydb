@@ -835,6 +835,88 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteSession->Close(TDuration::MilliSeconds(10));
     }
 
+    Y_UNIT_TEST(PreferredDatabaseNoFallback) {
+        // The test checks that the session keeps trying to connect to the preferred database
+        // and does not fall back to other databases.
+
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(
+            TEST_CASE_NAME, false, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, 2);
+
+        setup->Start(true, true);
+
+        TFederationDiscoveryServiceMock fdsMock;
+        fdsMock.Port = setup->GetGrpcPort();
+        ui16 newServicePort = setup->GetPortManager()->GetPort(4285);
+        auto grpcServer = setup->StartGrpcService(newServicePort, &fdsMock);
+
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
+        cfg.SetDatabase("/Root");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        NYdb::TDriver driver(cfg);
+        NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver);
+
+        auto retryPolicy = std::make_shared<NPersQueue::NTests::TYdbPqTestRetryPolicy>();
+
+        auto writeSettings = TFederatedWriteSessionSettings()
+            .AllowFallback(false)
+            .PreferredDatabase("dc2");
+
+        writeSettings
+            .RetryPolicy(retryPolicy)
+            .DirectWriteToPartition(false)
+            .Path(setup->GetTestTopic())
+            .MessageGroupId("src_id");
+
+        retryPolicy->Initialize();
+        retryPolicy->ExpectBreakDown();
+
+        auto writer = topicClient.CreateWriteSession(writeSettings);
+
+        Ydb::FederationDiscovery::ListFederationDatabasesResponse response;
+        auto op = response.mutable_operation();
+        op->set_status(Ydb::StatusIds::SUCCESS);
+        response.mutable_operation()->set_ready(true);
+        response.mutable_operation()->set_id("12345");
+        Ydb::FederationDiscovery::ListFederationDatabasesResult mockResult;
+        mockResult.set_control_plane_endpoint("cp.logbroker-federation:2135");
+        mockResult.set_self_location("fancy_datacenter");
+        auto c1 = mockResult.add_federation_databases();
+        c1->set_name("dc1");
+        c1->set_path("/Root");
+        c1->set_id("account-dc1");
+        c1->set_endpoint("localhost:" + ToString(fdsMock.Port));
+        c1->set_location("dc1");
+        c1->set_status(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
+        c1->set_weight(1000);
+        auto c2 = mockResult.add_federation_databases();
+        c2->set_name("dc2");
+        c2->set_path("/Root");
+        c2->set_id("account-dc2");
+        c2->set_endpoint("localhost:" + ToString(fdsMock.Port));
+        c2->set_location("dc2");
+        c2->set_status(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_UNAVAILABLE);
+        c2->set_weight(500);
+        op->mutable_result()->PackFrom(mockResult);
+        auto fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue({std::move(response), grpc::Status::OK});
+
+        Cerr << "=== Session was created, waiting for retries" << Endl;
+        retryPolicy->WaitForRetriesSync(3);
+
+        Cerr << "=== In the next federation discovery response dc2 will be available" << Endl;
+        // fdsMock.PreparedResponse.Clear();
+        // std::optional<TFederationDiscoveryServiceMock::TManualRequest> fdsRequest;
+        fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResult());
+
+        Cerr << "=== Waiting for repair" << Endl;
+        retryPolicy->WaitForRepairSync();
+
+        Cerr << "=== Closing the session" << Endl;
+        writer->Close(TDuration::MilliSeconds(10));
+    }
+
 }
 
 }

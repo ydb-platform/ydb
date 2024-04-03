@@ -129,29 +129,51 @@ void TFederatedWriteSessionImpl::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db)
     CurrentDatabase = db;
 }
 
-std::shared_ptr<TDbInfo> TFederatedWriteSessionImpl::SelectDatabaseImpl() {
-    std::vector<std::shared_ptr<TDbInfo>> availableDatabases;
+std::pair<std::shared_ptr<TDbInfo>, EStatus> TFederatedWriteSessionImpl::SelectDatabaseImpl() {
+    auto isPreferred = [&preferred = Settings.PreferredDatabase_](const TDbInfo& db) {
+        return AsciiEqualsIgnoreCase(*preferred, db.name()) || AsciiEqualsIgnoreCase(*preferred, db.id());
+    };
+
+    auto const AVAILABLE = TDbInfo::Status::DatabaseInfo_Status_AVAILABLE;
+
+    if (Settings.PreferredDatabase_ && !Settings.AllowFallback_) {
+        // Search for a particular database.
+        for (const auto& db : FederationState->DbInfos) {
+            if (isPreferred(*db)) {
+                return db->status() == AVAILABLE
+                    ? std::pair{db, EStatus::SUCCESS}
+                    : std::pair{nullptr, EStatus::UNAVAILABLE};
+            }
+        }
+        return {nullptr, EStatus::NOT_FOUND};
+    }
+
     ui64 totalWeight = 0;
+    std::vector<std::shared_ptr<TDbInfo>> availableDatabases;
+    std::shared_ptr<TDbInfo> sameDatacenterDb;
 
     for (const auto& db : FederationState->DbInfos) {
-        if (db->status() != TDbInfo::Status::DatabaseInfo_Status_AVAILABLE) {
+        if (db->status() != AVAILABLE) {
             continue;
         }
-
-        if (Settings.PreferredDatabase_ && (AsciiEqualsIgnoreCase(db->name(), *Settings.PreferredDatabase_) ||
-                                            AsciiEqualsIgnoreCase(db->id(), *Settings.PreferredDatabase_))) {
-            return db;
-        } else if (AsciiEqualsIgnoreCase(FederationState->SelfLocation, db->location())) {
-            return db;
+        if (Settings.PreferredDatabase_ && isPreferred(*db)) {
+            return {db, EStatus::SUCCESS};
+        }
+        if (AsciiEqualsIgnoreCase(FederationState->SelfLocation, db->location())) {
+            // Don't return it immediately, as we may find preferred database on next iterations.
+            sameDatacenterDb = db;
         } else {
             availableDatabases.push_back(db);
             totalWeight += db->weight();
         }
     }
 
+    if (sameDatacenterDb) {
+        return {sameDatacenterDb, EStatus::SUCCESS};
+    }
+
     if (availableDatabases.empty() || totalWeight == 0) {
-        // close session, return error
-        return nullptr;
+        return {nullptr, EStatus::NOT_FOUND};
     }
 
     std::sort(availableDatabases.begin(), availableDatabases.end(), [](const std::shared_ptr<TDbInfo>& lhs, const std::shared_ptr<TDbInfo>& rhs){
@@ -167,7 +189,7 @@ std::shared_ptr<TDbInfo> TFederatedWriteSessionImpl::SelectDatabaseImpl() {
     for (const auto& db : availableDatabases) {
         borderWeight += db->weight();
         if (hashValue < borderWeight) {
-            return db;
+            return {db, EStatus::SUCCESS};
         }
     }
     Y_UNREACHABLE();
@@ -181,13 +203,20 @@ void TFederatedWriteSessionImpl::OnFederatedStateUpdateImpl() {
 
     Y_ABORT_UNLESS(!FederationState->DbInfos.empty());
 
-    auto preferrableDb = SelectDatabaseImpl();
+    auto [preferrableDb, status] = SelectDatabaseImpl();
 
     if (!preferrableDb) {
-        CloseImpl(EStatus::UNAVAILABLE,
-                  NYql::TIssues{NYql::TIssue("Fail to select database: no available database with positive weight")});
+        if (!RetryState) {
+            RetryState = Settings.RetryPolicy_->CreateRetryState();
+        }
+        if (auto delay = RetryState->GetNextRetryDelay(status)) {
+            ScheduleFederatedStateUpdateImpl(*delay);
+        } else {
+            CloseImpl(EStatus::UNAVAILABLE, NYql::TIssues{NYql::TIssue("Fail to select database: no available database with positive weight")});
+        }
         return;
     }
+    RetryState.reset();
 
     if (!DatabasesAreSame(preferrableDb, CurrentDatabase)) {
         LOG_LAZY(Log, TLOG_INFO, GetLogPrefix()

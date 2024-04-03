@@ -23,7 +23,7 @@ CREATE {external} TABLE `{path}lineitem` (
     l_extendedprice Double {notnull}, -- it should be Decimal(12, 2)
     l_linenumber Int32 {notnull},
     l_linestatus String {notnull},
-    l_orderkey Int32 {notnull}, -- FK to O_ORDERKEY
+    l_orderkey Int64 {notnull}, -- FK to O_ORDERKEY
     l_partkey Int64 {notnull}, -- FK to P_PARTKEY, first part of the compound FK to (PS_PARTKEY, PS_SUPPKEY) with L_SUPPKEY
     l_quantity Double {notnull}, -- it should be Decimal(12, 2)
     l_receiptdate Date {notnull},

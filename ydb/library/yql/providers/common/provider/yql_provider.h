@@ -187,7 +187,7 @@ void WriteStatistics(NYson::TYsonWriter& writer, const TOperationStatistics& sta
 bool ValidateCompressionForInput(std::string_view format, std::string_view compression, TExprContext& ctx);
 bool ValidateCompressionForOutput(std::string_view format, std::string_view compression, TExprContext& ctx);
 
-bool ValidateFormatForInput(std::string_view format, const TStructExprType* schemaStructRowType, const std::vector<TString>& partitionedBy, TExprContext& ctx);
+bool ValidateFormatForInput(std::string_view format, const TStructExprType* schemaStructRowType, const std::function<bool(const TStringBuf&)>& excludeFields, TExprContext& ctx);
 bool ValidateFormatForOutput(std::string_view format, TExprContext& ctx);
 
 bool ValidateIntervalUnit(std::string_view unit, TExprContext& ctx);

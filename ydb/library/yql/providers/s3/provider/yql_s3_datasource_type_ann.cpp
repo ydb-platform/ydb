@@ -345,7 +345,7 @@ public:
         }
 
         if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_Format), ctx) ||
-            !NCommon::ValidateFormatForInput(input->Child(TS3ParseSettings::idx_Format)->Content(), nullptr, {}, ctx))
+            !NCommon::ValidateFormatForInput(input->Child(TS3ParseSettings::idx_Format)->Content(), nullptr, nullptr, ctx))
         {
             return TStatus::Error;
         }
@@ -457,7 +457,12 @@ public:
                 }
             }
 
-            if (!NCommon::ValidateFormatForInput(format, structRowType, partitionedBy, ctx)) {
+            TSet<TString> partitionedBySet{partitionedBy.begin(), partitionedBy.end()};
+            if (!NCommon::ValidateFormatForInput(
+                format,
+                structRowType,
+                [partitionedBySet](const TStringBuf& fieldName) {return partitionedBySet.contains(fieldName); },
+                ctx)) {
                 return TStatus::Error;
             }
         }
@@ -529,7 +534,7 @@ public:
         }
 
         const auto format = input->Child(TS3Object::idx_Format)->Content();
-        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) || !NCommon::ValidateFormatForInput(format, nullptr, {}, ctx)) {
+        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) || !NCommon::ValidateFormatForInput(format, nullptr, nullptr, ctx)) {
             return TStatus::Error;
         }
 

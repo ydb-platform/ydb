@@ -186,6 +186,7 @@ Y_UNIT_TEST(TestPartitionTotalQuota) {
 }
 
 Y_UNIT_TEST(TestAccountReadQuota) {
+    DBGTRACE("TestAccountReadQuota");
     TTestContext tc;
     TAtomic stop = 0;
     TAtomicCounter quoterRequests = 0;
@@ -221,10 +222,13 @@ Y_UNIT_TEST(TestAccountReadQuota) {
     data.push_back({1, s});
 
     auto runTest = [&]() {
+        DBGTRACE("runTest");
         Cerr << "CmdWrite\n";
+        DBGTRACE_LOG("CmdWrite");
         CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
         data[0].first++;
         Cerr << "CmdRead\n";
+        DBGTRACE_LOG("CmdRead");
         CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {0}, 0, 0, "user");
     };
     Cerr << "Run 1\n";

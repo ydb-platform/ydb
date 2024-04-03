@@ -111,6 +111,7 @@ void TPartition::CancelAllWritesOnIdle(const TActorContext& ctx) {
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
             WriteInflightSize -= msg.Data.size();
+            DBGTRACE_LOG("WriteInflightSize=" << WriteInflightSize);
         }
     }
 
@@ -139,6 +140,7 @@ void TPartition::FailBadClient(const TActorContext& ctx) {
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
             WriteInflightSize -= msg.Data.size();
+            DBGTRACE_LOG("WriteInflightSize=" << WriteInflightSize);
         }
     }
     UpdateWriteBufferIsFullState(ctx.Now());
@@ -510,6 +512,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     DBGTRACE_LOG("StartOffset=" << StartOffset);
 
     EndOffset = Head.GetNextOffset();
+    DBGTRACE_LOG("EndOffset=" << EndOffset);
     NewHead.Clear();
     NewHead.Offset = EndOffset;
 
@@ -719,6 +722,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         SetDeadlinesForWrites(ctx);
     }
     WriteInflightSize += size;
+    DBGTRACE_LOG("WriteInflightSize=" << WriteInflightSize);
 
     // TODO: remove decReservedSize == 0
     Y_ABORT_UNLESS(size <= decReservedSize || decReservedSize == 0);
@@ -947,7 +951,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
         //check already written
 
         ui64 poffset = p.Offset ? *p.Offset : curOffset;
-        DBGTRACE_LOG("poffset=" << poffset);
+        DBGTRACE_LOG("poffset=" << poffset << ", p.Offset=" << p.Offset);
 
         LOG_TRACE_S(
                 ctx, NKikimrServices::PERSQUEUE,
@@ -1013,11 +1017,19 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
         }
 
         if (poffset < curOffset) { //too small offset
-            DBGTRACE_LOG("too small offset");
-            CancelAllWritesOnWrite(ctx, request,
-                                    TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId) << " seqNo: " << p.Msg.SeqNo
-                                        << " partNo: " << p.Msg.PartNo << " has incorrect offset " << poffset << ", must be at least " << curOffset,
-                                        p, sourceIdBatch, NPersQueue::NErrorCode::EErrorCode::WRITE_ERROR_BAD_OFFSET);
+            DBGTRACE_LOG("too small offset: poffset=" << poffset << ", curOffset=" << curOffset);
+//            CancelAllWritesOnWrite(ctx, request,
+//                                    TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId) << " seqNo: " << p.Msg.SeqNo
+//                                        << " partNo: " << p.Msg.PartNo << " has incorrect offset " << poffset << ", must be at least " << curOffset,
+//                                        p, sourceIdBatch, NPersQueue::NErrorCode::EErrorCode::WRITE_ERROR_BAD_OFFSET);
+            ReplyError(ctx,
+                       p.Cookie,
+                       NPersQueue::NErrorCode::EErrorCode::WRITE_ERROR_BAD_OFFSET,
+                       TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId) <<
+                       " seqNo: " << p.Msg.SeqNo <<
+                       " partNo: " << p.Msg.PartNo <<
+                       " has incorrect offset " << poffset <<
+                       ", must be at least " << curOffset);
             return EProcessResult::Abort;
         }
 
@@ -1235,6 +1247,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
 
     ProcessParameters parameters(sourceIdBatch);
     parameters.CurOffset = PartitionedBlob.IsInited() ? PartitionedBlob.GetOffset() : EndOffset;
+    DBGTRACE_LOG("parameters.CurOffset=" << parameters.CurOffset << ", PartitionedBlob.IsInited=" << PartitionedBlob.IsInited() << ", EndOffset=" << EndOffset);
 
     WriteCycleSize = 0;
     WriteNewSize = 0;
@@ -1315,6 +1328,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
             }, std::nullopt};
 
             WriteInflightSize += heartbeat->Data.size();
+            DBGTRACE_LOG("WriteInflightSize=" << WriteInflightSize);
             auto result = ProcessRequest(hbMsg, parameters, request, ctx);
             Y_ABORT_UNLESS(result == EProcessResult::Continue);
 
@@ -1562,6 +1576,7 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& 
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
             WriteInflightSize -= msg.Data.size();
+            DBGTRACE_LOG("WriteInflightSize=" << WriteInflightSize);
         }
 
         ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::OVERLOAD, "quota exceeded");
@@ -1737,8 +1752,10 @@ void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActor
 
 void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)
 {
+    DBGTRACE_LOG("TPartition::BeginAppendHeadWithNewWrites");
     Parameters.ConstructInPlace(*SourceIdBatch);
     Parameters->CurOffset = PartitionedBlob.IsInited() ? PartitionedBlob.GetOffset() : EndOffset;
+    DBGTRACE_LOG("CurOffset=" << Parameters->CurOffset << ", PartitionedBlob.IsInited=" << PartitionedBlob.IsInited() << ", EndOffset=" << EndOffset);
 
     WriteCycleSize = 0;
     WriteNewSize = 0;
@@ -1787,6 +1804,7 @@ void TPartition::EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, co
             }, std::nullopt};
 
             WriteInflightSize += heartbeat->Data.size();
+            DBGTRACE_LOG("WriteInflightSize=" << WriteInflightSize);
             auto result = ProcessRequest(hbMsg, *Parameters, request, ctx);
             Y_ABORT_UNLESS(result == EProcessResult::Continue);
 

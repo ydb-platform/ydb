@@ -20,7 +20,7 @@ class TRecordBatchBuilder;
 
 class TSortableScanData {
 private:
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<NAccessor::IChunkedArray>>, Columns);
+    YDB_READONLY_DEF(std::vector<NAccessor::IChunkedArray::TReader>, Columns);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::Field>>, Fields);
 public:
     TSortableScanData() = default;
@@ -32,7 +32,7 @@ public:
         std::vector<std::shared_ptr<arrow::Array>> columns;
         std::shared_ptr<arrow::Schema> schema = std::make_shared<arrow::Schema>(Fields);
         for (ui32 i = 0; i < Columns.size(); ++i) {
-            auto extracted = Columns[i]->CopyRecord(pos);
+            auto extracted = Columns[i].CopyRecord(pos);
             columns.emplace_back(extracted);
         }
         return arrow::RecordBatch::Make(schema, 1, columns);
@@ -41,7 +41,7 @@ public:
     std::shared_ptr<arrow::Table> Slice(const ui64 offset, const ui64 count) const {
         std::vector<std::shared_ptr<arrow::ChunkedArray>> slicedArrays;
         for (auto&& i : Columns) {
-            slicedArrays.emplace_back(i->Slice(offset, count));
+            slicedArrays.emplace_back(i.Slice(offset, count));
         }
         return arrow::Table::Make(std::make_shared<arrow::Schema>(Fields), slicedArrays, count);
     }
@@ -70,8 +70,8 @@ public:
         for (ui32 i = 0; i < Columns.size(); ++i) {
             auto& jsonColumn = result["sorting_columns"].AppendValue(NJson::JSON_MAP);
             jsonColumn["name"] = Fields[i]->name();
-            if (position >= 0 && (ui64)position < Columns[i]->GetRecordsCount()) {
-                jsonColumn["value"] = Columns[i]->DebugString(position);
+            if (position >= 0 && (ui64)position < Columns[i].GetRecordsCount()) {
+                jsonColumn["value"] = Columns[i].DebugString(position);
             }
         }
         return result;
@@ -296,7 +296,7 @@ public:
     std::partial_ordering Compare(const TSortableBatchPosition& item) const {
         Y_ABORT_UNLESS(item.ReverseSort == ReverseSort);
         Y_ABORT_UNLESS(item.Sorting->GetColumns().size() == Sorting->GetColumns().size());
-        const auto directResult = NAccessor::IChunkedArray::CompareColumns(Sorting->GetColumns(), Position, item.Sorting->GetColumns(), item.Position);
+        const auto directResult = NAccessor::IChunkedArray::TReader::CompareColumns(Sorting->GetColumns(), Position, item.Sorting->GetColumns(), item.Position);
         if (ReverseSort) {
             if (directResult == std::partial_ordering::less) {
                 return std::partial_ordering::greater;

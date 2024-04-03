@@ -255,7 +255,7 @@ public:
 
 private:
     NJson::TJsonValue ColumnPrimitiveValueToJsonValue(NYdb::TValueParser& valueParser) {
-        switch (valueParser.GetPrimitiveType()) {
+        switch (const auto primitive = valueParser.GetPrimitiveType()) {
             case NYdb::EPrimitiveType::Bool:
                 return valueParser.GetBool();
             case NYdb::EPrimitiveType::Int8:
@@ -306,7 +306,8 @@ private:
                 return valueParser.GetDyNumber();
             case NYdb::EPrimitiveType::Uuid:
                 return valueParser.GetUuid().ToString();
-        }
+            default:
+                Y_ENSURE(false, TStringBuilder() << "Unsupported type: " << primitive);        }
     }
 
     NJson::TJsonValue ColumnValueToJsonValue(NYdb::TValueParser& valueParser) {

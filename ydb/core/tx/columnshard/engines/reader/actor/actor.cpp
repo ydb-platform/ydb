@@ -1,8 +1,8 @@
 #include "actor.h"
 #include <ydb/core/tx/columnshard/blobs_reader/read_coordinator.h>
-#include <ydb/core/formats/arrow/reader/read_filter_merger.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/actor.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap::NReader {
 constexpr i64 DEFAULT_READ_AHEAD_BYTES = (i64)2 * 1024 * 1024 * 1024;
@@ -194,7 +194,7 @@ bool TColumnShardScan::ProduceResults() noexcept {
     auto resultConclusion = ScanIterator->GetBatch();
     if (resultConclusion.IsFail()) {
         ACFL_ERROR("stage", "got error")("iterator", ScanIterator->DebugString())("message", resultConclusion.GetErrorMessage());
-        SendAbortExecution(resultConclusion.GetErrorMessage());
+        SendScanError(resultConclusion.GetErrorMessage());
 
         ScanIterator.reset();
         Finish(NColumnShard::TScanCounters::EStatusFinish::IteratorInternalErrorResult);
@@ -226,26 +226,27 @@ bool TColumnShardScan::ProduceResults() noexcept {
         if (shardedBatch.IsSharded()) {
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_success")("count", shardedBatch.GetSplittedByShards().size())("info", ComputeShardingPolicy.DebugString());
             Result->SplittedBatches = shardedBatch.GetSplittedByShards();
-            Result->ArrowBatch = shardedBatch.GetRecordBatch();
         } else {
             if (ComputeShardingPolicy.IsEnabled()) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_problems")("info", ComputeShardingPolicy.DebugString());
             }
-            Result->ArrowBatch = shardedBatch.GetRecordBatch();
         }
+        TMemoryProfileGuard mGuard("SCAN_PROFILE::RESULT::TO_KQP");
+        Result->ArrowBatch = NArrow::ToBatch(shardedBatch.GetRecordBatch(), true);
         Rows += batch->num_rows();
-        Bytes += NArrow::GetBatchDataSize(batch);
-        ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetBatchDataSize(batch))("num_rows", numRows)("batch_columns", JoinSeq(",", batch->schema()->field_names()));
+        Bytes += NArrow::GetBatchDataSize(Result->ArrowBatch);
+        ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetBatchDataSize(Result->ArrowBatch))("num_rows", numRows)("batch_columns", JoinSeq(",", batch->schema()->field_names()));
     }
     if (CurrentLastReadKey) {
-        NIndexedReader::TSortableBatchPosition pNew(result.GetLastReadKey(), 0, result.GetLastReadKey()->schema()->field_names(), {}, false);
-        NIndexedReader::TSortableBatchPosition pOld(CurrentLastReadKey, 0, CurrentLastReadKey->schema()->field_names(), {}, false);
+        NArrow::NMerger::TSortableBatchPosition pNew(result.GetLastReadKey(), 0, result.GetLastReadKey()->schema()->field_names(), {}, false);
+        NArrow::NMerger::TSortableBatchPosition pOld(CurrentLastReadKey, 0, CurrentLastReadKey->schema()->field_names(), {}, false);
         AFL_VERIFY(pOld < pNew)("old", pOld.DebugJson().GetStringRobust())("new", pNew.DebugJson().GetStringRobust());
     }
     CurrentLastReadKey = result.GetLastReadKey();
 
     Result->LastKey = ConvertLastKey(result.GetLastReadKey());
     SendResult(false, false);
+    ScanIterator->OnSentDataFromInterval(result.GetNotFinishedIntervalIdx());
     ACFL_DEBUG("stage", "finished")("iterator", ScanIterator->DebugString());
     return true;
 }
@@ -375,8 +376,7 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
 
 void TColumnShardScan::SendScanError(const TString& reason) {
     AFL_VERIFY(reason);
-    TString msg = TStringBuilder() << "Scan failed at tablet " << TabletId;
-    msg += ", reason: " + reason;
+    const TString msg = TStringBuilder() << "Scan failed at tablet " << TabletId << ", reason: " + reason;
 
     auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(ScanGen, TabletId);
     ev->Record.SetStatus(Ydb::StatusIds::GENERIC_ERROR);
@@ -384,15 +384,6 @@ void TColumnShardScan::SendScanError(const TString& reason) {
     NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
 
     Send(ScanComputeActorId, ev.Release());
-}
-
-void TColumnShardScan::SendAbortExecution(const TString& reason) {
-    AFL_VERIFY(reason);
-    auto status = NYql::NDqProto::StatusIds::PRECONDITION_FAILED;
-    TString msg = TStringBuilder() << "Scan failed at tablet " << TabletId;
-    msg += ", reason: " + reason;
-
-    Send(ScanComputeActorId, new NKqp::TEvKqp::TEvAbortExecution(status, msg));
 }
 
 void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish status) {

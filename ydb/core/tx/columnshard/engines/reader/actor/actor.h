@@ -99,8 +99,6 @@ private:
 
     void SendScanError(const TString& reason);
 
-    void SendAbortExecution(const TString& reason);
-
     void Finish(const NColumnShard::TScanCounters::EStatusFinish status);
 
     void ReportStats();

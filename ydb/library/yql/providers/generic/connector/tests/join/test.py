@@ -2,11 +2,9 @@ import pytest
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
-from ydb.library.yql.providers.generic.connector.tests.utils.runner import Runner
-import ydb.library.yql.providers.generic.connector.tests.utils.dqrun as dqrun
-import ydb.library.yql.providers.generic.connector.tests.utils.kqprun as kqprun
+from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import runner_types, configure_runner
 
-import conftest  # import configure_runner, docker_compose_dir, Clients, clients
+import conftest
 import scenario
 from collection import Collection
 from test_case import TestCase
@@ -19,22 +17,19 @@ tc_collection = Collection(
     )
 )
 
-runners = (dqrun.DqRunner, kqprun.KqpRunner)
-runners_ids = ("dqrun", "kqprun")
 
-
-@pytest.mark.parametrize("runner_type", runners, ids=runners_ids)
+@pytest.mark.parametrize("runner_type", runner_types)
 @pytest.mark.parametrize("test_case", tc_collection.get('join'), ids=tc_collection.ids('join'))
 @pytest.mark.usefixtures("settings")
 @pytest.mark.usefixtures("clients")
 def test_join(
     request: pytest.FixtureRequest,
     settings: Settings,
-    runner_type: Runner,
+    runner_type: str,
     clients: conftest.Clients,
     test_case: TestCase,
 ):
-    runner = conftest.configure_runner(runner=runner_type, settings=settings)
+    runner = configure_runner(runner_type=runner_type, settings=settings)
     scenario.join(
         test_name=request.node.name,
         clickhouse_client=clients.ClickHouse,

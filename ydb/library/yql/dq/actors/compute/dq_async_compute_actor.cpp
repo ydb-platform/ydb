@@ -25,10 +25,11 @@ bool IsDebugLogEnabled(const TActorSystem* actorSystem) {
 
 } // anonymous namespace
 
-struct TComputeActorAsyncInputHelperForTaskRunnerActor : public TComputeActorAsyncInputHelper
+//Used in Async CA to interact with TaskRunnerActor
+struct TComputeActorAsyncInputHelperAsync : public TComputeActorAsyncInputHelper
 {
 public:
-    TComputeActorAsyncInputHelperForTaskRunnerActor(
+    TComputeActorAsyncInputHelperAsync(
             const TString& logPrefix,
             ui64 index,
             NDqProto::EWatermarksMode watermarksMode,
@@ -64,10 +65,10 @@ public:
     bool PushStarted;
 };
 
-class TDqAsyncComputeActor : public TDqComputeActorBase<TDqAsyncComputeActor, TComputeActorAsyncInputHelperForTaskRunnerActor>
+class TDqAsyncComputeActor : public TDqComputeActorBase<TDqAsyncComputeActor, TComputeActorAsyncInputHelperAsync>
                            , public NTaskRunnerActor::ITaskRunnerActor::ICallbacks
 {
-    using TBase = TDqComputeActorBase<TDqAsyncComputeActor, TComputeActorAsyncInputHelperForTaskRunnerActor>;
+    using TBase = TDqComputeActorBase<TDqAsyncComputeActor, TComputeActorAsyncInputHelperAsync>;
 public:
     static constexpr char ActorName[] = "DQ_COMPUTE_ACTOR";
 
@@ -124,11 +125,6 @@ public:
             source.TaskRunnerActor = TaskRunnerActor;
         }
 
-        for (auto& [_, source]: InputTransformsMap) {
-            source.TaskRunnerActor = TaskRunnerActor;
-        }
-
-
         Become(&TDqAsyncComputeActor::StateFuncWrapper<&TDqAsyncComputeActor::StateFuncBody>);
 
         auto wakeup = [this]{ ContinueExecute(EResumeSource::CABootstrapWakeup); };
@@ -153,17 +149,15 @@ public:
         }
     }
 
-    template<typename T>
-    requires(std::is_base_of<TComputeActorAsyncInputHelperForTaskRunnerActor, T>::value)
-    T CreateInputHelper(const TString& logPrefix,
+    TComputeActorAsyncInputHelperAsync CreateInputHelper(const TString& logPrefix,
         ui64 index,
         NDqProto::EWatermarksMode watermarksMode
     ) 
     {
-        return T(logPrefix, index, watermarksMode, Cookie, ProcessSourcesState.Inflight);
+        return TComputeActorAsyncInputHelperAsync(logPrefix, index, watermarksMode, Cookie, ProcessSourcesState.Inflight);
     }
 
-    const IDqAsyncInputBuffer* GetInputTransform(ui64 inputIdx, const TComputeActorAsyncInputHelperForTaskRunnerActor&) const {
+    const IDqAsyncInputBuffer* GetInputTransform(ui64 inputIdx, const TComputeActorAsyncInputHelperSync&) const {
         return TaskRunnerStats.GetInputTransform(inputIdx);
     }
 
@@ -330,9 +324,14 @@ private:
         // no TaskRunner => no outputChannel.Channel, nothing to Finish
         CA_LOG_I("Peer finished, channel: " << channelId);
         TOutputChannelInfo* outputChannel = OutputChannelsMap.FindPtr(channelId);
+        TrySendAsyncChannelData(*outputChannel); // early finish (skip data)
         YQL_ENSURE(outputChannel, "task: " << Task.GetId() << ", output channelId: " << channelId);
 
-        outputChannel->Finished = true;
+        if (outputChannel->PopStarted) { // There may be another in-flight message here
+            return;
+        }
+
+        outputChannel->PopStarted = true;
         ProcessOutputsState.Inflight++;
         Send(TaskRunnerActorId, MakeHolder<NTaskRunnerActor::TEvOutputChannelDataRequest>(channelId, /* wasFinished = */ true, 0));  // finish channel
         DoExecute();

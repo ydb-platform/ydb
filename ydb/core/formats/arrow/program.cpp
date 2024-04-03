@@ -33,6 +33,7 @@ struct GroupByOptions: public arrow::compute::ScalarAggregateOptions {
 };
 }
 #endif
+#include "common/container.h"
 
 #include <util/system/yassert.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
@@ -552,13 +553,36 @@ arrow::Result<arrow::Datum> TDatumBatch::GetColumnByName(const std::string& name
     return Datums[i];
 }
 
+std::shared_ptr<arrow::Table> TDatumBatch::ToTable() const {
+    std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
+    columns.reserve(Datums.size());
+    for (auto col : Datums) {
+        if (col.is_scalar()) {
+            columns.push_back(std::make_shared<arrow::ChunkedArray>(NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*col.scalar(), Rows))));
+        } else if (col.is_array()) {
+            if (col.length() == -1) {
+                return {};
+            }
+            columns.push_back(std::make_shared<arrow::ChunkedArray>(col.make_array()));
+        } else if (col.is_arraylike()) {
+            if (col.length() == -1) {
+                return {};
+            }
+            columns.push_back(col.chunked_array());
+        } else {
+            AFL_VERIFY(false);
+        }
+    }
+    return arrow::Table::Make(Schema, columns, Rows);
+}
+
 std::shared_ptr<arrow::RecordBatch> TDatumBatch::ToRecordBatch() const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(Datums.size());
     for (auto col : Datums) {
         if (col.is_scalar()) {
-            columns.push_back(*arrow::MakeArrayFromScalar(*col.scalar(), Rows));
-        } else if (col.is_array()){
+            columns.push_back(NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*col.scalar(), Rows)));
+        } else if (col.is_array()) {
             if (col.length() == -1) {
                 return {};
             }
@@ -854,17 +878,25 @@ arrow::Status TProgramStep::Apply(std::shared_ptr<arrow::RecordBatch>& batch, ar
     return arrow::Status::OK();
 }
 
-std::set<std::string> TProgramStep::GetColumnsInUsage() const {
+std::set<std::string> TProgramStep::GetColumnsInUsage(const bool originalOnly/* = false*/) const {
     std::set<std::string> result;
     for (auto&& i : Filters) {
-        result.emplace(i.GetColumnName());
+        if (!originalOnly || !i.IsGenerated()) {
+            result.emplace(i.GetColumnName());
+        }
     }
     for (auto&& i : Assignes) {
         for (auto&& f : i.GetArguments()) {
-            result.emplace(f.GetColumnName());
+            if (!originalOnly || !f.IsGenerated()) {
+                result.emplace(f.GetColumnName());
+            }
         }
     }
     return result;
+}
+
+std::shared_ptr<NArrow::TColumnFilter> TProgramStep::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& t) const {
+    return BuildFilter(t->BuildTable(GetColumnsInUsage(true)));
 }
 
 std::shared_ptr<NArrow::TColumnFilter> TProgramStep::BuildFilter(const std::shared_ptr<arrow::Table>& t) const {

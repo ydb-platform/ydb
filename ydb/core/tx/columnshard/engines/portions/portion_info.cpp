@@ -64,67 +64,38 @@ std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
     return result;
 }
 
-ui64 TPortionInfo::GetColumnRawBytes(const std::vector<ui32>& columnIds) const {
+ui64 TPortionInfo::GetColumnRawBytes(const std::vector<ui32>& columnIds, const bool validation) const {
+    return GetColumnRawBytes(std::set<ui32>(columnIds.begin(), columnIds.end()), validation);
+}
+
+ui64 TPortionInfo::GetColumnRawBytes(const std::optional<std::set<ui32>>& entityIds, const bool validation) const {
     ui64 sum = 0;
-    const ui32 recordsCount = GetRecordsCount();
-    for (auto&& i : columnIds) {
-        bool found = false;
-        if (TIndexInfo::IsSpecialColumn(i)) {
-            sum += recordsCount * TIndexInfo::GetSpecialColumnByteWidth(i);
-            found = true;
-        } else {
-            for (auto&& r : Records) {
-                if (r.ColumnId == i) {
-                    sum += r.GetMeta().GetRawBytesVerified();
-                    found = true;
-                }
-            }
-        }
-        AFL_VERIFY(found)("event", "id_not_found")("column_id", i);
-    }
+    const auto aggr = [&](const TColumnRecord& r) {
+        sum += r.GetMeta().GetRawBytes();
+    };
+    AggregateIndexChunksData(aggr, Records, entityIds, validation);
     return sum;
 }
 
-ui64 TPortionInfo::GetColumnRawBytes(const std::set<ui32>& entityIds) const {
+ui64 TPortionInfo::GetColumnBlobBytes(const std::optional<std::set<ui32>>& entityIds, const bool validation) const {
     ui64 sum = 0;
-    const ui32 recordsCount = GetRecordsCount();
-    std::set<ui32> readyIds;
-    for (auto&& i : TIndexInfo::GetSpecialColumnIds()) {
-        if (entityIds.contains(i)) {
-            sum += recordsCount * TIndexInfo::GetSpecialColumnByteWidth(i);
-            readyIds.emplace(i);
-        }
-    }
-    for (auto&& r : Records) {
-        if (entityIds.contains(r.ColumnId)) {
-            sum += r.GetMeta().GetRawBytesVerified();
-            readyIds.emplace(r.ColumnId);
-        }
-    }
-    AFL_VERIFY(readyIds.size() == entityIds.size())("requested", JoinSeq(",", entityIds))("found", JoinSeq(",", readyIds));
+    const auto aggr = [&](const TColumnRecord& r) {
+        sum += r.GetBlobRange().GetSize();
+    };
+    AggregateIndexChunksData(aggr, Records, entityIds, validation);
     return sum;
 }
 
-ui64 TPortionInfo::GetIndexRawBytes(const std::set<ui32>& entityIds) const {
-    ui64 sum = 0;
-    std::set<ui32> readyIndexes;
-    for (auto&& r : Indexes) {
-        if (entityIds.contains(r.GetIndexId())) {
-            sum += r.GetRawBytes();
-            readyIndexes.emplace(r.GetIndexId());
-        }
-    }
-    AFL_VERIFY(readyIndexes.size() == entityIds.size())("requested", JoinSeq(",", entityIds))("found", JoinSeq(",", readyIndexes));
-    return sum;
+ui64 TPortionInfo::GetColumnBlobBytes(const std::vector<ui32>& columnIds, const bool validation) const {
+    return GetColumnBlobBytes(std::set<ui32>(columnIds.begin(), columnIds.end()), validation);
 }
 
-ui64 TPortionInfo::GetIndexRawBytes() const {
+ui64 TPortionInfo::GetIndexRawBytes(const std::optional<std::set<ui32>>& entityIds, const bool validation) const {
     ui64 sum = 0;
-    std::set<ui32> readyIndexes;
-    for (auto&& r : Indexes) {
+    const auto aggr = [&](const TIndexChunk& r) {
         sum += r.GetRawBytes();
-        readyIndexes.emplace(r.GetIndexId());
-    }
+    };
+    AggregateIndexChunksData(aggr, Indexes, entityIds, validation);
     return sum;
 }
 
@@ -173,7 +144,7 @@ std::vector<const NKikimr::NOlap::TColumnRecord*> TPortionInfo::GetColumnChunksP
     for (auto&& c : Records) {
         if (c.ColumnId == columnId) {
             Y_ABORT_UNLESS(c.Chunk == result.size());
-            Y_ABORT_UNLESS(c.GetMeta().GetNumRowsVerified());
+            Y_ABORT_UNLESS(c.GetMeta().GetNumRows());
             result.emplace_back(&c);
         }
     }
@@ -231,9 +202,9 @@ std::vector<NKikimr::NOlap::TPortionInfo::TPage> TPortionInfo::BuildPages() cons
             currentSize = 0;
             currentId = i.GetColumnId();
         }
-        currentSize += i.GetMeta().GetNumRowsVerified();
+        currentSize += i.GetMeta().GetNumRows();
         ++currentCursor[currentSize];
-        entities[i.GetColumnId()].emplace_back(&i, i.GetMeta().GetNumRowsVerified());
+        entities[i.GetColumnId()].emplace_back(&i, i.GetMeta().GetNumRows());
     }
     for (auto&& i : Indexes) {
         if (currentId != i.GetIndexId()) {
@@ -479,7 +450,7 @@ THashMap<TString, THashMap<NKikimr::NOlap::TUnifiedBlobId, std::vector<NKikimr::
         const TString& storageId = GetColumnStorageId(c.GetColumnId(), indexInfo);
         auto& storageRecords = result[storageId];
         auto& blobRecords = storageRecords[GetBlobId(c.GetBlobRange().GetBlobIdxVerified())];
-        blobRecords.emplace_back(TEntityChunk(c.GetAddress(), c.GetMeta().GetNumRowsVerified(), c.GetMeta().GetRawBytesVerified(), c.GetBlobRange()));
+        blobRecords.emplace_back(TEntityChunk(c.GetAddress(), c.GetMeta().GetNumRows(), c.GetMeta().GetRawBytes(), c.GetBlobRange()));
     }
     for (auto&& c : GetIndexes()) {
         const TString& storageId = indexInfo.GetIndexStorageId(c.GetIndexId());
@@ -544,6 +515,181 @@ void TPortionInfo::FullValidation() const {
     }
 }
 
+ui64 TPortionInfo::GetMinMemoryForReadColumns(const std::optional<std::set<ui32>>& columnIds) const {
+    ui32 columnId = 0;
+    ui32 chunkIdx = 0;
+
+    struct TDelta {
+        i64 BlobBytes = 0;
+        i64 RawBytes = 0;
+        void operator+=(const TDelta& add) {
+            BlobBytes += add.BlobBytes;
+            RawBytes += add.RawBytes;
+        }
+    };
+
+    std::map<ui64, TDelta> diffByPositions;
+    ui64 position = 0;
+    ui64 RawBytesCurrent = 0;
+    ui64 BlobBytesCurrent = 0;
+    std::optional<ui32> recordsCount;
+
+    const auto doFlushColumn = [&]() {
+        if (!recordsCount && position) {
+            recordsCount = position;
+        } else {
+            AFL_VERIFY(*recordsCount == position);
+        }
+        if (position) {
+            TDelta delta;
+            delta.RawBytes = -1 * RawBytesCurrent;
+            delta.BlobBytes = -1 * BlobBytesCurrent;
+            diffByPositions[position] += delta;
+        }
+        position = 0;
+        chunkIdx = 0;
+        RawBytesCurrent = 0;
+        BlobBytesCurrent = 0;
+    };
+
+    for (auto&& i : Records) {
+        if (columnIds && !columnIds->contains(i.GetColumnId())) {
+            continue;
+        }
+        if (columnId != i.GetColumnId()) {
+            if (columnId) {
+                doFlushColumn();
+            }
+            AFL_VERIFY(i.GetColumnId() > columnId);
+            AFL_VERIFY(i.GetChunkIdx() == 0);
+            columnId = i.GetColumnId();
+        } else {
+            AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1);
+        }
+        chunkIdx = i.GetChunkIdx();
+        TDelta delta;
+        delta.RawBytes = -1 * RawBytesCurrent + i.GetMeta().GetRawBytes();
+        delta.BlobBytes = -1 * BlobBytesCurrent + i.GetBlobRange().Size;
+        diffByPositions[position] += delta;
+        position += i.GetMeta().GetNumRows();
+        RawBytesCurrent = i.GetMeta().GetRawBytes();
+        BlobBytesCurrent = i.GetBlobRange().Size;
+    }
+    if (columnId) {
+        doFlushColumn();
+    }
+    i64 maxRawBytes = 0;
+    TDelta current;
+    for (auto&& i : diffByPositions) {
+        current += i.second;
+        AFL_VERIFY(current.BlobBytes >= 0);
+        AFL_VERIFY(current.RawBytes >= 0);
+        if (maxRawBytes < current.RawBytes) {
+            maxRawBytes = current.RawBytes;
+        }
+    }
+    AFL_VERIFY(current.BlobBytes == 0)("real", current.BlobBytes);
+    AFL_VERIFY(current.RawBytes == 0)("real", current.RawBytes);
+    return maxRawBytes;
+}
+
+namespace {
+template <class TExternalBlobInfo>
+TPortionInfo::TPreparedBatchData PrepareForAssembleImpl(const TPortionInfo& portion, const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
+    THashMap<TChunkAddress, TExternalBlobInfo>& blobsData) {
+    std::vector<TPortionInfo::TColumnAssemblingInfo> columns;
+    auto arrowResultSchema = resultSchema.GetSchema();
+    columns.reserve(arrowResultSchema->num_fields());
+    const ui32 rowsCount = portion.GetRecordsCount();
+    for (auto&& i : arrowResultSchema->fields()) {
+        columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i->name()), resultSchema.GetColumnLoaderOptional(i->name()));
+    }
+    {
+        int skipColumnId = -1;
+        TPortionInfo::TColumnAssemblingInfo* currentAssembler = nullptr;
+        for (auto& rec : portion.GetRecords()) {
+            if (skipColumnId == (int)rec.ColumnId) {
+                continue;
+            }
+            if (!currentAssembler || rec.ColumnId != currentAssembler->GetColumnId()) {
+                const i32 resultPos = resultSchema.GetFieldIndex(rec.ColumnId);
+                if (resultPos < 0) {
+                    skipColumnId = rec.ColumnId;
+                    continue;
+                }
+                AFL_VERIFY((ui32)resultPos < columns.size());
+                currentAssembler = &columns[resultPos];
+            }
+            auto it = blobsData.find(rec.GetAddress());
+            AFL_VERIFY(it != blobsData.end())("size", blobsData.size())("address", rec.GetAddress().DebugString());
+            currentAssembler->AddBlobInfo(rec.Chunk, rec.GetMeta().GetNumRows(), std::move(it->second));
+            blobsData.erase(it);
+        }
+    }
+
+    // Make chunked arrays for columns
+    std::vector<TPortionInfo::TPreparedColumn> preparedColumns;
+    preparedColumns.reserve(columns.size());
+    for (auto& c : columns) {
+        preparedColumns.emplace_back(c.Compile());
+    }
+
+    return TPortionInfo::TPreparedBatchData(std::move(preparedColumns), arrowResultSchema, rowsCount);
+}
+
+}
+
+namespace {
+class TChunkAccessor {
+private:
+    const std::vector<TDeserializeChunkedArray::TChunk>& Chunks;
+    const std::shared_ptr<TColumnLoader> Loader;
+public:
+    TChunkAccessor(const std::vector<TDeserializeChunkedArray::TChunk>& chunks, const std::shared_ptr<TColumnLoader>& loader)
+        : Chunks(chunks)
+        , Loader(loader)
+    {
+
+    }
+    ui64 GetChunksCount() const {
+        return Chunks.size();
+    }
+    ui64 GetChunkLength(const ui32 idx) const {
+        return Chunks[idx].GetRecordsCount();
+    }
+    std::shared_ptr<arrow::Array> GetArray(const ui32 idx) const {
+        return Chunks[idx].GetArrayVerified(Loader);
+    }
+};
+}
+
+NArrow::NAccessor::IChunkedArray::TCurrentChunkAddress TDeserializeChunkedArray::DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const {
+    TChunkAccessor accessor(Chunks, Loader);
+    return SelectChunk(chunkCurrent, position, accessor);
+}
+
+TPortionInfo::TPreparedBatchData TPortionInfo::PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TString>& blobsData) const {
+    return PrepareForAssembleImpl(*this, dataSchema, resultSchema, blobsData);
+}
+
+TPortionInfo::TPreparedBatchData TPortionInfo::PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData) const {
+    return PrepareForAssembleImpl(*this, dataSchema, resultSchema, blobsData);
+}
+
+std::shared_ptr<TDeserializeChunkedArray> TPortionInfo::TPreparedColumn::AssembleForSeqAccess() const {
+    Y_ABORT_UNLESS(!Blobs.empty());
+
+    std::vector<TDeserializeChunkedArray::TChunk> chunks;
+    chunks.reserve(Blobs.size());
+    ui64 recordsCount = 0;
+    for (auto& blob : Blobs) {
+        chunks.push_back(blob.BuildDeserializeChunk(Loader));
+        recordsCount += blob.GetExpectedRowsCountVerified();
+    }
+
+    return std::make_shared<TDeserializeChunkedArray>(recordsCount, Loader, std::move(chunks));
+}
+
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {
     Y_ABORT_UNLESS(!Blobs.empty());
 
@@ -559,6 +705,18 @@ std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() c
     return (*res)->column(0);
 }
 
+TDeserializeChunkedArray::TChunk TPortionInfo::TAssembleBlobInfo::BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const {
+    if (NullRowsCount) {
+        Y_ABORT_UNLESS(!Data);
+        auto emptyBatch = NArrow::MakeEmptyBatch(loader->GetExpectedSchema(), NullRowsCount);
+        AFL_VERIFY(emptyBatch->num_columns() == 1);
+        return TDeserializeChunkedArray::TChunk(emptyBatch->column(0));
+    } else {
+        AFL_VERIFY(ExpectedRowsCount);
+        return TDeserializeChunkedArray::TChunk(*ExpectedRowsCount, Data);
+    }
+}
+
 std::shared_ptr<arrow::RecordBatch> TPortionInfo::TAssembleBlobInfo::BuildRecordBatch(const TColumnLoader& loader) const {
     if (NullRowsCount) {
         Y_ABORT_UNLESS(!Data);
@@ -569,8 +727,22 @@ std::shared_ptr<arrow::RecordBatch> TPortionInfo::TAssembleBlobInfo::BuildRecord
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "cannot unpack batch")("error", result.status().ToString())("loader", loader.DebugString());
             return nullptr;
         }
+        if (ExpectedRowsCount) {
+            AFL_VERIFY((*result)->num_rows() == ExpectedRowsCount)("real", (*result)->num_rows())("expected", ExpectedRowsCount);
+        }
         return *result;
     }
+}
+
+std::shared_ptr<NArrow::TGeneralContainer> TPortionInfo::TPreparedBatchData::AssembleForSeqAccess() const {
+    std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> columns;
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    for (auto&& i : Columns) {
+        columns.emplace_back(i.AssembleForSeqAccess());
+        fields.emplace_back(i.GetField());
+    }
+
+    return std::make_shared<NArrow::TGeneralContainer>(std::make_shared<arrow::Schema>(fields), std::move(columns));
 }
 
 std::shared_ptr<arrow::Table> TPortionInfo::TPreparedBatchData::AssembleTable(const TAssembleOptions& options) const {

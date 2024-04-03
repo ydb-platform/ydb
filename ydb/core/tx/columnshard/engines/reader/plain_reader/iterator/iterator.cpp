@@ -11,7 +11,7 @@ TColumnShardScanIterator::TColumnShardScanIterator(const std::shared_ptr<TReadCo
     Y_ABORT_UNLESS(Context->GetReadMetadata()->IsSorted());
 
     if (readMetadata->Empty()) {
-        IndexedData->Abort();
+        IndexedData->Abort("empty read metadata");
     }
 }
 
@@ -28,6 +28,10 @@ TConclusion<bool> TColumnShardScanIterator::ReadNextInterval() {
     return IndexedData->ReadNextInterval();
 }
 
+void TColumnShardScanIterator::DoOnSentDataFromInterval(const ui32 intervalIdx) const {
+    return IndexedData->OnSentDataFromInterval(intervalIdx);
+}
+
 void TColumnShardScanIterator::FillReadyResults() {
     auto ready = IndexedData->ExtractReadyResults(MaxRowsInBatch);
     i64 limitLeft = Context->GetReadMetadata()->Limit == 0 ? INT64_MAX : Context->GetReadMetadata()->Limit - ItemsRead;
@@ -42,12 +46,14 @@ void TColumnShardScanIterator::FillReadyResults() {
 
     if (limitLeft == 0) {
         AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "limit_reached_on_scan")("limit", Context->GetReadMetadata()->Limit)("ready", ItemsRead);
-        IndexedData->Abort();
+        IndexedData->Abort("records count limit exhausted");
     }
 }
 
 TColumnShardScanIterator::~TColumnShardScanIterator() {
-    IndexedData->Abort();
+    if (!IndexedData->IsFinished()) {
+        IndexedData->Abort("iterator destructor");
+    }
     ReadMetadata->ReadStats->PrintToLog();
 }
 

@@ -1,8 +1,8 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
-#include <ydb/core/formats/arrow/reader/read_filter_merger.h>
 #include <library/cpp/object_factory/object_factory.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap {
 class TGranuleMeta;
@@ -118,7 +118,7 @@ public:
         return DoDebugString();
     }
 
-    virtual std::vector<NIndexedReader::TSortableBatchPosition> GetBucketPositions() const = 0;
+    virtual std::vector<NArrow::NMerger::TSortableBatchPosition> GetBucketPositions() const = 0;
     bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
         return DoIsLocked(dataLocksManager);
     }

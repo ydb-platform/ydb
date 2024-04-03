@@ -420,8 +420,16 @@ public:
 
 class TFailExpressionEvaluation : public TSyncTransformerBase {
 public:
+    TFailExpressionEvaluation(EKikimrQueryType queryType)
+        : QueryType(queryType)
+    {}
+
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         output = input;
+
+        if (QueryType == EKikimrQueryType::Query || QueryType == EKikimrQueryType::Script) {
+            return TStatus::Ok;
+        }
 
         auto evaluateNode = FindNode(input, [](const TExprNode::TPtr& node) {
             return node->IsCallable({"EvaluateIf!", "EvaluateFor!", "EvaluateAtom"});
@@ -453,6 +461,8 @@ public:
     }
     void Rewind() final {
     }
+
+    const EKikimrQueryType QueryType;
 };
 
 class TPrepareDataQueryAstTransformer : public TGraphTransformerBase {
@@ -1654,6 +1664,7 @@ private:
         state->Configuration->AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
         state->Configuration->Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
         state->Gateway = FederatedQuerySetup->HttpGateway;
+        state->ExecutorPoolId = AppData()->UserPoolId;
 
         auto dataSource = NYql::CreateS3DataSource(state);
         auto dataSink = NYql::CreateS3DataSink(state);
@@ -1787,7 +1798,7 @@ private:
                 NYql::NLog::ELevel::TRACE), "LogYqlTransform")
             .AddPreTypeAnnotation()
             .AddExpressionEvaluation(*FuncRegistry)
-            .Add(new TFailExpressionEvaluation(), "FailExpressionEvaluation")
+            .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
             .AddIOAnnotation(false)
             .AddTypeAnnotation()
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
@@ -1814,7 +1825,9 @@ private:
         Init(queryType);
 
         ExprCtx->Reset();
-        ExprCtx->Step.Done(TExprStep::ExprEval); // KIKIMR-8067
+        if (queryType != EKikimrQueryType::Query && queryType != EKikimrQueryType::Script) {
+            ExprCtx->Step.Done(TExprStep::ExprEval); // KIKIMR-8067
+        }
 
         TypesCtx->DeprecatedSQL = false;
         TypesCtx->CachedNow.reset();

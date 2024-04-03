@@ -1,6 +1,5 @@
 PY3TEST()
 
-STYLE_PYTHON()
 NO_CHECK_IMPORTS()
 
 DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse/docker-compose.yml)
@@ -51,9 +50,10 @@ PEERDIR(
     contrib/python/pytest
     ydb/library/yql/providers/generic/connector/api/common
     ydb/library/yql/providers/generic/connector/api/service/protos
-    ydb/library/yql/providers/generic/connector/tests/test_cases
+    ydb/library/yql/providers/generic/connector/tests/common_test_cases
     ydb/library/yql/providers/generic/connector/tests/utils
     ydb/library/yql/providers/generic/connector/tests/utils/clients
+    ydb/library/yql/providers/generic/connector/tests/utils/run
     ydb/library/yql/providers/generic/connector/tests/utils/scenario
 )
 

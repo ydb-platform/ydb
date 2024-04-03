@@ -4759,10 +4759,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                         return TTestActorRuntime::EEventAction::PROCESS;
                     } else {
                         if (prevIsFinished) {
-                            Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event");
+                            Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event" << Endl);
                             Cerr.Flush();
-                            auto resp = std::make_unique<NKqp::TEvKqpCompute::TEvScanError>(msg->Generation, 0);
-                            runtime->Send(new IEventHandle(ev->Recipient, ev->Sender, resp.release()));
+                            for (auto&& i : csController->GetShardActualIds()) {
+                                runtime->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                                    new TEvents::TEvPoisonPill(), i, false));
+                            }
                         } else {
                             prevIsFinished = msg->Finished;
                         }

@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 "CALLABLE", "CASE", "CAST", "CUBE", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP",
                 "DICT", "DISTINCT", "ENUM", "ERASE", "EXCEPT", "EXISTS", "FLOW", "FROM", "FULL", "GLOBAL",
                 "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST", "LOCAL",
-                "NOT", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "ROLLUP",
+                "NOT", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "RETURNING", "ROLLUP",
                 "SELECT", "SET", "STREAM", "STRUCT", "SYMMETRIC", "TAGGED", "TUPLE", "UNBOUNDED",
                 "UNION", "VARIANT", "WHEN", "WHERE", "WINDOW", "WITHOUT"
             },
@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 "CALLABLE", "CASE", "CAST", "CUBE", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP",
                 "DICT", "DISTINCT", "EMPTY_ACTION", "ENUM", "EXCEPT", "EXISTS", "FALSE", "FLOW", "FROM", "FULL", "GLOBAL",
                 "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST", "LOCAL",
-                "NOT", "NULL", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "ROLLUP",
+                "NOT", "NULL", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "RETURNING", "ROLLUP",
                 "SELECT", "SET", "STRUCT", "SYMMETRIC", "TAGGED", "TRUE", "TUPLE", "UNBOUNDED",
                 "UNION", "VARIANT", "WHEN", "WHERE", "WINDOW", "WITHOUT"
              },
@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 "CALLABLE", "CASE", "CAST", "COMPACT", "CUBE", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP",
                 "DICT", "DISTINCT", "ENUM", "ERASE", "EXCEPT", "EXISTS", "FLOW", "FROM", "FULL", "GLOBAL",
                 "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST", "LOCAL",
-                "NOT", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "ROLLUP",
+                "NOT", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "RETURNING", "ROLLUP",
                 "SELECT", "SET", "STREAM", "STRUCT", "SYMMETRIC", "TAGGED", "TUPLE", "UNBOUNDED",
                 "UNION", "VARIANT", "WHEN", "WHERE", "WINDOW", "WITHOUT"
             },
@@ -2482,7 +2482,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
         ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL WITH (a=b, c=d, e=f) ON (col)",
-            "<main>:1:40: Error: local: alternative is not implemented yet: 717:7: local_index\n");
+            "<main>:1:40: Error: local: alternative is not implemented yet: 719:7: local_index\n");
     }
 
     Y_UNIT_TEST(OptionalAliases) {
@@ -4779,8 +4779,6 @@ Y_UNIT_TEST_SUITE(JsonValue) {
             "SELECT $returning;\n"
             "SELECT 1 as returning;\n"
             "SELECT $returning as returning;\n"
-            "SELECT returning FROM InputSyntax;\n"
-            "SELECT returning, count(*) FROM InputSyntax GROUP BY returning;\n"
         );
 
         UNIT_ASSERT(res.Root);

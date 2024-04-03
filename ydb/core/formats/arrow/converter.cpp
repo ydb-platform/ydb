@@ -48,20 +48,20 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryP
     return true;
 }
 
-static bool ConvertColumn(const NScheme::TTypeInfo colType, std::shared_ptr<arrow::Array>& column, std::shared_ptr<arrow::Field>& field) {
+static arrow::Status ConvertColumn(const NScheme::TTypeInfo colType, std::shared_ptr<arrow::Array>& column, std::shared_ptr<arrow::Field>& field) {
     switch (colType.GetTypeId()) {
     case NScheme::NTypeIds::Decimal:
-        return false;
+        return arrow::Status::TypeError("Cannot convert Decimal type");
     case NScheme::NTypeIds::JsonDocument: {
         const static TSet<arrow::Type::type> jsonDocArrowTypes{ arrow::Type::BINARY, arrow::Type::STRING };
         if (!jsonDocArrowTypes.contains(column->type()->id())) {
-            return false;
+            return arrow::Status::TypeError("Cannot convert JsonDocument to ", column->type()->ToString());
         }
         break;
     }
     default:
         if (column->type()->id() != arrow::Type::BINARY) {
-            return false;
+            return arrow::Status::TypeError("Cannot convert ", NScheme::TypeName(colType), " to ", column->type()->ToString());
         }
         break;
     }
@@ -76,8 +76,12 @@ static bool ConvertColumn(const NScheme::TTypeInfo colType, std::shared_ptr<arro
             for (i32 i = 0; i < binaryArray.length(); ++i) {
                 auto value = binaryArray.Value(i);
                 const auto dyNumber = NDyNumber::ParseDyNumberString(TStringBuf(value.data(), value.size()));
-                if (!dyNumber.Defined() || !builder.Append((*dyNumber).data(), (*dyNumber).size()).ok()) {
-                    return false;
+                if (!dyNumber.Defined()) {
+                    return arrow::Status::SerializationError("Cannot parse dy number: ", value);
+                }
+                auto appendResult = builder.Append((*dyNumber).data(), (*dyNumber).size());
+                if (appendResult.ok()) {
+                    return appendResult;
                 }
             }
 	    break;
@@ -91,13 +95,18 @@ static bool ConvertColumn(const NScheme::TTypeInfo colType, std::shared_ptr<arro
                 }
                 const TStringBuf valueBuf(value.data(), value.size());
                 if (NBinaryJson::IsValidBinaryJson(valueBuf)) {
-                    if (!builder.Append(value).ok()) {
-                        return false;
+                    auto appendResult = builder.Append(value);
+                    if (!appendResult.ok()) {
+                        return appendResult;
                     }
                 } else {
                     const auto binaryJson = NBinaryJson::SerializeToBinaryJson(valueBuf);
-                    if (!binaryJson.Defined() || !builder.Append(binaryJson->Data(), binaryJson->Size()).ok()) {
-                        return false;
+                    if (!binaryJson.Defined()) {
+                        return arrow::Status::SerializationError("Cannot serialize json: ", valueBuf);
+                    }
+                    auto appendResult = builder.Append(binaryJson->Data(), binaryJson->Size());
+                    if (!appendResult.ok()) {
+                        return appendResult;
                     }
                 }
             }
@@ -108,8 +117,9 @@ static bool ConvertColumn(const NScheme::TTypeInfo colType, std::shared_ptr<arro
     }
 
     std::shared_ptr<arrow::BinaryArray> result;
-    if (!builder.Finish(&result).ok()) {
-        return false;
+    auto finishResult = builder.Finish(&result);
+    if (!finishResult.ok()) {
+        return finishResult;
     }
 
     column = result;
@@ -117,10 +127,10 @@ static bool ConvertColumn(const NScheme::TTypeInfo colType, std::shared_ptr<arro
         field = std::make_shared<arrow::Field>(field->name(), std::make_shared<arrow::BinaryType>());
     }
 
-    return true;
+    return arrow::Status::OK();
 }
 
-std::shared_ptr<arrow::RecordBatch> ConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
+arrow::Result<std::shared_ptr<arrow::RecordBatch>> ConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                    const THashMap<TString, NScheme::TTypeInfo>& columnsToConvert)
 {
     std::vector<std::shared_ptr<arrow::Array>> columns = batch->columns();
@@ -130,8 +140,9 @@ std::shared_ptr<arrow::RecordBatch> ConvertColumns(const std::shared_ptr<arrow::
         auto& colName = batch->column_name(i);
         auto it = columnsToConvert.find(TString(colName.data(), colName.size()));
         if (it != columnsToConvert.end()) {
-            if (!ConvertColumn(it->second, columns[i], fields[i])) {
-                return {};
+            auto convertResult = ConvertColumn(it->second, columns[i], fields[i]);
+            if (!convertResult.ok()) {
+                return arrow::Status::FromArgs(convertResult.code(), "column ", colName, ": ", convertResult.ToString());
             }
         }
     }
@@ -185,7 +196,7 @@ static std::shared_ptr<arrow::Array> InplaceConvertColumn(const std::shared_ptr<
     }
 }
 
-std::shared_ptr<arrow::RecordBatch> InplaceConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
+arrow::Result<std::shared_ptr<arrow::RecordBatch>> InplaceConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                           const THashMap<TString, NScheme::TTypeInfo>& columnsToConvert) {
     std::vector<std::shared_ptr<arrow::Array>> columns = batch->columns();
     std::vector<std::shared_ptr<arrow::Field>> fields;

@@ -50,6 +50,7 @@ class ConnectionParams:
         self.grpc_port = None
         self.mon_port = None
         self.mon_protocol = None
+        self.token_type = None
         self.token = None
         self.domain = None
         self.verbose = None
@@ -91,6 +92,27 @@ class ConnectionParams:
         netloc = self.get_netloc(endpoint_info.host, endpoint_info.port)
         return urllib.parse.urlunsplit((endpoint_info.protocol, netloc, path, urllib.parse.urlencode(params), ''))
 
+    def parse_token(self, token_file):
+        if token_file:
+            self.token = token_file.readline().rstrip('\r\n')
+            token_file.close()
+        if self.token is None:
+            self.token = os.getenv('YDB_TOKEN')
+            if self.token is not None:
+                self.token = self.token.strip()
+        if self.token is None:
+            try:
+                path = os.path.expanduser(os.path.join('~', '.ydb', 'token'))
+                with open(path) as f:
+                    self.token = f.readline().strip('\r\n')
+            except Exception:
+                pass
+        
+        if self.token is not None and len(self.token.split(' ')) == 2:
+            self.token_type, self.token = self.token.split(' ')
+        else:
+            self.token_type = 'OAuth'
+
     def apply_args(self, args, with_localhost=True):
         self.grpc_port = args.grpc_port
         self.mon_port = args.mon_port
@@ -109,20 +131,7 @@ class ConnectionParams:
         if self.mon_protocol is None:
             self.mon_protocol = 'http'
 
-        if args.token_file:
-            self.token = args.token_file.readline().rstrip('\r\n')
-            args.token_file.close()
-        if self.token is None:
-            self.token = os.getenv('YDB_TOKEN')
-            if self.token is not None:
-                self.token = self.token.strip()
-        if self.token is None:
-            try:
-                path = os.path.expanduser(os.path.join('~', '.ydb', 'token'))
-                with open(path) as f:
-                    self.token = f.readline().strip('\r\n')
-            except Exception:
-                pass
+        self.parse_token(args.token_file)
         self.domain = 1
         self.verbose = args.verbose
         self.quiet = args.quiet
@@ -284,8 +293,8 @@ def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True
     if connection_params.verbose:
         print('INFO: fetching %s' % url, file=sys.stderr)
     request = urllib.request.Request(url, data=data, method=method)
-    if connection_params.token and url.startswith('https://'):
-        request.add_header('Authorization', 'OAuth %s' % connection_params.token)
+    if connection_params.token and url.startswith('http'):
+        request.add_header('Authorization', '%s %s' % (connection_params.token_type, connection_params.token))
     if content_type is not None:
         request.add_header('Content-Type', content_type)
     if accept is not None:

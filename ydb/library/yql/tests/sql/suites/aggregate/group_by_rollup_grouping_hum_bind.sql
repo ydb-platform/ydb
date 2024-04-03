@@ -10,5 +10,5 @@ $hum_gr_kv = ($grouping) -> {
 };
 
 select count(1) as elements, key_first, val_first, $hum_gr_kv(grouping(key_first, val_first)) as group
-from plato.Input group by cube(cast(key as uint32) /100 as key_first, Substring(value, 1, 1) as val_first)
+from plato.Input group by cube(cast(key as uint32) / 100u as key_first, Substring(value, 1, 1) as val_first)
 order by elements, key_first, val_first;

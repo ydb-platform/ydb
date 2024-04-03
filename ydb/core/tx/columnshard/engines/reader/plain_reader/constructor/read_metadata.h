@@ -2,8 +2,8 @@
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/formats/arrow/replace_key.h>
-#include <ydb/core/formats/arrow/reader/read_filter_merger.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/stats.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -13,7 +13,7 @@ struct TReadMetadata : public TReadMetadataBase {
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
 
-    NIndexedReader::TSortableBatchPosition BuildSortedPosition(const NArrow::TReplaceKey& key) const;
+    NArrow::NMerger::TSortableBatchPosition BuildSortedPosition(const NArrow::TReplaceKey& key) const;
     std::shared_ptr<IDataReader> BuildReader(const std::shared_ptr<TReadContext>& context) const;
 
     bool HasProcessingColumnIds() const {

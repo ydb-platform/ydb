@@ -1,10 +1,7 @@
 IF (YQL_PACKAGED)
     PACKAGE()
 
-    FROM_SANDBOX(
-        FILE {FILE_RESOURCE_ID} OUT_NOAUTO
-            libdatetime2_udf.so
-    )
+    FROM_SANDBOX(FILE {FILE_RESOURCE_ID} OUT_NOAUTO libdatetime2_udf.so)
 
     END()
 ELSE()

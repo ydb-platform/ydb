@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include "source.h"
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -8,14 +9,14 @@ class TScanHead;
 
 class TMergingContext {
 protected:
-    YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Start);
-    YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Finish);
+    YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Start);
+    YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Finish);
     YDB_READONLY(bool, IncludeFinish, true);
     YDB_READONLY(bool, IncludeStart, false);
     YDB_READONLY(ui32, IntervalIdx, 0);
     bool IsExclusiveIntervalFlag = false;
 public:
-    TMergingContext(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
+    TMergingContext(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& finish,
         const ui32 intervalIdx, const bool includeFinish, const bool includeStart, const bool isExclusiveInterval)
         : Start(start)
         , Finish(finish)
@@ -47,10 +48,14 @@ class TFetchingInterval: public TNonCopyable, public NResourceBroker::NSubscribe
 private:
     using TTaskBase = NResourceBroker::NSubscribe::ITask;
     std::shared_ptr<TMergingContext> MergingContext;
+    bool AbortedFlag = false;
     TAtomic SourcesFinalized = 0;
+    TAtomic PartSendingWait = 0;
+    std::unique_ptr<NArrow::NMerger::TMergePartialStream> Merger;
     std::shared_ptr<TSpecialReadContext> Context;
     NColumnShard::TCounterGuard TaskGuard;
     std::map<ui32, std::shared_ptr<IDataSource>> Sources;
+
     void ConstructResult();
 
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
@@ -63,6 +68,14 @@ protected:
     virtual void DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) override;
 
 public:
+    std::set<ui64> GetPathIds() const {
+        std::set<ui64> result;
+        for (auto&& i : Sources) {
+            result.emplace(i.second->GetPathId());
+        }
+        return result;
+    }
+
     ui32 GetIntervalIdx() const {
         return IntervalIdx;
     }
@@ -76,6 +89,7 @@ public:
     }
 
     void Abort() {
+        AbortedFlag = true;
         if (AtomicCas(&SourcesFinalized, 1, 0)) {
             for (auto&& i : Sources) {
                 i.second->Abort();
@@ -93,9 +107,21 @@ public:
         return result;
     }
 
-    void OnSourceFetchStageReady(const ui32 sourceIdx);
+    NJson::TJsonValue DebugJsonForMemory() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        auto& jsonSources = result.InsertValue("sources", NJson::JSON_ARRAY);
+        for (auto&& [_, i] : Sources) {
+            jsonSources.AppendValue(i->DebugJsonForMemory());
+        }
+        return result;
+    }
 
-    TFetchingInterval(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
+    void OnSourceFetchStageReady(const ui32 sourceIdx);
+    void OnPartSendingComplete();
+    void SetMerger(std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger);
+    bool HasMerger() const;
+
+    TFetchingInterval(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& finish,
         const ui32 intervalIdx, const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,
         const bool includeFinish, const bool includeStart, const bool isExclusiveInterval);
 };

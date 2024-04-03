@@ -53,6 +53,8 @@ namespace NSQLTranslationPG {
 
 using namespace NYql;
 
+static const THashSet<TString> SystemColumns = { "tableoid", "xmin", "cmin", "xmax", "cmax", "ctid" };
+
 template <typename T>
 const T* CastNode(const void* nodeptr, int tag) {
     Y_ENSURE(nodeTag(nodeptr) == tag);
@@ -1790,6 +1792,10 @@ private:
 
     bool AddColumn(TCreateTableCtx& ctx, const ColumnDef* node) {
         TColumnInfo cinfo{.Name = node->colname};
+        if (SystemColumns.contains(to_lower(cinfo.Name))) {
+            AddError(TStringBuilder() << "system column can't be used: " << node->colname);
+            return false;
+        }
 
         if (node->constraints) {
             for (int i = 0; i < ListLength(node->constraints); ++i) {
@@ -4374,6 +4380,27 @@ public:
         return ret;
     }
 
+    TAstNode* ParseAExprNullIf(const A_Expr* value, const TExprSettings& settings) {
+        if (ListLength(value->name) != 1) {
+            AddError(TStringBuilder() << "Unsupported count of names: " << ListLength(value->name));
+            return nullptr;
+        }
+        if (!value->lexpr || !value->rexpr) {
+            AddError("Missing operands");
+            return nullptr;
+        }
+
+        auto lhs = ParseExpr(value->lexpr, settings);
+        auto rhs = ParseExpr(value->rexpr, settings);
+        if (!lhs || !rhs) {
+            return nullptr;
+        }
+        auto pred = L(A("Coalesce"),
+                L(A("FromPg"), L(A("PgOp"), QA("="), lhs, rhs)),
+                L(A("Bool"), QA("false")));
+        return L(A("If"), pred, lhs, L(A("Null")));
+    }
+
     TAstNode* ParseAExprIn(const A_Expr* value, const TExprSettings& settings) {
         if (ListLength(value->name) != 1) {
             AddError(TStringBuilder() << "Unsupported count of names: " << ListLength(value->name));
@@ -4500,6 +4527,8 @@ public:
         case AEXPR_OP_ANY:
         case AEXPR_OP_ALL:
             return ParseAExprOpAnyAll(value, settings, value->kind == AEXPR_OP_ALL);
+        case AEXPR_NULLIF:
+            return ParseAExprNullIf(value, settings);
         default:
             AddError(TStringBuilder() << "A_Expr_Kind unsupported value: " << (int)value->kind);
             return nullptr;

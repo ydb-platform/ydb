@@ -8,7 +8,7 @@ In parallel with designing the schema, you need to set up your development envir
 
 ## Choosing API
 
-Choose {{ ydb-short-name }} the API you want to use; there are several options:
+Choose the {{ ydb-short-name }} API you want to use; there are several options:
 
 - The recommended way for mainstream programming languages is using a [{{ ydb-short-name }} SDK](../reference/ydb-sdk/index.md). They provide high-level APIs and implement best practices on working with {{ ydb-short-name }}. {{ ydb-short-name }} SDKs are available for several popular languages and strive for feature parity, but not all are feature-complete. Refer to the [SDK feature comparison table](../reference/ydb-sdk/feature-parity.md) to check if the SDK for the programming language you had in mind will fit your needs or to choose a programming language with better feature coverage if you're flexible.
 - Alternatively, {{ ydb-short-name }} provides [PostgreSQL-compatible API](../postgresql/intro.md). It is intended to simplify migrating existing applications that have outgrown PostgreSQL. However, it is also useful for exotic programming languages that have a PostgreSQL client library but don't have a {{ ydb-short-name }} SDK. Refer to PostgreSQL compatibility documentation to check if its completeness will suit your needs.

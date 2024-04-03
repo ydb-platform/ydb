@@ -220,7 +220,7 @@ bool TCommittedDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSou
 }
 
 void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) {
-    TMemoryProfileGuard mGuard("SCAN_PROFILE::ASSEMBLER::COMMITTED");
+    TMemoryProfileGuard mGuard("SCAN_PROFILE::ASSEMBLER::COMMITTED", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     if (!GetStageData().GetTable()) {
         Y_ABORT_UNLESS(GetStageData().GetBlobs().size() == 1);
         auto bData = MutableStageData().ExtractBlob(GetStageData().GetBlobs().begin()->first);

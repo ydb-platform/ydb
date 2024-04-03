@@ -534,6 +534,210 @@ INSTANTIATE_TEST_SUITE_P(
             "{Segments: [<[], 1>, ..., <[0#5], 6>, <[0#6], 7>, ...], UpperKey: [0#<Max>]}")
 ));
 
+////////////////////////////////////////////////////////////////////////////////
+
+class TReplicationProgressComputeReplicationProgressLag
+    : public ::testing::Test
+    , public ::testing::WithParamInterface<std::tuple<
+        const char*,
+        const char*,
+        TDuration>>
+{ };
+
+TEST_P(TReplicationProgressComputeReplicationProgressLag, Simple)
+{
+    const auto& params = GetParam();
+    auto maxProgress = ConvertTo<TReplicationProgress>(TYsonStringBuf(std::get<0>(params)));
+    auto replicaProgress = ConvertTo<TReplicationProgress>(TYsonStringBuf(std::get<1>(params)));
+    auto expected = std::get<2>(params);
+
+    auto result = ComputeReplicationProgressLag(maxProgress, replicaProgress);
+    EXPECT_EQ(result, expected)
+        << "max_progress: " << std::get<0>(params) << std::endl
+        << "replica_progress: " << std::get<1>(params) << std::endl
+        << "expected: " << ToString(expected) << std::endl
+        << "actual: " << ToString(result) << std::endl;
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    TReplicationProgressComputeReplicationProgressLag,
+    TReplicationProgressComputeReplicationProgressLag,
+    ::testing::Values(
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",
+            TDuration::Zero()),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1837578930916163584};{lower_key=[1];timestamp=1837578941653581824}];"
+                "upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=1837578930916163584}];upper_key=[<type=max>#]}",
+            TDuration::Seconds(9)),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=2147483648};{lower_key=[2];timestamp=5368709120}];"
+                "upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=0};{lower_key=[1];timestamp=3221225472}];upper_key=[<type=max>#]}",
+            TDuration::Seconds(1)),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=0}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[1];timestamp=3221225472}];"
+                "upper_key=[<type=max>#]}",
+            TDuration::Zero()),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[1];timestamp=3221225472}];"
+                "upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=0}];upper_key=[<type=max>#]}",
+            TDuration::Seconds(2)),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=3221225472}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[1];timestamp=4294967296};"
+                "{lower_key=[2];timestamp=1073741824}];upper_key=[<type=max>#]}",
+            TDuration::Seconds(1)),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[1];timestamp=5368709120};"
+                "{lower_key=[2];timestamp=1073741824}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=3221225472}];upper_key=[<type=max>#]}",
+            TDuration::Seconds(1)),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[1];timestamp=3221225472};"
+                "{lower_key=[2];timestamp=1073741824}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=3221225472};{lower_key=[1];timestamp=1073741824};"
+                "{lower_key=[2];timestamp=3221225472}];upper_key=[<type=max>#]}",
+            TDuration::Seconds(1)),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=2147483648};{lower_key=[1];timestamp=4294967296};"
+                "{lower_key=[3];timestamp=8589934592};{lower_key=[5];timestamp=12884901888}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=4294967296};{lower_key=[2];timestamp=6442450944};"
+                "{lower_key=[4];timestamp=10737418240};{lower_key=[6];timestamp=15032385536}];"
+                "upper_key=[<type=max>#]}",
+            TDuration::Seconds(1)),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[1];timestamp=2147483648};"
+                "{lower_key=[2];timestamp=3221225472}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[1];timestamp=2147483648};{lower_key=[2];timestamp=3221225472}];upper_key=[3]}",
+            TDuration::Seconds(2)),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[2];timestamp=3221225472}];"
+                "upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[1];timestamp=2147483648};{lower_key=[2];timestamp=3221225472}];upper_key=[3]}",
+            TDuration::Seconds(2)),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[1];timestamp=2147483648};"
+                "{lower_key=[2];timestamp=3221225472}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[1];timestamp=3221225472}];upper_key=[3]}",
+            TDuration::Seconds(2)),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=3221225472};{lower_key=[2];timestamp=2147483648}];"
+                "upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[1];timestamp=3221225472};{lower_key=[2];timestamp=2147483648}];"
+                "upper_key=[<type=max>#]}",
+            TDuration::Seconds(2))
+));
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TReplicationProgressBuildMax
+    : public ::testing::Test
+    , public ::testing::WithParamInterface<std::tuple<
+        const char*,
+        const char*,
+        const char*>>
+{ };
+
+TEST_P(TReplicationProgressBuildMax, Simple)
+{
+    const auto& params = GetParam();
+    auto progress = ConvertTo<TReplicationProgress>(TYsonStringBuf(std::get<0>(params)));
+    auto other = ConvertTo<TReplicationProgress>(TYsonStringBuf(std::get<1>(params)));
+    auto expected = ConvertTo<TReplicationProgress>(TYsonStringBuf(std::get<2>(params)));
+
+    auto result = BuildMaxProgress(progress, other);
+    EXPECT_TRUE(IsReplicationProgressEqual(result, expected))
+        << "progress: " << std::get<0>(params) << std::endl
+        << "other: " << std::get<1>(params) << std::endl
+        << "expected: " << ToString(expected) << std::endl
+        << "actual: " << ToString(result) << std::endl;
+
+    auto result2 = BuildMaxProgress(other, progress);
+    EXPECT_TRUE(IsReplicationProgressEqual(result2, expected))
+        << "progress: " << std::get<1>(params) << std::endl
+        << "other: " << std::get<0>(params) << std::endl
+        << "expected: " << ToString(expected) << std::endl
+        << "actual: " << ToString(result2) << std::endl;
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    TReplicationProgressBuildMax,
+    TReplicationProgressBuildMax,
+    ::testing::Values(
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}"),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2}];upper_key=[<type=max>#]}"),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[2];timestamp=2}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=0};{lower_key=[1];timestamp=3}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=3}];upper_key=[<type=max>#]}"),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=0}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=3}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=3}];upper_key=[<type=max>#]}"),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=2}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=3};{lower_key=[2];timestamp=1}];"
+                "upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=2};{lower_key=[1];timestamp=3};{lower_key=[2];timestamp=2}];"
+                "upper_key=[<type=max>#]}"),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2};{lower_key=[2];timestamp=1}];"
+                "upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=2};{lower_key=[1];timestamp=1};{lower_key=[2];timestamp=2}];"
+                "upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=2}];upper_key=[<type=max>#]}"),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2};{lower_key=[3];timestamp=4};"
+                "{lower_key=[5];timestamp=6}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=2};{lower_key=[2];timestamp=3};{lower_key=[4];timestamp=5};"
+                "{lower_key=[6];timestamp=7}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=2};{lower_key=[2];timestamp=3};{lower_key=[3];timestamp=4};"
+                "{lower_key=[4];timestamp=5};{lower_key=[5];timestamp=6};{lower_key=[6];timestamp=7}];"
+                "upper_key=[<type=max>#]}"),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[1];timestamp=2147483648};"
+                "{lower_key=[2];timestamp=3221225472}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[1];timestamp=2147483648};{lower_key=[2];timestamp=3221225472}];upper_key=[3]}",
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[1];timestamp=2147483648};"
+                "{lower_key=[2];timestamp=3221225472}];upper_key=[<type=max>#]}"),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[2];timestamp=3221225472}];"
+                "upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[1];timestamp=2147483648};{lower_key=[2];timestamp=3221225472}];upper_key=[3]}",
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[1];timestamp=2147483648};"
+                "{lower_key=[2];timestamp=3221225472}];upper_key=[<type=max>#]}"),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[1];timestamp=2147483648};"
+                "{lower_key=[2];timestamp=1073741824}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[1];timestamp=3221225472}];upper_key=[3]}",
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[1];timestamp=3221225472};"
+                "{lower_key=[3];timestamp=1073741824}];upper_key=[<type=max>#]}"),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[1];timestamp=2147483648};"
+                "{lower_key=[2];timestamp=1073741824};{lower_key=[4];timestamp=2147483648}];upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[1];timestamp=3221225472}];upper_key=[3]}",
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[1];timestamp=3221225472};"
+                "{lower_key=[3];timestamp=1073741824};{lower_key=[4];timestamp=2147483648}];upper_key=[<type=max>#]}"),
+        std::tuple(
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[2];timestamp=3221225472}];"
+                "upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[1];timestamp=1073741824};{lower_key=[2];timestamp=3221225472}];"
+                "upper_key=[<type=max>#]}",
+            "{segments=[{lower_key=[];timestamp=1073741824};{lower_key=[2];timestamp=3221225472}];"
+                "upper_key=[<type=max>#]}")
+
+));
 
 ////////////////////////////////////////////////////////////////////////////////
 

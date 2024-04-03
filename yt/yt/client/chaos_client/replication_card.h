@@ -184,6 +184,12 @@ bool IsReplicaLocationValid(
     const NYPath::TYPath& tablePath,
     const TString& clusterName);
 
+TReplicationProgress BuildMaxProgress(const TReplicationProgress& progress1, const TReplicationProgress& progress2);
+
+TDuration ComputeReplicationProgressLag(
+    const TReplicationProgress& maxProgress,
+    const TReplicationProgress& replicaProgress);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NChaosClient

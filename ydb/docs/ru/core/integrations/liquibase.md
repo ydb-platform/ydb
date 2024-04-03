@@ -195,7 +195,7 @@ YDB не поддерживает уникальный вторичный инд
 
 ### Ввод данных в таблицу
 
-`loadData`, `loadUpdateData` - загрузка данных из CSV файла. *loadUpdateData* загружает данные командой [{#T}](../yql/reference/syntax/upsert_into.md).
+`loadData`, `loadUpdateData` - загрузка данных из CSV файла. `loadUpdateData` загружает данные командой [{#T}](../yql/reference/syntax/upsert_into.md).
 
 `insert` - changeset, который осуществляет единичный insert в таблицу командой [{#T}](../yql/reference/syntax/insert_into.md). Например:
 

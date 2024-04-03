@@ -156,6 +156,24 @@ std::shared_ptr<arrow::Array> PgConvertString(const std::shared_ptr<arrow::Array
     return ret;
 }
 
+Numeric Uint64ToPgNumeric(ui64 value) {
+    if (value <= (ui64)Max<i64>()) {
+        return int64_to_numeric((i64)value);
+    }
+
+    auto ret1 = int64_to_numeric((i64)(value & ~(1ull << 63)));
+    auto half = int64_to_numeric(1ll << 62);
+    bool haveError = false;
+    auto ret2 = numeric_add_opt_error(ret1, half, &haveError);
+    Y_ENSURE(!haveError);
+    auto ret3 = numeric_add_opt_error(ret2, half, &haveError);
+    Y_ENSURE(!haveError);
+    pfree(ret1);
+    pfree(ret2);
+    pfree(half);
+    return ret3;
+}
+
 Numeric PgFloatToNumeric(double item, ui64 scale, int digits) {
     double intPart, fracPart;
     bool error;

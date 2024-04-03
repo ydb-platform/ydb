@@ -47,6 +47,7 @@ extern "C" {
 #include "utils/datum.h"
 #include "utils/lsyscache.h"
 #include "utils/datetime.h"
+#include "utils/numeric.h"
 #include "utils/typcache.h"
 #include "mb/pg_wchar.h"
 #include "nodes/execnodes.h"
@@ -77,6 +78,7 @@ extern "C" {
 }
 
 #include "arrow.h"
+#include "arrow_impl.h"
 
 namespace NYql {
 
@@ -1937,12 +1939,22 @@ NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUd
     switch (Slot) {
     case NUdf::EDataSlot::Bool:
         return ScalarDatumToPod(BoolGetDatum(value.Get<bool>()));
+    case NUdf::EDataSlot::Int8:
+        return ScalarDatumToPod(Int16GetDatum(value.Get<i8>()));
+    case NUdf::EDataSlot::Uint8:
+        return ScalarDatumToPod(Int16GetDatum(value.Get<ui8>()));
     case NUdf::EDataSlot::Int16:
         return ScalarDatumToPod(Int16GetDatum(value.Get<i16>()));
+    case NUdf::EDataSlot::Uint16:
+        return ScalarDatumToPod(Int32GetDatum(value.Get<ui16>()));
     case NUdf::EDataSlot::Int32:
         return ScalarDatumToPod(Int32GetDatum(value.Get<i32>()));
+    case NUdf::EDataSlot::Uint32:
+        return ScalarDatumToPod(Int64GetDatum(value.Get<ui32>()));
     case NUdf::EDataSlot::Int64:
         return ScalarDatumToPod(Int64GetDatum(value.Get<i64>()));
+    case NUdf::EDataSlot::Uint64:
+        return PointerDatumToPod(NumericGetDatum(Uint64ToPgNumeric(value.Get<ui64>())));
     case NUdf::EDataSlot::Float:
         return ScalarDatumToPod(Float4GetDatum(value.Get<float>()));
     case NUdf::EDataSlot::Double:
@@ -2603,11 +2615,35 @@ struct TToPgExec {
             }
             break;
         }
+        case NUdf::EDataSlot::Int8: {
+            auto inputPtr = array.GetValues<i8>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int16GetDatum(inputPtr[i]);
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Uint8: {
+            auto inputPtr = array.GetValues<ui8>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int16GetDatum(inputPtr[i]);
+            }
+            break;
+        }
         case NUdf::EDataSlot::Int16: {
             auto inputPtr = array.GetValues<i16>(1);
             auto outputPtr = res->array()->GetMutableValues<ui64>(1);
             for (size_t i = 0; i < length; ++i) {
                 outputPtr[i] = Int16GetDatum(inputPtr[i]);
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Uint16: {
+            auto inputPtr = array.GetValues<ui16>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int32GetDatum(inputPtr[i]);
             }
             break;
         }
@@ -2619,12 +2655,40 @@ struct TToPgExec {
             }
             break;
         }
+        case NUdf::EDataSlot::Uint32: {
+            auto inputPtr = array.GetValues<ui32>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int64GetDatum(inputPtr[i]);
+            }
+            break;
+        }
         case NUdf::EDataSlot::Int64: {
             auto inputPtr = array.GetValues<i64>(1);
             auto outputPtr = res->array()->GetMutableValues<ui64>(1);
             for (size_t i = 0; i < length; ++i) {
                 outputPtr[i] = Int64GetDatum(inputPtr[i]);
             }
+            break;
+        }
+        case NUdf::EDataSlot::Uint64: {
+            NUdf::TFixedSizeBlockReader<ui64, true> reader;
+            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                auto res = Uint64ToPgNumeric(item.Get<ui64>());
+                auto ref = NUdf::TStringRef((const char*)res, GetFullVarSize((const text*)res));
+                auto ptr = builder.AddPgItem<false, 0>(ref);
+                UpdateCleanVarSize((text*)(ptr + sizeof(void*)), GetCleanVarSize((const text*)res));
+                pfree(res);
+            }
+
+            *res = builder.Build(true);
             break;
         }
         case NUdf::EDataSlot::Float: {
@@ -2729,8 +2793,12 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, T
 
     switch (dataSlot) {
     case NUdf::EDataSlot::Bool:
+    case NUdf::EDataSlot::Int8:
+    case NUdf::EDataSlot::Uint8:
     case NUdf::EDataSlot::Int16:
+    case NUdf::EDataSlot::Uint16:
     case NUdf::EDataSlot::Int32:
+    case NUdf::EDataSlot::Uint32:
     case NUdf::EDataSlot::Int64:
     case NUdf::EDataSlot::Float:
     case NUdf::EDataSlot::Double:
@@ -2741,6 +2809,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, T
     case NUdf::EDataSlot::String:
     case NUdf::EDataSlot::Utf8:
     case NUdf::EDataSlot::Interval:
+    case NUdf::EDataSlot::Uint64:
         kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
         break;
     default:
@@ -2973,12 +3042,22 @@ TComputationNodeFactory GetPgFactory() {
                 switch (*sourceDataSlot) {
                 case NUdf::EDataSlot::Bool:
                     return new TToPg<NUdf::EDataSlot::Bool>(ctx.Mutables, arg);
+                case NUdf::EDataSlot::Int8:
+                    return new TToPg<NUdf::EDataSlot::Int8>(ctx.Mutables, arg);
+                case NUdf::EDataSlot::Uint8:
+                    return new TToPg<NUdf::EDataSlot::Uint8>(ctx.Mutables, arg);                    
                 case NUdf::EDataSlot::Int16:
                     return new TToPg<NUdf::EDataSlot::Int16>(ctx.Mutables, arg);
+                case NUdf::EDataSlot::Uint16:
+                    return new TToPg<NUdf::EDataSlot::Uint16>(ctx.Mutables, arg);                    
                 case NUdf::EDataSlot::Int32:
                     return new TToPg<NUdf::EDataSlot::Int32>(ctx.Mutables, arg);
+                case NUdf::EDataSlot::Uint32:
+                    return new TToPg<NUdf::EDataSlot::Uint32>(ctx.Mutables, arg);
                 case NUdf::EDataSlot::Int64:
                     return new TToPg<NUdf::EDataSlot::Int64>(ctx.Mutables, arg);
+                case NUdf::EDataSlot::Uint64:
+                    return new TToPg<NUdf::EDataSlot::Uint64>(ctx.Mutables, arg);
                 case NUdf::EDataSlot::Float:
                     return new TToPg<NUdf::EDataSlot::Float>(ctx.Mutables, arg);
                 case NUdf::EDataSlot::Double:

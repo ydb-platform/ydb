@@ -531,6 +531,34 @@
             "uri": "https://{canondata_backend}/1942415/14c2050022adcb6379d90c4a2a09abf0847e7643/resource.tar.gz#test.test_blocks-mod_uint64--Results_/results.txt"
         }
     ],
+    "test.test[blocks-pg_to_numbers--Debug]": [
+        {
+            "checksum": "662acd407724083dd9c1dbd79d9ba62d",
+            "size": 2431,
+            "uri": "https://{canondata_backend}/1600758/6458ab288b4e949a11be7d8b8556e303e3e7a299/resource.tar.gz#test.test_blocks-pg_to_numbers--Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-pg_to_numbers--Peephole]": [
+        {
+            "checksum": "e77a8da60a152d67479897d7a3207066",
+            "size": 2119,
+            "uri": "https://{canondata_backend}/1600758/6458ab288b4e949a11be7d8b8556e303e3e7a299/resource.tar.gz#test.test_blocks-pg_to_numbers--Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-pg_to_numbers--Plan]": [
+        {
+            "checksum": "2a3ff6525cae18a9bf2a298600aba937",
+            "size": 6044,
+            "uri": "https://{canondata_backend}/1600758/6458ab288b4e949a11be7d8b8556e303e3e7a299/resource.tar.gz#test.test_blocks-pg_to_numbers--Plan_/plan.txt"
+        }
+    ],
+    "test.test[blocks-pg_to_numbers--Results]": [
+        {
+            "checksum": "ed84f232a0401a636ae382d5e9c4bdaa",
+            "size": 4399,
+            "uri": "https://{canondata_backend}/1600758/6458ab288b4e949a11be7d8b8556e303e3e7a299/resource.tar.gz#test.test_blocks-pg_to_numbers--Results_/results.txt"
+        }
+    ],
     "test.test[case-case_opt_then-default.txt-Debug]": [
         {
             "checksum": "3ea5cbcf567dde38b6ff2bbbeebf2124",

@@ -231,6 +231,7 @@ bool TColumnShardScan::ProduceResults() noexcept {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_problems")("info", ComputeShardingPolicy.DebugString());
             }
         }
+        TMemoryProfileGuard mGuard("SCAN_PROFILE::RESULT::TO_KQP");
         Result->ArrowBatch = NArrow::ToBatch(shardedBatch.GetRecordBatch(), true);
         Rows += batch->num_rows();
         Bytes += NArrow::GetBatchDataSize(Result->ArrowBatch);
@@ -245,6 +246,7 @@ bool TColumnShardScan::ProduceResults() noexcept {
 
     Result->LastKey = ConvertLastKey(result.GetLastReadKey());
     SendResult(false, false);
+    ScanIterator->OnSentDataFromInterval(result.GetNotFinishedIntervalIdx());
     ACFL_DEBUG("stage", "finished")("iterator", ScanIterator->DebugString());
     return true;
 }

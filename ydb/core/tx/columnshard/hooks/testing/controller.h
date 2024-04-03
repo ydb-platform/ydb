@@ -29,6 +29,10 @@ private:
     YDB_ACCESSOR(std::optional<ui64>, GuaranteeIndexationStartBytesLimit, 0);
     YDB_ACCESSOR(std::optional<TDuration>, OptimizerFreshnessCheckDuration, TDuration::Zero());
     EOptimizerCompactionWeightControl CompactionControl = EOptimizerCompactionWeightControl::Force;
+
+    YDB_ACCESSOR(std::optional<ui64>, OverrideReduceMemoryIntervalLimit, 1024);
+    YDB_ACCESSOR_DEF(std::optional<ui64>, OverrideRejectMemoryIntervalLimit);
+
     std::optional<TDuration> ReadTimeoutClean;
     std::optional<ui32> ExpectedShardsCount;
 
@@ -186,6 +190,12 @@ protected:
     }
 
 public:
+    virtual ui64 GetReduceMemoryIntervalLimit(const ui64 def) const override {
+        return OverrideReduceMemoryIntervalLimit.value_or(def);
+    }
+    virtual ui64 GetRejectMemoryIntervalLimit(const ui64 def) const override {
+        return OverrideRejectMemoryIntervalLimit.value_or(def);
+    }
     bool IsTrivialLinks() const;
     TCheckContext CheckInvariants() const;
 

@@ -345,6 +345,13 @@ YDB не поддерживает уникальный вторичный инд
 
 Основной командой является `liquibase update`, которая применяет миграции, если текущая схема {{ ydb-short-name }} отстает от пользовательского описания.
 
+Далее в примерах предполагается, использование следующего файла настроек `liquibase.properties`:
+
+```properties
+changelog-file=changelogs.xml
+url=jdbc:ydb:grpc://localhost:2136/local
+```
+
 Применим к пустой базе данных следующий changeset:
 
 ```xml
@@ -534,3 +541,18 @@ liquibase changelog-sync --changelog-file=dbchangelog.xml
 Результатом будет синхронизация liquibase в вашем проекте:
 
 ![_assets/liquibase-step-4.png](_assets/liquibase-step-4.png)
+
+## Подключение к YDB
+
+В вышеуказанных примерах мы использовали Docker контейнер, для которого не требовалось дополнительных параметров для аутентификации.
+
+Существуют различные варианты настройки аутентификации через параметр URL:
+
+* Docker контейнер (anonymous authentication):<br>`jdbc:ydb:grpc://localhost:2136/local`
+* Self-hosted кластер:<br>`jdbc:ydb:grpcs://<host>:2135/Root/testdb?secureConnectionCertificate=file:~/myca.cer`
+* Подключение с использованием токена:<br>`jdbc:ydb:grpcs://<host>:2135/path/to/database?token=file:~/my_token`
+* Подключение с использованием сервисного аккаунта:<br>`jdbc:ydb:grpcs://<host>:2135/path/to/database?saFile=file:~/sa_key.json`
+
+Если ваш кластер настроен с использованием логина и пароля, процесс аутентификации происходит через параметры Liquibase.
+
+За дополнительной информацией о различных настройках аутентификации обратитесь к соответствующему [разделу](../concepts/auth.md).

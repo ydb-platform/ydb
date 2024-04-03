@@ -24,7 +24,7 @@ bool TStepAction::DoExecute() {
         if (Source->IsEmptyData()) {
             break;
         }
-        TMemoryProfileGuard mGuard("SCAN_PROFILE::FETCHING::" + Step->GetName() + "::" + Step->GetBranchName());
+        TMemoryProfileGuard mGuard("SCAN_PROFILE::FETCHING::" + Step->GetName() + "::" + Step->GetBranchName(), IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
         if (!Step->ExecuteInplace(Source, Step)) {
             return true;
         }

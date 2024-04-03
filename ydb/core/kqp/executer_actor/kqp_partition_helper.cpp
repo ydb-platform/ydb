@@ -212,6 +212,7 @@ TVector<TCell> FillKeyValues(const TVector<NScheme::TTypeInfo>& keyColumnTypes, 
             }
             case NKqpProto::TKqpPhyValue::kLiteralValue: {
                 const auto& literal = tupleValue.GetLiteralValue();
+                auto binded = typeEnv.BindAllocator();
                 auto [type, value] = ImportValueFromProto(literal.GetType(), literal.GetValue(), typeEnv, holderFactory);
                 keyValues.emplace_back(NMiniKQL::MakeCell(keyColumnTypes[i], value, typeEnv, /* copy */ true));
                 continue;

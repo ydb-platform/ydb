@@ -15,10 +15,21 @@ package NKikimrPQ;
 option java_package = "ru.yandex.kikimr.proto";
 
 
+message TPartitionCounterData {
+    optional uint64 MessagesWrittenTotal = 1;
+    optional uint64 MessagesWrittenGrpc = 2;
+    optional uint64 BytesWrittenTotal = 3;
+    optional uint64 BytesWrittenGrpc = 4;
+    optional uint64 BytesWrittenUncompressed = 5;
+    repeated uint64 MessagesSizes = 6;
+    //ToDo: !! InputLag = 7
+}
+
 message TPartitionMeta {
     optional uint64 StartOffset = 1;
     optional uint64 EndOffset = 2;
     optional bool SubDomainOutOfSpace = 3 [default = false];
+    optional TPartitionCounterData CounterData = 4;
 }
 
 message TPartitionTxMeta {
@@ -607,6 +618,7 @@ message TReleasePartition {
     optional NActorsProto.TActorId PipeClient = 6;
     optional uint32 Group = 7;
     optional string Path = 8;
+    repeated uint32 Partition = 9;
 }
 
 message TPartitionReleased {
@@ -811,6 +823,7 @@ message THasDataInfoResponse { //signal
     optional uint64 Cookie = 2;
     optional uint64 SizeLag = 3;
     optional uint64 WriteTimestampEstimateMS = 4;
+    optional bool ReadingFinished = 5;
 }
 
 message TBatchHeader {

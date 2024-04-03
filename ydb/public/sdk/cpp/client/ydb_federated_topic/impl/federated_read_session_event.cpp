@@ -1,5 +1,5 @@
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/federated_topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/read_session.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session.h>
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -143,7 +143,7 @@ TReadSessionEvent::TDataReceivedEvent::TDataReceivedEvent(NTopic::TReadSessionEv
 
 void TReadSessionEvent::TDataReceivedEvent::Commit() {
     for (auto [from, to] : OffsetRanges) {
-        static_cast<NPersQueue::TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
+        static_cast<NTopic::TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
     }
 }
 

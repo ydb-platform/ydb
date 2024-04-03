@@ -273,6 +273,12 @@ private:
         auto cachePolicy = google::protobuf::Arena::CreateMessage<Ydb::Table::QueryCachePolicy>(Request_->GetArena());
         cachePolicy->set_keep_in_cache(true);
 
+        auto settings = NKqp::NPrivateEvents::TQueryRequestSettings()
+            .SetKeepSession(false)
+            .SetUseCancelAfter(false)
+            .SetSyntax(syntax)
+            .SetSupportStreamTrailingResult(true);
+
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             QueryAction,
             queryType,
@@ -286,10 +292,7 @@ private:
             GetCollectStatsMode(req->stats_mode()),
             cachePolicy,
             nullptr, // operationParams
-            false, // keepSession
-            false, // useCancelAfter
-            syntax,
-            true); // trailing support
+            settings);
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
             NYql::TIssues issues;

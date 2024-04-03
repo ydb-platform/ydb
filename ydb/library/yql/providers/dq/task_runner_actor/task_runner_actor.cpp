@@ -610,7 +610,7 @@ private:
             TaskRunner = Factory->GetOld(*Alloc.get(), settings, TraceId);
         } catch (...) {
             TString message = "Could not create TaskRunner for " + ToString(taskId) + " on node " + ToString(replyTo.NodeId()) + ", error: " + CurrentExceptionMessage();
-            Send(replyTo, TEvDq::TEvAbortExecution::InternalError(message), 0, cookie);
+            Send(replyTo, TEvDq::TEvAbortExecution::Unavailable(message), 0, cookie); // retries, fallback on retries limit
             return;
         }
 
@@ -726,7 +726,7 @@ private:
 
     void CreateSpillingStorage(ui64 channelId, TActorSystem* actorSystem, bool enableSpilling) {
         TSpillingStorageInfo::TPtr spillingStorageInfo = nullptr;
-        auto channelStorage = ExecCtx->CreateChannelStorage(channelId, enableSpilling, actorSystem, true /*isConcurrent*/);
+        auto channelStorage = ExecCtx->CreateChannelStorage(channelId, enableSpilling, actorSystem);
 
         if (channelStorage) {
             auto spillingIt = SpillingStoragesInfos.find(channelId);

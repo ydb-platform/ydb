@@ -73,8 +73,8 @@ There are also some comparison predicates, as shown in Table 9.2. These behave m
 ```||
 ||boolean IS TRUE → boolean | Test whether boolean expression yields true. (NOT SUPPORTED)|
 ```sql
-#true IS TRUE → true
-#NULL::boolean IS TRUE → false
+true IS TRUE → true
+NULL::boolean IS TRUE → false
 ```||
 |#
 
@@ -3825,7 +3825,7 @@ trim_array(ARRAY[1,2,3,4,5,6], 2) → {1,2,3,4}
 Expands an array into a set of rows. The array's elements are read out in storage order. (NOT SUPPORTED)|
 
 ```sql
-#SELECT * FROM unnest(ARRAY[1,2]) as a → [
+SELECT * FROM unnest(ARRAY[1,2]) as a → [
 1
 2
 ]
@@ -4636,7 +4636,7 @@ NULL
 ]
 ```
 
-9.24.3. ANY/SOME (array) (NOT SUPPORTED)
+9.24.3. ANY/SOME (array)
 
 expression operator ANY (array expression)
 expression operator SOME (array expression)
@@ -4649,14 +4649,14 @@ SOME is a synonym for ANY.
 
 Example
 ```sql
-#SELECT x FROM (VALUES (1),(2),(3)) a(x) WHERE x = ANY (array[1,2]) ORDER BY x → [
+SELECT x FROM (VALUES (1),(2),(3)) a(x) WHERE x = ANY (array[1,2]) ORDER BY x → [
 1
 2
 ]
 ]
 ```
 
-9.24.4. ALL (array) (NOT SUPPORTED)
+9.24.4. ALL (array)
 
 expression operator ALL (array expression)
 
@@ -4666,7 +4666,7 @@ If the array expression yields a null array, the result of ALL will be null. If 
 
 Example
 ```sql
-#SELECT x FROM (VALUES (1),(2),(3)) a(x) WHERE x <> ALL (array[1,2]) ORDER BY x → [
+SELECT x FROM (VALUES (1),(2),(3)) a(x) WHERE x <> ALL (array[1,2]) ORDER BY x → [
 3
 ]
 ]

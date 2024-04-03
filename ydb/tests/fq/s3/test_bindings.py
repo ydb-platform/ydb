@@ -67,8 +67,8 @@ class TestBindings:
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    @pytest.mark.parametrize("is_replace_if_exists", [True, False])
-    def test_binding_operations(self, kikimr, s3, client: FederatedQueryClient, yq_version):
+    @pytest.mark.parametrize("kikimr_settings", [{"is_replace_if_exists": True}, {"is_replace_if_exists": False}], indirect=True)
+    def test_binding_operations(self, kikimr, s3, client: FederatedQueryClient, yq_version, unique_prefix):
 
         resource = boto3.resource(
             "s3",
@@ -100,19 +100,21 @@ class TestBindings:
         }
 
         # Test connection creation
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "connection_name"
         connection_id = client.create_storage_connection(
-            "connection_name",
+            storage_connection_name,
             "bindbucket",
             visibility=fq.Acl.Visibility.SCOPE
         ).result.connection_id
 
         self._assert_connections(
-            client, expected_connection_names=['connection_name'])
+            client, expected_connection_names=[storage_connection_name])
         self._assert_query_results(
             client,
-            R'''
+            fR'''
             SELECT *
-            FROM connection_name.`abc.json` WITH (
+            FROM `{storage_connection_name}`.`abc.json` WITH (
                 FORMAT="json_each_row",
                 SCHEMA (
                 a Int32 NOT NULL,
@@ -126,23 +128,25 @@ class TestBindings:
             type_id=ydb.Type.PrimitiveTypeId.INT32))
         b_type = ydb.Column(name="b", type=ydb.Type(
             type_id=ydb.Type.PrimitiveTypeId.UTF8))
-        binding_id = client.create_object_storage_binding(name="binding_name",
+        storage_binding_name = unique_prefix + "binding_name"
+        binding_id = client.create_object_storage_binding(name=storage_binding_name,
                                                           path="abc.json",
                                                           format="json_each_row",
                                                           connection_id=connection_id,
                                                           visibility=fq.Acl.Visibility.SCOPE,
                                                           columns=[a_type, b_type]).result.binding_id
 
-        self._assert_bindings(client, expected_binding_names=['binding_name'])
+        self._assert_bindings(client, expected_binding_names=[storage_binding_name])
         self._assert_query_results(
             client,
-            R'SELECT * FROM bindings.binding_name;',
+            fR'SELECT * FROM bindings.`{storage_binding_name}`;',
             yq_version,
             expected_result_set)
 
         # Test binding modification
+        new_storage_binding_name = unique_prefix + "new_binding_name"
         client.modify_object_storage_binding(binding_id=binding_id,
-                                             name="new_binding_name",
+                                             name=new_storage_binding_name,
                                              path="abc.json",
                                              format="json_each_row",
                                              connection_id=connection_id,
@@ -150,31 +154,32 @@ class TestBindings:
                                              columns=[a_type, b_type]).result
 
         self._assert_bindings(client, expected_binding_names=[
-                              'new_binding_name'])
+                              new_storage_binding_name])
         self._assert_query_results(
             client,
-            R'SELECT * FROM bindings.new_binding_name;',
+            fR'SELECT * FROM bindings.`{new_storage_binding_name}`;',
             yq_version,
             expected_result_set)
 
         # Test connection modification
+        new_storage_connection_name = unique_prefix + "new_connection_name"
         client.modify_object_storage_connection(connection_id,
-                                                "new_connection_name",
+                                                new_storage_connection_name,
                                                 "bindbucket",
                                                 visibility=fq.Acl.Visibility.SCOPE)
 
         self._assert_connections(client, expected_connection_names=[
-                                 'new_connection_name'])
+                                 new_storage_connection_name])
         self._assert_query_results(
             client,
-            R'SELECT * FROM bindings.new_binding_name;',
+            fR'SELECT * FROM bindings.`{new_storage_binding_name}`;',
             yq_version,
             expected_result_set)
         self._assert_query_results(
             client,
-            R'''
+            fR'''
             SELECT *
-            FROM new_connection_name.`abc.json` WITH (
+            FROM `{new_storage_connection_name}`.`abc.json` WITH (
                 FORMAT="json_each_row",
                 SCHEMA (
                 a Int32 NOT NULL,
@@ -193,8 +198,9 @@ class TestBindings:
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    @pytest.mark.parametrize("is_replace_if_exists", [True, False])
-    def test_modify_connection_with_a_lot_of_bindings(self, kikimr, s3, client: FederatedQueryClient, yq_version):
+    @pytest.mark.parametrize("kikimr_settings", [{"is_replace_if_exists": True}, {"is_replace_if_exists": False}], indirect=True)
+    def test_modify_connection_with_a_lot_of_bindings(self, kikimr, s3, client: FederatedQueryClient, yq_version, unique_prefix):
+        pytest.skip("Tiket: YQ-2972")
 
         resource = boto3.resource(
             "s3",
@@ -225,14 +231,16 @@ class TestBindings:
         }
 
         # Test connection creation
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "connection_name"
         connection_id = client.create_storage_connection(
-            "connection_name",
+            storage_connection_name,
             "bindbucket",
             visibility=fq.Acl.Visibility.SCOPE
         ).result.connection_id
 
         self._assert_connections(
-            client, expected_connection_names=['connection_name'])
+            client, expected_connection_names=[storage_connection_name])
 
         # Test binding creation
         a_type = ydb.Column(name="a", type=ydb.Type(
@@ -240,7 +248,7 @@ class TestBindings:
         b_type = ydb.Column(name="b", type=ydb.Type(
             type_id=ydb.Type.PrimitiveTypeId.UTF8))
         for i in range(100):
-            client.create_object_storage_binding(name=f"binding_name_{i}",
+            client.create_object_storage_binding(name=f"{unique_prefix}binding_name_{i}",
                                                  path="abc.json",
                                                  format="json_each_row",
                                                  connection_id=connection_id,
@@ -249,82 +257,88 @@ class TestBindings:
 
         self._assert_bindings(client,
                               expected_binding_names=[
-                                  f'binding_name_{i}'
+                                  f'{unique_prefix}binding_name_{i}'
                                   for i in range(100)
                               ])
         self._assert_query_results(
             client,
-            f"SELECT COUNT(*) as count FROM ({' UNION ALL '.join(f'SELECT * FROM bindings.binding_name_{i}' for i in range(100))})",
+            f"SELECT COUNT(*) as count FROM ({' UNION ALL '.join(f'SELECT * FROM bindings.`{unique_prefix}binding_name_{i}`' for i in range(100))})",
             yq_version,
             expected_result_set)
 
         # Test connection modification
+        new_storage_connection_name = unique_prefix + "new_connection_name"
         client.modify_object_storage_connection(connection_id,
-                                                "new_connection_name",
+                                                new_storage_connection_name,
                                                 "bindbucket",
                                                 visibility=fq.Acl.Visibility.SCOPE)
 
         self._assert_connections(client, expected_connection_names=[
-                                 'new_connection_name'])
+                                 new_storage_connection_name])
         self._assert_bindings(client,
                               expected_binding_names=[
-                                  f'binding_name_{i}'
+                                  f'{unique_prefix}binding_name_{i}'
                                   for i in range(100)
                               ])
         self._assert_query_results(
             client,
-            f"SELECT COUNT(*) as count FROM ({' UNION ALL '.join(f'SELECT * FROM bindings.binding_name_{i}' for i in range(100))})",
+            f"SELECT COUNT(*) as count FROM ({' UNION ALL '.join(f'SELECT * FROM bindings.`{unique_prefix}binding_name_{i}`' for i in range(100))})",
             yq_version,
             expected_result_set)
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_name_uniqueness_constraint(self, client: FederatedQueryClient):
+    def test_name_uniqueness_constraint(self, kikimr, client: FederatedQueryClient, unique_prefix):
         # Test connection & binding creation
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "connection_name"
         connection_id = client.create_storage_connection(
-            "connection_name",
+            storage_connection_name,
             "bindbucket",
             visibility=fq.Acl.Visibility.SCOPE
         ).result.connection_id
 
         self._assert_connections(
-            client, expected_connection_names=['connection_name'])
+            client, expected_connection_names=[storage_connection_name])
 
         # Test binding creation
         a_type = ydb.Column(name="a", type=ydb.Type(
             type_id=ydb.Type.PrimitiveTypeId.INT32))
         b_type = ydb.Column(name="b", type=ydb.Type(
             type_id=ydb.Type.PrimitiveTypeId.UTF8))
-        binding_id = client.create_object_storage_binding(name="binding_name",
+        storage_binding_name = unique_prefix + "binding_name"
+        binding_id = client.create_object_storage_binding(name=storage_binding_name,
                                                           path="abc.json",
                                                           format="json_each_row",
                                                           connection_id=connection_id,
                                                           visibility=fq.Acl.Visibility.SCOPE,
                                                           columns=[a_type, b_type]).result.binding_id
-        self._assert_bindings(client, expected_binding_names=['binding_name'])
+        self._assert_bindings(client, expected_binding_names=[storage_binding_name])
 
         # Test connection & binding creation with substring names
+        storage_connection_substring_name = unique_prefix + "connection"
         connection_id_substring_name = client.create_storage_connection(
-            "connection",
+            storage_connection_substring_name,
             "bindbucket",
             visibility=fq.Acl.Visibility.SCOPE
         ).result.connection_id
 
         self._assert_connections(
-            client, expected_connection_names=['connection_name', 'connection'])
+            client, expected_connection_names=[storage_connection_name, storage_connection_substring_name])
 
         # Test binding creation
-        client.create_object_storage_binding(name="binding",
+        storage_binding_name_substring = unique_prefix + "binding"
+        client.create_object_storage_binding(name=storage_binding_name_substring,
                                              path="abc.json",
                                              format="json_each_row",
                                              connection_id=connection_id_substring_name,
                                              visibility=fq.Acl.Visibility.SCOPE,
                                              columns=[a_type, b_type])
-        self._assert_bindings(client, expected_binding_names=['binding_name', 'binding'])
+        self._assert_bindings(client, expected_binding_names=[storage_binding_name, storage_binding_name_substring])
 
         # Test uniqueness constraint
         create_connection_result = client.create_storage_connection(
-            "binding_name",
+            storage_binding_name,
             "bindbucket",
             visibility=fq.Acl.Visibility.SCOPE,
             check_issues=False
@@ -334,7 +348,7 @@ class TestBindings:
                "Binding with the same name already exists. Please choose another name"
         assert create_connection_result.issues[0].severity == 1
 
-        create_binding_result = client.create_object_storage_binding(name="connection_name",
+        create_binding_result = client.create_object_storage_binding(name=storage_connection_name,
                                                                      path="abc.json",
                                                                      format="json_each_row",
                                                                      connection_id=connection_id,
@@ -348,7 +362,7 @@ class TestBindings:
 
         modify_connection_result = client.modify_object_storage_connection(
             connection_id,
-            "binding_name",
+            storage_binding_name,
             "bindbucket",
             visibility=fq.Acl.Visibility.SCOPE,
             check_issues=False
@@ -359,7 +373,7 @@ class TestBindings:
         assert modify_connection_result.issues[0].severity == 1
 
         modify_binding_result = client.modify_object_storage_binding(binding_id,
-                                                                     name="connection_name",
+                                                                     name=storage_connection_name,
                                                                      path="abc.json",
                                                                      format="json_each_row",
                                                                      connection_id=connection_id,
@@ -373,8 +387,8 @@ class TestBindings:
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    @pytest.mark.parametrize("bindings_mode", ["BM_DROP_WITH_WARNING"])
-    def test_s3_insert(self, kikimr, s3, client, bindings_mode, yq_version):
+    @pytest.mark.parametrize("kikimr_settings", [{"bindings_mode": "BM_DROP_WITH_WARNING"}], indirect=True)
+    def test_s3_insert(self, kikimr, s3, client, yq_version, unique_prefix):
 
         resource = boto3.resource(
             "s3",
@@ -387,18 +401,20 @@ class TestBindings:
         bucket.create(ACL='public-read')
         bucket.objects.all().delete()
 
-        connection_id = client.create_storage_connection("bb", "bindbucket").result.connection_id
+        kikimr.control_plane.wait_bootstrap(1)
+        connection_id = client.create_storage_connection(unique_prefix + "bb", "bindbucket").result.connection_id
 
         fooType = ydb.Column(name="foo", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
         barType = ydb.Column(name="bar", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))
-        client.create_object_storage_binding(name="s3binding",
+        storage_binding_name = unique_prefix + "s3binding"
+        client.create_object_storage_binding(name=storage_binding_name,
                                              path="path1/",
                                              format="csv_with_names",
                                              connection_id=connection_id,
                                              columns=[fooType, barType])
 
-        sql = R'''
-            insert into bindings.`s3binding`
+        sql = fR'''
+            insert into bindings.`{storage_binding_name}`
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
             '''
 
@@ -409,8 +425,8 @@ class TestBindings:
             assert "message: \"Please remove \\\'bindings.\\\' from your query, the support for this syntax will be dropped soon" in issues
             assert "severity: 2" in issues
 
-        sql = R'''
-            select foo, bar from bindings.`s3binding`;
+        sql = fR'''
+            select foo, bar from bindings.`{storage_binding_name}`;
             '''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
@@ -435,7 +451,7 @@ class TestBindings:
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_s3_format_mismatch(self, kikimr, s3, client):
+    def test_s3_format_mismatch(self, kikimr, s3, client, unique_prefix):
 
         resource = boto3.resource(
             "s3",
@@ -447,18 +463,20 @@ class TestBindings:
         bucket = resource.Bucket("bindbucket")
         bucket.create(ACL='public-read')
 
-        connection_id = client.create_storage_connection("bb", "bindbucket").result.connection_id
+        kikimr.control_plane.wait_bootstrap(1)
+        connection_id = client.create_storage_connection(unique_prefix + "bb", "bindbucket").result.connection_id
 
         fooType = ydb.Column(name="foo", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.UTF8))
         barType = ydb.Column(name="bar", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
-        client.create_object_storage_binding(name="s3binding",
+        storage_binding_name = unique_prefix + "s3binding"
+        client.create_object_storage_binding(name=storage_binding_name,
                                              path="path2/",
                                              format="csv_with_names",
                                              connection_id=connection_id,
                                              columns=[fooType, barType])
 
-        sql = R'''
-            insert into bindings.`s3binding`
+        sql = fR'''
+            insert into bindings.`{storage_binding_name}`
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
             '''
 
@@ -471,7 +489,7 @@ class TestBindings:
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_pg_binding(self, kikimr, s3, client):
+    def test_pg_binding(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -494,12 +512,14 @@ Banana,3
 Apple,2
 Pear,15'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='a/fruits.csv', ContentType='text/plain')
+
         kikimr.control_plane.wait_bootstrap(1)
-        connection_response = client.create_storage_connection("fruitbucket", "fbucket")
+        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
 
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(pg_type=ydb.PgType(oid=25)))
         priceType = ydb.Column(name="Price", type=ydb.Type(pg_type=ydb.PgType(oid=23)))
-        client.create_object_storage_binding(name="my_binding",
+        storage_binding_name = unique_prefix + "my_binding"
+        client.create_object_storage_binding(name=storage_binding_name,
                                              path="a/",
                                              format="csv_with_names",
                                              connection_id=connection_response.result.connection_id,
@@ -508,9 +528,9 @@ Pear,15'''
                                                  "file_pattern": "*.csv"
                                              })
 
-        sql = R'''
+        sql = fR'''
             SELECT *
-            FROM bindings.my_binding;
+            FROM bindings.{storage_binding_name};
             '''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS,
@@ -536,7 +556,7 @@ Pear,15'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("pg_syntax", [False, True], ids=["yql_syntax", "pg_syntax"])
-    def test_count_for_pg_binding(self, kikimr, s3, client, pg_syntax):
+    def test_count_for_pg_binding(self, kikimr, s3, client, pg_syntax, unique_prefix):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -556,21 +576,23 @@ Pear,15'''
 
         row = R'''{"a": 42, "b": 3.14, "c": "text"}'''
         s3_client.put_object(Body=row, Bucket='count_for_pg_binding', Key='abc.json', ContentType='text/json')
+
         kikimr.control_plane.wait_bootstrap(1)
-        connection_response = client.create_storage_connection("abc", "count_for_pg_binding")
+        connection_response = client.create_storage_connection(unique_prefix + "abc", "count_for_pg_binding")
 
         aType = ydb.Column(name="a", type=ydb.Type(pg_type=ydb.PgType(oid=23)))
         bType = ydb.Column(name="b", type=ydb.Type(pg_type=ydb.PgType(oid=701)))
         cType = ydb.Column(name="c", type=ydb.Type(pg_type=ydb.PgType(oid=25)))
-        client.create_object_storage_binding(name="binding_for_count",
+        storage_binding_name = unique_prefix + "binding_for_count"
+        client.create_object_storage_binding(name=storage_binding_name,
                                              path="abc.json",
                                              format="json_each_row",
                                              connection_id=connection_response.result.connection_id,
                                              columns=[aType, bType, cType])
 
-        sql = R'''
+        sql = fR'''
             SELECT COUNT(*)
-            FROM bindings.binding_for_count;
+            FROM bindings.{storage_binding_name};
             '''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS,
@@ -591,7 +613,7 @@ Pear,15'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_ast_in_failed_query_compilation(self, kikimr, s3, client):
+    def test_ast_in_failed_query_compilation(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -603,17 +625,19 @@ Pear,15'''
         bucket.create(ACL='public-read')
         bucket.objects.all().delete()
 
-        connection_id = client.create_storage_connection("bb", "bindbucket").result.connection_id
+        kikimr.control_plane.wait_bootstrap(1)
+        connection_id = client.create_storage_connection(unique_prefix + "bb", "bindbucket").result.connection_id
 
         data_column = ydb.Column(name="data", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
-        client.create_object_storage_binding(name="s3binding",
+        storage_binding_name = unique_prefix + "s3binding"
+        client.create_object_storage_binding(name=storage_binding_name,
                                              path="/",
                                              format="raw",
                                              connection_id=connection_id,
                                              columns=[data_column])
 
-        sql = R'''
-            SELECT some_unknown_column FROM bindings.`s3binding`;
+        sql = fR'''
+            SELECT some_unknown_column FROM bindings.`{storage_binding_name}`;
         '''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id

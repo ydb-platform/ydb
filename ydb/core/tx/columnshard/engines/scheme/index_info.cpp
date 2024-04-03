@@ -48,6 +48,10 @@ std::shared_ptr<arrow::RecordBatch> TIndexInfo::AddSpecialColumns(const std::sha
     return *res;
 }
 
+ui64 TIndexInfo::GetSpecialColumnsRecordSize() {
+    return sizeof(ui64) + sizeof(ui64);
+}
+
 std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchemaSnapshot() {
     static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(arrow::FieldVector{
         arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),
@@ -355,12 +359,14 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     }
 
     {
-        NStatistics::TPortionStorageCursor cursor;
         for (const auto& stat : schema.GetStatistics()) {
             NStatistics::TOperatorContainer container;
             AFL_VERIFY(container.DeserializeFromProto(stat));
+            AFL_VERIFY(StatisticsByName.emplace(container.GetName(), std::move(container)).second);
+        }
+        NStatistics::TPortionStorageCursor cursor;
+        for (auto&& [_, container] : StatisticsByName) {
             container.SetCursor(cursor);
-            Statistics.emplace(container->GetIdentifier(), container);
             container->ShiftCursor(cursor);
         }
     }
@@ -418,7 +424,9 @@ std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSche
 
         const auto& column = it->second;
         std::string colName(column.Name.data(), column.Name.size());
-        fields.emplace_back(std::make_shared<arrow::Field>(colName, NArrow::GetArrowType(column.PType), !column.NotNull));
+        auto arrowType = NArrow::GetArrowType(column.PType);
+        AFL_VERIFY(arrowType.ok());
+        fields.emplace_back(std::make_shared<arrow::Field>(colName, arrowType.ValueUnsafe(), !column.NotNull));
     }
 
     return std::make_shared<arrow::Schema>(std::move(fields));

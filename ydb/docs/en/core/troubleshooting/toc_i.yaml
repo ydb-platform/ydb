@@ -1,8 +1,0 @@
-items:
-- name: System views
-  href: system_views_db.md
-- name: Monitoring
-  href: monitoring.md
-- name: System views (deprecated)
-  href: system_views.md
-  hidden: true

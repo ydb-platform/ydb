@@ -672,6 +672,14 @@ std::vector<TReplicationProgress> ScatterReplicationProgress(
     return result;
 }
 
+bool IsReplicaLocationValid(
+    const TReplicaInfo* replica,
+    const NYPath::TYPath& tablePath,
+    const TString& clusterName)
+{
+    return replica->ReplicaPath == tablePath && replica->ClusterName == clusterName;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NChaosClient

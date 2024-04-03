@@ -18,6 +18,11 @@ message TEvMarkSchemeShardPipe {
 }
 
 message TEvCreateSequence {
+    message TSetVal {
+        sint64 NextValue = 1;
+        bool NextUsed = 2;
+    }
+
     NKikimrProto.TPathID PathId = 1;
     uint64 TxId = 2;
     uint64 TxPartId = 3;
@@ -39,6 +44,8 @@ message TEvCreateSequence {
     oneof OptionalCycle {
         bool Cycle = 9;
     }
+    bool Frozen = 10; // defaults to false
+    TSetVal SetVal = 11;
 }
 
 message TEvCreateSequenceResult {
@@ -223,4 +230,34 @@ message TEvRedirectSequenceResult {
     uint64 Origin = 2;
     uint64 TxId = 3;
     uint64 TxPartId = 4;
+}
+
+message TEvGetSequence {
+    NKikimrProto.TPathID PathId = 1;
+    uint64 TxId = 2;
+    uint64 TxPartId = 3;
+}
+
+message TEvGetSequenceResult {
+    enum EStatus {
+        UNKNOWN = 0;
+        SUCCESS = 1;
+        PIPE_OUTDATED = 2;
+        SEQUENCE_NOT_FOUND = 3;
+        SEQUENCE_MOVED = 4;
+    }
+
+    EStatus Status = 1;
+    uint64 Origin = 2;
+    uint64 TxId = 3;
+    uint64 TxPartId = 4;
+    uint64 MovedTo = 5; // moved to a different sequence shard
+    sint64 MinValue = 6;
+    sint64 MaxValue = 7;
+    sint64 StartValue = 8;
+    sint64 NextValue = 9;
+    bool NextUsed = 10;
+    uint64 Cache = 11;
+    sint64 Increment = 12;
+    bool Cycle = 13;
 }

@@ -132,8 +132,6 @@ namespace NKikimr {
         NewMemRec = TMemRecLogoBlob(ingress);
         NewDataMerger.Swap(dataMerger);
         NewMemRec.SetType(NewDataMerger.GetType());
-        Y_ABORT_UNLESS(NewDataMerger.HasSmallBlobs() ||
-                 (NewMemRec.GetType() == TBlobType::DiskBlob && !NewMemRec.HasData())); // i.e. we also work for empty blobs
 
         Key = key;
         MemRec = &NewMemRec;
@@ -216,22 +214,25 @@ namespace NKikimr {
                         newMerger.AddPart(blob, it);
                     }
                 }
+                break;
             }
             case TBlobType::HugeBlob:
             case TBlobType::ManyHugeBlobs: {
                 const auto& oldMerger = dataMerger->GetHugeBlobMerger();
 
-                Y_DEBUG_ABORT_UNLESS(oldMerger.SavedData().size() == localParts.CountBits());
+                auto parts = oldMerger.GetParts();
+                Y_DEBUG_ABORT_UNLESS(oldMerger.SavedData().size() == parts.CountBits());
                 Y_DEBUG_ABORT_UNLESS(oldMerger.SavedData().size() == oldMerger.GetCircaLsns().size());
 
-                for (ui8 i = localParts.FirstPosition(), j = 0; i != localParts.GetSize(); i = localParts.NextPosition(i), ++j) {
-                    if (delVec.Get(i)) {
-                        newMerger.AddDeletedHugeBlob(oldMerger.SavedData()[j]);
+                for (ui8 i = parts.FirstPosition(), j = 0; i != parts.GetSize(); i = parts.NextPosition(i), ++j) {
+                    if (localParts.Get(i)) {
+                        auto curOneHotPart = NMatrix::TVectorType::MakeOneHot(i, parts.GetSize());
+                        newMerger.AddHugeBlob(&oldMerger.SavedData()[j], &oldMerger.SavedData()[j] + 1, curOneHotPart, oldMerger.GetCircaLsns()[j]);
                     } else {
-                        auto parts = NMatrix::TVectorType::MakeOneHot(i, localParts.GetSize());
-                        newMerger.AddHugeBlob(&oldMerger.SavedData()[j], &oldMerger.SavedData()[j] + 1, parts, oldMerger.GetCircaLsns()[j]);
+                        newMerger.AddDeletedHugeBlob(oldMerger.SavedData()[j]);
                     }
                 }
+                break;
             }
             default: {
                 Y_DEBUG_ABORT_UNLESS(false);

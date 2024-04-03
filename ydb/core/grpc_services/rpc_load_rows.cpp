@@ -4,7 +4,7 @@
 #include "service_table.h"
 #include "audit_dml_operations.h"
 
-#include <ydb/core/tx/tx_proxy/upload_rows/upload_rows_common_impl.h>
+#include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/library/yql/public/udf/udf_types.h>
@@ -462,8 +462,12 @@ private:
                 auto& nullValue = cvsSettings.null_value();
                 bool withHeader = cvsSettings.header();
 
-                NFormats::TArrowCSV reader(SrcColumns, withHeader, NotNullColumns);
-                reader.SetSkipRows(skipRows);
+                auto reader = NFormats::TArrowCSV::Create(SrcColumns, withHeader, NotNullColumns);
+                if (!reader.ok()) {
+                    errorMessage = reader.status().ToString();
+                    return false;
+                }
+                reader->SetSkipRows(skipRows);
 
                 if (!delimiter.empty()) {
                     if (delimiter.size() != 1) {
@@ -471,20 +475,20 @@ private:
                         return false;
                     }
 
-                    reader.SetDelimiter(delimiter[0]);
+                    reader->SetDelimiter(delimiter[0]);
                 }
 
                 if (!nullValue.empty()) {
-                    reader.SetNullValue(nullValue);
+                    reader->SetNullValue(nullValue);
                 }
 
                 if (data.size() > NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE) {
                     ui32 blockSize = NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE;
                     blockSize *= data.size() / blockSize + 1;
-                    reader.SetBlockSize(blockSize);
+                    reader->SetBlockSize(blockSize);
                 }
 
-                Batch = reader.ReadSingleBatch(data, errorMessage);
+                Batch = reader->ReadSingleBatch(data, errorMessage);
                 if (!Batch) {
                     return false;
                 }

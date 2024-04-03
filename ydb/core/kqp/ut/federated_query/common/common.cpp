@@ -17,7 +17,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
     }
 
     std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
-        NYql::IHTTPGateway::TPtr httpGateway,
+        bool initializeHttpGateway,
         NYql::NConnector::IClient::TPtr connectorClient,
         NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver,
         std::optional<NKikimrConfig::TAppConfig> appConfig)
@@ -30,6 +30,13 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         }
         appConfig->MutableTableServiceConfig()->SetEnablePreparedDdl(true);
 
+        auto settings = TKikimrSettings();
+
+        NYql::IHTTPGateway::TPtr httpGateway;
+        if (initializeHttpGateway) {
+            httpGateway = MakeHttpGateway(appConfig->GetQueryServiceConfig().GetHttpGateway(), settings.CountersRoot);
+        }
+
         auto federatedQuerySetupFactory = std::make_shared<TKqpFederatedQuerySetupFactoryMock>(
             httpGateway,
             connectorClient,
@@ -41,10 +48,10 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             nullptr,
             nullptr);
 
-        auto settings = TKikimrSettings()
-                            .SetFeatureFlags(featureFlags)
-                            .SetFederatedQuerySetupFactory(federatedQuerySetupFactory)
-                            .SetKqpSettings({});
+        settings
+            .SetFeatureFlags(featureFlags)
+            .SetFederatedQuerySetupFactory(federatedQuerySetupFactory)
+            .SetKqpSettings({});
 
         settings = settings.SetAppConfig(appConfig.value());
 

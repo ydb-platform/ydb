@@ -330,9 +330,15 @@ private:
         // no TaskRunner => no outputChannel.Channel, nothing to Finish
         CA_LOG_I("Peer finished, channel: " << channelId);
         TOutputChannelInfo* outputChannel = OutputChannelsMap.FindPtr(channelId);
+        TrySendAsyncChannelData(*outputChannel); // early finish (skip data)
         YQL_ENSURE(outputChannel, "task: " << Task.GetId() << ", output channelId: " << channelId);
 
-        outputChannel->Finished = true;
+        if (outputChannel->PopStarted) {
+            InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssue("Several parallel pop operations. Please check multiple parallel TEvOutputChannelDataRequest for channel"));
+            return;
+        }
+
+        outputChannel->PopStarted = true;
         ProcessOutputsState.Inflight++;
         Send(TaskRunnerActorId, MakeHolder<NTaskRunnerActor::TEvOutputChannelDataRequest>(channelId, /* wasFinished = */ true, 0));  // finish channel
         DoExecute();
@@ -578,7 +584,22 @@ private:
         auto it = OutputChannelsMap.find(ev->Get()->ChannelId);
         Y_ABORT_UNLESS(it != OutputChannelsMap.end());
         TOutputChannelInfo& outputChannel = it->second;
-        Y_ABORT_UNLESS(!outputChannel.AsyncData); // have finished previous cycle
+        if (outputChannel.AsyncData) {
+            CA_LOG_E("Data was not sent to the output channel in the previous step. Channel: " << outputChannel.ChannelId
+            << " Finished: " << outputChannel.Finished
+            << " Previous: { DataSize: " << outputChannel.AsyncData->Data.size()
+            << ", Watermark: " << outputChannel.AsyncData->Watermark
+            << ", Checkpoint: " << outputChannel.AsyncData->Checkpoint
+            << ", Finished: " << outputChannel.AsyncData->Finished
+            << ", Changed: " << outputChannel.AsyncData->Changed << "}"
+            << " Current: { DataSize: " << ev->Get()->Data.size()
+            << ", Watermark: " << ev->Get()->Watermark
+            << ", Checkpoint: " << ev->Get()->Checkpoint
+            << ", Finished: " << ev->Get()->Finished
+            << ", Changed: " << ev->Get()->Changed << "} ");
+            InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssue("Data was not sent to the output channel in the previous step"));
+            return;
+        }
         outputChannel.AsyncData.ConstructInPlace();
         outputChannel.AsyncData->Watermark = std::move(ev->Get()->Watermark);
         outputChannel.AsyncData->Data = std::move(ev->Get()->Data);

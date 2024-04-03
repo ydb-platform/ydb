@@ -53,6 +53,8 @@ namespace NSQLTranslationPG {
 
 using namespace NYql;
 
+static const THashSet<TString> SystemColumns = { "tableoid", "xmin", "cmin", "xmax", "cmax", "ctid" };
+
 template <typename T>
 const T* CastNode(const void* nodeptr, int tag) {
     Y_ENSURE(nodeTag(nodeptr) == tag);
@@ -286,15 +288,21 @@ public:
     };
 
     TConverter(TVector<TAstParseResult>& astParseResults, const NSQLTranslation::TTranslationSettings& settings,
-            const TString& query, bool perStatementResult)
+            const TString& query, TVector<TStmtParseInfo>* stmtParseInfo, bool perStatementResult)
         : AstParseResults(astParseResults)
         , Settings(settings)
         , DqEngineEnabled(Settings.DqDefaultAuto->Allow())
         , BlockEngineEnabled(Settings.BlockDefaultAuto->Allow())
+        , StmtParseInfo(stmtParseInfo)
         , PerStatementResult(perStatementResult)
     {
+        Y_ENSURE(settings.Mode == NSQLTranslation::ESqlMode::QUERY || settings.Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW);
+        Y_ENSURE(settings.Mode != NSQLTranslation::ESqlMode::LIMITED_VIEW || !perStatementResult);
         State.ApplicationName = Settings.ApplicationName;
         AstParseResults.push_back({});
+        if (StmtParseInfo) {
+            StmtParseInfo->push_back({});
+        }
         ScanRows(query);
 
         for (auto& flag : Settings.Flags) {
@@ -344,6 +352,9 @@ public:
             return;
         }
         AstParseResults.resize(ListLength(raw));
+        if (StmtParseInfo) {
+            StmtParseInfo->resize(AstParseResults.size());
+        }
         for (; StatementId < AstParseResults.size(); ++StatementId) {
             AstParseResults[StatementId].Pool = std::make_unique<TMemoryPool>(4096);
             AstParseResults[StatementId].Root = ParseResult(raw, StatementId);
@@ -387,14 +398,16 @@ public:
             return nullptr;
         }
 
-        if (Settings.EndOfQueryCommit) {
+        if (Settings.EndOfQueryCommit && Settings.Mode != NSQLTranslation::ESqlMode::LIMITED_VIEW) {
             State.Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
                 A("world"))));
         }
 
         AddVariableDeclarations();
 
-        State.Statements.push_back(L(A("return"), A("world")));
+        if (Settings.Mode != NSQLTranslation::ESqlMode::LIMITED_VIEW) {
+            State.Statements.push_back(L(A("return"), A("world")));
+        }
 
         if (DqEngineEnabled) {
             State.Statements[dqEnginePgmPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
@@ -424,6 +437,12 @@ public:
     bool ParseRawStmt(const RawStmt* value) {
         AT_LOCATION_EX(value, stmt_location);
         auto node = value->stmt;
+        if (Settings.Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW) {
+            if (NodeTag(node) != T_SelectStmt && NodeTag(node) != T_VariableSetStmt) {
+                AddError("Unsupported statement in LIMITED_VIEW mode");
+                return false;
+            }
+        }
         switch (NodeTag(node)) {
         case T_SelectStmt:
             return ParseSelectStmt(CAST_NODE(SelectStmt, node), false) != nullptr;
@@ -740,6 +759,15 @@ public:
         bool fillTargetColumns = false,
         bool unknownsAllowed = false
     ) {
+        if (Settings.Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW) {
+            if (HasSelectInLimitedView) {
+                AddError("Expected exactly one SELECT in LIMITED_VIEW mode");
+                return nullptr;
+            }
+
+            HasSelectInLimitedView = true;
+        }
+
         bool isValuesClauseOfInsertStmt = fillTargetColumns;
 
         State.CTE.emplace_back();
@@ -935,6 +963,10 @@ public:
                                 }
 
                                 if (ListLength(join->usingClause) > 0) {
+                                    if (join->join_using_alias) {
+                                        AddError(TStringBuilder() << "join USING: unsupported AS");
+                                        return nullptr;
+                                    }
                                     if (op == "cross") {
                                         op = "inner";
                                     }
@@ -1075,7 +1107,7 @@ public:
 
             if (x != value) {
                 if (x->limitOption == LIMIT_OPTION_COUNT || x->limitOption == LIMIT_OPTION_DEFAULT) {
-                    if (value->limitCount || value->limitOffset) {
+                    if (x->limitCount || x->limitOffset) {
                         AddError("SelectStmt: limit should be used only on top");
                         return nullptr;
                     }
@@ -1272,6 +1304,11 @@ public:
 
         if (inner) {
             return output;
+        }
+
+        if (Settings.Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW) {
+            State.Statements.push_back(L(A("return"), L(A("Right!"), L(A("Cons!"), A("world"), output))));
+            return State.Statements.back();
         }
 
         auto resOptions = QL(QL(QA("type")), QL(QA("autoref")));
@@ -1755,6 +1792,10 @@ private:
 
     bool AddColumn(TCreateTableCtx& ctx, const ColumnDef* node) {
         TColumnInfo cinfo{.Name = node->colname};
+        if (SystemColumns.contains(to_lower(cinfo.Name))) {
+            AddError(TStringBuilder() << "system column can't be used: " << node->colname);
+            return false;
+        }
 
         if (node->constraints) {
             for (int i = 0; i < ListLength(node->constraints); ++i) {
@@ -2159,31 +2200,43 @@ public:
 
         auto name = to_lower(TString(value->name));
         if (name == "search_path") {
-            if (ListLength(value->args) != 1) {
-                AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
-                return nullptr;
-            }
-            auto val = ListNodeNth(value->args, 0);
-            if (!isSetConfig) {
-                if (NodeTag(val) == T_A_Const) {
-                    val = (const Node*)&CAST_NODE(A_Const, val)->val;
-                } else {
-                    AddError(TStringBuilder() << "VariableSetStmt, expected const for " << value->name << " option");
+            THashSet<TString> visitedValues;
+            TVector<TString> values;
+            for (int i = 0; i < ListLength(value->args); ++i) {
+                auto val = ListNodeNth(value->args, i);
+                if (!isSetConfig) {
+                    if (NodeTag(val) == T_A_Const) {
+                        val = (const Node*)&CAST_NODE(A_Const, val)->val;
+                    } else {
+                        AddError(TStringBuilder() << "VariableSetStmt, expected const for " << value->name << " option");
+                        return nullptr;
+                    }
+                }
+
+                if (NodeTag(val) != T_String) {
+                    AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                     return nullptr;
+                }
+                TString rawStr = to_lower(TString(StrVal(val)));
+                if (visitedValues.emplace(rawStr).second) {
+                    values.emplace_back(rawStr);
                 }
             }
 
-            if (NodeTag(val) != T_String) {
-                AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
+            if (values.size() != 1) {
+                AddError(TStringBuilder() << "VariableSetStmt, expected 1 unique scheme, but got: " << values.size());
                 return nullptr;
             }
-            TString rawStr = to_lower(TString(StrVal(val)));
+            auto rawStr = values[0];
             if (rawStr != "pg_catalog" && rawStr != "public" && rawStr != "" && rawStr != "information_schema") {
                 AddError(TStringBuilder() << "VariableSetStmt, search path supports only 'information_schema', 'public', 'pg_catalog', '' but got: '" << rawStr << "'");
                 return nullptr;
             }
             if (Settings.GUCSettings) {
                 Settings.GUCSettings->Set(name, rawStr, value->is_local);
+                if (StmtParseInfo) {
+                    (*StmtParseInfo)[StatementId].KeepInCache = false;
+                }
             }
             return State.Statements.back();
         }
@@ -2430,6 +2483,9 @@ public:
         }
         if (varName == "standard_conforming_strings"){
             return "on";
+        }
+        if (varName == "transaction_isolation"){
+            return "serializable";
         }
         return {};
     }
@@ -4242,6 +4298,44 @@ public:
         return L(A("PgOp"), QAX(op), lhs, rhs);
     }
 
+    TAstNode* ParseAExprOpAnyAll(const A_Expr* value, const TExprSettings& settings, bool all) {
+        if (ListLength(value->name) != 1) {
+            AddError(TStringBuilder() << "Unsupported count of names: " << ListLength(value->name));
+            return nullptr;
+        }
+
+        auto nameNode = ListNodeNth(value->name, 0);
+        if (NodeTag(nameNode) != T_String) {
+            NodeNotImplemented(value, nameNode);
+            return nullptr;
+        }
+
+        auto op = StrVal(nameNode);
+        if (!value->lexpr || !value->rexpr) {
+            AddError("Missing operands");
+            return nullptr;
+        }
+
+        auto lhs = ParseExpr(value->lexpr, settings);
+        if (NodeTag(value->rexpr) == T_SubLink) {
+            auto sublink = CAST_NODE(SubLink, value->rexpr);
+            auto subselect = CAST_NODE(SelectStmt, sublink->subselect);
+            if (subselect->withClause && subselect->withClause->recursive) {
+                if (State.ApplicationName && State.ApplicationName->StartsWith("pgAdmin")) {
+                    AddWarning(TIssuesIds::PG_COMPAT, "AEXPR_OP_ANY forced to false");
+                    return L(A("PgConst"), QA("false"), L(A("PgType"), QA("bool")));
+                }
+            }
+        }
+
+        auto rhs = ParseExpr(value->rexpr, settings);
+        if (!lhs || !rhs) {
+            return nullptr;
+        }
+
+        return L(A(all ? "PgAllOp" : "PgAnyOp"), QAX(op), lhs, rhs);
+    }
+
     TAstNode* ParseAExprLike(const A_Expr* value, const TExprSettings& settings, bool insensitive) {
         if (ListLength(value->name) != 1) {
             AddError(TStringBuilder() << "Unsupported count of names: " << ListLength(value->name));
@@ -4284,6 +4378,27 @@ public:
         }
 
         return ret;
+    }
+
+    TAstNode* ParseAExprNullIf(const A_Expr* value, const TExprSettings& settings) {
+        if (ListLength(value->name) != 1) {
+            AddError(TStringBuilder() << "Unsupported count of names: " << ListLength(value->name));
+            return nullptr;
+        }
+        if (!value->lexpr || !value->rexpr) {
+            AddError("Missing operands");
+            return nullptr;
+        }
+
+        auto lhs = ParseExpr(value->lexpr, settings);
+        auto rhs = ParseExpr(value->rexpr, settings);
+        if (!lhs || !rhs) {
+            return nullptr;
+        }
+        auto pred = L(A("Coalesce"),
+                L(A("FromPg"), L(A("PgOp"), QA("="), lhs, rhs)),
+                L(A("Bool"), QA("false")));
+        return L(A("If"), pred, lhs, L(A("Null")));
     }
 
     TAstNode* ParseAExprIn(const A_Expr* value, const TExprSettings& settings) {
@@ -4410,10 +4525,10 @@ public:
         case AEXPR_NOT_BETWEEN_SYM:
             return ParseAExprBetween(value, settings);
         case AEXPR_OP_ANY:
-            if (State.ApplicationName && State.ApplicationName->StartsWith("pgAdmin")) {
-                AddWarning(TIssuesIds::PG_COMPAT, "AEXPR_OP_ANY forced to false");
-                return L(A("PgConst"), QA("false"), L(A("PgType"), QA("bool")));
-            }
+        case AEXPR_OP_ALL:
+            return ParseAExprOpAnyAll(value, settings, value->kind == AEXPR_OP_ALL);
+        case AEXPR_NULLIF:
+            return ParseAExprNullIf(value, settings);
         default:
             AddError(TStringBuilder() << "A_Expr_Kind unsupported value: " << (int)value->kind);
             return nullptr;
@@ -4639,7 +4754,9 @@ private:
 
     TState State;
     ui32 StatementId = 0;
+    TVector<TStmtParseInfo>* StmtParseInfo;
     bool PerStatementResult;
+    bool HasSelectInLimitedView = false;
 };
 
 const THashMap<TStringBuf, TString> TConverter::ProviderToInsertModeMap = {
@@ -4647,18 +4764,27 @@ const THashMap<TStringBuf, TString> TConverter::ProviderToInsertModeMap = {
     {NYql::YtProviderName, "append"}
 };
 
-NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
+NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo) {
     TVector<NYql::TAstParseResult> results;
-    TConverter converter(results, settings, query, false);
+    TVector<TStmtParseInfo> stmtParseInfos;
+    TConverter converter(results, settings, query, &stmtParseInfos, false);
     NYql::PGParse(query, converter);
+    if (stmtParseInfo) {
+        Y_ENSURE(!stmtParseInfos.empty());
+        *stmtParseInfo = stmtParseInfos.back();
+    }
     Y_ENSURE(!results.empty());
+    results.back().ActualSyntaxType = NYql::ESyntaxType::Pg;
     return std::move(results.back());
 }
 
-TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
+TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TVector<TStmtParseInfo>* stmtParseInfo) {
     TVector<NYql::TAstParseResult> results;
-    TConverter converter(results, settings, query, true);
+    TConverter converter(results, settings, query, stmtParseInfo, true);
     NYql::PGParse(query, converter);
+    for (auto& res : results) {
+        res.ActualSyntaxType = NYql::ESyntaxType::Pg; 
+    }
     return results;
 }
 

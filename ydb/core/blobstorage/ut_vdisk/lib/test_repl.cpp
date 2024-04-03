@@ -203,6 +203,7 @@ private:
 
         ReplCtx = std::make_shared<TReplCtx>(
                 VCtx,
+                nullptr,
                 nullptr, // PDiskCtx
                 nullptr, // HugeBlobCtx
                 nullptr,

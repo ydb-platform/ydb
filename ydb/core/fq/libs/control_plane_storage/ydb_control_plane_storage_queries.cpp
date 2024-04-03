@@ -401,7 +401,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
         TVector<TString> filters;
         if (request.filter().name()) {
             queryBuilder.AddString("filter_name", request.filter().name());
-            filters.push_back("`" NAME_COLUMN_NAME "` ILIKE '%' || $filter_name || '%'");
+            filters.push_back("Re2::Grep($filter_name, Re2::Options(false AS CaseSensitive, true as Literal))(`" NAME_COLUMN_NAME "`)");
         }
 
         if (request.filter().query_type() != FederatedQuery::QueryContent::QUERY_TYPE_UNSPECIFIED) {
@@ -1007,7 +1007,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             "$to_delete = (\n"
                 "SELECT * FROM `" JOBS_TABLE_NAME "`\n"
                 "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id\n"
-                "ORDER BY `" JOB_ID_COLUMN_NAME "`\n"
+                "ORDER BY `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME  "`, `" JOB_ID_COLUMN_NAME "`\n"
                 "LIMIT $max_count_jobs, 1\n"
             ");\n"
         );

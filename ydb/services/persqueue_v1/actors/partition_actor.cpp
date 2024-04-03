@@ -67,7 +67,9 @@ TPartitionActor::TPartitionActor(
     , Topic(topic)
     , DirectRead(directRead)
     , UseMigrationProtocol(useMigrationProtocol)
+    , FirstRead(true)
 {
+    Y_UNUSED(FirstRead);
 }
 
 

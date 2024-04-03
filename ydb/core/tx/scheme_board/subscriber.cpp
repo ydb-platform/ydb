@@ -1,4 +1,5 @@
 #include "events.h"
+#include "events_internal.h"
 #include "helpers.h"
 #include "monitorable_actor.h"
 #include "subscriber.h"
@@ -356,13 +357,13 @@ namespace {
 
 template <typename TPath, typename TDerived>
 class TReplicaSubscriber: public TMonitorableActor<TDerived> {
-    void Handle(TSchemeBoardEvents::TEvNotify::TPtr& ev) {
+    void Handle(NInternalEvents::TEvNotify::TPtr& ev) {
         auto& record = *ev->Get()->MutableRecord();
 
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender);
 
-        this->Send(ev->Sender, new TSchemeBoardEvents::TEvNotifyAck(record.GetVersion()));
+        this->Send(ev->Sender, new NInternalEvents::TEvNotifyAck(record.GetVersion()));
 
         if (!IsValidNotification(Path, record)) {
             SBS_LOG_E("Suspicious " << ev->Get()->ToString()
@@ -373,7 +374,7 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
         this->Send(Parent, ev->Release().Release(), 0, ev->Cookie);
     }
 
-    void Handle(TSchemeBoardEvents::TEvSyncVersionRequest::TPtr& ev) {
+    void Handle(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
@@ -382,7 +383,7 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
         this->Send(Replica, ev->Release().Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
-    void Handle(TSchemeBoardEvents::TEvSyncVersionResponse::TPtr& ev) {
+    void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
@@ -427,7 +428,7 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
             this->Send(MakeInterconnectProxyId(Replica.NodeId()), new TEvents::TEvUnsubscribe());
         }
 
-        this->Send(Replica, new TSchemeBoardEvents::TEvUnsubscribe(Path));
+        this->Send(Replica, new NInternalEvents::TEvUnsubscribe(Path));
         this->Send(Parent, new TEvents::TEvGone());
 
         TMonitorableActor<TDerived>::PassAway();
@@ -466,16 +467,16 @@ public:
     void Bootstrap(const TActorContext&) {
         TMonitorableActor<TDerived>::Bootstrap();
 
-        this->Send(Replica, new TSchemeBoardEvents::TEvSubscribe(Path, DomainOwnerId),
+        this->Send(Replica, new NInternalEvents::TEvSubscribe(Path, DomainOwnerId),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
         this->Become(&TDerived::StateWork);
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TSchemeBoardEvents::TEvNotify, Handle);
-            hFunc(TSchemeBoardEvents::TEvSyncVersionRequest, Handle);
-            hFunc(TSchemeBoardEvents::TEvSyncVersionResponse, Handle);
+            hFunc(NInternalEvents::TEvNotify, Handle);
+            hFunc(NInternalEvents::TEvSyncVersionRequest, Handle);
+            hFunc(NInternalEvents::TEvSyncVersionResponse, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
@@ -509,7 +510,7 @@ public:
 
 template <typename TPath, typename TDerived, typename TReplicaDerived>
 class TSubscriberProxy: public TMonitorableActor<TDerived> {
-    void Handle(TSchemeBoardEvents::TEvNotify::TPtr& ev) {
+    void Handle(NInternalEvents::TEvNotify::TPtr& ev) {
         if (ev->Sender != ReplicaSubscriber) {
             return;
         }
@@ -518,20 +519,20 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
         Delay = DefaultDelay;
     }
 
-    void Handle(TSchemeBoardEvents::TEvSyncVersionRequest::TPtr& ev) {
+    void Handle(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
         if (!ReplicaMissing) {
             CurrentSyncRequest = ev->Cookie;
             this->Send(ReplicaSubscriber, ev->Release().Release(), 0, ev->Cookie);
         } else {
-            this->Send(Parent, new TSchemeBoardEvents::TEvSyncVersionResponse(0, true), 0, ev->Cookie);
+            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0, true), 0, ev->Cookie);
         }
     }
 
-    void HandleSleep(TSchemeBoardEvents::TEvSyncVersionRequest::TPtr& ev) {
-        this->Send(Parent, new TSchemeBoardEvents::TEvSyncVersionResponse(0, true), 0, ev->Cookie);
+    void HandleSleep(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
+        this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0, true), 0, ev->Cookie);
     }
 
-    void Handle(TSchemeBoardEvents::TEvSyncVersionResponse::TPtr& ev) {
+    void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
         if (ev->Sender != ReplicaSubscriber || ev->Cookie != CurrentSyncRequest) {
             return;
         }
@@ -563,11 +564,11 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
 
     void OnReplicaFailure() {
         if (CurrentSyncRequest) {
-            this->Send(Parent, new TSchemeBoardEvents::TEvSyncVersionResponse(0, true), 0, CurrentSyncRequest);
+            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0, true), 0, CurrentSyncRequest);
             CurrentSyncRequest = 0;
         }
 
-        this->Send(Parent, new TSchemeBoardEvents::TEvNotifyBuilder(Path, true));
+        this->Send(Parent, new NInternalEvents::TEvNotifyBuilder(Path, true));
     }
 
     void Handle(TEvents::TEvGone::TPtr& ev) {
@@ -646,9 +647,9 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TSchemeBoardEvents::TEvNotify, Handle);
-            hFunc(TSchemeBoardEvents::TEvSyncVersionRequest, Handle);
-            hFunc(TSchemeBoardEvents::TEvSyncVersionResponse, Handle);
+            hFunc(NInternalEvents::TEvNotify, Handle);
+            hFunc(NInternalEvents::TEvSyncVersionRequest, Handle);
+            hFunc(NInternalEvents::TEvSyncVersionResponse, Handle);
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
@@ -660,7 +661,7 @@ public:
 
     STFUNC(StateSleep) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TSchemeBoardEvents::TEvSyncVersionRequest, HandleSleep);
+            hFunc(NInternalEvents::TEvSyncVersionRequest, HandleSleep);
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
@@ -764,7 +765,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         return InitialResponses.size() > (Proxies.size() / 2);
     }
 
-    void EnqueueSyncRequest(TSchemeBoardEvents::TEvSyncRequest::TPtr& ev) {
+    void EnqueueSyncRequest(NInternalEvents::TEvSyncRequest::TPtr& ev) {
         DelayedSyncRequest = Max(DelayedSyncRequest, ev->Cookie);
     }
 
@@ -778,14 +779,14 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
         Y_ABORT_UNLESS(PendingSync.empty());
         for (const auto& proxy : Proxies) {
-            this->Send(proxy, new TSchemeBoardEvents::TEvSyncVersionRequest(Path), 0, CurrentSyncRequest);
+            this->Send(proxy, new NInternalEvents::TEvSyncVersionRequest(Path), 0, CurrentSyncRequest);
             PendingSync.emplace(proxy);
         }
 
         return true;
     }
 
-    void Handle(TSchemeBoardEvents::TEvNotify::TPtr& ev) {
+    void Handle(NInternalEvents::TEvNotify::TPtr& ev) {
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender);
 
@@ -848,7 +849,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         }
     }
 
-    void Handle(TSchemeBoardEvents::TEvSyncRequest::TPtr& ev) {
+    void Handle(NInternalEvents::TEvSyncRequest::TPtr& ev) {
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
@@ -869,7 +870,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         Y_ABORT_UNLESS(MaybeRunVersionSync());
     }
 
-    void Handle(TSchemeBoardEvents::TEvSyncVersionResponse::TPtr& ev) {
+    void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
@@ -931,7 +932,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             SBS_LOG_W(done);
         }
 
-        this->Send(Owner, new TSchemeBoardEvents::TEvSyncResponse(Path, partial), 0, ev->Cookie);
+        this->Send(Owner, new NInternalEvents::TEvSyncResponse(Path, partial), 0, ev->Cookie);
 
         PendingSync.clear();
         ReceivedSync.clear();
@@ -1055,7 +1056,7 @@ public:
 
     STATEFN(StateResolve) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TSchemeBoardEvents::TEvSyncRequest, EnqueueSyncRequest); // from owner (cache)
+            hFunc(NInternalEvents::TEvSyncRequest, EnqueueSyncRequest); // from owner (cache)
 
             hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
 
@@ -1068,9 +1069,9 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TSchemeBoardEvents::TEvNotify, Handle);
-            hFunc(TSchemeBoardEvents::TEvSyncRequest, Handle); // from owner (cache)
-            hFunc(TSchemeBoardEvents::TEvSyncVersionResponse, Handle); // from proxies
+            hFunc(NInternalEvents::TEvNotify, Handle);
+            hFunc(NInternalEvents::TEvSyncRequest, Handle); // from owner (cache)
+            hFunc(NInternalEvents::TEvSyncVersionResponse, Handle); // from proxies
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 

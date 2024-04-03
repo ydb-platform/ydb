@@ -1,7 +1,7 @@
 Registering pre-existing tables
+	int8_tbl
 	onek
 	tenk1
-	int8_tbl
 <sql-statement>
 --
 -- LIMIT

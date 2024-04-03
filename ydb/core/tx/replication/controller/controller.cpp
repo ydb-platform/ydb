@@ -73,6 +73,10 @@ void TController::Cleanup(const TActorContext& ctx) {
         Send(actorId, new TEvents::TEvPoison());
     }
 
+    for (const auto& [nodeId, _] : Sessions) {
+        CloseSession(nodeId, ctx);
+    }
+
     NodesManager.Shutdown(ctx);
 }
 
@@ -248,11 +252,17 @@ void TController::DeleteSession(ui32 nodeId, const TActorContext& ctx) {
     }
 
     Sessions.erase(nodeId);
+    CloseSession(nodeId, ctx);
+    ScheduleRunWorkers();
+}
+
+void TController::CloseSession(ui32 nodeId, const TActorContext& ctx) {
+    CLOG_T(ctx, "Close session"
+        << ": nodeId# " << nodeId);
+
     if (SelfId().NodeId() != nodeId) {
         Send(ctx.InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
     }
-
-    ScheduleRunWorkers();
 }
 
 void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& ctx) {
@@ -285,6 +295,10 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
 }
 
 void TController::StopWorker(ui32 nodeId, const TWorkerId& id) {
+    LOG_D("Stop worker"
+        << ": nodeId# " << nodeId
+        << ", workerId# " << id);
+
     Y_ABORT_UNLESS(Sessions.contains(nodeId));
     auto& session = Sessions[nodeId];
 
@@ -333,7 +347,10 @@ void TController::ScheduleRunWorkers() {
     RunWorkersScheduled = true;
 }
 
-void TController::Handle(TEvPrivate::TEvRunWorkers::TPtr&, const TActorContext&) {
+void TController::Handle(TEvPrivate::TEvRunWorkers::TPtr&, const TActorContext& ctx) {
+    CLOG_D(ctx, "Run workers"
+        << ": queue# " << WorkersToRun.size());
+
     static constexpr ui32 limit = 100;
     ui32 i = 0;
 
@@ -380,6 +397,10 @@ void TController::Handle(TEvPrivate::TEvRunWorkers::TPtr&, const TActorContext&)
 }
 
 void TController::RunWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd) {
+    LOG_D("Run worker"
+        << ": nodeId# " << nodeId
+        << ", workerId# " << id);
+
     Y_ABORT_UNLESS(Sessions.contains(nodeId));
     auto& session = Sessions[nodeId];
 

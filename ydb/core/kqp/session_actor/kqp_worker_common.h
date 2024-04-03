@@ -149,7 +149,8 @@ IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId,
     TIntrusivePtr<TModuleResolverState> moduleResolverState,
     TIntrusivePtr<TKqpCounters> counters,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
+    const TGUCSettings::TPtr& gUCSettings
     );
 
 bool IsSameProtoType(const NKikimrMiniKQL::TType& actual, const NKikimrMiniKQL::TType& expected);

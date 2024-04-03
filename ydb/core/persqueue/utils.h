@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/string/builder.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 

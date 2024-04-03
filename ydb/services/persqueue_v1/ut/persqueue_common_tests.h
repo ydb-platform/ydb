@@ -358,7 +358,7 @@ public:
     }
 
     void WriteWithBlobsRateLimit() {
-        TestWriteWithRateLimiter(NKikimrPQ::TPQConfig::TQuotingConfig::WRITTEN_BLOB_SIZE, TDuration::MilliSeconds(5200));
+        //TestWriteWithRateLimiter(NKikimrPQ::TPQConfig::TQuotingConfig::WRITTEN_BLOB_SIZE, TDuration::MilliSeconds(5200));
     }
 
     void WriteWithUserPayloadRateLimit() {

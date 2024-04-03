@@ -128,7 +128,9 @@ public:
     virtual ~TChildProcess() {
         try {
             NFs::RemoveRecursive(WorkDir);
-        } catch (...) { }
+        } catch (...) {
+            YQL_CLOG(DEBUG, ProviderDq) << "Error on WorkDir cleanup: " << CurrentExceptionMessage();
+        }
     }
 
     virtual TString ExternalWorkDir() {
@@ -395,7 +397,7 @@ public:
             ContainerName = portoSettings.ContainerNamePrefix + "/" + ContainerName;
         }
 
-        YQL_CLOG(DEBUG, ProviderDq) << "HardLink " << ExeName << "'" << WorkDir << "/" << name << "'";
+        YQL_CLOG(DEBUG, ProviderDq) << "HardLink " << ExeName << " -> '" << WorkDir << "/" << name << "'";
         if (NFs::HardLink(ExeName, WorkDir + "/" + name)) {
             ExeName = WorkDir + "/" + name;
         } else {
@@ -410,7 +412,9 @@ public:
     ~TPortoProcess() {
         try {
             NFs::RemoveRecursive(TmpDir);
-        } catch (...) { }
+        } catch (...) {
+            YQL_CLOG(DEBUG, ProviderDq) << "Error on TmpDir cleanup: " << CurrentExceptionMessage();
+        }
     }
 
 private:
@@ -556,7 +560,7 @@ public:
 
 class TInputChannel : public IInputChannel {
 public:
-    TInputChannel(const ITaskRunner::TPtr& taskRunner, ui64 taskId, ui64 channelId, IInputStream& input, IOutputStream& output, i64 channelBufferSize)
+    TInputChannel(ITaskRunner* taskRunner, ui64 taskId, ui64 channelId, IInputStream& input, IOutputStream& output, i64 channelBufferSize)
         : TaskId(taskId)
         , ChannelId(channelId)
         , Input(input)
@@ -630,7 +634,7 @@ private:
     IInputStream& Input;
     IOutputStream& Output;
 
-    ITaskRunner::TPtr TaskRunner;
+    ITaskRunner* TaskRunner; // this channel is owned by TaskRunner
 
     i64 FreeSpace;
 };

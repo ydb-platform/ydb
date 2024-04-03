@@ -27,7 +27,7 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
     Y_UNIT_TEST(S3Source) {
         CreateBucketWithObject("test_bucket_plan_s3_source", "test_object_plan_s3_source", TEST_CONTENT);
 
-        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+        auto kikimr = MakeKikimrRunner(true);
 
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
             CreateBucket("test_bucket_write", s3Client);
         }
 
-        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+        auto kikimr = MakeKikimrRunner(true);
 
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();

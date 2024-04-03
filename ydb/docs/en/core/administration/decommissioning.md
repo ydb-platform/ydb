@@ -31,7 +31,7 @@ By managing the `DECOMMIT_PENDING` and `DECOMMIT_IMMINENT` states, you can perfo
 >
 > Repeat the above steps for the next set of equipment in the DC-1 until all the equipment is moved.
 
-To set the desired state of disk decommissioning, use the [{{ ydb-short-name }} DSTool](ydb-dstool-overview.md) utility. The command below sets the `DECOMMIT_IMMINENT` status for the disk with the ID `1000` on the node with the ID `1`:
+To set the desired state of disk decommissioning, use the [{{ ydb-short-name }} DSTool](../reference/ydb-dstool/index.md) utility. The command below sets the `DECOMMIT_IMMINENT` status for the disk with the ID `1000` on the node with the ID `1`:
 
 ```bash
 ydb-dstool -e  <bs_endpoint> pdisk set --decommit-status DECOMMIT_IMMINENT --pdisk-ids "[1:1000]"

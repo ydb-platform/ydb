@@ -1,7 +1,7 @@
 #include "columnshard_ut_common.h"
 
-#include "columnshard__stats_scan.h"
 #include "common/tests/shard_reader.h"
+#include "engines/reader/sys_view/chunks/chunks.h"
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
@@ -174,7 +174,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
 
     // Schema: pathId, kind, rows, bytes, rawBytes. PK: {pathId, kind}
     //record.SetSchemaVersion(0);
-    auto ydbSchema = PrimaryIndexStatsSchema;
+    auto ydbSchema = NOlap::NReader::NSysView::NChunks::TStatsIterator::StatsSchema;
     for (const auto& col : ydbSchema.Columns) {
         record.AddColumnTags(col.second.Id);
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(col.second.PType, col.second.PTypeMod);
@@ -298,8 +298,8 @@ std::vector<TCell> MakeTestCells(const std::vector<TTypeInfo>& types, ui32 value
 TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTest::TTestColumn>& columns,
                      const TTestBlobOptions& options, const std::set<std::string>& notNullColumns) {
     NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::LZ4_FRAME, notNullColumns);
-    batchBuilder.Start(NArrow::NTest::TTestColumn::ConvertToPairs(columns));
-
+    const auto startStatus = batchBuilder.Start(NArrow::NTest::TTestColumn::ConvertToPairs(columns));
+    UNIT_ASSERT_C(startStatus.ok(), startStatus.ToString());
     std::vector<ui32> nullPositions;
     std::vector<ui32> samePositions;
     for (size_t i = 0; i < columns.size(); ++i) {

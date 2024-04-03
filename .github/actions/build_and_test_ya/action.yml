@@ -31,19 +31,16 @@ inputs:
   test_type:
     type: string
     default: "unittest,py3test,py2test,pytest"
+  increment:
+    type: boolean
+    required: true
+    description: If true, compares build graphs between the current and previous commits to find a list of test suites to run. Otherwise, runs all tests.
   folder_prefix:
     type: string
     default: "ya-"
-  cache_tests:
-    type: boolean
-    default: false
-    description: "Use cache for tests"
   put_build_results_to_cache:
     type: boolean
     default: true
-  commit_sha:
-    type: string
-    default: ""
   secs:
     type: string
     default: ""
@@ -67,7 +64,7 @@ runs:
         # tricky: we are searching job with name that contains build_preset
         check_url=$(curl -s $jobs_url | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .html_url')
         
-        echo "Pre-commit [check]($check_url) for ${{ inputs.commit_sha }} has started." | .github/scripts/tests/comment-pr.py --rewrite
+        echo "Pre-commit [check]($check_url) for $(git rev-parse HEAD) has started." | .github/scripts/tests/comment-pr.py --rewrite
     
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd
@@ -91,24 +88,32 @@ runs:
         bazel_remote_password: ${{ inputs.put_build_results_to_cache &&  fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
         link_threads: ${{ inputs.link_threads }}
 
-    - name: debug1
+    - name: Generate ya.make with affected test suites list
+      if: inputs.run_tests == 'true' && inputs.increment == 'true'
+      uses: ./.github/actions/graph_compare
+ 
+    - name: Check if there's a list of tests to run
+      id: test_run_choice
       shell: bash
-      run: echo "Run tests? ${{ inputs.run_tests }}"
+      run: |
+        if [ -f ya.make ];then
+          echo "target='.'" >> $GITHUB_OUTPUT
+          echo "Listed test targets: "
+          cat ya.make
+        else
+          echo "target=${{ inputs.build_target }}" >> $GITHUB_OUTPUT
+        fi
 
     - name: Run tests
       uses: ./.github/actions/test_ya
       if: ${{ inputs.run_tests == 'true' &&  (steps.build.outputs.success == 'true' || inputs.run_tests_if_build_fails == 'true') }}
       with:
-        build_target: ${{ inputs.build_target }}
+        build_target: ${{ steps.test_run_choice.outputs.target }}
         build_preset: ${{ inputs.build_preset }}
         test_size: ${{ inputs.test_size }}
-        test_type: ${{ inputs.test_type }}
         testman_token: ${{ fromJSON( inputs.secs ).TESTMO_TOKEN }}
         testman_url: ${{  fromJSON( inputs.vars ).TESTMO_URL }}
         testman_project_id: ${{  fromJSON( inputs.vars ).TESTMO_PROJECT_ID }}
-        bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
-        bazel_remote_username: ${{ inputs.put_build_results_to_cache &&  fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
-        bazel_remote_password: ${{ inputs.put_build_results_to_cache &&  fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
         link_threads: ${{ inputs.link_threads }}
         test_threads: ${{ inputs.test_threads }}
         

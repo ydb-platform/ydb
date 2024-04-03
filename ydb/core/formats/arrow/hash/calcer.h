@@ -71,9 +71,9 @@ public:
             return nullptr;
         }
 
-        std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TAccessor>> columnScanners;
+        std::vector<NAccessor::IChunkedArray::TReader> columnScanners;
         for (auto&& i : columns) {
-            columnScanners.emplace_back(std::make_shared<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TAccessor>(i));
+            columnScanners.emplace_back(NAccessor::IChunkedArray::TReader(std::make_shared<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TAccessor>(i)));
         }
 
 
@@ -85,7 +85,7 @@ public:
             for (int row = 0; row < batch->num_rows(); ++row) {
                 hashCalcer.Start();
                 for (auto& column : columnScanners) {
-                    auto address = column->GetAddress(row);
+                    auto address = column.GetReadChunk(row);
                     AppendField(address.GetArray(), address.GetPosition(), hashCalcer);
                 }
                 intBuilder.UnsafeAppend(hashCalcer.Finish());

@@ -1120,10 +1120,6 @@ bool TPersQueueReadBalancer::TClientInfo::IsReadeable(ui32 partitionId) const {
         }
     }
 
-    if (IsFinished(partitionId)) {
-        return node->Parents.empty();
-    }
-
     return true;
 }
 

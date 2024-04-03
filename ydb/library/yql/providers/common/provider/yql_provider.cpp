@@ -1409,12 +1409,22 @@ bool ValidateFormatForInput(
             rowType = item->GetItemType();
             ++realSchemaRowCount;
         }
+        if (!realSchemaRowCount) {
+            return true;
+        }
 
         if (realSchemaRowCount > 1) {
             ctx.AddError(TIssue(TStringBuilder() << "Only one field in schema supported in raw format (you have " 
                 << realSchemaRowCount << " fields)"));
             return false;
-        } else if (realSchemaRowCount == 1 && rowType != ctx.MakeType<TDataExprType>(EDataSlot::String)) {
+        }
+
+        if (rowType->GetKind() == ETypeAnnotationKind::Optional) {
+            rowType = rowType->Cast<TOptionalExprType>()->GetItemType();
+        }
+
+        if (rowType->GetKind() != ETypeAnnotationKind::Data
+            || !IsDataTypeString(rowType->Cast<TDataExprType>()->GetSlot())) {
             ctx.AddError(TIssue(TStringBuilder() << "Only string type field in schema supported in raw format"));
             return false;
         }

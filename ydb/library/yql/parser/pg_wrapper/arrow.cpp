@@ -162,16 +162,13 @@ Numeric Uint64ToPgNumeric(ui64 value) {
     }
 
     auto ret1 = int64_to_numeric((i64)(value & ~(1ull << 63)));
-    auto half = int64_to_numeric(1ll << 62);
+    auto bit = int64_to_numeric(Min<i64>());
     bool haveError = false;
-    auto ret2 = numeric_add_opt_error(ret1, half, &haveError);
-    Y_ENSURE(!haveError);
-    auto ret3 = numeric_add_opt_error(ret2, half, &haveError);
+    auto ret2 = numeric_sub_opt_error(ret1, bit, &haveError);
     Y_ENSURE(!haveError);
     pfree(ret1);
-    pfree(ret2);
-    pfree(half);
-    return ret3;
+    pfree(bit);
+    return ret2;
 }
 
 Numeric PgFloatToNumeric(double item, ui64 scale, int digits) {

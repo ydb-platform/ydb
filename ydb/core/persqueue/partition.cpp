@@ -1722,7 +1722,7 @@ TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TTransacti
 {
     Y_UNUSED(request);
 
-    DBGTRACE("TPartition::ProcessUserActionOrTransaction");
+    DBGTRACE("TPartition::ProcessUserActionOrTransaction(TTransaction)");
     Y_ABORT_UNLESS(!TxInProgress);
 
     auto result = EProcessResult::Continue;
@@ -2121,6 +2121,7 @@ TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(const TEvP
                                                                       TEvKeyValue::TEvRequest* request,
                                                                       const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::ProcessUserActionOrTransaction(TEvPersQueue::TEvProposeTransaction)");
     Y_UNUSED(request);
 
     if (AffectedUsers.size() >= MAX_USERS) {
@@ -2186,6 +2187,7 @@ TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TEvPQ::TEv
                                                                       TEvKeyValue::TEvRequest* request,
                                                                       const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo)");
     Y_UNUSED(request);
 
     if (AffectedUsers.size() >= MAX_USERS) {

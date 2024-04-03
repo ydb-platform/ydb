@@ -491,30 +491,29 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
 
             bool match = false;
             for (auto& [_, userInfo] : matcher.UserInfos) {
-                if (userInfo.Session) {
-                    UNIT_ASSERT(ud.HasSession());
-                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.Session, ud.GetSession());
+                if (userInfo.Session && ud.HasSession()) {
+                    if (*userInfo.Session != ud.GetSession()) {
+                        continue;
+                    }
+
                     match = true;
-                }
-                if (userInfo.Generation) {
-                    UNIT_ASSERT(ud.HasGeneration());
-                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.Generation, ud.GetGeneration());
-                    match = true;
-                }
-                if (userInfo.Step) {
-                    UNIT_ASSERT(ud.HasStep());
-                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.Step, ud.GetStep());
-                    match = true;
-                }
-                if (userInfo.Offset) {
-                    UNIT_ASSERT(ud.HasOffset());
-                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.Offset, ud.GetOffset());
-                    match = true;
-                }
-                if (userInfo.ReadRuleGeneration) {
-                    UNIT_ASSERT(ud.HasReadRuleGeneration());
-                    UNIT_ASSERT_VALUES_EQUAL(*userInfo.ReadRuleGeneration, ud.GetReadRuleGeneration());
-                    match = true;
+
+                    if (userInfo.Generation) {
+                        UNIT_ASSERT(ud.HasGeneration());
+                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.Generation, ud.GetGeneration());
+                    }
+                    if (userInfo.Step) {
+                        UNIT_ASSERT(ud.HasStep());
+                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.Step, ud.GetStep());
+                    }
+                    if (userInfo.Offset) {
+                        UNIT_ASSERT(ud.HasOffset());
+                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.Offset, ud.GetOffset());
+                    }
+                    if (userInfo.ReadRuleGeneration) {
+                        UNIT_ASSERT(ud.HasReadRuleGeneration());
+                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.ReadRuleGeneration, ud.GetReadRuleGeneration());
+                    }
                 }
 
                 if (match) {
@@ -1543,6 +1542,7 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
 
 Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TPartitionFixture)
 {
+    DBGTRACE("CorrectRange_Multiple_Consumers");
     const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
@@ -1554,18 +1554,27 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TPartitionFixture)
     CreateSession("client-1", "session-1");
     CreateSession("client-2", "session-2");
 
+    DBGTRACE_LOG("SendSetOffset");
     SendSetOffset(1, "client-1", 3, "session-1");
+    DBGTRACE_LOG("SendCalcPredicate");
     SendCalcPredicate(step, txId, "client-2", 0, 1);
+    DBGTRACE_LOG("SendSetOffset");
     SendSetOffset(2, "client-1", 6, "session-1");
 
+    DBGTRACE_LOG("WaitCmdWrite");
     WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session="session-1", .Offset=3}}}});
+    DBGTRACE_LOG("SendCmdWriteResponse");
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
+    DBGTRACE_LOG("WaitProxyResponse");
     WaitProxyResponse({.Cookie=1, .Status=NMsgBusProxy::MSTATUS_OK});
 
+    DBGTRACE_LOG("WaitCalcPredicateResult");
     WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=true});
+    DBGTRACE_LOG("SendCommitTx");
     SendCommitTx(step, txId);
 
+    DBGTRACE_LOG("WaitCmdWrite");
     WaitCmdWrite({.Count=5, .UserInfos={
                  {1, {.Session="session-2", .Offset=1}},
                  {3, {.Session="session-1", .Offset=6}}

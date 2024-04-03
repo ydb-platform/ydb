@@ -949,6 +949,11 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                         table = update.Cast().Table().Value();
                     }
 
+                    if (auto del = effect.Maybe<TKiDeleteTable>()) {
+                        cluster = del.Cast().DataSink().Cluster();
+                        table = del.Cast().Table().Value();
+                    }
+
                     auto& tableData = GetTableData(tablesData, cluster, table);
                     const auto& tableMeta = BuildTableMeta(tableData, effect.Pos(), ctx);
                     YQL_ENSURE(effectsMap[effect.Raw()]);

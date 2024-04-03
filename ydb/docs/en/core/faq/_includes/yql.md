@@ -35,7 +35,7 @@ WHERE Key LIKE "some_prefix%";
 
 #### Why does a query return only 1000 rows? {#result-rows-limit}
 
-1000 rows is the response size limit per YQL query. If a response is shortened, it is flagged as `Truncated`. To output more table rows, you can use [paginated output](../../best_practices/paging.md) or the `ReadTable` operation.
+1000 rows is the response size limit per YQL query. If a response is shortened, it is flagged as `Truncated`. To output more table rows, you can use [paginated output](../../dev/paging.md) or the `ReadTable` operation.
 
 #### How to escape quotes of JSON strings when adding them to a table? {#escaping-quotes}
 

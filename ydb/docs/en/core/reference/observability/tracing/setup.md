@@ -6,11 +6,11 @@ Tracing is described in detail on the [opentelemetry](https://opentelemetry.io/)
 
 {% endnote %}
 
-Tracing is a tool that allows you to see in detail the path a request takes through a distributed system. The path of a single request (trace) is described by a set of spans. A span represents a segment of time, usually associated with the time taken to perform a specific operation (e.g., writing information to disk, executing transaction). Spans form a tree, often a span's subtree is a detailed representation of it, but this is not always the case.
+Tracing is a tool that allows you to see in detail the path a request takes through a distributed system. The path of a single request (trace) is described by collection of spans. A span represents a segment of time, usually associated with the time taken to perform a specific operation (e.g., writing information to disk, executing transaction). Spans form a tree, often a span's subtree is a detailed representation of it, but this is not always the case.
 
 ![Example of a trace](_images/spans.png "Example of a trace")
 
-To aggregate disparate spans into traces, they are sent to a collector. This is a service that aggregates and stores spans for later analysis of traces. {{ ydb-short-name }} does not include this service. An administrator must set it up independently. [Jaeger](https://www.jaegertracing.io/) is commonly used as a collector.
+To aggregate disparate spans into traces, they are sent to a collector. This is a service that aggregates and stores spans for later analysis of traces. {{ ydb-short-name }} does not include this service; an administrator must set it up independently. [Jaeger](https://www.jaegertracing.io/) is commonly used as a collector.
 
 ## Minimal configuration
 
@@ -26,7 +26,7 @@ tracing_config:
     - max_traces_per_minute: 10
 ```
 
-In this configuration, the collector_url field specifies the URL of an [OTLP-compatible](https://opentelemetry.io/docs/specs/otlp/). span collector. More details on the `backend` section can be found in the [corresponding section](./setup.md#backend).
+In this configuration, the `collector_url` field specifies the URL of an [OTLP-compatible](https://opentelemetry.io/docs/specs/otlp/). span collector. More details on the `backend` section can be found in the [corresponding section](./setup.md#backend).
 
 With this setup, no requests are sampled, and no more than 10 requests per minute with an [external trace-id](./external-traces.md) are traced by each cluster node.
 
@@ -75,7 +75,7 @@ tracing_config:
 
 Uploader is a cluster node component responsible for sending spans to the collector. To avoid overloading the span collector, the uploader will not send more than `max_exported_spans_per_second` spans per second on average.
 
-To optimize performance, the uploader sends spans in batches. Each batch contains no more than `max_spans_in_batch` spans with a total serialized size of no more than `max_bytes_in_batch` bytes. Each batch accumulates for no more than `max_batch_accumulation_milliseconds` milliseconds. Batches can be sent in parallel, and the maximum number of concurrently sent batches is controlled by the `max_export_requests_inflight` parameter. If more than `span_export_timeout_seconds` seconds have passed since a span was received by the uploader, the uploader may discard it in favor of sending newer spans.
+To optimize performance and reduce the number of requests, the uploader sends spans in batches. Each batch contains no more than `max_spans_in_batch` spans with a total serialized size of no more than `max_bytes_in_batch` bytes. Each batch accumulates for no more than `max_batch_accumulation_milliseconds` milliseconds. Batches can be sent in parallel, and the maximum number of concurrently sent batches is controlled by the `max_export_requests_inflight` parameter. If more than `span_export_timeout_seconds` seconds have passed since a span was received by the uploader, the uploader may discard it in favor of sending newer spans.
 
 Default values:
 * `max_exported_spans_per_second = inf` (no limits)
@@ -89,7 +89,7 @@ The `uploader` section is optional; if absent, the default value for each parame
 
 {% note info %}
 
-The uploader is a local component of the node, so the described limitations apply to each node separately, not to the entire cluster as a whole.
+The uploader is a local component of the node, so the described limits apply to each node separately, not to the entire cluster as a whole.
 
 {% endnote %}
 
@@ -109,13 +109,13 @@ tracing_config:
 
 #### Description
 
-{{ ydb-short-name }} supports the transmission of external trace-ids for building a complete trace of a request. The method of transmitting an external trace-id is described on the page [{#T}](./external-traces.md). To avoid overloading the collector, {{ ydb-short-name }} has a mechanism to limit the number of externally traced requests. The restrictions are described in this section and consist of a sequence of rules, each rule containing:
+{{ ydb-short-name }} supports the transmission of external trace-ids for constructing a complete trace of a request. The method of transmitting an external trace-id is described on the page [{#T}](./external-traces.md). To avoid overloading the collector, {{ ydb-short-name }} has a mechanism to limit the number of externally traced requests. The restrictions are described in this section and consist of a sequence of rules, each rule containing:
 
 * `scope` – a set of selectors for filtering the request.
 * `max_traces_per_minute` – the highest average number of requests per minute to be traced by this rule. Should be a positive integer.
 * `max_traces_burst` – the maximum burst of externally traced requests. Should be a non-negative integer.
 
-The only mandatory parameter is max_traces_per_minute.
+The only mandatory parameter is `max_traces_per_minute`.
 
 A detailed description of these options is provided in the section [{#T}](./setup.md#semantics)
 
@@ -147,10 +147,10 @@ tracing_config:
 
 #### Description
 
-For diagnosing issues in the system, it can be useful to look at an example trace of a request regardless of whether users are tracing their requests. For this purpose, {{ ydb-short-name }} has a request sampling mechanism. For a sampled request, a random trace-id is generated. This section controls the sampling of requests with configuration format similar to [`external_throttling`](./setup.md#external-throttling), each rule has two additional fields:
+For diagnosing issues in the system, it can be useful to look at an example trace of a request regardless of whether users are tracing their requests or not. For this purpose, {{ ydb-short-name }} has a request sampling mechanism. For a sampled request, a random trace-id is generated. This section controls the sampling of requests with configuration format similar to [`external_throttling`](./setup.md#external-throttling), each rule has two additional fields:
 
-* `fraction` – the proportion of requests sampled according to this rule. Should be a rational number between 0 and 1 inclusively.
-* `level` — verbosity level of a trace. Should be an integer between 0 and 15 inclusively. This parameter is described in more detail in the section [{#T}](./setup.md#tracing-levels)
+* `fraction` – the proportion of requests sampled according to this rule. Should be a rational number between 0 and 1 inclusive.
+* `level` — verbosity level of a trace. Should be an integer between 0 and 15 inclusive. This parameter is described in more detail in the section [{#T}](./setup.md#tracing-levels)
 
 Both fields are mandatory.
 
@@ -218,7 +218,7 @@ Each rule includes an optional scope field with a set of selectors that determin
 
 {% note info %}
 
-Tracing is supported not only for the request types listed above. This list only includes request types supported by the request_types selector.
+Tracing is supported not only for the request types listed above. This list only includes request types supported by the `request_types` selector.
 
 {% endnote %}
 
@@ -240,7 +240,7 @@ A request matches the rule if it matches all selectors. `scope` can be absent, w
 
 The parameters `max_traces_per_minute` and `max_traces_burst` are used to limit the number of requests. In the case of sampling, they limit the number of requests sampled by this rule. In the case of external throttling, they limit the number of external traces that are continued by the system.
 
-A variation of the [leaky bucket](https://en.wikipedia.org/wiki/Leaky_bucket) with a bucket size of `max_traces_burst + 1` is used for limitations. For example, if `max_traces_per_minute = 60` and `max_traces_burst = 0`, then with a flow of 10000 requests per minute, one request will be traced every second. If `max_traces_burst = 20`, then with a similar flow of requests, the first 21 will be traced, and thereafter one request will be traced every second.
+A variation of the [leaky bucket](https://en.wikipedia.org/wiki/Leaky_bucket) with a bucket size of `max_traces_burst + 1` is used for limiting the amount of traced requests. For example, if `max_traces_per_minute = 60` and `max_traces_burst = 0`, then with a flow of 10000 requests per minute, one request will be traced every second. If `max_traces_burst = 20`, then with a similar flow of requests, the first 21 will be traced, and thereafter one request will be traced every second.
 
 {% note warning %}
 
@@ -267,7 +267,7 @@ There are 7 verbosity levels for each component:
 | Verbosity level | Meaning |
 | --------------- | ------- |
 | `Off` | No tracing |
-| `TopLevel` | The lowest verbosity, no more than 2 spans per request to the component |
+| `TopLevel` | The lowest verbosity, no more than 2 spans per request to the component are generated |
 | `Basic` | Spans of the main operations of the component |
 | `Detailed` | The highest verbosity, applicable for diagnosing problems in production |
 | `Diagnostic` | Detailed debug information for developers |
@@ -310,7 +310,7 @@ tracing_config:
       max_traces_per_minute: 20
 ```
 
-With a sufficient flow of requests with an external trace-id, at least 60 requests per minute and at least 20 `KeyValue.ReadRange` type requests per minute will be traced. In total, no more than 80 requests per minute will be traced.
+With a sufficient flow of requests with an external trace-id, at least 60 requests per minute and at least 20 requests of type `KeyValue.ReadRange` will be traced per minute. In total, no more than 80 requests per minute will be traced.
 
 The decision algorithm is as follows: for a request with an external trace-id, the set of rules under which the request falls is determined. The request consumes the quota from all rules where it is still available. A request is not traced only if no rule has any quota left.
 

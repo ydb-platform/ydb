@@ -48,8 +48,8 @@ protected:
     TAtomic FilterStageFlag = 0;
     bool IsReadyFlag = false;
 
-    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TColumnsSet>& columns) = 0;
-    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TIndexesSet>& indexes) = 0;
+    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) = 0;
+    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) = 0;
     virtual void DoAbort() = 0;
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) = 0;
@@ -61,6 +61,7 @@ public:
     bool IsSourceInMemory() const {
         return IsSourceInMemoryFlag;
     }
+    virtual bool IsSourceInMemory(const std::set<ui32>& fieldIds) const = 0;
     bool AddSequentialEntityIds(const ui32 entityId) {
         if (DoAddSequentialEntityIds(entityId)) {
             IsSourceInMemoryFlag = false;
@@ -107,16 +108,16 @@ public:
         DoAssembleColumns(columns);
     }
 
-    bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TColumnsSet>& columns) {
+    bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) {
         AFL_VERIFY(columns);
         return DoStartFetchingColumns(sourcePtr, step, columns);
     }
 
-    bool StartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TIndexesSet>& indexes) {
+    bool StartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) {
         AFL_VERIFY(indexes);
         return DoStartFetchingIndexes(sourcePtr, step, indexes);
     }
-    void InitFetchingPlan(const std::shared_ptr<IFetchingStep>& fetchingFirstStep, const std::shared_ptr<IDataSource>& sourcePtr);
+    void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching, const std::shared_ptr<IDataSource>& sourcePtr);
 
     std::shared_ptr<arrow::RecordBatch> GetLastPK() const {
         return Finish.ExtractSortingPosition();
@@ -223,8 +224,8 @@ private:
         const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) override;
-    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TColumnsSet>& columns) override;
-    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TIndexesSet>& indexes) override;
+    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) override;
+    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) override;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) override;
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
@@ -254,6 +255,15 @@ public:
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
         return Portion->DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
+    }
+
+    virtual bool IsSourceInMemory(const std::set<ui32>& fieldIds) const override {
+        for (auto&& i : SequentialEntityIds) {
+            if (fieldIds.contains(i)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnsIds) const override {
@@ -306,8 +316,8 @@ private:
 
     }
 
-    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TColumnsSet>& columns) override;
-    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& /*sourcePtr*/, const std::shared_ptr<IFetchingStep>& /*step*/, const std::shared_ptr<TIndexesSet>& /*indexes*/) override {
+    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) override;
+    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/, const std::shared_ptr<TIndexesSet>& /*indexes*/) override {
         return false;
     }
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& /*indexMeta*/) override {
@@ -337,6 +347,10 @@ public:
             }
         }
         return result;
+    }
+
+    virtual bool IsSourceInMemory(const std::set<ui32>& /*fieldIds*/) const override {
+        return true;
     }
 
     virtual bool HasIndexes(const std::set<ui32>& /*indexIds*/) const override {

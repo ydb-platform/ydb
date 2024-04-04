@@ -215,6 +215,9 @@ public:
         if (Stats == "profile") {
             request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_PROFILE);
             request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
+        } else if (Stats == "full") {
+            request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_FULL);
+            request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
         }
         if (Database) {
             request.SetDatabase(Database);
@@ -633,7 +636,7 @@ struct TJsonRequestParameters<TJsonQuery> {
                       {"name":"syntax","in":"query","description":"query syntax (yql_v1, pg)","required":false,"type":"string"},
                       {"name":"database","in":"query","description":"database name","required":false,"type":"string"},
                       {"name":"schema","in":"query","description":"result format schema (classic, modern, ydb, multi)","required":false,"type":"string"},
-                      {"name":"stats","in":"query","description":"return stats (profile)","required":false,"type":"string"},
+                      {"name":"stats","in":"query","description":"return stats (profile, full)","required":false,"type":"string"},
                       {"name":"action","in":"query","description":"execute method (execute-scan, execute-script, execute-query, execute-data,explain-ast, explain-scan, explain-script, explain-query, explain-data)","required":false,"type":"string"},
                       {"name":"base64","in":"query","description":"return strings using base64 encoding","required":false,"type":"string"},
                       {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";

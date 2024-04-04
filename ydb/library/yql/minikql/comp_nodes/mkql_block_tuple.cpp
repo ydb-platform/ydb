@@ -66,76 +66,10 @@ private:
     const std::shared_ptr<arrow::DataType> ReturnArrowType;
 };
 
-class TBlockNthExec {
-public:
-    TBlockNthExec(const std::shared_ptr<arrow::DataType>& returnArrowType, ui32 index, bool isOptional, bool needExternalOptional)
-        : ReturnArrowType(returnArrowType)
-        , Index(index)
-        , IsOptional(isOptional)
-        , NeedExternalOptional(needExternalOptional)
-    {}
-
-    arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
-        arrow::Datum inputDatum = batch.values[0];
-        if (inputDatum.is_scalar()) {
-            if (inputDatum.scalar()->is_valid) {
-                const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(*inputDatum.scalar());
-                *res = arrow::Datum(structScalar.value[Index]);
-            } else {
-                *res = arrow::Datum(arrow::MakeNullScalar(ReturnArrowType));
-            }
-        } else {
-            const auto& array = inputDatum.array();
-            auto child = array->child_data[Index];
-            if (NeedExternalOptional) {
-                auto newArrayData = arrow::ArrayData::Make(ReturnArrowType, array->length, { array->buffers[0] });
-                newArrayData->child_data.push_back(child);
-                *res = arrow::Datum(newArrayData);
-            } else if (!IsOptional || !array->buffers[0]) {
-                *res = arrow::Datum(child);
-            } else {
-                auto newArrayData = child->Copy();
-                if (!newArrayData->buffers[0]) {
-                    newArrayData->buffers[0] = array->buffers[0];
-                } else {
-                    auto buffer = AllocateBitmapWithReserve(array->length + array->offset, ctx->memory_pool());
-                    arrow::internal::BitmapAnd(child->GetValues<uint8_t>(0, 0), child->offset, array->GetValues<uint8_t>(0, 0), array->offset, array->length, array->offset, buffer->mutable_data());
-                    newArrayData->buffers[0] = buffer;
-                }
-
-                newArrayData->SetNullCount(arrow::kUnknownNullCount);
-                *res = arrow::Datum(newArrayData);
-            }
-        }
-
-        return arrow::Status::OK();
-    }
-
-private:
-    const std::shared_ptr<arrow::DataType> ReturnArrowType;
-    const ui32 Index;
-    const bool IsOptional;
-    const bool NeedExternalOptional;
-};
-
 std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockAsTupleKernel(const TVector<TType*>& argTypes, TType* resultType) {
     std::shared_ptr<arrow::DataType> returnArrowType;
     MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
     auto exec = std::make_shared<TBlockAsTupleExec>(argTypes, returnArrowType);
-    auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
-        [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        return exec->Exec(ctx, batch, res);
-    });
-
-    kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
-    return kernel;
-}
-
-std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockNthKernel(const TVector<TType*>& argTypes, TType* resultType, ui32 index,
-    bool isOptional, bool needExternalOptional) {
-    std::shared_ptr<arrow::DataType> returnArrowType;
-    MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
-    auto exec = std::make_shared<TBlockNthExec>(returnArrowType, index, isOptional, needExternalOptional);
     auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
         [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         return exec->Exec(ctx, batch, res);
@@ -156,26 +90,6 @@ IComputationNode* WrapBlockAsTuple(TCallable& callable, const TComputationNodeFa
     }
 
     auto kernel = MakeBlockAsTupleKernel(argsTypes, callable.GetType()->GetReturnType());
-    return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), std::move(argsNodes), argsTypes, *kernel, kernel);
-}
-
-IComputationNode* WrapBlockNth(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 2U, "Expected two args.");
-    auto input = callable.GetInput(0U);
-    auto blockType = AS_TYPE(TBlockType, input.GetStaticType());
-    bool isOptional;
-    auto tupleType = AS_TYPE(TTupleType, UnpackOptional(blockType->GetItemType(), isOptional));
-    auto indexData = AS_VALUE(TDataLiteral, callable.GetInput(1U));
-    auto index = indexData->AsValue().Get<ui32>();
-    MKQL_ENSURE(index < tupleType->GetElementsCount(), "Bad tuple index");
-    auto childType = tupleType->GetElementType(index);
-    bool needExternalOptional = isOptional && childType->IsVariant();
-
-    auto tuple = LocateNode(ctx.NodeLocator, callable, 0);
-
-    TComputationNodePtrVector argsNodes = { tuple };
-    TVector<TType*> argsTypes = { blockType };
-    auto kernel = MakeBlockNthKernel(argsTypes, callable.GetType()->GetReturnType(), index, isOptional, needExternalOptional);
     return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), std::move(argsNodes), argsTypes, *kernel, kernel);
 }
 

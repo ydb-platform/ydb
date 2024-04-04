@@ -94,8 +94,12 @@ private:
     void WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& message);
     bool PrepareDeferredWrite(TDeferredWrite& deferred);
 
-    bool CloseImpl(EStatus statusCode, NYql::TIssues&& issues, TDuration timeout = TDuration::Zero());
-    bool CloseImpl(NTopic::TSessionClosedEvent const& ev, TDuration timeout = TDuration::Zero());
+    void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
+    void CloseImpl(NTopic::TSessionClosedEvent const& ev);
+
+    bool QueuesAreEmpty() const {
+        return OriginalMessagesToGetAck.empty() && OriginalMessagesToPassDown.empty();
+    }
 
     TStringBuilder GetLogPrefix() const;
 
@@ -130,6 +134,8 @@ private:
     std::deque<TWrappedWriteMessage> OriginalMessagesToPassDown;
     std::deque<TWrappedWriteMessage> OriginalMessagesToGetAck;
     i64 BufferFreeSpace;
+
+    NThreading::TPromise<void> ClosingOrQueuesHaveBeenDrained;
 
     // Exiting.
     bool Closing = false;

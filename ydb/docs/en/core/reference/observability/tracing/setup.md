@@ -26,7 +26,7 @@ tracing_config:
     - max_traces_per_minute: 10
 ```
 
-In this configuration, the `collector_url` field specifies the URL of an [OTLP-compatible](https://opentelemetry.io/docs/specs/otlp/). span collector. More details on the `backend` section can be found in the [corresponding section](./setup.md#backend).
+In this configuration, the `collector_url` field specifies the URL of an [OTLP-compatible](https://opentelemetry.io/docs/specs/otlp/) span collector. More details on the `backend` section can be found in the [corresponding section](./setup.md#backend).
 
 With this setup, no requests are sampled, and no more than 10 requests per minute with an [external trace-id](./external-traces.md) are traced by each cluster node.
 
@@ -73,7 +73,7 @@ tracing_config:
 
 #### Description
 
-Uploader is a cluster node component responsible for sending spans to the collector. To avoid overloading the span collector, the uploader will not send more than `max_exported_spans_per_second` spans per second on average.
+The uploader is a component of a cluster node responsible for sending spans to the collector. To avoid overloading the span collector, the uploader will not send more than `max_exported_spans_per_second` spans per second on average.
 
 To optimize performance and reduce the number of requests, the uploader sends spans in batches. Each batch contains no more than `max_spans_in_batch` spans with a total serialized size of no more than `max_bytes_in_batch` bytes. Each batch accumulates for no more than `max_batch_accumulation_milliseconds` milliseconds. Batches can be sent in parallel, and the maximum number of concurrently sent batches is controlled by the `max_export_requests_inflight` parameter. If more than `span_export_timeout_seconds` seconds have passed since a span was received by the uploader, the uploader may discard it in favor of sending newer spans.
 
@@ -147,7 +147,7 @@ tracing_config:
 
 #### Description
 
-For diagnosing issues in the system, it can be useful to look at an example trace of a request regardless of whether users are tracing their requests or not. For this purpose, {{ ydb-short-name }} has a request sampling mechanism. For a sampled request, a random trace-id is generated. This section controls the sampling of requests with configuration format similar to [`external_throttling`](./setup.md#external-throttling), each rule has two additional fields:
+Diagnosing system issues can benefit from examining a sample trace of a request, whether or not users are actively tracing their requests. For this purpose, {{ ydb-short-name }} has a request sampling mechanism. For a sampled request, a random trace-id is generated. This section controls the sampling of requests with configuration format similar to [`external_throttling`](./setup.md#external-throttling), each rule has two additional fields:
 
 * `fraction` – the proportion of requests sampled according to this rule. Should be a rational number between 0 and 1 inclusive.
 * `level` — verbosity level of a trace. Should be an integer between 0 and 15 inclusive. This parameter is described in more detail in the section [{#T}](./setup.md#tracing-levels)

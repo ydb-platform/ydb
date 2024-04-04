@@ -844,15 +844,25 @@ All the metadata provided when writing a message is sent to a consumer with the 
   // this transaction is not yet active and has no id
   TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
 
-  // do something else in the transaction
-  transaction.executeDataQuery("SELECT 1").join();
+  // get message text within the transaction
+  Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
+          .join();
+  if (!dataQueryResult.isSuccess()) {
+      logger.error("Couldn't execute DataQuery: {}", dataQueryResult);
+      return; // retry or shutdown
+  }
   // now the transaction is active and has an id
-  // analyzeQueryResultIfNeeded();
+
+  ResultSetReader rsReader = dataQueryResult.getValue().getResultSet(0);
+  byte[] message;
+  if (rsReader.next()) {
+      message = rsReader.getColumn(0).getBytes();
+  } else {
+      return; // retry or shutdown
+  }
 
   writer.send(
-          Message.newBuilder()
-                  .setData(messageString.getBytes())
-                  .build(),
+          Message.of(message),
           SendSettings.newBuilder()
                   .setTransaction(transaction)
                   .build()
@@ -886,20 +896,26 @@ All the metadata provided when writing a message is sent to a consumer with the 
   // this transaction is not yet active and has no id
   TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
 
-  // get message text executing data query on a transaction
+  // get message text within the transaction
   Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
           .join();
-  // now the transaction is active and has an id
   if (!dataQueryResult.isSuccess()) {
       logger.error("Couldn't execute DataQuery: {}", dataQueryResult);
       return; // retry or shutdown
   }
-  String messageString = dataQueryResult.getValue().getResultSet(0).getColumn(0).getText();
+  // now the transaction is active and has an id
+
+  ResultSetReader rsReader = dataQueryResult.getValue().getResultSet(0);
+  byte[] message;
+  if (rsReader.next()) {
+      message = rsReader.getColumn(0).getBytes();
+  } else {
+      return; // retry or shutdown
+  }
 
   try {
-      // Blocks until the message is put into sending buffer
       writer.send(Message.newBuilder()
-                              .setData(messageString.getBytes())
+                              .setData(message)
                               .build(),
                       SendSettings.newBuilder()
                               .setTransaction(transaction)
@@ -923,13 +939,13 @@ All the metadata provided when writing a message is sent to a consumer with the 
               })
               // Waiting for the message to reach the server before committing the transaction
               .join();
+
+      Status commitStatus = transaction.commit().join();
+      analyzeCommitStatus(commitStatus);
   } catch (QueueOverflowException exception) {
       logger.error("Queue overflow exception while sending a message{}: ", index, exception);
       // Send queue is full. Need to retry with backoff or skip
   }
-
-  Status commitStatus = transaction.commit().join();
-  analyzeCommitStatus(commitStatus);
   ```
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}

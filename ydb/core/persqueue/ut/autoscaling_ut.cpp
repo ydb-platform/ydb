@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         writeSession3->Close(TDuration::Seconds(1));
     }
 
-    using TOffsets=std::unordered_map<ui32, std::deque<ui64>>;
+    using TOffsets = std::unordered_map<ui32, ui64>;
 
     struct TTestPartitionReadSession {
 
@@ -217,9 +217,10 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         NThreading::TPromise<std::set<size_t>> Promise;
 
         TMutex Lock;
+        TSemaphore Semaphore;
 
-        TTestPartitionReadSession(TTopicClient& client, const TOffsets& offsets)
-            : Offsets(std::move(offsets)) {
+        TTestPartitionReadSession(TTopicClient& client)
+            : Semaphore("", 10) {
             auto readSettings = TReadSessionSettings()
                 .ConsumerName(TEST_CONSUMER)
                 .AppendTopics(TEST_TOPIC);
@@ -231,12 +232,10 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
                         auto partitionId = ev.GetPartitionSession()->GetPartitionId();
                         Modify([&](std::set<size_t>& s) { s.insert(partitionId); });
 
-                        if (Offsets.contains(partitionId) && !Offsets[partitionId].empty()) {
-                            Cerr << ">>>>> Start reading from offset " << Offsets[partitionId].front() << Endl;
-                            ev.Confirm(Offsets[partitionId].front(), TMaybe<ui64>());
-                            if (Offsets[partitionId].size() > 1) {
-                                Offsets[partitionId].pop_front();
-                            }
+                        Semaphore.Acquire();
+                        if (Offsets.contains(partitionId)) {
+                            Cerr << ">>>>> Start reading from offset " << Offsets[partitionId] << Endl;
+                            ev.Confirm(Offsets[partitionId], TMaybe<ui64>());
                         } else {
                             ev.Confirm();
                         }
@@ -247,13 +246,14 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
                     (TReadSessionEvent::TStopPartitionSessionEvent& ev) mutable {
                         Cerr << ">>>>> Received TStopPartitionSessionEvent message " << ev.DebugString() << Endl;
                         Modify([&](std::set<size_t>& s) { s.erase(ev.GetPartitionSession()->GetPartitionId()); });
+                        Semaphore.Acquire();
                         ev.Confirm();
             });
 
             Session = client.CreateReadSession(readSettings);
         }
 
-        void WaitAndAssertPartitions(std::set<size_t> partitions, const TString& message) {
+        void WaitAndAssertPartitions(std::set<size_t> partitions, size_t messagesCount, const TString& message) {
             with_lock (Lock) {
                 ExpectedPartitions = partitions;
 
@@ -267,6 +267,11 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
 
                 Promise = NThreading::NewPromise<std::set<size_t>>();
             }
+
+            for (size_t i = 0; i < messagesCount; ++i) {
+                Semaphore.Release();
+            }
+
             Promise.GetFuture().Wait(TDuration::Seconds(5));
 
             std::set<size_t> actualPartitions;
@@ -305,41 +310,41 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
-        TTestPartitionReadSession readSession(client, {});
+        TTestPartitionReadSession readSession(client);
 
-        readSession.WaitAndAssertPartitions({0}, "Must read all exists partitions");
+        readSession.WaitAndAssertPartitions({0}, 1, "Must read all exists partitions");
 
         ui64 txId = 1023;
         SplitPartition(setup, ++txId, 0, "a");
 
-        readSession.WaitAndAssertPartitions({0, 1, 2}, "After split must read all partitions because parent partition is empty");
+        readSession.WaitAndAssertPartitions({0, 1, 2}, 2, "After split must read all partitions because parent partition is empty");
     }
 
     Y_UNIT_TEST(PartitionSplit_ReadNotEmptyPartitions) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
-        TOffsets offsets{ {0, {0, 0, 1 }}}; // The third read of the 0-partition will be from the end of partition.
-
         TTopicClient client = setup.MakeClient();
-        TTestPartitionReadSession readSession(client, offsets);
+        TTestPartitionReadSession readSession(client);
+        readSession.Offsets[0] = 0;
+
         auto writeSession = CreateWriteSession(client, "producer-1", 0);
 
-        readSession.WaitAndAssertPartitions({0}, "Must read all exists partitions");
+        readSession.WaitAndAssertPartitions({0}, 1, "Must read all exists partitions");
 
         UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 2)));
-
-        readSession.WaitAndAssertPartitions({0}, "Must read all exists partitions");
 
         ui64 txId = 1023;
         SplitPartition(setup, ++txId, 0, "a");
 
-        readSession.WaitAndAssertPartitions({0}, "After split must read only 0 partition because had been read not from the end of partition");
-        readSession.WaitAndAssertPartitions({}, "Partition must be released for secondary read after 1 second");
-        readSession.WaitAndAssertPartitions({0}, "Must secondary read for check read from end");
+        readSession.WaitAndAssertPartitions({0}, 0, "After split must read only 0 partition because had been read not from the end of partition");
+        readSession.WaitAndAssertPartitions({}, 1, "Partition must be released for secondary read after 1 second");
+        readSession.WaitAndAssertPartitions({0}, 1, "Must secondary read for check read from end");
 
-        readSession.WaitAndAssertPartitions({}, "Partition must be released for secondary read because start not from the end of partition after 2 seconds");
-        readSession.WaitAndAssertPartitions({0, 1, 2}, "Must read from all partitions because had been read from the end of partition");
+        readSession.Offsets[0] = 1;
+
+        readSession.WaitAndAssertPartitions({}, 1, "Partition must be released for secondary read because start not from the end of partition after 2 seconds");
+        readSession.WaitAndAssertPartitions({0, 1, 2}, 3, "Must read from all partitions because had been read from the end of partition");
     }
 
 }

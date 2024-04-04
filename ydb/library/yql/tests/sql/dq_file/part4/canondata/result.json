@@ -595,6 +595,28 @@
         }
     ],
     "test.test[blocks-combine_all_min_filter_opt--Results]": [],
+    "test.test[blocks-pg_to_strings--Analyze]": [
+        {
+            "checksum": "574a9bcc386175d4f5942609476da5ea",
+            "size": 4925,
+            "uri": "https://{canondata_backend}/1942525/3a30f5d86a5965d8237b2c8701ec0f3439ff7de5/resource.tar.gz#test.test_blocks-pg_to_strings--Analyze_/plan.txt"
+        }
+    ],
+    "test.test[blocks-pg_to_strings--Debug]": [
+        {
+            "checksum": "a257d4252edd5ea5475dc51c8ba22ccf",
+            "size": 2914,
+            "uri": "https://{canondata_backend}/1942525/3a30f5d86a5965d8237b2c8701ec0f3439ff7de5/resource.tar.gz#test.test_blocks-pg_to_strings--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[blocks-pg_to_strings--Plan]": [
+        {
+            "checksum": "574a9bcc386175d4f5942609476da5ea",
+            "size": 4925,
+            "uri": "https://{canondata_backend}/1942525/3a30f5d86a5965d8237b2c8701ec0f3439ff7de5/resource.tar.gz#test.test_blocks-pg_to_strings--Plan_/plan.txt"
+        }
+    ],
+    "test.test[blocks-pg_to_strings--Results]": [],
     "test.test[column_order-union_all_positional_columns_count_fail--Debug]": [],
     "test.test[column_order-union_all_positional_columns_count_fail--Plan]": [],
     "test.test[column_order-union_all_positional_columns_count_fail--Results]": [

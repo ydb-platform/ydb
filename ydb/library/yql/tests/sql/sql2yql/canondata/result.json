@@ -3653,6 +3653,13 @@
             "uri": "https://{canondata_backend}/1931696/a05a1e3d0534c5eae6899e6139bc739c1ed7f8c4/resource.tar.gz#test_sql2yql.test_blocks-pg_to_numbers_/sql.yql"
         }
     ],
+    "test_sql2yql.test[blocks-pg_to_strings]": [
+        {
+            "checksum": "308c3efb38651e23a2cb1eef66fc22cc",
+            "size": 3389,
+            "uri": "https://{canondata_backend}/1775319/07e4d1b097b2d684a2faa72633e0b11cc4eac6a3/resource.tar.gz#test_sql2yql.test_blocks-pg_to_strings_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[blocks-pg_tofrom]": [
         {
             "checksum": "b826f6b175ed015c94598bd63781d9d7",
@@ -12730,6 +12737,13 @@
             "checksum": "15ae2647f3110534a4e0e10d89a19e35",
             "size": 6373,
             "uri": "https://{canondata_backend}/1775059/5625478e977a363be64a17bebddbd8ed18706eac/resource.tar.gz#test_sql2yql.test_pg-str_lookup_pg_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg-strings_to_pg]": [
+        {
+            "checksum": "6a6e4a7ee4de6e0d276b27faea4b4d80",
+            "size": 2429,
+            "uri": "https://{canondata_backend}/1817427/71467d0ad2e7af215a0f5155cc31731320ef6787/resource.tar.gz#test_sql2yql.test_pg-strings_to_pg_/sql.yql"
         }
     ],
     "test_sql2yql.test[pg-struct_tuple_cast]": [
@@ -21811,6 +21825,13 @@
             "uri": "https://{canondata_backend}/1931696/a05a1e3d0534c5eae6899e6139bc739c1ed7f8c4/resource.tar.gz#test_sql_format.test_blocks-pg_to_numbers_/formatted.sql"
         }
     ],
+    "test_sql_format.test[blocks-pg_to_strings]": [
+        {
+            "checksum": "0404c4d6812380e91e2096d1d6ce04a9",
+            "size": 280,
+            "uri": "https://{canondata_backend}/1775319/07e4d1b097b2d684a2faa72633e0b11cc4eac6a3/resource.tar.gz#test_sql_format.test_blocks-pg_to_strings_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[blocks-pg_tofrom]": [
         {
             "checksum": "25c9751ead91546896ba8aec437b67e0",
@@ -29271,6 +29292,13 @@
             "checksum": "f1954f2bb0c2bf59abe9752284f424cc",
             "size": 637,
             "uri": "https://{canondata_backend}/1775059/5625478e977a363be64a17bebddbd8ed18706eac/resource.tar.gz#test_sql_format.test_pg-str_lookup_pg_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[pg-strings_to_pg]": [
+        {
+            "checksum": "28a82ea955580518134f6cbe9f46352b",
+            "size": 364,
+            "uri": "https://{canondata_backend}/1817427/71467d0ad2e7af215a0f5155cc31731320ef6787/resource.tar.gz#test_sql_format.test_pg-strings_to_pg_/formatted.sql"
         }
     ],
     "test_sql_format.test[pg-struct_tuple_cast]": [

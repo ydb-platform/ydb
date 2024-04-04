@@ -283,15 +283,25 @@ You can also specify any value in the `value` field. Data from the `value` field
 
 The type formatting table to load into the table:
 
-| YDB type                                | Description format                                           |
-|-----------------------------------------|--------------------------------------------------------------|
-| `Bool`                                  | `true` or `false`                                            |
-| `Int8`, `Int16`, `Int32`, `Int64`       | A signed integer                                             |
-| `Uint8`, `Uint16`, `Uint32`, `Uint64`   | An unsigned integer                                          |
-| `Text`, `Bytes`, `Json`, `JsonDocument` | Represent as text                                            |
-| `Float`, `Double`, `Decimal(22, 9)`     | A real number                                                |
-| `Interval`                              | [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601#Durations) |
-| `Date`, `Datetime`, `Timestamp`         | [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601)           |
+| YDB type                                | Description format                                                                                                                                           |
+|-----------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Bool`                                  | `true` or `false`                                                                                                                                            |
+| `Int8`, `Int16`, `Int32`, `Int64`       | A signed integer                                                                                                                                             |
+| `Uint8`, `Uint16`, `Uint32`, `Uint64`   | An unsigned integer                                                                                                                                          |
+| `Text`, `Bytes`, `Json`, `JsonDocument` | Represent as text                                                                                                                                            |
+| `Float`, `Double`, `Decimal(22, 9)`     | A real number                                                                                                                                                |
+| `Interval`                              | [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601#Durations), corresponds to the `java.time.Duration` in Java.                                               |
+| `Date`                                  | Pattern `YYYY-MM-DD` calendar date from standard [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601)                                                          |
+| `Datetime`                              | Pattern `YYYY-MM-DDThh:mm:ss`, timezone will be set to `UTC`                                                                                                 |
+| `Timestamp`                             | The timestamp from the [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601) standard corresponds to the `java.time.Instant` in Java, precision in microseconds |                                                                               |
+
+
+Example `CSV` file:
+
+```csv
+id,bool_column,bigint_column,smallint_column,tinyint_column,float_column,double_column,decimal_column,uint8_column,uint16_column,uint32_column,uint64_column,text_column,binary_column,json_column,jsondocument_column,date_column,datetime_column,timestamp_column,interval_column
+2,true,123123,13000,112,1.123,1.123123,1.123123,12,13,14,15,kurdyukov-kir,binary,{"asd": "asd"},{"asd": "asd"},2014-04-06,2023-09-16T12:30,2023-07-31T17:00:00.00Z,PT10S
+```
 
 {% note warning %}
 

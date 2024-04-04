@@ -19,6 +19,8 @@ items:
       href: ../administration/monitoring.md
     - name: Grafana dashboards
       href: ../administration/grafana-dashboards.md
+    - name: Tracing
+      include: { mode: link, path: ../reference/observability/tracing/toc_p.yaml }
 - name: Updating YDB
   href: ../administration/upgrade.md
 - name: Changing an actor system's configuration

@@ -2,7 +2,7 @@
 
 Fully explaining how YDB works in detail takes quite a while. Below you can review several key highlights and then continue exploring documentation to learn more.
 
-### YDB architecture
+### YDB architecture {#ydb-architecture}
 
 ![YDB architecture](https://storage.yandexcloud.net/ydb-www-prod-site-assets/howitworks/grps.png)
 

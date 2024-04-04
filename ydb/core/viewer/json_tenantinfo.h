@@ -628,6 +628,7 @@ public:
                         tenant.SetStorageAllocatedLimit(storageAllocatedLimit);
                         tenant.SetStorageMinAvailableSize(storageMinAvailableSize);
                         tenant.SetStorageGroups(storageGroups);
+
                         auto& ssdUsage = *tenant.AddStorageUsage();
                         ssdUsage.SetType(NKikimrViewer::TStorageUsage::SSD);
                         ssdUsage.SetSize(storageAllocatedSize);
@@ -635,6 +636,15 @@ public:
                         // TODO(andrew-rykov)
                         auto& hddUsage = *tenant.AddStorageUsage();
                         hddUsage.SetType(NKikimrViewer::TStorageUsage::HDD);
+
+                        if (tenant.databasequotas().data_size_hard_quota()) {
+                            auto& ssdQuotaUsage = *tenant.AddQuotaUsage();
+                            ssdQuotaUsage.SetType(NKikimrViewer::TStorageUsage::SSD);
+                            ssdQuotaUsage.SetSize(tenant.GetMetrics().GetStorage());
+                            ssdQuotaUsage.SetLimit(tenant.databasequotas().data_size_hard_quota());
+                            auto& hddQuotaUsage = *tenant.AddQuotaUsage();
+                            hddQuotaUsage.SetType(NKikimrViewer::TStorageUsage::HDD);
+                        }
                     }
                 }
 

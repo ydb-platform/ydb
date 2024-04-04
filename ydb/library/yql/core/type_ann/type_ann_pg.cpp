@@ -458,9 +458,13 @@ const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNo
         pgType = "float8";
         break;
     case NUdf::EDataSlot::String:
+    case NUdf::EDataSlot::Yson:
         pgType = "bytea";
         break;
     case NUdf::EDataSlot::Utf8:
+    case NUdf::EDataSlot::TzDate:
+    case NUdf::EDataSlot::TzDatetime:
+    case NUdf::EDataSlot::TzTimestamp:
         pgType = "text";
         break;
     case NUdf::EDataSlot::Date:
@@ -472,6 +476,15 @@ const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNo
         break;
     case NUdf::EDataSlot::Interval:
         pgType = "interval";
+        break;
+    case NUdf::EDataSlot::Json:
+        pgType = "json";
+        break;
+    case NUdf::EDataSlot::JsonDocument:
+        pgType = "jsonb";
+        break;
+    case NUdf::EDataSlot::Uuid:
+        pgType = "uuid";
         break;
     default:
         ctx.AddError(TIssue(ctx.GetPosition(pos),

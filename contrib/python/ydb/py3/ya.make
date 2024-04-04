@@ -2,11 +2,12 @@
 
 PY3_LIBRARY()
 
-VERSION(3.8.1)
+VERSION(3.9.0)
 
 LICENSE(Apache-2.0)
 
 PEERDIR(
+    contrib/python/PyJWT
     contrib/python/aiohttp
     contrib/python/grpcio
     contrib/python/packaging

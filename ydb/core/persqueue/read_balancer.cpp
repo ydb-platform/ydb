@@ -1979,7 +1979,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingFinishedRequest::TPt
             if (status.NewSDK || !status.ReadingFinished) {
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                             "Reading of partition " << r.GetPartitionId() << " was finished by " << r.GetConsumer()
-                            << ", firstMessage=" << r.GetFirstMessage() << ", old SDK");
+                            << ", firstMessage=" << r.GetFirstMessage() << ", old SDK, iteration=" << status.Iteration);
 
                 status.NewSDK = false;
                 status.ReadingFinished = true;
@@ -1993,7 +1993,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingFinishedRequest::TPt
                     ++status.Iteration;
                     ++status.Cookie;
 
-                    auto deleay = 1ul << status.Iteration;
+                    auto deleay = std::min<size_t>(1ul << status.Iteration, TabletConfig.GetPartitionConfig().GetLifetimeSeconds());
                     ctx.Schedule(TDuration::Seconds(deleay), new TEvPersQueue::TEvWakeupClientPartition(r.GetConsumer(), r.GetPartitionId(), status.Cookie));
                 }
             }

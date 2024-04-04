@@ -151,6 +151,7 @@ SRCS(
     misc/signal_registry.cpp
     misc/slab_allocator.cpp
     misc/statistics.cpp
+    misc/string_helpers.cpp
     misc/cache_config.cpp
     misc/utf8_decoder.cpp
     misc/zerocopy_output_writer.cpp

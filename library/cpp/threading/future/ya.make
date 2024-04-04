@@ -1,7 +1,3 @@
-SUBSCRIBER(
-    swarmer
-)
-
 LIBRARY()
 
 SRCS(

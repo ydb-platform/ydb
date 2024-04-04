@@ -250,7 +250,7 @@ public:
     THashMap<TPathId, TExternalDataSourceInfo::TPtr> ExternalDataSources;
     THashMap<TPathId, TViewInfo::TPtr> Views;
 
-    TTempTablesState TempTablesState;
+    TTempDirsState TempDirsState;
 
     TTablesStorage ColumnTables;
     std::shared_ptr<NKikimr::NOlap::NBackground::TSessionsManager> BackgroundSessionsManager;
@@ -893,7 +893,7 @@ public:
     void HandleBackgroundCleaningTransactionResult(
         TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& result);
     void HandleBackgroundCleaningCompletionResult(const TTxId& txId);
-    void ClearTempTablesState();
+    void ClearTempDirsState();
 
     struct TTxCleanDroppedSubDomains;
     NTabletFlatExecutor::ITransaction* CreateTxCleanDroppedSubDomains();

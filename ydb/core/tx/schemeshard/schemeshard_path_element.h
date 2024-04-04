@@ -6,6 +6,7 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/core/actorid.h>
 
 #include <library/cpp/json/json_value.h>
 
@@ -84,6 +85,8 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
     // Number of references to this path element in the database
     size_t DbRefCount = 0;
     size_t AllChildrenCount = 0;
+
+    TActorId OwnerActorId;
 
 private:
     ui64 AliveChildrenCount = 0;

@@ -68,8 +68,8 @@ const TSchemeLimits TSchemeShard::DefaultLimits = {};
 
 void TSchemeShard::SubscribeToTempTableOwners() {
     auto ctx = ActorContext();
-    auto& tempTablesByOwner = TempTablesState.TempTablesByOwner;
-    for (const auto& [ownerActorId, tempTables] : tempTablesByOwner) {
+    auto& TempDirsByOwner = TempDirsState.TempDirsByOwner;
+    for (const auto& [ownerActorId, tempTables] : TempDirsByOwner) {
         ctx.Send(new IEventHandle(ownerActorId, SelfId(),
                                 new TEvSchemeShard::TEvOwnerActorAck(),
                                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
@@ -435,7 +435,7 @@ void TSchemeShard::Clear() {
         UpdateBorrowedCompactionQueueMetrics();
     }
 
-    ClearTempTablesState();
+    ClearTempDirsState();
 
     ShardsWithBorrowed.clear();
     ShardsWithLoaned.clear();
@@ -4374,7 +4374,7 @@ void TSchemeShard::Die(const TActorContext &ctx) {
         BorrowedCompactionQueue->Shutdown(ctx);
     }
 
-    ClearTempTablesState();
+    ClearTempDirsState();
     if (BackgroundCleaningQueue) {
         BackgroundCleaningQueue->Shutdown(ctx);
     }

@@ -138,7 +138,7 @@ enum class EAttachChildResult : ui32 {
 
 using EServerlessComputeResourcesMode = NKikimrSubDomains::EServerlessComputeResourcesMode;
 
-struct TTempTablesState {
+struct TTempDirsState {
 
     struct TRetryState {
         bool IsScheduled = false;
@@ -152,7 +152,7 @@ struct TTempTablesState {
         TRetryState RetryState;
     };
 
-    THashMap<TActorId, THashSet<TPathId>> TempTablesByOwner; // OwnerActorId -> [ TPathId ]
+    THashMap<TActorId, THashSet<TPathId>> TempDirsByOwner; // OwnerActorId -> [ TPathId ]
     THashMap<ui32, TNodeState> NodeStates; // NodeId -> TNodeState
 };
 

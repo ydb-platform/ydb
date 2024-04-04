@@ -22,7 +22,7 @@ Changeset `createTable` отвечает за создание таблицы. �
 
 {% endnote %}
 
-Таблица сравнения описаний типов Liquibase с [типами {{ ydb-short-name }}](https://ydb.tech/docs/ru/yql/reference/types/primitive):
+Таблица сравнения описаний типов Liquibase с [типами {{ ydb-short-name }}](../yql/reference/types/primitive.md):
 
 | Liquibase типы                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | {{ ydb-short-name }} тип   |
 |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------|
@@ -43,10 +43,6 @@ Changeset `createTable` отвечает за создание таблицы. �
 {% note warning %}
 
 В YDB тип данных `Timestamp` хранит дату с точностью до микросекунд, в то время как `java.sql.Timestamp` или `java.time.Instant` хранят временную метку с точностью до наносекунд. Обратите на это внимание при работе с этим типом данных.
-
-{% endnote %}
-
-{% note info %}
 
 Имена типов не чувствительны к регистру.
 
@@ -149,7 +145,7 @@ Changeset `createTable` отвечает за создание таблицы. �
 
 {% note warning %}
 
-YDB не поддерживает уникальный вторичный индекс
+YDB не поддерживает уникальный вторичный индекс.
 
 {% endnote %}
 
@@ -299,7 +295,7 @@ YDB не поддерживает уникальный вторичный инд
 
 {% note warning %}
 
-Чтобы понять, какие SQL-конструкции может выполнять {{ ydb-short-name }}, ознакомьтесь с документацией по языку запросов [YQL](https://ydb.tech/docs/ru/yql/reference/).
+Чтобы понять, какие SQL-конструкции может выполнять {{ ydb-short-name }}, ознакомьтесь с документацией по языку запросов [YQL](](../yql/reference/index.md)).
 
 {% endnote %}
 
@@ -329,8 +325,8 @@ YDB не поддерживает уникальный вторичный инд
   
   # you may need to sudo
   # set an actual versions .jar files
-  curl -L -o ydb-jdbc-driver.jar https://repo1.maven.org/maven2/tech/ydb/jdbc/ydb-jdbc-driver-shaded/2.0.7/ydb-jdbc-driver-shaded-2.0.7.jar
-  curl -L -o liquibase-ydb-dialect.jar https://repo1.maven.org/maven2/tech/ydb/dialects/liquibase-ydb-dialect/1.0.0/liquibase-ydb-dialect-1.0.0.jar
+  curl -L -o ydb-jdbc-driver.jar https://repo.maven.apache.org/maven2/tech/ydb/jdbc/ydb-jdbc-driver-shaded/2.0.7/ydb-jdbc-driver-shaded-2.0.7.jar
+  curl -L -o liquibase-ydb-dialect.jar https://repo.maven.apache.org/maven2/tech/ydb/dialects/liquibase-ydb-dialect/1.0.0/liquibase-ydb-dialect-1.0.0.jar
   ```
 
   Более подробное описание в разделе [manual library management](https://docs.liquibase.com/start/install/home.html) в документации Liquibase.
@@ -428,7 +424,8 @@ Liquibase command 'update' was executed successfully.
 --changeset kurdyukov-kir:create-a-topic
 CREATE TOPIC `my_topic` (
     CONSUMER my_consumer
-    ) WITH (retention_period = Interval('P1D')
+) WITH (
+     retention_period = Interval('P1D')
 );
 
 --changeset kurdyukov-kir:auto-partitioning-disabled
@@ -542,7 +539,7 @@ liquibase changelog-sync --changelog-file=dbchangelog.xml
 
 ![_assets/liquibase-step-4.png](_assets/liquibase-step-4.png)
 
-## Подключение к YDB
+## Подключение к {{ ydb-short-name }}
 
 В вышеуказанных примерах мы использовали Docker контейнер, для которого не требовалось дополнительных параметров для аутентификации.
 

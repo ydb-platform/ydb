@@ -22,7 +22,7 @@ You can also explicitly specify the original type name, such as `Int32`, `Json`,
 
 {% endnote %}
 
-Table of comparison of Liquibase types descriptions with [{{ ydb-short-name }} types](https://ydb.tech/docs/en/yql/reference/types/primitive):
+Table of comparison of Liquibase types descriptions with [{{ ydb-short-name }} types](../yql/reference/types/primitive.md):
 
 | Liquibase types                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | {{ ydb-short-name }} type  |
 |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------|
@@ -43,10 +43,6 @@ Table of comparison of Liquibase types descriptions with [{{ ydb-short-name }} t
 {% note warning %}
 
 In YDB, the `Timestamp` data type stores dates with microsecond precision. The `java.sql.Timestamp` or `java.time.Instant` store timestamps with nanosecond precision, so you should be aware of this when using these data types.
-
-{% endnote %}
-
-{% note info %}
 
 The type names are case insensitive.
 
@@ -295,11 +291,11 @@ The type formatting table to load into the table:
 | `Text`, `Bytes`, `Json`, `JsonDocument` | Represent as text                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `Float`, `Double`, `Decimal(22, 9)`     | A real number                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `Interval`                              | [Format](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/time/Duration.html#parse(java.lang.CharSequence)) `java.time.Duration`, prefix `PT` is optional                                                                                                                                                                                                                                                                                       |
-| `Date`, `Datetime`, `Timestamp`         | Format [ISO-8601](https://ru.wikipedia.org/wiki/ISO_8601), in Java, the following format is used: [ISO_LOCAL_DATE](https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html#ISO_LOCAL_DATE), [ISO_LOCAL_DATE_TIME](https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html#ISO_LOCAL_DATE_TIME), [ISO_INSTANT](https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html#ISO_INSTANT) |
+| `Date`, `Datetime`, `Timestamp`         | Format [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601), in Java, the following format is used: [ISO_LOCAL_DATE](https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html#ISO_LOCAL_DATE), [ISO_LOCAL_DATE_TIME](https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html#ISO_LOCAL_DATE_TIME), [ISO_INSTANT](https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html#ISO_INSTANT) |
 
 {% note warning %}
 
-To understand which SQL statements {{ydb-short-name}} can perform, read the documentation for the query language [YQL](https://ydb.tech/docs/en/yql/reference/).
+To understand which SQL statements {{ydb-short-name}} can perform, read the documentation for the query language [YQL](../yql/reference/index.md).
 
 {% endnote %}
 
@@ -329,8 +325,8 @@ There are two ways:
   
   # you may need to sudo
   # set an actual versions .jar files
-  curl -L -o ydb-jdbc-driver.jar https://repo1.maven.org/maven2/tech/ydb/jdbc/ydb-jdbc-driver-shaded/2.0.7/ydb-jdbc-driver-shaded-2.0.7.jar
-  curl -L -o liquibase-ydb-dialect.jar https://repo1.maven.org/maven2/tech/ydb/dialects/liquibase-ydb-dialect/1.0.0/liquibase-ydb-dialect-1.0.0.jar
+  curl -L -o ydb-jdbc-driver.jar https://repo.maven.apache.org/maven2/tech/ydb/jdbc/ydb-jdbc-driver-shaded/2.0.7/ydb-jdbc-driver-shaded-2.0.7.jar
+  curl -L -o liquibase-ydb-dialect.jar https://repo.maven.apache.org/maven2/tech/ydb/dialects/liquibase-ydb-dialect/1.0.0/liquibase-ydb-dialect-1.0.0.jar
   ```
 
   For a more detailed description, see the [Manual library management](https://docs.liquibase.com/start/install/home.html) in Liquibase documentation.
@@ -421,7 +417,8 @@ Let's say we need to create a {{ydb-short-name }} topic and turn off the param `
 --changeset kurdyukov-kir:create-a-topic
 CREATE TOPIC `my_topic` (
     CONSUMER my_consumer
-    ) WITH (retention_period = Interval('P1D')
+) WITH (
+     retention_period = Interval('P1D')
 );
 
 --changeset kurdyukov-kir:auto-partitioning-disabled
@@ -535,7 +532,7 @@ The result will be liquibase synchronization in your project:
 
 ![_assets/liquibase-step-4.png](_assets/liquibase-step-4.png)
 
-## Connecting to YDB
+## Connecting to {{ ydb-short-name }}
 
 In the examples above, a Docker container was used, which didn't require any additional authentication settings.
 

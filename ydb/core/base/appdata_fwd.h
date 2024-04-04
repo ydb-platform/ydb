@@ -240,6 +240,7 @@ struct TAppData {
     TVector<TString> DefaultUserSIDs;
     TString AllAuthenticatedUsers = "all-users@well-known";
     TString TenantName;
+    TString SlotName;
 
     TIntrusivePtr<TResourceProfiles> ResourceProfiles;
 

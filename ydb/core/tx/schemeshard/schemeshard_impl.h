@@ -853,7 +853,7 @@ public:
 
     void EnqueueBackgroundCompaction(const TShardIdx& shardIdx, const TPartitionStats& stats);
     void UpdateBackgroundCompaction(const TShardIdx& shardIdx, const TPartitionStats& stats);
-    void RemoveBackgroundCompaction(const TShardIdx& shardIdx);
+    bool RemoveBackgroundCompaction(const TShardIdx& shardIdx);
 
     void EnqueueBorrowedCompaction(const TShardIdx& shardIdx);
     void RemoveBorrowedCompaction(const TShardIdx& shardIdx);

@@ -95,11 +95,11 @@ void TSchemeShard::EnqueueBorrowedCompaction(const TShardIdx& shardIdx) {
 
     auto ctx = ActorContext();
 
-    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "borrowed compaction enqueue shard# " << shardIdx << " at schemeshard " << TabletID());
-
-    BorrowedCompactionQueue->Enqueue(shardIdx);
-    UpdateBorrowedCompactionQueueMetrics();
+    if (BorrowedCompactionQueue->Enqueue(shardIdx)) {
+        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Borrowed compaction enqueued shard# " << shardIdx << " at schemeshard " << TabletID());
+        UpdateBorrowedCompactionQueueMetrics();
+    }
 }
 
 void TSchemeShard::RemoveBorrowedCompaction(const TShardIdx& shardIdx) {

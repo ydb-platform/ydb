@@ -2807,10 +2807,19 @@ private:
     // from the front
     THashMap<ui32, TCompactionWaiterList> CompactionWaiters;
 
-    using TCompactBorrowedWaiterList = TList<TActorId>;
+    struct TCompactBorrowedWaiter : public TThrRefBase {
+        TCompactBorrowedWaiter(TActorId actorId, TLocalPathId requestedTable)
+            : ActorId(actorId)
+            , RequestedTable(requestedTable)
+        { }
+
+        TActorId ActorId;
+        TLocalPathId RequestedTable;
+        THashSet<ui32> CompactingTables;
+    };
 
     // tableLocalTid -> waiters, similar to CompactionWaiters
-    THashMap<ui32, TCompactBorrowedWaiterList> CompactBorrowedWaiters;
+    THashMap<ui32, TList<TIntrusivePtr<TCompactBorrowedWaiter>>> CompactBorrowedWaiters;
 
     struct TReplicationSourceOffsetsReceiveState {
         // A set of tables for which we already received offsets

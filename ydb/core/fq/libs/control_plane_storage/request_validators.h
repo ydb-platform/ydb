@@ -109,7 +109,7 @@ NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<FederatedQ
             if (!dataStreams.has_schema()) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "data streams with empty schema is forbidden"));
             }
-            issues.AddIssues(NKikimr::NExternalSource::ValidateDateFormatSetting(dataStreams.format_setting(), true));
+            issues.AddIssues(NKikimr::NExternalSource::ValidateDataStreams(dataStreams));
             break;
         }
         case FederatedQuery::BindingSetting::BINDING_NOT_SET: {
@@ -120,7 +120,7 @@ NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<FederatedQ
         case FederatedQuery::BindingSetting::kObjectStorage:
             const FederatedQuery::ObjectStorageBinding objectStorage = setting.object_storage();
             for (const auto& subset: objectStorage.subset()) {
-                issues.AddIssues(NKikimr::NExternalSource::Validate(subset.schema(), subset, pathsLimit));
+                issues.AddIssues(NKikimr::NExternalSource::ValidateObjectStorage(subset.schema(), subset, pathsLimit));
             }
             break;
         }

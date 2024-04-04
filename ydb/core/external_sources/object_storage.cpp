@@ -47,7 +47,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             }
         }
 
-        if (auto issues = Validate(schema, objectStorage)) {
+        if (auto issues = ValidateObjectStorage(schema, objectStorage)) {
             ythrow TExternalSourceException() << issues.ToString();
         }
 
@@ -164,8 +164,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
     }
 
     template<typename TScheme, typename TObjectStorage>
-    static NYql::TIssues Validate(const TScheme& schema, const TObjectStorage& objectStorage, size_t pathsLimit = 50000) {
-        std::cerr << "Validate" << std::endl;
+    static NYql::TIssues ValidateObjectStorage(const TScheme& schema, const TObjectStorage& objectStorage, size_t pathsLimit = 50000) {
         NYql::TIssues issues;
         issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting()));
         issues.AddIssues(ValidateFormatForInput(objectStorage.format(), schema, objectStorage.partitioned_by()));
@@ -270,6 +269,13 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "unknown format setting " + key));
             }
         }
+        return issues;
+    }
+
+    static NYql::TIssues ValidateDataStreams(const FederatedQuery::DataStreamsBinding& binding) {
+        NYql::TIssues issues;
+        issues.AddIssues(ValidateDateFormatSetting(binding.format_setting(), true));
+        issues.AddIssues(ValidateFormatForInput(binding.format(), binding.schema(), TVector<TString>{}));
         return issues;
     }
 
@@ -476,12 +482,12 @@ IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegEx
     return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns);
 }
 
-NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit) {
-    return TObjectStorageExternalSource::Validate(schema, objectStorage, pathsLimit);
+NYql::TIssues ValidateObjectStorage(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit) {
+    return TObjectStorageExternalSource::ValidateObjectStorage(schema, objectStorage, pathsLimit);
 }
 
-NYql::TIssues ValidateDateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting, bool matchAllSettings) {
-    return TObjectStorageExternalSource::ValidateDateFormatSetting(formatSetting, matchAllSettings);
+NYql::TIssues ValidateDataStreams(const FederatedQuery::DataStreamsBinding& binding) {
+    return TObjectStorageExternalSource::ValidateDataStreams(binding);
 }
 
 }

@@ -396,14 +396,16 @@ void TTransaction::ModifyRows(
     rows.reserve(modifications.Size());
 
     bool usedStrongLocks = false;
+    bool usedWideLocks = false;
     for (const auto& modification : modifications) {
         auto mask = modification.Locks;
+        usedWideLocks |= mask.GetSize() > TLegacyLockMask::MaxCount;
+        if (usedWideLocks) {
+            break;
+        }
+
         for (int index = 0; index < TLegacyLockMask::MaxCount; ++index) {
-            if (mask.Get(index) > MaxOldLockType) {
-                THROW_ERROR_EXCEPTION("New locks are not supported in RPC client yet")
-                    << TErrorAttribute("lock_index", index)
-                    << TErrorAttribute("lock_type", mask.Get(index));
-            }
+            usedWideLocks |= mask.Get(index) > MaxOldLockType;
             usedStrongLocks |= mask.Get(index) == ELockType::SharedStrong;
         }
     }
@@ -411,14 +413,19 @@ void TTransaction::ModifyRows(
     if (usedStrongLocks) {
         req->Header().set_protocol_version_minor(YTRpcModifyRowsStrongLocksVersion);
     }
+    if (usedWideLocks) {
+        req->RequireServerFeature(ERpcProxyFeature::WideLocks);
+    }
 
     for (const auto& modification : modifications) {
         rows.emplace_back(modification.Row);
         req->add_row_modification_types(static_cast<NProto::ERowModificationType>(modification.Type));
-        if (usedStrongLocks) {
+        if (usedWideLocks) {
+            ToProto(req->add_row_locks(), modification.Locks);
+        } else if (usedStrongLocks) {
             auto locks = modification.Locks;
             YT_VERIFY(!locks.HasNewLocks());
-            req->add_row_locks(locks.ToLegacyMask().GetBitmap());
+            req->add_row_legacy_locks(locks.ToLegacyMask().GetBitmap());
         } else {
             TLegacyLockBitmap bitmap = 0;
             for (int index = 0; index < TLegacyLockMask::MaxCount; ++index) {
@@ -426,7 +433,7 @@ void TTransaction::ModifyRows(
                     bitmap |= 1u << index;
                 }
             }
-            req->add_row_read_locks(bitmap);
+            req->add_row_legacy_read_locks(bitmap);
         }
     }
 

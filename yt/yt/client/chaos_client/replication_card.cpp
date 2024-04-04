@@ -1,5 +1,7 @@
 #include "replication_card.h"
 
+#include <yt/yt/client/transaction_client/helpers.h>
+
 #include <yt/yt/core/misc/guid.h>
 #include <yt/yt/core/misc/serialize.h>
 
@@ -680,6 +682,159 @@ bool IsReplicaLocationValid(
     return replica->ReplicaPath == tablePath && replica->ClusterName == clusterName;
 }
 
+TReplicationProgress BuildMaxProgress(
+    const TReplicationProgress& progress,
+    const TReplicationProgress& other)
+{
+    if (progress.Segments.empty()) {
+        return other;
+    }
+    if (other.Segments.empty()) {
+        return progress;
+    }
+
+    TReplicationProgress result;
+
+    auto progressIt = progress.Segments.begin();
+    auto otherIt = other.Segments.begin();
+    auto progressEnd = progress.Segments.end();
+    auto otherEnd = other.Segments.end();
+
+    auto progressTimestamp = NullTimestamp;
+    auto otherTimestamp = NullTimestamp;
+
+    bool upperKeySelected = false;
+
+    auto tryAppendSegment =[&result] (TUnversionedOwningRow row, TTimestamp timestamp) {
+        if (result.Segments.empty() || result.Segments.back().Timestamp != timestamp) {
+            result.Segments.push_back({std::move(row), timestamp});
+        }
+    };
+
+    while (progressIt != progressEnd || otherIt != otherEnd) {
+        int cmpResult;
+
+        if (otherIt == otherEnd) {
+            cmpResult = -1;
+            if (!upperKeySelected && CompareRows(progressIt->LowerKey, other.UpperKey) >= 0) {
+                upperKeySelected = true;
+                otherTimestamp = NullTimestamp;
+                tryAppendSegment(other.UpperKey, progressTimestamp);
+                continue;
+            }
+        } else if (progressIt == progressEnd) {
+            cmpResult = 1;
+            if (!upperKeySelected && CompareRows(otherIt->LowerKey, progress.UpperKey) >= 0) {
+                upperKeySelected = true;
+                progressTimestamp = NullTimestamp;
+                tryAppendSegment(progress.UpperKey, otherTimestamp);
+                continue;
+            }
+        } else {
+            cmpResult = CompareRows(progressIt->LowerKey, otherIt->LowerKey);
+        }
+
+        TUnversionedOwningRow lowerKey;
+        if (cmpResult < 0) {
+            progressTimestamp = progressIt->Timestamp;
+            lowerKey = progressIt->LowerKey;
+            ++progressIt;
+        } else if (cmpResult > 0) {
+            otherTimestamp = otherIt->Timestamp;
+            lowerKey = otherIt->LowerKey;
+            ++otherIt;
+        } else {
+            progressTimestamp = progressIt->Timestamp;
+            otherTimestamp = otherIt->Timestamp;
+            lowerKey = progressIt->LowerKey;
+            ++progressIt;
+            ++otherIt;
+        }
+
+        tryAppendSegment(std::move(lowerKey), std::max(progressTimestamp, otherTimestamp));
+    }
+
+    auto cmpResult = CompareRows(progress.UpperKey, other.UpperKey);
+    result.UpperKey = cmpResult > 0 ? progress.UpperKey : other.UpperKey;
+
+    if (!upperKeySelected) {
+        if (cmpResult > 0) {
+            tryAppendSegment(other.UpperKey, progressTimestamp);
+        } else if (cmpResult < 0) {
+            tryAppendSegment(progress.UpperKey, otherTimestamp);
+        }
+    }
+
+    return result;
+}
+
+TDuration ComputeReplicationProgressLag(
+    const TReplicationProgress& syncProgress,
+    const TReplicationProgress& replicaProgress)
+{
+    if (syncProgress.Segments.empty()) {
+        return TDuration::Zero();
+    }
+    auto timestampDiff = [] (TTimestamp loTimestamp, TTimestamp hiTimestamp) {
+        if (loTimestamp >= hiTimestamp) {
+            return TDuration::Zero();
+        }
+        return TimestampDiffToDuration(loTimestamp, hiTimestamp).first;
+    };
+
+    if (replicaProgress.Segments.empty()) {
+        return timestampDiff(GetReplicationProgressMaxTimestamp(syncProgress), NullTimestamp);
+    }
+
+    auto syncIt = syncProgress.Segments.begin();
+    auto replicaIt = replicaProgress.Segments.begin();
+    auto syncEnd = syncProgress.Segments.end();
+    auto replicaEnd = replicaProgress.Segments.end();
+
+    auto syncSegmentTimestamp = NullTimestamp;
+    auto replicaSegmentTimestamp = NullTimestamp;
+    auto lag = TDuration::Zero();
+
+    while (syncIt != syncEnd || replicaIt != replicaEnd) {
+        int cmpResult;
+        if (syncIt == syncEnd) {
+            cmpResult = -1;
+            if (CompareRows(replicaIt->LowerKey, syncProgress.UpperKey) >= 0) {
+                syncSegmentTimestamp = NullTimestamp;
+            }
+        } else if (replicaIt == replicaEnd) {
+            cmpResult = 1;
+            if (CompareRows(syncIt->LowerKey, replicaProgress.UpperKey) >= 0) {
+                replicaSegmentTimestamp = NullTimestamp;
+            }
+        } else {
+            cmpResult = CompareRows(replicaIt->LowerKey, syncIt->LowerKey);
+        }
+
+        if (cmpResult > 0) {
+            syncSegmentTimestamp = syncIt->Timestamp;
+            ++syncIt;
+        } else if (cmpResult < 0) {
+            replicaSegmentTimestamp = replicaIt->Timestamp;
+            ++replicaIt;
+        } else {
+            syncSegmentTimestamp = syncIt->Timestamp;
+            replicaSegmentTimestamp = replicaIt->Timestamp;
+            ++replicaIt;
+            ++syncIt;
+        }
+
+        lag = std::max(lag, timestampDiff(replicaSegmentTimestamp, syncSegmentTimestamp));
+    }
+
+    if (CompareRows(syncProgress.UpperKey, replicaProgress.UpperKey) > 0) {
+        lag = std::max(lag, timestampDiff(NullTimestamp, syncProgress.Segments.back().Timestamp));
+    }
+
+    return lag;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NChaosClient
+

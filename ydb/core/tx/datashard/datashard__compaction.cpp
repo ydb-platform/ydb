@@ -197,8 +197,7 @@ void TDataShard::CompactionComplete(ui32 tableId, const TActorContext &ctx) {
     auto finishedInfo = Executor()->GetFinishedCompactionInfo(tableId);
 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-        "CompactionComplete of tablet# "<< TabletID()
-        << ", table# " << tableId
+        "CompactionComplete of tablet# "<< TabletID() << ", table# " << tableId
         << ", finished edge# " << finishedInfo.Edge
         << ", ts " << finishedInfo.FullCompactionTs);
 
@@ -235,8 +234,7 @@ void TDataShard::ReplyCompactionWaiters(
     const TActorContext &ctx)
 {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-        "CompactionComplete of tablet# "<< TabletID()
-        << ", table# " << tableId
+        "ReplyCompactionWaiters of tablet# "<< TabletID() << ", table# " << tableId
         << ", finished edge# " << compactionInfo.Edge
         << ", front# " << (CompactionWaiters[tableId].empty() ? 0UL : std::get<0>(CompactionWaiters[tableId].front())));
 
@@ -256,7 +254,8 @@ void TDataShard::ReplyCompactionWaiters(
         ctx.Send(sender, std::move(response));
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Sending TEvCompactTableResult to# " << sender
+            "ReplyCompactionWaiters of tablet# "<< TabletID() << ", table# " << tableId
+            << " sending TEvCompactTableResult to# " << sender
             << "pathId# " << TPathId(GetPathOwnerId(), localPathId));
 
         fullCompactionQueue->pop_front();
@@ -278,7 +277,8 @@ void TDataShard::ReplyCompactionWaiters(
                     ctx.Send(waiter->ActorId, std::move(response));
 
                     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                        "Sending TEvCompactBorrowedResult to# " << waiter->ActorId
+                        "ReplyCompactionWaiters of tablet# "<< TabletID() << ", table# " << tableId
+                        << " sending TEvCompactBorrowedResult to# " << waiter->ActorId
                         << "pathId# " << TPathId(GetPathOwnerId(), waiter->RequestedTable));
                 }
 

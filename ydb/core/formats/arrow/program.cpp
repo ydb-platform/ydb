@@ -149,11 +149,11 @@ public:
         if (!arguments) {
             return arrow::Status::Invalid("Error parsing args.");
         }
-//        try {
+        try {
             return Function->Execute(*arguments, assign.GetOptions(), TBase::Ctx);
-//        } catch (const std::exception& ex) {
-//            return arrow::Status::ExecutionError(ex.what());
-//        }
+        } catch (const std::exception& ex) {
+            return arrow::Status::ExecutionError(ex.what());
+        }
     }
 };
 
@@ -866,10 +866,30 @@ arrow::Status TProgramStep::ApplyProjection(std::shared_ptr<arrow::RecordBatch>&
 arrow::Status TProgramStep::Apply(std::shared_ptr<arrow::RecordBatch>& batch, arrow::compute::ExecContext* ctx) const {
     auto rb = TDatumBatch::FromRecordBatch(batch);
 
-    NArrow::TStatusValidator::Validate(ApplyAssignes(*rb, ctx));
-    NArrow::TStatusValidator::Validate(ApplyFilters(*rb));
-    NArrow::TStatusValidator::Validate(ApplyAggregates(*rb, ctx));
-    NArrow::TStatusValidator::Validate(ApplyProjection(*rb));
+    {
+        auto status = ApplyAssignes(*rb, ctx);
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    {
+        auto status = ApplyFilters(*rb);
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    {
+        auto status = ApplyAggregates(*rb, ctx);
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    {
+        auto status = ApplyProjection(*rb);
+        if (!status.ok()) {
+            return status;
+        }
+    }
 
     batch = (*rb).ToRecordBatch();
     if (!batch) {
@@ -895,11 +915,11 @@ std::set<std::string> TProgramStep::GetColumnsInUsage(const bool originalOnly/* 
     return result;
 }
 
-std::shared_ptr<NArrow::TColumnFilter> TProgramStep::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& t) const {
+arrow::Result<std::shared_ptr<NArrow::TColumnFilter>> TProgramStep::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& t) const {
     return BuildFilter(t->BuildTable(GetColumnsInUsage(true)));
 }
 
-std::shared_ptr<NArrow::TColumnFilter> TProgramStep::BuildFilter(const std::shared_ptr<arrow::Table>& t) const {
+arrow::Result<std::shared_ptr<NArrow::TColumnFilter>> TProgramStep::BuildFilter(const std::shared_ptr<arrow::Table>& t) const {
     if (Filters.empty()) {
         return nullptr;
     }
@@ -907,7 +927,12 @@ std::shared_ptr<NArrow::TColumnFilter> TProgramStep::BuildFilter(const std::shar
     NArrow::TColumnFilter fullLocal = NArrow::TColumnFilter::BuildAllowFilter();
     for (auto&& rb : batches) {
         auto datumBatch = TDatumBatch::FromRecordBatch(rb);
-        NArrow::TStatusValidator::Validate(ApplyAssignes(*datumBatch, NArrow::GetCustomExecContext()));
+        {
+            auto statusAssign = ApplyAssignes(*datumBatch, NArrow::GetCustomExecContext());
+            if (!statusAssign.ok()) {
+                return statusAssign;
+            }
+        }
         NArrow::TColumnFilter local = NArrow::TColumnFilter::BuildAllowFilter();
         NArrow::TStatusValidator::Validate(MakeCombinedFilter(*datumBatch, local));
         AFL_VERIFY(local.Size() == datumBatch->Rows)("local", local.Size())("datum", datumBatch->Rows);
@@ -940,32 +965,6 @@ std::set<std::string> TProgram::GetProcessingColumns() const {
         result.emplace(i.second.GetColumnName());
     }
     return result;
-}
-
-std::shared_ptr<NArrow::TColumnFilter> TProgram::ApplyEarlyFilter(std::shared_ptr<arrow::Table>& batch, const bool useFilter) const {
-    std::shared_ptr<NArrow::TColumnFilter> filter = std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter());
-    for (ui32 i = 0; i < Steps.size(); ++i) {
-        try {
-            auto& step = Steps[i];
-            if (!step->IsFilterOnly()) {
-                break;
-            }
-
-            std::shared_ptr<NArrow::TColumnFilter> local = step->BuildFilter(batch);
-            AFL_VERIFY(local);
-            if (!useFilter) {
-                *filter = filter->And(*local);
-            } else {
-                *filter = filter->CombineSequentialAnd(*local);
-                if (!local->Apply(batch)) {
-                    break;
-                }
-            }
-        } catch (const std::exception& ex) {
-            AFL_VERIFY(false);
-        }
-    }
-    return filter;
 }
 
 }

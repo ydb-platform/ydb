@@ -8,18 +8,16 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 class IDataSource;
-
+class TFetchingScriptCursor;
 class IFetchingStep {
 private:
-    std::shared_ptr<IFetchingStep> NextStep;
     YDB_READONLY_DEF(TString, Name);
-    YDB_READONLY(ui32, Index, 0);
-    YDB_READONLY_DEF(TString, BranchName);
 protected:
-    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step) const = 0;
+    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const = 0;
     virtual TString DoDebugString() const {
         return "";
     }
+public:
     virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& /*source*/) const {
         return 0;
     }
@@ -27,72 +25,109 @@ protected:
         return false;
     }
 
-public:
     virtual ~IFetchingStep() = default;
 
-    bool InitSourceSeqColumnIds(const std::shared_ptr<IDataSource>& source) const {
-        auto* current = this;
-        while (current) {
-            if (current->DoInitSourceSeqColumnIds(source)) {
-                return true;
-            } else {
-                current = current->NextStep.get();
-            }
-        }
-        return false;
-    }
-
-    std::shared_ptr<IFetchingStep> AttachNext(const std::shared_ptr<IFetchingStep>& nextStep) {
-        AFL_VERIFY(nextStep);
-        NextStep = nextStep;
-        nextStep->Index = Index + 1;
-        if (!nextStep->BranchName) {
-            nextStep->BranchName = BranchName;
-        }
-        return nextStep;
-    }
-
-    ui64 PredictRawBytes(const std::shared_ptr<IDataSource>& source) const {
-        ui64 result = 0;
-        auto* current = this;
-        while (current) {
-            result += current->DoPredictRawBytes(source);
-            current = current->NextStep.get();
-        }
-        return result;
-    }
-
-    bool ExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step) const {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", DebugString())("scan_step_idx", GetIndex());
+    bool ExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
         return DoExecuteInplace(source, step);
     }
 
-    const std::shared_ptr<IFetchingStep>& GetNextStep() const {
-        return NextStep;
-    }
-
-    IFetchingStep(const TString& name, const TString& branchName = Default<TString>())
+    IFetchingStep(const TString& name)
         : Name(name)
-        , BranchName(branchName)
     {
 
     }
 
     TString DebugString() const {
         TStringBuilder sb;
-        sb << "name=" << Name << ";" << DoDebugString() << ";branch=" << BranchName << ";";
-        if (NextStep) {
-            sb << "next=" << NextStep->DebugString() << ";";
-        }
+        sb << "name=" << Name << ";details={" << DoDebugString() << "};";
         return sb;
     }
+};
+
+class TFetchingScript {
+private:
+    YDB_ACCESSOR(TString, BranchName, "UNDEFINED");
+    std::vector<std::shared_ptr<IFetchingStep>> Steps;
+public:
+    TFetchingScript() = default;
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "[";
+        for (auto&& i : Steps) {
+            sb << "{" << i->DebugString() << "};";
+        }
+        sb << "]";
+        return sb;
+    }
+
+    const std::shared_ptr<IFetchingStep>& GetStep(const ui32 index) const {
+        AFL_VERIFY(index < Steps.size());
+        return Steps[index];
+    }
+
+    ui64 PredictRawBytes(const std::shared_ptr<IDataSource>& source) const {
+        ui64 result = 0;
+        for (auto&& current: Steps) {
+            result += current->DoPredictRawBytes(source);
+        }
+        return result;
+    }
+
+    void AddStep(const std::shared_ptr<IFetchingStep>& step) {
+        AFL_VERIFY(step);
+        Steps.emplace_back(step);
+    }
+
+    bool InitSourceSeqColumnIds(const std::shared_ptr<IDataSource>& source) const {
+        for (auto it = Steps.rbegin(); it != Steps.rend(); ++it) {
+            if ((*it)->DoInitSourceSeqColumnIds(source)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool IsFinished(const ui32 currentStepIdx) const {
+        AFL_VERIFY(currentStepIdx <= Steps.size());
+        return currentStepIdx == Steps.size();
+    }
+
+    ui32 Execute(const ui32 startStepIdx, const std::shared_ptr<IDataSource>& source) const;
+};
+
+class TFetchingScriptCursor {
+private:
+    ui32 CurrentStepIdx = 0;
+    std::shared_ptr<TFetchingScript> Script;
+public:
+    TFetchingScriptCursor(const std::shared_ptr<TFetchingScript>& script, const ui32 index)
+        : CurrentStepIdx(index)
+        , Script(script)
+    {
+
+    }
+
+    const TString& GetName() const {
+        return Script->GetStep(CurrentStepIdx)->GetName();
+    }
+
+    TString DebugString() const {
+        return Script->GetStep(CurrentStepIdx)->DebugString();
+    }
+
+    bool Next() {
+        return !Script->IsFinished(++CurrentStepIdx);
+    }
+
+    bool Execute(const std::shared_ptr<IDataSource>& source);
 };
 
 class TStepAction: public IDataTasksProcessor::ITask {
 private:
     using TBase = IDataTasksProcessor::ITask;
     std::shared_ptr<IDataSource> Source;
-    std::shared_ptr<IFetchingStep> Step;
+    TFetchingScriptCursor Cursor;
     bool FinishedFlag = false;
 protected:
     virtual bool DoApply(IDataReader& owner) const override;
@@ -102,10 +137,10 @@ public:
         return "STEP_ACTION";
     }
 
-    TStepAction(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step, const NActors::TActorId& ownerActorId)
+    TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId)
         : TBase(ownerActorId)
         , Source(source)
-        , Step(step)
+        , Cursor(std::move(cursor))
     {
 
     }
@@ -116,32 +151,16 @@ private:
     using TBase = IFetchingStep;
     const ui32 Count = 0;
 protected:
-    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const override;
+    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& /*source*/) const override {
         return TIndexInfo::GetSpecialColumnsRecordSize() * Count;
     }
 public:
-    TBuildFakeSpec(const ui32 count, const TString& nameBranch = "")
-        : TBase("FAKE_SPEC", nameBranch)
+    TBuildFakeSpec(const ui32 count)
+        : TBase("FAKE_SPEC")
         , Count(count)
     {
         AFL_VERIFY(Count);
-    }
-};
-
-class TFakeStep: public IFetchingStep {
-private:
-    using TBase = IFetchingStep;
-protected:
-    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& /*source*/, const std::shared_ptr<IFetchingStep>& /*step*/) const override {
-        return true;
-    }
-
-public:
-    TFakeStep()
-        : TBase("FAKE")
-    {
-
     }
 };
 
@@ -150,7 +169,7 @@ private:
     using TBase = IFetchingStep;
     const NIndexes::TIndexCheckerContainer IndexChecker;
 protected:
-    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const override;
+    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
 public:
     TApplyIndexStep(const NIndexes::TIndexCheckerContainer& indexChecker)
         : TBase("APPLY_INDEX")
@@ -165,14 +184,14 @@ private:
     using TBase = IFetchingStep;
     std::shared_ptr<TColumnsSet> Columns;
 protected:
-    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step) const override;
+    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const override;
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "columns=" << Columns->DebugString() << ";";
     }
 public:
-    TColumnBlobsFetchingStep(const std::shared_ptr<TColumnsSet>& columns, const TString& nameBranch = "")
-        : TBase("FETCHING_COLUMNS", nameBranch)
+    TColumnBlobsFetchingStep(const std::shared_ptr<TColumnsSet>& columns)
+        : TBase("FETCHING_COLUMNS")
         , Columns(columns) {
         AFL_VERIFY(Columns);
         AFL_VERIFY(Columns->GetColumnsCount());
@@ -184,14 +203,14 @@ private:
     using TBase = IFetchingStep;
     std::shared_ptr<TIndexesSet> Indexes;
 protected:
-    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step) const override;
+    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const override;
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "indexes=" << Indexes->DebugString() << ";";
     }
 public:
-    TIndexBlobsFetchingStep(const std::shared_ptr<TIndexesSet>& indexes, const TString& nameBranch = "")
-        : TBase("FETCHING_INDEXES", nameBranch)
+    TIndexBlobsFetchingStep(const std::shared_ptr<TIndexesSet>& indexes)
+        : TBase("FETCHING_INDEXES")
         , Indexes(indexes) {
         AFL_VERIFY(Indexes);
         AFL_VERIFY(Indexes->GetIndexesCount());
@@ -206,7 +225,7 @@ private:
         return TStringBuilder() << "columns=" << Columns->DebugString() << ";";
     }
 public:
-    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const override;
+    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     TAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
         : TBase("ASSEMBLER" + (specName ? "::" + specName : ""))
         , Columns(columns)
@@ -226,7 +245,7 @@ private:
 protected:
     virtual bool DoInitSourceSeqColumnIds(const std::shared_ptr<IDataSource>& source) const override;
 public:
-    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const override;
+    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     TOptionalAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
         : TBase("OPTIONAL_ASSEMBLER" + (specName ? "::" + specName : ""))
         , Columns(columns) {
@@ -242,12 +261,11 @@ private:
 protected:
     virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const override;
 public:
-    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step) const override;
+    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     TFilterProgramStep(const std::shared_ptr<NSsa::TProgramStep>& step)
         : TBase("PROGRAM")
         , Step(step)
     {
-
     }
 };
 
@@ -255,7 +273,7 @@ class TPredicateFilter: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
 public:
-    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step) const override;
+    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     TPredicateFilter()
         : TBase("PREDICATE") {
 
@@ -266,7 +284,7 @@ class TSnapshotFilter: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
 public:
-    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step) const override;
+    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     TSnapshotFilter()
         : TBase("SNAPSHOT") {
 

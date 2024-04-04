@@ -25,8 +25,8 @@ private:
     NIndexes::TIndexCheckerContainer IndexChecker;
     TReadMetadata::TConstPtr ReadMetadata;
     std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
-    std::shared_ptr<IFetchingStep> BuildColumnsFetchingPlan(const bool needSnapshotsFilter, const bool exclusiveSource, const bool partialUsageByPredicate, const bool useIndexes) const;
-    std::array<std::array<std::array<std::array<std::shared_ptr<IFetchingStep>, 2>, 2>, 2>, 2> CacheFetchingScripts;
+    std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshotsFilter, const bool exclusiveSource, const bool partialUsageByPredicate, const bool useIndexes) const;
+    std::array<std::array<std::array<std::array<std::shared_ptr<TFetchingScript>, 2>, 2>, 2>, 2> CacheFetchingScripts;
 public:
     static const inline ui64 DefaultRejectMemoryIntervalLimit = ((ui64)3) << 30;
     static const inline ui64 DefaultReduceMemoryIntervalLimit = DefaultRejectMemoryIntervalLimit;
@@ -55,7 +55,7 @@ public:
 
     TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext);
 
-    std::shared_ptr<IFetchingStep> GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) const;
+    std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) const;
 };
 
 }

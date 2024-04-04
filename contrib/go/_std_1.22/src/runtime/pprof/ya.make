@@ -1,0 +1,63 @@
+GO_LIBRARY()
+IF (OS_DARWIN AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND RACE AND NOT CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        defs_darwin_arm64.go
+        elf.go
+        label.go
+        map.go
+        pe.go
+        pprof.go
+        pprof_rusage.go
+        proto.go
+        proto_darwin.go
+        protobuf.go
+        protomem.go
+        runtime.go
+        vminfo_darwin.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        defs_darwin_amd64.go
+        elf.go
+        label.go
+        map.go
+        pe.go
+        pprof.go
+        pprof_rusage.go
+        proto.go
+        proto_darwin.go
+        protobuf.go
+        protomem.go
+        runtime.go
+        vminfo_darwin.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND NOT RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        elf.go
+        label.go
+        map.go
+        pe.go
+        pprof.go
+        pprof_rusage.go
+        proto.go
+        proto_other.go
+        protobuf.go
+        protomem.go
+        runtime.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        elf.go
+        label.go
+        map.go
+        pe.go
+        pprof.go
+        pprof_windows.go
+        proto.go
+        proto_windows.go
+        protobuf.go
+        protomem.go
+        runtime.go
+    )
+ENDIF()
+END()

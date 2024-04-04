@@ -283,17 +283,17 @@ You can also specify any value in the `value` field. Data from the `value` field
 
 The type formatting table to load into the table:
 
-| YDB type                                | Description format                                                                                                                                           |
-|-----------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `Bool`                                  | `true` or `false`                                                                                                                                            |
-| `Int8`, `Int16`, `Int32`, `Int64`       | A signed integer                                                                                                                                             |
-| `Uint8`, `Uint16`, `Uint32`, `Uint64`   | An unsigned integer                                                                                                                                          |
-| `Text`, `Bytes`, `Json`, `JsonDocument` | Represent as text                                                                                                                                            |
-| `Float`, `Double`, `Decimal(22, 9)`     | A real number                                                                                                                                                |
-| `Interval`                              | [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601#Durations), corresponds to the `java.time.Duration` in Java.                                               |
-| `Date`                                  | Pattern `YYYY-MM-DD` calendar date from standard [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601)                                                          |
-| `Datetime`                              | Pattern `YYYY-MM-DDThh:mm:ss`, timezone will be set to `UTC`                                                                                                 |
-| `Timestamp`                             | The timestamp from the [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601) standard corresponds to the `java.time.Instant` in Java, precision in microseconds |                                                                               |
+| YDB type                                | Description format                                                                                                                                                                                                                               |
+|-----------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Bool`                                  | `true` or `false`                                                                                                                                                                                                                                |
+| `Int8`, `Int16`, `Int32`, `Int64`       | A signed integer                                                                                                                                                                                                                                 |
+| `Uint8`, `Uint16`, `Uint32`, `Uint64`   | An unsigned integer                                                                                                                                                                                                                              |
+| `Text`, `Bytes`, `Json`, `JsonDocument` | Represent as text                                                                                                                                                                                                                                |
+| `Float`, `Double`, `Decimal(22, 9)`     | A real number                                                                                                                                                                                                                                    |
+| `Interval`                              | [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601#Durations), corresponds to the `java.time.Duration` in Java.                                                                                                                                   |
+| `Date`                                  | Pattern `YYYY-MM-DD` calendar date from standard [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601)                                                                                                                                              |
+| `Datetime`                              | Pattern `YYYY-MM-DDThh:mm:ss`, timezone will be set to `UTC`                                                                                                                                                                                     |
+| `Timestamp`                             | The timestamp from the [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601) standard corresponds to the `java.time.Instant` in Java, timezone will be set to `UTC` (precision in microseconds - `Timestamp` type {{ ydb-short-name }} restriction) |                                                                               |
 
 
 Example `CSV` file:

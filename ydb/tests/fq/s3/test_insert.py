@@ -21,7 +21,7 @@ class TestS3(object):
 
     @yq_all
     @pytest.mark.parametrize("dataset_name", ["dataset", "dataにちは% set"])
-    @pytest.mark.parametrize("format", ["json_list", "json_each_row", "csv_with_names"])
+    @pytest.mark.parametrize("format", ["json_list", "json_each_row", "csv_with_names", "parquet"])
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_insert(self, kikimr, s3, client, format, dataset_name, unique_prefix):
         resource = boto3.resource(

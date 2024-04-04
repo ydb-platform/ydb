@@ -10,6 +10,7 @@ extern "C" {
 
 namespace NYql {
 
+Numeric Uint64ToPgNumeric(ui64 value);
 Numeric PgFloatToNumeric(double item, ui64 scale, int digits);
 Numeric PgDecimal128ToNumeric(arrow::Decimal128 val, int32_t precision, int32_t scale, Numeric high_bits_mul);
 TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& originalType, NKikimr::NMiniKQL::TPgType* targetType);

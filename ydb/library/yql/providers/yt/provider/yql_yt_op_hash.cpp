@@ -90,6 +90,10 @@ TString TYtNodeHashCalculator::MakeSalt(const TYtSettings::TConstPtr& config, co
             builder << path;
         }
     }
+    if (auto val = config->DockerImage.Get(cluster)) {
+        update = true;
+        builder << *val;
+    }
     if (auto val = config->NativeYtTypeCompatibility.Get(cluster)) {
         update = true;
         builder << *val;

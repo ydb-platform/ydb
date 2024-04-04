@@ -88,4 +88,7 @@ select 1, $interval64_minus1*2, $interval64_plus1*2
 , 2, $interval64_max*2, ($interval64_max/2)*2
 , 3, $interval64_min/2, $interval64_max/2
 , 4, -$interval64_min, -$interval64_max
-, 5, abs($interval64_min), abs($interval64_max);
+, 5, abs($interval64_min), abs($interval64_max)
+, 6, $interval64_min/18446744073709551615ul, $interval64_max/18446744073709551615ul
+, 7, $interval64_min/9223372036854775807l, $interval64_max/9223372036854775807l
+, 8, $interval64_min/0, $interval64_max/0;

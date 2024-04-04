@@ -113,18 +113,28 @@ struct TNumDivInterval {
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
+        const auto bbRvOverflow = BasicBlock::Create(context, "bbRvOverflow", ctx.Func);
         const auto bbMain = BasicBlock::Create(context, "bbMain", ctx.Func);
         const auto bbDone = BasicBlock::Create(context, "bbDone", ctx.Func);
-        const auto type = Type::getInt128Ty(context);
-        const auto null = ConstantInt::get(type, 0);
-        const auto result = PHINode::Create(type, 3, "result", bbDone);
+        const auto resultType = Type::getInt128Ty(context);
+        const auto null = ConstantInt::get(resultType, 0);
+        const auto result = PHINode::Create(resultType, 3, "result", bbDone);
 
         const auto rv = GetterFor<typename TRight::TLayout>(right, context, block);
         const auto rvZero = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ,
                 rv, ConstantInt::get(rv->getType(), 0), "rvZero", block);
 
-        BranchInst::Create(bbDone, bbMain, rvZero, block);
+        BranchInst::Create(bbDone, bbRvOverflow, rvZero, block);
         result->addIncoming(null, block);
+
+        block = bbRvOverflow;
+
+        const auto rvOverflow = GenIsInt64Overflow<typename TRight::TLayout>(rv, context, block);
+        const auto zero = SetterFor<typename TOutput::TLayout>(
+                ConstantInt::get(Type::getInt64Ty(context), 0), context, block);
+        BranchInst::Create(bbDone, bbMain, rvOverflow, block);
+        result->addIncoming(zero, block);
+
         block = bbMain;
 
         const auto lval = StaticCast<typename TLeft::TLayout, typename TOutput::TLayout>(
@@ -135,13 +145,9 @@ struct TNumDivInterval {
         const auto divResult = SetterFor<typename TOutput::TLayout>(div, context, block);
 
         const auto res = SelectInst::Create(
-                GenIsInt64Overflow<typename TRight::TLayout>(rv, context, block),
-                null, // ConstantInt::get(Type::getInt64Ty(context), 0),
-                SelectInst::Create(
-                    GenIsBadInterval<TOutput>(div, context, block),
-                    null,
-                    divResult,
-                    "selectDiv", block),
+                GenIsBadInterval<TOutput>(div, context, block),
+                null,
+                divResult,
                 "res", block);
 
         result->addIncoming(res, block);

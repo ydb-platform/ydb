@@ -68,6 +68,7 @@ TPartitionActor::TPartitionActor(
     , DirectRead(directRead)
     , UseMigrationProtocol(useMigrationProtocol)
     , FirstRead(true)
+    , ReadingFinishedSent(false)
 {
 }
 
@@ -1052,11 +1053,15 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
         WaitDataInPartition(ctx);
     }
 
-    if (record.GetReadingFinished()) {
-        // TODO TX?
-        ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, FirstRead));
-    } else {
-        FirstRead = false;
+    if (!ReadingFinishedSent) {
+        if (record.GetReadingFinished()) {
+            ReadingFinishedSent = true;
+
+            // TODO Tx
+            ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, FirstRead));
+        } else {
+            FirstRead = false;
+        }
     }
 }
 

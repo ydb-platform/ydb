@@ -211,6 +211,7 @@ private:
     bool UseMigrationProtocol;
 
     bool FirstRead;
+    bool ReadingFinishedSent;
 };
 
 

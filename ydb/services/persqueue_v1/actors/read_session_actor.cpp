@@ -2316,7 +2316,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
 
     auto it = Topics.find(msg->Topic);
     if (it == Topics.end()) {
-        // TODO SessionClose?
         return;
     }
 

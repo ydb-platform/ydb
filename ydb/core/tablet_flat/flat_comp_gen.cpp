@@ -913,6 +913,7 @@ void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation)
         };
 
         if (FinalCompactionId != 0) {
+            // Another final compaction is already compacting final parts for us
             if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
                 logl << "TGenCompactionStrategy BeginGenCompaction for " << Backend->OwnerTabletId()
                     << ": task " << taskId << ", generation " << generation
@@ -926,6 +927,7 @@ void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation)
         if (!Generations.empty()) {
             auto& gen = Generations.back();
             if (gen.State != EState::Free) {
+                // The last generation will compact final parts for us
                 if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
                     logl << "TGenCompactionStrategy BeginGenCompaction for " << Backend->OwnerTabletId()
                         << ": task " << taskId << ", generation " << generation
@@ -936,6 +938,7 @@ void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation)
             }
         } else {
             if (MemCompactionId != 0) {
+                // The last generation is compacting final parts for us
                 if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
                     logl << "TGenCompactionStrategy BeginGenCompaction for " << Backend->OwnerTabletId()
                         << ": task " << taskId << ", generation " << generation

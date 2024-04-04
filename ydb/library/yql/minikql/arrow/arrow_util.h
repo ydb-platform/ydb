@@ -39,6 +39,20 @@ inline std::string_view GetStringScalarValue(const arrow::Scalar& scalar) {
     return std::string_view{reinterpret_cast<const char*>(base.value->data()), static_cast<size_t>(base.value->size())};
 }
 
+inline arrow::Datum MakeUint8Array(arrow::MemoryPool* pool, ui8 value, int64_t len) {
+    std::shared_ptr<arrow::Buffer> data = ARROW_RESULT(arrow::AllocateBuffer(len, pool));
+    std::memset(data->mutable_data(), value, len);
+    return arrow::ArrayData::Make(arrow::uint8(), len, { std::shared_ptr<arrow::Buffer>{}, data });
+}
+
+inline arrow::Datum MakeFalseArray(arrow::MemoryPool* pool, int64_t len) {
+    return MakeUint8Array(pool, 0, len);
+}
+
+inline arrow::Datum MakeTrueArray(arrow::MemoryPool* pool, int64_t len) {
+    return MakeUint8Array(pool, 1, len);
+}
+
 template<typename T>
 struct TPrimitiveDataType;
 

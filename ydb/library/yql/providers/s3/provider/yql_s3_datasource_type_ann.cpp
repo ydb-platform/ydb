@@ -461,7 +461,7 @@ public:
             if (!NCommon::ValidateFormatForInput(
                 format,
                 structRowType,
-                [partitionedBySet](const TStringBuf& fieldName) {return partitionedBySet.contains(fieldName); },
+                [partitionedBySet](TStringBuf fieldName) {return partitionedBySet.contains(fieldName); },
                 ctx)) {
                 return TStatus::Error;
             }

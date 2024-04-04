@@ -114,7 +114,7 @@ public:
         if (!NCommon::ValidateFormatForInput(
             format,
             schema->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(),
-            [](const TStringBuf& fieldName) {return FindPqMetaFieldDescriptorBySysColumn(TString(fieldName)); },
+            [](TStringBuf fieldName) {return FindPqMetaFieldDescriptorBySysColumn(TString(fieldName)); },
             ctx)) {
             return TStatus::Error;
         }

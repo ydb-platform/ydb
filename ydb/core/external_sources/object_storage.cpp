@@ -115,10 +115,61 @@ struct TObjectStorageExternalSource : public IExternalSource {
         ValidateHostname(HostnamePatterns, proto.GetLocation());
     }
 
+    static bool ValidateStringType(const NYdb::TType& columnType) {
+        static NYdb::TType stringType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::String).Build();
+        static NYdb::TType utf8Type = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Utf8).Build();
+        static NYdb::TType ysonType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Yson).Build();
+        static NYdb::TType jsonType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Json).Build();
+        static const std::vector<NYdb::TType> availableTypes {
+            stringType,
+            utf8Type,
+            ysonType,
+            jsonType,
+            NYdb::TTypeBuilder{}.Optional(stringType).Build(),
+            NYdb::TTypeBuilder{}.Optional(utf8Type).Build(),
+            NYdb::TTypeBuilder{}.Optional(ysonType).Build(),
+            NYdb::TTypeBuilder{}.Optional(jsonType).Build()
+        };
+        
+        return FindIf(availableTypes, [&columnType](const auto& availableType) { return NYdb::TypesEqual(availableType, columnType); }) != availableTypes.end();
+    }
+
+    template<typename TScheme, typename TPartitionedBy>
+    static NYql::TIssues ValidateFormatForInput(const TString& format, const TScheme& schema, const TPartitionedBy& partitionedBy) {
+        NYql::TIssues issues;
+        if (format == "raw"sv) {
+            ui64 realSchemaRowCount = 0;
+            Ydb::Column lastColumn;
+            TSet<TString> partitionedBySet{partitionedBy.begin(), partitionedBy.end()};
+
+            for (const auto& column: schema.column()) {
+                if (partitionedBySet.contains(column.name())) {
+                    continue;
+                }
+                if (!ValidateStringType(column.type())) {
+                    issues.AddIssue(MakeErrorIssue(
+                        Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder{} << TStringBuilder() << "Only string type field in schema supported in raw format (you have " 
+                            << NYdb::TType(column.type()).ToString() <<" type)"));
+                }
+                ++realSchemaRowCount;
+            }
+
+            if (realSchemaRowCount > 1) {
+                issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder{} << TStringBuilder() << "Only one field in schema supported in raw format (you have " 
+                    << realSchemaRowCount << " fields)"));
+            }
+        }
+        return issues;
+    }
+
     template<typename TScheme, typename TObjectStorage>
     static NYql::TIssues Validate(const TScheme& schema, const TObjectStorage& objectStorage, size_t pathsLimit = 50000) {
+        std::cerr << "Validate" << std::endl;
         NYql::TIssues issues;
         issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting()));
+        issues.AddIssues(ValidateFormatForInput(objectStorage.format(), schema, objectStorage.partitioned_by()));
+
         if (objectStorage.projection_size() || objectStorage.partitioned_by_size()) {
             try {
                 TVector<TString> partitionedBy{objectStorage.partitioned_by().begin(), objectStorage.partitioned_by().end()};

@@ -1385,7 +1385,7 @@ bool ValidateCompressionForOutput(std::string_view format, std::string_view comp
 bool ValidateFormatForInput(
     std::string_view format,
     const TStructExprType* schemaStructRowType,
-    const std::function<bool(const TStringBuf&)>& excludeFields,
+    const std::function<bool(TStringBuf)>& excludeFields,
     TExprContext& ctx) {
     if (format.empty()) {
         return true;

@@ -1,14 +1,12 @@
 #include "util/charset/utf8.h"
 #include "utils.h"
 #include "ydb/public/api/protos/ydb_value.pb.h"
-#include <memory>
 #include <ydb/library/yql/sql/settings/partitioning.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/config.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/raw_parser.h>
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
-//#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/commands/defrem.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>

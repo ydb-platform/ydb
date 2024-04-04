@@ -3,7 +3,9 @@ AccessModifierOffset: -4
 ConstructorInitializerIndentWidth: 4
 AlignEscapedNewlinesLeft: false
 AlignEscapedNewlines: Left
-AlignTrailingComments: true
+AlignTrailingComments:
+    Kind: Always
+    OverEmptyLines: 0
 AllowAllParametersOfDeclarationOnNextLine: true
 AllowShortBlocksOnASingleLine: false
 AllowShortIfStatementsOnASingleLine: false

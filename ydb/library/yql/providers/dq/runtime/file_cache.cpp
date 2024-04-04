@@ -123,7 +123,7 @@ void TFileCache::AddFile(const TString& path, const TString& objectId)
         LRU.push_back(objectId);
         file.Position = --LRU.end();
         UsedSize += file.Size;
-        Files.insert(std::make_pair(objectId, file));
+        Files[objectId] = file;
     }
 
     // don't lock on fs
@@ -193,7 +193,7 @@ void TFileCache::ReleaseFile(const TString& objectId) {
 bool TFileCache::Contains(const TString& objectId)
 {
     TGuard<TMutex> guard(Mutex);
-    return Files.contains(objectId);
+    return FindFileObject(objectId) != Files.end();
 }
 
 void TFileCache::Walk(const std::function<void(const TString& objectId)>& f)

@@ -1433,8 +1433,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev
     }
 
     auto& clientInfo = it->second;
+    clientInfo.UnlockPartition(partitionId);
     if (!clientInfo.SessionsWithGroup) {
-        group = 0;
+        group = TClientInfo::MAIN_GROUP;
     }
     auto cit = clientInfo.ClientGroupsInfo.find(group);
     if (cit == clientInfo.ClientGroupsInfo.end()) {
@@ -1452,18 +1453,17 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev
     }
     Y_ABORT_UNLESS(jt != clientGroupsInfo.PartitionsInfo.end());
     auto& partitionInfo = jt->second;
-    partitionInfo.Session = TActorId();
-    partitionInfo.State = EPS_FREE;
+    partitionInfo.Unlock();
 
     clientGroupsInfo.FreePartition(partitionId);
 
-    --session->NumActive;
-    --session->NumSuspended;
-    if (!clientInfo.IsReadeable(partitionId)) {
-        --session->NumInactive;
-    }
+    session->Unlock(!clientInfo.IsReadeable(partitionId)); // TODO тут точно должно быть IsReadable без условия что прочитана?
 
     clientGroupsInfo.ScheduleBalance(ctx);
+}
+
+void TPersQueueReadBalancer::TClientInfo::UnlockPartition(ui32 partitionId) {
+    GetPartitionReadingStatus(partitionId).Unlock();
 }
 
 void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {

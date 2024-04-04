@@ -207,6 +207,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         EPartitionState State;
         TActorId Session;
         ui32 GroupId;
+
+        void Unlock() { Session = TActorId(); State = EPS_FREE; };
     };
 
     struct TClientInfo;
@@ -234,6 +236,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
             TString ClientNode;
             ui32 ProxyNodeId;
             TInstant Timestamp;
+
+            void Unlock(bool inactive) { --NumActive; --NumSuspended; if (inactive) { -- NumInactive; } }
         };
 
         TClientGroupInfo(const TClientInfo& clientInfo)
@@ -311,6 +315,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
         bool IsFinished() const { return Commited || (ReadingFinished && (FirstRead || NewSDK)); };
         bool Commit() { return !std::exchange(Commited, true); };
+        void Unlock() { ReadingFinished = false; ++Cookie; };
     };
 
     struct TClientInfo {
@@ -348,6 +353,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         bool ProccessReadingFinished(ui32 partitionId);
 
         TStringBuilder GetPrefix() const;
+
+        void UnlockPartition(ui32 partitionId);
 
         TReadingPartitionStatus& GetPartitionReadingStatus(ui32 partitionId);
 

@@ -1469,7 +1469,7 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
     THashSet<NScheme::TTypeId> intTypes = {
         NTypeIds::Int8, NTypeIds::Int16, NTypeIds::Int32, NTypeIds::Int64,
         NTypeIds::Uint8, NTypeIds::Uint16, NTypeIds::Uint32, NTypeIds::Uint64,
-        NTypeIds::Timestamp
+        NTypeIds::Timestamp, NTypeIds::Timestamp64, NTypeIds::Interval64
     };
     THashSet<NScheme::TTypeId> strTypes = {
         NTypeIds::Utf8, NTypeIds::String

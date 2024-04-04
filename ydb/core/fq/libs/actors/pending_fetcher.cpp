@@ -166,6 +166,7 @@ public:
         , DqCompFactory(dqCompFactory)
         , ServiceCounters(serviceCounters, "pending_fetcher")
         , GetTaskCounters("GetTask", ServiceCounters.Counters)
+        , FailedStatusCodeCounters(MakeIntrusive<TStatusCodeByScopeCounters>("IntermediateFailedStatusCode", ServiceCounters.RootCounters->GetSubgroup("component", "QueryDiagnostic")))
         , CredentialsFactory(credentialsFactory)
         , S3Gateway(s3Gateway)
         , ConnectorClient(connectorClient)
@@ -453,7 +454,7 @@ private:
     }
 
     NActors::IActor* CreateYdbRunActor(TRunActorParams&& params, const ::NYql::NCommon::TServiceCounters& queryCounters) const {
-        auto actorFactory = CreateActorFactory(params, queryCounters);
+        auto actorFactory = CreateActorFactory(params, queryCounters, FailedStatusCodeCounters);
         return ::NFq::CreateYdbRunActor(SelfId(), queryCounters, std::move(params), actorFactory);
     }
 
@@ -478,6 +479,7 @@ private:
     ::NYql::NCommon::TServiceCounters ServiceCounters;
     TRequestCounters GetTaskCounters;
     TInstant StartGetTaskTime;
+    NFq::TStatusCodeByScopeCounters::TPtr FailedStatusCodeCounters;
 
     IModuleResolver::TPtr ModuleResolver;
 

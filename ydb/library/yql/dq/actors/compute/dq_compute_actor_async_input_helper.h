@@ -100,5 +100,25 @@ public:
     }
 };
 
+//Used for inputs in Sync ComputeActor and for a base for input transform in both sync and async ComputeActors
+struct TComputeActorAsyncInputHelperSync: public TComputeActorAsyncInputHelper
+{
+public:
+    using TComputeActorAsyncInputHelper::TComputeActorAsyncInputHelper;
+
+    void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space, bool finished) override {
+        Buffer->Push(std::move(batch), space);
+        if (finished) {
+            Buffer->Finish();
+            Finished = true;
+        }
+    }
+    i64 GetFreeSpace() const override{
+        return Buffer->GetFreeSpace();
+    }
+
+    IDqAsyncInputBuffer::TPtr Buffer;
+};
+
 } //namespace NYql::NDq
 

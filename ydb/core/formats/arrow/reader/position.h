@@ -1,5 +1,9 @@
 #pragma once
+#include <ydb/core/formats/arrow/common/accessor.h>
 #include <ydb/core/formats/arrow/permutations.h>
+#include <ydb/core/formats/arrow/switch/switch_type.h>
+#include <ydb/core/formats/arrow/switch/compare.h>
+#include <ydb/core/formats/arrow/common/container.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
@@ -16,29 +20,30 @@ class TRecordBatchBuilder;
 
 class TSortableScanData {
 private:
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::Array>>, Columns);
+    YDB_READONLY_DEF(std::vector<NAccessor::IChunkedArray::TReader>, Columns);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::Field>>, Fields);
 public:
     TSortableScanData() = default;
     TSortableScanData(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns);
+    TSortableScanData(const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns);
+    TSortableScanData(const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns);
 
     std::shared_ptr<arrow::RecordBatch> ExtractPosition(const ui64 pos) const {
         std::vector<std::shared_ptr<arrow::Array>> columns;
         std::shared_ptr<arrow::Schema> schema = std::make_shared<arrow::Schema>(Fields);
         for (ui32 i = 0; i < Columns.size(); ++i) {
-            auto extracted = NArrow::CopyRecords(Columns[i], {pos});
+            auto extracted = Columns[i].CopyRecord(pos);
             columns.emplace_back(extracted);
         }
         return arrow::RecordBatch::Make(schema, 1, columns);
     }
 
-    std::shared_ptr<arrow::RecordBatch> Slice(const ui64 offset, const ui64 count) const {
-        std::vector<std::shared_ptr<arrow::Array>> slicedArrays;
+    std::shared_ptr<arrow::Table> Slice(const ui64 offset, const ui64 count) const {
+        std::vector<std::shared_ptr<arrow::ChunkedArray>> slicedArrays;
         for (auto&& i : Columns) {
-            AFL_VERIFY(offset + count <= (ui64)i->length())("offset", offset)("count", count)("length", i->length());
-            slicedArrays.emplace_back(i->Slice(offset, count));
+            slicedArrays.emplace_back(i.Slice(offset, count));
         }
-        return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(Fields), count, slicedArrays);
+        return arrow::Table::Make(std::make_shared<arrow::Schema>(Fields), slicedArrays, count);
     }
 
     bool IsSameSchema(const std::shared_ptr<arrow::Schema>& schema) const {
@@ -65,8 +70,8 @@ public:
         for (ui32 i = 0; i < Columns.size(); ++i) {
             auto& jsonColumn = result["sorting_columns"].AppendValue(NJson::JSON_MAP);
             jsonColumn["name"] = Fields[i]->name();
-            if (position >= 0 && position < Columns[i]->length()) {
-                jsonColumn["value"] = NArrow::DebugString(Columns[i], position);
+            if (position >= 0 && (ui64)position < Columns[i].GetRecordsCount()) {
+                jsonColumn["value"] = Columns[i].DebugString(position);
             }
         }
         return result;
@@ -84,7 +89,7 @@ public:
 class TSortableBatchPosition {
 private:
     YDB_READONLY(i64, Position, 0);
-    i64 RecordsCount = 0;
+    YDB_READONLY(i64, RecordsCount, 0);
     bool ReverseSort = false;
     std::shared_ptr<TSortableScanData> Sorting;
     std::shared_ptr<TSortableScanData> Data;
@@ -95,12 +100,12 @@ public:
         return Sorting->ExtractPosition(Position);
     }
 
-    std::shared_ptr<arrow::RecordBatch> SliceData(const ui64 offset, const ui64 count) const {
+    std::shared_ptr<arrow::Table> SliceData(const ui64 offset, const ui64 count) const {
         AFL_VERIFY(Data);
         return Data->Slice(offset, count);
     }
 
-    std::shared_ptr<arrow::RecordBatch> SliceKeys(const ui64 offset, const ui64 count) const {
+    std::shared_ptr<arrow::Table> SliceKeys(const ui64 offset, const ui64 count) const {
         AFL_VERIFY(Sorting);
         return Sorting->Slice(offset, count);
     }
@@ -140,7 +145,9 @@ public:
 
     //  (-inf, it1), [it1, it2), [it2, it3), ..., [itLast, +inf)
     template <class TBordersIterator>
-    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBorders(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, TBordersIterator& it) {
+    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBorders(const std::shared_ptr<arrow::RecordBatch>& batch,
+        const std::vector<std::string>& columnNames, TBordersIterator& it)
+    {
         std::vector<std::shared_ptr<arrow::RecordBatch>> result;
         if (!batch || batch->num_rows() == 0) {
             while (it.IsValid()) {
@@ -268,9 +275,12 @@ public:
         return Sorting->IsSameSchema(schema);
     }
 
-    TSortableBatchPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 position, const std::vector<std::string>& sortingColumns, const std::vector<std::string>& dataColumns, const bool reverseSort)
+    template <class TRecords>
+    TSortableBatchPosition(const std::shared_ptr<TRecords>& batch, const ui32 position, const std::vector<std::string>& sortingColumns,
+        const std::vector<std::string>& dataColumns, const bool reverseSort)
         : Position(position)
-        , ReverseSort(reverseSort) {
+        , ReverseSort(reverseSort) 
+    {
         Y_ABORT_UNLESS(batch);
         Y_ABORT_UNLESS(batch->num_rows());
         RecordsCount = batch->num_rows();
@@ -286,7 +296,7 @@ public:
     std::partial_ordering Compare(const TSortableBatchPosition& item) const {
         Y_ABORT_UNLESS(item.ReverseSort == ReverseSort);
         Y_ABORT_UNLESS(item.Sorting->GetColumns().size() == Sorting->GetColumns().size());
-        const auto directResult = NArrow::ColumnsCompare(Sorting->GetColumns(), Position, item.Sorting->GetColumns(), item.Position);
+        const auto directResult = NAccessor::IChunkedArray::TReader::CompareColumns(Sorting->GetColumns(), Position, item.Sorting->GetColumns(), item.Position);
         if (ReverseSort) {
             if (directResult == std::partial_ordering::less) {
                 return std::partial_ordering::greater;
@@ -325,7 +335,6 @@ public:
         }
 
     }
-
 };
 
 }

@@ -25,14 +25,18 @@ namespace NKikimr::NColumnShard {
         TProposeResult Propose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, bool /*proposed*/) const override {
             switch (SchemaTxBody.TxBody_case()) {
                 case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
+                    {
+                        auto validationStatus = ValidateTables(SchemaTxBody.GetInitShard().GetTables());
+                        if (validationStatus.IsFail()) {
+                            return  TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());
+                        }
+                    }
                     break;
                 case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables:
-                    for (auto& table : SchemaTxBody.GetEnsureTables().GetTables()) {
-                        if (table.HasSchemaPreset() && !ValidateTablePreset(table.GetSchemaPreset())) {
-                            return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, "Invalid schema");
-                        }
-                        if (table.HasSchema() && !ValidateTableSchema(table.GetSchema())) {
-                            return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, "Invalid schema");
+                    {
+                        auto validationStatus = ValidateTables(SchemaTxBody.GetEnsureTables().GetTables());
+                        if (validationStatus.IsFail()) {
+                            return  TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());
                         }
                     }
                     break;
@@ -91,10 +95,26 @@ namespace NKikimr::NColumnShard {
         }
 
     private:
-        bool ValidateTableSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) const {
-            namespace NTypeIds = NScheme::NTypeIds;
+        TConclusionStatus ValidateTables(::google::protobuf::RepeatedPtrField<::NKikimrTxColumnShard::TCreateTable> tables) const {
+            for (auto& table : tables) {
+                if (table.HasSchemaPreset()) {
+                    const auto validationStatus = ValidateTablePreset(table.GetSchemaPreset());
+                    if (validationStatus.IsFail()) {
+                        return validationStatus;
+                    }
+                }
+                if (table.HasSchema()) {
+                    const auto validationStatus = ValidateTableSchema(table.GetSchema());
+                    if (validationStatus.IsFail()) {
+                        return validationStatus;
+                    }
+                }
+            } return TConclusionStatus::Success();
+        }
 
-            static const THashSet<NScheme::TTypeId> supportedTypes = {
+        TConclusionStatus ValidateTableSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) const {
+            namespace NTypeIds = NScheme::NTypeIds;
+            static const THashSet<NScheme::TTypeId> pkSupportedTypes = {
                 NTypeIds::Timestamp,
                 NTypeIds::Int8,
                 NTypeIds::Int16,
@@ -112,41 +132,47 @@ namespace NKikimr::NColumnShard {
                 NTypeIds::String,
                 NTypeIds::Utf8
             };
-
             if (!schema.HasEngine() ||
                 schema.GetEngine() != NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES) {
-                return false;
+                return TConclusionStatus::Fail("Invalid scheme engine: " + (schema.HasEngine() ? NKikimrSchemeOp::EColumnTableEngine_Name(schema.GetEngine()) : TString("No")));
             }
 
             if (!schema.KeyColumnNamesSize()) {
-                return false;
+                return TConclusionStatus::Fail("There is no key columns");
             }
 
-            TString firstKeyColumn = schema.GetKeyColumnNames()[0];
             THashSet<TString> keyColumns(schema.GetKeyColumnNames().begin(), schema.GetKeyColumnNames().end());
-
+            TVector<TString> columnErrors;
             for (const NKikimrSchemeOp::TOlapColumnDescription& column : schema.GetColumns()) {
                 TString name = column.GetName();
-                /*
-                if (column.GetNotNull() && keyColumns.contains(name)) {
-                    return false;
+                void* typeDescr = nullptr;
+                if (column.GetTypeId() == NTypeIds::Pg && column.HasTypeInfo()) {
+                    typeDescr = NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId());
                 }
-                */
-                if (name == firstKeyColumn && !supportedTypes.contains(column.GetTypeId())) {
-                    return false;
+
+                NScheme::TTypeInfo schemeType(column.GetTypeId(), typeDescr);
+                if (keyColumns.contains(name) && !pkSupportedTypes.contains(column.GetTypeId())) {
+                    columnErrors.emplace_back("key column " + name + " has unsupported type "  + column.GetTypeName());
+                }
+                auto arrowType = NArrow::GetArrowType(schemeType);
+                if (!arrowType.ok()) {
+                    columnErrors.emplace_back("column " + name + ": " + arrowType.status().ToString());
                 }
                 keyColumns.erase(name);
             }
+            if (!columnErrors.empty()) {
+                return TConclusionStatus::Fail("Column errors: " + JoinSeq("; ", columnErrors));
+            }
 
             if (!keyColumns.empty()) {
-                return false;
+                return TConclusionStatus::Fail("Key columns not in scheme: " + JoinSeq(", ", keyColumns));
             }
-            return true;
+            return TConclusionStatus::Success();
         }
 
-        bool ValidateTablePreset(const NKikimrSchemeOp::TColumnTableSchemaPreset& preset) const {
+        TConclusionStatus ValidateTablePreset(const NKikimrSchemeOp::TColumnTableSchemaPreset& preset) const {
             if (preset.HasName() && preset.GetName() != "default") {
-                return false;
+                return TConclusionStatus::Fail("Preset name must be empty or 'default', but '" + preset.GetName() + "' got");
             }
             return ValidateTableSchema(preset.GetSchema());
         }

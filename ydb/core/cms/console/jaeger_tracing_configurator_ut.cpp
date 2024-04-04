@@ -166,9 +166,8 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
         }
 
         for (size_t i = 0; i < 100; ++i) {
-            auto [state, level] = controls.HandleTracing(true, {});
-            UNIT_ASSERT_EQUAL(state, TTracingControls::EXTERNAL);
-            UNIT_ASSERT_EQUAL(level, TComponentTracingLevels::ProductionVerbose); // All external traces are accepted
+            auto [state, _] = controls.HandleTracing(true, {});
+            UNIT_ASSERT_EQUAL(state, TTracingControls::OFF); // No request with trace-id are traced
         }
         WaitForUpdate(runtime); // Initial update
     }

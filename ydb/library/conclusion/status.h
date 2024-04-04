@@ -25,6 +25,7 @@ private:
         Y_ABORT_UNLESS(!!ErrorMessage);
     }
 public:
+    void Validate() const;
 
     const TString& GetErrorMessage() const {
         return ErrorMessage ? *ErrorMessage : Default<TString>();
@@ -44,6 +45,10 @@ public:
 
     bool IsFail() const {
         return !Ok();
+    }
+
+    bool IsSuccess() const {
+        return Ok();
     }
 
     bool Ok() const {

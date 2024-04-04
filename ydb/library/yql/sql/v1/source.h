@@ -74,7 +74,7 @@ namespace NSQLTranslationV1 {
         TNodePtr PrepareSamplingRate(TPosition pos, ESampleClause clause, TNodePtr samplingRate);
         virtual bool SetSamplingOptions(TContext& ctx, TPosition pos, ESampleClause clause, ESampleMode mode, TNodePtr samplingRate, TNodePtr samplingSeed);
         virtual bool SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints);
-        virtual bool CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const;
+        virtual bool AddGrouping(TContext& ctx, const TVector<TString>& columns, TString& groupingColumn);
         virtual TNodePtr BuildFilter(TContext& ctx, const TString& label);
         virtual TNodePtr BuildFilterLambda();
         virtual TNodePtr BuildFlattenByColumns(const TString& label);
@@ -86,6 +86,7 @@ namespace NSQLTranslationV1 {
         virtual TNodePtr BuildCalcOverWindow(TContext& ctx, const TString& label);
         virtual TNodePtr BuildSort(TContext& ctx, const TString& label);
         virtual TNodePtr BuildCleanupColumns(TContext& ctx, const TString& label);
+        virtual TNodePtr BuildGroupingColumns(const TString& label);
         virtual bool BuildSamplingLambda(TNodePtr& node);
         virtual bool SetSamplingRate(TContext& ctx, ESampleClause clause, TNodePtr samplingRate);
         virtual IJoin* GetJoin();
@@ -292,8 +293,8 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildEraseColumns(TPosition pos, const TVector<TString>& columns);
     TNodePtr BuildIntoTableOptions(TPosition pos, const TVector<TString>& eraseColumns, const TTableHints& hints);
     TNodePtr BuildWriteColumns(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, EWriteColumnMode mode, TSourcePtr values, TNodePtr options = nullptr);
-    TNodePtr BuildUpdateColumns(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr values, TSourcePtr source);
-    TNodePtr BuildDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr source);
+    TNodePtr BuildUpdateColumns(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr values, TSourcePtr source, TNodePtr options = nullptr);
+    TNodePtr BuildDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr source, TNodePtr options = nullptr);
 
     // Implemented in query.cpp
     TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TViewDescription& view);

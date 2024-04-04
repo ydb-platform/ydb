@@ -16,7 +16,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     makeOptionalYdbTypeFromTypeID,
 )
 
-from ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_common import TestCase
+from ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common import TestCase
 
 
 class Factory:

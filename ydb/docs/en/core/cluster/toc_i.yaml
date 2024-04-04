@@ -8,7 +8,7 @@ items:
 - name: Embedded UI
   include: { mode: link, path: ../maintenance/embedded_monitoring/toc_p.yaml }
 - name: Cluster system views
-  href: ../troubleshooting/system_views_cluster.md
+  href: ../devops/manual/system-views.md
 - name: Audit log
   href: audit-log.md
 - name: Short access control notation

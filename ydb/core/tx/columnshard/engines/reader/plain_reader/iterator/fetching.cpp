@@ -16,19 +16,16 @@ bool TStepAction::DoApply(IDataReader& /*owner*/) const {
 }
 
 bool TStepAction::DoExecute() {
+    if (Source->IsAborted()) {
+        return true;
+    }
     NMiniKQL::TThrowingBindTerminator bind;
     while (Step) {
         if (Source->IsEmptyData()) {
-            Source->Finalize();
-            FinishedFlag = true;
-            return true;
+            break;
         }
+        TMemoryProfileGuard mGuard("SCAN_PROFILE::FETCHING::" + Step->GetName() + "::" + Step->GetBranchName(), IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
         if (!Step->ExecuteInplace(Source, Step)) {
-            return true;
-        }
-        if (Source->IsEmptyData()) {
-            Source->Finalize();
-            FinishedFlag = true;
             return true;
         }
         Step = Step->GetNextStep();
@@ -64,6 +61,20 @@ bool TAssemblerStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source
     return true;
 }
 
+bool TOptionalAssemblerStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const {
+    source->AssembleColumns(Columns);
+    return true;
+}
+
+bool TOptionalAssemblerStep::DoInitSourceSeqColumnIds(const std::shared_ptr<IDataSource>& source) const {
+    for (auto&& i : Columns->GetColumnIds()) {
+        if (source->AddSequentialEntityIds(i)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool TFilterProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const {
     AFL_VERIFY(source);
     AFL_VERIFY(Step);
@@ -78,13 +89,13 @@ ui64 TFilterProgramStep::DoPredictRawBytes(const std::shared_ptr<IDataSource>& s
 }
 
 bool TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const {
-    auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(source->GetStageData().GetTable());
+    auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(source->GetStageData().GetTable()->BuildTable());
     source->MutableStageData().AddFilter(filter);
     return true;
 }
 
 bool TSnapshotFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const {
-    auto filter = MakeSnapshotFilter(source->GetStageData().GetTable(), source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
+    auto filter = MakeSnapshotFilter(source->GetStageData().GetTable()->BuildTable(), source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
     source->MutableStageData().AddFilter(filter);
     return true;
 }

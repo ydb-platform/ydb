@@ -113,6 +113,8 @@ public:
     IDataReader(const std::shared_ptr<TReadContext>& context);
     virtual ~IDataReader() = default;
 
+    virtual void OnSentDataFromInterval(const ui32 intervalIdx) const = 0;
+
     const TReadContext& GetContext() const {
         return *Context;
     }
@@ -125,7 +127,8 @@ public:
         return Context->GetCounters();
     }
 
-    void Abort() {
+    void Abort(const TString& reason) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_aborted")("reason", reason);
         return DoAbort();
     }
 

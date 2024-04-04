@@ -122,7 +122,7 @@ bool SwitchArrayType(const arrow::Datum& column, TFunc&& f) {
  * @return Result of execution of callback or false if the type typeId is not supported.
  */
 template <typename TFunc>
-bool SwitchYqlTypeToArrowType(const NScheme::TTypeInfo& typeInfo, TFunc&& callback) {
+[[nodiscard]] bool SwitchYqlTypeToArrowType(const NScheme::TTypeInfo& typeInfo, TFunc&& callback) {
     switch (typeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Bool:
             return callback(TTypeWrapper<arrow::BooleanType>());
@@ -250,7 +250,7 @@ bool Append(arrow::ArrayBuilder& builder, const std::vector<typename T::c_type>&
 }
 
 template <typename T>
-bool Append(T& builder, const arrow::Array& array, int position, ui64* recordSize = nullptr) {
+[[nodiscard]] bool Append(T& builder, const arrow::Array& array, int position, ui64* recordSize = nullptr) {
     return SwitchType(array.type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;

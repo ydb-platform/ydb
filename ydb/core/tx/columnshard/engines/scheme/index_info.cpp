@@ -5,7 +5,6 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/core/formats/arrow/sort_cursor.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
 #include <ydb/core/sys_view/common/schema.h>
@@ -264,32 +263,6 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators) 
     }
 }
 
-std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortDescription() const {
-    if (GetPrimaryKey()) {
-        auto key = ExtendedKey; // Sort with extended key, greater snapshot first
-        Y_ABORT_UNLESS(key && key->num_fields() > 2);
-        auto description = std::make_shared<NArrow::TSortDescription>(key);
-        description->Directions[key->num_fields() - 1] = -1;
-        description->Directions[key->num_fields() - 2] = -1;
-        description->NotNull = true; // TODO
-        return description;
-    }
-    return {};
-}
-
-std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortReplaceDescription() const {
-    if (GetPrimaryKey()) {
-        auto key = ExtendedKey; // Sort with extended key, greater snapshot first
-        Y_ABORT_UNLESS(key && key->num_fields() > 2);
-        auto description = std::make_shared<NArrow::TSortDescription>(key, GetPrimaryKey());
-        description->Directions[key->num_fields() - 1] = -1;
-        description->Directions[key->num_fields() - 2] = -1;
-        description->NotNull = true; // TODO
-        return description;
-    }
-    return {};
-}
-
 TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId) const {
     auto it = ColumnFeatures.find(columnId);
     AFL_VERIFY(it != ColumnFeatures.end());
@@ -424,7 +397,9 @@ std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSche
 
         const auto& column = it->second;
         std::string colName(column.Name.data(), column.Name.size());
-        fields.emplace_back(std::make_shared<arrow::Field>(colName, NArrow::GetArrowType(column.PType), !column.NotNull));
+        auto arrowType = NArrow::GetArrowType(column.PType);
+        AFL_VERIFY(arrowType.ok());
+        fields.emplace_back(std::make_shared<arrow::Field>(colName, arrowType.ValueUnsafe(), !column.NotNull));
     }
 
     return std::make_shared<arrow::Schema>(std::move(fields));

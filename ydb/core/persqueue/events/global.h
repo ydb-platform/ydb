@@ -51,7 +51,6 @@ struct TEvPersQueue {
         EvGetPartitionsLocation,
         EvGetPartitionsLocationResponse,
         EvReadingFinished,
-        EvWakeupClientPartition,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -208,17 +207,6 @@ struct TEvPersQueue {
         ui32 Group;
     };
 
-    struct TEvWakeupClientPartition : TEventLocal<TEvWakeupClientPartition, EvWakeupClientPartition> {
-        TEvWakeupClientPartition(const TString& consumer, const ui32 partitionId, const ui64 cookie)
-            : Consumer(consumer)
-            , PartitionId(partitionId)
-            , Cookie(cookie)
-        {}
-
-        TString Consumer;
-        ui32 PartitionId;
-        ui64 Cookie;
-    };
 
     struct TEvDescribe : public TEventPB<TEvDescribe, NKikimrPQ::TDescribe, EvDescribe> {
         TEvDescribe()

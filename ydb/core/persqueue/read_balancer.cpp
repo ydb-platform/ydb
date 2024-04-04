@@ -1992,14 +1992,14 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingFinishedRequest::TPt
                     ++status.Cookie;
 
                     auto deleay = std::min<size_t>(1ul << status.Iteration, TabletConfig.GetPartitionConfig().GetLifetimeSeconds());
-                    ctx.Schedule(TDuration::Seconds(deleay), new TEvPersQueue::TEvWakeupClientPartition(r.GetConsumer(), r.GetPartitionId(), status.Cookie));
+                    ctx.Schedule(TDuration::Seconds(deleay), new TEvPQ::TEvWakeupReleasePartition(r.GetConsumer(), r.GetPartitionId(), status.Cookie));
                 }
             }
         }
     }
 }
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvWakeupClientPartition::TPtr &ev, const TActorContext& ctx) {
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvWakeupReleasePartition::TPtr &ev, const TActorContext& ctx) {
     auto* msg = ev->Get();
     auto it = ClientsInfo.find(msg->Consumer);
     if (it == ClientsInfo.end()) {

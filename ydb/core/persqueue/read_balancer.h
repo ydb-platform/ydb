@@ -91,7 +91,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     TString GenerateStat();
 
     void Handle(TEvPersQueue::TEvWakeupClient::TPtr &ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvWakeupClientPartition::TPtr &ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvWakeupReleasePartition::TPtr &ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvDescribe::TPtr &ev, const TActorContext& ctx);
 
     void HandleOnInit(TEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext& ctx);
@@ -503,7 +503,7 @@ public:
             HFunc(TEvPersQueue::TEvGetPartitionsLocation, Handle);
             HFunc(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
             HFunc(TEvPersQueue::TEvReadingFinishedRequest, Handle);
-            HFunc(TEvPersQueue::TEvWakeupClientPartition, Handle);
+            HFunc(TEvPQ::TEvWakeupReleasePartition, Handle);
 
             default:
                 HandleDefaultEvents(ev, SelfId());

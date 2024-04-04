@@ -1577,8 +1577,7 @@ void TPersQueueReadBalancer::UnregisterSession(const TActorId& pipe, const TActo
     for (auto& [groupKey, groupInfo] : clientInfo.ClientGroupsInfo) {
         for (auto& [partitionNumber, partitionInfo] : groupInfo.PartitionsInfo) { //TODO: reverse map
             if (partitionInfo.Session == pipe) {
-                partitionInfo.Session = TActorId();
-                partitionInfo.State = EPS_FREE;
+                partitionInfo.Unlock();
                 groupInfo.FreePartition(partitionNumber);
             }
         }
@@ -1739,10 +1738,9 @@ void TPersQueueReadBalancer::TClientGroupInfo::LockPartition(const TActorId pipe
     auto it = PartitionsInfo.find(partition);
     Y_ABORT_UNLESS(it != PartitionsInfo.end());
     auto& partitionInfo = it->second;
-    partitionInfo.Session = pipe;
-    partitionInfo.State = EPS_ACTIVE;
+    partitionInfo.Lock(pipe);
     ++sessionInfo.NumActive;
-    if (!ClientInfo.IsReadeable(partition)) {
+    if (ClientInfo.IsFinished(partition)) {
         ++sessionInfo.NumInactive;
     }
     //TODO:rebuild structs

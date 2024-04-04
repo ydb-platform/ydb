@@ -209,6 +209,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         ui32 GroupId;
 
         void Unlock() { Session = TActorId(); State = EPS_FREE; };
+        void Lock(const TActorId& session) { Session = session; State = EPS_ACTIVE; }
     };
 
     struct TClientInfo;

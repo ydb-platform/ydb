@@ -614,7 +614,7 @@ private:
             return;
         }
 
-        Invoker->Invoke([taskRunner=TaskRunner, replyTo, selfId, cookie, actorSystem, settings=Settings, stageId=StageId, startTime, clusterName = ClusterName, alloc = Alloc](){
+        Invoker->Invoke([taskRunner=TaskRunner, replyTo, selfId, cookie, actorSystem, settings=Settings, stageId=StageId, startTime, clusterName = ClusterName](){
             try {
                 //auto guard = taskRunner->BindAllocator(); // only for local mode
                 NDq::TDqTaskRunnerMemoryLimits limits;
@@ -636,7 +636,7 @@ private:
                     taskRunner->GetReadRanges(),
                     taskRunner->GetTypeEnv(),
                     taskRunner->GetHolderFactory(),
-                    alloc,
+                    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>{},
                     THashMap<ui64, std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>>{},
                     sensors);
 

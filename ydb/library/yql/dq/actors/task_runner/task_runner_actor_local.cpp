@@ -431,8 +431,7 @@ private:
         THashMap<ui64, std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> inputTransforms;
         for (auto i = 0; i != inputs.size(); ++i) {
             if (auto t = TaskRunner->GetInputTransform(i)) {
-                inputTransforms[i].first = t->first;
-                inputTransforms[i].second = t->second;
+                inputTransforms[i] = *t;
             }
         }
 

@@ -466,8 +466,7 @@ private:
         }
         TypeEnv = const_cast<NKikimr::NMiniKQL::TTypeEnvironment*>(&typeEnv);
         for (auto& [inputIndex, transform] : this->InputTransformsMap) {
-            transform.Input = ev->Get()->InputTransforms.at(inputIndex).first;
-            transform.Buffer = ev->Get()->InputTransforms.at(inputIndex).second;
+            std::tie(transform.Input, transform.Buffer) = ev->Get()->InputTransforms.at(inputIndex);
         }
         FillIoMaps(holderFactory, typeEnv, secureParams, taskParams, readRanges, nullptr);
 

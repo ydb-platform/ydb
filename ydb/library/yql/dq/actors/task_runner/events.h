@@ -190,12 +190,14 @@ struct TEvTaskRunnerCreateFinished
         , Alloc(alloc)
         , InputTransforms(std::move(inputTransforms))
     { 
-        Y_ABORT_UNLESS(Alloc);
+        Y_ABORT_UNLESS(inputTransforms.empty() || Alloc);
     }
 
     ~TEvTaskRunnerCreateFinished() {
-        auto guard = Guard(*Alloc);
-        InputTransforms.clear();
+        if (!InputTransforms.empty()) {
+            auto guard = Guard(*Alloc);
+            InputTransforms.clear();
+        }
     }
 
     TTaskRunnerActorSensors Sensors;

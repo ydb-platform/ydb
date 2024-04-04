@@ -2690,21 +2690,21 @@ public:
             switch (NodeTag(rawNode)) {
                 case T_DefElem: {
                     const auto* defElem = CAST_NODE(DefElem, rawNode);
-                    TStringBuf nameElem = defElem->defname;
+                    TString nameElem = defElem->defname;
                     if (defElem->arg) {
                         switch (NodeTag(defElem->arg))
                         {
                             case T_Integer:
-                                options.emplace_back(QL(QA(nameElem), QA(ToString(intVal(defElem->arg)))));
+                                options.emplace_back(QL(QAX(nameElem), QA(ToString(intVal(defElem->arg)))));
                                 break;
                             case T_Float:
-                                options.emplace_back(QL(QA(nameElem), QA(strVal(defElem->arg))));
+                                options.emplace_back(QL(QAX(nameElem), QA(strVal(defElem->arg))));
                                 break;
                             case T_TypeName: {
                                 const auto* typeName = CAST_NODE_EXT(PG_TypeName, T_TypeName, defElem->arg);
                                 if (ListLength(typeName->names) > 0) {
-                                    options.emplace_back(QL(QA(nameElem),
-                                        QA(StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)))));
+                                    options.emplace_back(QL(QAX(nameElem),
+                                        QAX(StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)))));
                                     }
                                 break;
                             }

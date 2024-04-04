@@ -84,7 +84,8 @@ void TLoader::StageParseMeta() noexcept
                 NPage::TBtreeIndexMeta converted{{
                     meta.GetRootPageId(), 
                     meta.GetRowCount(), 
-                    meta.GetDataSize(), 
+                    meta.GetDataSize(),
+                    meta.GetGroupDataSize(),
                     meta.GetErasedRowCount()}, 
                     meta.GetLevelCount(), 
                     meta.GetIndexSize()};

@@ -339,7 +339,7 @@ namespace NTable {
             }
 
             if (erased) {
-                Current.BTreeIndexErased++;
+                Current.BTreeIndexErasedRowCount++;
             }
         }
 
@@ -673,6 +673,7 @@ namespace NTable {
                         m->SetLevelCount(meta.LevelCount);
                         m->SetIndexSize(meta.IndexSize);
                         m->SetDataSize(meta.DataSize);
+                        m->SetGroupDataSize(meta.GroupDataSize);
                         m->SetRowCount(meta.RowCount);
                         m->SetErasedRowCount(meta.ErasedRowCount);
                     }
@@ -802,10 +803,13 @@ namespace NTable {
                         g.BTreeIndex.AddKey(Key);
                     }
                     if (groupId.IsMain()) {
-                        g.BTreeIndex.AddChild({page, dataPage->Count, raw.size(), Current.BTreeIndexErased});
-                        Current.BTreeIndexErased = 0;
+                        g.BTreeIndex.AddChild({page, dataPage->Count, raw.size(), Current.BTreeGroupDataSize, Current.BTreeIndexErasedRowCount});
+                        Current.BTreeGroupDataSize = 0;
+                        Current.BTreeIndexErasedRowCount = 0;
                     } else {
                         g.BTreeIndex.AddShortChild({page, dataPage->Count, raw.size()});
+                        // Note: group data size is approximate, includes only finished pages
+                        Current.BTreeGroupDataSize += raw.size();
                     }
                     g.BTreeIndex.Flush(Pager);
                 }
@@ -1114,7 +1118,8 @@ namespace NTable {
             ui64 Coded = 0;
             ui64 HiddenRows = 0;
             ui64 HiddenDrops = 0;
-            ui64 BTreeIndexErased = 0;
+            ui64 BTreeIndexErasedRowCount = 0;
+            ui64 BTreeGroupDataSize = 0;
 
             // doesn't include written B-Tree index bytes
             ui64 MainWritten = 0;

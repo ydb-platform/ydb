@@ -1,7 +1,6 @@
 #include "flat_page_btree_index.h"
 #include "flat_page_btree_index_writer.h"
 #include "test/libs/table/test_writer.h"
-#include "ydb/core/tx/datashard/datashard.h"
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -56,7 +55,7 @@ namespace {
     }
 
     TChild MakeChild(ui32 index) {
-        return {index + 10000, index + 100, index + 1000, index + 30};
+        return {index + 10000, index + 100, index + 1000, index + 2000, index + 30};
     }
 
     TShortChild MakeShortChild(ui32 index) {
@@ -74,7 +73,7 @@ namespace {
             TChild child;
             if (node.IsShortChildFormat()) {
                 auto shortChild = node.GetShortChild(pos);
-                child = {shortChild.PageId, shortChild.RowCount, shortChild.DataSize, 0};
+                child = {shortChild.PageId, shortChild.RowCount, shortChild.DataSize, 0, 0};
             } else {
                 child = node.GetChild(pos);
             }
@@ -122,7 +121,7 @@ namespace {
     void Dump(TSharedData node, const TPartScheme::TGroupInfo& groupInfo) {
         TWriterBundle pager(1, TLogoBlobID());
         auto pageId = ((IPageWriter*)&pager)->Write(node, EPage::BTreeIndex, 0);
-        TChild page{pageId, 0, 0, 0};
+        TChild page{pageId, 0, 0, 0, 0};
         Dump(page, groupInfo, pager.Back());
     }
 
@@ -300,7 +299,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
             writer.AddKey(deserialized.GetCells());
         }
         for (auto &c : children) {
-            writer.AddChild({c.PageId, c.RowCount, c.DataSize, 0});
+            writer.AddChild({c.PageId, c.RowCount, c.DataSize, 0, 0});
         }
 
         auto serialized = writer.Finish();
@@ -344,7 +343,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
             writer.AddKey(deserialized.GetCells());
         }
         for (auto &c : children) {
-            writer.AddChild({c.PageId, c.RowCount, c.DataSize, 0});
+            writer.AddChild({c.PageId, c.RowCount, c.DataSize, 0, 0});
         }
 
         auto serialized = writer.Finish();
@@ -540,7 +539,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
 
         Dump(result, builder.GroupInfo, pager.Back());
 
-        TBtreeIndexMeta expected{{0, 1155, 11055, 385}, 1, 595};
+        TBtreeIndexMeta expected{{0, 1155, 11055, 22055, 385}, 1, 683};
         UNIT_ASSERT_EQUAL_C(result, expected, "Got " + result.ToString());
 
         CheckKeys(result.PageId, keys, builder.GroupInfo, pager.Back());
@@ -575,10 +574,11 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
 
         Dump(result, builder.GroupInfo, pager.Back());
         
-        TBtreeIndexMeta expected{{9, 0, 0, 0}, 3, 1550};
+        TBtreeIndexMeta expected{{9, 0, 0, 0, 0}, 3, 1790};
         for (auto c : children) {
             expected.RowCount += c.RowCount;
             expected.DataSize += c.DataSize;
+            expected.GroupDataSize += c.GroupDataSize;
             expected.ErasedRowCount += c.ErasedRowCount;
         }
         UNIT_ASSERT_EQUAL_C(result, expected, "Got " + result.ToString());
@@ -634,7 +634,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
         TLayoutCook lay = MakeLayout();
         TIntrusivePtr<TPartScheme> scheme = new TPartScheme(lay.RowScheme()->Cols);
 
-        TBtreeIndexBuilder builder(scheme, { }, 600, 1, Max<ui32>());
+        TBtreeIndexBuilder builder(scheme, { }, 650, 1, Max<ui32>());
         
         TVector<TString> keys;
         for (ui32 i : xrange(100)) {
@@ -659,7 +659,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
 
         Dump(result, builder.GroupInfo, pager.Back());
         
-        TBtreeIndexMeta expected{{15, 15150, 106050, 8080}, 3, 10270};
+        TBtreeIndexMeta expected{{15, 15150, 106050, 207050, 8080}, 3, 11198};
         UNIT_ASSERT_EQUAL_C(result, expected, "Got " + result.ToString());
     }
 
@@ -701,7 +701,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         auto pages = IndexTools::CountMainPages(*part);
         UNIT_ASSERT_VALUES_EQUAL(pages, 1);
 
-        TBtreeIndexMeta expected{{0 /*Data page*/, 5, 5240, 0}, 0, 0};
+        TBtreeIndexMeta expected{{0 /*Data page*/, 5, 5240, 0, 0}, 0, 0};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected, "Got " + part->IndexPages.BTreeGroups[0].ToString());
     }
 
@@ -731,7 +731,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         auto pages = IndexTools::CountMainPages(*part);
         UNIT_ASSERT_VALUES_EQUAL(pages, 2);
 
-        TBtreeIndexMeta expected{{part->IndexPages.BTreeGroups[0].PageId, 10, 10480, 0}, 1, 1115};
+        TBtreeIndexMeta expected{{part->IndexPages.BTreeGroups[0].PageId, 10, 10480, 0, 0}, 1, 1115};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected, "Got " + part->IndexPages.BTreeGroups[0].ToString());
     }
 
@@ -764,7 +764,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         auto pages = IndexTools::CountMainPages(*part);
         UNIT_ASSERT_VALUES_EQUAL(pages, 117);
 
-        TBtreeIndexMeta expected{{part->IndexPages.BTreeGroups[0].PageId, 700, 733140, 0}, 3, 86036};
+        TBtreeIndexMeta expected{{part->IndexPages.BTreeGroups[0].PageId, 700, 733140, 0, 0}, 3, 86036};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected, "Got " + part->IndexPages.BTreeGroups[0].ToString());
     }
 
@@ -798,7 +798,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         auto pages = IndexTools::CountMainPages(*part);
         UNIT_ASSERT_VALUES_EQUAL(pages, 31);
 
-        TBtreeIndexMeta expected{{part->IndexPages.BTreeGroups[0].PageId, 1000, 22098, 143}, 2, 1380};
+        TBtreeIndexMeta expected{{part->IndexPages.BTreeGroups[0].PageId, 1000, 22098, 0, 143}, 2, 1380};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected, "Got " + part->IndexPages.BTreeGroups[0].ToString());
     }
 
@@ -832,10 +832,10 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         auto pages = IndexTools::CountMainPages(*part);
         UNIT_ASSERT_VALUES_EQUAL(pages, 334);
 
-        TBtreeIndexMeta expected0{{part->IndexPages.BTreeGroups[0].PageId, 1000, 16680, 0}, 3, 15246};
+        TBtreeIndexMeta expected0{{part->IndexPages.BTreeGroups[0].PageId, 1000, 16680, 32680, 0}, 3, 15246};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected0, "Got " + part->IndexPages.BTreeGroups[0].ToString());
 
-        TBtreeIndexMeta expected1{{part->IndexPages.BTreeGroups[1].PageId, 1000, 21890, 0}, 3, 6497};
+        TBtreeIndexMeta expected1{{part->IndexPages.BTreeGroups[1].PageId, 1000, 21890, 42890, 0}, 3, 6497};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[1], expected1, "Got " + part->IndexPages.BTreeGroups[1].ToString());
     }
 
@@ -871,16 +871,16 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         auto pages = IndexTools::CountMainPages(*part);
         UNIT_ASSERT_VALUES_EQUAL(pages, 334);
 
-        TBtreeIndexMeta expected0{{part->IndexPages.BTreeGroups[0].PageId, 1000, 32680, 0}, 3, 15246};
+        TBtreeIndexMeta expected0{{part->IndexPages.BTreeGroups[0].PageId, 1000, 32680, 64000, 0}, 3, 15246};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected0, "Got " + part->IndexPages.BTreeGroups[0].ToString());
 
-        TBtreeIndexMeta expected1{{part->IndexPages.BTreeGroups[1].PageId, 1000, 22889, 0}, 3, 6497};
+        TBtreeIndexMeta expected1{{part->IndexPages.BTreeGroups[1].PageId, 1000, 22889, 0, 0}, 3, 6497};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[1], expected1, "Got " + part->IndexPages.BTreeGroups[1].ToString());
 
-        TBtreeIndexMeta expectedHist0{{part->IndexPages.BTreeHistoric[0].PageId, 2000, 77340, 0}, 4, 34225};
+        TBtreeIndexMeta expectedHist0{{part->IndexPages.BTreeHistoric[0].PageId, 2000, 77340, 0, 0}, 4, 34225};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeHistoric[0], expectedHist0, "Got " + part->IndexPages.BTreeHistoric[0].ToString());
 
-        TBtreeIndexMeta expectedHist1{{part->IndexPages.BTreeHistoric[1].PageId, 2000, 45780, 0}, 3, 13014};
+        TBtreeIndexMeta expectedHist1{{part->IndexPages.BTreeHistoric[1].PageId, 2000, 45780, 0, 0}, 3, 13014};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeHistoric[1], expectedHist1, "Got " + part->IndexPages.BTreeHistoric[1].ToString());
     }
 }

@@ -97,6 +97,7 @@ namespace NKikimr::NTable::NPage {
             TPageId PageId;
             TRowId RowCount;
             ui64 DataSize;
+            ui64 GroupDataSize;
             TRowId ErasedRowCount;
 
             auto operator<=>(const TChild&) const = default;
@@ -106,11 +107,17 @@ namespace NKikimr::NTable::NPage {
             }
 
             TString ToString() const noexcept {
-                return TStringBuilder() << "PageId: " << PageId << " RowCount: " << RowCount << " DataSize: " << DataSize << " ErasedRowCount: " << ErasedRowCount;
+                TStringBuilder result;
+                result << "PageId: " << PageId << " RowCount: " << RowCount << " DataSize: " << DataSize;
+                if (GroupDataSize) {
+                    result << " GroupDataSize: " << GroupDataSize;
+                }
+                result << " ErasedRowCount: " << ErasedRowCount;
+                return result;
             }
         } Y_PACKED;
 
-        static_assert(sizeof(TChild) == 28, "Invalid TBtreeIndexNode TChild size");
+        static_assert(sizeof(TChild) == 36, "Invalid TBtreeIndexNode TChild size");
 
         static_assert(offsetof(TChild, PageId) == offsetof(TShortChild, PageId));
         static_assert(offsetof(TChild, RowCount) == offsetof(TShortChild, RowCount));

@@ -133,9 +133,10 @@ namespace NTest {
             for (bool history : {false, true}) {
                 for (const auto &meta : history ? lay.GetBTreeHistoricIndexes() : lay.GetBTreeGroupIndexes()) {
                     NPage::TBtreeIndexMeta converted{{
-                        meta.GetRootPageId(), 
-                        meta.GetRowCount(), 
-                        meta.GetDataSize(), 
+                        meta.GetRootPageId(),
+                        meta.GetRowCount(),
+                        meta.GetDataSize(),
+                        meta.GetGroupDataSize(),
                         meta.GetErasedRowCount()}, 
                         meta.GetLevelCount(), 
                         meta.GetIndexSize()};

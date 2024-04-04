@@ -4,6 +4,7 @@
 #include <util/string/builder.h>
 #include <util/string/escape.h>
 #include <util/system/unaligned_mem.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -806,6 +807,7 @@ TString TPartitionedBlob::CompactHead(bool glueHead, THead& head, bool glueNewHe
 
 std::optional<std::pair<TKey, TString>> TPartitionedBlob::Add(TClientBlob&& blob)
 {
+    DBGTRACE("TPartitionedBlob::Add");
     Y_ABORT_UNLESS(NewHead.Offset >= Head.Offset);
     ui32 size = blob.GetBlobSize();
     Y_ABORT_UNLESS(InternalPartsCount < 1000); //just check for future packing
@@ -853,6 +855,7 @@ std::optional<std::pair<TKey, TString>> TPartitionedBlob::Add(TClientBlob&& blob
     }
     BlobsSize += size + GetMaxHeaderSize();
     ++NextPartNo;
+    DBGTRACE_LOG("SourceId=" << SourceId << ", SeqNo=" << SeqNo << ", NextPartNo=" << NextPartNo);
     Blobs.push_back(blob);
     if (!IsComplete())
         ++InternalPartsCount;

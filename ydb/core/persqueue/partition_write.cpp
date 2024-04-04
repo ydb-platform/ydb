@@ -956,7 +956,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TSplitMessageGroupMsg& msg
 
 TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
     DBGTRACE("TPartition::ProcessRequest(TWriteMsg)");
-    DBGTRACE_LOG("p.Msg.SourceId=" << p.Msg.SourceId);
+    DBGTRACE_LOG("p.Msg.SourceId=" << p.Msg.SourceId << ", p.Msg.SegNo=" << p.Msg.SeqNo << ", p.Msg.PartNo=" << p.Msg.PartNo << ", p.Msg.TotalParts=" << p.Msg.TotalParts);
         ui64& curOffset = parameters.CurOffset;
         DBGTRACE_LOG("curOffset=" << curOffset);
         auto& sourceIdBatch = parameters.SourceIdBatch;
@@ -1114,10 +1114,12 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
         );
         TString s;
         if (!PartitionedBlob.IsNextPart(p.Msg.SourceId, p.Msg.SeqNo, p.Msg.PartNo, &s)) {
-            DBGTRACE_LOG("client sends gaps");
-            //this must not be happen - client sends gaps, fail this client till the end
-            CancelAllWritesOnWrite(ctx, request, s, p, sourceIdBatch);
-            //now no changes will leak
+            DBGTRACE_LOG("s=" << s);
+            DBGTRACE_LOG("client sends gaps: SourceId=" << p.Msg.SourceId << ", SeqNo=" << p.Msg.SeqNo << ", PartNo=" << p.Msg.PartNo);
+//            //this must not be happen - client sends gaps, fail this client till the end
+//            CancelAllWritesOnWrite(ctx, request, s, p, sourceIdBatch);
+//            //now no changes will leak
+            ctx.Send(Tablet, new TEvents::TEvPoisonPill());
             return EProcessResult::Abort;
         }
 
@@ -1132,7 +1134,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
 
         TMaybe<TPartData> partData;
         if (p.Msg.TotalParts > 1) { //this is multi-part message
-            DBGTRACE_LOG("multi-part message");
+            DBGTRACE_LOG("multi-part message: PartNo=" << p.Msg.PartNo << ", TotalParts=" << p.Msg.TotalParts);
             partData = TPartData(p.Msg.PartNo, p.Msg.TotalParts, p.Msg.TotalSize);
         }
         WriteTimestamp = ctx.Now();

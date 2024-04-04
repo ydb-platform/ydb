@@ -446,6 +446,8 @@ std::pair<TString, TActorId> CmdSetOwner(TTestActorRuntime* runtime, ui64 tablet
 
 void WritePartData(const ui32 partition, const TString& sourceId, const i64 offset, const ui64 seqNo, const ui16 partNo, const ui16 totalParts,
                     const ui32 totalSize, const TString& data, TTestContext& tc, const TString& cookie, i32 msgSeqNo) {
+    DBGTRACE("WritePartData");
+    DBGTRACE_LOG("seqNo=" << seqNo << ", partNo=" << partNo << ", totalParts=" << totalParts << ", totalSize=" << totalSize << ", data.size=" << data.size() << ", cookie=" << cookie << ", msgSeqNo=" << msgSeqNo);
     THolder<TEvPersQueue::TEvRequest> request;
     tc.Runtime->ResetScheduledCount();
     request.Reset(new TEvPersQueue::TEvRequest);
@@ -469,6 +471,8 @@ void WritePartData(const ui32 partition, const TString& sourceId, const i64 offs
 
 void WritePartDataWithBigMsg(const ui32 partition, const TString& sourceId, const ui64 seqNo, const ui16 partNo, const ui16 totalParts,
                     const ui32 totalSize, const TString& data, TTestContext& tc, const TString& cookie, i32 msgSeqNo, ui32 bigMsgSize) {
+    DBGTRACE("WritePartDataWithBigMsg");
+    DBGTRACE_LOG("seqNo=" << seqNo << ", partNo=" << partNo << ", totalParts=" << totalParts << ", totalSize=" << totalSize << ", data.size=" << data.size() << ", cookie=" << cookie << ", msgSeqNo=" << msgSeqNo << ", bigMsgSize=" << bigMsgSize);
     THolder<TEvPersQueue::TEvRequest> request;
     tc.Runtime->ResetScheduledCount();
     request.Reset(new TEvPersQueue::TEvRequest);

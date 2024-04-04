@@ -1951,7 +1951,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPt
     }
 }
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingFinishedRequest::TPtr& ev, const TActorContext& ctx) {
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
     auto& r = ev->Get()->Record;
 
     auto it = ClientsInfo.find(r.GetConsumer());

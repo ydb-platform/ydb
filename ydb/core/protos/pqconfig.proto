@@ -992,7 +992,7 @@ message TEvReadingPartitionStatusRequest {
 };
 
 // The consumer's reading of the partition is finished (from ReadSession)
-message TEvReadingFinishedRequest {
+message TEvReadingPartitionFinishedRequest {
     optional string Consumer = 1;
     optional uint32 PartitionId = 2;
     optional bool NewSDK = 3;

@@ -50,7 +50,7 @@ struct TEvPersQueue {
         EvPeriodicTopicStats,
         EvGetPartitionsLocation,
         EvGetPartitionsLocationResponse,
-        EvReadingFinished,
+        EvReadingPartitionFinished,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -207,7 +207,6 @@ struct TEvPersQueue {
         ui32 Group;
     };
 
-
     struct TEvDescribe : public TEventPB<TEvDescribe, NKikimrPQ::TDescribe, EvDescribe> {
         TEvDescribe()
         {}
@@ -273,10 +272,10 @@ struct TEvPersQueue {
     using TEvProposeTransactionAttach = TEvDataShard::TEvProposeTransactionAttach;
     using TEvProposeTransactionAttachResult = TEvDataShard::TEvProposeTransactionAttachResult;
 
-    struct TEvReadingFinishedRequest : public TEventPB<TEvReadingFinishedRequest, NKikimrPQ::TEvReadingFinishedRequest, EvReadingFinished> {
-        TEvReadingFinishedRequest() = default;
+    struct TEvReadingPartitionFinishedRequest : public TEventPB<TEvReadingPartitionFinishedRequest, NKikimrPQ::TEvReadingPartitionFinishedRequest, EvReadingPartitionFinished> {
+        TEvReadingPartitionFinishedRequest() = default;
 
-        TEvReadingFinishedRequest(const TString& consumer, ui32 partitionId, bool newSDK, bool firstMessage) {
+        TEvReadingPartitionFinishedRequest(const TString& consumer, ui32 partitionId, bool newSDK, bool firstMessage) {
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
             Record.SetNewSDK(newSDK);

@@ -188,7 +188,9 @@ private:
     THashMap<TString, ui64> KeyRefCount;
 };
 
-bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env);
+using BuildStatsYieldHandler = std::function<void()>;
+
+bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env, BuildStatsYieldHandler yieldHandler);
 void GetPartOwners(const TSubset& subset, THashSet<ui64>& partOwners);
 
 }}

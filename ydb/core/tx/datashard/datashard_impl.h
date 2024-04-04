@@ -296,7 +296,7 @@ class TDataShard
     friend class TReplicationSourceOffsetsClient;
     friend class TReplicationSourceOffsetsServer;
 
-    friend class TAsyncTableStatsBuilder;
+    friend class TTableStatsCoroBuilder;
     friend class TReadTableScan;
     friend class TWaitForStreamClearanceUnit;
     friend class TBuildIndexScan;

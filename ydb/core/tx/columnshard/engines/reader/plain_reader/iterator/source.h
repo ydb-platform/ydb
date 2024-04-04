@@ -88,7 +88,7 @@ public:
     void SetIsReady();
 
     void Finalize() {
-        TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT");
+        TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
         StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
     }
 

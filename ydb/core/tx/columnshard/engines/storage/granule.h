@@ -245,6 +245,7 @@ public:
     void OnAfterPortionsLoad() {
         auto g = OptimizerPlanner->StartModificationGuard();
         for (auto&& i : Portions) {
+            i.second->OnAfterLoad();
             OnAfterChangePortion(i.second, &g);
         }
     }

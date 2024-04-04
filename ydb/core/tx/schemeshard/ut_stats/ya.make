@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/cms
     ydb/core/testlib/default
     ydb/core/tx
+    ydb/core/tx/datashard/ut_common
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/wrappers/ut_helpers
 )

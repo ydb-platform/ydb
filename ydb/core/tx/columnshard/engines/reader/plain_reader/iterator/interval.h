@@ -1,48 +1,10 @@
 #pragma once
-#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include "source.h"
-#include <ydb/core/formats/arrow/reader/position.h>
+#include "merge.h"
+
+#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
-
-class TScanHead;
-
-class TMergingContext {
-protected:
-    YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Start);
-    YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Finish);
-    YDB_READONLY(bool, IncludeFinish, true);
-    YDB_READONLY(bool, IncludeStart, false);
-    YDB_READONLY(ui32, IntervalIdx, 0);
-    bool IsExclusiveIntervalFlag = false;
-public:
-    TMergingContext(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& finish,
-        const ui32 intervalIdx, const bool includeFinish, const bool includeStart, const bool isExclusiveInterval)
-        : Start(start)
-        , Finish(finish)
-        , IncludeFinish(includeFinish)
-        , IncludeStart(includeStart)
-        , IntervalIdx(intervalIdx)
-        , IsExclusiveIntervalFlag(isExclusiveInterval)
-    {
-
-    }
-
-    bool IsExclusiveInterval() const {
-        return IsExclusiveIntervalFlag;
-    }
-
-    NJson::TJsonValue DebugJson() const {
-        NJson::TJsonValue result = NJson::JSON_MAP;
-        result.InsertValue("start", Start.DebugJson());
-        result.InsertValue("idx", IntervalIdx);
-        result.InsertValue("finish", Finish.DebugJson());
-        result.InsertValue("include_finish", IncludeFinish);
-        result.InsertValue("exclusive", IsExclusiveIntervalFlag);
-        return result;
-    }
-
-};
 
 class TFetchingInterval: public TNonCopyable, public NResourceBroker::NSubscribe::ITask {
 private:

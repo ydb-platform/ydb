@@ -599,6 +599,7 @@ protected:
         AFL_VERIFY(status.GetStatus() != NKikimrProto::EReplyStatus::NODATA)("blob_id", range)("status", status.GetStatus())("error", status.GetErrorMessage())("type", TxEvent->IndexChanges->TypeString())("task_id", TxEvent->IndexChanges->GetTaskIdentifier())
             ("debug", TxEvent->IndexChanges->DebugString());
         TxEvent->SetPutStatus(NKikimrProto::ERROR);
+        Counters.ReadErrors->Add(1);
         TActorContext::AsActorContext().Send(ParentActorId, std::move(TxEvent));
         return false;
     }

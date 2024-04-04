@@ -1,12 +1,14 @@
 #include "util/charset/utf8.h"
 #include "utils.h"
 #include "ydb/public/api/protos/ydb_value.pb.h"
+#include <memory>
 #include <ydb/library/yql/sql/settings/partitioning.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/config.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/raw_parser.h>
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
+//#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/commands/defrem.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
@@ -2657,82 +2659,79 @@ public:
 
         std::vector<TAstNode*> options;
 
-        if (value->accessMethod) {
-            AddError("USING not supported");
-            return nullptr;
-        }
+        TString mode = (value->if_not_exists) ? "create_if_not_exists" : "create";
+        options.push_back(QL(QA("mode"), QA(mode)));
 
-        if (value->if_not_exists) {
-            TString mode = (ctx.ifNotExists) ? "create_if_not_exists" : "create";
-            options.push_back(QL(QA("mode"), QA(mode)));
-        }
-
-        auto [sink, key] = ParseWriteRangeVar(value->sequence, true);
+        auto [sink, key] = ParseQualifiedPgObjectName(
+            value->sequence->catalogname,
+            value->sequence->schemaname,
+            value->sequence->relname,
+            "pgSequence"
+        );
 
         if (!sink || !key) {
             return nullptr;
+        }
+
+        const auto relPersistence = static_cast<NPg::ERelPersistence>(value->sequence->relpersistence);
+        switch (relPersistence) {
+            case NPg::ERelPersistence::Temp:
+                options.push_back(QL(QA("temporary")));
+                break;
+            case NPg::ERelPersistence::Unlogged:
+                AddError("UNLOGGED sequence not supported");
+                return nullptr;
+                break;
+            case NPg::ERelPersistence::Permanent:
+                break;
         }
 
         for (int i = 0; i < ListLength(value->options); ++i) {
             auto rawNode = ListNodeNth(value->options, i);
 
             switch (NodeTag(rawNode)) {
-                case T_DefElem:
-                    auto defElem = CAST_NODE(ColumnDef, rawNode);
-                        return nullptr;
+                case T_DefElem: {
+                    const auto* defElem = CAST_NODE(DefElem, rawNode);
+                    TStringBuf nameElem = defElem->defname;
+                    if (defElem->arg) {
+                        switch (NodeTag(defElem->arg))
+                        {
+                            case T_Integer:
+                                options.emplace_back(QL(QA(nameElem), QA(ToString(intVal(defElem->arg)))));
+                                break;
+                            case T_Float:
+                                options.emplace_back(QL(QA(nameElem), QA(strVal(defElem->arg))));
+                                break;
+                            case T_TypeName: {
+                                const auto* typeName = reinterpret_cast<PG_TypeName*>(defElem->arg);
+                                options.emplace_back(QL(QA(nameElem),
+                                    QA(StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)))));
+                                break;
+                            }
+                            default:
+                                AddError("storage parameters for index is not supported yet:" + TString(nameElem));
+                                NodeNotImplemented(defElem->arg);
+                                return nullptr;
+                        }
                     }
                     break;
-
+                }
                 default:
-                    NodeNotImplemented(value, rawNode);
+                    NodeNotImplemented(rawNode);
                     return nullptr;
             }
         }
 
-        TString mode = (ctx.ifNotExists) ? "create_if_not_exists" : "create";
-        options.push_back(QL(QA("mode"), QA(mode)));
-        options.push_back(QL(QA("columns"), BuildColumnsOptions(ctx)));
-        if (!ctx.PrimaryKey.empty()) {
-            options.push_back(QL(QA("primarykey"), QVL(ctx.PrimaryKey.data(), ctx.PrimaryKey.size())));
-        }
-        for (auto& uniq : ctx.UniqConstr) {
-            auto columns = QVL(uniq.data(), uniq.size());
-            options.push_back(QL(QA("index"), QL(
-                                  QL(QA("indexName")),
-                                  QL(QA("indexType"), QA("syncGlobalUnique")),
-                                  QL(QA("dataColumns"), QL()),
-                                  QL(QA("indexColumns"), columns))));
-        }
-        if (ctx.isTemporary) {
-            options.push_back(QL(QA("temporary")));
+        if (value->for_identity) {
+            options.push_back(QL(QA("for_identity")));
         }
 
-        for (int i = 0; i < ListLength(value->tableElts); ++i) {
-            auto rawNode = ListNodeNth(value->tableElts, i);
-
-            switch (NodeTag(rawNode)) {
-                case T_ColumnDef:
-                    if (!AddColumn(ctx, CAST_NODE(ColumnDef, rawNode))) {
-                        return nullptr;
-                    }
-                    break;
-
-                case T_Constraint:
-                    if (!AddConstraint(ctx, CAST_NODE(Constraint, rawNode))) {
-                        return nullptr;
-                    }
-                    break;
-
-                default:
-                    NodeNotImplemented(value, rawNode);
-                    return nullptr;
-            }
-        }
+        options.push_back(QL(QA("owner_id"), QA(ToString(value->ownerId))));
 
         State.Statements.push_back(
                 L(A("let"), A("world"),
                   L(A("Write!"), A("world"), sink, key, L(A("Void")),
-                    BuildCreateTableOptions(ctx))));
+                    QVL(options.data(), options.size()))));
 
         return State.Statements.back();
     }

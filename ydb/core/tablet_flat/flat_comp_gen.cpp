@@ -429,9 +429,9 @@ bool TGenCompactionStrategy::ScheduleBorrowedCompaction() {
     if (!hasBorrowed || ForcedState != EForcedState::None || FinalState.State != EState::Free || FinalCompactionId != 0) {
         if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
             logl << "TGenCompactionStrategy ScheduleBorrowedCompaction for " << ownerTabletId
-                << " nothing to compact "
-                << " has borrowed " << hasBorrowed << " parts " << KnownParts.size()
-                << " state: forced " << ForcedState << ", final " << FinalState.State << ", id " << FinalCompactionId;
+                << " nothing to compact"
+                << " has borrowed " << hasBorrowed << ", parts " << KnownParts.size()
+                << ", forced state " << ForcedState << ", final state " << FinalState.State << ", id " << FinalCompactionId;
         }
         return false;
     }
@@ -1126,6 +1126,12 @@ void TGenCompactionStrategy::CheckGeneration(ui32 generation) {
     CheckOverload(generation);
 
     auto& gen = Generations[generation - 1];
+
+    if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
+        logl << "TGenCompactionStrategy CheckGeneration for " << Backend->OwnerTabletId()
+            << " generation " << generation << ", state " << gen.State 
+            << ", final id " << FinalCompactionId << ", final level " << FinalCompactionLevel;
+    }
 
     if (gen.State != EState::Free && gen.State != EState::PendingBackground) {
         return;

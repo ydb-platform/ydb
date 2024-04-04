@@ -151,6 +151,12 @@ ui64 TCompactionLogic::PrepareForceCompaction(ui32 table, EForceCompaction mode)
     if (!tableInfo)
         return 0;
 
+    if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
+        logl << "TCompactionLogic PrepareForceCompaction for " << Backend->OwnerTabletId()
+            << " table " << table << ", mode " << mode << ", forced state " << tableInfo->ForcedCompactionState
+            << ", forced mode " << tableInfo->ForcedCompactionMode;
+    }
+
     if (mode == EForceCompaction::Borrowed) {
         // Note: we also schedule mem table compaction below, because tx status may have borrowed data
         tableInfo->Strategy->ScheduleBorrowedCompaction();

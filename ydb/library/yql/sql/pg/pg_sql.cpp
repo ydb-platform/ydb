@@ -2701,9 +2701,11 @@ public:
                                 options.emplace_back(QL(QA(nameElem), QA(strVal(defElem->arg))));
                                 break;
                             case T_TypeName: {
-                                const auto* typeName = reinterpret_cast<PG_TypeName*>(defElem->arg);
-                                options.emplace_back(QL(QA(nameElem),
-                                    QA(StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)))));
+                                const auto* typeName = CAST_NODE_EXT(PG_TypeName, T_TypeName, defElem->arg);
+                                if (ListLength(typeName->names) > 0) {
+                                    options.emplace_back(QL(QA(nameElem),
+                                        QA(StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)))));
+                                    }
                                 break;
                             }
                             default:
@@ -2723,7 +2725,9 @@ public:
             options.push_back(QL(QA("for_identity")));
         }
 
-        options.push_back(QL(QA("owner_id"), QA(ToString(value->ownerId))));
+        if (value->ownerId != InvalidOid) {
+            options.push_back(QL(QA("owner_id"), QA(ToString(value->ownerId))));
+        }
 
         State.Statements.push_back(
                 L(A("let"), A("world"),

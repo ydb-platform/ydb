@@ -315,7 +315,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
         bool IsFinished() const { return Commited || (ReadingFinished && (FirstRead || NewSDK)); };
         bool Commit() { return !std::exchange(Commited, true); };
-        void Unlock() { ReadingFinished = false; ++Cookie; };
+        bool Unlock() { ReadingFinished = false; ++Cookie; return ReleaseChildren(); };
+        bool ReleaseChildren() { return !Commited; }
     };
 
     struct TClientInfo {
@@ -354,7 +355,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
         TStringBuilder GetPrefix() const;
 
-        void UnlockPartition(ui32 partitionId);
+        void UnlockPartition(ui32 partitionId, const TActorContext& ctx);
 
         TReadingPartitionStatus& GetPartitionReadingStatus(ui32 partitionId);
 

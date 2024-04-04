@@ -155,6 +155,14 @@ TTestReadSession::TTestReadSession(TTopicClient& client, size_t expectedMessages
             ev.Confirm();
     });
 
+    readSettings.EventHandlers_.StopPartitionSessionHandler(
+        [&]
+        (TReadSessionEvent::TStopPartitionSessionEvent& ev) mutable {
+            Cerr << ">>>>> Received TStopPartitionSessionEvent message " << ev.DebugString() << Endl;
+            Partitions.erase(ev.GetPartitionSession()->GetPartitionId());
+            ev.Confirm();
+    });
+
     Session = client.CreateReadSession(readSettings);
 }
 

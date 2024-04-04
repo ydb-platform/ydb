@@ -1178,9 +1178,14 @@ bool TPersQueueReadBalancer::TClientInfo::ProccessReadingFinished(ui32 partition
 
             for (const auto* c : node->Children) {
                 if (IsReadeable(c->Id)) {
-                    freePartitions.push_back(c->Id);
-                    hasChanges = true;
-                } else {
+                    auto it = groupInfo.PartitionsInfo.find(c->Id);
+                    Y_ABORT_UNLESS(it != groupInfo.PartitionsInfo.end());
+                    auto& partitionInfo = it->second;
+
+                    if (partitionInfo.State != EPS_ACTIVE) {
+                        freePartitions.push_back(c->Id);
+                        hasChanges = true;
+                    }
                     queue.push_back(c);
                 }
             }
@@ -1433,7 +1438,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev
     }
 
     auto& clientInfo = it->second;
-    clientInfo.UnlockPartition(partitionId);
     if (!clientInfo.SessionsWithGroup) {
         group = TClientInfo::MAIN_GROUP;
     }
@@ -1458,12 +1462,35 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev
     clientGroupsInfo.FreePartition(partitionId);
 
     session->Unlock(!clientInfo.IsReadeable(partitionId)); // TODO тут точно должно быть IsReadable без условия что прочитана?
+    clientInfo.UnlockPartition(partitionId, ctx);
 
     clientGroupsInfo.ScheduleBalance(ctx);
 }
 
-void TPersQueueReadBalancer::TClientInfo::UnlockPartition(ui32 partitionId) {
-    GetPartitionReadingStatus(partitionId).Unlock();
+void TPersQueueReadBalancer::TClientInfo::UnlockPartition(ui32 partitionId, const TActorContext& ctx) {
+    if (GetPartitionReadingStatus(partitionId).Unlock()) {
+        // Release all children partitions if required
+
+        auto* n = Balancer.PartitionGraph.GetPartition(partitionId);
+        if (!n) {
+            return;
+        }
+
+        std::deque<TPartitionGraph::Node*> queue;
+        queue.insert(queue.end(), n->Children.begin(), n->Children.end());
+
+        while (!queue.empty()) {
+            auto* node = queue.front();
+            queue.pop_front();
+            queue.insert(queue.end(), node->Children.begin(), node->Children.end());
+
+            auto* group = FindGroup(node->Id);
+            if (!group) {
+                continue;
+            }
+            group->ReleasePartition(node->Id, ctx);
+        }
+    }
 }
 
 void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
@@ -1960,11 +1987,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingFinishedRequest::TPt
 
                 if (status.FirstRead) {
                     if (clientInfo.ProccessReadingFinished(r.GetPartitionId())) {
-                        Cerr << ">>>>> 1" << Endl;
                         ctx.Send(ctx.SelfID, new TEvPersQueue::TEvWakeupClient(r.GetConsumer(), TClientInfo::MAIN_GROUP));
                     }
                 } else {
-                    Cerr << ">>>>> 2" << Endl;
                     ++status.Iteration;
                     ++status.Cookie;
 

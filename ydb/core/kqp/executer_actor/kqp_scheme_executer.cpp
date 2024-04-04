@@ -53,7 +53,7 @@ public:
     TKqpSchemeExecuter(
         TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target, const TMaybe<TString>& requestType,
         const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-        bool temporary, TString sessionId, TIntrusivePtr<TUserRequestContext> ctx,
+        bool temporary, bool createTableAs, TString sessionId, TIntrusivePtr<TUserRequestContext> ctx,
         const TActorId& kqpTempTablesAgentActor)
         : PhyTx(phyTx)
         , QueryType(queryType)
@@ -61,6 +61,7 @@ public:
         , Database(database)
         , UserToken(userToken)
         , Temporary(temporary)
+        , CreateTableAs(createTableAs)
         , SessionId(sessionId)
         , RequestContext(std::move(ctx))
         , RequestType(requestType)
@@ -112,6 +113,8 @@ public:
                     }
                     tableDesc->SetName(tableDesc->GetName() + SessionId);
                     tableDesc->SetPath(tableDesc->GetPath() + SessionId);
+                }
+                if (Temporary || CreateTableAs) {
                     YQL_ENSURE(KqpTempTablesAgentActor != TActorId(),
                         "Create temp table with empty KqpTempTablesAgentActor");
                     ActorIdToProto(KqpTempTablesAgentActor, modifyScheme.MutableTempTableOwnerActorId());
@@ -608,6 +611,7 @@ private:
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     bool Temporary;
+    bool CreateTableAs;
     TString SessionId;
     ui64 TxId = 0;
     TActorId SchemePipeActorId_;
@@ -622,12 +626,12 @@ private:
 IActor* CreateKqpSchemeExecuter(
     TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,
     const TMaybe<TString>& requestType, const TString& database,
-    TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool temporary, TString sessionId,
-    TIntrusivePtr<TUserRequestContext> ctx, const TActorId& kqpTempTablesAgentActor)
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool temporary, bool createTableAs,
+    TString sessionId, TIntrusivePtr<TUserRequestContext> ctx, const TActorId& kqpTempTablesAgentActor)
 {
     return new TKqpSchemeExecuter(
         phyTx, queryType, target, requestType, database, userToken,
-        temporary, sessionId, std::move(ctx), kqpTempTablesAgentActor);
+        temporary, createTableAs, sessionId, std::move(ctx), kqpTempTablesAgentActor);
 }
 
 } // namespace NKikimr::NKqp

@@ -195,6 +195,7 @@ struct TTableSettings {
     TResetableSetting<TString, void> Tiering;
     TMaybe<TString> PartitionByHashFunction;
     TMaybe<TString> StoreExternalBlobs;
+    TMaybe<bool> ResetTemporary;
 
     // These parameters are only used for external sources
     TMaybe<TString> DataSourcePath;
@@ -806,6 +807,8 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
         const TMaybe<TString>& requestType, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> ResetTemporary(const TString& src, const TString& cluster) = 0;
 
     virtual NThreading::TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) = 0;
 

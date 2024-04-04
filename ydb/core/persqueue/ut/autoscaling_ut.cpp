@@ -6,6 +6,14 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
 
+#include <util/stream/output.h>
+
+static inline IOutputStream& operator<<(IOutputStream& o, const std::set<size_t> t) {
+    o << "[" << JoinRange(", ", t.begin(), t.end()) << "]";
+
+    return o;
+}
+
 namespace NKikimr {
 
 using namespace NYdb::NTopic;
@@ -196,17 +204,72 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         writeSession3->Close(TDuration::Seconds(1));
     }
 
+    struct TTestPartitionReadSession {
+
+        std::shared_ptr<IReadSession> Session;
+        std::set<size_t> Partitions;
+
+        std::set<size_t> ExpectedPartitions;
+        NThreading::TPromise<std::set<size_t>> Promise;
+
+        TTestPartitionReadSession(TTopicClient& client) {
+            auto readSettings = TReadSessionSettings()
+                .ConsumerName(TEST_CONSUMER)
+                .AppendTopics(TEST_TOPIC);
+
+            readSettings.EventHandlers_.StartPartitionSessionHandler(
+                    [&]
+                    (TReadSessionEvent::TStartPartitionSessionEvent& ev) mutable {
+                        Cerr << ">>>>> Received TStartPartitionSessionEvent message " << ev.DebugString() << Endl;
+                        Partitions.insert(ev.GetPartitionSession()->GetPartitionId());
+                        if (ExpectedPartitions == Partitions) {
+                            Promise.SetValue(Partitions);
+                        }
+                        ev.Confirm();
+            });
+
+            readSettings.EventHandlers_.StopPartitionSessionHandler(
+                    [&]
+                    (TReadSessionEvent::TStopPartitionSessionEvent& ev) mutable {
+                        Cerr << ">>>>> Received TStopPartitionSessionEvent message " << ev.DebugString() << Endl;
+                        Partitions.erase(ev.GetPartitionSession()->GetPartitionId());
+                        if (ExpectedPartitions == Partitions) {
+                            Promise.SetValue(Partitions);
+                        }
+                        ev.Confirm();
+            });
+
+            Session = client.CreateReadSession(readSettings);
+        }
+
+        void Wait(std::set<size_t> partitions, const TString& message) {
+            ExpectedPartitions = partitions;
+
+            if (ExpectedPartitions == Partitions) {
+                return;
+            }
+
+            Promise = NThreading::NewPromise<std::set<size_t>>();
+            auto actualPartitions = Promise.GetFuture().GetValue(TDuration::Seconds(1));
+
+            UNIT_ASSERT_VALUES_EQUAL_C(ExpectedPartitions, actualPartitions, message);
+        }
+
+    };
+
     Y_UNIT_TEST(PartitionSplit_ReadEmptyPartitions) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
-        TTestReadSession ReadSession(client, 3);
+        TTestPartitionReadSession readSession(client);
+
+        readSession.Wait({0}, "Must read all exists partitions");
 
         ui64 txId = 1023;
         SplitPartition(setup, ++txId, 0, "a");
 
-        ReadSession.WaitAllMessages();
+        readSession.Wait({0, 1, 2}, "After split must read all partitions because parent partition is empty");
     }
 }
 

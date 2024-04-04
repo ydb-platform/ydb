@@ -1,5 +1,5 @@
 items:
 - name: Обзор
   href: index.md
-- name: Изначальное развёртывание
+- name: Первоначальное развёртывание
   href: initial-deployment.md

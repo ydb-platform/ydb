@@ -97,7 +97,7 @@ private:
     void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
     void CloseImpl(NTopic::TSessionClosedEvent const& ev);
 
-    bool QueuesAreEmpty() const {
+    bool MessageQueuesAreEmpty() const {
         return OriginalMessagesToGetAck.empty() && OriginalMessagesToPassDown.empty();
     }
 
@@ -135,7 +135,8 @@ private:
     std::deque<TWrappedWriteMessage> OriginalMessagesToGetAck;
     i64 BufferFreeSpace;
 
-    NThreading::TPromise<void> ClosingOrQueuesHaveBeenDrained;
+    NThreading::TPromise<void> HasBeenClosed;
+    NThreading::TPromise<void> MessageQueuesHaveBeenDrained;
 
     // Exiting.
     bool Closing = false;

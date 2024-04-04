@@ -120,6 +120,15 @@ public:
         return {okResponse, grpc::Status::OK};
     }
 
+    TGrpcResult ComposeResultUnavailable() {
+        Ydb::FederationDiscovery::ListFederationDatabasesResponse response;
+        auto op = response.mutable_operation();
+        op->set_status(Ydb::StatusIds::UNAVAILABLE);
+        response.mutable_operation()->set_ready(true);
+        response.mutable_operation()->set_id("12345");
+        return {response, grpc::Status::OK};
+    }
+
 
 public:
     ui16 Port;

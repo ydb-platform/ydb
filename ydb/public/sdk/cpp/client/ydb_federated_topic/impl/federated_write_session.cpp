@@ -41,6 +41,7 @@ TFederatedWriteSessionImpl::TFederatedWriteSessionImpl(
     , Log(Connections->GetLog())
     , ClientEventsQueue(std::make_shared<NTopic::TWriteSessionEventsQueue>(Settings))
     , BufferFreeSpace(Settings.MaxMemoryUsage_)
+    , HasBeenClosed(NThreading::NewPromise())
 {
 }
 
@@ -60,10 +61,8 @@ void TFederatedWriteSessionImpl::Start() {
         Y_UNUSED(f);
         if (auto self = selfCtx->LockShared()) {
             with_lock(self->Lock) {
-                if (!self->Closing) {
-                    self->FederationState = self->Observer->GetState();
-                    self->OnFederatedStateUpdateImpl();
-                }
+                self->FederationState = self->Observer->GetState();
+                self->OnFederatedStateUpdateImpl();
             }
         }
     });
@@ -103,8 +102,8 @@ void TFederatedWriteSessionImpl::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db)
                         self->OriginalMessagesToGetAck.pop_front();
                     }
                     self->ClientEventsQueue->PushEvent(std::move(ev));
-                    if (self->QueuesAreEmpty() && self->ClosingOrQueuesHaveBeenDrained.Initialized() && !self->ClosingOrQueuesHaveBeenDrained.HasValue()) {
-                        self->ClosingOrQueuesHaveBeenDrained.SetValue();
+                    if (self->MessageQueuesAreEmpty() && self->MessageQueuesHaveBeenDrained.Initialized() && !self->MessageQueuesHaveBeenDrained.HasValue()) {
+                        self->MessageQueuesHaveBeenDrained.SetValue();
                     } else if (self->BufferFreeSpace > 0 && !self->ClientHasToken) {
                         self->ClientEventsQueue->PushEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
                         self->ClientHasToken = true;
@@ -115,9 +114,7 @@ void TFederatedWriteSessionImpl::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db)
         .SessionClosedHandler([selfCtx = SelfContext](const NTopic::TSessionClosedEvent & ev) {
             if (auto self = selfCtx->LockShared()) {
                 with_lock(self->Lock) {
-                    if (!self->Closing) {
-                        self->CloseImpl(ev);
-                    }
+                    self->CloseImpl(ev);
                 }
             }
         });
@@ -220,6 +217,8 @@ std::pair<std::shared_ptr<TDbInfo>, EStatus> TFederatedWriteSessionImpl::SelectD
 
 void TFederatedWriteSessionImpl::OnFederatedStateUpdateImpl() {
     if (!FederationState->Status.IsSuccess()) {
+        // The observer became stale, it won't try to get federation state anymore due to retry policy,
+        // so there's no reason to keep the write session alive.
         CloseImpl(FederationState->Status.GetStatus(), NYql::TIssues(FederationState->Status.GetIssues()));
         return;
     }
@@ -261,9 +260,6 @@ void TFederatedWriteSessionImpl::ScheduleFederatedStateUpdateImpl(TDuration dela
         if (ok) {
             if (auto self = selfCtx->LockShared()) {
                 with_lock(self->Lock) {
-                    if (self->Closing) {
-                        return;
-                    }
                     self->FederationState = self->Observer->GetState();
                     self->OnFederatedStateUpdateImpl();
                 }
@@ -274,6 +270,9 @@ void TFederatedWriteSessionImpl::ScheduleFederatedStateUpdateImpl(TDuration dela
     UpdateStateDelayContext = Connections->CreateContext();
     if (!UpdateStateDelayContext) {
         Closing = true;
+        if (!HasBeenClosed.HasValue()) {
+            HasBeenClosed.SetValue();
+        }
         // TODO log DRIVER_IS_STOPPING_DESCRIPTION
         return;
     }
@@ -336,6 +335,9 @@ void TFederatedWriteSessionImpl::WriteInternal(NTopic::TContinuationToken&&, TWr
     {
         TDeferredWrite deferred(Subsession);
         with_lock(Lock) {
+            if (Closing) {
+                return;
+            }
             BufferFreeSpace -= wrapped.Message.Data.size();
             OriginalMessagesToPassDown.emplace_back(std::move(wrapped));
 
@@ -377,8 +379,8 @@ void TFederatedWriteSessionImpl::CloseImpl(NTopic::TSessionClosedEvent const& ev
     ClientEventsQueue->Close(ev);
     NTopic::Cancel(UpdateStateDelayContext);
 
-    if (ClosingOrQueuesHaveBeenDrained.Initialized() && !ClosingOrQueuesHaveBeenDrained.HasValue()) {
-        ClosingOrQueuesHaveBeenDrained.SetValue();
+    if (!HasBeenClosed.HasValue()) {
+        HasBeenClosed.SetValue();
     }
 }
 
@@ -392,20 +394,18 @@ bool TFederatedWriteSessionImpl::Close(TDuration timeout) {
     };
 
     with_lock(Lock) {
-        if (bool empty = QueuesAreEmpty(); Closing || empty) {
+        if (bool empty = MessageQueuesAreEmpty(); Closing || empty) {
             doLog(empty);
             return empty;
         }
-        ClosingOrQueuesHaveBeenDrained = NThreading::NewPromise();
+        MessageQueuesHaveBeenDrained = NThreading::NewPromise();
     }
 
-    ClosingOrQueuesHaveBeenDrained.GetFuture().Wait(timeout);
+    NThreading::WaitAny(HasBeenClosed, MessageQueuesHaveBeenDrained).Wait(timeout);
 
-    with_lock(Lock) {
-        bool empty = QueuesAreEmpty();
-        doLog(empty);
-        return empty;
-    }
+    bool empty = MessageQueuesAreEmpty();
+    doLog(empty);
+    return empty;
 }
 
 }  // namespace NYdb::NFederatedTopic

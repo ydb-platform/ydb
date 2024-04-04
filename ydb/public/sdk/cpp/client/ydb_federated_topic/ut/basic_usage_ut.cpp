@@ -836,6 +836,128 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteSession->Close(TDuration::MilliSeconds(10));
     }
 
+    Y_UNIT_TEST(WriteSessionCloseWaitsForWrites) {
+        // Write a bunch of messages before the federation observer initialization.
+        // Then as soon as the federation discovery service responds to the observer, close the write session.
+        // The federated write session must wait for acks of all written messages.
+
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(
+            TEST_CASE_NAME, false, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, 2);
+
+        setup->Start(true, true);
+
+        TFederationDiscoveryServiceMock fdsMock;
+        fdsMock.Port = setup->GetGrpcPort();
+        ui16 newServicePort = setup->GetPortManager()->GetPort(4285);
+        auto grpcServer = setup->StartGrpcService(newServicePort, &fdsMock);
+
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
+        cfg.SetDatabase("/Root");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        NYdb::TDriver driver(cfg);
+        NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver);
+
+        // Create write session.
+        auto writeSettings = NTopic::TWriteSessionSettings()
+            .DirectWriteToPartition(false)
+            .Path(setup->GetTestTopic())
+            .MessageGroupId("src_id");
+
+        int acks = 0;
+        writeSettings.EventHandlers_.AcksHandler([&acks](NTopic::TWriteSessionEvent::TAcksEvent& ev) {
+            acks += ev.Acks.size();
+        });
+
+        auto WriteSession = topicClient.CreateWriteSession(writeSettings);
+        Cerr << "Session was created" << Endl;
+
+        int messageCount = 100;
+        for (int i = 0; i < messageCount; ++i) {
+            auto event = WriteSession->GetEvent(true);
+            auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
+            WriteSession->Write(std::move(readyToAcceptEvent->ContinuationToken), NTopic::TWriteMessage("hello-" + ToString(i)));
+        }
+
+        std::optional<TFederationDiscoveryServiceMock::TManualRequest> fdsRequest;
+        do {
+            fdsRequest = fdsMock.GetNextPendingRequest();
+            if (!fdsRequest.has_value()) {
+                Sleep(TDuration::MilliSeconds(50));
+            }
+        } while (!fdsRequest.has_value());
+        fdsRequest->Result.SetValue(fdsMock.ComposeOkResult());
+
+        // Close method should wait until all messages have been acked.
+        WriteSession->Close();
+        UNIT_ASSERT_VALUES_EQUAL(acks, messageCount);
+    }
+
+    Y_UNIT_TEST(WriteSessionCloseIgnoresWrites) {
+        // Create a federated write session with NoRetryPolicy.
+        // Make federation discovery service to respond with an UNAVAILABLE status.
+        // It makes a federation observer object to become stale and the write session to close.
+
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(
+            TEST_CASE_NAME, false, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, 2);
+
+        setup->Start(true, true);
+
+        TFederationDiscoveryServiceMock fdsMock;
+        fdsMock.Port = setup->GetGrpcPort();
+        ui16 newServicePort = setup->GetPortManager()->GetPort(4285);
+        auto grpcServer = setup->StartGrpcService(newServicePort, &fdsMock);
+
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
+        cfg.SetDatabase("/Root");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        NYdb::TDriver driver(cfg);
+        TFederatedTopicClientSettings clientSettings;
+        clientSettings.RetryPolicy(NPersQueue::IRetryPolicy::GetNoRetryPolicy());
+        NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver, clientSettings);
+
+        // Create write session.
+        auto writeSettings = NTopic::TWriteSessionSettings()
+            .DirectWriteToPartition(false)
+            // .RetryPolicy(NPersQueue::IRetryPolicy::GetNoRetryPolicy())
+            .Path(setup->GetTestTopic())
+            .MessageGroupId("src_id");
+
+        int acks = 0;
+        writeSettings.EventHandlers_.AcksHandler([&acks](NTopic::TWriteSessionEvent::TAcksEvent& ev) {
+            acks += ev.Acks.size();
+        });
+
+        auto WriteSession = topicClient.CreateWriteSession(writeSettings);
+        Cerr << "Session was created" << Endl;
+
+        int messageCount = 100;
+        for (int i = 0; i < messageCount; ++i) {
+            auto event = WriteSession->GetEvent(true);
+            auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
+            WriteSession->Write(std::move(readyToAcceptEvent->ContinuationToken), NTopic::TWriteMessage("hello-" + ToString(i)));
+        }
+
+        std::optional<TFederationDiscoveryServiceMock::TManualRequest> fdsRequest;
+        do {
+            fdsRequest = fdsMock.GetNextPendingRequest();
+            if (!fdsRequest.has_value()) {
+                Sleep(TDuration::MilliSeconds(50));
+            }
+        } while (!fdsRequest.has_value());
+        fdsRequest->Result.SetValue(fdsMock.ComposeResultUnavailable());
+
+        // At this point the observer that federated write session works with should become stale, and the session closes.
+        // No messages we have written and no federation discovery requests should be sent.
+
+        Sleep(TDuration::Seconds(3));
+        fdsRequest = fdsMock.GetNextPendingRequest();
+        UNIT_ASSERT(!fdsRequest.has_value());
+        WriteSession->Close();
+        UNIT_ASSERT_VALUES_EQUAL(acks, 0);
+    }
+
     Y_UNIT_TEST(PreferredDatabaseNoFallback) {
         // The test checks that the session keeps trying to connect to the preferred database
         // and does not fall back to other databases.

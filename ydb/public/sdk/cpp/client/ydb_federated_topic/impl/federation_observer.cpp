@@ -155,6 +155,9 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
                     ScheduleFederationDiscoveryImpl(*retryDelay);
                     return;
                 }
+                // If retryDelay is Nothing, meaning there won't be another retry,
+                // we replace FederatedDbState with the unsuccessful one and then set the PromiseToInitState if needed,
+                // and the observer becomes stale (see IsStale method).
             } else {
                 ScheduleFederationDiscoveryImpl(REDISCOVERY_DELAY);
             }

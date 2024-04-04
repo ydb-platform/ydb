@@ -283,15 +283,24 @@ YDB не поддерживает уникальный вторичный инд
 
 Таблица форматирования типов для загрузки в таблицу:
 
-| YDB тип                                 | Формат описания                                               |
-|-----------------------------------------|---------------------------------------------------------------|
-| `Bool`                                  | `true` или `false`                                            |
-| `Int8`, `Int16`, `Int32`, `Int64`       | Целочисленное число                                           |
-| `Uint8`, `Uint16`, `Uint32`, `Uint64`   | Целое число без знака                                         |
-| `Text`, `Bytes`, `Json`, `JsonDocument` | Строковое описание                                            |
-| `Float`, `Double`, `Decimal(22, 9)`     | Вещественное число                                            |
-| `Interval`                              | [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601#Durations)  |
-| `Date`, `Datetime`, `Timestamp`         | [ISO-8601](https://ru.wikipedia.org/wiki/ISO_8601)            |
+| YDB тип                                 | Формат описания                                                                                                                                           |
+|-----------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Bool`                                  | `true` или `false`                                                                                                                                        |
+| `Int8`, `Int16`, `Int32`, `Int64`       | Целочисленное число                                                                                                                                       |
+| `Uint8`, `Uint16`, `Uint32`, `Uint64`   | Целое число без знака                                                                                                                                     |
+| `Text`, `Bytes`, `Json`, `JsonDocument` | Строковое описание                                                                                                                                        |
+| `Float`, `Double`, `Decimal(22, 9)`     | Вещественное число                                                                                                                                        |
+| `Interval`                              | [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601#Durations), соответствует классу `java.time.Duration` в Java.                                           |
+| `Date`                                  | Шаблон `YYYY-MM-DD` календарной даты из стандарта [ISO-8601](https://ru.wikipedia.org/wiki/ISO_8601)                                                      |
+| `Datetime`                              | Шаблон `YYYY-MM-DDThh:mm:ss`, timezone будет установлена `UTC`                                                                                            |
+| `Timestamp`                             | Временная метка из стандарта [ISO-8601](https://ru.wikipedia.org/wiki/ISO_8601) соответствует классу `java.time.Instant` в Java, точность в микросекундах |                                                                               |
+
+Пример `CSV` файла:
+
+```csv
+id,bool_column,bigint_column,smallint_column,tinyint_column,float_column,double_column,decimal_column,uint8_column,uint16_column,uint32_column,uint64_column,text_column,binary_column,json_column,jsondocument_column,date_column,datetime_column,timestamp_column,interval_column
+2,true,123123,13000,112,1.123,1.123123,1.123123,12,13,14,15,kurdyukov-kir,binary,{"asd": "asd"},{"asd": "asd"},2014-04-06,2023-09-16T12:30,2023-07-31T17:00:00.00Z,PT10S
+```
 
 {% note warning %}
 
@@ -462,7 +471,7 @@ Liquibase: Update has been successful. Rows affected: 3
 Liquibase command 'update' was executed successfully.
 ```
 
-Результатом будет удаление индекса, добавление колонки `is_deleted`, выключение настройки авто партиционирования, а также создание топика:
+Результатом будет удаление индекса, добавление колонки `is_deleted`, выключение параметра `AUTO_PARTITIONING_BY_SIZE`, а также создание топика:
 
 ![_assets/liquibase-step-2.png](_assets/liquibase-step-2.png)
 

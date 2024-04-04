@@ -2707,7 +2707,6 @@ public:
                                 break;
                             }
                             default:
-                                AddError("storage parameters for index is not supported yet:" + TString(nameElem));
                                 NodeNotImplemented(defElem->arg);
                                 return nullptr;
                         }

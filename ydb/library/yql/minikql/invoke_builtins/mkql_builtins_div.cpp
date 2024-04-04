@@ -94,7 +94,7 @@ struct TNumDivInterval {
     {
         if constexpr (std::is_same_v<ui64, typename TRight::TLayout>) {
             if (right.Get<ui64>() > static_cast<ui64>(std::numeric_limits<i64>::max())) {
-                return NUdf::TUnboxedValuePod();
+                return NUdf::TUnboxedValuePod(i64(0));
             }
         }
 
@@ -113,34 +113,40 @@ struct TNumDivInterval {
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto lv = StaticCast<typename TLeft::TLayout, typename TOutput::TLayout>(
-                GetterFor<typename TLeft::TLayout>(left, context, block), context, block);
-        const auto rightValue = GetterFor<typename TRight::TLayout>(right, context, block);
-        const auto rv = StaticCast<typename TRight::TLayout, typename TOutput::TLayout>(rightValue, context, block);
+        const auto bbMain = BasicBlock::Create(context, "bbMain", ctx.Func);
+        const auto bbDone = BasicBlock::Create(context, "bbDone", ctx.Func);
         const auto type = Type::getInt128Ty(context);
-        const auto zero = ConstantInt::get(type, 0);
-        const auto check = CmpInst::Create(
-                Instruction::ICmp, ICmpInst::ICMP_EQ, rv, ConstantInt::get(rv->getType(), 0), "check", block);
+        const auto null = ConstantInt::get(type, 0);
+        const auto result = PHINode::Create(type, 3, "result", bbDone);
 
-        const auto done = BasicBlock::Create(context, "done", ctx.Func);
-        const auto good = BasicBlock::Create(context, "good", ctx.Func);
-        const auto result = PHINode::Create(type, 2, "result", done);
-        result->addIncoming(zero, block);
+        const auto rv = GetterFor<typename TRight::TLayout>(right, context, block);
+        const auto rvZero = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ,
+                rv, ConstantInt::get(rv->getType(), 0), "rvZero", block);
 
-        BranchInst::Create(done, good, check, block);
+        BranchInst::Create(bbDone, bbMain, rvZero, block);
+        result->addIncoming(null, block);
+        block = bbMain;
 
-        block = good;
-        const auto div = BinaryOperator::CreateSDiv(lv, rv, "div", block);
-        const auto full = SetterFor<typename TOutput::TLayout>(div, context, block);
-        const auto bad = BinaryOperator::CreateOr(
-                GenIsInt64Overflow<typename TRight::TLayout>(rightValue, context, block),
-                GenIsBadInterval<TOutput>(div, context, block),
-                "bad", block);
-        const auto sel = SelectInst::Create(bad, zero, full, "sel", block);
-        result->addIncoming(sel, block);
-        BranchInst::Create(done, block);
+        const auto lval = StaticCast<typename TLeft::TLayout, typename TOutput::TLayout>(
+                GetterFor<typename TLeft::TLayout>(left, context, block), context, block);
+        const auto rval = StaticCast<typename TRight::TLayout, typename TOutput::TLayout>(
+                rv, context, block);
+        const auto div = BinaryOperator::CreateSDiv(lval, rval, "div", block);
+        const auto divResult = SetterFor<typename TOutput::TLayout>(div, context, block);
 
-        block = done;
+        const auto res = SelectInst::Create(
+                GenIsInt64Overflow<typename TRight::TLayout>(rv, context, block),
+                null, // ConstantInt::get(Type::getInt64Ty(context), 0),
+                SelectInst::Create(
+                    GenIsBadInterval<TOutput>(div, context, block),
+                    null,
+                    divResult,
+                    "selectDiv", block),
+                "res", block);
+
+        result->addIncoming(res, block);
+        BranchInst::Create(bbDone, block);
+        block = bbDone;
         return result;
     }
 #endif

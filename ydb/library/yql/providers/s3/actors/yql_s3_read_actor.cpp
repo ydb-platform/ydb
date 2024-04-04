@@ -1829,7 +1829,7 @@ public:
         if (it != RangeCache.end()) {
             return it->second;
         }
-        RetryStuff->Gateway->Download(UrlEscapeRet(Url + Path, true), RetryStuff->Headers,
+        RetryStuff->Gateway->Download(RetryStuff->Url, RetryStuff->Headers,
                             range.Offset,
                             range.Length,
                             std::bind(&OnResult, GetActorSystem(), SelfActorId, range, ++RangeCookie, std::placeholders::_1),

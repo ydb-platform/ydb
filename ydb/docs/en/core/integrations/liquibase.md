@@ -295,7 +295,7 @@ The type formatting table to load into the table:
 
 {% note warning %}
 
-To understand which SQL statements {{ydb-short-name}} can perform, read the documentation for the query language [YQL](../yql/reference/index.md).
+To understand which SQL statements {{ydb-short-name}} can perform and what are the restrictions on data types, read the documentation for the query language [YQL](../yql/reference/index.md).
 
 {% endnote %}
 

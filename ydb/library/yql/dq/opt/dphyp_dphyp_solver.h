@@ -40,7 +40,7 @@ private:
 
     void EnumerateCmpRec(const TNodeSet& s1, const TNodeSet& s2, const TNodeSet& x);
 
-    void EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const TJoinHypergraph<TNodeSet>::TEdge& csgCmpEdge);
+    void EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge);
 
 private:
     inline TNodeSet MakeBiMin(const TNodeSet& s);
@@ -210,7 +210,7 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsg(const TNodeSet
             s2[i] = 1;
 
             if (auto* edge = Graph_.FindEdgeBetween(s1, s2)) {
-                EmitCsgCmp(s1, s2, *edge);
+                EmitCsgCmp(s1, s2, edge);
             }
 
             EnumerateCmpRec(s1, s2, x | MakeB(neighs, GetLowestSetBit(s2)));
@@ -233,7 +233,7 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCmpRec(const 
 
         if (DpTable_.contains(s2 | next)) {
             if (auto* edge = Graph_.FindEdgeBetween(s1, s2 | next)) {
-                EmitCsgCmp(s1, s2 | next, *edge);
+                EmitCsgCmp(s1, s2 | next, edge);
             }
         }
 
@@ -337,29 +337,32 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
 /* 
  * Emit a single CSG + CMP pair
 */
-template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const TJoinHypergraph<TNodeSet>::TEdge& csgCmpEdge) {
+template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge) {
     // Here we actually build the join and choose and compare the
     // new plan to what's in the dpTable, if it there
 
     Y_ENSURE(DpTable_.contains(s1), "DP Table does not contain S1");
     Y_ENSURE(DpTable_.contains(s2), "DP Table does not conaint S2");
 
-    TNodeSet joined = s1 | s2;
+    const auto* reversedEdge = Graph_.FindEdgeBetween(s2, s1);
 
-    auto reversedEdge = Graph_.FindEdgeBetween(s2, s1);
+    if (csgCmpEdge->Reversed) {
+        std::swap(csgCmpEdge, reversedEdge);
+    }
 
     auto bestJoin = PickBestJoin(
         DpTable_[s1],
         DpTable_[s2],
-        csgCmpEdge.JoinKind,
-        csgCmpEdge.IsCommutative,
-        csgCmpEdge.JoinConditions,
+        csgCmpEdge->JoinKind,
+        csgCmpEdge->IsCommutative,
+        csgCmpEdge->JoinConditions,
         reversedEdge->JoinConditions,
-        csgCmpEdge.LeftJoinKeys,
-        csgCmpEdge.RightJoinKeys,
+        csgCmpEdge->LeftJoinKeys,
+        csgCmpEdge->RightJoinKeys,
         Pctx_
     );
 
+    TNodeSet joined = s1 | s2;
     if (!DpTable_.contains(joined) || bestJoin->Stats->Cost < DpTable_[joined]->Stats->Cost) {
         DpTable_[joined] = bestJoin;
     }

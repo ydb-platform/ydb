@@ -143,6 +143,8 @@ void TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>& w
     while (printer.HasNext()) {
         printer.Print();
     }
+
+    return 1;
 }
 
 bool TPrettyTable::TRow::HasFreeText() const {

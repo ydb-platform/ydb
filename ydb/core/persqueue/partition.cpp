@@ -1512,6 +1512,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     }
 
     const auto writeDuration = ctx.Now() - WriteStartTime;
+    DBGTRACE_LOG("writeDuration=" << writeDuration);
     const auto minWriteLatency = TDuration::MilliSeconds(AppData(ctx)->PQConfig.GetMinWriteLatencyMs());
     if (writeDuration > minWriteLatency) {
         UsersInfoWriteInProgress = false;
@@ -1639,6 +1640,7 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
 
             WriteCycleStartTime = now;
             WriteStartTime = now;
+            DBGTRACE_LOG("WriteStartTime=" << WriteStartTime);
             TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero();
             PartitionQuotaWaitTimeForCurrentBlob = TDuration::Zero();
             WritesTotal.Inc();
@@ -1646,6 +1648,7 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
             AddMetaKey(request.Get());
             ctx.Send(Tablet, request.Release());
             UsersInfoWriteInProgress = true;
+            HaveWriteMsg = true;
         }
 
         return;
@@ -1687,6 +1690,7 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
     EndHandleRequests(request.Get(), ctx);
 
     WriteStartTime = TActivationContext::Now();
+    DBGTRACE_LOG("WriteStartTime=" << WriteStartTime);
 
     AddCmdWriteTxMeta(request->Record);
     AddCmdWriteUserInfos(request->Record);

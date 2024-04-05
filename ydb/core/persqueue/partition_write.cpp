@@ -559,13 +559,22 @@ void TPartition::UpdateAfterWriteCounters(bool writeComplete) {
 
 void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     DBGTRACE("TPartition::HandleWriteResponse");
+    DBGTRACE_LOG("HaveWriteMsg=" << HaveWriteMsg);
     PQ_LOG_T("TPartition::HandleWriteResponse.");
     Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
+
+    if (!HaveWriteMsg) {
+        DBGTRACE_LOG("skip");
+        BecomeIdle();
+        return;
+    }
+
     ui64 prevEndOffset = EndOffset;
 
     ui32 totalLatencyMs = (ctx.Now() - WriteCycleStartTime).MilliSeconds();
     ui32 writeLatencyMs = (ctx.Now() - WriteStartTime).MilliSeconds();
 
+    DBGTRACE_LOG("writeLatencyMs=" << writeLatencyMs);
     WriteLatency.IncFor(writeLatencyMs, 1);
     if (writeLatencyMs >= AppData(ctx)->PQConfig.GetWriteLatencyBigMs()) {
         SLIBigLatency.Inc();
@@ -1730,6 +1739,7 @@ void TPartition::EndHandleRequests(TEvKeyValue::TEvRequest* request, const TActo
 
     AddMetaKey(request);
     WriteStartTime = TActivationContext::Now();
+    DBGTRACE_LOG("WriteStartTime=" << WriteStartTime);
 }
 
 void TPartition::BeginProcessWrites(const TActorContext& ctx)
@@ -1952,6 +1962,7 @@ void TPartition::WritePendingBlob(THolder<TEvKeyValue::TEvRequest> request) {
 
     AddMetaKey(request.Get());
     WriteStartTime = TActivationContext::Now();
+    DBGTRACE_LOG("WriteStartTime=" << WriteStartTime);
     // Write blob
 #if 1
     // PQ -> CacheProxy -> KV

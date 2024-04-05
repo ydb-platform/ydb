@@ -101,15 +101,13 @@ struct TTableColumn {
     TString Name;
     TType Type;
     TString Family;
-    std::optional<bool> NotNull;
 
     TTableColumn() = default;
 
-    TTableColumn(TString name, TType type, TString family = TString(), std::optional<bool> notNull = std::nullopt)
+    TTableColumn(TString name, TType type, TString family = TString())
         : Name(std::move(name))
         , Type(std::move(type))
         , Family(std::move(family))
-        , NotNull(std::move(notNull))
     { }
 
     // Conversion from TColumn for API compatibility
@@ -540,7 +538,7 @@ private:
     TTableDescription();
     explicit TTableDescription(const Ydb::Table::CreateTableRequest& request);
 
-    void AddColumn(const TString& name, const Ydb::Type& type, const TString& family, std::optional<bool> notNull);
+    void AddColumn(const TString& name, const Ydb::Type& type, const TString& family);
     void SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns);
 
     // common

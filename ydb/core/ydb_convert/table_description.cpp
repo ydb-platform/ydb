@@ -382,6 +382,7 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
         } else {
             columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
         }
+
         Y_ENSURE(columnType);
         if (protoType == NYql::NProto::TypeIds::Decimal) {
             auto typeParams = columnType->mutable_decimal_type();
@@ -392,7 +393,6 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
             NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
         }
     }
-    newColumn->set_not_null(column.GetNotNull());
     return columnType;
 }
 
@@ -432,7 +432,6 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
             NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
         }
     }
-    newColumn->set_not_null(column.GetNotNull());
     switch (column.GetDefaultValueCase()) {
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
             auto fromLiteral = newColumn->mutable_from_literal();
@@ -497,6 +496,10 @@ void FillColumnDescriptionImpl(TYdbProto& out,
 
     for (const auto& column : in.GetColumns()) {
         auto newColumn = out.add_columns();
+        Y_ENSURE(
+            column.GetTypeId() != NScheme::NTypeIds::Pg || !column.GetNotNull(),
+            "It is not allowed to create NOT NULL column with pg type"
+        );
         Ydb::Type* columnType = AddColumn(newColumn, column);
 
         if (columnIdToKeyPos.count(column.GetId())) {
@@ -630,23 +633,16 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
     for (const auto& column : in) {
         NKikimrSchemeOp:: TColumnDescription* cd = out.AddColumns();
         cd->SetName(column.name());
-        bool notOptional = !column.type().has_optional_type();
-        if (!column.has_not_null()) {
-            if (!column.type().has_pg_type()) {
-                cd->SetNotNull(notOptional);
-            }
-        } else {
-            if (!column.type().has_pg_type() && notOptional != column.not_null()) {
-                status = Ydb::StatusIds::BAD_REQUEST;
-                error = "Not consistent column type and not_null option for column: " + column.name();
+        if (!column.type().has_optional_type()) {
+            if (!AppData()->FeatureFlags.GetEnableNotNullColumns()) {
+                status = Ydb::StatusIds::UNSUPPORTED;
+                error = "Not null columns feature is not supported yet";
                 return false;
             }
-            cd->SetNotNull(column.not_null());
-        }
-        if (cd->GetNotNull() && !AppData()->FeatureFlags.GetEnableNotNullColumns()) {
-            status = Ydb::StatusIds::UNSUPPORTED;
-            error = "Not null columns feature is not supported yet";
-            return false;
+
+            if (!column.type().has_pg_type()) {
+                cd->SetNotNull(true);
+            }
         }
 
         NScheme::TTypeInfo typeInfo;

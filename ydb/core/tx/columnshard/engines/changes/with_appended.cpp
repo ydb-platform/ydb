@@ -72,7 +72,7 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
         }
     }
     {
-        auto g = context.EngineLogs.GranulesStorage->StartPackModification();
+        auto g = context.EngineLogs.GranulesStorage->GetStats()->StartPackModification();
         for (auto& [_, portionInfo] : PortionsToRemove) {
             context.EngineLogs.CleanupPortions[portionInfo.GetRemoveSnapshotVerified()].emplace_back(portionInfo);
             const TPortionInfo& oldInfo = context.EngineLogs.GetGranuleVerified(portionInfo.GetPathId()).GetPortionVerified(portionInfo.GetPortion());

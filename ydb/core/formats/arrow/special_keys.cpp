@@ -39,6 +39,10 @@ ui64 TSpecialKeys::GetMemoryBytes() const {
     return Data ? NArrow::GetBatchDataSize(Data) : 0;
 }
 
+ui64 TSpecialKeys::GetMemorySize() const {
+    return GetBatchMemorySize(Data);
+}
+
 TFirstLastSpecialKeys::TFirstLastSpecialKeys(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<TString>& columnNames /*= {}*/) {
     Y_ABORT_UNLESS(batch);
     Y_ABORT_UNLESS(batch->num_rows());

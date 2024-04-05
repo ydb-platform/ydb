@@ -450,9 +450,6 @@ public:
     // Legacy, do not use for modern code
     virtual void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status,
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message) = 0;
-    // Legacy, do not use for modern code
-    virtual void SendResult(Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message) = 0;
 };
 
 class IRequestNoOpCtx : public IRequestCtx {
@@ -934,22 +931,6 @@ public:
         auto resp = self->CreateResponseMessage();
         resp->mutable_operation()->CopyFrom(operation);
         self->Reply(resp, operation.status());
-    }
-
-    void SendResult(Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message) override
-    {
-        auto self = Derived();
-        self->FinishRequest();
-        auto resp = self->CreateResponseMessage();
-        auto deferred = resp->mutable_operation();
-        deferred->set_ready(true);
-        deferred->set_status(status);
-        deferred->mutable_issues()->MergeFrom(message);
-        if (self->CostInfo) {
-            deferred->mutable_cost_info()->Swap(self->CostInfo);
-        }
-        self->Reply(resp, status);
     }
 
     void SendResult(const google::protobuf::Message& result,

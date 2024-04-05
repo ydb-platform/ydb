@@ -844,7 +844,8 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
 
         lay
             .Col(0, 0,  NScheme::NTypeIds::Uint32)
-            .Col(1, 1,  NScheme::NTypeIds::String)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Col(1, 2,  NScheme::NTypeIds::String)
             .Key({0});
 
         NPage::TConf conf{ true, 7 * 1024 };
@@ -858,7 +859,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         
         for (ui32 i : xrange(1000)) {
             for (ui32 j : xrange(i % 5 + 1)) {
-                cook.Ver({0, 10 - j}).Add(*TSchemedCookRow(*lay).Col(i, ToString(i * 10 + j)));
+                cook.Ver({0, 10 - j}).Add(*TSchemedCookRow(*lay).Col(i, TString(i * 2 + j, 'x'), TString(i * 3 + j, 'x')));
             }
         }
 
@@ -871,16 +872,75 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         auto pages = IndexTools::CountMainPages(*part);
         UNIT_ASSERT_VALUES_EQUAL(pages, 334);
 
-        TBtreeIndexMeta expected0{{part->IndexPages.BTreeGroups[0].PageId, 1000, 32680, 22889+77340+45780, 0}, 3, 18430};
+        ui64 dataSize0 = IndexTools::CountDataSize(*part, TGroupId{0, 0});
+        ui64 dataSize1 = IndexTools::CountDataSize(*part, TGroupId{1, 0});
+        ui64 dataSizeHist0 = IndexTools::CountDataSize(*part, TGroupId{0, 1});
+        ui64 dataSizeHist1 = IndexTools::CountDataSize(*part, TGroupId{1, 1});
+
+        TBtreeIndexMeta expected0{{part->IndexPages.BTreeGroups[0].PageId, 1000, dataSize0, dataSize1+dataSizeHist0+dataSizeHist1, 0}, 3, 18430};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected0, "Got " + part->IndexPages.BTreeGroups[0].ToString());
 
-        TBtreeIndexMeta expected1{{part->IndexPages.BTreeGroups[1].PageId, 1000, 22889, 0, 0}, 3, 6497};
+        TBtreeIndexMeta expected1{{part->IndexPages.BTreeGroups[1].PageId, 1000, dataSize1, 0, 0}, 3, 8284};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[1], expected1, "Got " + part->IndexPages.BTreeGroups[1].ToString());
 
-        TBtreeIndexMeta expectedHist0{{part->IndexPages.BTreeHistoric[0].PageId, 2000, 77340, 0, 0}, 4, 34225};
+        TBtreeIndexMeta expectedHist0{{part->IndexPages.BTreeHistoric[0].PageId, 2000, dataSizeHist0, 0, 0}, 4, 34225};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeHistoric[0], expectedHist0, "Got " + part->IndexPages.BTreeHistoric[0].ToString());
 
-        TBtreeIndexMeta expectedHist1{{part->IndexPages.BTreeHistoric[1].PageId, 2000, 45780, 0, 0}, 3, 13014};
+        TBtreeIndexMeta expectedHist1{{part->IndexPages.BTreeHistoric[1].PageId, 2000, dataSizeHist1, 0, 0}, 3, 16645};
+        UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeHistoric[1], expectedHist1, "Got " + part->IndexPages.BTreeHistoric[1].ToString());
+    }
+
+    Y_UNIT_TEST(External) {
+        TLayoutCook lay;
+
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Col(1, 2,  NScheme::NTypeIds::String)
+            .Key({0});
+
+        NPage::TConf conf{ true, 7 * 1024 };
+        conf.WriteBTreeIndex = true;
+        conf.SmallEdge = 133;
+        conf.LargeEdge = 333;
+        conf.Group(0).PageRows = 3;
+        conf.Group(1).PageRows = 4;
+        conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 5;
+        conf.Group(1).BTreeIndexNodeKeysMin = conf.Group(1).BTreeIndexNodeKeysMax = 6;
+
+        TPartCook cook(lay, conf);
+        
+        for (ui32 i : xrange(1000)) {
+            for (ui32 j : xrange(i % 5 + 1)) {
+                cook.Ver({0, 10 - j}).Add(*TSchemedCookRow(*lay).Col(i, TString(i * 2 + j, 'x'), TString(i * 3 + j, 'x')));
+            }
+        }
+
+        TPartEggs eggs = cook.Finish();
+
+        const auto part = eggs.Lone();
+
+        Cerr << DumpPart(*part, 2) << Endl;
+
+        auto pages = IndexTools::CountMainPages(*part);
+        UNIT_ASSERT_VALUES_EQUAL(pages, 334);
+
+        ui64 dataSize0 = IndexTools::CountDataSize(*part, TGroupId{0, 0});
+        ui64 dataSize1 = IndexTools::CountDataSize(*part, TGroupId{1, 0});
+        ui64 dataSizeHist0 = IndexTools::CountDataSize(*part, TGroupId{0, 1});
+        ui64 dataSizeHist1 = IndexTools::CountDataSize(*part, TGroupId{1, 1});
+        ui64 groupDataSize = dataSize1+dataSizeHist0+dataSizeHist1 + 120463 + 7413329;
+
+        TBtreeIndexMeta expected0{{part->IndexPages.BTreeGroups[0].PageId, 1000, dataSize0, groupDataSize, 0}, 3, 18430};
+        UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected0, "Got " + part->IndexPages.BTreeGroups[0].ToString());
+
+        TBtreeIndexMeta expected1{{part->IndexPages.BTreeGroups[1].PageId, 1000, dataSize1, 0, 0}, 3, 6497};
+        UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[1], expected1, "Got " + part->IndexPages.BTreeGroups[1].ToString());
+
+        TBtreeIndexMeta expectedHist0{{part->IndexPages.BTreeHistoric[0].PageId, 2000, dataSizeHist0, 0, 0}, 4, 34225};
+        UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeHistoric[0], expectedHist0, "Got " + part->IndexPages.BTreeHistoric[0].ToString());
+
+        TBtreeIndexMeta expectedHist1{{part->IndexPages.BTreeHistoric[1].PageId, 2000, dataSizeHist1, 0, 0}, 3, 13014};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeHistoric[1], expectedHist1, "Got " + part->IndexPages.BTreeHistoric[1].ToString());
     }
 }

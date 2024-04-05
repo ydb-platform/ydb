@@ -853,6 +853,8 @@ namespace NTable {
                 auto blob = NPage::TLabelWrapper::WrapString(plain, EPage::Opaque, 0);
                 ui64 ref = Globs.Size(); /* is the current blob index */
 
+                Current.BTreeGroupDataSize += blob.size();
+
                 return Register(row, tag, Pager.WriteLarge(std::move(blob), ref));
 
             } else if (plain.size() >= SmallEdge) {
@@ -863,6 +865,7 @@ namespace NTable {
                 FrameS.Put(row, tag, blob.size());
 
                 Current.SmallWritten += blob.size();
+                Current.BTreeGroupDataSize += blob.size();
 
                 return { ELargeObj::Outer, Pager.WriteOuter(std::move(blob)) };
 

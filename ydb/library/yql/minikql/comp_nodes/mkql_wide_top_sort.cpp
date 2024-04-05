@@ -564,10 +564,6 @@ private:
     bool HasMemoryForProcessing() const {
         // TODO: Change to enable spilling
         // return !TlsAllocState->IsMemoryYellowZoneEnabled();
-        const int SPILL_LIMIT = 2;
-        if (Storage.size() / Indexes.size() > SPILL_LIMIT) {
-            return false;
-        }
         return true;
     }
 

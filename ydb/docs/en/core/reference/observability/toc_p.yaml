@@ -1,3 +1,4 @@
 items:
 - name: Metrics reference
   href: metrics/index.md
+- include: { mode: link, href: tracing/toc_p.yaml }

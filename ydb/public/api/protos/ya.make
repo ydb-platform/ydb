@@ -14,6 +14,7 @@ SRCS(
     draft/ydb_maintenance.proto
     draft/ydb_logstore.proto
     draft/ydb_dynamic_config.proto
+    draft/ydb_object_storage.proto
     ydb_federation_discovery.proto
     persqueue_error_codes_v1.proto
     ydb_auth.proto

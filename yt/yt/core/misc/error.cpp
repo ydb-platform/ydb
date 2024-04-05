@@ -886,8 +886,26 @@ std::optional<TError> TError::FindMatching(TErrorCode code) const
     }
 
     for (const auto& innerError : InnerErrors()) {
-        auto innerResult = innerError.FindMatching(code);
-        if (innerResult) {
+        if (auto innerResult = innerError.FindMatching(code)) {
+            return innerResult;
+        }
+    }
+
+    return {};
+}
+
+std::optional<TError> TError::FindMatching(const THashSet<TErrorCode>& codes) const
+{
+    if (!Impl_) {
+        return {};
+    }
+
+    if (codes.contains(GetCode())) {
+        return *this;
+    }
+
+    for (const auto& innerError : InnerErrors()) {
+        if (auto innerResult = innerError.FindMatching(codes)) {
             return innerResult;
         }
     }

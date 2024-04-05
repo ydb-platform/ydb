@@ -118,33 +118,43 @@ void PipeReaderToWriter(
     while (auto batch = reader->Read(readOptions)) {
         yielder.TryYield();
 
-        if (batch->IsEmpty()) {
-            WaitFor(reader->GetReadyEvent())
-                .ThrowOnError();
-            continue;
-        }
+        TSharedRange<TUnversionedRow> rows;
 
-        auto rows = batch->MaterializeRows();
+        try {
+            if (batch->IsEmpty()) {
+                WaitFor(reader->GetReadyEvent())
+                    .ThrowOnError();
+                continue;
+            }
 
-        if (options.ValidateValues) {
-            for (auto row : rows) {
-                for (const auto& value : row) {
-                    ValidateStaticValue(value);
+            rows = batch->MaterializeRows();
+
+            if (options.ValidateValues) {
+                for (auto row : rows) {
+                    for (const auto& value : row) {
+                        ValidateStaticValue(value);
+                    }
                 }
             }
-        }
 
-        if (options.Throttler) {
-            i64 dataWeight = 0;
-            for (auto row : rows) {
-                dataWeight += GetDataWeight(row);
+            if (options.Throttler) {
+                i64 dataWeight = 0;
+                for (auto row : rows) {
+                    dataWeight += GetDataWeight(row);
+                }
+                WaitFor(options.Throttler->Throttle(dataWeight))
+                    .ThrowOnError();
             }
-            WaitFor(options.Throttler->Throttle(dataWeight))
-                .ThrowOnError();
-        }
 
-        if (!rows.empty() && options.PipeDelay) {
-            TDelayedExecutor::WaitForDuration(options.PipeDelay);
+            if (!rows.empty() && options.PipeDelay) {
+                TDelayedExecutor::WaitForDuration(options.PipeDelay);
+            }
+        } catch (const std::exception& ex) {
+            if (options.ReaderErrorWrapper) {
+                THROW_ERROR(options.ReaderErrorWrapper(ex));
+            } else {
+                throw;
+            }
         }
 
         if (!writer->Write(rows)) {

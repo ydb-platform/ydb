@@ -568,6 +568,31 @@ TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto cnStreamLookup = TDqCnStreamLookup(input);
+    auto leftInputType = GetDqConnectionType(TDqConnection(input), ctx);
+    if (!leftInputType) {
+        return TStatus::Error;
+    }
+    auto leftRowType = GetSeqItemType(leftInputType);
+
+    const auto rightRowType = input->Child(TDqCnStreamLookup::idx_RightInputRowType)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+
+    const auto outputRowType = GetDqJoinResultType<true>(
+        input->Pos(),
+        *leftRowType->Cast<TStructExprType>(),
+        cnStreamLookup.LeftLabel().Cast<TCoAtom>().StringValue(),
+        *rightRowType->Cast<TStructExprType>(),
+        cnStreamLookup.RightLabel().StringValue(),
+        cnStreamLookup.JoinType().StringValue(),
+        cnStreamLookup.JoinKeys(),
+        ctx
+    );
+    //TODO (YQ-2068) verify lookup parameters
+    input->SetTypeAnn(ctx.MakeType<TStreamExprType>(outputRowType));
+    return TStatus::Ok;
+}
+
 TStatus AnnotateDqCnMerge(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 2, ctx)) {
         return TStatus::Error;
@@ -979,6 +1004,9 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
             if (TDqCnMap::Match(input.Get())) {
                 return AnnotateDqConnection(input, ctx);
             }
+            if (TDqCnStreamLookup::Match(input.Get())) {
+                return AnnotateDqCnStreamLookup(input, ctx);
+            }
 
             if (TDqCnBroadcast::Match(input.Get())) {
                 return AnnotateDqConnection(input, ctx);
@@ -994,6 +1022,10 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
 
             if (TDqCnMerge::Match(input.Get())) {
                 return AnnotateDqCnMerge(input, ctx);
+            }
+            
+            if (TDqCnStreamLookup::Match(input.Get())) {
+                return AnnotateDqCnStreamLookup(input, ctx);
             }
 
             if (TDqReplicate::Match(input.Get())) {

@@ -12,6 +12,7 @@
 namespace NKikimr::NOlap {
 
 class TGranulesStorage;
+class TGranulesStat;
 class TColumnChunkLoadContext;
 
 class TDataClassSummary: public NColumnShard::TBaseGranuleDataClassSummary {
@@ -26,6 +27,7 @@ public:
     void AddPortion(const TPortionInfo& info) {
         ColumnPortionsSize += info.GetColumnBlobBytes();
         TotalPortionsSize += info.GetTotalBlobBytes();
+        MetadataMemoryPortionsSize += info.GetMetadataMemorySize();
         RecordsCount += info.NumRows();
         ++PortionsCount;
 
@@ -40,6 +42,8 @@ public:
     }
 
     void RemovePortion(const TPortionInfo& info) {
+        MetadataMemoryPortionsSize -= info.GetMetadataMemorySize();
+        Y_ABORT_UNLESS(MetadataMemoryPortionsSize >= 0);
         ColumnPortionsSize -= info.GetColumnBlobBytes();
         Y_ABORT_UNLESS(ColumnPortionsSize >= 0);
         TotalPortionsSize -= info.GetTotalBlobBytes();
@@ -66,45 +70,14 @@ private:
     TDataClassSummary Compacted;
     friend class TGranuleMeta;
 public:
-    enum class ECompactionClass: ui32 {
-        Split = 100,
-        Internal = 50,
-        WaitInternal = 30,
-        NoCompaction = 0
-    };
-
-    ECompactionClass GetCompactionClass(const TCompactionLimits& limits, const TMonotonic lastModification, const TMonotonic now) const {
-        if (GetActivePortionsCount() <= 1) {
-            return ECompactionClass::NoCompaction;
-        }
-        if ((i64)GetGranuleSize() >= limits.GranuleSizeForOverloadPrevent)
-        {
-            return ECompactionClass::Split;
-        }
-
-        if (now - lastModification > TDuration::Seconds(limits.InGranuleCompactSeconds)) {
-            if (GetInserted().GetPortionsCount()) {
-                return ECompactionClass::Internal;
-            }
-        } else {
-            if (GetInserted().GetPortionsCount() > 1 &&
-                (GetInserted().GetColumnPortionsSize() >= limits.GranuleIndexedPortionsSizeLimit ||
-                    GetInserted().GetPortionsCount() >= limits.GranuleIndexedPortionsCountLimit)) {
-                return ECompactionClass::Internal;
-            }
-            if (GetInserted().GetPortionsCount()) {
-                return ECompactionClass::WaitInternal;
-            }
-        }
-
-        return ECompactionClass::NoCompaction;
-    }
-
     const TDataClassSummary& GetInserted() const {
         return Inserted;
     }
     const TDataClassSummary& GetCompacted() const {
         return Compacted;
+    }
+    ui64 GetMetadataMemoryPortionsSize() const {
+        return Inserted.GetMetadataMemoryPortionsSize() + Compacted.GetMetadataMemoryPortionsSize();
     }
     ui64 GetGranuleSize() const {
         return Inserted.GetTotalPortionsSize() + Compacted.GetTotalPortionsSize();
@@ -171,9 +144,9 @@ private:
     std::set<EActivity> Activity;
     mutable bool AllowInsertionFlag = false;
     const ui64 PathId;
-    std::shared_ptr<TGranulesStorage> Owner;
     const NColumnShard::TGranuleDataCounters Counters;
     NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
+    std::shared_ptr<TGranulesStat> Stats;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> OptimizerPlanner;
     std::shared_ptr<NActualizer::TGranuleActualizationIndex> ActualizationIndex;
     std::map<NArrow::TReplaceKey, THashMap<ui64, std::shared_ptr<TPortionInfo>>> PortionsByPK;
@@ -261,7 +234,6 @@ public:
         return result;
     }
 
-    TGranuleAdditiveSummary::ECompactionClass GetCompactionType(const TCompactionLimits& limits) const;
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;
 
     NStorageOptimizer::TOptimizationPriority GetCompactionPriority() const {
@@ -276,14 +248,6 @@ public:
         if (currentInstant - OptimizerPlanner->GetActualizationInstant() > TDuration::Seconds(1)) {
             OptimizerPlanner->Actualize(currentInstant);
         }
-    }
-
-    bool NeedCompaction(const TCompactionLimits& limits) const {
-        if (InCompaction() || Empty()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "granule_skipped_by_state")("path_id", GetPathId())("granule_size", Size());
-            return false;
-        }
-        return GetCompactionType(limits) != TGranuleAdditiveSummary::ECompactionClass::NoCompaction;
     }
 
     bool InCompaction() const;
@@ -334,7 +298,7 @@ public:
         return *it->second;
     }
 
-    std::shared_ptr<TPortionInfo> GetPortionPtr(const ui64 portion) const {
+    std::shared_ptr<TPortionInfo> GetPortionOptional(const ui64 portion) const {
         auto it = Portions.find(portion);
         if (it == Portions.end()) {
             return nullptr;
@@ -344,11 +308,9 @@ public:
 
     bool ErasePortion(const ui64 portion);
 
-    explicit TGranuleMeta(const ui64 pathId, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex);
+    explicit TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex);
 
     bool Empty() const noexcept { return Portions.empty(); }
-
-    ui64 Size() const;
 };
 
 } // namespace NKikimr::NOlap

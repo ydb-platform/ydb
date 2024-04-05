@@ -1388,7 +1388,6 @@ message TColumnShardConfig {
             TMinimalTablesCountPolicy MinimalTables = 1;
             TIdentityGroupsPolicy IdentityGroups = 2;
         }
-
     }
     optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
     optional bool DisabledOnSchemeShard = 2 [default = true];
@@ -1401,6 +1400,14 @@ message TColumnShardConfig {
     optional bool UseChunkedMergeOnCompaction = 9 [default = true];
     optional uint64 CompactionMemoryLimit = 10 [default = 536870912];
     optional uint64 TieringsMemoryLimit = 11 [default = 536870912];
+    message TIndexMetadataMemoryLimit {
+        oneof Value {
+            double TotalRatio = 1 [default = 0.3];
+            uint64 AbsoluteValue = 2;
+        }
+    }
+
+    optional TIndexMetadataMemoryLimit IndexMetadataMemoryLimit = 12;
 }
 
 message TSchemeShardConfig {

@@ -17,6 +17,7 @@ protected:
     i64 TotalPortionsSize = 0;
     i64 PortionsCount = 0;
     i64 RecordsCount = 0;
+    i64 MetadataMemoryPortionsSize = 0;
 public:
     i64 GetColumnPortionsSize() const {
         return ColumnPortionsSize;
@@ -30,9 +31,18 @@ public:
     i64 GetPortionsCount() const {
         return PortionsCount;
     }
+    i64 GetMetadataMemoryPortionsSize() const {
+        return MetadataMemoryPortionsSize;
+    }
 
     TString DebugString() const {
-        return TStringBuilder() << "columns_size:" << ColumnPortionsSize << ";total_size:" << TotalPortionsSize << ";count:" << PortionsCount << ";";
+        return TStringBuilder() << 
+            "columns_size:" << ColumnPortionsSize << 
+            ";total_size:" << TotalPortionsSize << 
+            ";count:" << PortionsCount << 
+            ";metadata_portions_size:" << MetadataMemoryPortionsSize <<
+            ";records_count:" << RecordsCount <<
+            ";";
     }
 
     TBaseGranuleDataClassSummary operator+(const TBaseGranuleDataClassSummary& item) const;
@@ -261,6 +271,8 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr GranuleOptimizerLocked;
 
+    NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataUsageBytes;
+
     TAgentGranuleDataCounters GranuleDataAgent;
     std::vector<std::shared_ptr<TIncrementalHistogram>> BlobSizeDistribution;
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionSizeDistribution;
@@ -357,6 +369,10 @@ public:
     void OnPortionNoBorder(const ui64 size) const {
         PortionNoBorderCount->Add(1);
         PortionNoBorderBytes->Add(size);
+    }
+
+    void OnIndexMetadataUsageBytes(const ui64 size) const {
+        IndexMetadataUsageBytes->Set(size);
     }
 
     void OnGranuleOptimizerLocked() const {

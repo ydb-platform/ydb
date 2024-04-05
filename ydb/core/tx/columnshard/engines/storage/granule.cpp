@@ -7,15 +7,6 @@
 
 namespace NKikimr::NOlap {
 
-TGranuleAdditiveSummary::ECompactionClass TGranuleMeta::GetCompactionType(const TCompactionLimits& limits) const {
-    return GetAdditiveSummary().GetCompactionClass(
-        limits, ModificationLastTime, TMonotonic::Now());
-}
-
-ui64 TGranuleMeta::Size() const {
-    return GetAdditiveSummary().GetGranuleSize();
-}
-
 void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info.DebugString())("path_id", GetPathId());
     auto it = Portions.find(info.GetPortion());
@@ -73,16 +64,17 @@ void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> port
             NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
             ActualizationIndex->AddPortion(portionAfter, context);
         }
+        Stats->OnAddPortion(*portionAfter);
     }
     if (!!AdditiveSummaryCache) {
-        auto g = AdditiveSummaryCache->StartEdit(Counters);
         if (portionAfter && !portionAfter->HasRemoveSnapshot()) {
+            auto g = AdditiveSummaryCache->StartEdit(Counters);
             g.AddPortion(*portionAfter);
         }
     }
 
     ModificationLastTime = TMonotonic::Now();
-    Owner->UpdateGranuleInfo(*this);
+    Stats->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore) {
@@ -103,10 +95,11 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
             OptimizerPlanner->StartModificationGuard().RemovePortion(portionBefore);
             ActualizationIndex->RemovePortion(portionBefore);
         }
+        Stats->OnRemovePortion(*portionBefore);
     }
     if (!!AdditiveSummaryCache) {
-        auto g = AdditiveSummaryCache->StartEdit(Counters);
         if (portionBefore && !portionBefore->HasRemoveSnapshot()) {
+            auto g = AdditiveSummaryCache->StartEdit(Counters);
             g.RemovePortion(*portionBefore);
         }
     }
@@ -116,14 +109,14 @@ void TGranuleMeta::OnCompactionFinished() {
     AllowInsertionFlag = false;
     Y_ABORT_UNLESS(Activity.erase(EActivity::GeneralCompaction));
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionFinished")("info", DebugString());
-    Owner->UpdateGranuleInfo(*this);
+    Stats->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnCompactionFailed(const TString& reason) {
     AllowInsertionFlag = false;
     Y_ABORT_UNLESS(Activity.erase(EActivity::GeneralCompaction));
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionFailed")("reason", reason)("info", DebugString());
-    Owner->UpdateGranuleInfo(*this);
+    Stats->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnCompactionStarted() {
@@ -153,14 +146,13 @@ const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary(
     return *AdditiveSummaryCache;
 }
 
-TGranuleMeta::TGranuleMeta(const ui64 pathId, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex)
+TGranuleMeta::TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex)
     : PathId(pathId)
-    , Owner(owner)
     , Counters(counters)
-    , PortionInfoGuard(Owner->GetCounters().BuildPortionBlobsGuard())
+    , PortionInfoGuard(owner.GetCounters().BuildPortionBlobsGuard())
+    , Stats(owner.GetStats())
 {
-    Y_ABORT_UNLESS(Owner);
-    OptimizerPlanner = std::make_shared<NStorageOptimizer::NBuckets::TOptimizerPlanner>(PathId, owner->GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey());
+    OptimizerPlanner = std::make_shared<NStorageOptimizer::NBuckets::TOptimizerPlanner>(PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey());
     ActualizationIndex = std::make_shared<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 
 }

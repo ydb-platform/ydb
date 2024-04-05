@@ -2493,6 +2493,7 @@ public:
         }
         if (varName == "default_transaction_read_only"){
             return "off"; // mediawiki
+        }
         if (varName == "transaction_isolation"){
             return "serializable";
         }

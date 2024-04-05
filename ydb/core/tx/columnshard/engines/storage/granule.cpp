@@ -169,7 +169,7 @@ bool TGranuleMeta::InCompaction() const {
     return Activity.contains(EActivity::GeneralCompaction);
 }
 
-std::shared_ptr<NKikimr::NOlap::TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(const TPortionInfo& portion) {
+std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(const TPortionInfo& portion) {
     auto it = Portions.find(portion.GetPortion());
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "UpsertPortionOnLoad")("portion_info", portion.DebugString());
     if (it == Portions.end()) {

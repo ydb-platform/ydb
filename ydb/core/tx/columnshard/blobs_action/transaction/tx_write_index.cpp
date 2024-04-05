@@ -57,11 +57,11 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     const ui64 bytesWritten = changes->GetBlobsAction().GetWritingTotalSize();
 
     if (!Ev->Get()->IndexChanges->IsAborted()) {
-        NOlap::TWriteIndexCompleteContext context(ctx, blobsWritten, bytesWritten, Ev->Get()->Duration, TriggerActivity, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>());
+        NOlap::TWriteIndexCompleteContext context(ctx, blobsWritten, bytesWritten, Ev->Get()->Duration, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>());
         Ev->Get()->IndexChanges->WriteIndexOnComplete(Self, context);
     }
 
-    Self->EnqueueBackgroundActivities(false, TriggerActivity);
+    Self->EnqueueBackgroundActivities(false);
     changes->MutableBlobsAction().OnCompleteTxAfterAction(*Self, Ev->Get()->GetPutStatus() == NKikimrProto::OK);
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexComplete(*changes, *Self);
 }

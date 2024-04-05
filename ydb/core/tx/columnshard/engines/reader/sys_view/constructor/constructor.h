@@ -36,39 +36,39 @@ private:
         if (!logsIndex) {
             return dynamic_pointer_cast<TReadMetadataBase>(out);
         }
-        THashMap<ui64, THashSet<ui64>> portionsInUse;
-        const auto predStatSchema = [](const std::shared_ptr<TPortionInfo>& l, const std::shared_ptr<TPortionInfo>& r) {
-            return std::tuple(l->GetPathId(), l->GetPortionId()) < std::tuple(r->GetPathId(), r->GetPortionId());
-        };
+        THashSet<ui64> pathIds;
         for (auto&& filter : read.PKRangesFilter) {
             const ui64 fromPathId = *filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1);
             const ui64 toPathId = *filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>());
-            if (read.TableName.EndsWith(IIndexInfo::TABLE_INDEX_STATS_TABLE) || read.TableName.EndsWith(IIndexInfo::TABLE_INDEX_PORTION_STATS_TABLE)) {
-                if (fromPathId <= read.PathId && toPathId >= read.PathId) {
+            if (read.TableName.EndsWith(IIndexInfo::TABLE_INDEX_STATS_TABLE) 
+                || read.TableName.EndsWith(IIndexInfo::TABLE_INDEX_PORTION_STATS_TABLE)
+                || read.TableName.EndsWith(IIndexInfo::TABLE_INDEX_GRANULE_STATS_TABLE)
+                ) {
+                if (fromPathId <= read.PathId && read.PathId <= toPathId) {
                     auto pathInfo = logsIndex->GetGranuleOptional(read.PathId);
                     if (!pathInfo) {
                         continue;
                     }
-                    for (auto&& p : pathInfo->GetPortions()) {
-                        if (portionsInUse[read.PathId].emplace(p.first).second) {
-                            out->IndexPortions.emplace_back(p.second);
-                        }
+                    if (pathIds.emplace(pathInfo->GetPathId()).second) {
+                        out->IndexGranules.emplace_back(NAbstract::TGranuleMetaView(*pathInfo, out->IsDescSorted()));
                     }
                 }
-                std::sort(out->IndexPortions.begin(), out->IndexPortions.end(), predStatSchema);
-            } else if (read.TableName.EndsWith(IIndexInfo::STORE_INDEX_STATS_TABLE) || read.TableName.EndsWith(IIndexInfo::STORE_INDEX_PORTION_STATS_TABLE)) {
+            } else if (read.TableName.EndsWith(IIndexInfo::STORE_INDEX_STATS_TABLE) 
+                || read.TableName.EndsWith(IIndexInfo::STORE_INDEX_PORTION_STATS_TABLE)
+                || read.TableName.EndsWith(IIndexInfo::STORE_INDEX_GRANULE_STATS_TABLE)
+                ) {
                 auto pathInfos = logsIndex->GetTables(fromPathId, toPathId);
                 for (auto&& pathInfo : pathInfos) {
-                    for (auto&& p : pathInfo->GetPortions()) {
-                        if (portionsInUse[p.second->GetPathId()].emplace(p.first).second) {
-                            out->IndexPortions.emplace_back(p.second);
-                        }
+                    if (pathIds.emplace(pathInfo->GetPathId()).second) {
+                        out->IndexGranules.emplace_back(NAbstract::TGranuleMetaView(*pathInfo, out->IsDescSorted()));
                     }
                 }
-                std::sort(out->IndexPortions.begin(), out->IndexPortions.end(), predStatSchema);
             }
         }
-
+        std::sort(out->IndexGranules.begin(), out->IndexGranules.end());
+        if (out->IsDescSorted()) {
+            std::reverse(out->IndexGranules.begin(), out->IndexGranules.end());
+        }
         return dynamic_pointer_cast<TReadMetadataBase>(out);
     }
 public:

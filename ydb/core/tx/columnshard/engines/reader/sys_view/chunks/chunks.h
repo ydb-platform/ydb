@@ -29,11 +29,9 @@ public:
 class TStatsIterator: public NAbstract::TStatsIterator<NKikimr::NSysView::Schema::PrimaryIndexStats> {
 private:
     using TBase = NAbstract::TStatsIterator<NKikimr::NSysView::Schema::PrimaryIndexStats>;
-    virtual void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo& portion) const override;
-    virtual ui32 GetConstructionRecordsCount(const TPortionInfo& portion) const override {
-        return portion.GetRecords().size() + portion.GetIndexes().size();
-    }
-
+    virtual void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const override;
+    virtual ui32 PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const override;
+    void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo& portion) const;
 public:
     using TBase::TBase;
 };

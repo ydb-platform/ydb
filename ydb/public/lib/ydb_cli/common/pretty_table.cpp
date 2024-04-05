@@ -270,11 +270,7 @@ bool TPrettyTable::TRow::PrintColumnsNextLine(IOutputStream& o, const TVector<si
     o << colors.Default();
     o << " │" << Endl;
 
-    if (fullPrintedColumnsCnt == Columns.size()) {
-        return 0;
-    }
-
-    return 1;
+    return fullPrintedColumnsCnt != Columns.size();
 }
 
 bool TPrettyTable::TRow::HasFreeText() const {

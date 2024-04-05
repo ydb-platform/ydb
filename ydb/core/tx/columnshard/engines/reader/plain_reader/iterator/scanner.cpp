@@ -84,9 +84,9 @@ private:
     class TSourceInfo {
     private:
         YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
-        YDB_READONLY_DEF(std::shared_ptr<IFetchingStep>, FetchingInfo);
+        YDB_READONLY_DEF(std::shared_ptr<TFetchingScript>, FetchingInfo);
     public:
-        TSourceInfo(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& fetchingInfo)
+        TSourceInfo(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TFetchingScript>& fetchingInfo)
             : Source(source)
             , FetchingInfo(fetchingInfo)
         {
@@ -113,7 +113,7 @@ public:
         AddSource(sourceInfo.GetSource(), sourceInfo.GetFetchingInfo());
     }
 
-    void AddSource(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& fetching) {
+    void AddSource(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TFetchingScript>& fetching) {
         const ui64 sourceMemory = fetching->PredictRawBytes(source);
         MemorySum += sourceMemory;
         AFL_VERIFY(Sources[sourceMemory].emplace(source->GetSourceIdx(), TSourceInfo(source, fetching)).second);

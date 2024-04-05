@@ -125,6 +125,10 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
         CASE_SIMPLE_TYPE(Datetime, ui32, Uint32);
         CASE_SIMPLE_TYPE(Timestamp, ui64, Uint64);
         CASE_SIMPLE_TYPE(Interval, i64, Int64);
+        CASE_SIMPLE_TYPE(Date32,   i32,  Int32);
+        CASE_SIMPLE_TYPE(Datetime64, i64, Int64);
+        CASE_SIMPLE_TYPE(Timestamp64, i64, Int64);
+        CASE_SIMPLE_TYPE(Interval64, i64, Int64);
 
 
 #undef CASE_SIMPLE_TYPE
@@ -228,6 +232,7 @@ bool CellToValue(NScheme::TTypeInfo type, const TCell& c, NKikimrMiniKQL::TValue
         val.MutableOptional()->SetUint32(ReadUnaligned<ui16>(c.Data()));
         break;
 
+    case NScheme::NTypeIds::Date32:
     case NScheme::NTypeIds::Int32:
         Y_ABORT_UNLESS(c.Size() == sizeof(i32));
         val.MutableOptional()->SetInt32(ReadUnaligned<i32>(c.Data()));
@@ -274,6 +279,9 @@ bool CellToValue(NScheme::TTypeInfo type, const TCell& c, NKikimrMiniKQL::TValue
         val.MutableOptional()->SetUint64(ReadUnaligned<ui64>(c.Data()));
         break;
     case NScheme::NTypeIds::Interval:
+    case NScheme::NTypeIds::Interval64:
+    case NScheme::NTypeIds::Timestamp64:
+    case NScheme::NTypeIds::Datetime64:
         Y_ABORT_UNLESS(c.Size() == sizeof(i64));
         val.MutableOptional()->SetInt64(ReadUnaligned<i64>(c.Data()));
         break;

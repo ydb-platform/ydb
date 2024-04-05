@@ -1,7 +1,5 @@
 UNITTEST_FOR(util)
 
-SUBSCRIBER(g:util-subscribers)
-
 SRCS(
     datetime/base_ut.cpp
     datetime/cputimer_ut.cpp

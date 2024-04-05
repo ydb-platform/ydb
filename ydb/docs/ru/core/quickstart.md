@@ -79,23 +79,22 @@
       mkdir ydb_data
       mkdir ydb_certs
       ```
-   2. Загрузите текущую версию Docker образа:
 
-      ```bash
-      docker pull {{ ydb_local_docker_image }}:{{ ydb_local_docker_image_tag }}
-      ```
-
-   3. Запустите Docker контейнер:
+   2. Запустите Docker контейнер:
 
       ```bash
       docker run -d --rm --name ydb-local -h localhost \
+        --platform linux/amd64 \
         -p 2135:2135 -p 2136:2136 -p 8765:8765 \
         -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
         -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
+        -e YDB_USE_IN_MEMORY_PDISKS=true \
         {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
       ```
 
       Если контейнер успешно запустился, вы увидите его идентификатор. Контейнеру может потребоваться несколько минут для инициализации. База данных будет недоступна до окончания инициализации.
+
+      Настройка `YDB_USE_IN_MEMORY_PDISKS` делает все данные волатильными, хранящимися только в оперативной памяти. В настоящее время сохранение данных путем её отключения поддерживается только на x86_64 процессорах.
 
 {% endlist %}
 

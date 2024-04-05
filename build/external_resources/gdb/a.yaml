@@ -42,6 +42,7 @@ ci:
       filters:
         - discovery: dir
           abs-paths:
+            - devtools/gdb/**
             - toolchains/ynd/gdb/**
 
   flows:

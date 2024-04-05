@@ -436,13 +436,20 @@ const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNo
         pgType = "bool";
         break;
     case NUdf::EDataSlot::Int16:
+    case NUdf::EDataSlot::Int8:
+    case NUdf::EDataSlot::Uint8:
         pgType = "int2";
         break;
     case NUdf::EDataSlot::Int32:
+    case NUdf::EDataSlot::Uint16:
         pgType = "int4";
         break;
     case NUdf::EDataSlot::Int64:
+    case NUdf::EDataSlot::Uint32:
         pgType = "int8";
+        break;
+    case NUdf::EDataSlot::Uint64:
+        pgType = "numeric";
         break;
     case NUdf::EDataSlot::Float:
         pgType = "float4";
@@ -451,9 +458,13 @@ const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNo
         pgType = "float8";
         break;
     case NUdf::EDataSlot::String:
+    case NUdf::EDataSlot::Yson:
         pgType = "bytea";
         break;
     case NUdf::EDataSlot::Utf8:
+    case NUdf::EDataSlot::TzDate:
+    case NUdf::EDataSlot::TzDatetime:
+    case NUdf::EDataSlot::TzTimestamp:
         pgType = "text";
         break;
     case NUdf::EDataSlot::Date:
@@ -465,6 +476,15 @@ const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNo
         break;
     case NUdf::EDataSlot::Interval:
         pgType = "interval";
+        break;
+    case NUdf::EDataSlot::Json:
+        pgType = "json";
+        break;
+    case NUdf::EDataSlot::JsonDocument:
+        pgType = "jsonb";
+        break;
+    case NUdf::EDataSlot::Uuid:
+        pgType = "uuid";
         break;
     default:
         ctx.AddError(TIssue(ctx.GetPosition(pos),

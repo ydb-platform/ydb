@@ -25,6 +25,7 @@ public:
             , JoinKind(joinKind)
             , IsCommutative(isCommutative)
             , JoinConditions(joinConditions)
+            , Reversed(false)
         {
             BuildCondVectors();
         }
@@ -40,6 +41,7 @@ public:
         std::set<std::pair<TJoinColumn, TJoinColumn>> JoinConditions;
         TVector<TString> LeftJoinKeys;
         TVector<TString> RightJoinKeys;
+        bool Reversed;
 
         void BuildCondVectors() {
             LeftJoinKeys.clear();
@@ -105,6 +107,7 @@ public:
         TEdge reversedEdge = std::move(edge);
         std::swap(reversedEdge.Left, reversedEdge.Right);
         reversedEdge.JoinConditions = std::move(reversedJoinConditions);
+        reversedEdge.Reversed = true;
     
         AddEdgeImpl(reversedEdge);
     }

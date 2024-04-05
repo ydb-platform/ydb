@@ -405,6 +405,7 @@ public:
         , ResponsesReceived(0)
         , ReportedBytes(0)
     {
+        Span.Attribute("event", ev->ToString());
         ReportBytes(sizeof(*this));
         MaxSaneRequests = ev->QuerySize * info->Type.TotalPartCount() * (1 + info->Type.Handoff()) * 3;
 

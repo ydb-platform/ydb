@@ -518,6 +518,7 @@ public:
         , IncarnationRecords(info->GetTotalVDisksNum())
         , ExpiredVDiskSet(&info->GetTopology())
     {
+        Span.Attribute("blob_id", ev->ToString());
         if (ev->Orbit.HasShuttles()) {
             RootCauseTrack.IsOn = true;
         }

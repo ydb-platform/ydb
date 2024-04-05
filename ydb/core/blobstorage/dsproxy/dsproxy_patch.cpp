@@ -121,6 +121,7 @@ public:
         , Orbit(std::move(ev->Orbit))
         , UseVPatch(useVPatch)
     {
+        Span.Attribute("event", ev->ToString());
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {

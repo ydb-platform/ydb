@@ -357,7 +357,9 @@ public:
         , Decommission(ev->Decommission)
         , StartTime(now)
         , FailedDisks(&Info->GetTopology())
-    {}
+    {
+        Span.Attribute("event", ev->ToString());
+    }
 
     void Bootstrap() {
         A_LOG_INFO_S("DSR07", "bootstrap"

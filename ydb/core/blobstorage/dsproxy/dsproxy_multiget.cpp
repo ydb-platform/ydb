@@ -114,7 +114,9 @@ public:
         , MustRestoreFirst(ev->MustRestoreFirst)
         , GetHandleClass(ev->GetHandleClass)
         , ForceBlockTabletData(ev->ForceBlockTabletData)
-    {}
+    {
+        Span.Attribute("event", ev->ToString());
+    }
 
     void PrepareRequest(ui32 beginIdx, ui32 endIdx) {
         Y_ABORT_UNLESS(endIdx > beginIdx);

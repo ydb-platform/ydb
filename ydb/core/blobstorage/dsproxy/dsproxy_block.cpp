@@ -146,7 +146,9 @@ public:
         , IssuerGuid(ev->IssuerGuid)
         , StartTime(now)
         , QuorumTracker(Info.Get())
-    {}
+    {
+        Span.Attribute("event", ev->ToString());
+    }
 
     void Bootstrap() {
         A_LOG_DEBUG_S("DSPB05", "bootstrap"

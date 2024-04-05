@@ -2487,18 +2487,14 @@ public:
         if (varName == "standard_conforming_strings"){
             return "on";
         }
-<<<<<<< HEAD
-
         if (varName == "search_path"){
             auto searchPath = Settings.GUCSettings->Get("search_path");
             return searchPath ? *searchPath : "public";
         }
         if (varName == "default_transaction_read_only"){
             return "off"; // mediawiki
-=======
         if (varName == "transaction_isolation"){
             return "serializable";
->>>>>>> main
         }
         return {};
     }

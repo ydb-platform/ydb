@@ -1430,7 +1430,7 @@ ui32 FindOperator(const THashMap<TString, TVector<ui32>>& operatorsByName, const
 
         return operId;
     }
-    
+
     // for example, some operators are based on SQL system_functions.sql
     return 0;
 }
@@ -1614,7 +1614,7 @@ struct TCatalog {
     {
         if ( GetEnv("YDB_EXPERIMENTAL_PG") == "1"){
             // zabbix config
-            StaticTables.push_back(
+            AllStaticTables.push_back(
                 {{"public", "config"}, ERelKind::Relation, 100001}
             );
             AllStaticColumns.push_back(
@@ -1629,7 +1629,7 @@ struct TCatalog {
             );
 
             // zabbix dbversion
-            StaticTables.push_back(
+            AllStaticTables.push_back(
                 {{"public", "dbversion"}, ERelKind::Relation, 100002}
             );
             AllStaticColumns.push_back(

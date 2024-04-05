@@ -6,6 +6,11 @@ DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/join/docker-compo
 DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/fq-connector-go)
 ENV(COMPOSE_PROJECT_NAME=join)
 
+# This requirement forces tests to be launched consequently,
+# otherwise CI system would be overloaded due to simultaneous launch of many Docker containers.
+# See DEVTOOLSSUPPORT-44103 for details
+REQUIREMENTS(cpu:all)
+
 IF (AUTOCHECK) 
     # Split tests to chunks only when they're running on different machines with distbuild,
     # otherwise this directive will slow down local test execution.
@@ -21,18 +26,16 @@ IF (AUTOCHECK)
 
     REQUIREMENTS(
         container:4467981730
-        cpu:all
         dns:dns64
     )
 ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
-# Including of docker_compose/recipe.inc automatically converts these tests into LARGE, 
-# which makes it impossible to run them during precommit checks on Github CI. 
-# Next several lines forces these tests to be MEDIUM. To see discussion, visit YDBOPS-8928.
-
 IF (OPENSOURCE)
+    # Including of docker_compose/recipe.inc automatically converts these tests into LARGE, 
+    # which makes it impossible to run them during precommit checks on Github CI. 
+    # Next several lines forces these tests to be MEDIUM. To see discussion, visit YDBOPS-8928.
     SIZE(MEDIUM)
     SET(TEST_TAGS_VALUE)
     SET(TEST_REQUIREMENTS_VALUE)

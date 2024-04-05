@@ -4,23 +4,56 @@
 #include "propagating_storage.h"
 #include "fls.h"
 
+#include <yt/yt/core/misc/intrusive_mpsc_stack.h>
+
+#include <library/cpp/yt/misc/function_view.h>
+
 #include <util/system/context.h>
 
 #include <atomic>
-#include <list>
 
 namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TFiberRegistry;
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TFiberRegisterTag
+{ };
+
+struct TFiberUnregisterTag
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Do not change inheritence order or layout.
+// Some offsets are hardcoded at devtools/gdb/yt_fibers_printer.py.
 class TFiber
-    : public TRefCounted
+    : public TIntrusiveNode<TFiber, NDetail::TFiberRegisterTag>
+    , public TIntrusiveNode<TFiber, NDetail::TFiberUnregisterTag>
     , public ITrampoLine
 {
-public:
-    using TCookie = std::list<TFiber*>::iterator;
+    using TRegisterBase = TIntrusiveNode<TFiber, NDetail::TFiberRegisterTag>;
+    using TUnregisterBase = TIntrusiveNode<TFiber, NDetail::TFiberUnregisterTag>;
 
-    explicit TFiber(EExecutionStackKind stackKind = EExecutionStackKind::Small);
+public:
+    using TFiberList = TSimpleIntrusiveList<TFiber, NDetail::TFiberRegisterTag>;
+
+    static TFiber* CreateFiber(EExecutionStackKind stackKind = EExecutionStackKind::Small);
+
+    // Set this as AfterSwitch to release fiber's resources.
+    static void ReleaseFiber(TFiber* fiber);
+
     ~TFiber();
 
     void Recreate();
@@ -33,7 +66,6 @@ public:
 
     void SetRunning();
     void SetWaiting();
-    void SetFinished();
     void SetIdle();
 
     bool TryIntrospectWaiting(EFiberState& state, const std::function<void()>& func);
@@ -42,11 +74,11 @@ public:
     const TPropagatingStorage& GetPropagatingStorage() const;
     TFls* GetFls() const;
 
-    static std::vector<TFiberPtr> List();
+    static void ReadFibers(TFunctionView<void(TFiberList&)> callback);
 
 private:
     const std::shared_ptr<TExecutionStack> Stack_;
-    const TCookie RegistryCookie_;
+
     TExceptionSafeContext MachineContext_;
 
     std::atomic<TFiberId> FiberId_ = InvalidFiberId;
@@ -55,12 +87,17 @@ private:
 
     std::unique_ptr<TFls> Fls_;
 
+    explicit TFiber(EExecutionStackKind stackKind = EExecutionStackKind::Small);
+
+    void SetFinished();
     void Clear();
 
     void DoRunNaked() override;
-};
 
-DEFINE_REFCOUNTED_TYPE(TFiber)
+    void UnregisterAndDelete() noexcept;
+
+    friend class ::NYT::NConcurrency::TFiberRegistry;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

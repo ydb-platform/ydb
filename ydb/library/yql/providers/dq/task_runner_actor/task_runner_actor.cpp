@@ -636,6 +636,8 @@ private:
                     taskRunner->GetReadRanges(),
                     taskRunner->GetTypeEnv(),
                     taskRunner->GetHolderFactory(),
+                    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>{},
+                    THashMap<ui64, std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>>{},
                     sensors);
 
                 actorSystem->Send(

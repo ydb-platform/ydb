@@ -5,7 +5,7 @@
 Инструкция `CREATE TABLE` предназначена для создания пустой таблицы в текущей базе данных. Синтаксис команды:
 
 ```sql
-CREATE [TEMPORARY] TABLE <table name> (
+CREATE [TEMPORARY | TEMP] TABLE <table name> (
 
 <column name> <column data type> [COLLATE][PRIMARY KEY]
 
@@ -15,8 +15,8 @@ CREATE [TEMPORARY] TABLE <table name> (
 );
 ```
 При создании таблицы можно задать:
-1. **Тип таблицы**: `TEMPORARY` (поддерживается не полностью и используется только в тестах) – временная таблица, которая автоматически удаляется в конце сеанса или в конце текущей транзакции. Если параметр не задан (оставлен пустым) – создается постоянная таблица;
-2. **Имя таблицы**: `<table name>` – можно использовать английские буквы в нижнем регистре, цифры и нижнее подчёркивание. Например, название таблицы "People" будет сохранено как "people";
+1. **Тип таблицы**: {% include [temp-table-description.md](../../_includes/temp-table-description.md) %}
+2. **Имя таблицы**: `<table name>` – можно использовать английские буквы в нижнем регистре, цифры, нижнее подчёркивание и знак доллара ($). Например, название таблицы "People" будет сохранено как "people";
 3. **Имя столбца/колонки**: <column name> – действую такие же правила нейминга как и для имен таблиц;
 4. **Тип данных**: <column data type> – указываются [стандартные типы](https://www.postgresql.org/docs/current/datatype.html) данных PostgreSQL;
 5. **Правило сортировки**: `COLLATE` – [правила сортировки](https://www.postgresql.org/docs/current/collation.html) позволяют устанавливать порядок сортировки и особенности классификации символов в отдельных столбцах или даже при выполнении отдельных операций. К сортируемым типам относятся: `text`, `varchar` и `char`. Можно указать локализацию (`ru_RU`, `en_US`), используемую для определения правил сортировки и сравнения строк в указанных столбцах.
@@ -30,7 +30,7 @@ CREATE [TEMPORARY] TABLE <table name> (
 ## Создание двух таблиц с первичным ключом и автоинкрементом {#create_table_pk_serial}
 #|
 || **Таблица people** | **Таблица social_card** ||
-|| 
+||
 ```sql
 CREATE TABLE people (
     id                 Serial PRIMARY KEY,
@@ -44,8 +44,8 @@ CREATE TABLE people (
     sex                Text,
     social_card_number Int
 );
-``` 
-| 
+```
+|
 ```sql
 CREATE TABLE social_card (
     id                   Serial PRIMARY KEY,
@@ -55,8 +55,8 @@ CREATE TABLE social_card (
     issue                Date,
     expiry               Date,
     issuing_authority    Text,
-    category             Text 
-); 
+    category             Text
+);
 ```
 ||
 |#
@@ -83,18 +83,10 @@ CREATE TABLE people (
 );
 ```
 
-В этом примере мы создали таблицу "people" с ограничением (блоком `CONSTRAINT`), в котором задали первичный ключ (`PRIMARY KEY`) для колонки "id". Альтернативная запись может выглядеть так: `PRIMARY KEY(id)` без указания ключевого слова `CONSTRAINT`. 
+В этом примере мы создали таблицу "people" с ограничением (блоком `CONSTRAINT`), в котором задали первичный ключ (`PRIMARY KEY`) для колонки "id". Альтернативная запись может выглядеть так: `PRIMARY KEY(id)` без указания ключевого слова `CONSTRAINT`.
 
 
 ## Создание временной таблицы {#create_table_temp_table}
-
-
-{% note warning %}
-
-Функциональность временной таблицы реализована не полностью.
-
-{% endnote %}
-
 
 ```sql
 CREATE TEMPORARY TABLE people (
@@ -103,7 +95,7 @@ CREATE TEMPORARY TABLE people (
 );
 ```
 
-Временная таблица задается через ключевое слово `TEMPORARY`. Она существует до конца сеанса или до завершения транзакции, далее она автоматически удаляется.
+Временная таблица задается через ключевые слова `TEMPORARY` или `TEMP`.
 
 
 ## Создание таблицы с условиями сортировки {#create_table_collate}

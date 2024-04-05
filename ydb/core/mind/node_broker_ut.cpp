@@ -1366,7 +1366,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           sharedScopeId);
     }
 
-    Y_UNIT_TEST(NameExpiration)
+    Y_UNIT_TEST(NodeNameExpiration)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 4, { "/dc-1/my-database" });
@@ -1389,7 +1389,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckLeaseExtension(runtime, sender, NODE1, TStatus::OK, epoch);
         CheckLeaseExtension(runtime, sender, NODE3, TStatus::OK, epoch);
 
-        // After this epoch update NODE2 is expired, but stil holds slot name
+        // After this epoch update NODE2 is expired, but stil holds name
         epoch = WaitForEpochUpdate(runtime, sender);
 
         // Extend lease for NODE1 and NODE3
@@ -1400,15 +1400,15 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckRegistration(runtime, sender, "host4", 19001, "/dc-1/my-database",
                           TStatus::OK, NODE4, epoch.GetNextEnd(), "slot-3");
 
-        // After this epoch update NODE2 is removed and slot name is free 
+        // After this epoch update NODE2 is removed and name is free 
         epoch = WaitForEpochUpdate(runtime, sender);
 
-        // Register node using new host, it reuses slot name
+        // Register node using new host, it reuses name
         CheckRegistration(runtime, sender, "host5", 19001, "/dc-1/my-database",
                           TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
     }
 
-    Y_UNIT_TEST(NameReuseRestart)
+    Y_UNIT_TEST(NodeNameReuseRestart)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 4, { "/dc-1/my-database" });
@@ -1435,7 +1435,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-0");
     }
 
-    Y_UNIT_TEST(NameReuseRestartWithHostChanges)
+    Y_UNIT_TEST(NodeNameReuseRestartWithHostChanges)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 4, { "/dc-1/my-database" });
@@ -1461,7 +1461,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckLeaseExtension(runtime, sender, NODE3, TStatus::OK, epoch);
         CheckLeaseExtension(runtime, sender, NODE4, TStatus::OK, epoch);
 
-        // After this epoch update NODE1 and NODE2 are expired, but stil hold slot names
+        // After this epoch update NODE1 and NODE2 are expired, but stil hold names
         epoch = WaitForEpochUpdate(runtime, sender);
 
         CheckLeaseExtension(runtime, sender, NODE3, TStatus::OK, epoch);
@@ -1477,7 +1477,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
     }
 
-    Y_UNIT_TEST(NameWithDifferentTenants)
+    Y_UNIT_TEST(NodeNameWithDifferentTenants)
     {
         TTestBasicRuntime runtime(8, false);
 

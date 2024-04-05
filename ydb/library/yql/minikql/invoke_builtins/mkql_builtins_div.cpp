@@ -89,6 +89,7 @@ struct TNumDivInterval {
     static_assert(TLeft::Features & NYql::NUdf::TimeIntervalType, "Left must be interval type");
     static_assert(TRight::Features & NYql::NUdf::IntegralType, "Right must be integral type");
     static_assert(TOutput::Features & NYql::NUdf::TimeIntervalType, "Output must be interval type");
+    static_assert(std::is_same_v<typename TOutput::TLayout, i64>, "Output layout type must be i64");
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
@@ -105,15 +106,13 @@ struct TNumDivInterval {
             return NUdf::TUnboxedValuePod();
         }
 
-        const auto ret = lv / rv;
-        return IsBadInterval<TOutput>(ret) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(ret);
+        return NUdf::TUnboxedValuePod(lv / rv);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto bbRvOverflow = BasicBlock::Create(context, "bbRvOverflow", ctx.Func);
         const auto bbMain = BasicBlock::Create(context, "bbMain", ctx.Func);
         const auto bbDone = BasicBlock::Create(context, "bbDone", ctx.Func);
         const auto resultType = Type::getInt128Ty(context);
@@ -124,31 +123,21 @@ struct TNumDivInterval {
         const auto rvZero = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ,
                 rv, ConstantInt::get(rv->getType(), 0), "rvZero", block);
 
-        BranchInst::Create(bbDone, bbRvOverflow, rvZero, block);
+        BranchInst::Create(bbDone, bbMain, rvZero, block);
         result->addIncoming(null, block);
 
-        block = bbRvOverflow;
+        block = bbMain;
 
         const auto rvOverflow = GenIsInt64Overflow<typename TRight::TLayout>(rv, context, block);
         const auto zero = SetterFor<typename TOutput::TLayout>(
                 ConstantInt::get(Type::getInt64Ty(context), 0), context, block);
-        BranchInst::Create(bbDone, bbMain, rvOverflow, block);
-        result->addIncoming(zero, block);
-
-        block = bbMain;
-
         const auto lval = StaticCast<typename TLeft::TLayout, typename TOutput::TLayout>(
                 GetterFor<typename TLeft::TLayout>(left, context, block), context, block);
         const auto rval = StaticCast<typename TRight::TLayout, typename TOutput::TLayout>(
                 rv, context, block);
         const auto div = BinaryOperator::CreateSDiv(lval, rval, "div", block);
         const auto divResult = SetterFor<typename TOutput::TLayout>(div, context, block);
-
-        const auto res = SelectInst::Create(
-                GenIsBadInterval<TOutput>(div, context, block),
-                null,
-                divResult,
-                "res", block);
+        const auto res = SelectInst::Create(rvOverflow, zero, divResult, "res", block);
 
         result->addIncoming(res, block);
         BranchInst::Create(bbDone, block);

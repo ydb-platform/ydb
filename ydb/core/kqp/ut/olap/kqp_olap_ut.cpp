@@ -217,9 +217,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    class TTypedLocalHelper: public Tests::NCS::THelper {
+    class TTypedLocalHelper: public Tests::NCS::THelper<false> {
     private:
-        using TBase = Tests::NCS::THelper;
+        using TBase = Tests::NCS::THelper<false>;
         const TString TypeName;
         TKikimrRunner& KikimrRunner;
         const TString TablePath;
@@ -435,30 +435,32 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     };
 
-    class TLocalHelper: public Tests::NCS::THelper {
+
+    template<bool UseTimestamp64 = false>
+    class TLocalHelper: public Tests::NCS::THelper<UseTimestamp64> {
     private:
-        using TBase = Tests::NCS::THelper;
+        using TBase = Tests::NCS::THelper<UseTimestamp64>;
     public:
         TLocalHelper& SetShardingMethod(const TString& value) {
             TBase::SetShardingMethod(value);
             return *this;
         }
 
+        using TBase::TBase;
         void CreateTestOlapTable(TString tableName = "olapTable", TString storeName = "olapStore",
             ui32 storeShardsCount = 4, ui32 tableShardsCount = 3) {
-            CreateOlapTableWithStore(tableName, storeName, storeShardsCount, tableShardsCount);
+            TBase::CreateOlapTableWithStore(tableName, storeName, storeShardsCount, tableShardsCount);
         }
-        using TBase::TBase;
 
-        TLocalHelper(TKikimrRunner& runner)
+        TLocalHelper<false>(TKikimrRunner& runner)
             : TBase(runner.GetTestServer()) {
 
         }
     };
 
-    class TExtLocalHelper: public TLocalHelper {
+    class TExtLocalHelper: public TLocalHelper<false> {
     private:
-        using TBase = TLocalHelper;
+        using TBase = TLocalHelper<false>;
         TKikimrRunner& KikimrRunner;
     public:
         bool TryCreateTable(const TString& storeName, const TString& tableName, const ui32 shardsCount) {
@@ -567,9 +569,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     };
 
+    template<bool UseTimestamp64 = false>
     void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, bool withSomeNulls = false) {
         UNIT_ASSERT(testTable != "/Root/benchTable"); // TODO: check schema instead
-        TLocalHelper lHelper(kikimr);
+        TLocalHelper<UseTimestamp64> lHelper(kikimr);
         if (withSomeNulls) {
             lHelper.WithSomeNulls();
         }
@@ -784,7 +787,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
 
@@ -813,7 +816,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
 
@@ -861,7 +864,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
 
@@ -919,7 +922,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
 
@@ -947,7 +950,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
 
@@ -976,7 +979,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
 
@@ -1134,7 +1137,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto client = kikimr.GetTableClient();
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 3);
 
@@ -1162,7 +1165,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 3);
 
         CreateSampleOltpTable(kikimr);
@@ -1190,7 +1193,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
 
         auto tableClient = kikimr.GetTableClient();
@@ -1212,7 +1215,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
 
         auto tableClient = kikimr.GetTableClient();
 
@@ -1281,7 +1284,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
         Tests::NCommon::TLoggerInit(kikimr).SetComponents({NKikimrServices::TX_COLUMNSHARD}, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
@@ -1373,7 +1376,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
         std::vector<TString> uids;
@@ -1434,7 +1437,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
 //        Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -1568,7 +1571,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
         //        Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -1646,7 +1649,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto client = kikimr.GetTableClient();
 
-            TLocalHelper(kikimr).CreateTestOlapTable();
+            TLocalHelper<false>(kikimr).CreateTestOlapTable();
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 10);
 
             TStreamExecScanQuerySettings scanSettings;
@@ -1701,7 +1704,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 128);
 
         auto tableClient = kikimr.GetTableClient();
@@ -1772,7 +1775,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         ui32 rowsCount = 0;
@@ -1805,7 +1808,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000);
 
@@ -1839,7 +1842,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000);
 
@@ -1881,7 +1884,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(rows.size() == expectedCount);
     }
 
-    TString BuildQuery(const TString& predicate, bool pushEnabled) {
+    TString BuildQuery(const std::string_view& predicate, bool pushEnabled) {
         TStringBuilder qBuilder;
         qBuilder << "--!syntax_v1" << Endl;
         qBuilder << "PRAGMA Kikimr.OptEnableOlapPushdown = '" << (pushEnabled ? "true" : "false") << "';" << Endl;
@@ -1900,7 +1903,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
 #if SSA_RUNTIME_VERSION >= 4U
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5, true);
 #else
@@ -1993,8 +1996,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` / 2.f <= 1.)",
             R"(`level` % 3. != 1.f)",
             //R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z"))",
-            R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z") AND `level` > 3)",
-            R"((`timestamp`, `level`) >= (Timestamp("1970-01-01T00:00:00.000001Z"), 3))",
+            R"(`timestamp` >= Timestamp("1970-01-01T00:00:03.000001Z") AND `level` > 3)",
+            R"((`timestamp`, `level`) >= (Timestamp("1970-01-01T00:00:03.000001Z"), 3))",
 #endif
         };
 
@@ -2033,6 +2036,48 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(UseTimestmap64AsPrimaryKey) {
+        constexpr bool logQueries = false;
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        TLocalHelper<true>(kikimr).CreateTestOlapTable();
+        WriteTestData<true>(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5, true);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto tableClient = kikimr.GetTableClient();
+
+        const std::vector<std::array<std::string_view, 2U>> testData = {
+            {R"(`timestamp` > Timestamp64("1970-01-01T00:00:03.000001Z"))"sv, "[[3000002];[3000003];[3000004]]"sv},
+            {R"(`timestamp` < Timestamp64("1970-01-01T00:00:03.000003Z"))"sv, "[[3000000];[3000001];[3000002]]"sv},
+            {R"(`timestamp` >= Timestamp64("1970-01-01T00:00:03.000001Z"))"sv, "[[3000001];[3000002];[3000003];[3000004]]"sv},
+            {R"(`timestamp` <= Timestamp64("1970-01-01T00:00:03.000003Z"))"sv, "[[3000000];[3000001];[3000002];[3000003]]"sv},
+            {R"(`timestamp` != Timestamp64("1970-01-01T00:00:03.000002Z"))"sv, "[[3000000];[3000001];[3000003];[3000004]]"sv},
+// TODO yql:{R"(`timestamp` == Timestamp64("1970-01-01T00:00:03.000002Z"))"sv, "[[3000002]]"sv},
+        };
+
+        for (const auto& predicate: testData) {
+            const auto query = BuildQuery(predicate.front(), true);
+
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto result = CollectStreamResult(it);
+
+            if (logQueries) {
+                Cerr << "Query: " << query << Endl;
+                Cerr << "Expected: " << predicate.back() << Endl;
+                Cerr << "Received: " << result.ResultSetYson << Endl;
+            }
+
+            CompareYson(result.ResultSetYson, TString(predicate.back()));
+        }
+    }
+
     Y_UNIT_TEST(PredicateDoNotPushdown) {
         constexpr bool logQueries = false;
         auto settings = TKikimrSettings()
@@ -2042,7 +2087,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
@@ -2105,7 +2150,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
@@ -2167,7 +2212,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
@@ -2278,7 +2323,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
@@ -2307,7 +2352,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
@@ -2357,7 +2402,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
         {
@@ -2403,7 +2448,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
         {
@@ -2447,7 +2492,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
         {
@@ -2491,7 +2536,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
         {
@@ -2680,7 +2725,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
         {
@@ -2725,10 +2770,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         ui32 numShards = 1;
         ui32 numIterations = 10;
-        TLocalHelper(*server).CreateTestOlapTable("olapTable", "olapStore", numShards, numShards);
+        TLocalHelper<false>(*server).CreateTestOlapTable("olapTable", "olapStore", numShards, numShards);
         const ui32 iterationPackSize = 2000;
         for (ui64 i = 0; i < numIterations; ++i) {
-            TLocalHelper(*server).SendDataViaActorSystem("/Root/olapStore/olapTable", 0, 1000000 + i * 1000000, iterationPackSize);
+            TLocalHelper<false>(*server).SendDataViaActorSystem("/Root/olapStore/olapTable", 0, 1000000 + i * 1000000, iterationPackSize);
         }
 
         TAggregationTestCase currentTest;
@@ -3828,7 +3873,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         static ui32 numKinds = 2;
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
         for (ui64 i = 0; i < 100; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 1000);
         }
@@ -3870,8 +3915,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         static ui32 numKinds = 5;
 
-        TLocalHelper(kikimr).CreateTestOlapTable("olapTable_1");
-        TLocalHelper(kikimr).CreateTestOlapTable("olapTable_2");
+        TLocalHelper<false>(kikimr).CreateTestOlapTable("olapTable_1");
+        TLocalHelper<false>(kikimr).CreateTestOlapTable("olapTable_2");
         for (ui64 i = 0; i < 10; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i*10000, 1000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i*10000, 2000);
@@ -4491,9 +4536,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         const ui32 numShards = 10;
         const ui32 numIterations = 10;
-        TLocalHelper(*server).CreateTestOlapTable("selectTable", "selectStore", numShards, numShards);
+        TLocalHelper<false>(*server).CreateTestOlapTable("selectTable", "selectStore", numShards, numShards);
         for(ui64 i = 0; i < numIterations; ++i) {
-            TLocalHelper(*server).SendDataViaActorSystem("/Root/selectStore/selectTable", 0, 1000000 + i*1000000, 2000);
+            TLocalHelper<false>(*server).SendDataViaActorSystem("/Root/selectStore/selectTable", 0, 1000000 + i*1000000, 2000);
         }
 
         ui64 result = 0;
@@ -4578,10 +4623,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         ui32 numShards = NSan::PlainOrUnderSanitizer(1000, 10);
         ui32 numIterations = NSan::PlainOrUnderSanitizer(50, 10);
-        TLocalHelper(*server).SetShardingMethod("HASH_FUNCTION_CLOUD_LOGS").CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
+        TLocalHelper<false>(*server).SetShardingMethod("HASH_FUNCTION_CLOUD_LOGS").CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
         ui32 insertRows = 0;
         for(ui64 i = 0; i < numIterations; ++i) {
-            TLocalHelper(*server).SendDataViaActorSystem("/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i * 1000000, 2000);
+            TLocalHelper<false>(*server).SendDataViaActorSystem("/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i * 1000000, 2000);
             insertRows += 2000;
         }
 
@@ -4644,9 +4689,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         const ui32 numShards = 10;
         const ui32 numIterations = 50;
-        TLocalHelper(*server).CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
+        TLocalHelper<false>(*server).CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
         for(ui64 i = 0; i < numIterations; ++i) {
-            TLocalHelper(*server).SendDataViaActorSystem("/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
+            TLocalHelper<false>(*server).SendDataViaActorSystem("/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
         }
 
         bool hasResult = false;
@@ -4708,11 +4753,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         ui32 numShards = NSan::PlainOrUnderSanitizer(100, 10);
         ui32 numIterations = NSan::PlainOrUnderSanitizer(100, 10);
-        TLocalHelper(*server).SetShardingMethod("HASH_FUNCTION_CLOUD_LOGS").CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
+        TLocalHelper<false>(*server).SetShardingMethod("HASH_FUNCTION_CLOUD_LOGS").CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
         ui32 insertRows = 0;
 
         for(ui64 i = 0; i < numIterations; ++i) {
-            TLocalHelper(*server).SendDataViaActorSystem("/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
+            TLocalHelper<false>(*server).SendDataViaActorSystem("/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
             insertRows += 2000;
         }
 
@@ -4791,7 +4836,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr.GetTestServer()).CreateTestOlapTable();
         for (ui64 i = 0; i < 10; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i*10000, 2000);
         }
@@ -4849,9 +4894,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
-        TLocalHelper(kikimr).CreateTestOlapTable("olapTable_1");
-        TLocalHelper(kikimr).CreateTestOlapTable("olapTable_2");
-        TLocalHelper(kikimr).CreateTestOlapTable("olapTable_3");
+        TLocalHelper<false>(kikimr).CreateTestOlapTable("olapTable_1");
+        TLocalHelper<false>(kikimr).CreateTestOlapTable("olapTable_2");
+        TLocalHelper<false>(kikimr).CreateTestOlapTable("olapTable_3");
 
         for (ui64 i = 0; i < 10; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i*10000, 2000);
@@ -4939,7 +4984,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
-        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr.GetTestServer()).CreateTestOlapTable();
         for (ui64 i = 0; i < 10; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i*10000, 2000);
         }
@@ -5005,9 +5050,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
-        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_1");
-        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_2");
-        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_3");
+        TLocalHelper<false>(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_1");
+        TLocalHelper<false>(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_2");
+        TLocalHelper<false>(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_3");
 
         for (ui64 i = 0; i < 100; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i*10000, 1000);
@@ -5168,7 +5213,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
 
-        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr.GetTestServer()).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
 
         auto tableClient = kikimr.GetTableClient();
@@ -5298,13 +5343,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         settings.AppConfig.MutableColumnShardConfig()->MutableTablesStorageLayoutPolicy()->MutableIdentityGroups();
         Y_ABORT_UNLESS(settings.AppConfig.GetColumnShardConfig().GetTablesStorageLayoutPolicy().HasIdentityGroups());
         TKikimrRunner kikimr(settings);
-        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore1", 20, 4);
+        TLocalHelper<false>(kikimr).CreateTestOlapTable("olapTable", "olapStore1", 20, 4);
         UNIT_ASSERT(TExtLocalHelper(kikimr).TryCreateTable("olapStore1", "olapTable_1", 5));
         UNIT_ASSERT(TExtLocalHelper(kikimr).TryCreateTable("olapStore1", "olapTable_2", 5));
         UNIT_ASSERT(TExtLocalHelper(kikimr).TryCreateTable("olapStore1", "olapTable_3", 5));
         UNIT_ASSERT(TExtLocalHelper(kikimr).TryCreateTable("olapStore1", "olapTable_4", 5));
 
-        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 16, 4);
+        TLocalHelper<false>(kikimr).CreateTestOlapTable("olapTable", "olapStore", 16, 4);
         UNIT_ASSERT(TExtLocalHelper(kikimr).TryCreateTable("olapStore", "olapTable_1", 4));
         UNIT_ASSERT(TExtLocalHelper(kikimr).TryCreateTable("olapStore", "olapTable_2", 4));
         UNIT_ASSERT(TExtLocalHelper(kikimr).TryCreateTable("olapStore", "olapTable_4", 2));
@@ -5990,7 +6035,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
 
         auto tableClient = kikimr.GetTableClient();
 
@@ -6016,7 +6061,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
 
         {
             WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
@@ -6039,7 +6084,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
 
         {
             WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
@@ -6062,7 +6107,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
 
         {
             WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
@@ -6088,7 +6133,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
 
         {
             WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
@@ -6114,7 +6159,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
 
         {
             WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
@@ -6140,7 +6185,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        TLocalHelper<false>(kikimr).CreateTestOlapTable();
 
         {
             WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");

@@ -20,6 +20,7 @@ public:
     virtual std::shared_ptr<arrow::RecordBatch> TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui32 tsStepUs = 1) const = 0;
 };
 
+template<bool UseTimestamp64 = false>
 class THelper: public THelperSchemaless {
 private:
     using TBase = THelperSchemaless;
@@ -41,7 +42,18 @@ public:
         return *this;
     }
 
-    static constexpr const char * PROTO_SCHEMA = R"(
+    static constexpr const char * PROTO_SCHEMA =
+    UseTimestamp64 ?
+    R"(
+        Columns { Name: "timestamp" Type: "Timestamp64" NotNull: true }
+        Columns { Name: "resource_id" Type: "Utf8" }
+        Columns { Name: "uid" Type: "Utf8" }
+        Columns { Name: "level" Type: "Int32" }
+        Columns { Name: "message" Type: "Utf8" }
+        KeyColumnNames: "timestamp"
+        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+    )":
+    R"(
         Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
         Columns { Name: "resource_id" Type: "Utf8" }
         Columns { Name: "uid" Type: "Utf8" }
@@ -50,6 +62,7 @@ public:
         KeyColumnNames: "timestamp"
         Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
     )";
+
 
     void WithSomeNulls() {
         WithSomeNulls_ = true;

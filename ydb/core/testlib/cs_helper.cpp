@@ -106,9 +106,14 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, ui64 pathIdBeg
 
 //
 
-std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() const {
+template<bool UseTimestamp64>
+std::shared_ptr<arrow::Schema> THelper<UseTimestamp64>::GetArrowSchema() const {
     std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.emplace_back(arrow::field("timestamp", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), false));
+    if constexpr (UseTimestamp64) {
+        fields.emplace_back(arrow::field("timestamp", arrow::int64(), false));
+    } else {
+        fields.emplace_back(arrow::field("timestamp", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), false));
+    }
     fields.emplace_back(arrow::field("resource_id", arrow::utf8()));
     fields.emplace_back(arrow::field("uid", arrow::utf8(), false));
     fields.emplace_back(arrow::field("level", arrow::int32()));
@@ -119,10 +124,12 @@ std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() const {
     return std::make_shared<arrow::Schema>(std::move(fields));
 }
 
-std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui32 tsStepUs) const {
+template<bool UseTimestamp64>
+std::shared_ptr<arrow::RecordBatch> THelper<UseTimestamp64>::TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui32 tsStepUs) const {
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
 
-    arrow::TimestampBuilder b1(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
+    arrow::Int64Builder bi;
+    arrow::TimestampBuilder bt(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
     arrow::StringBuilder b2;
     arrow::StringBuilder b3;
     arrow::Int32Builder b4;
@@ -139,7 +146,11 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     for (size_t i = 0; i < rowCount; ++i) {
         std::string uid("uid_" + std::to_string(tsBegin + i));
         std::string message("some prefix " + std::string(1024 + i % 200, 'x'));
-        Y_ABORT_UNLESS(b1.Append(tsBegin + i * tsStepUs).ok());
+        if constexpr (UseTimestamp64) {
+            Y_ABORT_UNLESS(bi.Append(tsBegin + i * tsStepUs).ok());
+        } else {
+            Y_ABORT_UNLESS(bt.Append(tsBegin + i * tsStepUs).ok());
+        }
         Y_ABORT_UNLESS(b2.Append(std::to_string(pathIdBegin + i)).ok());
         Y_ABORT_UNLESS(b3.Append(uid).ok());
 
@@ -158,14 +169,18 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
         Y_ABORT_UNLESS(b6.Append(jsonStringBase.data(), jsonStringBase.size()).ok());
     }
 
-    std::shared_ptr<arrow::TimestampArray> a1;
+    std::shared_ptr<typename std::conditional<UseTimestamp64, arrow::Int64Array, arrow::TimestampArray>::type> a1;
     std::shared_ptr<arrow::StringArray> a2;
     std::shared_ptr<arrow::StringArray> a3;
     std::shared_ptr<arrow::Int32Array> a4;
     std::shared_ptr<arrow::StringArray> a5;
     std::shared_ptr<arrow::StringArray> a6;
 
-    Y_ABORT_UNLESS(b1.Finish(&a1).ok());
+    if constexpr (UseTimestamp64) {
+        Y_ABORT_UNLESS(bi.Finish(&a1).ok());
+    } else {
+        Y_ABORT_UNLESS(bt.Finish(&a1).ok());
+    }
     Y_ABORT_UNLESS(b2.Finish(&a2).ok());
     Y_ABORT_UNLESS(b3.Finish(&a3).ok());
     Y_ABORT_UNLESS(b4.Finish(&a4).ok());
@@ -180,9 +195,14 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
 
 }
 
-TString THelper::GetTestTableSchema() const {
+template<bool UseTimestamp64>
+TString THelper<UseTimestamp64>::GetTestTableSchema() const {
     TStringBuilder sb;
-    sb << R"(Columns{ Name: "timestamp" Type : "Timestamp" NotNull : true })";
+    if constexpr (UseTimestamp64) {
+        sb << R"(Columns{ Name: "timestamp" Type : "Timestamp64" NotNull : true })";
+    } else {
+        sb << R"(Columns{ Name: "timestamp" Type : "Timestamp" NotNull : true })";
+    }
     sb << R"(Columns{ Name: "resource_id" Type : "Utf8" })";
     sb << "Columns{ Name: \"uid\" Type : \"Utf8\" NotNull : true StorageId : \"" + OptionalStorageId + "\" }";
     sb << R"(Columns{ Name: "level" Type : "Int32" })";
@@ -198,7 +218,8 @@ TString THelper::GetTestTableSchema() const {
     return sb;
 }
 
-void THelper::CreateOlapTableWithStore(TString tableName /*= "olapTable"*/, TString storeName /*= "olapStore"*/, ui32 storeShardsCount /*= 4*/, ui32 tableShardsCount /*= 3*/) {
+template<bool UseTimestamp64>
+void THelper<UseTimestamp64>::CreateOlapTableWithStore(TString tableName /*= "olapTable"*/, TString storeName /*= "olapStore"*/, ui32 storeShardsCount /*= 4*/, ui32 tableShardsCount /*= 3*/) {
     TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
     CreateTestOlapStore(sender, Sprintf(R"(
             Name: "%s"
@@ -223,6 +244,9 @@ void THelper::CreateOlapTableWithStore(TString tableName /*= "olapTable"*/, TStr
             }
         })", tableName.c_str(), tableShardsCount, ShardingMethod.data(), shardingColumns.c_str()));
 }
+
+template class THelper<false>;
+template class THelper<true>;
 
 // Clickbench table
 

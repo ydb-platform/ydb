@@ -284,8 +284,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
             Session = client.CreateReadSession(readSettings);
         }
 
-        void WaitAndAssertPartitions(std::set<size_t> partitions, size_t messagesCount, const TString& message) {
-            Y_UNUSED(messagesCount);
+        void WaitAndAssertPartitions(std::set<size_t> partitions, const TString& message) {
             Cerr << ">>>>> Wait partitions " << partitions << " " << message << Endl;
 
             with_lock (Lock) {
@@ -333,12 +332,12 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         TTopicClient client = setup.MakeClient();
         TTestPartitionReadSession readSession("ReadEmptyPartitions", client);
 
-        readSession.WaitAndAssertPartitions({0}, 1, "Must read all exists partitions");
+        readSession.WaitAndAssertPartitions({0}, "Must read all exists partitions");
 
         ui64 txId = 1023;
         SplitPartition(setup, ++txId, 0, "a");
 
-        readSession.WaitAndAssertPartitions({0, 1, 2}, 2, "After split must read all partitions because parent partition is empty");
+        readSession.WaitAndAssertPartitions({0, 1, 2}, "After split must read all partitions because parent partition is empty");
 
         readSession.Stop();
     }
@@ -352,20 +351,20 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
 
         auto writeSession = CreateWriteSession(client, "producer-1", 0);
 
-        readSession.WaitAndAssertPartitions({0}, 1, "Must read all exists partitions");
+        readSession.WaitAndAssertPartitions({0}, "Must read all exists partitions");
 
         UNIT_ASSERT(writeSession->Write(Msg("message_1", 2)));
 
         ui64 txId = 1023;
         SplitPartition(setup, ++txId, 0, "a");
 
-        readSession.WaitAndAssertPartitions({0}, 0, "After split must read only 0 partition because had been read not from the end of partition");
-        readSession.WaitAndAssertPartitions({}, 1, "Partition must be released for secondary read after 1 second");
-        readSession.WaitAndAssertPartitions({0}, 1, "Must secondary read for check read from end");
-        readSession.WaitAndAssertPartitions({}, 1, "Partition must be released for secondary read because start not from the end of partition after 2 seconds");
+        readSession.WaitAndAssertPartitions({0}, "After split must read only 0 partition because had been read not from the end of partition");
+        readSession.WaitAndAssertPartitions({}, "Partition must be released for secondary read after 1 second");
+        readSession.WaitAndAssertPartitions({0}, "Must secondary read for check read from end");
+        readSession.WaitAndAssertPartitions({}, "Partition must be released for secondary read because start not from the end of partition after 2 seconds");
 
         readSession.Offsets[0] = 1;
-        readSession.WaitAndAssertPartitions({0, 1, 2}, 3, "Must read from all partitions because had been read from the end of partition");
+        readSession.WaitAndAssertPartitions({0, 1, 2}, "Must read from all partitions because had been read from the end of partition");
 
         readSession.Stop();
     }

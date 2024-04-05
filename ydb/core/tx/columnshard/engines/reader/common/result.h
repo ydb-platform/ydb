@@ -16,17 +16,19 @@ private:
     // This 1-row batch contains the last key that was read while producing the ResultBatch.
     // NOTE: it might be different from the Key of last row in ResulBatch in case of filtering/aggregation/limit
     std::shared_ptr<arrow::RecordBatch> LastReadKey;
+    YDB_READONLY_DEF(std::optional<ui32>, NotFinishedIntervalIdx);
 
 public:
     void Cut(const ui32 limit) {
         ResultBatch.Cut(limit);
     }
 
-    const arrow::RecordBatch& GetResultBatch() const {
+    const arrow::Table& GetResultBatch() const {
         return *ResultBatch.GetRecordBatch();
     }
 
-    const std::shared_ptr<arrow::RecordBatch>& GetResultBatchPtrVerified() const {
+    const std::shared_ptr<arrow::Table>& GetResultBatchPtrVerified() const {
+        AFL_VERIFY(ResultBatch.GetRecordBatch());
         return ResultBatch.GetRecordBatch();
     }
 
@@ -56,10 +58,12 @@ public:
 
     explicit TPartialReadResult(
         const std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>& resourcesGuards,
-        const NArrow::TShardedRecordBatch& batch, std::shared_ptr<arrow::RecordBatch> lastKey)
+        const NArrow::TShardedRecordBatch& batch, std::shared_ptr<arrow::RecordBatch> lastKey, const std::optional<ui32> notFinishedIntervalIdx)
         : ResourcesGuards(resourcesGuards)
         , ResultBatch(batch)
-        , LastReadKey(lastKey) {
+        , LastReadKey(lastKey)
+        , NotFinishedIntervalIdx(notFinishedIntervalIdx)
+    {
         for (auto&& i : ResourcesGuards) {
             AFL_VERIFY(i);
         }
@@ -70,13 +74,13 @@ public:
 
     explicit TPartialReadResult(
         const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuards,
-        const NArrow::TShardedRecordBatch& batch, std::shared_ptr<arrow::RecordBatch> lastKey)
-        : TPartialReadResult(std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>({resourcesGuards}), batch, lastKey) {
+        const NArrow::TShardedRecordBatch& batch, std::shared_ptr<arrow::RecordBatch> lastKey, const std::optional<ui32> notFinishedIntervalIdx)
+        : TPartialReadResult(std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>({resourcesGuards}), batch, lastKey, notFinishedIntervalIdx) {
         AFL_VERIFY(resourcesGuards);
     }
 
-    explicit TPartialReadResult(const NArrow::TShardedRecordBatch& batch, std::shared_ptr<arrow::RecordBatch> lastKey)
-        : TPartialReadResult(std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>(), batch, lastKey) {
+    explicit TPartialReadResult(const NArrow::TShardedRecordBatch& batch, std::shared_ptr<arrow::RecordBatch> lastKey, const std::optional<ui32> notFinishedIntervalIdx)
+        : TPartialReadResult(std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>(), batch, lastKey, notFinishedIntervalIdx) {
     }
 };
 

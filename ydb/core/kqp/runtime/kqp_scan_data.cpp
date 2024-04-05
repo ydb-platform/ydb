@@ -45,6 +45,10 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, const NSc
         case NTypeIds::Datetime:
         case NTypeIds::Timestamp:
         case NTypeIds::Interval:
+        case NTypeIds::Date32:
+        case NTypeIds::Datetime64:
+        case NTypeIds::Timestamp64:
+        case NTypeIds::Interval64:
         case NTypeIds::ActorId:
         case NTypeIds::StepOrderId:
         {
@@ -330,11 +334,15 @@ TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
         {
             return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int16Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
+        case NTypeIds::Date32:
         case NTypeIds::Int32:
         {
             return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int32Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Int64:
+        case NTypeIds::Timestamp64:
+        case NTypeIds::Interval64:
+        case NTypeIds::Datetime64:
         {
             return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int64Array, i64>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }

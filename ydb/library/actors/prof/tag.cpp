@@ -121,12 +121,16 @@ namespace NProfiling {
     TSetThreadAllocTag* SetThreadAllocTag = SetThreadAllocTagFn();
 }
 
-TMemoryProfileGuard::TMemoryProfileGuard(const TString& id)
-    : Id(id)
+TMemoryProfileGuard::TMemoryProfileGuard(const TString& id, const bool enabled)
+    : Id(enabled ? id : "")
 {
-    NProfiling::TMemoryTagScope::Reset(TLocalProcessKeyState<NActors::TActorActivityTag>::GetInstance().Register(Id + "-Start"));
+    if (enabled) {
+        NProfiling::TMemoryTagScope::Reset(TLocalProcessKeyState<NActors::TActorActivityTag>::GetInstance().Register(Id + "-Start"));
+    }
 }
 
 TMemoryProfileGuard::~TMemoryProfileGuard() {
-    NProfiling::TMemoryTagScope::Reset(TLocalProcessKeyState<NActors::TActorActivityTag>::GetInstance().Register(Id + "-Finish"));
+    if (Id) {
+        NProfiling::TMemoryTagScope::Reset(TLocalProcessKeyState<NActors::TActorActivityTag>::GetInstance().Register(Id + "-Finish"));
+    }
 }

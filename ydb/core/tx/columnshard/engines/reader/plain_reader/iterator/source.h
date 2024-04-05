@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/data.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 
@@ -24,6 +25,7 @@ class IFetchingStep;
 
 class IDataSource {
 private:
+    YDB_ACCESSOR(bool, ExclusiveIntervalOnly, true);
     YDB_READONLY(ui32, SourceIdx, 0);
     YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Start);
     YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Finish);
@@ -37,6 +39,7 @@ private:
     bool MergingStartedFlag = false;
     bool AbortedFlag = false;
 protected:
+    bool IsSourceInMemoryFlag = true;
     THashMap<ui32, TFetchingInterval*> Intervals;
 
     std::unique_ptr<TFetchedData> StageData;
@@ -45,16 +48,27 @@ protected:
     TAtomic FilterStageFlag = 0;
     bool IsReadyFlag = false;
 
-    bool IsAborted() const {
-        return AbortedFlag;
-    }
-
-    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TColumnsSet>& columns) = 0;
-    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TIndexesSet>& indexes) = 0;
+    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) = 0;
+    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) = 0;
     virtual void DoAbort() = 0;
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) = 0;
+    virtual bool DoAddSequentialEntityIds(const ui32 entityId) = 0;
 public:
+    bool IsAborted() const {
+        return AbortedFlag;
+    }
+    bool IsSourceInMemory() const {
+        return IsSourceInMemoryFlag;
+    }
+    virtual bool IsSourceInMemory(const std::set<ui32>& fieldIds) const = 0;
+    bool AddSequentialEntityIds(const ui32 entityId) {
+        if (DoAddSequentialEntityIds(entityId)) {
+            IsSourceInMemoryFlag = false;
+            return true;
+        }
+        return false;
+    }
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
 
     virtual ui64 GetPathId() const = 0;
@@ -75,7 +89,7 @@ public:
     void SetIsReady();
 
     void Finalize() {
-        TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT");
+        TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
         StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
     }
 
@@ -94,16 +108,16 @@ public:
         DoAssembleColumns(columns);
     }
 
-    bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TColumnsSet>& columns) {
+    bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) {
         AFL_VERIFY(columns);
         return DoStartFetchingColumns(sourcePtr, step, columns);
     }
 
-    bool StartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TIndexesSet>& indexes) {
+    bool StartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) {
         AFL_VERIFY(indexes);
         return DoStartFetchingIndexes(sourcePtr, step, indexes);
     }
-    void InitFetchingPlan(const std::shared_ptr<IFetchingStep>& fetchingFirstStep, const std::shared_ptr<IDataSource>& sourcePtr, const bool isExclusive);
+    void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching, const std::shared_ptr<IDataSource>& sourcePtr);
 
     std::shared_ptr<arrow::RecordBatch> GetLastPK() const {
         return Finish.ExtractSortingPosition();
@@ -201,6 +215,7 @@ public:
 class TPortionDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
+    std::set<ui32> SequentialEntityIds;
     std::shared_ptr<TPortionInfo> Portion;
     std::shared_ptr<ISnapshotSchema> Schema;
 
@@ -209,12 +224,9 @@ private:
         const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) override;
-    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TColumnsSet>& columns) override;
-    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TIndexesSet>& indexes) override;
-    virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) override {
-        auto blobSchema = GetContext()->GetReadMetadata()->GetLoadSchema(Portion->GetMinSnapshot());
-        MutableStageData().AddBatch(Portion->PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs()).AssembleTable());
-    }
+    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) override;
+    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) override;
+    virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) override;
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");
@@ -232,6 +244,10 @@ private:
     virtual ui64 GetPathId() const override {
         return Portion->GetPathId();
     }
+    virtual bool DoAddSequentialEntityIds(const ui32 entityId) override {
+        return SequentialEntityIds.emplace(entityId).second;
+    }
+
 public:
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const override {
         return Portion->HasIndexes(indexIds);
@@ -241,8 +257,32 @@ public:
         return Portion->DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
     }
 
+    virtual bool IsSourceInMemory(const std::set<ui32>& fieldIds) const override {
+        for (auto&& i : SequentialEntityIds) {
+            if (fieldIds.contains(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnsIds) const override {
-        return Portion->GetColumnRawBytes(columnsIds, false);
+        if (SequentialEntityIds.size()) {
+            std::set<ui32> selectedSeq;
+            std::set<ui32> selectedInMem;
+            for (auto&& i : columnsIds) {
+                if (SequentialEntityIds.contains(i)) {
+                    selectedSeq.emplace(i);
+                } else {
+                    selectedInMem.emplace(i);
+                }
+            }
+            return Portion->GetMinMemoryForReadColumns(selectedSeq)
+                + Portion->GetColumnBlobBytes(selectedSeq)
+                + Portion->GetColumnRawBytes(selectedInMem, false);
+        } else {
+            return Portion->GetColumnRawBytes(columnsIds, false);
+        }
     }
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const override {
@@ -276,8 +316,8 @@ private:
 
     }
 
-    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TColumnsSet>& columns) override;
-    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& /*sourcePtr*/, const std::shared_ptr<IFetchingStep>& /*step*/, const std::shared_ptr<TIndexesSet>& /*indexes*/) override {
+    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) override;
+    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/, const std::shared_ptr<TIndexesSet>& /*indexes*/) override {
         return false;
     }
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& /*indexMeta*/) override {
@@ -294,6 +334,10 @@ private:
     virtual ui64 GetPathId() const override {
         return 0;
     }
+    virtual bool DoAddSequentialEntityIds(const ui32 /*entityId*/) override {
+        return false;
+    }
+
 public:
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
         THashMap<TChunkAddress, TString> result;
@@ -303,6 +347,10 @@ public:
             }
         }
         return result;
+    }
+
+    virtual bool IsSourceInMemory(const std::set<ui32>& /*fieldIds*/) const override {
+        return true;
     }
 
     virtual bool HasIndexes(const std::set<ui32>& /*indexIds*/) const override {

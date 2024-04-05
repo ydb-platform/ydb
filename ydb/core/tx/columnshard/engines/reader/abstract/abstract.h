@@ -6,6 +6,10 @@
 namespace NKikimr::NOlap::NReader {
 
 class TScanIteratorBase {
+protected:
+    virtual void DoOnSentDataFromInterval(const ui32 /*intervalIdx*/) const {
+
+    }
 public:
     virtual ~TScanIteratorBase() = default;
 
@@ -14,6 +18,12 @@ public:
     }
 
     virtual const TReadStats& GetStats() const;
+
+    void OnSentDataFromInterval(const std::optional<ui32> intervalIdx) const {
+        if (intervalIdx) {
+            DoOnSentDataFromInterval(*intervalIdx);
+        }
+    }
 
     virtual std::optional<ui32> GetAvailableResultsCount() const {
         return {};

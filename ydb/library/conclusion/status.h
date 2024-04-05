@@ -20,11 +20,17 @@ private:
 
     TConclusionStatus(const char* errorMessage, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::INTERNAL_ERROR)
         : ErrorMessage(errorMessage)
-        , Status(status)
-    {
+        , Status(status) {
+        Y_ABORT_UNLESS(!!ErrorMessage);
+    }
+
+    TConclusionStatus(const std::string& errorMessage, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::INTERNAL_ERROR)
+        : ErrorMessage(TString(errorMessage.data(), errorMessage.size()))
+        , Status(status) {
         Y_ABORT_UNLESS(!!ErrorMessage);
     }
 public:
+    void Validate() const;
 
     const TString& GetErrorMessage() const {
         return ErrorMessage ? *ErrorMessage : Default<TString>();
@@ -42,8 +48,16 @@ public:
         return TConclusionStatus(errorMessage);
     }
 
+    static TConclusionStatus Fail(const std::string& errorMessage) {
+        return TConclusionStatus(errorMessage);
+    }
+
     bool IsFail() const {
         return !Ok();
+    }
+
+    bool IsSuccess() const {
+        return Ok();
     }
 
     bool Ok() const {

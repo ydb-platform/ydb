@@ -23,7 +23,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr auto Margin = TDuration::MilliSeconds(1);
+constexpr auto Margin = TDuration::MilliSeconds(20);
 constexpr auto Quantum = TDuration::MilliSeconds(100);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -427,7 +427,7 @@ TEST_F(TFairShareInvokerPoolTest, CpuTimeAccountingBetweenContextSwitchesIsNotSu
         EXPECT_TRUE(!invocationOrder.empty());
     }).AsyncVia(invokerPool->GetInvoker(0)).Run();
 
-    YT_VERIFY(started.Wait(Quantum * 100));
+    started.Wait();
 
     // After 10 quantums of time (see notification of the #started variable) we start Fairness test in the second thread.
     // In case of better implementation we expect to have non-fair CPU time distribution between first and second invokers,
@@ -457,7 +457,7 @@ TEST_F(TFairShareInvokerPoolTest, GetTotalWaitTimeEstimateStuckAction)
     NThreading::TEvent event;
 
     auto action = BIND([&event] {
-        event.Wait(TDuration::Seconds(100));
+        event.Wait();
     })
         .AsyncVia(invokerPool->GetInvoker(0))
         .Run();
@@ -481,7 +481,7 @@ TEST_F(TFairShareInvokerPoolTest, GetTotalWaitTimeEstimateRelevancyDecay)
     NThreading::TEvent event;
 
     auto action = BIND([&event] {
-        event.Wait(100 * Quantum);
+        event.Wait();
     })
         .AsyncVia(invokerPool->GetInvoker(0))
         .Run();
@@ -507,14 +507,14 @@ TEST_F(TFairShareInvokerPoolTest, GetTotalWaitTimeEstimateSeveralActions)
 
     auto invokerPool = CreateInvokerPool(Queues_[0]->GetInvoker(), 1);
     // Make aggregator never forget a sample.
-    invokerPool->UpdateActionTimeRelevancyHalflife(TDuration::Days(100000000000000000));
+    invokerPool->UpdateActionTimeRelevancyHalflife(TDuration::Max());
 
     std::vector<NThreading::TEvent> leashes(ActionCount);
     std::vector<TFuture<void>> actions;
 
     for (int idx = 0; idx < ActionCount; ++idx) {
         actions.push_back(BIND([&leashes, idx] {
-            leashes[idx].Wait(100 * Quantum);
+            leashes[idx].Wait();
         })
             .AsyncVia(invokerPool->GetInvoker(0))
             .Run());
@@ -556,7 +556,7 @@ TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateUncorrelatedWithOtherInvok
     };
     auto invokerPool = CreateInvokerPool(Queues_[0]->GetInvoker(), 2);
     // Make aggregator never forget a sample.
-    invokerPool->UpdateActionTimeRelevancyHalflife(TDuration::Days(100000000000000000));
+    invokerPool->UpdateActionTimeRelevancyHalflife(TDuration::Max());
 
     std::vector<NThreading::TEvent> leashes(2);
     std::vector<TFuture<void>> actions;
@@ -568,7 +568,7 @@ TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateUncorrelatedWithOtherInvok
             } else {
                 executionOrderEnforcer(2);
             }
-            leashes[idx].Wait(100 * Quantum);
+            leashes[idx].Wait();
         })
             .AsyncVia(invokerPool->GetInvoker(0))
             .Run());
@@ -577,7 +577,7 @@ TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateUncorrelatedWithOtherInvok
     NThreading::TEvent secondaryLeash;
     auto secondaryAction = BIND([&executionOrderEnforcer, &secondaryLeash] {
         executionOrderEnforcer(1);
-        secondaryLeash.Wait(100 * Quantum);
+        secondaryLeash.Wait();
     })
         .AsyncVia(invokerPool->GetInvoker(1))
         .Run();

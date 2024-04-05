@@ -12,6 +12,7 @@ YA_IDE_VENV_VAR = 'YA_IDE_VENV'
 PY_NAMESPACE_PREFIX = 'py/namespace'
 BUILTIN_PROTO = 'builtin_proto'
 DEFAULT_FLAKE8_FILE_PROCESSING_TIME = "1.5"  # in seconds
+DEFAULT_BLACK_FILE_PROCESSING_TIME = "1.5"  # in seconds
 
 
 def _split_macro_call(macro_call, data, item_size, chunk_size=1024):
@@ -56,8 +57,8 @@ def uniq_suffix(path, unit):
 
 
 def pb2_arg(suf, path, mod, unit):
-    return '{path}__int__{suf}={mod}{modsuf}'.format(
-        path=stripext(to_build_root(path, unit)), suf=suf, mod=mod, modsuf=stripext(suf)
+    return '{path}__int{py_ver}__{suf}={mod}{modsuf}'.format(
+        path=stripext(to_build_root(path, unit)), suf=suf, mod=mod, modsuf=stripext(suf), py_ver=unit.get('_PYTHON_VER')
     )
 
 
@@ -74,7 +75,7 @@ def ev_cc_arg(path, unit):
 
 
 def ev_arg(path, mod, unit):
-    return '{}__int___ev_pb2.py={}_ev_pb2'.format(stripext(to_build_root(path, unit)), mod)
+    return '{}__int{}___ev_pb2.py={}_ev_pb2'.format(stripext(to_build_root(path, unit)), unit.get('_PYTHON_VER'), mod)
 
 
 def mangle(name):
@@ -209,10 +210,6 @@ def add_python_lint_checks(unit, py_ver, files):
             ymake.report_configure_error(
                 'NO_LINT() and STYLE_RUFF() can\'t be enabled both at the same time',
             )
-        # temporary allow using ruff for taxi only
-        ruff_allowed_paths = ("taxi/",)
-        if not upath.startswith(ruff_allowed_paths):
-            ymake.report_configure_error("STYLE_RUFF() is allowed only in " + ", ".join(ruff_allowed_paths))
 
         resolved_files = get_resolved_files()
         if resolved_files:
@@ -231,6 +228,10 @@ def add_python_lint_checks(unit, py_ver, files):
             params = ['black', 'tools/black_linter/black_linter']
             params += ['FILES'] + resolved_files
             params += ['CONFIGS', black_cfg]
+            params += [
+                "FILE_PROCESSING_TIME",
+                unit.get("BLACK_FILE_PROCESSING_TIME") or DEFAULT_BLACK_FILE_PROCESSING_TIME,
+            ]
             unit.on_add_linter_check(params)
 
 
@@ -655,7 +656,8 @@ def onpy_srcs(unit, *args):
 
     if protos:
         if not upath.startswith(py_runtime_path) and not upath.startswith(builtin_proto_path):
-            unit.onpeerdir(py_runtime_path)
+            if 'protobuf_old' not in upath:
+                unit.onpeerdir(py_runtime_path)
 
         unit.onpeerdir(unit.get("PY_PROTO_DEPS").split())
 

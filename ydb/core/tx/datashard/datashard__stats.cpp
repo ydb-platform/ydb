@@ -361,7 +361,9 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
     Actors.erase(ev->Sender);
 
     ui64 tableId = ev->Get()->TableId;
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Stats rebuilt at datashard " << TabletID() << ", for tableId " << tableId);
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Stats rebuilt at datashard " << TabletID() << ", for tableId " << tableId
+        << ": RowCount " << ev->Get()->Stats.RowCount << ", DataSize " << ev->Get()->Stats.DataSize.Size
+        << (ev->Get()->PartOwners.size() > 1 || ev->Get()->PartOwners.size() == 1 && *ev->Get()->PartOwners.begin() != TabletID() ? ", with borrowed parts" : ""));
 
     i64 dataSize = 0;
     if (TableInfos.contains(tableId)) {

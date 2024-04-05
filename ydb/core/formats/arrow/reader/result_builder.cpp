@@ -14,7 +14,7 @@ void TRecordBatchBuilder::AddRecord(const TSortableBatchPosition& position) {
     AFL_VERIFY_DEBUG(IsSameFieldsSequence(position.GetData().GetFields(), Fields));
 //    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "record_add_on_read")("record", position.DebugJson());
     for (ui32 i = 0; i < position.GetData().GetColumns().size(); ++i) {
-        NArrow::Append(*Builders[i], *position.GetData().GetColumns()[i], position.GetPosition());
+        position.GetData().GetColumns()[i].AppendPositionTo(*Builders[i], position.GetPosition(), MemoryBufferLimit ? &CurrentBytesUsed : nullptr);
     }
     ++RecordsCount;
 }

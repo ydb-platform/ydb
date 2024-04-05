@@ -2398,9 +2398,28 @@ private:
         const bool useDataQueryPool = !(HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty());
         const bool localComputeTasks = !((HasExternalSources || HasOlapTable || HasDatashardSourceScan) && DatashardTxs.empty());
 
-        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), GetSnapshot(),
-            Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, false, Nothing(),
-            ExecuterSpan, std::move(ResourceSnapshot), ExecuterRetriesConfig, useDataQueryPool, localComputeTasks, Request.MkqlMemoryLimit, AsyncIoFactory, singlePartitionOptAllowed, GetUserRequestContext(), FederatedQuerySetup);
+        Planner = CreateKqpPlanner({
+            .TasksGraph = TasksGraph,
+            .TxId = TxId,
+            .Executer = SelfId(),
+            .Snapshot = GetSnapshot(),
+            .Database = Database,
+            .UserToken = UserToken,
+            .Deadline = Deadline.GetOrElse(TInstant::Zero()),
+            .StatsMode = Request.StatsMode,
+            .WithSpilling = false,
+            .RlPath = Nothing(),
+            .ExecuterSpan =  ExecuterSpan,
+            .ResourcesSnapshot = std::move(ResourceSnapshot),
+            .ExecuterRetriesConfig = ExecuterRetriesConfig,
+            .UseDataQueryPool = useDataQueryPool,
+            .LocalComputeTasks = localComputeTasks,
+            .MkqlMemoryLimit = Request.MkqlMemoryLimit,
+            .AsyncIoFactory = AsyncIoFactory,
+            .AllowSinglePartitionOpt = singlePartitionOptAllowed,
+            .UserRequestContext = GetUserRequestContext(),
+            .FederatedQuerySetup = FederatedQuerySetup
+        });
 
         auto err = Planner->PlanExecution();
         if (err) {

@@ -759,7 +759,7 @@ public:
             writer.SetSpecs(spec);
 
             TStringStream err;
-            auto type = BuildType(*tableInfo.RowSpec->GetType(), typeBuilder, err);//
+            auto type = BuildType(*tableInfo.RowSpec->GetType(), typeBuilder, err);
             TValuePacker packer(true, type);
             for (auto& c: content) {
                 auto val = packer.Unpack(c, holderFactory);

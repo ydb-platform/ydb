@@ -84,6 +84,8 @@ struct TSolomonExporterConfig
 
     TDuration UpdateSensorServiceTreePeriod;
 
+    int ProducerCollectionBatchSize;
+
     TShardConfigPtr MatchShard(const TString& sensorName);
 
     ESummaryPolicy GetSummaryPolicy() const;

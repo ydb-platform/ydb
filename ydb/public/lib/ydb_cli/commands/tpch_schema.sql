@@ -4,7 +4,7 @@ CREATE {external} TABLE `{path}customer` (
     c_acctbal Double {notnull}, -- it should be Decimal(12, 2)
     c_address String {notnull},
     c_comment String {notnull},
-    c_custkey Int32 {notnull}, -- Identifier
+    c_custkey Int64 {notnull}, -- Identifier
     c_mktsegment String {notnull},
     c_name String {notnull},
     c_nationkey Int32 {notnull}, -- FK to N_NATIONKEY
@@ -23,15 +23,15 @@ CREATE {external} TABLE `{path}lineitem` (
     l_extendedprice Double {notnull}, -- it should be Decimal(12, 2)
     l_linenumber Int32 {notnull},
     l_linestatus String {notnull},
-    l_orderkey Int32 {notnull}, -- FK to O_ORDERKEY
-    l_partkey Int32 {notnull}, -- FK to P_PARTKEY, first part of the compound FK to (PS_PARTKEY, PS_SUPPKEY) with L_SUPPKEY
+    l_orderkey Int64 {notnull}, -- FK to O_ORDERKEY
+    l_partkey Int64 {notnull}, -- FK to P_PARTKEY, first part of the compound FK to (PS_PARTKEY, PS_SUPPKEY) with L_SUPPKEY
     l_quantity Double {notnull}, -- it should be Decimal(12, 2)
     l_receiptdate Date {notnull},
     l_returnflag String {notnull},
     l_shipdate Date {notnull},
     l_shipinstruct String {notnull},
     l_shipmode String {notnull},
-    l_suppkey Int32 {notnull}, -- FK to S_SUPPKEY, second part of the compound FK to (PS_PARTKEY, PS_SUPPKEY) with L_PARTKEY
+    l_suppkey Int64 {notnull}, -- FK to S_SUPPKEY, second part of the compound FK to (PS_PARTKEY, PS_SUPPKEY) with L_PARTKEY
     l_tax Double {notnull} -- it should be Decimal(12, 2)
     {primary_key} (l_orderkey, l_linenumber)
 )
@@ -55,9 +55,9 @@ WITH ({store}"{s3_prefix}/nation/"
 CREATE {external} TABLE `{path}orders` (
     o_clerk String {notnull},
     o_comment String {notnull},
-    o_custkey Int32 {notnull}, -- FK to C_CUSTKEY
+    o_custkey Int64 {notnull}, -- FK to C_CUSTKEY
     o_orderdate Date {notnull},
-    o_orderkey Int32 {notnull}, -- Identifier
+    o_orderkey Int64 {notnull}, -- Identifier
     o_orderpriority String {notnull},
     o_orderstatus String {notnull},
     o_shippriority Int32 {notnull},
@@ -75,7 +75,7 @@ CREATE {external} TABLE `{path}part` (
     p_container String {notnull},
     p_mfgr String {notnull},
     p_name String {notnull},
-    p_partkey Int32 {notnull}, -- Identifier
+    p_partkey Int64 {notnull}, -- Identifier
     p_retailprice Double {notnull}, -- it should be Decimal(12, 2)
     p_size Int32 {notnull},
     p_type String {notnull}
@@ -89,8 +89,8 @@ WITH ({store}"{s3_prefix}/part/"
 CREATE {external} TABLE `{path}partsupp` (
     ps_availqty Int32 {notnull},
     ps_comment String {notnull},
-    ps_partkey Int32 {notnull}, -- FK to P_PARTKEY
-    ps_suppkey Int32 {notnull}, -- FK to S_SUPPKEY
+    ps_partkey Int64 {notnull}, -- FK to P_PARTKEY
+    ps_suppkey Int64 {notnull}, -- FK to S_SUPPKEY
     ps_supplycost Double {notnull} -- it should be Decimal(12, 2)
     {primary_key}(ps_partkey, ps_suppkey)
 )
@@ -117,7 +117,7 @@ CREATE {external} TABLE `{path}supplier` (
     s_name String {notnull},
     s_nationkey Int32 {notnull}, -- FK to N_NATIONKEY
     s_phone String {notnull},
-    s_suppkey Int32 {notnull} -- Identifier
+    s_suppkey Int64 {notnull} -- Identifier
     {primary_key}(s_suppkey)
 )
 {partition_supplier}

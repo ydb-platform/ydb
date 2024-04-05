@@ -4,30 +4,70 @@
 # static erasure is the parameter that
 # describes the fault tolerance mode of the
 # cluster. See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
-erasure: block-4-2
+static_erasure: block-4-2
 host_configs: # the list of available host configurations in the cluster.
-- host_config_id: 1                                # the unique id of the host config
-  drive:
+- drive:
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_01   # path of the first disk in the host configration.
+    type: SSD                                      # kind of the disk: available kinds are SSD, NVME or HDD
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
-
+    type: SSD
+  host_config_id: 1                                # the unique id of the host config
 hosts:
 - host: ydb-node-zone-a-1.local   # storage node DNS name
-  host_config_id: 1               # numeric host configuration template identifier.
+  host_config_id: 1           # numeric host configuration template identifier.
+  walle_location:             # this parameter describes where host is located.
+    body: 1                   # string representing a host serial number.
+    data_center: 'zone-a'     # string representing the datacenter / availability zone where the host is located.
+                              # if cluster is deployed using mirror-3-dc fault tolerance mode, all hosts must be distributed
+                              # across 3 datacenters.
+    rack: '1'                 # string representing a rack identifier where the host is located.
+                              # if cluster is deployed using block-4-2 erasure, all hosts should be distrubited
+                              # accross at least 8 racks.
 - host: ydb-node-zone-a-2.local
   host_config_id: 1
+  walle_location:
+    body: 2
+    data_center: 'zone-a'
+    rack: '2'
 - host: ydb-node-zone-a-3.local
   host_config_id: 1
+  walle_location:
+    body: 3
+    data_center: 'zone-a'
+    rack: '3'
+
 - host: ydb-node-zone-a-4.local
   host_config_id: 1
+  walle_location:
+    body: 4
+    data_center: 'zone-a'
+    rack: '4'
 - host: ydb-node-zone-a-5.local
   host_config_id: 1
+  walle_location:
+    body: 5
+    data_center: 'zone-a'
+    rack: '5'
 - host: ydb-node-zone-a-6.local
   host_config_id: 1
+  walle_location:
+    body: 6
+    data_center: 'zone-a'
+    rack: '6'
+
 - host: ydb-node-zone-a-7.local
   host_config_id: 1
+  walle_location:
+    body: 7
+    data_center: 'zone-a'
+    rack: '7'
 - host: ydb-node-zone-a-8.local
   host_config_id: 1
+  walle_location:
+    body: 8
+    data_center: 'zone-a'
+    rack: '8'
+
 domains_config:
   domain:
   # There can be only one root domain in a cluster. Domain name prefixes all scheme objects names, e.g. full name of a table table1 in database db1 
@@ -36,22 +76,55 @@ domains_config:
     storage_pool_types:
     - kind: ssd
       pool_config:
-        kind: ssd
         box_id: 1
+        # fault tolerance mode name - none, block-4-2, or mirror-3-dc. 
+        # See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
+        erasure_species: block-4-2
+        kind: ssd
         pdisk_filter:
         - property:
           - type: SSD # device type to match host_configs.drive.type
+        vdisk_kind: Default
   state_storage:
   - ring:
       node: [1, 2, 3, 4, 5, 6, 7, 8]
       nto_select: 5
     ssid: 1
-# configuration of static blobstorage group.
-# YDB uses this group to store system tablets' data, like SchemeShard
-blob_storage_config:
+table_service_config:
+  sql_version: 1
+actor_system_config:    # the configuration of the actor system which descibes how cores of the instance are distributed
+  executor:             # accross different types of workloads in the instance.
+  - name: System        # system executor of the actor system. in this executor YDB launches system type of workloads, like system tablets
+                        # and reads from storage.
+    threads: 2          # the number of threads allocated to system executor.
+    type: BASIC
+  - name: User          # user executor of the actor system. In this executor YDB launches user workloads, like datashard activities,
+                        # queries and rpc calls.
+    threads: 3          # the number of threads allocated to user executor.
+    type: BASIC
+  - name: Batch         # user executor of the actor system. In this executor YDB launches batch operations, like scan queries, table
+                        # compactions, background compactions.
+    threads: 2          # the number of threads allocated to the batch executor.
+    type: BASIC
+  - name: IO            # the io executor. In this executor launches sync operations and writes logs.
+    threads: 1
+    time_per_mailbox_micro_secs: 100
+    type: IO
+  - name: IC            # the interconnect executor which YDB uses for network communications accross different nodes of the cluster.
+    spin_threshold: 10
+    threads: 1          # the number of threads allocated to the interconnect executor.
+    time_per_mailbox_micro_secs: 100
+    type: BASIC
+  scheduler:
+    progress_threshold: 10000
+    resolution: 256
+    spin_threshold: 0
+blob_storage_config:    # configuration of static blobstorage group.
+                        # YDB uses this group to store system tablets' data, like SchemeShard
   service_set:
     groups:
-    - rings:           # in block-4-2 must have exactly 1 ring or availability zone.
+    - erasure_species: block-4-2  # fault tolerance mode name for the static group
+      rings:           # in block-4-2 must have exactly 1 ring or availability zone.
       - fail_domains:
         - vdisk_locations:    # fail domains of the static group describe where each vdisk of the static group should be located.
           - node_id: "ydb-node-zone-a-1.local"
@@ -98,10 +171,15 @@ channel_profile_config:
       pdisk_category: 1
       storage_pool_kind: ssd
     profile_id: 0
-tls:
-  cert: "/opt/ydb/certs/node.crt"
-  key: "/opt/ydb/certs/node.key"
-  ca: "/opt/ydb/certs/ca.crt"
+interconnect_config:
+    start_tcp: true
+    encryption_mode: OPTIONAL
+    path_to_certificate_file: "/opt/ydb/certs/node.crt"
+    path_to_private_key_file: "/opt/ydb/certs/node.key"
+    path_to_ca_file: "/opt/ydb/certs/ca.crt"
 grpc_config:
-  services_enabled:
-  - legacy
+    cert: "/opt/ydb/certs/node.crt"
+    key: "/opt/ydb/certs/node.key"
+    ca: "/opt/ydb/certs/ca.crt"
+    services_enabled:
+    - legacy

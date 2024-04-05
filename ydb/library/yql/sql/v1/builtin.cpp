@@ -101,12 +101,13 @@ public:
             }
             columns.emplace_back(column);
         }
-        ui64 hint;
-        if (!src->CalculateGroupingHint(ctx, columns, hint)) {
+        TString groupingColumn;
+        if (!src->AddGrouping(ctx, columns, groupingColumn)) {
             return false;
         }
-        Nodes.push_back(BuildAtom(Pos, "Uint64"));
-        Nodes.push_back(BuildQuotedAtom(Pos, IntToString<10>(hint)));
+        Nodes.push_back(BuildAtom(Pos, "Member"));
+        Nodes.push_back(BuildAtom(Pos, "row"));
+        Nodes.push_back(BuildQuotedAtom(Pos, groupingColumn));
         return TAstListNode::DoInit(ctx, src);
     }
 

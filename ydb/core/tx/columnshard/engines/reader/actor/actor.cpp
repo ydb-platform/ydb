@@ -226,16 +226,16 @@ bool TColumnShardScan::ProduceResults() noexcept {
         if (shardedBatch.IsSharded()) {
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_success")("count", shardedBatch.GetSplittedByShards().size())("info", ComputeShardingPolicy.DebugString());
             Result->SplittedBatches = shardedBatch.GetSplittedByShards();
-            Result->ArrowBatch = shardedBatch.GetRecordBatch();
         } else {
             if (ComputeShardingPolicy.IsEnabled()) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_problems")("info", ComputeShardingPolicy.DebugString());
             }
-            Result->ArrowBatch = shardedBatch.GetRecordBatch();
         }
+        TMemoryProfileGuard mGuard("SCAN_PROFILE::RESULT::TO_KQP", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
+        Result->ArrowBatch = NArrow::ToBatch(shardedBatch.GetRecordBatch(), true);
         Rows += batch->num_rows();
-        Bytes += NArrow::GetBatchDataSize(batch);
-        ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetBatchDataSize(batch))("num_rows", numRows)("batch_columns", JoinSeq(",", batch->schema()->field_names()));
+        Bytes += NArrow::GetBatchDataSize(Result->ArrowBatch);
+        ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetBatchDataSize(Result->ArrowBatch))("num_rows", numRows)("batch_columns", JoinSeq(",", batch->schema()->field_names()));
     }
     if (CurrentLastReadKey) {
         NArrow::NMerger::TSortableBatchPosition pNew(result.GetLastReadKey(), 0, result.GetLastReadKey()->schema()->field_names(), {}, false);
@@ -246,6 +246,7 @@ bool TColumnShardScan::ProduceResults() noexcept {
 
     Result->LastKey = ConvertLastKey(result.GetLastReadKey());
     SendResult(false, false);
+    ScanIterator->OnSentDataFromInterval(result.GetNotFinishedIntervalIdx());
     ACFL_DEBUG("stage", "finished")("iterator", ScanIterator->DebugString());
     return true;
 }

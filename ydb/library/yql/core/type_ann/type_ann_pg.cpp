@@ -436,13 +436,20 @@ const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNo
         pgType = "bool";
         break;
     case NUdf::EDataSlot::Int16:
+    case NUdf::EDataSlot::Int8:
+    case NUdf::EDataSlot::Uint8:
         pgType = "int2";
         break;
     case NUdf::EDataSlot::Int32:
+    case NUdf::EDataSlot::Uint16:
         pgType = "int4";
         break;
     case NUdf::EDataSlot::Int64:
+    case NUdf::EDataSlot::Uint32:
         pgType = "int8";
+        break;
+    case NUdf::EDataSlot::Uint64:
+        pgType = "numeric";
         break;
     case NUdf::EDataSlot::Float:
         pgType = "float4";
@@ -451,9 +458,13 @@ const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNo
         pgType = "float8";
         break;
     case NUdf::EDataSlot::String:
+    case NUdf::EDataSlot::Yson:
         pgType = "bytea";
         break;
     case NUdf::EDataSlot::Utf8:
+    case NUdf::EDataSlot::TzDate:
+    case NUdf::EDataSlot::TzDatetime:
+    case NUdf::EDataSlot::TzTimestamp:
         pgType = "text";
         break;
     case NUdf::EDataSlot::Date:
@@ -465,6 +476,15 @@ const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNo
         break;
     case NUdf::EDataSlot::Interval:
         pgType = "interval";
+        break;
+    case NUdf::EDataSlot::Json:
+        pgType = "json";
+        break;
+    case NUdf::EDataSlot::JsonDocument:
+        pgType = "jsonb";
+        break;
+    case NUdf::EDataSlot::Uuid:
+        pgType = "uuid";
         break;
     default:
         ctx.AddError(TIssue(ctx.GetPosition(pos),
@@ -914,6 +934,55 @@ IGraphTransformer::TStatus PgAggWrapper(const TExprNode::TPtr& input, TExprNode:
     auto result = ctx.Expr.MakeType<TPgExprType>(resultType);
     input->SetTypeAnn(result);
 
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus PgNullIfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    TVector<ui32> types(2);
+    bool replaced = false;
+
+    for (ui32 i = 0; i < 2; ++i) {
+        auto* item = input->Child(i);
+        auto type = item->GetTypeAnn();
+        ui32 argType;
+        bool convertToPg;
+        const auto pos = item->Pos();
+        if (!ExtractPgType(type, argType, convertToPg, pos, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (convertToPg) {
+            replaced = true;
+            input->ChildRef(i) = ctx.Expr.NewCallable(input->Child(2)->Pos(), "ToPg", { input->ChildPtr(i) });
+        }
+
+        types[i] = argType;
+    }
+
+    if (replaced) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    const NPg::TTypeDesc* commonType;
+    if (const auto issue = NPg::LookupCommonType(types,
+        [&input, &ctx](size_t i) {
+            return ctx.Expr.GetPosition(input->Child(i)->Pos());
+        }, commonType))
+    {
+        ctx.Expr.AddError(*issue);
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (IsCastRequired(commonType->TypeId, types[0])) {
+        input->ChildRef(0) = WrapWithPgCast(std::move(input->ChildRef(0)), commonType->TypeId, ctx.Expr);
+        return IGraphTransformer::TStatus::Repeat;
+    }
+    
+    input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(commonType->TypeId));
     return IGraphTransformer::TStatus::Ok;
 }
 

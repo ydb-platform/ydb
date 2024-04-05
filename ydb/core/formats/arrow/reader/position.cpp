@@ -86,12 +86,35 @@ TSortableBatchPosition::TFoundPosition TSortableBatchPosition::SkipToLower(const
     return *pos;
 }
 
+TSortableScanData::TSortableScanData(const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns) {
+    for (auto&& i : columns) {
+        auto c = batch->GetAccessorByNameOptional(i);
+        AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns))("batch", batch->DebugString());
+        Columns.emplace_back(NAccessor::IChunkedArray::TReader(c));
+        auto f = batch->GetSchema()->GetFieldByName(i);
+        AFL_VERIFY(f);
+        Fields.emplace_back(f);
+    }
+}
+
 TSortableScanData::TSortableScanData(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns) {
     for (auto&& i : columns) {
         auto c = batch->GetColumnByName(i);
         AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns));
-        Columns.emplace_back(c);
+        Columns.emplace_back(NAccessor::IChunkedArray::TReader(std::make_shared<NAccessor::TTrivialArray>(c)));
         auto f = batch->schema()->GetFieldByName(i);
+        AFL_VERIFY(f);
+        Fields.emplace_back(f);
+    }
+}
+
+TSortableScanData::TSortableScanData(const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns) {
+    for (auto&& i : columns) {
+        auto c = batch->GetColumnByName(i);
+        AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns));
+        Columns.emplace_back(NAccessor::IChunkedArray::TReader(std::make_shared<NAccessor::TTrivialChunkedArray>(c)));
+        auto f = batch->schema()->GetFieldByName(i);
+        AFL_VERIFY(f);
         Fields.emplace_back(f);
     }
 }

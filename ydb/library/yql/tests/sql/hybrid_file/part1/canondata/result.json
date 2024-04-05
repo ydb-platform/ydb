@@ -321,6 +321,20 @@
             "uri": "https://{canondata_backend}/1925842/70942689b7ce63cefca5f7da5343fab5153230a8/resource.tar.gz#test.test_aggregate-group_by_ru_join_star-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[aggregate-group_by_ru_with_window_func--Debug]": [
+        {
+            "checksum": "30142821625d52a8d86806bef725b1b7",
+            "size": 7804,
+            "uri": "https://{canondata_backend}/1942525/ec97a3e319902cc36fb85651547b6e4cac4c1a70/resource.tar.gz#test.test_aggregate-group_by_ru_with_window_func--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[aggregate-group_by_ru_with_window_func--Plan]": [
+        {
+            "checksum": "453199fe70d7e91552c3760b7a54faf8",
+            "size": 13571,
+            "uri": "https://{canondata_backend}/1942525/ec97a3e319902cc36fb85651547b6e4cac4c1a70/resource.tar.gz#test.test_aggregate-group_by_ru_with_window_func--Plan_/plan.txt"
+        }
+    ],
     "test.test[aggregate-group_by_session_compact--Debug]": [
         {
             "checksum": "a75bd8349ce7f4bf7889c1fcbf05ad45",
@@ -599,6 +613,20 @@
             "checksum": "e0940ee33b35d03a6a98aa6884579077",
             "size": 4075,
             "uri": "https://{canondata_backend}/1925842/70942689b7ce63cefca5f7da5343fab5153230a8/resource.tar.gz#test.test_blocks-partial_blocks1--Plan_/plan.txt"
+        }
+    ],
+    "test.test[blocks-pg_to_strings--Debug]": [
+        {
+            "checksum": "157dad7ce8a73aabee8714a4e039ea95",
+            "size": 4278,
+            "uri": "https://{canondata_backend}/1942525/08790a06a7634a1b3941cda5983d0edb9a19a5f2/resource.tar.gz#test.test_blocks-pg_to_strings--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[blocks-pg_to_strings--Plan]": [
+        {
+            "checksum": "fbd2f976b2eed9a51805d4678a44455d",
+            "size": 7164,
+            "uri": "https://{canondata_backend}/1942525/08790a06a7634a1b3941cda5983d0edb9a19a5f2/resource.tar.gz#test.test_blocks-pg_to_strings--Plan_/plan.txt"
         }
     ],
     "test.test[blocks-sub_uint64_opt2--Debug]": [

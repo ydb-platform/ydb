@@ -38,6 +38,8 @@ bool IsTerminalStatus(FederatedQuery::QueryMeta::ComputeStatus status);
 
 bool IsAbortedStatus(FederatedQuery::QueryMeta::ComputeStatus status);
 
+bool IsFailedStatus(FederatedQuery::QueryMeta::ComputeStatus status);
+
 bool IsBillablelStatus(FederatedQuery::QueryMeta::ComputeStatus status, NYql::NDqProto::StatusIds::StatusCode statusCode);
 
 TDuration GetDuration(const TString& value, const TDuration& defaultValue);

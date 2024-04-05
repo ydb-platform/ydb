@@ -24,6 +24,21 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     NArrow::Append<arrow::StringType>(*builders[11], arrow::util::string_view(statInfo.data(), statInfo.size()));
 }
 
+ui32 TStatsIterator::PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const {
+    return std::min<ui32>(10000, granule.GetPortions().size());
+}
+
+void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const {
+    ui64 recordsCount = 0;
+    while (auto portion = granule.PopFrontPortion()) {
+        recordsCount += 1;
+        AppendStats(builders, *portion);
+        if (recordsCount >= 10000) {
+            break;
+        }
+    }
+}
+
 std::unique_ptr<TScanIteratorBase> TReadStatsMetadata::StartScan(const std::shared_ptr<TReadContext>& readContext) const {
     return std::make_unique<TStatsIterator>(readContext->GetReadMetadataPtrVerifiedAs<TReadStatsMetadata>());
 }

@@ -1896,7 +1896,8 @@ void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
                     NIceDb::TUpdate<Schema::Paths::LastTxId>(elem->LastTxId),
                     NIceDb::TUpdate<Schema::Paths::DirAlterVersion>(elem->DirAlterVersion),
                     NIceDb::TUpdate<Schema::Paths::UserAttrsAlterVersion>(elem->UserAttrs->AlterVersion),
-                    NIceDb::TUpdate<Schema::Paths::ACLVersion>(elem->ACLVersion)
+                    NIceDb::TUpdate<Schema::Paths::ACLVersion>(elem->ACLVersion),
+                    NIceDb::TUpdate<Schema::Paths::OwnerActorId>(elem->OwnerActorId.ToString())
                     );
     } else {
         db.Table<Schema::MigratedPaths>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
@@ -1913,7 +1914,8 @@ void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
                     NIceDb::TUpdate<Schema::MigratedPaths::LastTxId>(elem->LastTxId),
                     NIceDb::TUpdate<Schema::MigratedPaths::DirAlterVersion>(elem->DirAlterVersion),
                     NIceDb::TUpdate<Schema::MigratedPaths::UserAttrsAlterVersion>(elem->UserAttrs->AlterVersion),
-                    NIceDb::TUpdate<Schema::MigratedPaths::ACLVersion>(elem->ACLVersion)
+                    NIceDb::TUpdate<Schema::MigratedPaths::ACLVersion>(elem->ACLVersion),
+                    NIceDb::TUpdate<Schema::MigratedPaths::OwnerActorId>(elem->OwnerActorId.ToString())
                     );
     }
 }
@@ -6326,7 +6328,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr
         return Execute(CreateTxProgressImport(ev), ctx);
     } else if (TxIdToIndexBuilds.contains(txId)) {
         return Execute(CreateTxReply(ev), ctx);
-    } else if (BackgroundCleaningTxs.contains(txId)) {
+    } else if (BackgroundCleaningTxToPrimaryTx.contains(txId)) {
         return HandleBackgroundCleaningTransactionResult(ev);
     }
 
@@ -6382,7 +6384,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
         Execute(CreateTxReply(txId), ctx);
         executed = true;
     }
-    if (BackgroundCleaningTxs.contains(txId)) {
+    if (BackgroundCleaningTxToPrimaryTx.contains(txId)) {
         HandleBackgroundCleaningCompletionResult(txId);
         executed = true;
     }
@@ -6556,24 +6558,24 @@ void TSchemeShard::ApplyPartitionConfigStoragePatch(
     }
 }
 
-std::optional<TTempTableInfo> TSchemeShard::ResolveTempTableInfo(const TPathId& pathId) {
+std::optional<TTempDirInfo> TSchemeShard::ResolveTempDirsInfo(const TPathId& pathId) {
     auto path = TPath::Init(pathId, this);
     if (!path) {
         return std::nullopt;
     }
-    TTempTableInfo info;
+    TTempDirInfo info;
     info.Name = path.LeafName();
     info.WorkingDir = path.Parent().PathString();
 
-    TTableInfo::TPtr table = Tables.at(path.Base()->PathId);
-    if (!table) {
+    auto pathInfo = PathsById.at(path.Base()->PathId);
+    if (!pathInfo) {
         return std::nullopt;
     }
-    if (!table->IsTemporary) {
+    if (!pathInfo->OwnerActorId) {
         return std::nullopt;
     }
 
-    info.OwnerActorId = table->OwnerActorId;
+    info.OwnerActorId = pathInfo->OwnerActorId;
     return info;
 }
 

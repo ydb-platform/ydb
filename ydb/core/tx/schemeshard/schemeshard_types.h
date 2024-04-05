@@ -156,7 +156,7 @@ struct TTempDirsState {
     THashMap<ui32, TNodeState> NodeStates; // NodeId -> TNodeState
 };
 
-struct TTempTableInfo {
+struct TTempDirInfo {
     TString WorkingDir;
     TString Name;
     TActorId OwnerActorId;

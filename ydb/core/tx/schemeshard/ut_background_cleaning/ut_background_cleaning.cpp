@@ -58,6 +58,20 @@ void AsyncCreateTempTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 t
     AsyncSend(runtime, schemeShardId, ev, nodeIdx, ownerActorId);
 }
 
+void AsyncMkTempDir(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx) {
+    auto ev = MkDirRequest(txId, workingDir, scheme);
+    auto* tx = ev->Record.MutableTransaction(0);
+    auto* desc = tx->MutableMkDir();
+    ActorIdToProto(ownerActorId, desc->MutableOwnerActorId());
+
+    AsyncSend(runtime, schemeShardId, ev, nodeIdx, ownerActorId);
+}
+
+void TestMkTempDir(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, const TVector<TExpectedResult>& expectedResults, ui32 ownerNodeIdx) {
+    AsyncMkTempDir(runtime, TTestTxConfig::SchemeShard, txId, workingDir, scheme, ownerActorId, ownerNodeIdx);
+    TestModificationResults(runtime, txId, expectedResults);
+}
+
 void TestCreateTempTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, const TVector<TExpectedResult>& expectedResults, ui32 ownerNodeIdx) {
     AsyncCreateTempTable(runtime, TTestTxConfig::SchemeShard, txId, workingDir, scheme, ownerActorId, ownerNodeIdx);
     TestModificationResults(runtime, txId, expectedResults);
@@ -130,7 +144,12 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         auto ownerActorId = runtime.AllocateEdgeActor(1);
 
         ui64 txId = 100;
-        TestCreateTempTable(runtime, txId, "/MyRoot", R"(
+
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+
+        TestCreateTempTable(runtime, txId, "/MyRoot/tmp", R"(
             TableDescription {
                 Name: "TempTable"
                 Columns { Name: "key"   Type: "Uint64" }
@@ -141,7 +160,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         env.TestWaitNotification(runtime, txId);
 
-        CheckTable(runtime, "/MyRoot/TempTable");
+        CheckTable(runtime, "/MyRoot/tmp/TempTable");
 
         const TActorId proxy = runtime.GetInterconnectProxy(1, 0);
         runtime.Send(new IEventHandle(proxy, TActorId(), new TEvInterconnect::TEvDisconnect(), 0, 0), 1, true);
@@ -150,7 +169,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         runtime.DispatchEvents(options);
 
         env.SimulateSleep(runtime, TDuration::Seconds(50));
-        CheckTable(runtime, "/MyRoot/TempTable", TTestTxConfig::SchemeShard, false);
+        CheckTable(runtime, "/MyRoot/tmp/TempTable", TTestTxConfig::SchemeShard, false);
     }
 
     Y_UNIT_TEST(SchemeshardBackgroundCleaningTestCreateCleanWithRetry) {
@@ -167,7 +186,12 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         auto ownerActorId = runtime.AllocateEdgeActor(1);
 
         ui64 txId = 100;
-        TestCreateTempTable(runtime, txId, "/MyRoot",R"(
+
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+
+        TestCreateTempTable(runtime, txId, "/MyRoot/tmp", R"(
             TableDescription {
                 Name: "TempTable"
                 Columns { Name: "key"   Type: "Uint64" }
@@ -175,10 +199,9 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
                 KeyColumnNames: ["key"]
             }
         )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
-
         env.TestWaitNotification(runtime, txId);
 
-        CheckTable(runtime, "/MyRoot/TempTable");
+        CheckTable(runtime, "/MyRoot/tmp/TempTable");
 
         const TActorId proxy = runtime.GetInterconnectProxy(1, 0);
 
@@ -190,7 +213,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         env.SimulateSleep(runtime, TDuration::Seconds(50));
 
-        CheckTable(runtime, "/MyRoot/TempTable", TTestTxConfig::SchemeShard, true);
+        CheckTable(runtime, "/MyRoot/tmp/TempTable", TTestTxConfig::SchemeShard, true);
     }
 
     Y_UNIT_TEST(SchemeshardBackgroundCleaningTestCreateCleanManyTables) {
@@ -206,7 +229,12 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         auto ownerActorId = runtime.AllocateEdgeActor(1);
         ui64 txId = 100;
-        TestCreateTempTable(runtime, txId, "/MyRoot", R"(
+
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        env.TestWaitNotification(runtime, txId);
+
+        ++txId;
+        TestCreateTempTable(runtime, txId, "/MyRoot/tmp", R"(
             TableDescription {
                 Name: "TempTable1"
                 Columns { Name: "key"   Type: "Uint64" }
@@ -217,7 +245,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         env.TestWaitNotification(runtime, txId);
 
         ++txId;
-        TestCreateTempTable(runtime, txId, "/MyRoot", R"(
+        TestCreateTempTable(runtime, txId, "/MyRoot/tmp", R"(
             TableDescription {
                 Name: "TempTable2"
                 Columns { Name: "key"   Type: "Uint64" }
@@ -227,8 +255,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
         env.TestWaitNotification(runtime, txId);
 
-        CheckTable(runtime, "/MyRoot/TempTable1");
-        CheckTable(runtime, "/MyRoot/TempTable2");
+        CheckTable(runtime, "/MyRoot/tmp/TempTable1");
+        CheckTable(runtime, "/MyRoot/tmp/TempTable2");
 
         const TActorId proxy = runtime.GetInterconnectProxy(1, 0);
         runtime.Send(new IEventHandle(proxy, TActorId(), new TEvInterconnect::TEvDisconnect(), 0, 0), 1, true);
@@ -242,8 +270,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
             runtime.DispatchEvents(options);
         }
 
-        CheckTable(runtime, "/MyRoot/TempTable1", TTestTxConfig::SchemeShard, false);
-        CheckTable(runtime, "/MyRoot/TempTable2", TTestTxConfig::SchemeShard, false);
+        CheckTable(runtime, "/MyRoot/tmp/TempTable1", TTestTxConfig::SchemeShard, false);
+        CheckTable(runtime, "/MyRoot/tmp/TempTable2", TTestTxConfig::SchemeShard, false);
     }
 
     Y_UNIT_TEST(SchemeshardBackgroundCleaningTestReboot) {
@@ -258,8 +286,13 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         env.SimulateSleep(runtime, TDuration::Seconds(30));
 
         auto ownerActorId1 = runtime.AllocateEdgeActor(1);
-        ui64 txId1 = 100;
-        TestCreateTempTable(runtime, txId1, "/MyRoot", R"(
+
+        ui64 txId = 100;
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp1", ownerActorId1, { NKikimrScheme::StatusAccepted }, 1);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 txId1 = ++txId;
+        TestCreateTempTable(runtime, txId1, "/MyRoot/tmp1", R"(
             TableDescription {
                 Name: "TempTable1"
                 Columns { Name: "key"   Type: "Uint64" }
@@ -270,8 +303,13 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         env.TestWaitNotification(runtime, txId1);
 
         auto ownerActorId2 = runtime.AllocateEdgeActor(2);
-        ui64 txId2 = ++txId1;
-        TestCreateTempTable(runtime, txId2, "/MyRoot", R"(
+
+        ++txId;
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp2", ownerActorId2, { NKikimrScheme::StatusAccepted }, 2);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 txId2 = ++txId;
+        TestCreateTempTable(runtime, txId2, "/MyRoot/tmp2", R"(
             TableDescription {
                 Name: "TempTable2"
                 Columns { Name: "key"   Type: "Uint64" }
@@ -281,8 +319,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         )", ownerActorId2, { NKikimrScheme::StatusAccepted }, 2);
         env.TestWaitNotification(runtime, txId2);
 
-        CheckTable(runtime, "/MyRoot/TempTable1");
-        CheckTable(runtime, "/MyRoot/TempTable2");
+        CheckTable(runtime, "/MyRoot/tmp1/TempTable1");
+        CheckTable(runtime, "/MyRoot/tmp2/TempTable2");
 
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
@@ -298,8 +336,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         runtime.DispatchEvents(options);
 
         env.SimulateSleep(runtime, TDuration::Seconds(50));
-        CheckTable(runtime, "/MyRoot/TempTable1", TTestTxConfig::SchemeShard, false);
-        CheckTable(runtime, "/MyRoot/TempTable2", TTestTxConfig::SchemeShard);
+        CheckTable(runtime, "/MyRoot/tmp1/TempTable1", TTestTxConfig::SchemeShard, false);
+        CheckTable(runtime, "/MyRoot/tmp2/TempTable2", TTestTxConfig::SchemeShard);
     }
 
     Y_UNIT_TEST(SchemeshardBackgroundCleaningTestSimpleDrop) {
@@ -316,7 +354,11 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         auto ownerActorId = runtime.AllocateEdgeActor(1);
 
         ui64 txId = 100;
-        TestCreateTempTable(runtime, txId, "/MyRoot", R"(
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+
+        TestCreateTempTable(runtime, txId, "/MyRoot/tmp", R"(
             TableDescription {
                 Name: "TempTable"
                 Columns { Name: "key"   Type: "Uint64" }
@@ -327,13 +369,13 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         env.TestWaitNotification(runtime, txId);
 
-        CheckTable(runtime, "/MyRoot/TempTable");
+        CheckTable(runtime, "/MyRoot/tmp/TempTable");
 
         ++txId;
-        TestDropTempTable(runtime, txId, "/MyRoot", "TempTable", true);
+        TestDropTempTable(runtime, txId, "/MyRoot/tmp", "TempTable", true);
 
         env.SimulateSleep(runtime, TDuration::Seconds(50));
-        CheckTable(runtime, "/MyRoot/TempTable", TTestTxConfig::SchemeShard, false);
+        CheckTable(runtime, "/MyRoot/tmp/TempTable", TTestTxConfig::SchemeShard, false);
     }
 
     Y_UNIT_TEST(SchemeshardBackgroundCleaningTestSimpleDropIndex) {
@@ -350,7 +392,11 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         auto ownerActorId = runtime.AllocateEdgeActor(1);
 
         ui64 txId = 100;
-        TestCreateTempTable(runtime, txId, "/MyRoot", R"(
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+
+        TestCreateTempTable(runtime, txId, "/MyRoot/tmp", R"(
             TableDescription {
                 Name: "TempTable"
                 Columns { Name: "key"   Type: "Uint64" }
@@ -365,17 +411,17 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         env.TestWaitNotification(runtime, txId);
 
-        CheckTable(runtime, "/MyRoot/TempTable");
+        CheckTable(runtime, "/MyRoot/tmp/TempTable");
 
-        TestLs(runtime, "/MyRoot/TempTable/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+        TestLs(runtime, "/MyRoot/tmp/TempTable/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
 
         ++txId;
-        TestDropTempTable(runtime, txId, "/MyRoot", "TempTable", true);
+        TestDropTempTable(runtime, txId, "/MyRoot/tmp", "TempTable", true);
 
         env.SimulateSleep(runtime, TDuration::Seconds(50));
-        CheckTable(runtime, "/MyRoot/TempTable", TTestTxConfig::SchemeShard, false);
+        CheckTable(runtime, "/MyRoot/tmp/TempTable", TTestTxConfig::SchemeShard, false);
 
-        TestLs(runtime, "/MyRoot/TempTable/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/tmp/TempTable/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathNotExist);
     }
 
     Y_UNIT_TEST(SchemeshardBackgroundCleaningTestSimpleCleanIndex) {
@@ -392,7 +438,11 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         auto ownerActorId = runtime.AllocateEdgeActor(1);
 
         ui64 txId = 100;
-        TestCreateTempTable(runtime, txId, "/MyRoot", R"(
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+
+        TestCreateTempTable(runtime, txId, "/MyRoot/tmp", R"(
             TableDescription {
                 Name: "TempTable"
                 Columns { Name: "key"   Type: "Uint64" }
@@ -407,9 +457,9 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         env.TestWaitNotification(runtime, txId);
 
-        CheckTable(runtime, "/MyRoot/TempTable");
+        CheckTable(runtime, "/MyRoot/tmp/TempTable");
 
-        TestLs(runtime, "/MyRoot/TempTable/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+        TestLs(runtime, "/MyRoot/tmp/TempTable/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
 
         const TActorId proxy = runtime.GetInterconnectProxy(1, 0);
         runtime.Send(new IEventHandle(proxy, TActorId(), new TEvInterconnect::TEvDisconnect(), 0, 0), 1, true);
@@ -419,8 +469,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         env.SimulateSleep(runtime, TDuration::Seconds(50));
 
-        CheckTable(runtime, "/MyRoot/TempTable", TTestTxConfig::SchemeShard, false);
+        CheckTable(runtime, "/MyRoot/tmp/TempTable", TTestTxConfig::SchemeShard, false);
 
-        TestLs(runtime, "/MyRoot/TempTable/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/tmp/TempTable/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathNotExist);
     }
 };

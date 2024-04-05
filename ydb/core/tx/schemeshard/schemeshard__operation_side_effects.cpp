@@ -818,7 +818,6 @@ void TSideEffects::DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorCon
 void TSideEffects::DoUpdateTempDirsToRemoveState(TSchemeShard* ss, const TActorContext& ctx) {
     for (auto& [ownerActorId, tempDirs]: TempDirsToRemoveState) {
         auto& TempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
-
         const auto it = TempDirsByOwner.find(ownerActorId);
         if (it == TempDirsByOwner.end()) {
             continue;

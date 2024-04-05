@@ -47,7 +47,7 @@ tracing_config:
 
 #### Description
 
-This section describes the span collector. Currently, the only supported option is `opentelemetry`. Span transmission from a cluster node to the collector is performed using the push model. The collector must be compatible with [OTLP](https://opentelemetry.io/docs/specs/otlp/).
+This section describes the span collector. Currently, the only supported option is `opentelemetry`. Span transmission from a cluster node to the collector uses the push model. The collector must be compatible with [OTLP](https://opentelemetry.io/docs/specs/otlp/).
 
 In the `opentelemetry` section:
 

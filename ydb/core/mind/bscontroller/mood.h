@@ -30,5 +30,22 @@ struct TMood {
     }
 };
 
+struct TPDiskMood {
+    enum EValue : ui8 {
+        Normal = 0,
+        Restarting = 1
+    };
+
+    static TString Name(const EValue value) {
+        switch (value) {
+            case Normal:
+                return "Normal";
+            case Restarting:
+                return "Restarting";
+        }
+        return Sprintf("Unknown%" PRIu64, (ui64)value);
+    }
+};
+
 }  // NBsController
 }  // NKikimr

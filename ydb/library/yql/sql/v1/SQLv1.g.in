@@ -555,7 +555,9 @@ join_constraint:
   | USING pure_column_or_named_list
 ;
 
-into_table_stmt: (INSERT | INSERT OR ABORT | INSERT OR REVERT | INSERT OR IGNORE | UPSERT | REPLACE) INTO into_simple_table_ref into_values_source;
+returning_columns_list: RETURNING (ASTERISK | an_id (COMMA an_id)*);
+
+into_table_stmt: (INSERT | INSERT OR ABORT | INSERT OR REVERT | INSERT OR IGNORE | UPSERT | REPLACE) INTO into_simple_table_ref into_values_source returning_columns_list?;
 
 into_values_source:
     pure_column_list? values_source
@@ -822,8 +824,8 @@ simple_table_ref_core: object_ref | AT? bind_parameter;
 simple_table_ref: simple_table_ref_core table_hints?;
 into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?;
 
-delete_stmt: DELETE FROM simple_table_ref (WHERE expr | ON into_values_source)?;
-update_stmt: UPDATE simple_table_ref (SET set_clause_choice (WHERE expr)? | ON into_values_source);
+delete_stmt: DELETE FROM simple_table_ref (WHERE expr | ON into_values_source)? returning_columns_list?;
+update_stmt: UPDATE simple_table_ref (SET set_clause_choice (WHERE expr)? | ON into_values_source)  returning_columns_list?;
 
 /// out of 2003 standart
 set_clause_choice: set_clause_list | multiple_column_assignment;
@@ -1094,6 +1096,7 @@ keyword_expr_uncompat:
   | PROCESS
   | REDUCE
   | RETURN
+  | RETURNING
   | ROLLUP
   | SELECT
   | SYMMETRIC
@@ -1349,7 +1352,6 @@ keyword_compat: (
   | RESPECT
   | RESTRICT
   | RESULT
-  | RETURNING
   | REVERT
   | REVOKE
   | RIGHT

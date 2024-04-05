@@ -983,7 +983,11 @@ public:
         return {};
     }
 
-    NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, bool /* withSpilling */, TActorSystem* /* actorSystem */, bool /*isConcurrent*/) const override {
+    NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, bool /* withSpilling */, TActorSystem* /* actorSystem */) const override {
+        return {};
+    }
+
+    std::function<void()> GetWakeupCallback() const override {
         return {};
     }
 };

@@ -3,43 +3,22 @@
 
 namespace NYql::NDq {
 
-struct TComputeActorAsyncInputHelperForTaskRunner : public TComputeActorAsyncInputHelper
-{
-public:
-    using TComputeActorAsyncInputHelper::TComputeActorAsyncInputHelper;
-
-    void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space, bool finished) override {
-        Buffer->Push(std::move(batch), space);
-        if (finished) {
-            Buffer->Finish();
-            Finished = true;
-        }
-    }
-    i64 GetFreeSpace() const override{
-        return Buffer->GetFreeSpace();
-    }
-
-    IDqAsyncInputBuffer::TPtr Buffer;
-};
-
 template<typename TDerived>
-class TDqSyncComputeActorBase: public TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperForTaskRunner> {
-    using TBase = TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperForTaskRunner>;
+class TDqSyncComputeActorBase: public TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync> {
+    using TBase = TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync>;
 public:
-    using TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperForTaskRunner>::TDqComputeActorBase;
+    using TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync>::TDqComputeActorBase;
     static constexpr bool HasAsyncTaskRunner = false;
 
-    template<typename T>
-    requires(std::is_base_of<TComputeActorAsyncInputHelperForTaskRunner, T>::value)
-    T CreateInputHelper(const TString& logPrefix,
+    TComputeActorAsyncInputHelperSync CreateInputHelper(const TString& logPrefix,
         ui64 index,
         NDqProto::EWatermarksMode watermarksMode
     )
     {
-        return T(logPrefix, index, watermarksMode);
+        return TComputeActorAsyncInputHelperSync(logPrefix, index, watermarksMode);
     }
 
-    const IDqAsyncInputBuffer* GetInputTransform(ui64, const TComputeActorAsyncInputHelperForTaskRunner& inputTransformInfo) const
+    const IDqAsyncInputBuffer* GetInputTransform(ui64, const TComputeActorAsyncInputHelperSync& inputTransformInfo) const
     {
         return inputTransformInfo.Buffer.Get();
     }
@@ -237,7 +216,7 @@ protected:
         }
 
         for (auto& [inputIndex, transform] : this->InputTransformsMap) {
-            std::tie(transform.InputBuffer, transform.Buffer) = TaskRunner->GetInputTransform(inputIndex);
+            std::tie(transform.Input, transform.Buffer) = *TaskRunner->GetInputTransform(inputIndex);
         }
 
         for (auto& [channelId, channel] : this->OutputChannelsMap) {

@@ -731,6 +731,28 @@ TEST(TYsonStructTest, Reconfigure)
     EXPECT_EQ(95, subconfig->MyInt);
 }
 
+struct TTestYsonStructWithFieldInitializer
+    : public TYsonStruct
+{
+    TTestSubconfigPtr Sub = New<TTestSubconfig>();
+
+    REGISTER_YSON_STRUCT(TTestYsonStructWithFieldInitializer);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("sub", &TThis::Sub)
+            .DefaultNew();
+    }
+};
+
+TEST(TYsonStructTest, TestNestedWithFieldInitializer)
+{
+    using TConfig = TTestYsonStructWithFieldInitializer;
+    using TPtr = TIntrusivePtr<TConfig>;
+
+    auto yson = ConvertTo<TPtr>(TYsonString(TStringBuf("{}")));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TTestConfigLite
@@ -812,6 +834,242 @@ TEST(TYsonStructTest, TestConvertToLite)
     EXPECT_EQ(deserialized.MyString, "y");
     EXPECT_EQ(deserialized.MyInt, 10);
     EXPECT_NE(deserialized.Subconfig, nullptr);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestLiteFieldNormalYson
+    : public virtual TYsonStruct
+{
+    TTestLiteWithDefaults SubLite;
+
+    REGISTER_YSON_STRUCT(TTestLiteFieldNormalYson);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("sub_lite", &TThis::SubLite)
+            .Default();
+    }
+};
+
+struct TTestLiteFieldNormalYsonSecondBase
+    : public virtual TYsonStruct
+{
+    TTestLiteWithDefaults SubLite2;
+
+    REGISTER_YSON_STRUCT(TTestLiteFieldNormalYsonSecondBase);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("sub_lite_2", &TThis::SubLite2)
+            .Default();
+    }
+};
+
+struct TTestLiteFieldNormalYsonDoubleDerived
+    : public TTestLiteFieldNormalYson
+    , public TTestLiteFieldNormalYsonSecondBase
+{
+    TTestLiteWithDefaults SubLite3;
+
+    REGISTER_YSON_STRUCT(TTestLiteFieldNormalYsonDoubleDerived);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("sub_lite_3", &TThis::SubLite3)
+            .Default();
+    }
+};
+
+TEST(TYsonStructTest, YsonStructWithLiteField)
+{
+    using TConfig = TTestLiteFieldNormalYson;
+    using TConfigPtr = TIntrusivePtr<TConfig>;
+
+    {
+        auto yson = ConvertTo<TConfigPtr>(TYsonString(TStringBuf("{}")));
+        auto& sub = yson->SubLite;
+        EXPECT_EQ(sub.MyString, "y");
+        EXPECT_EQ(sub.MyInt, 10);
+        EXPECT_TRUE(sub.Subconfig);
+    }
+
+    {
+        auto yson = New<TConfig>();
+        auto& sub = yson->SubLite;
+        EXPECT_EQ(sub.MyString, "y");
+        EXPECT_EQ(sub.MyInt, 10);
+        EXPECT_TRUE(sub.Subconfig);
+    }
+}
+
+TEST(TYsonStructTest, DoubleDerivedYsonStructWithLiteFields)
+{
+    using TConfig = TTestLiteFieldNormalYsonDoubleDerived;
+    using TConfigPtr = TIntrusivePtr<TConfig>;
+
+    {
+        auto yson = ConvertTo<TConfigPtr>(TYsonString(TStringBuf("{}")));
+
+        {
+            auto& sub = yson->SubLite;
+            EXPECT_EQ(sub.MyString, "y");
+            EXPECT_EQ(sub.MyInt, 10);
+            EXPECT_TRUE(sub.Subconfig);
+        }
+        {
+            auto& sub = yson->SubLite2;
+            EXPECT_EQ(sub.MyString, "y");
+            EXPECT_EQ(sub.MyInt, 10);
+            EXPECT_TRUE(sub.Subconfig);
+        }
+        {
+            auto& sub = yson->SubLite3;
+            EXPECT_EQ(sub.MyString, "y");
+            EXPECT_EQ(sub.MyInt, 10);
+            EXPECT_TRUE(sub.Subconfig);
+        }
+    }
+
+    {
+        auto yson = New<TConfig>();
+
+        {
+            auto& sub = yson->SubLite;
+            EXPECT_EQ(sub.MyString, "y");
+            EXPECT_EQ(sub.MyInt, 10);
+            EXPECT_TRUE(sub.Subconfig);
+        }
+        {
+            auto& sub = yson->SubLite2;
+            EXPECT_EQ(sub.MyString, "y");
+            EXPECT_EQ(sub.MyInt, 10);
+            EXPECT_TRUE(sub.Subconfig);
+        }
+        {
+            auto& sub = yson->SubLite3;
+            EXPECT_EQ(sub.MyString, "y");
+            EXPECT_EQ(sub.MyInt, 10);
+            EXPECT_TRUE(sub.Subconfig);
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestLiteFieldLite
+    : public virtual TYsonStructLite
+{
+    TTestLiteWithDefaults SubLite;
+
+    REGISTER_YSON_STRUCT_LITE(TTestLiteFieldLite);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("sub_lite", &TThis::SubLite)
+            .Default();
+    }
+};
+
+struct TTestLiteFieldLiteSecondBase
+    : public virtual TYsonStructLite
+{
+    TTestLiteWithDefaults SubLite2;
+
+    REGISTER_YSON_STRUCT_LITE(TTestLiteFieldLiteSecondBase);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("sub_lite_2", &TThis::SubLite2)
+            .Default();
+    }
+};
+
+struct TTestLiteFieldLiteDoubleDerived
+    : public TTestLiteFieldLite
+    , public TTestLiteFieldLiteSecondBase
+{
+    TTestLiteWithDefaults SubLite3;
+
+    REGISTER_YSON_STRUCT_LITE(TTestLiteFieldLiteDoubleDerived);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("sub_lite_3", &TThis::SubLite3)
+            .Default();
+    }
+};
+
+TEST(TYsonStructTest, LiteWithLiteField)
+{
+    using TConfig = TTestLiteFieldLite;
+
+    {
+        auto yson = ConvertTo<TTestLiteFieldLite>(TYsonString(TStringBuf("{}")));
+        auto& sub = yson.SubLite;
+        EXPECT_EQ(sub.MyString, "y");
+        EXPECT_EQ(sub.MyInt, 10);
+        EXPECT_TRUE(sub.Subconfig);
+    }
+
+    {
+        TConfig yson;
+        auto& sub = yson.SubLite;
+        EXPECT_EQ(sub.MyString, "y");
+        EXPECT_EQ(sub.MyInt, 10);
+        EXPECT_TRUE(sub.Subconfig);
+    }
+}
+
+TEST(TYsonStructTest, DoubleDerivedLiteWithLiteFields)
+{
+    using TConfig = TTestLiteFieldLiteDoubleDerived;
+
+    {
+        auto yson = ConvertTo<TConfig>(TYsonString(TStringBuf("{}")));
+
+        {
+            auto& sub = yson.SubLite;
+            EXPECT_EQ(sub.MyString, "y");
+            EXPECT_EQ(sub.MyInt, 10);
+            EXPECT_TRUE(sub.Subconfig);
+        }
+        {
+            auto& sub = yson.SubLite2;
+            EXPECT_EQ(sub.MyString, "y");
+            EXPECT_EQ(sub.MyInt, 10);
+            EXPECT_TRUE(sub.Subconfig);
+        }
+        {
+            auto& sub = yson.SubLite3;
+            EXPECT_EQ(sub.MyString, "y");
+            EXPECT_EQ(sub.MyInt, 10);
+            EXPECT_TRUE(sub.Subconfig);
+        }
+    }
+
+    {
+        TConfig yson;
+
+        {
+            auto& sub = yson.SubLite;
+            EXPECT_EQ(sub.MyString, "y");
+            EXPECT_EQ(sub.MyInt, 10);
+            EXPECT_TRUE(sub.Subconfig);
+        }
+        {
+            auto& sub = yson.SubLite2;
+            EXPECT_EQ(sub.MyString, "y");
+            EXPECT_EQ(sub.MyInt, 10);
+            EXPECT_TRUE(sub.Subconfig);
+        }
+        {
+            auto& sub = yson.SubLite3;
+            EXPECT_EQ(sub.MyString, "y");
+            EXPECT_EQ(sub.MyInt, 10);
+            EXPECT_TRUE(sub.Subconfig);
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1980,7 +2238,7 @@ class TTestConfigWithSubStructLite
     : public TYsonStructLite
 {
 public:
-    std::optional<TTestSubConfigLiteWithDefaults> Sub;
+    TTestSubConfigLiteWithDefaults Sub;
 
     REGISTER_YSON_STRUCT_LITE(TTestConfigWithSubStructLite);
 
@@ -2004,8 +2262,8 @@ TEST(TYsonStructTest, CustomSubStructLite)
         .BeginMap()
         .EndMap();
     testStruct.Load(testNode->AsMap());
-    EXPECT_EQ(testStruct.Sub->MyInt, 11);
-    EXPECT_EQ(testStruct.Sub->MyString, "x");
+    EXPECT_EQ(testStruct.Sub.MyInt, 11);
+    EXPECT_EQ(testStruct.Sub.MyString, "x");
 
     testNode = BuildYsonNodeFluently()
         .BeginMap()
@@ -2014,8 +2272,8 @@ TEST(TYsonStructTest, CustomSubStructLite)
                 .EndMap()
         .EndMap();
     testStruct.Load(testNode->AsMap());
-    EXPECT_EQ(testStruct.Sub->MyInt, 11);
-    EXPECT_EQ(testStruct.Sub->MyString, "x");
+    EXPECT_EQ(testStruct.Sub.MyInt, 11);
+    EXPECT_EQ(testStruct.Sub.MyString, "x");
 
     testNode = BuildYsonNodeFluently()
         .BeginMap()
@@ -2025,8 +2283,8 @@ TEST(TYsonStructTest, CustomSubStructLite)
                 .EndMap()
         .EndMap();
     testStruct.Load(testNode->AsMap());
-    EXPECT_EQ(testStruct.Sub->MyInt, 11);
-    EXPECT_EQ(testStruct.Sub->MyString, "C");
+    EXPECT_EQ(testStruct.Sub.MyInt, 11);
+    EXPECT_EQ(testStruct.Sub.MyString, "C");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2115,13 +2373,11 @@ public:
 
 TEST(TYsonStructTest, NestedListWithCustomDefault)
 {
-    {
-        auto testInput = TYsonString(TStringBuf("{}"));
-        auto deserialized = ConvertTo<TIntrusivePtr<TTestingNestedListWithCustomDefault>>(testInput);
+    auto testInput = TYsonString(TStringBuf("{}"));
+    auto deserialized = ConvertTo<TIntrusivePtr<TTestingNestedListWithCustomDefault>>(testInput);
 
-        EXPECT_EQ(deserialized->NestedList.size(), 1u);
-        EXPECT_EQ(deserialized->NestedList[0]->IntValue, 5);
-    }
+    EXPECT_EQ(deserialized->NestedList.size(), 1u);
+    EXPECT_EQ(deserialized->NestedList[0]->IntValue, 5);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2148,34 +2404,32 @@ public:
 
 TEST(TYsonStructTest, NestedMapWithCustomDefault)
 {
-    {
-        auto testInput = TYsonString(TStringBuf("{}"));
-        auto deserialized = ConvertTo<TIntrusivePtr<TTestingNestedMapWithCustomDefault>>(testInput);
+    auto testInput = TYsonString(TStringBuf("{}"));
+    auto deserialized = ConvertTo<TIntrusivePtr<TTestingNestedMapWithCustomDefault>>(testInput);
 
-        EXPECT_EQ(deserialized->NestedMap.size(), 2u);
-        EXPECT_EQ(deserialized->NestedMap["foo"]->IntValue, 42);
-        EXPECT_EQ(deserialized->NestedMap["bar"]->IntValue, 7);
+    EXPECT_EQ(deserialized->NestedMap.size(), 2u);
+    EXPECT_EQ(deserialized->NestedMap["foo"]->IntValue, 42);
+    EXPECT_EQ(deserialized->NestedMap["bar"]->IntValue, 7);
 
-        auto testNode = BuildYsonNodeFluently()
-            .BeginMap()
-                .Item("nested_map")
-                    .BeginMap()
-                        .Item("baz")
-                            .BeginMap()
-                                .Item("int_value").Value(33)
-                            .EndMap()
-                        .Item("foo")
-                            .BeginMap()
-                                .Item("int_value").Value(88)
-                            .EndMap()
-                    .EndMap()
-            .EndMap();
-        Deserialize(deserialized, testNode->AsMap());
-        EXPECT_EQ(deserialized->NestedMap.size(), 3u);
-        EXPECT_EQ(deserialized->NestedMap["baz"]->IntValue, 33);
-        EXPECT_EQ(deserialized->NestedMap["foo"]->IntValue, 88);
-        EXPECT_EQ(deserialized->NestedMap["bar"]->IntValue, 7);
-    }
+    auto testNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("nested_map")
+                .BeginMap()
+                    .Item("baz")
+                        .BeginMap()
+                            .Item("int_value").Value(33)
+                        .EndMap()
+                    .Item("foo")
+                        .BeginMap()
+                            .Item("int_value").Value(88)
+                        .EndMap()
+                .EndMap()
+        .EndMap();
+    Deserialize(deserialized, testNode->AsMap());
+    EXPECT_EQ(deserialized->NestedMap.size(), 3u);
+    EXPECT_EQ(deserialized->NestedMap["baz"]->IntValue, 33);
+    EXPECT_EQ(deserialized->NestedMap["foo"]->IntValue, 88);
+    EXPECT_EQ(deserialized->NestedMap["bar"]->IntValue, 7);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2203,33 +2457,99 @@ public:
 
 TEST(TYsonStructTest, NestedMapWithCustomDefaultAndResetOnLoad)
 {
+    auto testInput = TYsonString(TStringBuf("{}"));
+    auto deserialized = ConvertTo<TIntrusivePtr<TTestingNestedMapWithCustomDefaultResetOnLoad>>(testInput);
+
+    EXPECT_EQ(deserialized->NestedMap.size(), 2u);
+    EXPECT_EQ(deserialized->NestedMap["foo"]->IntValue, 42);
+    EXPECT_EQ(deserialized->NestedMap["bar"]->IntValue, 7);
+
+    auto testNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("nested_map")
+                .BeginMap()
+                    .Item("baz")
+                        .BeginMap()
+                            .Item("int_value").Value(33)
+                        .EndMap()
+                    .Item("foo")
+                        .BeginMap()
+                            .Item("int_value").Value(88)
+                        .EndMap()
+                .EndMap()
+        .EndMap();
+    Deserialize(deserialized, testNode->AsMap());
+    EXPECT_EQ(deserialized->NestedMap.size(), 2u);
+    EXPECT_EQ(deserialized->NestedMap["baz"]->IntValue, 33);
+    EXPECT_EQ(deserialized->NestedMap["foo"]->IntValue, 88);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TInnerYsonStruct
+    : public TYsonStruct
+{
+    int MyInt;
+
+    REGISTER_YSON_STRUCT(TInnerYsonStruct);
+
+    static void Register(TRegistrar registrar)
     {
-        auto testInput = TYsonString(TStringBuf("{}"));
-        auto deserialized = ConvertTo<TIntrusivePtr<TTestingNestedMapWithCustomDefaultResetOnLoad>>(testInput);
+        registrar.Parameter("my_int", &TThis::MyInt)
+            .Default(1);
 
-        EXPECT_EQ(deserialized->NestedMap.size(), 2u);
-        EXPECT_EQ(deserialized->NestedMap["foo"]->IntValue, 42);
-        EXPECT_EQ(deserialized->NestedMap["bar"]->IntValue, 7);
-
-        auto testNode = BuildYsonNodeFluently()
-            .BeginMap()
-                .Item("nested_map")
-                    .BeginMap()
-                        .Item("baz")
-                            .BeginMap()
-                                .Item("int_value").Value(33)
-                            .EndMap()
-                        .Item("foo")
-                            .BeginMap()
-                                .Item("int_value").Value(88)
-                            .EndMap()
-                    .EndMap()
-            .EndMap();
-        Deserialize(deserialized, testNode->AsMap());
-        EXPECT_EQ(deserialized->NestedMap.size(), 2u);
-        EXPECT_EQ(deserialized->NestedMap["baz"]->IntValue, 33);
-        EXPECT_EQ(deserialized->NestedMap["foo"]->IntValue, 88);
+        registrar.Postprocessor([] (TThis* self) {
+            self->MyInt = 42;
+        });
     }
+};
+
+struct TOuterYsonStructWithNull
+    : public TYsonStruct
+{
+    TIntrusivePtr<TInnerYsonStruct> Inner;
+
+    REGISTER_YSON_STRUCT(TOuterYsonStructWithNull);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("inner", &TThis::Inner)
+            // Make sure postprocessor doesn't cause sigsegv in case of nullptr
+            .Default();
+    }
+};
+
+struct TOuterYsonStructWithValidation
+    : public TYsonStruct
+{
+    TIntrusivePtr<TInnerYsonStruct> Inner;
+
+    REGISTER_YSON_STRUCT(TOuterYsonStructWithValidation);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("inner", &TThis::Inner)
+            .DefaultNew()
+            // Will be true only if postprocessor is called and is called before this check.
+            .CheckThat([] (const TIntrusivePtr<TInnerYsonStruct>& inner) {
+                EXPECT_EQ(inner->MyInt % 2, 0);
+            });
+    }
+};
+
+TEST(TYsonStructTest, OuterYsonStructWithNull)
+{
+    auto testInput = TYsonString(TStringBuf("{}"));
+    auto deserialized = ConvertTo<TIntrusivePtr<TOuterYsonStructWithNull>>(testInput);
+}
+
+TEST(TYsonStructTest, OuterYsonStructWithValidation)
+{
+    auto testInput = TYsonString(TStringBuf("{}"));
+    auto deserialized = ConvertTo<TIntrusivePtr<TOuterYsonStructWithValidation>>(testInput);
+
+    EXPECT_TRUE(deserialized->Inner);
+    EXPECT_EQ(deserialized->Inner->MyInt, 42);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

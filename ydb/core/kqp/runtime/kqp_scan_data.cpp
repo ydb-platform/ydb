@@ -45,6 +45,10 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, const NSc
         case NTypeIds::Datetime:
         case NTypeIds::Timestamp:
         case NTypeIds::Interval:
+        case NTypeIds::Date32:
+        case NTypeIds::Datetime64:
+        case NTypeIds::Timestamp64:
+        case NTypeIds::Interval64:
         case NTypeIds::ActorId:
         case NTypeIds::StepOrderId:
         {
@@ -330,11 +334,15 @@ TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
         {
             return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int16Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
+        case NTypeIds::Date32:
         case NTypeIds::Int32:
         {
             return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int32Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Int64:
+        case NTypeIds::Timestamp64:
+        case NTypeIds::Interval64:
+        case NTypeIds::Datetime64:
         {
             return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int64Array, i64>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
@@ -399,9 +407,22 @@ TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
             return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FixedSizeBinaryArray, NUdf::TStringRef>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Pg:
+            switch (NPg::PgTypeIdFromTypeDesc(columnType.GetTypeDesc())) {
+                case INT2OID:
+                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int16Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                case INT4OID:
+                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int32Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                case INT8OID:
+                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int64Array, i64>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                case FLOAT4OID:
+                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FloatArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                case FLOAT8OID:
+                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::DoubleArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                default:
+                    break;
+            }
             // TODO: support pg types
             YQL_ENSURE(false, "Unsupported pg type at column " << columnIndex);
-
         default:
             YQL_ENSURE(false, "Unsupported type: " << NScheme::TypeName(columnType.GetTypeId()) << " at column " << columnIndex);
     }

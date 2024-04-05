@@ -268,6 +268,10 @@ public:
         return TaskId;
     }
 
+    void SetSpillerFactory(std::shared_ptr<ISpillerFactory> spillerFactory) override {
+        AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(spillerFactory);
+    }
+
     bool UseSeparatePatternAlloc(const TDqTaskSettings& taskSettings) const {
         return Context.PatternCache &&
             (Settings.OptLLVM == "OFF" || taskSettings.IsLLVMDisabled() || Settings.UseCacheForLLVM);
@@ -775,10 +779,12 @@ public:
         return *ptr;
     }
 
-    std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr> GetInputTransform(ui64 inputIndex) override {
-        auto ptr = AllocatedHolder->InputTransforms.FindPtr(inputIndex);
-        YQL_ENSURE(ptr, "task: " << TaskId << " does not have input index: " << inputIndex << " or such transform");
-        return {ptr->TransformInput, ptr->TransformOutput};
+    std::optional<std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> GetInputTransform(ui64 inputIndex) override {
+        if (auto ptr = AllocatedHolder->InputTransforms.FindPtr(inputIndex)) {
+            return {std::pair{ptr->TransformInput, ptr->TransformOutput}};
+        } else {
+            return std::nullopt;
+        }
     }
 
     std::pair<IDqAsyncOutputBuffer::TPtr, IDqOutputConsumer::TPtr> GetOutputTransform(ui64 outputIndex) override {

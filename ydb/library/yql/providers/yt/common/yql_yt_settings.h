@@ -102,6 +102,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TString, false> _ImpersonationUser;
     NCommon::TConfSetting<EInferSchemaMode, false> InferSchemaMode;
     NCommon::TConfSetting<ui32, false> BatchListFolderConcurrency;
+    NCommon::TConfSetting<bool, false> ForceTmpSecurity;
 
     // Job runtime
     NCommon::TConfSetting<TString, true> Pool;
@@ -159,6 +160,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TString, true> PublishedAutoMerge;
     NCommon::TConfSetting<TString, true> TemporaryAutoMerge;
     NCommon::TConfSetting<TVector<TString>, true> LayerPaths;
+    NCommon::TConfSetting<TString, true> DockerImage;
     NCommon::TConfSetting<NYT::TNode, true> JobEnv;
     NCommon::TConfSetting<NYT::TNode, true> OperationSpec;
     NCommon::TConfSetting<NYT::TNode, true> Annotations;

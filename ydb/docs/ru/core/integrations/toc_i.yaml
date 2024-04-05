@@ -3,5 +3,7 @@ items:
   href: fluent-bit.md
 - name: goose
   href: goose.md
+- name: Импорт из источников JDBC
+  href: import-jdbc.md
 - name: Liquibase
   href: liquibase.md

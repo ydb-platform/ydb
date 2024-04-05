@@ -1,11 +1,10 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
-#include <ydb/core/formats/arrow/reader/read_filter_merger.h>
 #include <library/cpp/object_factory/object_factory.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap {
-struct TCompactionLimits;
 class TGranuleMeta;
 class TColumnEngineChanges;
 namespace NDataLocks {
@@ -58,7 +57,7 @@ private:
     YDB_READONLY(TInstant, ActualizationInstant, TInstant::Zero());
 protected:
     virtual void DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) = 0;
-    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
+    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
     virtual void DoActualize(const TInstant currentInstant) = 0;
     virtual TString DoDebugString() const {
@@ -67,7 +66,8 @@ protected:
     virtual NJson::TJsonValue DoSerializeToJsonVisual() const {
         return NJson::JSON_NULL;
     }
-    
+    virtual bool DoIsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
+
 public:
     using TFactory = NObjectFactory::TObjectFactory<IOptimizerPlanner, TString>;
     IOptimizerPlanner(const ui64 pathId)
@@ -118,7 +118,10 @@ public:
         return DoDebugString();
     }
 
-    virtual std::vector<NIndexedReader::TSortableBatchPosition> GetBucketPositions() const = 0;
+    virtual std::vector<NArrow::NMerger::TSortableBatchPosition> GetBucketPositions() const = 0;
+    bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
+        return DoIsLocked(dataLocksManager);
+    }
 
     NJson::TJsonValue SerializeToJsonVisual() const {
         return DoSerializeToJsonVisual();
@@ -129,7 +132,7 @@ public:
         DoModifyPortions(add, remove);
     }
 
-    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
+    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
     TOptimizationPriority GetUsefulMetric() const {
         return DoGetUsefulMetric();
     }

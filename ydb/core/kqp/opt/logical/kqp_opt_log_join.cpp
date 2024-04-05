@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/yql_cost_function.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -175,6 +176,7 @@ TDqJoin FlipLeftSemiJoin(const TDqJoin& join, TExprContext& ctx) {
             .Add(leftJoinKeyNames).Build()
         .RightJoinKeyNames()
             .Add(rightJoinKeyNames).Build()
+        .JoinAlgo(join.JoinAlgo())
         .Done();
 }
 
@@ -879,16 +881,22 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         .JoinKeys(join.JoinKeys())
         .LeftJoinKeyNames(join.LeftJoinKeyNames())
         .RightJoinKeyNames(join.RightJoinKeyNames())
+        .JoinAlgo(join.JoinAlgo())
         .Done();
 }
 
 } // anonymous namespace
 
-TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if ((kqpCtx.IsScanQuery() && !kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin) || !node.Maybe<TDqJoin>()) {
+TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, bool useCBO)
+{
+    if ((!useCBO && kqpCtx.IsScanQuery() && !kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin) || !node.Maybe<TDqJoin>()) {
         return node;
     }
     auto join = node.Cast<TDqJoin>();
+
+    if (useCBO && FromString<EJoinAlgoType>(join.JoinAlgo().StringValue()) != EJoinAlgoType::LookupJoin) {
+        return node;
+    }
 
     DBG("-- Join: " << KqpExprToPrettyString(join, ctx));
 

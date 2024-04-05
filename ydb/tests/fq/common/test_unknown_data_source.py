@@ -27,4 +27,4 @@ class TestUnknownDataSource:
         if yq_version == 'v1':
             assert "Unknown DataSource: kikimr" in issues, "Incorrect Issues: " + issues
         else:
-            assert "ATOM evaluation is not supported in YDB queries." in issues, "Incorrect Issues: " + issues
+            assert "Cannot find table" in issues, "Incorrect Issues: " + issues

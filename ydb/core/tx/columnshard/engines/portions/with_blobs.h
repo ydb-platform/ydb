@@ -48,7 +48,7 @@ public:
             void AddChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
                 return OwnerBlob->AddChunk(*OwnerPortion, chunk);
             }
-            void RestoreChunk(const std::shared_ptr<IPortionColumnChunk>& chunk) {
+            void RestoreChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
                 OwnerBlob->RestoreChunk(*OwnerPortion, chunk);
             }
         };
@@ -93,28 +93,34 @@ private:
     }
 
 public:
+    void InitBatchCached(const std::shared_ptr<arrow::RecordBatch>& batch) {
+        if (!batch) {
+            return;
+        }
+        CachedBatch = batch;
+    }
+
     static std::vector<TPortionInfoWithBlobs> RestorePortions(const std::vector<TPortionInfo>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
         const TVersionedIndex& tables, const std::shared_ptr<IStoragesManager>& operators);
-    static TPortionInfoWithBlobs RestorePortion(const TPortionInfo& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
+    static TPortionInfoWithBlobs RestorePortion(const TPortionInfo& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
         const TIndexInfo& indexInfo, const std::shared_ptr<IStoragesManager>& operators);
 
     std::shared_ptr<arrow::RecordBatch> GetBatch(const ISnapshotSchema::TPtr& data, const ISnapshotSchema& result, const std::set<std::string>& columnNames = {}) const;
+    static TPortionInfoWithBlobs SyncPortion(TPortionInfoWithBlobs&& source,
+        const ISnapshotSchema::TPtr& from, const ISnapshotSchema::TPtr& to, const TString& targetTier, const std::shared_ptr<IStoragesManager>& storages,
+        std::shared_ptr<NColumnShard::TSplitterCounters> counters);
 
     std::vector<std::shared_ptr<IPortionDataChunk>> GetEntityChunks(const ui32 entityId) const;
 
     bool ExtractColumnChunks(const ui32 columnId, std::vector<const TColumnRecord*>& records, std::vector<std::shared_ptr<IPortionDataChunk>>& chunks);
 
-    ui64 GetSize() const {
-        return PortionInfo.BlobsBytes();
-    }
-
     void FillStatistics(const TIndexInfo& index);
 
     static TPortionInfoWithBlobs BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
-        std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators,
-        const std::shared_ptr<ISnapshotSchema>& schema);
+        std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators);
 
-    std::optional<TPortionInfoWithBlobs> ChangeSaver(ISnapshotSchema::TPtr currentSchema, const TSaverContext& saverContext) const;
+    static TPortionInfoWithBlobs BuildByBlobs(std::vector<TSplittedBlob>&& chunks, const TPortionInfo& basePortion,
+        const std::shared_ptr<IStoragesManager>& operators);
 
     const TString& GetBlobByRangeVerified(const ui32 columnId, const ui32 chunkId) const {
         for (auto&& b : Blobs) {

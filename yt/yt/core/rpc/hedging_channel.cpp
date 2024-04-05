@@ -45,7 +45,7 @@ public:
     // IClientResponseHandler implementation.
     void HandleAcknowledgement() override;
     void HandleResponse(TSharedRefArray message, TString address) override;
-    void HandleError(const TError& error) override;
+    void HandleError(TError error) override;
     void HandleStreamingPayload(const TStreamingPayload& /*payload*/) override;
     void HandleStreamingFeedback(const TStreamingFeedback& /*feedback*/) override;
 
@@ -149,7 +149,7 @@ public:
         responseHandler->HandleResponse(std::move(message), std::move(address));
     }
 
-    void HandleError(const TError& error, bool backup)
+    void HandleError(TError error, bool backup)
     {
         IClientResponseHandlerPtr responseHandler;
         {
@@ -168,10 +168,10 @@ public:
         YT_LOG_DEBUG_IF(backup, "Request failed at backup (RequestId: %v)",
             Request_->GetRequestId());
 
-        responseHandler->HandleError(
-            backup
-            ? error << TErrorAttribute(BackupFailedKey, true)
-            : error);
+        if (backup) {
+            error <<= TErrorAttribute(BackupFailedKey, true);
+        }
+        responseHandler->HandleError(std::move(error));
     }
 
     // IClientRequestControl implementation.
@@ -302,9 +302,9 @@ void THedgingResponseHandler::HandleAcknowledgement()
     Session_->HandleAcknowledgement(Backup_);
 }
 
-void THedgingResponseHandler::HandleError(const TError& error)
+void THedgingResponseHandler::HandleError(TError error)
 {
-    Session_->HandleError(error, Backup_);
+    Session_->HandleError(std::move(error), Backup_);
 }
 
 void THedgingResponseHandler::HandleResponse(TSharedRefArray message, TString address)

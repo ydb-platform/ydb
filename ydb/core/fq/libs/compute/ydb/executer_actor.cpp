@@ -59,9 +59,10 @@ public:
         }
     };
 
-    TExecuterActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector, const TActorId& pinger, const ::NYql::NCommon::TServiceCounters& queryCounters)
+    TExecuterActor(const TRunActorParams& params, Ydb::Query::StatsMode statsMode, const TActorId& parent, const TActorId& connector, const TActorId& pinger, const ::NYql::NCommon::TServiceCounters& queryCounters)
         : TBaseComputeActor(queryCounters, "Executer")
         , Params(params)
+        , StatsMode(statsMode)
         , Parent(parent)
         , Connector(connector)
         , Pinger(pinger)
@@ -114,7 +115,7 @@ public:
     }
 
     void SendExecuteScript() {
-        Register(new TRetryActor<TEvYdbCompute::TEvExecuteScriptRequest, TEvYdbCompute::TEvExecuteScriptResponse, TString, TString, TDuration, TDuration, Ydb::Query::Syntax, Ydb::Query::ExecMode, TString>(Counters.GetCounters(ERequestType::RT_EXECUTE_SCRIPT), SelfId(), Connector, Params.Sql, Params.JobId, Params.ResultTtl, Params.ExecutionTtl, GetSyntax(), GetExecuteMode(), Params.JobId + "_" + ToString(Params.RestartCount)));
+        Register(new TRetryActor<TEvYdbCompute::TEvExecuteScriptRequest, TEvYdbCompute::TEvExecuteScriptResponse, TString, TString, TDuration, TDuration, Ydb::Query::Syntax, Ydb::Query::ExecMode, Ydb::Query::StatsMode, TString, std::map<TString, Ydb::TypedValue>>(Counters.GetCounters(ERequestType::RT_EXECUTE_SCRIPT), SelfId(), Connector, Params.Sql, Params.JobId, Params.ResultTtl, Params.ExecutionTtl, GetSyntax(), GetExecuteMode(), StatsMode, Params.JobId + "_" + ToString(Params.RestartCount), Params.QueryParameters));
     }
 
     Ydb::Query::Syntax GetSyntax() const {
@@ -162,6 +163,7 @@ public:
 
 private:
     TRunActorParams Params;
+    Ydb::Query::StatsMode StatsMode;
     TActorId Parent;
     TActorId Connector;
     TActorId Pinger;
@@ -172,11 +174,12 @@ private:
 };
 
 std::unique_ptr<NActors::IActor> CreateExecuterActor(const TRunActorParams& params,
+                                                     Ydb::Query::StatsMode statsMode,
                                                      const TActorId& parent,
                                                      const TActorId& connector,
                                                      const TActorId& pinger,
                                                      const ::NYql::NCommon::TServiceCounters& queryCounters) {
-    return std::make_unique<TExecuterActor>(params, parent, connector, pinger, queryCounters);
+    return std::make_unique<TExecuterActor>(params, statsMode, parent, connector, pinger, queryCounters);
 }
 
 }

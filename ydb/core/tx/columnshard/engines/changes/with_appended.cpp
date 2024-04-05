@@ -2,31 +2,38 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/splitter/rb_splitter.h>
+#include <ydb/core/tx/columnshard/splitter/batch_slice.h>
+#include <ydb/core/tx/columnshard/splitter/settings.h>
 
 namespace NKikimr::NOlap {
 
 void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
-    {
-        auto g = context.EngineLogs.GranulesStorage->StartPackModification();
-        THashSet<ui64> usedPortionIds;
-        for (auto& [_, portionInfo] : PortionsToRemove) {
-            Y_ABORT_UNLESS(!portionInfo.Empty());
-            Y_ABORT_UNLESS(portionInfo.HasRemoveSnapshot());
-            AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
-            portionInfo.SaveToDatabase(context.DBWrapper);
-        }
-        for (auto& portionInfoWithBlobs : AppendedPortions) {
-            auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
-            Y_ABORT_UNLESS(!portionInfo.Empty());
-            AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
-            portionInfo.SaveToDatabase(context.DBWrapper);
-        }
-    }
-
+    THashSet<ui64> usedPortionIds;
     for (auto& [_, portionInfo] : PortionsToRemove) {
-        context.EngineLogs.CleanupPortions[portionInfo.GetRemoveSnapshot()].emplace_back(portionInfo);
+        Y_ABORT_UNLESS(!portionInfo.Empty());
+        Y_ABORT_UNLESS(portionInfo.HasRemoveSnapshot());
+        AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
+        portionInfo.SaveToDatabase(context.DBWrapper);
     }
+    const auto predRemoveDroppedTable = [self](const TPortionInfoWithBlobs& item) {
+        auto& portionInfo = item.GetPortionInfo();
+        if (!!self && (!self->TablesManager.HasTable(portionInfo.GetPathId()) || self->TablesManager.GetTable(portionInfo.GetPathId()).IsDropped())) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_inserted_data")("reason", "table_removed")("path_id", portionInfo.GetPathId());
+            return true;
+        } else {
+            return false;
+        }
+    };
+    AppendedPortions.erase(std::remove_if(AppendedPortions.begin(), AppendedPortions.end(), predRemoveDroppedTable), AppendedPortions.end());
+    for (auto& portionInfoWithBlobs : AppendedPortions) {
+        auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
+        Y_ABORT_UNLESS(!portionInfo.Empty());
+        AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
+        portionInfo.SaveToDatabase(context.DBWrapper);
+    }
+}
+
+void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     if (self) {
         for (auto& portionInfo : AppendedPortions) {
             switch (portionInfo.GetPortionInfo().GetMeta().Produced) {
@@ -56,7 +63,7 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
             for (auto& rec : portionInfo.Records) {
                 blobsDeactivated.emplace(portionInfo.GetBlobId(rec.BlobRange.GetBlobIdxVerified()));
             }
-            self->IncCounter(NColumnShard::COUNTER_RAW_BYTES_DEACTIVATED, portionInfo.RawBytesSum());
+            self->IncCounter(NColumnShard::COUNTER_RAW_BYTES_DEACTIVATED, portionInfo.GetTotalRawBytes());
         }
 
         self->IncCounter(NColumnShard::COUNTER_BLOBS_DEACTIVATED, blobsDeactivated.size());
@@ -64,12 +71,10 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
             self->IncCounter(NColumnShard::COUNTER_BYTES_DEACTIVATED, blobId.BlobSize());
         }
     }
-}
-
-void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* /*self*/, TWriteIndexCompleteContext& context) {
     {
         auto g = context.EngineLogs.GranulesStorage->StartPackModification();
         for (auto& [_, portionInfo] : PortionsToRemove) {
+            context.EngineLogs.CleanupPortions[portionInfo.GetRemoveSnapshotVerified()].emplace_back(portionInfo);
             const TPortionInfo& oldInfo = context.EngineLogs.GetGranuleVerified(portionInfo.GetPathId()).GetPortionVerified(portionInfo.GetPortion());
             context.EngineLogs.UpsertPortion(portionInfo, &oldInfo);
         }
@@ -93,38 +98,39 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
 }
 
 std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(const std::shared_ptr<arrow::RecordBatch> batch,
-    const ui64 pathId, const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context) const {
+    const ui64 pathId, const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context, const std::optional<NArrow::NSerialization::TSerializerContainer>& overrideSaver) const {
     Y_ABORT_UNLESS(batch->num_rows());
 
     auto resultSchema = context.SchemaVersions.GetSchema(snapshot);
-    TEntityGroups groups(IStoragesManager::DefaultStorageId);
-    for (auto&& i : resultSchema->GetIndexInfo().GetEntityIds()) {
-        groups.Add(i, resultSchema->GetIndexInfo().GetEntityStorageId(i, IStoragesManager::DefaultStorageId));
-    }
 
     std::shared_ptr<NOlap::TSerializationStats> stats = std::make_shared<NOlap::TSerializationStats>();
     if (granuleMeta) {
         stats = granuleMeta->BuildSerializationStats(resultSchema);
     }
-    auto schema = std::make_shared<TDefaultSchemaDetails>(resultSchema, SaverContext, stats);
+    auto schema = std::make_shared<TDefaultSchemaDetails>(resultSchema, stats);
+    if (overrideSaver) {
+        schema->SetOverrideSerializer(*overrideSaver);
+    }
     std::vector<TPortionInfoWithBlobs> out;
     {
-        std::vector<TBatchSerializedSlice> pages = TRBSplitLimiter::BuildSimpleSlices(batch, SplitSettings, context.Counters.SplitterCounters, schema);
+        std::vector<TBatchSerializedSlice> pages = TBatchSerializedSlice::BuildSimpleSlices(batch, NSplitter::TSplitSettings(), context.Counters.SplitterCounters, schema);
         std::vector<TGeneralSerializedSlice> generalPages;
         for (auto&& i : pages) {
-            std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> portionColumns = i.GetPortionChunks();
+            auto portionColumns = i.GetPortionChunksToHash();
             resultSchema->GetIndexInfo().AppendIndexes(portionColumns);
-            generalPages.emplace_back(portionColumns, schema, context.Counters.SplitterCounters, SplitSettings);
+            generalPages.emplace_back(portionColumns, schema, context.Counters.SplitterCounters);
         }
 
-        TSimilarSlicer slicer(SplitSettings.GetExpectedPortionSize());
+        const NSplitter::TEntityGroups groups = resultSchema->GetIndexInfo().GetEntityGroupsByStorageId(IStoragesManager::DefaultStorageId, *SaverContext.GetStoragesManager());
+        TSimilarPacker slicer(NSplitter::TSplitSettings().GetExpectedPortionSize());
         auto packs = slicer.Split(generalPages);
 
         ui32 recordIdx = 0;
         for (auto&& i : packs) {
-            TGeneralSerializedSlice slice(std::move(i), GetSplitSettings());
+            TGeneralSerializedSlice slice(std::move(i));
             auto b = batch->Slice(recordIdx, slice.GetRecordsCount());
-            out.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), nullptr, pathId, snapshot, SaverContext.GetStoragesManager(), resultSchema));
+            out.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), nullptr, pathId, snapshot, SaverContext.GetStoragesManager()));
+            out.back().FillStatistics(resultSchema->GetIndexInfo());
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
             out.back().GetPortionInfo().AddMetadata(*resultSchema, primaryKeys, snapshotKeys, IStoragesManager::DefaultStorageId);

@@ -59,6 +59,17 @@ def find_conf(conf_file):
     return None
 
 
+# All paths in build graph shall be in posix format.
+# This ensures that UIDs of cross and native builds won't diverge
+# due to paths difference. This function is to be used to fix paths produced
+# by os.path.join on Windows.
+#
+# FIXME: upon complete switch to Python3 os.path.join may be replaced by posixpath.join
+#        and this function will become unnecessary
+def win_path_fix(path):
+    return path if sys.platform != 'win32' else path.replace('\\', '/')
+
+
 class DebugString(object):
     def __init__(self, get_string_func):
         self.get_string_func = get_string_func
@@ -301,7 +312,7 @@ def which(prog):
         for ext in pathext:
             p = os.path.join(dir_, prog + ext)
             if os.path.exists(p) and os.path.isfile(p) and os.access(p, os.X_OK):
-                return p
+                return win_path_fix(p)
 
     return None
 
@@ -504,7 +515,7 @@ class Options(object):
         self.toolchain_params = self.options.toolchain_params
 
         self.presets = parse_presets(self.options.presets)
-        userify_presets(self.presets, ('CFLAGS', 'CXXFLAGS', 'CONLYFLAGS', 'LDFLAGS', 'GO_COMPILE_FLAGS', 'GO_LINK_FLAGS'))
+        userify_presets(self.presets, ('CFLAGS', 'CXXFLAGS', 'CONLYFLAGS', 'LDFLAGS', 'GO_COMPILE_FLAGS', 'GO_LINK_FLAGS', 'STD_CXX_VERSION'))
 
     Instance = None
 
@@ -698,8 +709,13 @@ class Build(object):
             emit('IBTOOL_PATH', self.params['params']['ibtool'])
             self._configure_runtime_versions()
         elif type_ == 'system_cxx':
+            c_compiler = self.params['params'].get('c_compiler')
+            cxx_compiler = self.params['params'].get('cxx_compiler')
+            if is_positive('USE_CLANG_CL'):
+                c_compiler = 'clang-cl.exe' if c_compiler == 'cl.exe' else c_compiler
+                cxx_compiler = 'clang-cl.exe' if cxx_compiler == 'cl.exe' else cxx_compiler
             detector = CompilerDetector()
-            detector.detect(self.params['params'].get('c_compiler'), self.params['params'].get('cxx_compiler'))
+            detector.detect(c_compiler, cxx_compiler)
             type_ = detector.type
         else:
             detector = None
@@ -931,16 +947,16 @@ class CompilerDetector(object):
         gcc_version = version(gcc_vars)
         msvc_version = version(msvc_vars)
 
-        if clang_version:
+        if msvc_version:
+            logger.debug('Detected MSVC version %s', msvc_version)
+            self.type = 'msvc'
+        elif clang_version:
             logger.debug('Detected Clang version %s', clang_version)
             self.type = 'clang'
         elif gcc_version:
             logger.debug('Detected GCC version %s', gcc_version)
             # TODO(somov): Переименовать в gcc.
             self.type = 'gnu'
-        elif msvc_version:
-            logger.debug('Detected MSVC version %s', msvc_version)
-            self.type = 'msvc'
         else:
             raise ConfigureError('Could not determine custom compiler type: {}'.format(c_compiler))
 
@@ -1588,7 +1604,7 @@ class GnuCompiler(Compiler):
         emit('WERROR_MODE', self.tc.werror_mode)
         emit('_C_FLAGS', self.c_flags)
         emit('_C_FOPTIONS', self.c_foptions)
-        emit('_CXX_STD', '-std={}'.format(self.tc.cxx_std))
+        emit('_STD_CXX_VERSION', preset('USER_STD_CXX_VERSION') or self.tc.cxx_std)
         append('C_DEFINES', self.c_defines)
         append('C_WARNING_OPTS', self.c_warnings)
         append('CXX_WARNING_OPTS', self.cxx_warnings)
@@ -1775,16 +1791,15 @@ class MSVCToolchainOptions(ToolchainOptions):
         # C:\Program Files (x86)\Windows Kits\10\Lib\10.0.14393.0
         self.kit_libs = None
 
-        self.under_wine = 'wine' in self.params
-        self.system_msvc = 'system_msvc' in self.params
-        self.ide_msvs = 'ide_msvs' in self.params
+        self.under_wine_compiler = self.params.get('wine', False)
+        self.under_wine_tools = not build.host.is_windows
+        self.under_wine_lib = self.under_wine_tools
+        self.system_msvc = self.params.get('system_msvc', False)
+        self.ide_msvs = self.params.get('ide_msvs', False)
         self.use_clang = self.params.get('use_clang', False)
         self.use_arcadia_toolchain = self.params.get('use_arcadia_toolchain', False)
 
         self.sdk_version = None
-
-        if build.host.is_windows:
-            self.under_wine = False
 
         if self.ide_msvs:
             bindir = '$(VC_ExecutablePath_x64_x64)\\'
@@ -1799,10 +1814,12 @@ class MSVCToolchainOptions(ToolchainOptions):
 
             sdk_dir = '$(WindowsSdkDir)'
             self.sdk_version = '$(WindowsTargetPlatformVersion)'
-            self.kit_includes = os.path.join(sdk_dir, 'Include', self.sdk_version)
-            self.kit_libs = os.path.join(sdk_dir, 'Lib', self.sdk_version)
+            self.kit_includes = win_path_fix(os.path.join(sdk_dir, 'Include', self.sdk_version))
+            self.kit_libs = win_path_fix(os.path.join(sdk_dir, 'Lib', self.sdk_version))
 
         elif detector:
+            self.use_clang = is_positive('USE_CLANG_CL')
+
             self.masm_compiler = which('ml64.exe')
             self.link = which('link.exe')
             self.lib = which('lib.exe')
@@ -1810,35 +1827,30 @@ class MSVCToolchainOptions(ToolchainOptions):
             sdk_dir = os.environ.get('WindowsSdkDir')
             self.sdk_version = os.environ.get('WindowsSDKVersion').replace('\\', '')
             vc_install_dir = os.environ.get('VCToolsInstallDir')
-            # fix for cxx_std detection problem introduced in r7740071 when running in native VS toolkit commandline:
-            # in that case ya make gets 'system_cxx' configuration name and cxx_std is obviously missing in that config
-            # so default 'c++20' is substituted and we need to hotfix it here
-            self.cxx_std = 'c++latest'
 
             if any([x is None for x in (sdk_dir, self.sdk_version, vc_install_dir)]):
                 raise ConfigureError('No %WindowsSdkDir%, %WindowsSDKVersion% or %VCINSTALLDIR% present. Please, run vcvars64.bat to setup preferred environment.')
 
             self.vc_root = os.path.normpath(vc_install_dir)
-            self.kit_includes = os.path.normpath(os.path.join(sdk_dir, 'Include', self.sdk_version))
-            self.kit_libs = os.path.normpath(os.path.join(sdk_dir, 'Lib', self.sdk_version))
+            self.kit_includes = win_path_fix(os.path.normpath(os.path.join(sdk_dir, 'Include', self.sdk_version)))
+            self.kit_libs = win_path_fix(os.path.normpath(os.path.join(sdk_dir, 'Lib', self.sdk_version)))
 
             # TODO(somov): Определять автоматически self.version в этом случае
 
         else:
             if self.version_at_least(2019):
                 self.sdk_version = '10.0.18362.0'
-                sdk_dir = '$(WINDOWS_KITS-sbr:1939557911)'
                 if is_positive('MSVC20'):  # XXX: temporary flag, remove after DTCC-123 is completed
                     self.cxx_std = 'c++latest'
             else:
                 self.sdk_version = '10.0.16299.0'
-                sdk_dir = '$(WINDOWS_KITS-sbr:1379398385)'
+            sdk_dir = '$WINDOWS_KITS_RESOURCE_GLOBAL'
 
             self.vc_root = self.name_marker if not self.use_clang else '$MSVC_FOR_CLANG_RESOURCE_GLOBAL'
-            self.kit_includes = os.path.join(sdk_dir, 'Include', self.sdk_version)
-            self.kit_libs = os.path.join(sdk_dir, 'Lib', self.sdk_version)
+            self.kit_includes = win_path_fix(os.path.join(sdk_dir, 'Include', self.sdk_version))
+            self.kit_libs = win_path_fix(os.path.join(sdk_dir, 'Lib', self.sdk_version))
 
-            bindir = os.path.join(self.vc_root, 'bin', 'Hostx64')
+            bindir = win_path_fix(os.path.join(self.vc_root, 'bin', 'Hostx64'))
 
             tools_name = select(selectors=[
                 (build.target.is_x86, 'x86'),
@@ -1852,19 +1864,17 @@ class MSVCToolchainOptions(ToolchainOptions):
                 (build.target.is_armv7, 'armasm.exe'),
             ])
 
-            def prefix(_type, _path):
-                if not self.under_wine:
-                    return _path
-                return '{wine} {type} $WINE_ENV ${{ARCADIA_ROOT}} ${{ARCADIA_BUILD_ROOT}} {path}'.format(
-                    wine='${YMAKE_PYTHON} ${input:\"build/scripts/run_msvc_wine.py\"} $(WINE_TOOL-sbr:1093314933)/bin/wine64 -v140 ' +
-                         '${input;hide:\"build/scripts/process_command_files.py\"} ${input;hide:\"build/scripts/process_whole_archive_option.py\"}',
-                    type=_type,
-                    path=_path
-                )
+            self.masm_compiler = win_path_fix(os.path.join(bindir, tools_name, asm_name))
+            self.link = win_path_fix(os.path.join(bindir, tools_name, 'link.exe'))
 
-            self.masm_compiler = prefix('masm', os.path.join(bindir, tools_name, asm_name))
-            self.link = prefix('link', os.path.join(bindir, tools_name, 'link.exe'))
-            self.lib = prefix('lib', os.path.join(bindir, tools_name, 'lib.exe'))
+            if self.use_clang:
+                self.lib = self.host.exe(self.name_marker, "bin", "llvm-lib")
+                self.under_wine_lib = False
+            else:
+                self.lib = win_path_fix(os.path.join(bindir, tools_name, 'lib.exe'))
+                self.under_wine_lib = self.under_wine_tools
+
+            logger.debug("link {}; lib {}".format(self.link, self.lib))
 
 
 class MSVC(object):
@@ -1891,7 +1901,7 @@ class MSVCToolchain(MSVC, Toolchain):
 
         if self.tc.from_arcadia and not self.tc.ide_msvs:
             self.platform_projects.append('build/internal/platform/msvc')
-            if tc.under_wine:
+            if tc.under_wine_compiler or tc.under_wine_tools:
                 self.platform_projects.append('build/platform/wine')
 
     def print_toolchain(self):
@@ -1902,8 +1912,12 @@ class MSVCToolchain(MSVC, Toolchain):
         if self.tc.sdk_version:
             emit('WINDOWS_KITS_VERSION', self.tc.sdk_version)
 
-        if self.tc.under_wine:
-            emit('_UNDER_WINE', 'yes')
+        if self.tc.under_wine_tools:
+            emit('_UNDER_WINE_TOOLS', 'yes')
+        if self.tc.under_wine_lib:
+            emit('_UNDER_WINE_LIB', 'yes')
+        if self.tc.under_wine_compiler:
+            emit('_UNDER_WINE_COMPILER', 'yes')
         if self.tc.use_clang:
             emit('CLANG_CL', 'yes')
         if self.tc.ide_msvs:
@@ -2026,10 +2040,12 @@ class MSVCCompiler(MSVC, Compiler):
         cxx_warnings = []
 
         if self.tc.use_clang:
+            if not self.tc.is_system_cxx:
+                flags += [
+                    # Allow <windows.h> to be included via <Windows.h> in case-sensitive file-systems.
+                    '-fcase-insensitive-paths',
+                ]
             flags += [
-                # Allow <windows.h> to be included via <Windows.h> in case-sensitive file-systems.
-                '-fcase-insensitive-paths',
-
                 # At the time clang-cl identifies itself as MSVC 19.11:
                 # (actual value can be found in clang/lib/Driver/ToolChains/MSVC.cpp, the syntax would be like
                 # ```
@@ -2077,14 +2093,14 @@ class MSVCCompiler(MSVC, Compiler):
         else:
             defines += ['/D_MBCS']
 
-        vc_include = os.path.join(self.tc.vc_root, 'include') if not self.tc.ide_msvs else "$(VC_VC_IncludePath.Split(';')[0].Replace('\\','/'))"
+        vc_include = win_path_fix(os.path.join(self.tc.vc_root, 'include')) if not self.tc.ide_msvs else "$(VC_VC_IncludePath.Split(';')[0].Replace('\\','/'))"
 
         if not self.tc.ide_msvs:
             def include_flag(path):
                 return '{flag}"{path}"'.format(path=path, flag='/I ' if not self.tc.use_clang else '-imsvc')
 
             for name in ('shared', 'ucrt', 'um', 'winrt'):
-                flags.append(include_flag(os.path.join(self.tc.kit_includes, name)))
+                flags.append(include_flag(win_path_fix(os.path.join(self.tc.kit_includes, name))))
             flags.append(include_flag(vc_include))
 
         if self.tc.use_clang:
@@ -2094,9 +2110,9 @@ class MSVCCompiler(MSVC, Compiler):
         if self.tc.use_arcadia_toolchain:
             emit('USE_ARCADIA_TOOLCHAIN', 'yes')
 
-        emit('CXX_COMPILER', self.tc.cxx_compiler)
-        emit('C_COMPILER', self.tc.c_compiler)
-        emit('MASM_COMPILER', self.tc.masm_compiler)
+        emit('CXX_COMPILER_UNQUOTED', self.tc.cxx_compiler)
+        emit('C_COMPILER_UNQUOTED', self.tc.c_compiler)
+        emit('MASM_COMPILER_UNQUOTED', self.tc.masm_compiler)
         append('C_DEFINES', defines)
         append('C_WARNING_OPTS', c_warnings)
         emit('_CXX_DEFINES', cxx_defines)
@@ -2109,11 +2125,11 @@ class MSVCCompiler(MSVC, Compiler):
         if self.build.is_ide:
             emit('CFLAGS_PER_TYPE', '@[debug|$CFLAGS_DEBUG]@[release|$CFLAGS_RELEASE]')
 
-        emit('_STD_CXX', '/std:{}'.format(self.tc.cxx_std))
+        emit('_STD_CXX_VERSION', preset('USER_STD_CXX_VERSION') or self.tc.cxx_std)
 
         emit('_MSVC_FLAGS', flags)
 
-        ucrt_include = os.path.join(self.tc.kit_includes, 'ucrt') if not self.tc.ide_msvs else "$(UniversalCRT_IncludePath.Split(';')[0].Replace('\\','/'))"
+        ucrt_include = win_path_fix(os.path.join(self.tc.kit_includes, 'ucrt')) if not self.tc.ide_msvs else "$(UniversalCRT_IncludePath.Split(';')[0].Replace('\\','/'))"
 
         # clang-cl has '#include_next', and MSVC hasn't. It needs separately specified CRT and VC include directories for libc++ to include second in order standard C and C++ headers.
         if not self.tc.use_clang:
@@ -2137,8 +2153,8 @@ class MSVCLinker(MSVC, Linker):
         linker = self.tc.link
         linker_lib = self.tc.lib
 
-        emit('LINK_LIB_CMD', linker_lib)
-        emit('LINK_EXE_CMD', linker)
+        emit('_MSVC_LIB_UNQUOTED', linker_lib)
+        emit('_MSVC_LINK_UNQUOTED', linker)
 
         if self.build.is_release:
             emit('LINK_EXE_FLAGS_PER_TYPE', '$LINK_EXE_FLAGS_RELEASE')
@@ -2395,13 +2411,10 @@ class Cuda(object):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('8.0', '9.0', '9.1', '9.2', '10.0', '10.1'):
-            raise ConfigureError('CUDA versions 8.x, 9.x and 10.x are no longer supported.\nSee DEVTOOLS-7108 and DTCC-2118.')
-
-        if self.cuda_version.value in ('11.0', '11.1', '11.3', '11.4', '11.8', '12.1'):
+        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2'):
             return True
-
-        return False
+        else:
+            raise ConfigureError('CUDA version {} is not supported in Arcadia'.format(self.cuda_version.value))
 
     def auto_have_cuda(self):
         if is_positive('MUSL'):
@@ -2428,10 +2441,8 @@ class Cuda(object):
         return match.group(1)
 
     def convert_major_version(self, value):
-        if value == '10':
-            return '10.1'
-        elif value == '11':
-            return '11.3'
+        if value == '11':
+            return '11.4'
         else:
             return value
 

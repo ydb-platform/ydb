@@ -567,7 +567,6 @@ StrAppend(y_absl::Nonnull<String*> result, T i) {
 // handled quickly.
 // Later we can look into how we can extend this to more general argument
 // mixtures without bloating codegen too much, or copying unnecessarily.
-#ifndef __NVCC__
 template <typename String, typename... T>
 std::enable_if_t<
     (sizeof...(T) > 1),
@@ -605,20 +604,19 @@ StrAppend(y_absl::Nonnull<String*> str, T... args) {
   ptrdiff_t n;   // The length of the current argument
   typename String::pointer pos = &(*str)[old_size];
   using SomeTrivialEmptyType = std::false_type;
-  // Ugly code due to the lack of C++14 fold expression makes us.
-  const SomeTrivialEmptyType dummy1;
-  for (const SomeTrivialEmptyType& dummy2 :
-       {(/* Comma expressions are poor man's C++17 fold expression for C++14 */
-         (void)(n = lengths[i]),
-         (void)(n < 0 ? (void)(*pos++ = '-'), (n = ~n) : 0),
-         (void)y_absl::numbers_internal::FastIntToBufferBackward(
-             y_absl::numbers_internal::UnsignedAbsoluteValue(std::move(args)),
-             pos += n, static_cast<uint32_t>(n)),
-         (void)++i, dummy1)...}) {
-    (void)dummy2;  // Remove & migrate to fold expressions in C++17
-  }
+  const SomeTrivialEmptyType dummy;
+  // Ugly code due to the lack of C++17 fold expressions
+  const SomeTrivialEmptyType dummies[] = {
+      (/* Comma expressions are poor man's C++17 fold expression for C++14 */
+       (void)(n = lengths[i]),
+       (void)(n < 0 ? (void)(*pos++ = '-'), (n = ~n) : 0),
+       (void)y_absl::numbers_internal::FastIntToBufferBackward(
+           y_absl::numbers_internal::UnsignedAbsoluteValue(std::move(args)),
+           pos += n, static_cast<uint32_t>(n)),
+       (void)++i, dummy)...};
+  (void)dummies;  // Remove & migrate to fold expressions in C++17
 }
-#endif
+
 // Helper function for the future StrCat default floating-point format, %.6g
 // This is fast.
 inline strings_internal::AlphaNumBuffer<

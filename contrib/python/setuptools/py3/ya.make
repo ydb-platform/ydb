@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(69.1.0)
+VERSION(69.2.0)
 
 LICENSE(MIT)
 
@@ -216,6 +216,7 @@ PY_SRCS(
     setuptools/compat/__init__.py
     setuptools/compat/py310.py
     setuptools/compat/py311.py
+    setuptools/compat/py39.py
     setuptools/config/__init__.py
     setuptools/config/_apply_pyprojecttoml.py
     setuptools/config/_validate_pyproject/__init__.py

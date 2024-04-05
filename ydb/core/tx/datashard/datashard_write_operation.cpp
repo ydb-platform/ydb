@@ -90,6 +90,7 @@ bool TValidatedWriteTx::ParseOperation(const NEvents::TDataEvents::TEvWrite& ev,
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
+        case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
             break;
         default: {
             ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
@@ -646,6 +647,27 @@ bool TWriteOperation::OnStopping(TDataShard& self, const TActorContext& ctx) {
 
         // Distributed ops avoid doing new work when stopping
         return false;
+    }
+}
+
+void TWriteOperation::OnCleanup(TDataShard& self, std::vector<std::unique_ptr<IEventHandle>>& replies) {
+    if (!IsImmediate() && GetTarget() && !HasCompletedFlag()) {
+        auto status = NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED;
+
+        TString reason;
+        if (self.State == TShardState::SplitSrcWaitForNoTxInFlight) {
+            reason = TStringBuilder()
+                << "DataShard " << self.TabletID() << " is splitting";
+        } else if (self.Pipeline.HasWaitingSchemeOps()) {
+            reason = TStringBuilder()
+                << "DataShard " << self.TabletID() << " is blocked by a schema operation";
+        } else {
+            reason = "Transaction was cleaned up";
+        }
+
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(self.TabletID(), GetTxId(), status, reason);
+
+        replies.push_back(std::make_unique<IEventHandle>(GetTarget(), self.SelfId(), result.release(), 0, GetCookie()));
     }
 }
 

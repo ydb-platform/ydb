@@ -53,7 +53,9 @@ TestReadSingleBatch(TArrowCSV& reader,
 
     for (size_t i = 0; i < columns.size(); ++i) {
         UNIT_ASSERT_EQUAL(columns[i].first, batch->schema()->field(i)->name());
-        UNIT_ASSERT(NArrow::GetArrowType(columns[i].second)->Equals(batch->schema()->field(i)->type()));
+        auto arrowType = NArrow::GetArrowType(columns[i].second);
+        UNIT_ASSERT_C(arrowType.ok(), arrowType.status().ToString());
+        UNIT_ASSERT(arrowType.ValueUnsafe()->Equals(batch->schema()->field(i)->type()));
         // TODO: check data
     }
     return batch;
@@ -62,16 +64,17 @@ TestReadSingleBatch(TArrowCSV& reader,
 std::shared_ptr<arrow::RecordBatch>
 TestReadSingleBatch(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, const TString& data,
                     char delimiter, bool header, ui32 numRows, ui32 skipRows = 0, std::optional<char> escape = {}) {
-    TArrowCSV reader(columns, header);
-    reader.SetDelimiter(delimiter);
+    auto reader = TArrowCSV::Create(columns, header);
+    UNIT_ASSERT_C(reader.ok(), reader.status().ToString());
+    reader->SetDelimiter(delimiter);
     if (skipRows) {
-        reader.SetSkipRows(skipRows);
+        reader->SetSkipRows(skipRows);
     }
     if (escape) {
-        reader.SetEscaping(true, *escape);
+        reader->SetEscaping(true, *escape);
     }
 
-    return TestReadSingleBatch(reader, columns, data, numRows);
+    return TestReadSingleBatch(*reader, columns, data, numRows);
 }
 
 }
@@ -95,10 +98,11 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
             };
             TInstant dtInstant;
             Y_ABORT_UNLESS(TInstant::TryParseIso8601(dateTimeString, dtInstant));
-            TArrowCSV reader(columns, false);
+            auto reader = TArrowCSV::Create(columns, false);
+            UNIT_ASSERT_C(reader.ok(), reader.status().ToString());
 
             TString errorMessage;
-            auto batch = reader.ReadNext(data, errorMessage);
+            auto batch = reader->ReadNext(data, errorMessage);
             Cerr << errorMessage << "\n";
             UNIT_ASSERT(!!batch);
             UNIT_ASSERT(errorMessage.empty());
@@ -155,10 +159,11 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
         TVector<std::pair<TString, NScheme::TTypeInfo>> columns;
 
         {
-            TArrowCSV reader(columns, false);
+            auto reader = TArrowCSV::Create(columns, false);
+            UNIT_ASSERT_C(reader.ok(), reader.status().ToString());
 
             TString errorMessage;
-            auto batch = reader.ReadNext(data, errorMessage);
+            auto batch = reader->ReadNext(data, errorMessage);
             Cerr << errorMessage << "\n";
             UNIT_ASSERT(!batch);
             UNIT_ASSERT(!errorMessage.empty());
@@ -170,10 +175,11 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
                 {"i64", NScheme::TTypeInfo(NScheme::NTypeIds::Int64)}
             };
 
-            TArrowCSV reader(columns, false);
+            auto reader = TArrowCSV::Create(columns, false);
+            UNIT_ASSERT_C(reader.ok(), reader.status().ToString());
 
             TString errorMessage;
-            auto batch = reader.ReadNext(data, errorMessage);
+            auto batch = reader->ReadNext(data, errorMessage);
             Cerr << errorMessage << "\n";
             UNIT_ASSERT(!batch);
             UNIT_ASSERT(!errorMessage.empty());
@@ -291,14 +297,15 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
             csv += TString() + null + delimiter + q + null + q + delimiter + q + null + q + endLine;
             csv += TString() + null + delimiter + null + delimiter + null + endLine;
 
-            TArrowCSV reader(columns, false);
+            auto reader = TArrowCSV::Create(columns, false);
+            UNIT_ASSERT_C(reader.ok(), reader.status().ToString());
             if (!nulls.empty() || !defaultNull) {
-                reader.SetNullValue(null);
+                reader->SetNullValue(null);
             } else {
                 defaultNull = false;
             }
 
-            auto batch = TestReadSingleBatch(reader, columns, csv, 3);
+            auto batch = TestReadSingleBatch(*reader, columns, csv, 3);
 
             Cerr << "src:\n" << csv;
 

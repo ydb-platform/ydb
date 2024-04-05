@@ -172,6 +172,10 @@ protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
         return Data.GetLastScalar();
     }
+    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(TString&& /*data*/, const TSimpleColumnInfo& /*columnInfo*/) const override {
+        AFL_VERIFY(false);
+        return nullptr;
+    }
 
 public:
     i64 GetSize() const {

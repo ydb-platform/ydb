@@ -7,7 +7,7 @@
 
 #include <ydb/public/api/protos/ydb_federation_discovery.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/federated_topic.h>
 
@@ -51,11 +51,13 @@ public:
         }
         return nullptr;
     }
+
+    friend IOutputStream& operator<<(IOutputStream& out, TFederatedDbState const& state);
 };
 
 
 class TFederatedDbObserverImpl : public TClientImplCommon<TFederatedDbObserverImpl>,
-                                 public NPersQueue::TEnableSelfContext<TFederatedDbObserverImpl> {
+                                 public NTopic::TEnableSelfContext<TFederatedDbObserverImpl> {
 public:
     static constexpr TDuration REDISCOVER_DELAY = TDuration::Seconds(60);
 
@@ -92,7 +94,7 @@ private:
     bool Stopping = false;
 };
 
-class TFederatedDbObserver : public NPersQueue::TContextOwner<TFederatedDbObserverImpl> {
+class TFederatedDbObserver : public NTopic::TContextOwner<TFederatedDbObserverImpl> {
 public:
     inline TFederatedDbObserver(std::shared_ptr<TGRpcConnectionsImpl> connections,
                                 const TFederatedTopicClientSettings& settings)

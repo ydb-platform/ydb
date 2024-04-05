@@ -27,8 +27,20 @@ protected:
         return SharedBlobsManager;
     }
 public:
-};
 
+    static std::shared_ptr<TTestStoragesManager> GetInstance() {
+        static auto result = std::make_shared<NKikimr::NOlap::TTestStoragesManager>();
+        static TMutex mutex;
+        static bool initialized = false;
+        TGuard<TMutex> g(mutex);
+        if (!initialized) {
+            result->Initialize();
+        }
+        initialized = true;
+        return result;
+    }
+
+};
 
 }
 

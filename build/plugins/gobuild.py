@@ -30,6 +30,10 @@ def get_import_path(unit):
 
     module_path = rootrel_arc_src(unit.path(), unit)
     assert len(module_path) > 0
+
+    if go_package_name(unit) == "main":
+        return "main"
+
     import_path = module_path.replace('\\', '/')
     if import_path.startswith(std_lib_prefix):
         import_path = import_path[len(std_lib_prefix) :]
@@ -38,6 +42,10 @@ def get_import_path(unit):
     else:
         import_path = arc_project_prefix + import_path
     assert len(import_path) > 0
+
+    if import_path.endswith("/gotest"):
+        return import_path[:-7]
+
     return import_path
 
 
@@ -61,15 +69,6 @@ def compare_versions(version1, version2):
     if v1 == v2:
         return 0
     return 1 if v1 < v2 else -1
-
-
-def need_compiling_runtime(import_path, gostd_version):
-    return (
-        import_path in ('runtime', 'reflect', 'syscall')
-        or import_path.startswith('runtime/internal/')
-        or compare_versions('1.17', gostd_version) >= 0
-        and import_path == 'internal/bytealg'
-    )
 
 
 def go_package_name(unit):
@@ -236,8 +235,6 @@ def on_go_process_srcs(unit):
         if compare_versions('1.16', gostd_version) >= 0:
             import_path = get_import_path(unit)
             symabis_flags.extend(['FLAGS', '-p', import_path])
-            if need_compiling_runtime(import_path, gostd_version):
-                symabis_flags.append('-compiling-runtime')
         unit.on_go_compile_symabis(asm_files + symabis_flags)
 
     # Process cgo files

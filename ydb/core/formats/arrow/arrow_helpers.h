@@ -13,8 +13,8 @@ namespace NKikimr::NArrow {
 
 using TArrayVec = std::vector<std::shared_ptr<arrow::Array>>;
 
-std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeInfo typeInfo);
-std::shared_ptr<arrow::DataType> GetCSVArrowType(NScheme::TTypeInfo typeId);
+arrow::Result<std::shared_ptr<arrow::DataType>> GetArrowType(NScheme::TTypeInfo typeInfo);
+arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeInfo typeId);
 
 template <typename T>
 inline bool ArrayEqualValue(const std::shared_ptr<arrow::Array>& x, const std::shared_ptr<arrow::Array>& y) {
@@ -42,8 +42,8 @@ inline bool ArrayEqualView(const std::shared_ptr<arrow::Array>& x, const std::sh
 
 struct TSortDescription;
 
-std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns,  const std::set<std::string>& notNullColumns = {});
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, const std::set<std::string>& notNullColumns = {});
+arrow::Result<arrow::FieldVector> MakeArrowFields(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns,  const std::set<std::string>& notNullColumns = {});
+arrow::Result<std::shared_ptr<arrow::Schema>> MakeArrowSchema(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, const std::set<std::string>& notNullColumns = {});
 
 TString SerializeSchema(const arrow::Schema& schema);
 std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str);
@@ -54,13 +54,20 @@ TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& b
 std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob,
                                                      const std::shared_ptr<arrow::Schema>& schema);
 std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::Schema>& schema, const ui32 rowsCount = 0);
+std::shared_ptr<arrow::Table> ToTable(const std::shared_ptr<arrow::RecordBatch>& batch);
 
 std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                   const std::vector<TString>& columnNames);
+    const std::vector<TString>& columnNames);
 std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                   const std::vector<std::string>& columnNames); 
+    const std::vector<std::string>& columnNames);
+std::shared_ptr<arrow::Table> ExtractColumns(const std::shared_ptr<arrow::Table>& srcBatch,
+    const std::vector<TString>& columnNames);
+std::shared_ptr<arrow::Table> ExtractColumns(const std::shared_ptr<arrow::Table>& srcBatch,
+    const std::vector<std::string>& columnNames);
+std::shared_ptr<arrow::Table> ExtractColumnsValidate(const std::shared_ptr<arrow::Table>& srcBatch,
+    const std::vector<TString>& columnNames);
 std::shared_ptr<arrow::RecordBatch> ExtractColumnsValidate(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                   const std::vector<TString>& columnNames);
+    const std::vector<TString>& columnNames);
 std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
                                                    const std::shared_ptr<arrow::Schema>& dstSchema,
                                                    bool addNotExisted = false);
@@ -75,15 +82,7 @@ inline std::shared_ptr<arrow::RecordBatch> ExtractExistedColumns(const std::shar
 std::shared_ptr<arrow::Table> CombineInTable(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches);
 std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& combinedTable, const bool combine = false);
 std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches);
-std::shared_ptr<arrow::RecordBatch> CombineSortedBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
-                                                         const std::shared_ptr<TSortDescription>& description);
 std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& rb);
-std::vector<std::shared_ptr<arrow::RecordBatch>> MergeSortedBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
-                                                                    const std::shared_ptr<TSortDescription>& description,
-                                                                    size_t maxBatchRows);
-std::vector<std::shared_ptr<arrow::RecordBatch>> SliceSortedBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
-                                                                    const std::shared_ptr<TSortDescription>& description,
-                                                                    size_t maxBatchRows = 0);
 std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch,
     const std::vector<ui32>& sharding,
     ui32 numShards);
@@ -103,8 +102,8 @@ bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::Table>>& batches
 std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
                                               const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique);
 bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch,
-              const std::shared_ptr<arrow::Schema>& sortingKey,
-              bool desc = false);
+    const std::shared_ptr<arrow::Schema>& sortingKey,
+    bool desc = false);
 bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch,
                        const std::shared_ptr<arrow::Schema>& sortingKey,
                        bool desc = false);

@@ -1424,6 +1424,10 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
     if (!partitionId.IsSupportivePartition()) {
         ProcessCheckPartitionStatusRequests(partitionId);
     }
+
+    if (allInitialized) {
+        ProcessStatusRequests(ctx);
+    }
 }
 
 void TPersQueue::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx)
@@ -1789,18 +1793,20 @@ void TPersQueue::Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TA
     }
 }
 
+void TPersQueue::ProcessStatusRequests(const TActorContext &ctx) {
+    for (auto& ev : StatusRequests) {
+        Handle(ev, ctx);
+    }
+    StatusRequests.clear();
+}
 
 void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx)
 {
     ReadBalancerActorId = ev->Sender;
 
-    if (!ConfigInited) {
-        THolder<TEvPersQueue::TEvStatusResponse> res = MakeHolder<TEvPersQueue::TEvStatusResponse>();
-        auto& resp = res->Record;
-        resp.SetTabletId(TabletID());
-
-        ctx.Send(ev->Sender, res.Release());
-        return;
+    if (!ConfigInited || !AllOriginalPartitionsInited()) {
+      StatusRequests.push_back(ev);
+      return;
     }
 
     ui32 cnt = 0;
@@ -1810,8 +1816,9 @@ void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& 
 
     TActorId ans = CreateStatusProxyActor(TabletID(), ev->Sender, cnt, ev->Cookie, ctx);
     for (auto& p : Partitions) {
-        if (!p.second.InitDone)
+        if (!p.second.InitDone) {
             continue;
+        }
         THolder<TEvPQ::TEvPartitionStatus> event;
         if (ev->Get()->Record.GetConsumers().empty()) {
             event = MakeHolder<TEvPQ::TEvPartitionStatus>(ans, ev->Get()->Record.HasClientId() ? ev->Get()->Record.GetClientId() : "",
@@ -4190,6 +4197,26 @@ void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
     tx.PartitionRepliesExpected = Partitions.size();
 }
 
+TActorId TPersQueue::GetPartitionQuoter(const TPartitionId& partition) {
+    if (!AppData()->PQConfig.GetQuotingConfig().GetEnableQuoting())
+        return TActorId{};
+
+    auto& quoterId = PartitionWriteQuoters[partition.OriginalPartitionId];
+    if (!quoterId) {
+        quoterId = Register(new TWriteQuoter(
+            TopicConverter,
+            Config,
+            AppData()->PQConfig,
+            partition,
+            SelfId(),
+            TabletID(),
+            IsLocalDC,
+            *Counters
+        ));
+    }
+    return quoterId;
+}
+
 TPartition* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                                              const NPersQueue::TTopicConverterPtr topicConverter,
                                              const NKikimrPQ::TPQTabletConfig& config,
@@ -4211,6 +4238,7 @@ TPartition* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                           *Counters,
                           SubDomainOutOfSpace,
                           (ui32)channels,
+                          GetPartitionQuoter(partitionId),
                           newPartition);
 }
 

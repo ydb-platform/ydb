@@ -8,13 +8,13 @@ select
     o_year,
     sum(case
         when nation = 'MOZAMBIQUE' then volume
-        else 0::numeric
+        else 0
     end) / sum(volume) as mkt_share
 from
     (
         select
             extract(year from o_orderdate) as o_year,
-            l_extendedprice * (1::numeric - l_discount) as volume,
+            l_extendedprice * (1 - l_discount) as volume,
             n2.n_name as nation
         from
             {{part}},

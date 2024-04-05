@@ -8,10 +8,11 @@
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_costmodel.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdisk_error.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/skeleton_events.h>
 #include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h>
@@ -205,13 +206,20 @@ namespace NKikimr {
                 , MaxInFlightCost(maxInFlightCost)
                 , IntQueueId(intQueueId)
                 , Name(name)
-                , SkeletonFrontInFlightCount(skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/InFlightCount", false))
-                , SkeletonFrontInFlightCost(skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/InFlightCost", false))
-                , SkeletonFrontInFlightBytes(skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/InFlightBytes", false))
-                , SkeletonFrontDelayedCount(skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/DelayedCount", false))
-                , SkeletonFrontDelayedBytes(skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/DelayedBytes", false))
-                , SkeletonFrontCostProcessed(skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/CostProcessed", true))
+                , SkeletonFrontInFlightCount(MakeCounter(skeletonFrontGroup, "InFlightCount", false, false))
+                , SkeletonFrontInFlightCost(MakeCounter(skeletonFrontGroup, "InFlightCost", false, true))
+                , SkeletonFrontInFlightBytes(MakeCounter(skeletonFrontGroup, "InFlightBytes", false, true))
+                , SkeletonFrontDelayedCount(MakeCounter(skeletonFrontGroup, "DelayedCount", false, true))
+                , SkeletonFrontDelayedBytes(MakeCounter(skeletonFrontGroup, "DelayedBytes", false, true))
+                , SkeletonFrontCostProcessed(MakeCounter(skeletonFrontGroup, "CostProcessed", true, true))
             {}
+
+            ::NMonitoring::TDynamicCounters::TCounterPtr MakeCounter(TIntrusivePtr<::NMonitoring::TDynamicCounters> skeletonFrontGroup, const TString& sensorType, bool derivative, bool reportOnlyIfExtendedSensors) {
+                if (reportOnlyIfExtendedSensors && !NMonGroup::IsExtendedVDiskCounters()) {
+                    return skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/" + sensorType, derivative, NMonitoring::TCountableBase::EVisibility::Private);
+                }
+                return skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/" + sensorType, derivative);
+            }
 
             ui64 GetSize() const {
                 return Queue->GetSize();
@@ -1508,7 +1516,7 @@ namespace NKikimr {
                 TInstant now) {
             using namespace NErrBuilder;
             auto res = ErroneousResult(VCtx, status, errorReason, ev, now, nullptr, SelfVDiskId, VDiskIncarnationGuid, GInfo);
-            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie);
+            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie, VCtx);
         }
 
         void Reply(TEvBlobStorage::TEvVCheckReadiness::TPtr &ev, const TActorContext &ctx,

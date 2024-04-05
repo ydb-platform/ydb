@@ -53,18 +53,18 @@ Y_UNIT_TEST(JoinSearch2Rels) {
         std::static_pointer_cast<IBaseOptimizerNode>(rel2),
         joinConditions,
         InnerJoin,
-        GraceJoin
+        EJoinAlgoType::GraceJoin
         );
 
     auto res = optimizer->JoinSearch(op);
     std::stringstream ss;
     res->Print(ss);
-    TString expected = R"__(Join: (0) b.1=a.1,
-Type: 2, Nrows: 2e+10, Ncols: 2, Cost: 2.00112e+10
+    TString expected = R"__(Join: (0,2) b.1=a.1,
+Type: 2, Nrows: 2e+10, Ncols: 2, ByteSize: 0, Cost: 2.00112e+10
     Rel: b
-    Type: 0, Nrows: 1e+06, Ncols: 1, Cost: 9.00001e+06
+    Type: 0, Nrows: 1e+06, Ncols: 1, ByteSize: 0, Cost: 9.00001e+06
     Rel: a
-    Type: 0, Nrows: 100000, Ncols: 1, Cost: 1e+06
+    Type: 0, Nrows: 100000, Ncols: 1, ByteSize: 0, Cost: 1e+06
 )__";
 
     UNIT_ASSERT_STRINGS_EQUAL(expected, ss.str());
@@ -88,7 +88,7 @@ Y_UNIT_TEST(JoinSearch3Rels) {
         std::static_pointer_cast<IBaseOptimizerNode>(rel2),
         joinConditions,
         InnerJoin,
-        GraceJoin
+        EJoinAlgoType::GraceJoin
         );
 
     joinConditions.insert({
@@ -101,23 +101,23 @@ Y_UNIT_TEST(JoinSearch3Rels) {
         std::static_pointer_cast<IBaseOptimizerNode>(rel3),
         joinConditions,
         InnerJoin,
-        GraceJoin
+        EJoinAlgoType::GraceJoin
         );
 
     auto res = optimizer->JoinSearch(op2);
     std::stringstream ss;
     res->Print(ss);
 
-    TString expected = R"__(Join: (0) a.1=b.1,
-Type: 2, Nrows: 4e+13, Ncols: 3, Cost: 4.00004e+13
-    Join: (0) a.1=c.1,
-    Type: 2, Nrows: 2e+08, Ncols: 2, Cost: 2.01129e+08
+    TString expected = R"__(Join: (0,2) a.1=b.1,
+Type: 2, Nrows: 4e+13, Ncols: 3, ByteSize: 0, Cost: 4.00004e+13
+    Join: (0,2) a.1=c.1,
+    Type: 2, Nrows: 2e+08, Ncols: 2, ByteSize: 0, Cost: 2.01129e+08
         Rel: a
-        Type: 0, Nrows: 100000, Ncols: 1, Cost: 1e+06
+        Type: 0, Nrows: 100000, Ncols: 1, ByteSize: 0, Cost: 1e+06
         Rel: c
-        Type: 0, Nrows: 10000, Ncols: 1, Cost: 9009
+        Type: 0, Nrows: 10000, Ncols: 1, ByteSize: 0, Cost: 9009
     Rel: b
-    Type: 0, Nrows: 1e+06, Ncols: 1, Cost: 9.00001e+06
+    Type: 0, Nrows: 1e+06, Ncols: 1, ByteSize: 0, Cost: 9.00001e+06
 )__";
 
     UNIT_ASSERT_STRINGS_EQUAL(expected, ss.str());
@@ -218,7 +218,7 @@ void _DqOptimizeEquiJoinWithCosts(const std::function<IOptimizerNew*()>& optFact
     UNIT_ASSERT(equiJoin.Maybe<TCoEquiJoin>());
     auto resStr = NCommon::ExprToPrettyString(ctx, *res.Ptr());
     auto expected = R"__((
-(let $1 '('"Inner" '"orders" '"customer" '('"orders" '"a") '('"customer" '"b") '()))
+(let $1 '('"Inner" '"orders" '"customer" '('"orders" '"a") '('"customer" '"b") '('('"join_algo" '"MapJoin"))))
 (return (EquiJoin '('() '"orders") '('() '"customer") $1 '()))
 )
 )__";

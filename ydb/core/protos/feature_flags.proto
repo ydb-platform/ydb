@@ -131,4 +131,8 @@ message TFeatureFlags {
     optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = false];
     optional bool EnableCMSRequestPriorities = 117 [default = false];
     optional bool EnableKeyvalueLogBatching = 118 [default = false];
+    optional bool EnableLocalDBFlatIndex = 119 [default = true];
+    optional bool ExtendedVDiskCounters = 120 [default = true];
+    optional bool ExtendedPDiskSensors = 121 [default = true];
+    optional bool EnableSlotNameGeneration = 122 [default = false];
 }

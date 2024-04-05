@@ -1,9 +1,11 @@
 #include "column_engine_logs.h"
 #include "filter.h"
 
+#include "changes/actualization/construction/context.h"
 #include "changes/indexation.h"
 #include "changes/general_compaction.h"
-#include "changes/cleanup.h"
+#include "changes/cleanup_portions.h"
+#include "changes/cleanup_tables.h"
 #include "changes/ttl.h"
 
 #include <ydb/core/tx/columnshard/common/limits.h>
@@ -12,9 +14,6 @@
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/tiering/manager.h>
-
-#include <ydb/core/formats/arrow/one_batch_input_stream.h>
-#include <ydb/core/formats/arrow/merging_sorted_input_stream.h>
 
 #include <ydb/library/conclusion/status.h>
 
@@ -25,13 +24,27 @@
 
 namespace NKikimr::NOlap {
 
-TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits, const std::shared_ptr<IStoragesManager>& storagesManager)
-    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, limits, storagesManager))
+TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
+    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema)
+    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
     , LastGranule(0)
 {
+    ActualizationController = std::make_shared<NActualizer::TController>();
+    RegisterSchemaVersion(snapshot, schema);
+}
+
+TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
+    const TSnapshot& snapshot, TIndexInfo&& schema)
+    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
+    , StoragesManager(storagesManager)
+    , TabletId(tabletId)
+    , LastPortion(0)
+    , LastGranule(0) {
+    ActualizationController = std::make_shared<NActualizer::TController>();
+    RegisterSchemaVersion(snapshot, std::move(schema));
 }
 
 ui64 TColumnEngineForLogs::MemoryUsage() const {
@@ -72,12 +85,12 @@ TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo, u
     deltaStats.Bytes = 0;
     for (auto& rec : portionInfo.Records) {
         metadataBytes += rec.GetMeta().GetMetadataSize();
-        deltaStats.Bytes += rec.GetBlobRange().GetSize();
         deltaStats.BytesByColumn[rec.ColumnId] += rec.BlobRange.Size;
-        deltaStats.RawBytesByColumn[rec.ColumnId] += rec.GetMeta().GetRawBytes().value_or(0);
+        deltaStats.RawBytesByColumn[rec.ColumnId] += rec.GetMeta().GetRawBytes();
     }
     deltaStats.Rows = portionInfo.NumRows();
-    deltaStats.RawBytes = portionInfo.RawBytesSum();
+    deltaStats.Bytes = portionInfo.GetTotalBlobBytes();
+    deltaStats.RawBytes = portionInfo.GetTotalRawBytes();
     deltaStats.Blobs = portionInfo.GetBlobIdsCount();
     deltaStats.Portions = 1;
     return deltaStats;
@@ -135,7 +148,27 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
         const NOlap::TIndexInfo& lastIndexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
         Y_ABORT_UNLESS(lastIndexInfo.CheckCompatible(indexInfo));
     }
+    const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
     VersionedIndex.AddIndex(snapshot, std::move(indexInfo));
+    if (isCriticalScheme) {
+        if (!ActualizationStarted) {
+            ActualizationStarted = true;
+            for (auto&& i : Tables) {
+                i.second->StartActualizationIndex();
+            }
+        }
+        for (auto&& i : Tables) {
+            i.second->RefreshScheme();
+        }
+    }
+}
+
+void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) {
+    std::optional<NOlap::TIndexInfo> indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema, StoragesManager);
+    AFL_VERIFY(indexInfoOptional);
+    NOlap::TIndexInfo indexInfo = std::move(*indexInfoOptional);
+    indexInfo.SetAllKeys(StoragesManager);
+    RegisterSchemaVersion(snapshot, std::move(indexInfo));
 }
 
 bool TColumnEngineForLogs::Load(IDbWrapper& db) {
@@ -157,7 +190,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
         for (const auto& [_, portionInfo] : spg->GetPortions()) {
             UpdatePortionStats(*portionInfo, EStatsUpdateType::ADD);
             if (portionInfo->CheckForCleanup()) {
-                CleanupPortions[portionInfo->GetRemoveSnapshot()].emplace_back(*portionInfo);
+                CleanupPortions[portionInfo->GetRemoveSnapshotVerified()].emplace_back(*portionInfo);
             }
         }
     }
@@ -222,7 +255,7 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
     Y_ABORT_UNLESS(dataToIndex.size());
 
     TSaverContext saverContext(StoragesManager);
-    auto changes = std::make_shared<TInsertColumnEngineChanges>(std::move(dataToIndex), TSplitSettings(), saverContext);
+    auto changes = std::make_shared<TInsertColumnEngineChanges>(std::move(dataToIndex), saverContext);
     auto pkSchema = VersionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey();
 
     for (const auto& data : changes->GetDataToIndex()) {
@@ -237,7 +270,7 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
     return changes;
 }
 
-std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(const TCompactionLimits& limits, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
+std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
     AFL_VERIFY(dataLocksManager);
     auto granule = GranulesStorage->GetGranuleForCompaction(Tables, dataLocksManager);
     if (!granule) {
@@ -245,7 +278,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(cons
         return nullptr;
     }
     granule->OnStartCompaction();
-    auto changes = granule->GetOptimizationTask(limits, granule, dataLocksManager);
+    auto changes = granule->GetOptimizationTask(granule, dataLocksManager);
     NYDBTest::TControllers::GetColumnShardController()->OnStartCompaction(changes);
     if (!changes) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build optimization task for granule that need compaction")("weight", granule->GetCompactionPriority().DebugString());
@@ -253,65 +286,102 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(cons
     return changes;
 }
 
-std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const TSnapshot& snapshot,
-                                                                         THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
-    AFL_VERIFY(dataLocksManager);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size());
-    auto changes = std::make_shared<TCleanupColumnEngineChanges>(StoragesManager);
+std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCleanupTables(THashSet<ui64>& pathsToDrop) noexcept {
+    if (pathsToDrop.empty()) {
+        return nullptr;
+    }
+    auto changes = std::make_shared<TCleanupTablesColumnEngineChanges>(StoragesManager);
 
-    // Add all portions from dropped paths
-    THashSet<ui64> dropPortions;
-    THashSet<ui64> emptyPaths;
     ui64 txSize = 0;
     const ui64 txSizeLimit = TGlobalLimits::TxWriteLimitBytes / 4;
-    changes->NeedRepeat = false;
+    THashSet<ui64> pathsToRemove;
+    for (ui64 pathId : pathsToDrop) {
+        if (!HasDataInPathId(pathId)) {
+            changes->TablesToDrop.emplace(pathId);
+        }
+        txSize += 256;
+        if (txSize > txSizeLimit) {
+            break;
+        }
+    }
+    for (auto&& i : pathsToRemove) {
+        pathsToDrop.erase(i);
+    }
+    if (changes->TablesToDrop.empty()) {
+        return nullptr;
+    }
+    return changes;
+}
+
+std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::StartCleanupPortions(const TSnapshot& snapshot,
+                                                                         const THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
+    AFL_VERIFY(dataLocksManager);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size());
+    auto changes = std::make_shared<TCleanupPortionsColumnEngineChanges>(StoragesManager);
+
+    // Add all portions from dropped paths
+    ui64 txSize = 0;
+    const ui64 txSizeLimit = TGlobalLimits::TxWriteLimitBytes / 4;
+    ui32 skipLocked = 0;
+    ui32 portionsFromDrop = 0;
+    bool limitExceeded = false;
     for (ui64 pathId : pathsToDrop) {
         auto itTable = Tables.find(pathId);
         if (itTable == Tables.end()) {
-            emptyPaths.insert(pathId);
             continue;
         }
 
         for (auto& [portion, info] : itTable->second->GetPortions()) {
             if (dataLocksManager->IsLocked(*info)) {
+                ++skipLocked;
                 continue;
             }
             if (txSize + info->GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
                 txSize += info->GetTxVolume();
             } else {
-                changes->NeedRepeat = true;
+                limitExceeded = true;
                 break;
             }
             changes->PortionsToDrop.push_back(*info);
-            dropPortions.insert(portion);
+            ++portionsFromDrop;
         }
     }
-    for (ui64 pathId : emptyPaths) {
-        pathsToDrop.erase(pathId);
-    }
 
-    while (CleanupPortions.size() && !changes->NeedRepeat) {
-        auto it = CleanupPortions.begin();
+    for (auto it = CleanupPortions.begin(); !limitExceeded && it != CleanupPortions.end();) {
         if (it->first >= snapshot) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanupStop")("snapshot", snapshot.DebugString())("current_snapshot", it->first.DebugString());
             break;
         }
-        for (auto&& i : it->second) {
-            if (dataLocksManager->IsLocked(i)) {
+        for (ui32 i = 0; i < it->second.size();) {
+            if (dataLocksManager->IsLocked(it->second[i])) {
+                ++skipLocked;
+                ++i;
                 continue;
             }
-            Y_ABORT_UNLESS(i.CheckForCleanup(snapshot));
-            if (txSize + i.GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
-                txSize += i.GetTxVolume();
+            Y_ABORT_UNLESS(it->second[i].CheckForCleanup(snapshot));
+            if (txSize + it->second[i].GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
+                txSize += it->second[i].GetTxVolume();
             } else {
-                changes->NeedRepeat = true;
+                limitExceeded = true;
                 break;
             }
-            changes->PortionsToDrop.push_back(i);
+            changes->PortionsToDrop.push_back(std::move(it->second[i]));
+            if (i + 1 < it->second.size()) {
+                it->second[i] = std::move(it->second.back());
+            }
+            it->second.pop_back();
         }
-        CleanupPortions.erase(it);
+        if (limitExceeded) {
+            break;
+        }
+        if (it->second.empty()) {
+            it = CleanupPortions.erase(it);
+        } else {
+            ++it;
+        }
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size())("portions_prepared", changes->PortionsToDrop.size());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")
+        ("portions_count", CleanupPortions.size())("portions_prepared", changes->PortionsToDrop.size())("drop", portionsFromDrop)("skip", skipLocked);
 
     if (changes->PortionsToDrop.empty()) {
         return nullptr;
@@ -320,177 +390,43 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
     return changes;
 }
 
-TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering& tiering, TTieringProcessContext& context) const {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "ProcessTiering")("path_id", pathId)("tiering", tiering.GetDebugString());
-    auto& indexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
-    Y_ABORT_UNLESS(context.Changes->Tiering.emplace(pathId, tiering).second);
-
-    TDuration dWaiting = NYDBTest::TControllers::GetColumnShardController()->GetTTLDefaultWaitingDuration(TDuration::Minutes(1));
-    auto itTable = Tables.find(pathId);
-    if (itTable == Tables.end()) {
-        return dWaiting;
-    }
-
-    auto ttlTier = tiering.GetTierByName(TTierInfo::GetTtlTierName());
-    ui32 evictColumnId = indexInfo.GetColumnId(tiering.GetEvictColumnName());
-
-    const TInstant now = TInstant::Now();
-    for (auto& [portion, info] : itTable->second->GetPortions()) {
-        if (info->HasRemoveSnapshot()) {
-            continue;
-        }
-        if (context.DataLocksManager->IsLocked(*info)) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip ttl through busy portion")("portion_id", info->GetAddress().DebugString());
-            continue;
-        }
-        auto portionSchema = VersionedIndex.GetSchema(info->GetMinSnapshot());
-        auto statOperator = portionSchema->GetIndexInfo().GetStatistics(NStatistics::TIdentifier(NStatistics::EType::Max, {evictColumnId}));
-        std::shared_ptr<arrow::Scalar> max;
-        if (!statOperator) {
-            max = info->MaxValue(evictColumnId);
-            if (!max) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "scalar_less_not_max");
-                SignalCounters.OnPortionNoBorder(info->BlobsBytes());
-                continue;
-            } else {
-                NYDBTest::TControllers::GetColumnShardController()->OnMaxValueUsage();
-                SignalCounters.OnChunkUsageForTTL();
-            }
-        } else {
-            NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(statOperator);
-            SignalCounters.OnStatUsageForTTL();
-            max = statOperator.GetScalarVerified(info->GetMeta().GetStatisticsStorage());
-        }
-
-        bool keep = !ttlTier;
-        if (!!ttlTier) {
-            const auto expireTimestamp = ttlTier->GetEvictInstant(context.Now);
-            auto mpiOpt = ttlTier->ScalarToInstant(max);
-            Y_ABORT_UNLESS(mpiOpt);
-            const TInstant maxTtlPortionInstant = *mpiOpt;
-            const TDuration d = maxTtlPortionInstant - expireTimestamp;
-            keep = !!d;
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "keep_detect")("max", maxTtlPortionInstant.Seconds())("expire", expireTimestamp.Seconds());
-            if (d && dWaiting > d) {
-                dWaiting = d;
-            }
-        }
-
-        const bool tryEvictPortion = tiering.HasTiers() && context.HasLimitsForEviction();
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "scalar_less_result")("keep", keep)("tryEvictPortion", tryEvictPortion)("allowDrop", context.HasLimitsForTtl());
-        if (keep && tryEvictPortion) {
-            const TString currentTierName = info->GetMeta().GetTierName() ? info->GetMeta().GetTierName() : IStoragesManager::DefaultStorageId;
-            TString tierName = "";
-            const TInstant maxChangePortionInstant = info->RecordSnapshotMax().GetPlanInstant();
-            if (now - maxChangePortionInstant < TDuration::Minutes(60)) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_portion_to_evict")("reason", "too_fresh")("delta", now - maxChangePortionInstant);
-                continue;
-            }
-            for (auto& tierRef : tiering.GetOrderedTiers()) {
-                auto& tierInfo = tierRef.Get();
-                if (!indexInfo.AllowTtlOverColumn(tierInfo.GetEvictColumnName())) {
-                    SignalCounters.OnPortionNoTtlColumn(info->BlobsBytes());
-                    continue;
-                }
-                auto mpiOpt = tierInfo.ScalarToInstant(max);
-                Y_ABORT_UNLESS(mpiOpt);
-                const TInstant maxTieringPortionInstant = *mpiOpt;
-
-                const TDuration d = tierInfo.GetEvictInstant(context.Now) - maxTieringPortionInstant;
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering_choosing")("max", maxTieringPortionInstant.Seconds())
-                    ("evict", tierInfo.GetEvictInstant(context.Now).Seconds())("tier_name", tierInfo.GetName())("d", d);
-                if (d) {
-                    tierName = tierInfo.GetName();
-                    break;
-                } else {
-                    auto dWaitLocal = maxTieringPortionInstant - tierInfo.GetEvictInstant(context.Now);
-                    if (dWaiting > dWaitLocal) {
-                        dWaiting = dWaitLocal;
-                    }
-                }
-            }
-            if (!tierName) {
-                tierName = IStoragesManager::DefaultStorageId;
-            }
-            if (currentTierName != tierName) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering switch detected")("from", currentTierName)("to", tierName);
-                context.Changes->AddPortionToEvict(*info, TPortionEvictionFeatures(tierName, pathId));
-                context.AppPortionForEvictionChecker(*info);
-                SignalCounters.OnPortionToEvict(info->BlobsBytes());
-            }
-        }
-        if (!keep && context.HasLimitsForTtl()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "portion_remove")("portion", info->DebugString());
-            AFL_VERIFY(context.Changes->PortionsToRemove.emplace(info->GetAddress(), *info).second);
-            SignalCounters.OnPortionToDrop(info->BlobsBytes());
-            context.AppPortionForTtlChecker(*info);
-        }
-    }
-    if (dWaiting > TDuration::MilliSeconds(500) && (!context.HasLimitsForEviction() || !context.HasLimitsForTtl())) {
-        dWaiting = TDuration::MilliSeconds(500);
-    }
-    Y_ABORT_UNLESS(!!dWaiting);
-    return dWaiting;
-}
-
-bool TColumnEngineForLogs::DrainEvictionQueue(std::map<TMonotonic, std::vector<TEvictionsController::TTieringWithPathId>>& evictionsQueue, TTieringProcessContext& context) const {
-    const TMonotonic nowMonotonic = TlsActivationContext ? AppData()->MonotonicTimeProvider->Now() : TMonotonic::Now();
-    bool hasChanges = false;
-    while (evictionsQueue.size() && evictionsQueue.begin()->first < nowMonotonic) {
-        hasChanges = true;
-        auto tierings = std::move(evictionsQueue.begin()->second);
-        evictionsQueue.erase(evictionsQueue.begin());
-        for (auto&& i : tierings) {
-            auto itDuration = context.DurationsForced.find(i.GetPathId());
-            if (itDuration == context.DurationsForced.end()) {
-                const TDuration dWaiting = ProcessTiering(i.GetPathId(), i.GetTieringInfo(), context);
-                evictionsQueue[nowMonotonic + dWaiting].emplace_back(std::move(i));
-            } else {
-                evictionsQueue[nowMonotonic + itDuration->second].emplace_back(std::move(i));
-            }
-        }
-    }
-
-    if (evictionsQueue.size()) {
-        if (evictionsQueue.begin()->first < nowMonotonic) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "stop scan")("reason", "too many data")("first", evictionsQueue.begin()->first)("now", nowMonotonic);
-        } else if (!hasChanges) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "stop scan")("reason", "too early")("first", evictionsQueue.begin()->first)("now", nowMonotonic);
-        } else {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "stop scan")("reason", "task_ready")("first", evictionsQueue.begin()->first)("now", nowMonotonic)
-                ("internal", hasChanges)("evict_portions", context.Changes->GetPortionsToEvictCount())
-                ("drop_portions", context.Changes->PortionsToRemove.size());
-        }
-    } else {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "stop scan")("reason", "no data in queue");
-    }
-    return hasChanges;
-}
-
-std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept {
+std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, 
+    const ui64 memoryUsageLimit) noexcept {
     AFL_VERIFY(dataLocksManager);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartTtl")("external", pathEviction.size())("internal", EvictionsController.MutableNextCheckInstantForTierings().size());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartTtl")("external", pathEviction.size());
 
     TSaverContext saverContext(StoragesManager);
-
-    auto changes = std::make_shared<TTTLColumnEngineChanges>(TSplitSettings(), saverContext);
-
-    TTieringProcessContext context(memoryUsageLimit, changes, dataLocksManager, TTTLColumnEngineChanges::BuildMemoryPredictor());
-    bool hasExternalChanges = false;
+    NActualizer::TTieringProcessContext context(memoryUsageLimit, saverContext, dataLocksManager, SignalCounters, ActualizationController);
     for (auto&& i : pathEviction) {
-        context.DurationsForced[i.first] = ProcessTiering(i.first, i.second, context);
-        hasExternalChanges = true;
+        auto g = GetGranuleOptional(i.first);
+        if (g) {
+            if (!ActualizationStarted) {
+                g->StartActualizationIndex();
+            }
+            g->RefreshTiering(i.second);
+            g->BuildActualizationTasks(context);
+        }
     }
 
-    {
-        TLogContextGuard lGuard(TLogContextBuilder::Build()("queue", "ttl")("has_external", hasExternalChanges));
-        DrainEvictionQueue(EvictionsController.MutableNextCheckInstantForTierings(), context);
+    if (ActualizationStarted) {
+        TLogContextGuard lGuard(TLogContextBuilder::Build()("queue", "ttl")("external_count", pathEviction.size()));
+        for (auto&& i : Tables) {
+            if (pathEviction.contains(i.first)) {
+                continue;
+            }
+            i.second->BuildActualizationTasks(context);
+        }
+    } else {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "StartTtl")("skip", "not_ready_tiers");
     }
-
-    if (changes->PortionsToRemove.empty() && !changes->GetPortionsToEvictCount()) {
-        return nullptr;
+    std::vector<std::shared_ptr<TTTLColumnEngineChanges>> result;
+    for (auto&& i : context.GetTasks()) {
+        for (auto&& t : i.second) {
+            SignalCounters.OnActualizationTask(t.GetTask()->GetPortionsToEvictCount(), t.GetTask()->PortionsToRemove.size());
+            result.emplace_back(t.GetTask());
+        }
     }
-    return changes;
+    return result;
 }
 
 bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept {
@@ -574,24 +510,23 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
 }
 
 void TColumnEngineForLogs::OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) {
-    if (!TiersInitialized) {
+    if (!ActualizationStarted) {
         for (auto&& i : Tables) {
             i.second->StartActualizationIndex();
         }
     }
 
-    TiersInitialized = true;
+    ActualizationStarted = true;
     AFL_VERIFY(manager);
-    THashMap<ui64, TTiering> tierings;
-    if (manager) {
-        tierings = manager->GetTiering();
-    }
+    THashMap<ui64, TTiering> tierings = manager->GetTiering();
     ttl.AddTtls(tierings);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")
         ("new_count_tierings", tierings.size())
         ("new_count_ttls", ttl.PathsCount());
-    EvictionsController.RefreshTierings(std::move(tierings), ttl);
+    // some string
+
+
     if (pathId) {
         auto itGranule = Tables.find(*pathId);
         AFL_VERIFY(itGranule != Tables.end());
@@ -614,28 +549,12 @@ void TColumnEngineForLogs::OnTieringModified(const std::shared_ptr<NColumnShard:
 }
 
 void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
-    AFL_VERIFY(Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, GranulesStorage, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex)).second);
-}
-
-TColumnEngineForLogs::TTieringProcessContext::TTieringProcessContext(const ui64 memoryUsageLimit,
-    std::shared_ptr<TTTLColumnEngineChanges> changes, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>& memoryPredictor)
-    : MemoryUsageLimit(memoryUsageLimit)
-    , MemoryPredictor(memoryPredictor)
-    , Now(TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now())
-    , Changes(changes)
-    , DataLocksManager(dataLocksManager)
-{
-
-}
-
-void TEvictionsController::RefreshTierings(std::optional<THashMap<ui64, TTiering>>&& tierings, const NColumnShard::TTtl& ttl) {
-    if (tierings) {
-        OriginalTierings = std::move(*tierings);
+    auto infoEmplace = Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, GranulesStorage, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex));
+    AFL_VERIFY(infoEmplace.second);
+    if (ActualizationStarted) {
+        infoEmplace.first->second->StartActualizationIndex();
+        infoEmplace.first->second->RefreshScheme();
     }
-    auto copy = OriginalTierings;
-    ttl.AddTtls(copy);
-    NextCheckInstantForTierings = BuildNextInstantCheckers(std::move(copy));
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "RefreshTierings")("count", NextCheckInstantForTierings.size());
 }
 
 } // namespace NKikimr::NOlap

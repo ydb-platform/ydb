@@ -27,7 +27,7 @@ protected:
         for (auto&& portionInfo : Portions) {
             auto blobSchema = Schemas->FindPtr(portionInfo->GetPortionId());
             THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo> blobsDataAssemble;
-            for (auto&& i : portionInfo->Records) {
+            for (auto&& i : portionInfo->GetRecords()) {
                 auto blobData = Blobs.Extract((*blobSchema)->GetIndexInfo().GetColumnStorageId(i.GetColumnId(), portionInfo->GetMeta().GetTierName()), portionInfo->RestoreBlobRange(i.BlobRange));
                 blobsDataAssemble.emplace(i.GetAddress(), blobData);
             }
@@ -65,7 +65,7 @@ public:
     }
 
     static ui64 GetMemSize(const std::shared_ptr<TPortionInfo>& portion) {
-        return portion->GetRawBytes();
+        return portion->GetTotalRawBytes();
     }
 
     static bool CheckPortion(const TPortionInfo& portionInfo) {
@@ -162,7 +162,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizer::Init(const 
                 (*schemas)[portion.GetPortionId()] = currentSchema;
                 it = portions.emplace(portion.GetPortion(), std::make_shared<TPortionInfo>(portion)).first;
             }
-            TColumnRecord rec(it->second->RegisterBlobId(loadContext.GetBlobRange().GetBlobId()), loadContext, currentSchema->GetIndexInfo());
+            TColumnRecord rec(it->second->RegisterBlobId(loadContext.GetBlobRange().GetBlobId()), loadContext, currentSchema->GetIndexInfo().GetColumnFeaturesVerified(loadContext.GetAddress().GetColumnId()));
             AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
             it->second->AddRecord(currentSchema->GetIndexInfo(), rec, portionMeta);
         };

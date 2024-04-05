@@ -4215,6 +4215,10 @@ bool IsDataTypeTzDate(EDataSlot dataSlot) {
     return NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::TzDateType;
 }
 
+bool IsDataTypeBigDate(EDataSlot dataSlot) {
+    return (NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::BigDateType);
+}
+
 EDataSlot WithTzDate(EDataSlot dataSlot) {
     if (dataSlot == EDataSlot::Date) {
         return EDataSlot::TzDate;
@@ -6399,7 +6403,7 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
     if (aggDesc.FinalFuncId) {
         const ui32 originalAggResultType = NPg::LookupProc(aggDesc.FinalFuncId).ResultType;
         ui32 aggResultType = originalAggResultType;
-        AdjustReturnType(aggResultType, aggDesc.ArgTypes, argTypes);
+        AdjustReturnType(aggResultType, aggDesc.ArgTypes, 0, argTypes);
         finishLambda = ctx.Builder(pos)
             .Lambda()
             .Param("state")
@@ -6702,8 +6706,7 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
     }
 }
 
-void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, const TVector<ui32>& argTypes) {
-    YQL_ENSURE(procArgTypes.size() >= argTypes.size());
+void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, ui32 procVariadicType, const TVector<ui32>& argTypes) {
     if (returnType == NPg::AnyArrayOid) {
         TMaybe<ui32> inputElementType;
         TMaybe<ui32> inputArrayType;
@@ -6712,7 +6715,8 @@ void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, const
                 continue;
             }
 
-            if (procArgTypes[i] == NPg::AnyNonArrayOid) {
+            auto targetType = i >= procArgTypes.size() ? procVariadicType : procArgTypes[i];
+            if (targetType == NPg::AnyNonArrayOid) {
                 if (!inputElementType) {
                    inputElementType = argTypes[i];
                 } else {
@@ -6722,7 +6726,7 @@ void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, const
                 }
             }
 
-            if (procArgTypes[i] == NPg::AnyArrayOid) {
+            if (targetType == NPg::AnyArrayOid) {
                 if (!inputArrayType) {
                    inputArrayType = argTypes[i];
                 } else {
@@ -6737,6 +6741,18 @@ void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, const
             returnType = NPg::LookupType(*inputElementType).ArrayTypeId;
         } else if (inputArrayType) {
             returnType = *inputArrayType;
+        }
+    } else if (returnType == NPg::AnyElementOid) {
+        for (ui32 i = 0; i < argTypes.size(); ++i) {
+            if (!argTypes[i]) {
+                continue;
+            }
+
+            const auto& typeDesc = NPg::LookupType(argTypes[i]);
+            if (typeDesc.ArrayTypeId == typeDesc.TypeId) {
+                returnType = typeDesc.ElementTypeId;
+                return;
+            }
         }
     }
 }

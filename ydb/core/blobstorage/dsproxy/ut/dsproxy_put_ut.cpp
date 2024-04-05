@@ -76,7 +76,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
     TPutImpl::TPutResultVec putResults;
 
     putImpl.GenerateInitialRequests(logCtx, partSetSingleton);
-    putImpl.Step(logCtx, putResults, {&group.GetInfo()->GetTopology()});
+    putImpl.Step(logCtx, putResults, {&group.GetInfo()->GetTopology()}, false);
     auto vPuts = putImpl.GeneratePutRequests();
     group.SetError(0, NKikimrProto::ERROR);
 
@@ -119,7 +119,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
         vPutResult.MakeError(status, TString(), vPut.Record);
 
         putImpl.ProcessResponse(vPutResult);
-        putImpl.Step(logCtx, putResults, {&group.GetInfo()->GetTopology()});
+        putImpl.Step(logCtx, putResults, {&group.GetInfo()->GetTopology()}, false);
         auto nextVPuts = putImpl.GeneratePutRequests();
 
         if (putResults.size()) {
@@ -273,7 +273,7 @@ struct TTestPutAllOk {
             }
 
             std::visit([&](auto &ev) { putImpl.ProcessResponse(*ev); }, vPutResults[resIdx]);
-            putImpl.Step(LogCtx, putResults, &Group.GetInfo()->GetTopology());
+            putImpl.Step(LogCtx, putResults, &Group.GetInfo()->GetTopology(), false);
             auto vPuts = putImpl.GeneratePutRequests();
             if (putResults.size() == BlobCount) {
                 break;
@@ -309,7 +309,7 @@ struct TTestPutAllOk {
             }
 
             putImpl->GenerateInitialRequests(LogCtx, PartSets);
-            putImpl->Step(LogCtx, putResults, &Group.GetInfo()->GetTopology());
+            putImpl->Step(LogCtx, putResults, &Group.GetInfo()->GetTopology(), false);
             auto vPuts = putImpl->GeneratePutRequests();
             UNIT_ASSERT(vPuts.size() == 6 || !IsVPut);
             TDeque<TPutResultEvent> vPutResults;
@@ -367,7 +367,7 @@ Y_UNIT_TEST(TestMirror3dcWith3x3MinLatencyMod) {
     ErasureSplit((TErasureType::ECrcMode)blobId.CrcMode(), env.Info->Type, TRope(encryptedData), partSetSingleton[0]);
     putImpl.GenerateInitialRequests(logCtx, partSetSingleton);
     TPutImpl::TPutResultVec putResults;
-    putImpl.Step(logCtx, putResults, &env.Info->GetTopology());
+    putImpl.Step(logCtx, putResults, &env.Info->GetTopology(), false);
     auto vPuts = putImpl.GeneratePutRequests();
 
     UNIT_ASSERT_VALUES_EQUAL(vPuts.size(), 9);

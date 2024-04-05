@@ -525,10 +525,19 @@ protected:
                 }
             }
         }
-        for (auto& [index, input] : InputTransformsMap) {
-            if (input.AsyncInput) {
-                if (auto data = input.AsyncInput->ExtraData()) {
+        for (auto& [index, transform] : InputTransformsMap) {
+            if (transform.AsyncInput) {
+                if (auto data = transform.AsyncInput->ExtraData()) {
                     auto* entry = extraData->AddInputTransformsData();
+                    entry->SetIndex(index);
+                    entry->MutableData()->CopyFrom(*data);
+                }
+            }
+        }
+        for (auto& [index, output] : SinksMap) {
+            if (output.AsyncOutput) {
+                if (auto data = output.AsyncOutput->ExtraData()) {
+                    auto* entry = extraData->AddSinksExtraData();
                     entry->SetIndex(index);
                     entry->MutableData()->CopyFrom(*data);
                 }
@@ -799,10 +808,11 @@ protected:
         }
     };
 
-    struct TAsyncInputTransformHelper : TAsyncInputHelper {
-        NUdf::TUnboxedValue InputBuffer;
-
-        using TAsyncInputHelper::TAsyncInputHelper;
+    //Design note:
+    //Inherited TComputeActorAsyncInputHelperSync represents output part of an input transform. A transform's output is an input for TaskRunner
+    struct TAsyncInputTransformHelper: TComputeActorAsyncInputHelperSync {
+        using TComputeActorAsyncInputHelperSync::TComputeActorAsyncInputHelperSync;
+        NUdf::TUnboxedValue Input; //Expect a flow, that is the input for the transform
     };
 
     struct TOutputChannelInfo {
@@ -1291,7 +1301,7 @@ protected:
                         .StatsLevel = collectStatsLevel,
                         .TxId = TxId,
                         .TaskId = Task.GetId(),
-                        .TransformInput = transform.InputBuffer,
+                        .TransformInput = transform.Input,
                         .SecureParams = secureParams,
                         .TaskParams = taskParams,
                         .ComputeActorId = this->SelfId(),
@@ -1469,7 +1479,7 @@ private:
             if (inputDesc.HasTransform()) {
                 auto result = InputTransformsMap.emplace(
                     i,
-                    static_cast<TDerived*>(this)->template CreateInputHelper<TAsyncInputTransformHelper>(LogPrefix, i, NDqProto::WATERMARKS_MODE_DISABLED)
+                    TAsyncInputTransformHelper(LogPrefix, i, NDqProto::WATERMARKS_MODE_DISABLED)
                 );
                 YQL_ENSURE(result.second);
             }
@@ -1478,7 +1488,7 @@ private:
                 const auto watermarksMode = inputDesc.GetSource().GetWatermarksMode();
                 auto result = SourcesMap.emplace(
                     i, 
-                    static_cast<TDerived*>(this)->template CreateInputHelper<TAsyncInputHelper>(LogPrefix, i, watermarksMode)
+                    static_cast<TDerived*>(this)->CreateInputHelper(LogPrefix, i, watermarksMode)
                 );
                 YQL_ENSURE(result.second);
             } else {

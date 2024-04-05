@@ -28,7 +28,7 @@ FederatedQuery::IamAuth::IdentityCase GetIamAuth(const FederatedQuery::Connectio
     const auto& setting = connection.content().setting();
     switch (setting.connection_case()) {
         case FederatedQuery::ConnectionSetting::kYdbDatabase:
-            return setting.data_streams().auth().identity_case();
+            return setting.ydb_database().auth().identity_case();
         case FederatedQuery::ConnectionSetting::kClickhouseCluster:
             return setting.clickhouse_cluster().auth().identity_case();
         case FederatedQuery::ConnectionSetting::kObjectStorage:
@@ -158,6 +158,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         job.set_query_name(query.mutable_content()->name());
         *job.mutable_acl() = content.acl();
         job.set_automatic(content.automatic());
+        *job.mutable_parameters() = content.parameters();
     }
 
     std::shared_ptr<std::pair<FederatedQuery::CreateQueryResult, TAuditDetails<FederatedQuery::Query>>> response = std::make_shared<std::pair<FederatedQuery::CreateQueryResult, TAuditDetails<FederatedQuery::Query>>>();
@@ -400,7 +401,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
         TVector<TString> filters;
         if (request.filter().name()) {
             queryBuilder.AddString("filter_name", request.filter().name());
-            filters.push_back("`" NAME_COLUMN_NAME "` ILIKE '%' || $filter_name || '%'");
+            filters.push_back("Re2::Grep($filter_name, Re2::Options(false AS CaseSensitive, true as Literal))(`" NAME_COLUMN_NAME "`)");
         }
 
         if (request.filter().query_type() != FederatedQuery::QueryContent::QUERY_TYPE_UNSPECIFIED) {
@@ -979,6 +980,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             job.set_query_name(query.mutable_content()->name());
             *job.mutable_acl() = request.content().acl();
             job.set_automatic(request.content().automatic());
+            *job.mutable_parameters() = request.content().parameters();
         }
 
         response->second.After.ConstructInPlace().CopyFrom(query);
@@ -1005,7 +1007,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             "$to_delete = (\n"
                 "SELECT * FROM `" JOBS_TABLE_NAME "`\n"
                 "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id\n"
-                "ORDER BY `" JOB_ID_COLUMN_NAME "`\n"
+                "ORDER BY `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME  "`, `" JOB_ID_COLUMN_NAME "`\n"
                 "LIMIT $max_count_jobs, 1\n"
             ");\n"
         );

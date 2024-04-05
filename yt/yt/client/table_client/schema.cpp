@@ -689,6 +689,11 @@ bool TTableSchema::HasTimestampColumn() const
     return FindColumn(TimestampColumnName);
 }
 
+bool TTableSchema::HasTtlColumn() const
+{
+    return FindColumn(TtlColumnName);
+}
+
 bool TTableSchema::IsSorted() const
 {
     return KeyColumnCount_ > 0;
@@ -709,6 +714,15 @@ bool TTableSchema::HasRenamedColumns() const
 bool TTableSchema::IsEmpty() const
 {
     return Columns().empty();
+}
+
+std::optional<int> TTableSchema::GetTtlColumnIndex() const
+{
+    auto* column = FindColumn(TtlColumnName);
+    if (!column) {
+        return std::nullopt;
+    }
+    return GetColumnIndex(*column);
 }
 
 TKeyColumns TTableSchema::GetKeyColumnNames() const
@@ -1498,6 +1512,7 @@ void ValidateSystemColumnSchema(
 {
     static const auto allowedSortedTablesSystemColumns = THashMap<TString, ESimpleLogicalValueType>{
         {EmptyValueColumnName, ESimpleLogicalValueType::Int64},
+        {TtlColumnName, ESimpleLogicalValueType::Uint64},
     };
 
     static const auto allowedOrderedTablesSystemColumns = THashMap<TString, ESimpleLogicalValueType>{
@@ -1833,6 +1848,37 @@ void ValidateTimestampColumn(const TTableSchema& schema)
     }
 }
 
+//! Validates |$ttl| column, if any.
+/*!
+ *  Validate that:
+ *  - |$ttl| column cannot be a part of key.
+ *  - |$ttl| column can only be present in sorted tables.
+ *  - |$ttl| column has type |uint64|.
+ */
+void ValidateTtlColumn(const TTableSchema& schema)
+{
+    auto* column = schema.FindColumn(TtlColumnName);
+    if (!column) {
+        return;
+    }
+
+    if (column->SortOrder()) {
+        THROW_ERROR_EXCEPTION("Column %Qv cannot be a part of key",
+            TtlColumnName);
+    }
+
+    if (!column->IsOfV1Type(ESimpleLogicalValueType::Uint64)) {
+        THROW_ERROR_EXCEPTION("Column %Qv must have %Qlv type",
+            TtlColumnName,
+            EValueType::Uint64);
+    }
+
+    if (!schema.IsSorted()) {
+        THROW_ERROR_EXCEPTION("Column %Qv cannot appear in an ordered table",
+            TtlColumnName);
+    }
+}
+
 //! Validates |$cumulative_data_weight| column, if any.
 /*!
  *  Validate that:
@@ -1897,6 +1943,7 @@ void ValidateTableSchema(const TTableSchema& schema, bool isTableDynamic, bool a
     ValidateLocks(schema);
     ValidateKeyColumnsFormPrefix(schema);
     ValidateTimestampColumn(schema);
+    ValidateTtlColumn(schema);
     ValidateCumulativeDataWeightColumn(schema);
     ValidateSchemaAttributes(schema);
     if (isTableDynamic) {

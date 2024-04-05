@@ -56,9 +56,11 @@ private:
             if (auto it = respMap.find("expires_in"); it == respMap.end())
                 ythrow yexception() << "Result doesn't contain expires_in";
             else {
-                const TDuration expiresIn = TDuration::Seconds(it->second.GetUInteger());
+                const TDuration expiresIn = TDuration::Seconds(it->second.GetUInteger()) / 2;
 
-                NextTicketUpdate_ = TInstant::Now() + std::max(expiresIn, RefreshPeriod_);
+                const auto interval = std::max(std::min(expiresIn, RefreshPeriod_), TDuration::MilliSeconds(100));
+
+                NextTicketUpdate_ = TInstant::Now() + interval;
             }
         } catch (...) {
         }

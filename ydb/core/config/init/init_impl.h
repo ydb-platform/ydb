@@ -7,7 +7,6 @@
 
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/cms/console/config_item_info.h>
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
@@ -72,6 +71,10 @@ struct TConfigRefs {
     IProtoConfigFileProvider& ProtoConfigFileProvider;
 };
 
+struct TFileConfigOptions {
+    TString Description;
+    TMaybe<TString> ParsedOption;
+};
 
 template <class TProto>
 using TAccessors = std::tuple<
@@ -593,8 +596,23 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::TenantPoolConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (TenantName && InterconnectPort != DefaultInterconnectPort) {
-            appConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort(env));
+        if (TenantName) {
+            if (appConfig.GetDynamicNodeConfig().GetNodeInfo().HasSlotName()) {
+                const TString& slotName = appConfig.GetDynamicNodeConfig().GetNodeInfo().GetSlotName();
+                appConfig.MutableMonitoringConfig()->SetHostLabelOverride(slotName);
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+            } else if (InterconnectPort != DefaultInterconnectPort) {
+                appConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort(env));
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+            }
+        }
+
+        if (TenantName) {
+            if (InterconnectPort == DefaultInterconnectPort) {
+                appConfig.MutableMonitoringConfig()->SetProcessLocation(Host(env));
+            } else {
+                appConfig.MutableMonitoringConfig()->SetProcessLocation(HostAndICPort(env));
+            }
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
@@ -682,10 +700,17 @@ struct TCommonAppOptions {
     }
 
     TString HostAndICPort(IEnv& env) const {
+        auto hostname = Host(env);
+        if (!hostname) {
+            return "";
+        }
+        return TStringBuilder() << hostname << ":" << InterconnectPort;
+    }
+
+    TString Host(IEnv& env) const {
         try {
             auto hostname = to_lower(env.HostName());
-            hostname = hostname.substr(0, hostname.find('.'));
-            return TStringBuilder() << hostname << ":" << InterconnectPort;
+            return hostname.substr(0, hostname.find('.'));
         } catch (TSystemError& error) {
             return "";
         }
@@ -865,7 +890,7 @@ TString DeduceNodeDomain(const NConfig::TCommonAppOptions& cf, const NKikimrConf
 ui32 NextValidKind(ui32 kind);
 bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConfig& appConfig);
 NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, const IEnv& env);
-NKikimrConfig::TAppConfig GetYamlConfigFromResult(const NKikimr::NClient::TConfigurationResult& result, const TMap<TString, TString>& labels);
+NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& result, const TMap<TString, TString>& labels);
 NKikimrConfig::TAppConfig GetActualDynConfig(
     const NKikimrConfig::TAppConfig& yamlConfig,
     const NKikimrConfig::TAppConfig& regularConfig,
@@ -923,7 +948,7 @@ public:
         Option("naming-file", TCfg::TNameserviceConfigFieldTag{});
 
         CommonAppOptions.NodeId = CommonAppOptions.DeduceNodeId(AppConfig, Env);
-        Cout << "Determined node ID: " << CommonAppOptions.NodeId << Endl;
+        Logger.Out() << "Determined node ID: " << CommonAppOptions.NodeId << Endl;
 
         CommonAppOptions.ValidateTenant();
 
@@ -992,7 +1017,7 @@ public:
 
         TenantName = FillTenantPoolConfig(CommonAppOptions);
 
-        Cout << "configured" << Endl;
+        Logger.Out() << "configured" << Endl;
 
         FillData(CommonAppOptions);
     }
@@ -1176,7 +1201,7 @@ public:
             AppConfig.GetAuthConfig().GetStaffApiUserToken(),
         };
 
-        TMaybe<NKikimr::NClient::TConfigurationResult> result = DynConfigClient.GetConfig(CommonAppOptions.GrpcSslSettings, addrs, settings, Env, Logger);
+        auto result = DynConfigClient.GetConfig(CommonAppOptions.GrpcSslSettings, addrs, settings, Env, Logger);
 
         if (!result) {
             return;
@@ -1211,22 +1236,25 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
-        TMap<TString, TString>& labels,
         TString& clusterName,
-        NKikimrConfig::TAppConfig& initialCmsConfig,
-        NKikimrConfig::TAppConfig& initialCmsYamlConfig,
-        THashMap<ui32, TConfigItemInfo>& configInitInfo) const override
+        TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const override
     {
         appConfig = AppConfig;
         nodeId = NodeId;
         scopeId = ScopeId;
         tenantName = TenantName;
         servicesMask = ServicesMask;
-        labels = Labels;
         clusterName = ClusterName;
-        initialCmsConfig.CopyFrom(InitDebug.OldConfig);
-        initialCmsYamlConfig.CopyFrom(InitDebug.YamlConfig);
-        configInitInfo = InitDebug.ConfigTransformInfo;
+        configsDispatcherInitInfo.InitialConfig = appConfig;
+        configsDispatcherInitInfo.ItemsServeRules = std::monostate{},
+        configsDispatcherInitInfo.Labels = Labels;
+        configsDispatcherInitInfo.DebugInfo = TDebugInfo {
+            .InitInfo = InitDebug.ConfigTransformInfo,
+        };
+        auto& debugInfo = *configsDispatcherInitInfo.DebugInfo;
+        debugInfo.StaticConfig.CopyFrom(appConfig); // FIXME it's not static config
+        debugInfo.OldDynConfig.CopyFrom(InitDebug.OldConfig);
+        debugInfo.NewDynConfig.CopyFrom(InitDebug.YamlConfig);
     }
 };
 

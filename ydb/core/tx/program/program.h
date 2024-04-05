@@ -90,15 +90,8 @@ public:
         }
     }
 
-    std::shared_ptr<NArrow::TColumnFilter> ApplyEarlyFilter(std::shared_ptr<arrow::Table>& batch, const bool useFilter) const {
-        if (Program) {
-            return Program->ApplyEarlyFilter(batch, useFilter);
-        } else {
-            return nullptr;
-        }
-    }
-
-    inline arrow::Status ApplyProgram(std::shared_ptr<arrow::RecordBatch>& batch) const {
+    template <class TDataContainer>
+    inline arrow::Status ApplyProgram(std::shared_ptr<TDataContainer>& batch) const {
         if (Program) {
             return Program->ApplyTo(batch, NArrow::GetCustomExecContext());
         } else if (OverrideProcessingColumnsVector) {

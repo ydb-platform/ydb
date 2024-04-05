@@ -49,7 +49,9 @@ struct Schema : NIceDb::Schema {
         BorrowedBlobIdsTableId,
         SourceSessionsTableId,
         DestinationSessionsTableId,
-        OperationTxIdsId
+        OperationTxIdsId,
+        BackupIdsDeprecated,
+        ExportSessionsId
     };
 
     enum class ETierTables: ui32 {
@@ -322,6 +324,16 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TxId, LockId>;
     };
 
+    struct ExportPersistentSessions : NIceDb::Schema::Table<ExportSessionsId> {
+        struct Identifier : Column<1, NScheme::NTypeIds::String> {};
+        struct Status: Column<2, NScheme::NTypeIds::String> {};
+        struct Task: Column<3, NScheme::NTypeIds::String> {};
+        struct Cursor: Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<Identifier>;
+        using TColumns = TableColumns<Identifier, Status, Task, Cursor>;
+    };
+
     struct TierBlobsDraft: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsDraft> {
         struct StorageId: Column<1, NScheme::NTypeIds::String> {};
         struct BlobId: Column<2, NScheme::NTypeIds::String> {};
@@ -467,7 +479,8 @@ struct Schema : NIceDb::Schema {
         BorrowedBlobIds,
         SourceSessions,
         DestinationSessions,
-        OperationTxIds
+        OperationTxIds,
+        ExportPersistentSessions
         >;
 
     //

@@ -76,12 +76,13 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
     }
 
     int newNCols = leftStats.Ncols + rightStats.Ncols;
+    double newByteSize = leftStats.Nrows ? (leftStats.ByteSize / leftStats.Nrows) * newCard : 0 +
+            rightStats.Nrows ? (rightStats.ByteSize / rightStats.Nrows) * newCard : 0;
 
-    double cost = ctx.ComputeJoinCost(leftStats, rightStats, joinAlgo)
-        + newCard 
+    double cost = ctx.ComputeJoinCost(leftStats, rightStats, newCard, newByteSize, joinAlgo)
         + leftStats.Cost + rightStats.Cost;
 
-    auto result =  TOptimizerStatistics(outputType, newCard, newNCols, cost, 
+    auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost, 
         leftKeyColumns ? leftStats.KeyColumns : ( rightKeyColumns ? rightStats.KeyColumns : TOptimizerStatistics::EmptyColumns));
     result.Selectivity = selectivity;
     return result;

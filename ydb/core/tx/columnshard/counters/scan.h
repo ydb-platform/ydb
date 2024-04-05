@@ -40,6 +40,19 @@ public:
 };
 
 class TScanCounters: public TCommonCountersOwner {
+public:
+    enum class EStatusFinish {
+        Success /* "Success" */ = 0,
+        ConveyorInternalError /* "ConveyorInternalError" */,
+        ExternalAbort /* "ExternalAbort" */,
+        IteratorInternalErrorScan /* "IteratorInternalErrorScan" */,
+        IteratorInternalErrorResult /* "IteratorInternalErrorResult" */,
+        Deadline /* "Deadline" */,
+        UndeliveredEvent /* "UndeliveredEvent" */,
+        CannotAddInFlight /* "CannotAddInFlight" */,
+
+        COUNT
+    };
 private:
     using TBase = TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr ProcessingOverload;
@@ -54,7 +67,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr NoResultsAckRequest;
     NMonitoring::TDynamicCounters::TCounterPtr AckWaitingDuration;
 
-    NMonitoring::TDynamicCounters::TCounterPtr ScanDuration;
+    std::vector<NMonitoring::THistogramPtr> ScanDurationByStatus;
 
     NMonitoring::TDynamicCounters::TCounterPtr NoScanRecords;
     NMonitoring::TDynamicCounters::TCounterPtr NoScanIntervals;
@@ -66,7 +79,6 @@ private:
 public:
 
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters> ResourcesSubscriberCounters;
-
 
     NMonitoring::TDynamicCounters::TCounterPtr PortionBytes;
     NMonitoring::TDynamicCounters::TCounterPtr FilterBytes;
@@ -121,8 +133,9 @@ public:
         LogScanIntervals->Add(1);
     }
 
-    void OnScanDuration(const TDuration d) const {
-        ScanDuration->Add(d.MicroSeconds());
+    void OnScanDuration(const EStatusFinish status, const TDuration d) const {
+        AFL_VERIFY((ui32)status < ScanDurationByStatus.size());
+        ScanDurationByStatus[(ui32)status]->Collect(d.MilliSeconds());
     }
 
     void AckWaitingInfo(const TDuration d) const {

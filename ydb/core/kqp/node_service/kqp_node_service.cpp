@@ -13,6 +13,7 @@
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
+#include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
@@ -137,11 +138,13 @@ public:
     }
 
     TKqpNodeService(const NKikimrConfig::TTableServiceConfig& config, const TIntrusivePtr<TKqpCounters>& counters,
-        IKqpNodeComputeActorFactory* caFactory, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory)
+        IKqpNodeComputeActorFactory* caFactory, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
         : Config(config.GetResourceManager())
         , Counters(counters)
         , CaFactory(caFactory)
         , AsyncIoFactory(std::move(asyncIoFactory))
+        , FederatedQuerySetup(federatedQuerySetup)
     {
         Buckets = std::make_shared<TBucketArray>();
         if (config.HasIteratorReadsRetrySettings()) {
@@ -491,7 +494,7 @@ private:
             } else {
                 if (Y_LIKELY(!CaFactory)) {
                     computeActor = CreateKqpComputeActor(request.Executer, txId, &dqTask, AsyncIoFactory,
-                        AppData()->FunctionRegistry, runtimeSettings, memoryLimits, NWilson::TTraceId(ev->TraceId), ev->Get()->Arena);
+                        AppData()->FunctionRegistry, runtimeSettings, memoryLimits, NWilson::TTraceId(ev->TraceId), ev->Get()->Arena, FederatedQuerySetup);
                     taskCtx.ComputeActorId = Register(computeActor);
                 } else {
                     computeActor = CaFactory->CreateKqpComputeActor(request.Executer, txId, &dqTask,
@@ -711,6 +714,7 @@ private:
     IKqpNodeComputeActorFactory* CaFactory;
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
+    const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
     //state sharded by TxId
     std::shared_ptr<TBucketArray> Buckets;
@@ -720,9 +724,10 @@ private:
 } // anonymous namespace
 
 IActor* CreateKqpNodeService(const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-    TIntrusivePtr<TKqpCounters> counters, IKqpNodeComputeActorFactory* caFactory, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory)
+    TIntrusivePtr<TKqpCounters> counters, IKqpNodeComputeActorFactory* caFactory, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
 {
-    return new TKqpNodeService(tableServiceConfig, counters, caFactory, std::move(asyncIoFactory));
+    return new TKqpNodeService(tableServiceConfig, counters, caFactory, std::move(asyncIoFactory), federatedQuerySetup);
 }
 
 } // namespace NKqp

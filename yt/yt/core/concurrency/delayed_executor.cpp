@@ -172,8 +172,9 @@ private:
         TPollerThread()
             : TThread(
                 "DelayedPoller",
-                NThreading::EThreadPriority::Normal,
-                /*shutdownPriority*/ 200)
+                NThreading::TThreadOptions{
+                    .ShutdownPriority = 200,
+                })
         { }
 
         void EnqueueSubmission(TDelayedExecutorEntryPtr entry)
@@ -230,7 +231,7 @@ private:
         {
             while (true) {
                 auto cookie = EventCount_->PrepareWait();
-                // Reset notificagtion flag before processing queues but after prepare wait.
+                // Reset notification flag before processing queues but after prepare wait.
                 // Otherwise notifies occurred after processing queues and before wait
                 // can be lost. No new notifies can happen if notify flag is true before
                 // prepare wait.
@@ -438,4 +439,3 @@ void TDelayedExecutor::CancelAndClear(TDelayedExecutorCookie& cookie)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency
-

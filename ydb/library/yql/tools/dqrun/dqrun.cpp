@@ -24,7 +24,7 @@
 #include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.h>
 #include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h>
-#include <ydb/library/yql/providers/generic/actors/yql_generic_source_factory.h>
+#include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
@@ -117,6 +117,7 @@ struct TRunOptions {
     IOutputStream* StatisticsStream = nullptr;
     bool PrintPlan = false;
     bool AnalyzeQuery = false;
+    bool NoForceDq = false;
     bool AnsiLexer = false;
     IOutputStream* ExprOut = nullptr;
     IOutputStream* ResultOut = &Cout;
@@ -241,7 +242,7 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(
     RegisterS3ReadActorFactory(*factory, nullptr, httpGateway, GetHTTPDefaultRetryPolicy(TDuration::Seconds(HTTPmaxTimeSeconds), maxRetriesCount), {}, nullptr);
     RegisterS3WriteActorFactory(*factory, nullptr, httpGateway);
     RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
-    RegisterGenericReadActorFactory(*factory, credentialsFactory, genericClient);
+    RegisterGenericProviderFactories(*factory, credentialsFactory, genericClient);
 
     RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
 
@@ -275,7 +276,8 @@ struct TActorIds {
 std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
     const TGatewaysConfig& gatewaysConfig,
     IMetricsRegistryPtr& metricsRegistry,
-    NYql::NLog::ELevel loggingLevel
+    NYql::NLog::ELevel loggingLevel,
+    ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory
 ) {
     auto actorSystemManager = std::make_unique<TActorSystemManager>(metricsRegistry, YqlToActorsLogLevel(loggingLevel));
     TActorIds actorIds;
@@ -296,7 +298,7 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
         auto httpProxy = NHttp::CreateHttpProxy();
         actorIds.HttpProxy = actorSystemManager->GetActorSystem()->Register(httpProxy);
 
-        auto databaseResolver = NFq::CreateDatabaseResolver(actorIds.HttpProxy, nullptr);
+        auto databaseResolver = NFq::CreateDatabaseResolver(actorIds.HttpProxy, credentialsFactory);
         actorIds.DatabaseResolver = actorSystemManager->GetActorSystem()->Register(databaseResolver);
     }
 
@@ -313,7 +315,7 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
         sqlSettings.AnsiLexer = options.AnsiLexer;
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         sqlSettings.Flags.insert("DqEngineEnable");
-        if (!options.AnalyzeQuery) {
+        if (!options.AnalyzeQuery && !options.NoForceDq) {
             sqlSettings.Flags.insert("DqEngineForce");
         }
 
@@ -571,6 +573,7 @@ int RunMain(int argc, const char* argv[])
         .SetFlag(&runOptions.PrintPlan);
     opts.AddLongOption("keep-temp", "keep temporary tables").NoArgument();
     opts.AddLongOption("analyze-query", "enable analyze query").Optional().NoArgument().SetFlag(&runOptions.AnalyzeQuery);
+    opts.AddLongOption("no-force-dq", "don't set force dq mode").Optional().NoArgument().SetFlag(&runOptions.NoForceDq);
     opts.AddLongOption("ansi-lexer", "Use ansi lexer").Optional().NoArgument().SetFlag(&runOptions.AnsiLexer);
     opts.AddLongOption('E', "emulate-yt", "Emulate YT tables").Optional().NoArgument().SetFlag(&emulateYt);
 
@@ -758,12 +761,21 @@ int RunMain(int argc, const char* argv[])
         dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
     }
 
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
+
+    if (tokenAccessorEndpoint) {
+        TVector<TString> ss = StringSplitter(tokenAccessorEndpoint).SplitByString("://");
+        YQL_ENSURE(ss.size() == 2, "Invalid tokenAccessorEndpoint: " << tokenAccessorEndpoint); 
+
+        credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(ss[1], ss[0] == "grpcs", "");
+    }
+
     auto dqCompFactory = NMiniKQL::GetCompositeWithBuiltinFactory(factories);
 
     // Actor system starts here and will be automatically destroyed when goes out of the scope.
     std::unique_ptr<TActorSystemManager> actorSystemManager;
     TActorIds actorIds;
-    std::tie(actorSystemManager, actorIds) = RunActorSystem(gatewaysConfig, metricsRegistry, loggingLevel);
+    std::tie(actorSystemManager, actorIds) = RunActorSystem(gatewaysConfig, metricsRegistry, loggingLevel, credentialsFactory);
 
     IHTTPGateway::TPtr httpGateway;
     if (gatewaysConfig.HasClickHouse()) {
@@ -786,16 +798,6 @@ int RunMain(int argc, const char* argv[])
             NFq::MakeMdbEndpointGeneratorGeneric(false)
         );
     }
-
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
-
-    if (tokenAccessorEndpoint) {
-        TVector<TString> ss = StringSplitter(tokenAccessorEndpoint).SplitByString("://");
-        YQL_ENSURE(ss.size() == 2, "Invalid tokenAccessorEndpoint: " << tokenAccessorEndpoint); 
-
-        credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(ss[1], ss[0] == "grpcs", "");
-    }
-
 
     NConnector::IClient::TPtr genericClient;
     if (gatewaysConfig.HasGeneric()) {

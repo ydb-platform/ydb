@@ -31,6 +31,9 @@
 #include <parquet/arrow/reader.h>
 #include <parquet/file_reader.h>
 
+#include <library/cpp/protobuf/util/pb_io.h>
+#include <google/protobuf/text_format.h>
+
 #endif
 
 #include "yql_arrow_column_converters.h"
@@ -630,6 +633,7 @@ private:
             ScheduleRequest(consumer, transportMeta);
         }
     }
+
     void SendObjects(const TActorId& consumer, const NDqProto::TMessageTransportMeta& transportMeta) {
         Y_ENSURE(!MaybeIssues.Defined());
         std::vector<TObjectPath> result;
@@ -682,6 +686,7 @@ private:
         }
         return false;
     }
+
     bool TryFetch() {
         if (FetchingInProgress()) {
             LOG_D("TS3FileQueueActor", "TryFetch fetching already in progress");
@@ -721,6 +726,7 @@ private:
         TransitToNoMoreDirectoriesToListState();
         return false;
     }
+
     void Fetch() {
         Y_ENSURE(!ListingFuture.Defined());
         Y_ENSURE(MaybeLister.Defined());
@@ -751,7 +757,7 @@ private:
 
     void AnswerPendingRequests(bool earlyStop = false) {
         bool handledRequest = true;
-        while (HasPendingRequests && (!earlyStop || handledRequest)) {
+        while (HasPendingRequests && handledRequest) {
             bool isEmpty = true;
             handledRequest = false;
             for (auto& [consumer, requests] : PendingRequests) {
@@ -1823,7 +1829,7 @@ public:
         if (it != RangeCache.end()) {
             return it->second;
         }
-        RetryStuff->Gateway->Download(Url + Path, RetryStuff->Headers,
+        RetryStuff->Gateway->Download(RetryStuff->Url, RetryStuff->Headers,
                             range.Offset,
                             range.Length,
                             std::bind(&OnResult, GetActorSystem(), SelfActorId, range, ++RangeCookie, std::placeholders::_1),
@@ -2158,17 +2164,13 @@ public:
         LOG_CORO_D("RunCoroBlockArrowParserOverFile - FINISHED");
     }
 
-    STRICT_STFUNC_EXC(StateFunc,
+    STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvReadStarted, Handle);
         hFunc(TEvPrivate::TEvDataPart, Handle);
         hFunc(TEvPrivate::TEvReadFinished, Handle);
         hFunc(TEvPrivate::TEvContinue, Handle);
         hFunc(TEvPrivate::TEvReadResult2, Handle);
         hFunc(NActors::TEvents::TEvPoison, Handle);
-        , catch (const std::exception& e) {
-            TIssues issues{TIssue{TStringBuilder() << "An unknown exception has occurred: '" << e.what() << "'"}};
-            Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR));
-        }
     )
 
     void ProcessOneEvent() {
@@ -3391,7 +3393,10 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     
     TActorId fileQueueActor;
     if (auto it = settings.find("fileQueueActor"); it != settings.cend()) {
-        fileQueueActor.Parse(it->second.c_str(), it->second.size());
+        NActorsProto::TActorId protoId;
+        TMemoryInput inputStream(it->second);
+        ParseFromTextFormat(inputStream, protoId);
+        fileQueueActor = ActorIdFromProto(protoId);
     }
     
     ui64 fileQueueBatchSizeLimit;

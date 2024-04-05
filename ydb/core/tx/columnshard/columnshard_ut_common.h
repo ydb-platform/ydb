@@ -246,7 +246,7 @@ struct TTestSchema {
                 continue;
             }
             if (NOlap::NStatistics::NMax::TOperator::IsAvailableType(columns[i].GetType())) {
-                *schema->AddStatistics() = NOlap::NStatistics::TOperatorContainer(std::make_shared<NOlap::NStatistics::NMax::TOperator>(i + 1)).SerializeToProto();
+                *schema->AddStatistics() = NOlap::NStatistics::TOperatorContainer("MAX::" + columns[i].GetName(), std::make_shared<NOlap::NStatistics::NMax::TOperator>(i + 1)).SerializeToProto();
             }
         }
 
@@ -526,6 +526,13 @@ namespace NKikimr::NColumnShard {
         {
             Builders = NArrow::MakeBuilders(schema);
             Y_ABORT_UNLESS(Builders.size() == schema->fields().size());
+        }
+
+        TTableUpdatesBuilder(arrow::Result<std::shared_ptr<arrow::Schema>> schema) {
+            UNIT_ASSERT_C(schema.ok(), schema.status().ToString());
+            Schema = schema.ValueUnsafe();
+            Builders = NArrow::MakeBuilders(Schema);
+            Y_ABORT_UNLESS(Builders.size() == Schema->fields().size());
         }
 
         TRowBuilder AddRow() {

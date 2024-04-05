@@ -283,6 +283,11 @@ TYtConfiguration::TYtConfiguration()
             LayerPaths[cluster] = value;
             HybridDqExecution = false;
         });
+    REGISTER_SETTING(*this, DockerImage).NonEmpty()
+        .ValueSetter([this](const TString& cluster, const TString& value) {
+            DockerImage[cluster] = value;
+            HybridDqExecution = false;
+        });
     REGISTER_SETTING(*this, _EnableDq);
     // Deprecated. Use MaxInputTables instead
     REGISTER_SETTING(*this, ExtendTableLimit).Lower(2).Upper(3000)
@@ -442,6 +447,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, _ImpersonationUser);
     REGISTER_SETTING(*this, InferSchemaMode).Parser([](const TString& v) { return FromString<EInferSchemaMode>(v); });
     REGISTER_SETTING(*this, BatchListFolderConcurrency).Lower(1); // Upper bound on concurrent batch folder list requests https://yt.yandex-team.ru/docs/api/commands#execute_batch 
+    REGISTER_SETTING(*this, ForceTmpSecurity);
     REGISTER_SETTING(*this, JoinCommonUseMapMultiOut);
     REGISTER_SETTING(*this, _EnableYtPartitioning);
     REGISTER_SETTING(*this, UseAggPhases);

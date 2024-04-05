@@ -494,23 +494,33 @@ public:
 
                 YQL_CLOG(DEBUG, ProviderS3) << " hasDirectories=" << hasDirectories << ", consumersCount=" << consumersCount;
 
-                auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(NDq::CreateS3FileQueueActor(
-                    0ul,
-                    std::move(paths),
-                    fileQueuePrefetchSize,
-                    fileSizeLimit,
-                    useRuntimeListing,
-                    consumersCount,
-                    fileQueueBatchSizeLimit,
-                    fileQueueBatchObjectCountLimit,
-                    State_->Gateway,
-                    connect.Url,
-                    GetAuthInfo(State_->CredentialsFactory, connect.Token),
-                    pathPattern,
-                    pathPatternVariant,
-                    NS3Lister::ES3PatternType::Wildcard
-                ));
-                srcDesc.MutableSettings()->insert({"fileQueueActor", fileQueueActor.ToString()});
+                auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(
+                    NDq::CreateS3FileQueueActor(
+                        0ul,
+                        std::move(paths),
+                        fileQueuePrefetchSize,
+                        fileSizeLimit,
+                        useRuntimeListing,
+                        consumersCount,
+                        fileQueueBatchSizeLimit,
+                        fileQueueBatchObjectCountLimit,
+                        State_->Gateway,
+                        connect.Url,
+                        GetAuthInfo(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
+                        pathPattern,
+                        pathPatternVariant,
+                        NS3Lister::ES3PatternType::Wildcard
+                    ),
+                    NActors::TMailboxType::HTSwap,
+                    State_->ExecutorPoolId
+                );
+
+                NActorsProto::TActorId protoId;
+                ActorIdToProto(fileQueueActor, &protoId);
+                TString stringId;
+                google::protobuf::TextFormat::PrintToString(protoId, &stringId);
+
+                srcDesc.MutableSettings()->insert({"fileQueueActor", stringId});
             }
 #endif
             protoSettings.PackFrom(srcDesc);

@@ -76,6 +76,42 @@ private:
     THolder<TApiInitializer> ApiInitializer;
 };
 
+namespace NPrivate {
+
+template <class TSettings>
+Aws::Client::ClientConfiguration ConfigFromSettings(const TSettings& settings) {
+    Aws::Client::ClientConfiguration config;
+
+    // get default value from proto
+    auto threadsCount = NKikimrSchemeOp::TS3Settings::default_instance().GetExecutorThreadsCount();
+
+    config.endpointOverride = settings.endpoint();
+    config.executor = std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(threadsCount);
+    config.verifySSL = false;
+    config.connectTimeoutMs = 10000;
+    config.maxConnections = threadsCount;
+
+    switch (settings.scheme()) {
+        case TSettings::HTTP:
+            config.scheme = Http::Scheme::HTTP;
+            break;
+        case TSettings::HTTPS:
+            config.scheme = Http::Scheme::HTTPS;
+            break;
+        default:
+            Y_ABORT("Unknown scheme");
+    }
+
+    return config;
+}
+
+template <class TSettings>
+Aws::Auth::AWSCredentials CredentialsFromSettings(const TSettings& settings) {
+    return Aws::Auth::AWSCredentials(settings.access_key(), settings.secret_key());
+}
+
+} // namespace NPrivate
+
 } // anonymous
 
 TS3User::TS3User(const TS3User& /*baseObject*/) {
@@ -94,6 +130,41 @@ TS3User::~TS3User() {
     Singleton<TApiOwner>()->UnRef();
 }
 
+class TS3ThreadsPoolByEndpoint {
+private:
+
+    class TPool {
+    public:
+        std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor> Executor;
+        ui32 ThreadsCount = 0;
+        TPool(const std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor>& executor, const ui32 threadsCount)
+            : Executor(executor)
+            , ThreadsCount(threadsCount)
+        {
+
+        }
+    };
+
+    THashMap<TString, TPool> Pools;
+    TMutex Mutex;
+    std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor> GetPoolImpl(const TString& endpoint, const ui32 threadsCount) {
+        TGuard<TMutex> g(Mutex);
+        auto it = Pools.find(endpoint);
+        if (it == Pools.end()) {
+            TPool pool(std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(threadsCount), threadsCount);
+            it = Pools.emplace(endpoint, std::move(pool)).first;
+        } else if (it->second.ThreadsCount < threadsCount) {
+            TPool pool(std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(threadsCount), threadsCount);
+            it->second = std::move(pool);
+        }
+        return it->second.Executor;
+    }
+public:
+    static std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor> GetPool(const TString& endpoint, const ui32 threadsCount) {
+        return Singleton<TS3ThreadsPoolByEndpoint>()->GetPoolImpl(endpoint, threadsCount);
+    }
+};
+
 Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(const NKikimrSchemeOp::TS3Settings& settings) {
     Aws::Client::ClientConfiguration config;
 
@@ -107,10 +178,10 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
     if (settings.HasHttpRequestTimeoutMs()) {
         config.httpRequestTimeoutMs = settings.GetHttpRequestTimeoutMs();
     }
-    config.executor = std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(1);
+    config.executor = TS3ThreadsPoolByEndpoint::GetPool(settings.GetEndpoint(), settings.GetExecutorThreadsCount());
     config.enableTcpKeepAlive = true;
     //    config.lowSpeedLimit = 0;
-    config.maxConnections = 5;
+    config.maxConnections = settings.HasMaxConnectionsCount() ? settings.GetMaxConnectionsCount() : settings.GetExecutorThreadsCount();
     config.caPath = "/etc/ssl/certs";
 
     switch (settings.GetScheme()) {
@@ -152,26 +223,11 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
 }
 
 Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(const Ydb::Import::ImportFromS3Settings& settings) {
-    Aws::Client::ClientConfiguration config;
+    return NPrivate::ConfigFromSettings(settings);
+}
 
-    config.endpointOverride = settings.endpoint();
-    config.executor = std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(1);
-    config.verifySSL = false;
-    config.connectTimeoutMs = 10000;
-    config.maxConnections = 5;
-
-    switch (settings.scheme()) {
-        case Ydb::Import::ImportFromS3Settings::HTTP:
-            config.scheme = Http::Scheme::HTTP;
-            break;
-        case Ydb::Import::ImportFromS3Settings::HTTPS:
-            config.scheme = Http::Scheme::HTTPS;
-            break;
-        default:
-            Y_ABORT("Unknown scheme");
-    }
-
-    return config;
+Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(const Ydb::Export::ExportToS3Settings& settings) {
+    return NPrivate::ConfigFromSettings(settings);
 }
 
 Aws::Auth::AWSCredentials TS3ExternalStorageConfig::CredentialsFromSettings(const NKikimrSchemeOp::TS3Settings& settings) {
@@ -179,7 +235,11 @@ Aws::Auth::AWSCredentials TS3ExternalStorageConfig::CredentialsFromSettings(cons
 }
 
 Aws::Auth::AWSCredentials TS3ExternalStorageConfig::CredentialsFromSettings(const Ydb::Import::ImportFromS3Settings& settings) {
-    return Aws::Auth::AWSCredentials(settings.access_key(), settings.secret_key());
+    return NPrivate::CredentialsFromSettings(settings);
+}
+
+Aws::Auth::AWSCredentials TS3ExternalStorageConfig::CredentialsFromSettings(const Ydb::Export::ExportToS3Settings& settings) {
+    return NPrivate::CredentialsFromSettings(settings);
 }
 
 TString TS3ExternalStorageConfig::DoGetStorageId() const {
@@ -190,8 +250,16 @@ IExternalStorageOperator::TPtr TS3ExternalStorageConfig::DoConstructStorageOpera
     return std::make_shared<TS3ExternalStorage>(Config, Credentials, Bucket, StorageClass, verbose, UseVirtualAddressing);
 }
 
-TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ImportFromS3Settings& settings): Config(ConfigFromSettings(settings))
-, Credentials(CredentialsFromSettings(settings))
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ImportFromS3Settings& settings)
+    : Config(ConfigFromSettings(settings))
+    , Credentials(CredentialsFromSettings(settings))
+{
+    Bucket = settings.bucket();
+}
+
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Export::ExportToS3Settings& settings)
+    : Config(ConfigFromSettings(settings))
+    , Credentials(CredentialsFromSettings(settings))
 {
     Bucket = settings.bucket();
 }

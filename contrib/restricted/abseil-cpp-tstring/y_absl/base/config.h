@@ -602,8 +602,6 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // Checks whether C++17 std::string_view is available.
 #ifdef Y_ABSL_HAVE_STD_STRING_VIEW
 #error "Y_ABSL_HAVE_STD_STRING_VIEW cannot be directly set."
-#elif defined(__NVCC__)
-#define Y_ABSL_HAVE_STD_STRING_VIEW 1
 #elif defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L
 #define Y_ABSL_HAVE_STD_STRING_VIEW 1
 #elif defined(Y_ABSL_INTERNAL_CPLUSPLUS_LANG) && \
@@ -977,9 +975,9 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #ifdef Y_ABSL_HAVE_CONSTANT_EVALUATED
 #error Y_ABSL_HAVE_CONSTANT_EVALUATED cannot be directly set
 #endif
-#if defined(__cpp_lib_is_constant_evaluated) && (!defined(__CUDACC__) || CUDA_VERSION >= 11000)
+#ifdef __cpp_lib_is_constant_evaluated
 #define Y_ABSL_HAVE_CONSTANT_EVALUATED 1
-#elif Y_ABSL_HAVE_BUILTIN(__builtin_is_constant_evaluated) && (!defined(__CUDACC__) || CUDA_VERSION >= 11000)
+#elif Y_ABSL_HAVE_BUILTIN(__builtin_is_constant_evaluated)
 #define Y_ABSL_HAVE_CONSTANT_EVALUATED 1
 #endif
 

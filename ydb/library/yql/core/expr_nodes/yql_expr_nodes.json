@@ -1570,7 +1570,9 @@
                 {"Index": 3, "Name": "LeftKeysColumns", "Type": "TCoAtomList"},
                 {"Index": 4, "Name": "RightKeysColumns", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "LeftRenames", "Type": "TCoAtomList"},
-                {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList"}
+                {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList"},
+                {"Index": 7, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
+                {"Index": 8, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -2502,6 +2504,20 @@
                 {"Index": 0, "Name": "Type", "Type": "TCallable"},
                 {"Index": 1, "Name": "Buffer", "Type": "TExprBase"}
             ]
+        },
+        {
+            "Name" : "TCoReturningListItem",
+            "Base" : "TCallable",
+            "Match": {"Type": "Callable", "Name": "ReturningListItem"},
+            "Children": [
+                {"Index": 0, "Name": "ColumnRef", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TCoReturningStar",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "ReturningStar"},
+            "Children": []
         }
     ]
 }

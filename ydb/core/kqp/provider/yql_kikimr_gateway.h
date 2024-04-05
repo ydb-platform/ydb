@@ -386,6 +386,7 @@ struct TExternalSource {
     TString Password;
     TString AwsAccessKeyId;
     TString AwsSecretAccessKey;
+    TString Token;
     NKikimrSchemeOp::TAuth DataSourceAuth;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
 };
@@ -745,6 +746,7 @@ public:
         TMaybe<ui16> SqlVersion;
         google::protobuf::RepeatedPtrField<NKqpProto::TResultSetMeta> ResultSetsMeta;
         bool NeedToSplit = false;
+        bool AllowCache = true;
     };
 
     struct TExecuteLiteralResult : public TGenericResult {

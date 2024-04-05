@@ -28,6 +28,7 @@ Y_UNIT_TEST(TestDirectReadHappyWay) {
         activeZone = false;
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
         tc.Runtime->SetScheduledLimit(1000);
         tc.Runtime->RegisterService(MakePQDReadCacheServiceActorId(), tc.Runtime->Register(
                 CreatePQDReadCacheService(new NMonitoring::TDynamicCounters()))
@@ -42,6 +43,7 @@ Y_UNIT_TEST(TestDirectReadHappyWay) {
         TString user = "user1";
         TPQCmdSettings sessionSettings{0, user, sessionId};
         sessionSettings.PartitionSessionId = 1;
+        sessionSettings.KeepPipe = true;
 
         TPQCmdReadSettings readSettings{sessionId, 0, 0, 1, 99999, 1};
         readSettings.PartitionSessionId = 1;
@@ -49,9 +51,10 @@ Y_UNIT_TEST(TestDirectReadHappyWay) {
         readSettings.User = user;
 
         activeZone = false;
+        Cerr << "Create session\n";
         auto pipe = CmdCreateSession(sessionSettings, tc);
         TCmdDirectReadSettings publishSettings{0, sessionId, 1, 1, pipe, false};
-        readSettings.Pipe = pipe;        
+        readSettings.Pipe = pipe;
         CmdRead(readSettings, tc);
         Cerr << "Run cmd publish\n";
         CmdPublishRead(publishSettings, tc);
@@ -80,13 +83,14 @@ Y_UNIT_TEST(DirectReadBadSessionOrPipe) {
         TString user = "user2";
         TPQCmdSettings sessionSettings{0, user, sessionId};
         sessionSettings.PartitionSessionId = 1;
+        sessionSettings.KeepPipe = true;
 
         TPQCmdReadSettings readSettings(sessionId, 0, 0, 1, 99999, 1);
         readSettings.PartitionSessionId = 1;
         readSettings.DirectReadId = 1;
         readSettings.User = user;
         activeZone = false;
-        
+
         readSettings.ToFail = true;
         //No pipe
         CmdRead(readSettings, tc);
@@ -104,10 +108,10 @@ Y_UNIT_TEST(DirectReadBadSessionOrPipe) {
         activeZone = false;
         // Dead session
         CmdRead(readSettings, tc);
-        
+
         activeZone = false;
         TCmdDirectReadSettings publishSettings{0, sessionId, 1, 1, pipe, true};
-        readSettings.Pipe = pipe;        
+        readSettings.Pipe = pipe;
         activeZone = false;
         // Dead session
         Cerr << "Publish read\n";
@@ -132,19 +136,20 @@ Y_UNIT_TEST(DirectReadOldPipe) {
         TString user = "user2";
         TPQCmdSettings sessionSettings{0, user, sessionId};
         sessionSettings.PartitionSessionId = 1;
+        sessionSettings.KeepPipe = true;
 
         TPQCmdReadSettings readSettings(sessionId, 0, 0, 1, 99999, 1);
         readSettings.PartitionSessionId = 1;
         readSettings.DirectReadId = 1;
         readSettings.ToFail = true;
         activeZone = false;
-                
+
         auto pipe = CmdCreateSession(sessionSettings, tc);
-        
+
         auto event = MakeHolder<TEvTabletPipe::TEvServerDisconnected>(0, pipe, TActorId{});
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, event.Release(), 0, GetPipeConfigWithRetries());
         readSettings.Pipe = pipe;
-        
+
         CmdRead(readSettings, tc);
     });
 }
@@ -177,6 +182,60 @@ Y_UNIT_TEST(TestPartitionTotalQuota) {
         auto diff = (tc.Runtime->GetTimeProvider()->Now() - startTime).Seconds();
         UNIT_ASSERT_C(diff >= 9, TStringBuilder() << "Expected >= 9, actual: " << diff); //read quota is twice write quota. So, it's 200kb per seconds and 200kb burst. (2mb - 200kb) / 200kb = 9 seconds needed to get quota
     });
+}
+
+Y_UNIT_TEST(TestAccountReadQuota) {
+    TTestContext tc;
+    TAtomic stop = 0;
+    TAtomicCounter quoterRequests = 0;
+    i64 prevQuoterReqCount = 0;
+    Y_UNUSED(prevQuoterReqCount);
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetObserverFunc(
+        [&](TAutoPtr<IEventHandle>& ev) {
+            if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
+                Cerr << "Captured kesus quota request event from " << ev->Sender.ToString() << Endl;
+                if (!AtomicGet(stop)) {
+                    quoterRequests.Inc();
+                    tc.Runtime->Send(new IEventHandle(
+                        ev->Sender, TActorId{},
+                        new TEvQuota::TEvClearance(TEvQuota::TEvClearance::EResult::Success), 0, ev->Cookie)
+                    );
+                }
+                return TTestActorRuntimeBase::EEventAction::DROP;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        }
+    );
+    tc.Runtime->SetScheduledLimit(1000);
+
+    tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(true);
+    tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
+    tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableReadQuoting(true);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 100_KB}, {{"important_user", true}}, tc);
+    TVector<std::pair<ui64, TString>> data;
+    TString s{100_KB, 'c'};
+    data.push_back({1, s});
+
+    auto runTest = [&]() {
+        Cerr << "CmdWrite\n";
+        CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+        data[0].first++;
+        Cerr << "CmdRead\n";
+        CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {0}, 0, 0, "user");
+    };
+    Cerr << "Run 1\n";
+    runTest();
+    Sleep(TDuration::Seconds(1));
+    Cerr << "Currently have " << quoterRequests.Val() << " quoter requests\n";
+    Cerr << "Run 2\n";
+    runTest();
+    Sleep(TDuration::Seconds(1));
+    Cerr << "Currently have " << quoterRequests.Val() << " quoter requests\n";
+    AtomicSet(stop, 1);
+    Sleep(TDuration::Seconds(1));
 }
 
 Y_UNIT_TEST(TestPartitionPerConsumerQuota) {
@@ -224,11 +283,24 @@ Y_UNIT_TEST(TestPartitionWriteQuota) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
+
         tc.Runtime->SetScheduledLimit(1000);
-
         tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
-
         PQTabletPrepare({.partitions = 1, .writeSpeed = 100_KB}, {{"important_user", true}}, tc);
+
+        tc.Runtime->SetObserverFunc(
+            [&](TAutoPtr<IEventHandle>& ev) {
+                if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
+                    Cerr << "Captured kesus quota request event from " << ev->Sender.ToString() << Endl;
+                    tc.Runtime->Send(new IEventHandle(
+                        ev->Sender, TActorId{},
+                        new TEvQuota::TEvClearance(TEvQuota::TEvClearance::EResult::Success), 0, ev->Cookie)
+                    );
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+
         TVector<std::pair<ui64, TString>> data;
         TString s{2_MB, 'c'};
         data.push_back({1, s});
@@ -238,10 +310,9 @@ Y_UNIT_TEST(TestPartitionWriteQuota) {
         CmdWrite(0, "sourceid1", data, tc);
         data[0].first++;
         CmdWrite(0, "sourceid2", data, tc);
-
         //check throttling on total partition quota
         auto diff = (tc.Runtime->GetTimeProvider()->Now() - startTime).Seconds();
-        UNIT_ASSERT_C(diff >= 3, TStringBuilder() << "Actual: " << diff); 
+        UNIT_ASSERT_C(diff >= 3, TStringBuilder() << "Actual: " << diff);
     });
 }
 
@@ -1987,7 +2058,7 @@ Y_UNIT_TEST(TestReadSubscription) {
 
         TVector<std::pair<ui64, TString>> data;
 
-        ui32 pp = 8 + 4 + 2 + 9;    
+        ui32 pp = 8 + 4 + 2 + 9;
         TString tmp0{32 - pp - 2, '-'};
         char k = 0;
         for (ui32 i = 0; i < 5; ++i) {
@@ -2335,7 +2406,7 @@ Y_UNIT_TEST(TestStatusWithMultipleConsumers) {
         UNIT_ASSERT_EQUAL(result->Record.GetPartResult()[0].GetConsumerResult()[1].GetErrorCode(), NPersQueue::NErrorCode::SCHEMA_ERROR);
     }
 
-    {   
+    {
         THolder<TEvPersQueue::TEvStatus> statusEvent = MakeHolder<TEvPersQueue::TEvStatus>();
         statusEvent->Record.AddConsumers("consumer-0");
         statusEvent->Record.AddConsumers("nonex-consumer");
@@ -2343,20 +2414,20 @@ Y_UNIT_TEST(TestStatusWithMultipleConsumers) {
         TAutoPtr<IEventHandle> handle;
         TEvPersQueue::TEvStatusResponse *result;
         result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvStatusResponse>(handle);
-        
+
         auto consumer0Result = std::find_if(
             result->Record.GetPartResult()[0].GetConsumerResult().begin(),
             result->Record.GetPartResult()[0].GetConsumerResult().end(),
             [](const auto& consumerResult) { return consumerResult.GetConsumer() == "consumer-0"; });
-        
+
         UNIT_ASSERT_EQUAL(consumer0Result->GetErrorCode(), NPersQueue::NErrorCode::OK);
         UNIT_ASSERT_EQUAL(consumer0Result->GetCommitedOffset(), 1);
-        
+
         auto nonexConsumerResult =  std::find_if(
             result->Record.GetPartResult()[0].GetConsumerResult().begin(),
             result->Record.GetPartResult()[0].GetConsumerResult().end(),
             [](const auto& consumerResult) { return consumerResult.GetConsumer() == "nonex-consumer"; });
-        
+
         UNIT_ASSERT_EQUAL(nonexConsumerResult->GetErrorCode(), NPersQueue::NErrorCode::SCHEMA_ERROR);
     }
 

@@ -1,7 +1,11 @@
 #include "federated_write_session.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
+
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#undef INCLUDE_YDB_INTERNAL_H
 
 #include <library/cpp/threading/future/future.h>
 
@@ -20,22 +24,31 @@ bool DatabasesAreSame(std::shared_ptr<TDbInfo> lhs, std::shared_ptr<TDbInfo> rhs
 
 NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& settings);
 
-TFederatedWriteSession::TFederatedWriteSession(const TFederatedWriteSessionSettings& settings,
-                                             std::shared_ptr<TGRpcConnectionsImpl> connections,
-                                             const TFederatedTopicClientSettings& clientSetttings,
-                                             std::shared_ptr<TFederatedDbObserver> observer)
+TFederatedWriteSessionImpl::TFederatedWriteSessionImpl(
+    const TFederatedWriteSessionSettings& settings,
+    std::shared_ptr<TGRpcConnectionsImpl> connections,
+    const TFederatedTopicClientSettings& clientSetttings,
+    std::shared_ptr<TFederatedDbObserver> observer,
+    std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs
+)
     : Settings(settings)
     , Connections(std::move(connections))
     , SubClientSetttings(FromFederated(clientSetttings))
+    , ProvidedCodecs(std::move(codecs))
     , Observer(std::move(observer))
     , AsyncInit(Observer->WaitForFirstState())
     , FederationState(nullptr)
+    , Log(Connections->GetLog())
     , ClientEventsQueue(std::make_shared<NTopic::TWriteSessionEventsQueue>(Settings))
     , BufferFreeSpace(Settings.MaxMemoryUsage_)
 {
 }
 
-void TFederatedWriteSession::Start() {
+TStringBuilder TFederatedWriteSessionImpl::GetLogPrefix() const {
+     return TStringBuilder() << GetDatabaseLogPrefix(SubClientSetttings.Database_.GetOrElse("")) << "[" << SessionId << "] ";
+}
+
+void TFederatedWriteSessionImpl::Start() {
     // TODO validate settings?
     Settings.EventHandlers_.HandlersExecutor_->Start();
     with_lock(Lock) {
@@ -43,16 +56,20 @@ void TFederatedWriteSession::Start() {
         ClientHasToken = true;
     }
 
-    AsyncInit.Subscribe([self = shared_from_this()](const auto& f){
+    AsyncInit.Subscribe([selfCtx = SelfContext](const auto& f){
         Y_UNUSED(f);
-        with_lock(self->Lock) {
-            self->FederationState = self->Observer->GetState();
-            self->OnFederatedStateUpdateImpl();
+        if (auto self = selfCtx->LockShared()) {
+            with_lock(self->Lock) {
+                if (!self->Closing) {
+                    self->FederationState = self->Observer->GetState();
+                    self->OnFederatedStateUpdateImpl();
+                }
+            }
         }
     });
 }
 
-void TFederatedWriteSession::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db) {
+void TFederatedWriteSessionImpl::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db) {
     if (Subsession) {
         PendingToken.Clear();
         Subsession->Close(TDuration::Zero());
@@ -62,35 +79,44 @@ void TFederatedWriteSession::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db) {
         .Database(db->path())
         .DiscoveryEndpoint(db->endpoint());
     auto subclient = make_shared<NTopic::TTopicClient::TImpl>(Connections, clientSettings);
+    subclient->SetProvidedCodecs(ProvidedCodecs);
 
     auto handlers = NTopic::TWriteSessionSettings::TEventHandlers()
         .HandlersExecutor(Settings.EventHandlers_.HandlersExecutor_)
-        .ReadyToAcceptHander([self = shared_from_this()](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev){
-            TDeferredWrite deferred(self->Subsession);
-            with_lock(self->Lock) {
-                Y_ABORT_UNLESS(self->PendingToken.Empty());
-                self->PendingToken = std::move(ev.ContinuationToken);
-                self->PrepareDeferredWrite(deferred);
-            }
-            deferred.DoWrite();
-        })
-        .AcksHandler([self = shared_from_this()](NTopic::TWriteSessionEvent::TAcksEvent& ev){
-            with_lock(self->Lock) {
-                Y_ABORT_UNLESS(ev.Acks.size() <= self->OriginalMessagesToGetAck.size());
-                for (size_t i = 0; i < ev.Acks.size(); ++i) {
-                    self->BufferFreeSpace += self->OriginalMessagesToGetAck.front().Data.size();
-                    self->OriginalMessagesToGetAck.pop_front();
+        .ReadyToAcceptHandler([selfCtx = SelfContext](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev) {
+            if (auto self = selfCtx->LockShared()) {
+                TDeferredWrite deferred(self->Subsession);
+                with_lock(self->Lock) {
+                    Y_ABORT_UNLESS(self->PendingToken.Empty());
+                    self->PendingToken = std::move(ev.ContinuationToken);
+                    self->PrepareDeferredWrite(deferred);
                 }
-                self->ClientEventsQueue->PushEvent(std::move(ev));
-                if (self->BufferFreeSpace > 0 && !self->ClientHasToken) {
-                    self->ClientEventsQueue->PushEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
-                    self->ClientHasToken = true;
-                }
+                deferred.DoWrite();
             }
         })
-        .SessionClosedHandler([self = shared_from_this()](const NTopic::TSessionClosedEvent & ev){
-            with_lock(self->Lock) {
-                self->ClientEventsQueue->PushEvent(ev);
+        .AcksHandler([selfCtx = SelfContext](NTopic::TWriteSessionEvent::TAcksEvent& ev) {
+            if (auto self = selfCtx->LockShared()) {
+                with_lock(self->Lock) {
+                    Y_ABORT_UNLESS(ev.Acks.size() <= self->OriginalMessagesToGetAck.size());
+                    for (size_t i = 0; i < ev.Acks.size(); ++i) {
+                        self->BufferFreeSpace += self->OriginalMessagesToGetAck.front().Data.size();
+                        self->OriginalMessagesToGetAck.pop_front();
+                    }
+                    self->ClientEventsQueue->PushEvent(std::move(ev));
+                    if (self->BufferFreeSpace > 0 && !self->ClientHasToken) {
+                        self->ClientEventsQueue->PushEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
+                        self->ClientHasToken = true;
+                    }
+                }
+            }
+        })
+        .SessionClosedHandler([selfCtx = SelfContext](const NTopic::TSessionClosedEvent & ev) {
+            if (auto self = selfCtx->LockShared()) {
+                with_lock(self->Lock) {
+                    if (!self->Closing) {
+                        self->CloseImpl(ev);
+                    }
+                }
             }
         });
 
@@ -103,7 +129,7 @@ void TFederatedWriteSession::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db) {
     CurrentDatabase = db;
 }
 
-std::shared_ptr<TDbInfo> TFederatedWriteSession::SelectDatabaseImpl() {
+std::shared_ptr<TDbInfo> TFederatedWriteSessionImpl::SelectDatabaseImpl() {
     std::vector<std::shared_ptr<TDbInfo>> availableDatabases;
     ui64 totalWeight = 0;
 
@@ -147,7 +173,7 @@ std::shared_ptr<TDbInfo> TFederatedWriteSession::SelectDatabaseImpl() {
     Y_UNREACHABLE();
 }
 
-void TFederatedWriteSession::OnFederatedStateUpdateImpl() {
+void TFederatedWriteSessionImpl::OnFederatedStateUpdateImpl() {
     if (!FederationState->Status.IsSuccess()) {
         CloseImpl(FederationState->Status.GetStatus(), NYql::TIssues(FederationState->Status.GetIssues()));
         return;
@@ -164,22 +190,28 @@ void TFederatedWriteSession::OnFederatedStateUpdateImpl() {
     }
 
     if (!DatabasesAreSame(preferrableDb, CurrentDatabase)) {
+        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix()
+            << "Start federated write session to database '" << preferrableDb->name()
+            << "' (previous was " << (CurrentDatabase ? CurrentDatabase->name() : "<empty>") << ")"
+            << " FederationState: " << *FederationState);
         OpenSubSessionImpl(preferrableDb);
     }
 
     ScheduleFederatedStateUpdateImpl(UPDATE_FEDERATION_STATE_DELAY);
 }
 
-void TFederatedWriteSession::ScheduleFederatedStateUpdateImpl(TDuration delay) {
+void TFederatedWriteSessionImpl::ScheduleFederatedStateUpdateImpl(TDuration delay) {
     Y_ABORT_UNLESS(Lock.IsLocked());
-    auto cb = [self = shared_from_this()](bool ok) {
+    auto cb = [selfCtx = SelfContext](bool ok) {
         if (ok) {
-            with_lock(self->Lock) {
-                if (self->Closing) {
-                    return;
+            if (auto self = selfCtx->LockShared()) {
+                with_lock(self->Lock) {
+                    if (self->Closing) {
+                        return;
+                    }
+                    self->FederationState = self->Observer->GetState();
+                    self->OnFederatedStateUpdateImpl();
                 }
-                self->FederationState = self->Observer->GetState();
-                self->OnFederatedStateUpdateImpl();
             }
         }
     };
@@ -195,24 +227,24 @@ void TFederatedWriteSession::ScheduleFederatedStateUpdateImpl(TDuration delay) {
                                   UpdateStateDelayContext);
 }
 
-NThreading::TFuture<void> TFederatedWriteSession::WaitEvent() {
+NThreading::TFuture<void> TFederatedWriteSessionImpl::WaitEvent() {
     return ClientEventsQueue->WaitEvent();
 }
 
-TVector<NTopic::TWriteSessionEvent::TEvent> TFederatedWriteSession::GetEvents(bool block, TMaybe<size_t> maxEventsCount) {
+TVector<NTopic::TWriteSessionEvent::TEvent> TFederatedWriteSessionImpl::GetEvents(bool block, TMaybe<size_t> maxEventsCount) {
     return ClientEventsQueue->GetEvents(block, maxEventsCount);
 }
 
-TMaybe<NTopic::TWriteSessionEvent::TEvent> TFederatedWriteSession::GetEvent(bool block) {
+TMaybe<NTopic::TWriteSessionEvent::TEvent> TFederatedWriteSessionImpl::GetEvent(bool block) {
     auto events = GetEvents(block, 1);
     return events.empty() ? Nothing() : TMaybe<NTopic::TWriteSessionEvent::TEvent>{std::move(events.front())};
 }
 
-NThreading::TFuture<ui64> TFederatedWriteSession::GetInitSeqNo() {
+NThreading::TFuture<ui64> TFederatedWriteSessionImpl::GetInitSeqNo() {
     return NThreading::MakeFuture<ui64>(0u);
 }
 
-void TFederatedWriteSession::Write(NTopic::TContinuationToken&& token, TStringBuf data, TMaybe<ui64> seqNo,
+void TFederatedWriteSessionImpl::Write(NTopic::TContinuationToken&& token, TStringBuf data, TMaybe<ui64> seqNo,
                                    TMaybe<TInstant> createTimestamp) {
     NTopic::TWriteMessage message{std::move(data)};
     if (seqNo.Defined())
@@ -222,35 +254,35 @@ void TFederatedWriteSession::Write(NTopic::TContinuationToken&& token, TStringBu
     return WriteInternal(std::move(token), std::move(message));
 }
 
-void TFederatedWriteSession::Write(NTopic::TContinuationToken&& token, NTopic::TWriteMessage&& message) {
-    return WriteInternal(std::move(token), std::move(message));
+void TFederatedWriteSessionImpl::Write(NTopic::TContinuationToken&& token, NTopic::TWriteMessage&& message) {
+    return WriteInternal(std::move(token), TWrappedWriteMessage(std::move(message)));
 }
 
-void TFederatedWriteSession::WriteEncoded(NTopic::TContinuationToken&& token, TStringBuf data, NTopic::ECodec codec,
+void TFederatedWriteSessionImpl::WriteEncoded(NTopic::TContinuationToken&& token, TStringBuf data, NTopic::ECodec codec,
                                           ui32 originalSize, TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp) {
     auto message = NTopic::TWriteMessage::CompressedMessage(std::move(data), codec, originalSize);
     if (seqNo.Defined())
         message.SeqNo(*seqNo);
     if (createTimestamp.Defined())
         message.CreateTimestamp(*createTimestamp);
-    return WriteInternal(std::move(token), std::move(message));
+    return WriteInternal(std::move(token), TWrappedWriteMessage(std::move(message)));
 }
 
-void TFederatedWriteSession::WriteEncoded(NTopic::TContinuationToken&& token, NTopic::TWriteMessage&& message) {
-    return WriteInternal(std::move(token), std::move(message));
+void TFederatedWriteSessionImpl::WriteEncoded(NTopic::TContinuationToken&& token, NTopic::TWriteMessage&& message) {
+    return WriteInternal(std::move(token), TWrappedWriteMessage(std::move(message)));
 }
 
-void TFederatedWriteSession::WriteInternal(NTopic::TContinuationToken&&, NTopic::TWriteMessage&& message) {
+void TFederatedWriteSessionImpl::WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& wrapped) {
     ClientHasToken = false;
-    if (!message.CreateTimestamp_.Defined()) {
-        message.CreateTimestamp_ = TInstant::Now();
+    if (!wrapped.Message.CreateTimestamp_.Defined()) {
+        wrapped.Message.CreateTimestamp_ = TInstant::Now();
     }
 
     {
         TDeferredWrite deferred(Subsession);
         with_lock(Lock) {
-            BufferFreeSpace -= message.Data.size();
-            OriginalMessagesToPassDown.emplace_back(std::move(message));
+            BufferFreeSpace -= wrapped.Message.Data.size();
+            OriginalMessagesToPassDown.emplace_back(std::move(wrapped));
 
             PrepareDeferredWrite(deferred);
         }
@@ -262,32 +294,40 @@ void TFederatedWriteSession::WriteInternal(NTopic::TContinuationToken&&, NTopic:
     }
 }
 
-bool TFederatedWriteSession::PrepareDeferredWrite(TDeferredWrite& deferred) {
+bool TFederatedWriteSessionImpl::PrepareDeferredWrite(TDeferredWrite& deferred) {
     if (PendingToken.Empty()) {
         return false;
     }
     if (OriginalMessagesToPassDown.empty()) {
         return false;
     }
-    OriginalMessagesToGetAck.push_back(OriginalMessagesToPassDown.front());
-    deferred.Token.ConstructInPlace(std::move(*PendingToken));
-    deferred.Message.ConstructInPlace(std::move(OriginalMessagesToPassDown.front()));
+    OriginalMessagesToGetAck.push_back(std::move(OriginalMessagesToPassDown.front()));
     OriginalMessagesToPassDown.pop_front();
+    deferred.Token.ConstructInPlace(std::move(*PendingToken));
+    deferred.Message.ConstructInPlace(std::move(OriginalMessagesToGetAck.back().Message));
     PendingToken.Clear();
     return true;
 }
 
-void TFederatedWriteSession::CloseImpl(EStatus statusCode, NYql::TIssues&& issues) {
-    Closing = true;
-    if (Subsession) {
-        Subsession->Close(TDuration::Zero());
-    }
-    ClientEventsQueue->Close(TSessionClosedEvent(statusCode, std::move(issues)));
+void TFederatedWriteSessionImpl::CloseImpl(EStatus statusCode, NYql::TIssues&& issues, TDuration timeout) {
+    CloseImpl(TPlainStatus(statusCode, std::move(issues)), timeout);
 }
 
-bool TFederatedWriteSession::Close(TDuration timeout) {
+void TFederatedWriteSessionImpl::CloseImpl(NTopic::TSessionClosedEvent const& ev, TDuration timeout) {
+    if (Closing) {
+        return;
+    }
+    Closing = true;
     if (Subsession) {
-        return Subsession->Close(timeout);
+        Subsession->Close(timeout);
+    }
+    ClientEventsQueue->Close(ev);
+    NTopic::Cancel(UpdateStateDelayContext);
+}
+
+bool TFederatedWriteSessionImpl::Close(TDuration timeout) {
+    with_lock (Lock) {
+        CloseImpl(EStatus::SUCCESS, {}, timeout);
     }
     return true;
 }

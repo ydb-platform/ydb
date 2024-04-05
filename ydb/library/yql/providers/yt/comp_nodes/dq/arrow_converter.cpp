@@ -434,6 +434,10 @@ struct TYsonBlockReaderTraits {
         }
     }
 
+    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
+        Y_UNUSED(isOptional);
+        ythrow yexception() << "Yson reader not implemented for block resources";
+    }   
 };
 
 template<bool IsDictionary>

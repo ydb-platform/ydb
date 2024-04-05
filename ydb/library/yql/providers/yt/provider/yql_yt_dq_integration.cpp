@@ -34,7 +34,7 @@
 
 namespace NYql {
 
-static const THashSet<TStringBuf> UNSUPPORTED_YT_PRAGMAS = {"maxrowweight",  "layerpaths", "operationspec"};
+static const THashSet<TStringBuf> UNSUPPORTED_YT_PRAGMAS = {"maxrowweight",  "layerpaths", "dockerimage", "operationspec"};
 static const THashSet<TStringBuf> POOL_TREES_WHITELIST = {"physical",  "cloud", "cloud_default"};
 
 using namespace NNodes;
@@ -312,6 +312,11 @@ public:
                     AddInfo(ctx, info, skipIssues);
                     return false;
                 }
+                auto sampleSetting = GetSetting(section.Settings().Ref(), EYtSettingType::Sample);
+                if (sampleSetting && sampleSetting->Child(1)->Child(0)->Content() == "system") {
+                    AddInfo(ctx, "system sampling", skipIssues);
+                    return false;
+                }
                 for (auto path: section.Paths()) {
                     if (!path.Table().Maybe<TYtTable>()) {
                         AddInfo(ctx, "non-table path", skipIssues);
@@ -506,8 +511,8 @@ public:
     TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
         if (auto maybeYtReadTable = TMaybeNode<TYtReadTable>(read)) {
             TMaybeNode<TCoSecureParam> secParams;
-            if (State_->Configuration->Auth.Get().GetOrElse(TString())) {
-                const auto cluster = maybeYtReadTable.Cast().DataSource().Cluster();
+            const auto cluster = maybeYtReadTable.Cast().DataSource().Cluster();
+            if (State_->Configuration->Auth.Get().GetOrElse(TString()) || State_->Configuration->Tokens.Value(cluster, "")) {
                 secParams = Build<TCoSecureParam>(ctx, read->Pos()).Name().Build(TString("cluster:default_").append(cluster)).Done();
             }
             return Build<TDqReadWrap>(ctx, read->Pos())

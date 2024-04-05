@@ -317,10 +317,28 @@ public:
 private:
     void ExecuteScanTx() {
 
-        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), GetSnapshot(),
-            Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, AppData()->EnableKqpSpilling,
-            Request.RlPath, ExecuterSpan, std::move(ResourcesSnapshot), ExecuterRetriesConfig, /* useDataQueryPool */ false, /* localComputeTasks */ false,
-            Request.MkqlMemoryLimit, nullptr, false, GetUserRequestContext());
+        Planner = CreateKqpPlanner({
+            .TasksGraph = TasksGraph,
+            .TxId = TxId,
+            .Executer = SelfId(),
+            .Snapshot = GetSnapshot(),
+            .Database = Database,
+            .UserToken = UserToken,
+            .Deadline = Deadline.GetOrElse(TInstant::Zero()),
+            .StatsMode = Request.StatsMode,
+            .WithSpilling = AppData()->EnableKqpSpilling,
+            .RlPath = Request.RlPath,
+            .ExecuterSpan = ExecuterSpan,
+            .ResourcesSnapshot = std::move(ResourcesSnapshot),
+            .ExecuterRetriesConfig = ExecuterRetriesConfig,
+            .UseDataQueryPool = false,
+            .LocalComputeTasks = false,
+            .MkqlMemoryLimit = Request.MkqlMemoryLimit,
+            .AsyncIoFactory = nullptr,
+            .AllowSinglePartitionOpt = false,
+            .UserRequestContext = GetUserRequestContext(),
+            .FederatedQuerySetup = std::nullopt
+        });
 
         LOG_D("Execute scan tx, PendingComputeTasks: " << TasksGraph.GetTasks().size());
         auto err = Planner->PlanExecution();

@@ -1829,9 +1829,9 @@
     ],
     "test.test[EquiJoin-HintLeftUniqueRightMap-Debug]": [
         {
-            "checksum": "f656cc1c70d0a3c5715dcede0bf613dc",
-            "size": 3684,
-            "uri": "https://{canondata_backend}/1925842/6cda52b754dfbf22f4689dab1717eebd26ae88d6/resource.tar.gz#test.test_EquiJoin-HintLeftUniqueRightMap-Debug_/opt.yql"
+            "checksum": "f37c32620628bc39b143b373559b4dec",
+            "size": 3706,
+            "uri": "https://{canondata_backend}/1936947/86eb63797b7147bcdbee91829fe8d39a33d28f25/resource.tar.gz#test.test_EquiJoin-HintLeftUniqueRightMap-Debug_/opt.yql"
         },
         {
             "checksum": "a95bc48c26607bf8d91d4b24d31e8329",
@@ -1880,9 +1880,9 @@
     ],
     "test.test[EquiJoin-HintRightUniqueInnerMap-Debug]": [
         {
-            "checksum": "d0bfec608a5d22ad63bb3dc1a122410d",
-            "size": 3683,
-            "uri": "https://{canondata_backend}/1925842/6cda52b754dfbf22f4689dab1717eebd26ae88d6/resource.tar.gz#test.test_EquiJoin-HintRightUniqueInnerMap-Debug_/opt.yql"
+            "checksum": "955e91056fb266a34a13e81944dbcb38",
+            "size": 3705,
+            "uri": "https://{canondata_backend}/1936947/86eb63797b7147bcdbee91829fe8d39a33d28f25/resource.tar.gz#test.test_EquiJoin-HintRightUniqueInnerMap-Debug_/opt.yql"
         },
         {
             "checksum": "a95bc48c26607bf8d91d4b24d31e8329",
@@ -1931,9 +1931,9 @@
     ],
     "test.test[EquiJoin-HintRightUniqueLeftMap-Debug]": [
         {
-            "checksum": "3c0b890c0cf1b2ff872dfe3a2849b463",
-            "size": 3682,
-            "uri": "https://{canondata_backend}/1925842/6cda52b754dfbf22f4689dab1717eebd26ae88d6/resource.tar.gz#test.test_EquiJoin-HintRightUniqueLeftMap-Debug_/opt.yql"
+            "checksum": "8f84ed9ff347b312b7bfe34b90fb266c",
+            "size": 3704,
+            "uri": "https://{canondata_backend}/1936947/86eb63797b7147bcdbee91829fe8d39a33d28f25/resource.tar.gz#test.test_EquiJoin-HintRightUniqueLeftMap-Debug_/opt.yql"
         },
         {
             "checksum": "a95bc48c26607bf8d91d4b24d31e8329",
@@ -2470,9 +2470,9 @@
     ],
     "test.test[EquiJoinMap-JoinMapKey2-Debug]": [
         {
-            "checksum": "05935b86d737d8915bb32047d27db597",
-            "size": 11580,
-            "uri": "https://{canondata_backend}/1925842/6cda52b754dfbf22f4689dab1717eebd26ae88d6/resource.tar.gz#test.test_EquiJoinMap-JoinMapKey2-Debug_/opt.yql"
+            "checksum": "652ebe593747b8780fca4947634bfff3",
+            "size": 11709,
+            "uri": "https://{canondata_backend}/1936947/86eb63797b7147bcdbee91829fe8d39a33d28f25/resource.tar.gz#test.test_EquiJoinMap-JoinMapKey2-Debug_/opt.yql"
         },
         {
             "checksum": "23adb645dca07b689d9cb40adc75b885",
@@ -4076,9 +4076,9 @@
     ],
     "test.test[Optimizers-ExtendAndFlatmapExchange-Debug]": [
         {
-            "checksum": "bcf21d9b2749efba78c8a370662e5ada",
-            "size": 1592,
-            "uri": "https://{canondata_backend}/1903885/121399e6d1b461df1e94ed7185ed770bf9b83a77/resource.tar.gz#test.test_Optimizers-ExtendAndFlatmapExchange-Debug_/opt.yql"
+            "checksum": "3c64a7afb965a1dea235624ec0135b5c",
+            "size": 1363,
+            "uri": "https://{canondata_backend}/1781765/1a671ce7b0a921d3606f9e0fce1cc38f6e44d3c5/resource.tar.gz#test.test_Optimizers-ExtendAndFlatmapExchange-Debug_/opt.yql"
         },
         {
             "checksum": "213cba14f54d6b12b6c0e848790db31f",
@@ -4093,9 +4093,9 @@
     ],
     "test.test[Optimizers-ExtendAndFlatmapExchange-Plan]": [
         {
-            "checksum": "4236a1d7484695987b17252da96d6694",
-            "size": 6569,
-            "uri": "https://{canondata_backend}/1814674/cea98a57490eb7af3de0acfe4b9a25d9375d2977/resource.tar.gz#test.test_Optimizers-ExtendAndFlatmapExchange-Plan_/plan.txt"
+            "checksum": "de29bd45fca6b66d33a77d9e4511c09d",
+            "size": 5457,
+            "uri": "https://{canondata_backend}/1924537/86f955e66cd55d7ab9d6a2f939fb3765daff9a93/resource.tar.gz#test.test_Optimizers-ExtendAndFlatmapExchange-Plan_/plan.txt"
         }
     ],
     "test.test[Optimizers-ExtendAndFlatmapExchange-Results]": [

@@ -7,6 +7,7 @@
 #include "json_sysinfo.h"
 #include "json_query.h"
 #include "json_render.h"
+#include "json_autocomplete.h"
 
 namespace NKikimr {
 namespace NViewer {
@@ -77,9 +78,11 @@ IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr& request) {
             return new TJsonQuery(request);
         case NKikimrViewer::TEvViewerRequest::kRenderRequest:
             return new TJsonRender(request);
-        case NKikimrViewer::TEvViewerRequest::kReserved15:
+        case NKikimrViewer::TEvViewerRequest::kAutocompleteRequest:
+            return new TJsonAutocomplete(request);
         case NKikimrViewer::TEvViewerRequest::kReserved16:
         case NKikimrViewer::TEvViewerRequest::kReserved17:
+        case NKikimrViewer::TEvViewerRequest::kReserved18:
         case NKikimrViewer::TEvViewerRequest::REQUEST_NOT_SET:
             return nullptr;
     }

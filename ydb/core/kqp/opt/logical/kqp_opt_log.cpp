@@ -23,12 +23,11 @@ using namespace NYql::NNodes;
 class TKqpLogicalOptTransformer : public TOptimizeTransformerBase {
 public:
     TKqpLogicalOptTransformer(TTypeAnnotationContext& typesCtx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-        const TKikimrConfiguration::TPtr& config, TKqpProviderContext& pctx)
+        const TKikimrConfiguration::TPtr& config)
         : TOptimizeTransformerBase(nullptr, NYql::NLog::EComponent::ProviderKqp, {})
         , TypesCtx(typesCtx)
         , KqpCtx(*kqpCtx)
         , Config(config)
-        , Pctx(pctx)
     {
 #define HNDL(name) "KqpLogical-"#name, Hndl(&TKqpLogicalOptTransformer::name)
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(PushPredicateToReadTable));
@@ -168,8 +167,10 @@ protected:
 
     TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
         auto maxDPccpDPTableSize = Config->MaxDPccpDPTableSize.Get().GetOrElse(TDqSettings::TDefault::MaxDPccpDPTableSize);
-        auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(Pctx, maxDPccpDPTableSize));
-        TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel),
+        auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel);
+        auto providerCtx = TKqpProviderContext(KqpCtx, optLevel);
+        auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, maxDPccpDPTableSize));
+        TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, optLevel,
             *opt, [](auto& rels, auto label, auto node, auto stat) {
                 rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), stat, node));
             });
@@ -178,13 +179,15 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), ctx);
+        bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel) == 3;
+        TExprBase output = DqRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx);
         DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
     TMaybeNode<TExprBase> JoinToIndexLookup(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpJoinToIndexLookup(node, ctx, KqpCtx);
+        bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel) == 3;
+        TExprBase output = KqpJoinToIndexLookup(node, ctx, KqpCtx, useCBO);
         DumpAppliedRule("JoinToIndexLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -371,14 +374,12 @@ private:
     TTypeAnnotationContext& TypesCtx;
     const TKqpOptimizeContext& KqpCtx;
     const TKikimrConfiguration::TPtr& Config;
-    TKqpProviderContext& Pctx;
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpLogOptTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config,
-    TKqpProviderContext& pctx)
+    TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config)
 {
-    return THolder<IGraphTransformer>(new TKqpLogicalOptTransformer(typesCtx, kqpCtx, config, pctx));
+    return THolder<IGraphTransformer>(new TKqpLogicalOptTransformer(typesCtx, kqpCtx, config));
 }
 
 } // namespace NKikimr::NKqp::NOpt

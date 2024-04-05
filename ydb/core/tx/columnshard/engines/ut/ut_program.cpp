@@ -1,6 +1,6 @@
 #include <ydb/core/tx/columnshard/engines/index_info.h>
+#include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/resolver.h>
 
-#include <ydb/core/tx/columnshard/columnshard__index_scan.h>
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/program/program.h>
@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernel) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelStartsWithScalar) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -233,7 +233,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelEndsWithScalar) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelStartsWith) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -334,7 +334,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelEndsWith) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
 
@@ -382,7 +382,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelContains) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
 
@@ -435,7 +435,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(YqlKernelEquals) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
 
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     void JsonExistsImpl(bool isBinaryType) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -536,7 +536,9 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         if (isBinaryType) {
             THashMap<TString, NScheme::TTypeInfo> cc;
             cc["json_data"] = TTypeInfo(NTypeIds::JsonDocument);
-            batch = NArrow::ConvertColumns(batch, cc);
+            auto convertResult = NArrow::ConvertColumns(batch, cc);
+            UNIT_ASSERT_C(convertResult.ok(), convertResult.status().ToString());
+            batch = *convertResult;
             Cerr << batch->ToString() << Endl;
         }
         auto res = program.ApplyProgram(batch);
@@ -552,7 +554,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(Like) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -658,7 +660,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     void JsonValueImpl(bool isBinaryType, NYql::EDataSlot resultType) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {
@@ -728,7 +730,9 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         if (isBinaryType) {
             THashMap<TString, NScheme::TTypeInfo> cc;
             cc["json_data"] = TTypeInfo(NTypeIds::JsonDocument);
-            batch = NArrow::ConvertColumns(batch, cc);
+            auto convertResult = NArrow::ConvertColumns(batch, cc);
+            UNIT_ASSERT_C(convertResult.ok(), convertResult.status().ToString());
+            batch = *convertResult;
             Cerr << batch->ToString() << Endl;
         }
 
@@ -809,7 +813,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(SimpleFunction) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);;
-        TIndexColumnResolver columnResolver(indexInfo);
+        NReader::NPlain::TIndexColumnResolver columnResolver(indexInfo);
 
         NKikimrSSA::TProgram programProto;
         {

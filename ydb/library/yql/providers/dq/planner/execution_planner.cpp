@@ -187,10 +187,10 @@ namespace NYql::NDqs {
                         auto transform = output.Cast<NNodes::TDqTransform>();
                         outputTransform.Type = transform.Type();
                         const auto inputTypeAnnotation = transform.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-                        outputTransform.InputType = GetSerializedTypeAnnotation(inputTypeAnnotation, FunctionRegistry);
+                        outputTransform.InputType = GetSerializedTypeAnnotation(inputTypeAnnotation);
 
                         const auto outputTypeAnnotation = transform.OutputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-                        outputTransform.OutputType = GetSerializedTypeAnnotation(outputTypeAnnotation, FunctionRegistry);
+                        outputTransform.OutputType = GetSerializedTypeAnnotation(outputTypeAnnotation);
                         dqIntegration->FillTransformSettings(transform.Ref(), outputTransform.Settings);
                     } else {
                         YQL_ENSURE(false, "Unknown stage output type");
@@ -480,8 +480,7 @@ namespace NYql::NDqs {
             auto& item = result->Cast<TTupleExprType>()->GetItems()[0];
             YQL_ENSURE(item->GetKind() == ETypeAnnotationKind::List);
             auto exprType = item->Cast<TListExprType>()->GetItemType();
-
-            return GetSerializedTypeAnnotation(exprType, FunctionRegistry);
+            return GetSerializedTypeAnnotation(exprType);
         }
         return {};
     }
@@ -742,12 +741,10 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
         const TString& program,
         NActors::TActorId executerID,
         NActors::TActorId resultID,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TTypeAnnotationNode* typeAnn)
         : Program(program)
         , ExecuterID(executerID)
         , ResultID(resultID)
-        , FunctionRegistry(functionRegistry)
         , TypeAnn(typeAnn)
     { }
 
@@ -809,7 +806,7 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
             auto item = TypeAnn;
             YQL_ENSURE(item->GetKind() == ETypeAnnotationKind::List);
             auto exprType = item->Cast<TListExprType>()->GetItemType();
-            return GetSerializedTypeAnnotation(exprType, FunctionRegistry);
+            return GetSerializedTypeAnnotation(exprType);
         } else {
             return GetSerializedResultType(Program);
         }

@@ -43,6 +43,7 @@ SRCS(
     create_table_unit.cpp
     create_volatile_snapshot_unit.cpp
     datashard__cancel_tx_proposal.cpp
+    datashard__column_stats.cpp
     datashard__compact_borrowed.cpp
     datashard__compaction.cpp
     datashard__cleanup_borrowed.cpp
@@ -261,6 +262,7 @@ PEERDIR(
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/services/lib/sharding
     ydb/library/chunks_limiter
+    ydb/library/uuid
 )
 
 YQL_LAST_ABI_VERSION()
@@ -286,6 +288,7 @@ RECURSE_FOR_TESTS(
     ut_build_index
     ut_change_collector
     ut_change_exchange
+    ut_column_stats
     ut_compaction
     ut_erase_rows
     ut_followers

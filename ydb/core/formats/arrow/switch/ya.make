@@ -8,6 +8,7 @@ PEERDIR(
 
 SRCS(
     switch_type.cpp
+    compare.cpp
 )
 
 END()

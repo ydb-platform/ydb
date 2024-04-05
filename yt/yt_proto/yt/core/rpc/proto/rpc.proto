@@ -208,6 +208,8 @@ message TRspDiscover
 {
     required bool up = 1;
     repeated string suggested_addresses = 2;
+
+    extensions 100 to max;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

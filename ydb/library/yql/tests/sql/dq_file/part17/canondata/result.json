@@ -477,6 +477,31 @@
         }
     ],
     "test.test[bigdate-int_cast-default.txt-Results]": [],
+    "test.test[bigdate-table_io-default.txt-Analyze]": [
+        {
+            "checksum": "98dde4610012c7864233788539ec8b80",
+            "size": 16778,
+            "uri": "https://{canondata_backend}/1600758/25298d1c532d0c67aa8f12ec2205b095eb24cdb4/resource.tar.gz#test.test_bigdate-table_io-default.txt-Analyze_/plan.txt"
+        },
+        {
+            "uri": "file://test.test_bigdate-table_io-default.txt-Analyze_/extracted"
+        }
+    ],
+    "test.test[bigdate-table_io-default.txt-Debug]": [
+        {
+            "checksum": "f5ce9db7630709861cf6ef24b03e06a1",
+            "size": 5441,
+            "uri": "https://{canondata_backend}/1600758/25298d1c532d0c67aa8f12ec2205b095eb24cdb4/resource.tar.gz#test.test_bigdate-table_io-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[bigdate-table_io-default.txt-Plan]": [
+        {
+            "checksum": "8a5bd5be69231d893ed984ff4eb25966",
+            "size": 13442,
+            "uri": "https://{canondata_backend}/1600758/25298d1c532d0c67aa8f12ec2205b095eb24cdb4/resource.tar.gz#test.test_bigdate-table_io-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-table_io-default.txt-Results]": [],
     "test.test[binding-named_callable-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",
@@ -671,9 +696,9 @@
     ],
     "test.test[csee-yql-7237--Debug]": [
         {
-            "checksum": "b767adfc92f688e5a8de2beda8281abf",
-            "size": 5164,
-            "uri": "https://{canondata_backend}/1814674/596b6881e4e692acb2f60c77f02abe1dfca443e9/resource.tar.gz#test.test_csee-yql-7237--Debug_/opt.yql_patched"
+            "checksum": "5f2e95bf587ba9783b26f8c764c55343",
+            "size": 5177,
+            "uri": "https://{canondata_backend}/1937367/7b7d3406bd73e757a0d1fdeafae5df9757f3a7bc/resource.tar.gz#test.test_csee-yql-7237--Debug_/opt.yql_patched"
         }
     ],
     "test.test[csee-yql-7237--Plan]": [
@@ -1805,6 +1830,28 @@
         }
     ],
     "test.test[pg-distinct_on_single_projection_order-default.txt-Results]": [],
+    "test.test[pg-join_using_multiple3-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1942671/5a994316452c786807f2de3ed136ba6ab54f260c/resource.tar.gz#test.test_pg-join_using_multiple3-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[pg-join_using_multiple3-default.txt-Debug]": [
+        {
+            "checksum": "fd424f40c99a62b019a227477d543007",
+            "size": 1848,
+            "uri": "https://{canondata_backend}/212715/e1c6310e5432ce15fd0e5d6b22fa3eaf8b376b0a/resource.tar.gz#test.test_pg-join_using_multiple3-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-join_using_multiple3-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1942671/5a994316452c786807f2de3ed136ba6ab54f260c/resource.tar.gz#test.test_pg-join_using_multiple3-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-join_using_multiple3-default.txt-Results]": [],
     "test.test[pg-order_by_agg_extra_for_keys-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",
@@ -2144,9 +2191,9 @@
     ],
     "test.test[pg_catalog-pg_auth_members-default.txt-Debug]": [
         {
-            "checksum": "89087bb5c866532507e766caadeb1947",
-            "size": 462,
-            "uri": "https://{canondata_backend}/1784826/fe2bef548a55eb11e26daaded455ba74fda33a1b/resource.tar.gz#test.test_pg_catalog-pg_auth_members-default.txt-Debug_/opt.yql_patched"
+            "checksum": "67c1707f627eb1d62b8296d47ffeb054",
+            "size": 517,
+            "uri": "https://{canondata_backend}/1773845/3eb333049c811fbf89e9248a29fd2bbd21221d01/resource.tar.gz#test.test_pg_catalog-pg_auth_members-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg_catalog-pg_auth_members-default.txt-Plan]": [

@@ -10,15 +10,20 @@ from library.python.testing.style import rules
 import library.python.resource as lpr
 
 
-STYLE_CONFIG_JSON = json.dumps(yaml.safe_load(lpr.find('resfs/file/config.clang-format')))
+STYLE_CONFIG_JSON_14 = json.dumps(yaml.safe_load(lpr.find('resfs/file/config.clang-format')))
+STYLE_CONFIG_JSON_16 = json.dumps(yaml.safe_load(lpr.find('resfs/file/config.clang-format-16')))
 
 RES_FILE_PREFIX = '/cpp_style/files/'
 CHECKED_PATHS = list(lpr.iterkeys(RES_FILE_PREFIX, strip_prefix=True))
 
 
 def check_style(filename, actual_source):
-    clang_format_binary = yatest.common.binary_path('contrib/libs/clang14/tools/clang-format/clang-format')
-    config = STYLE_CONFIG_JSON
+    try:
+        clang_format_binary = yatest.common.binary_path('contrib/libs/clang14/tools/clang-format/clang-format')
+        config = STYLE_CONFIG_JSON_14
+    except Exception:
+        clang_format_binary = yatest.common.binary_path('contrib/libs/clang16/tools/clang-format/clang-format')
+        config = STYLE_CONFIG_JSON_16
 
     command = [clang_format_binary, '-assume-filename=' + filename, '-style=' + config]
     styled_source = subprocess.check_output(command, input=actual_source)

@@ -2,12 +2,12 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils/managed_executor.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/write_session.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/write_session.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/ut/fds_mock.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -757,6 +757,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         // Create write session.
         auto writeSettings = NTopic::TWriteSessionSettings()
+            .DirectWriteToPartition(false)
             .Path(setup->GetTestTopic())
             .MessageGroupId("src_id");
 
@@ -766,7 +767,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteSession->WaitEvent().Wait(TDuration::Seconds(1));
         auto event = WriteSession->GetEvent(false);
         Y_ASSERT(event);
-        Cerr << "Got new read session event: " << DebugString(*event) << Endl;
+        Cerr << "Got new write session event: " << DebugString(*event) << Endl;
         auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
         Y_ASSERT(readyToAcceptEvent);
         WriteSession->Write(std::move(readyToAcceptEvent->ContinuationToken), NTopic::TWriteMessage("hello"));
@@ -774,7 +775,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteSession->WaitEvent().Wait(TDuration::Seconds(1));
         event = WriteSession->GetEvent(false);
         Y_ASSERT(event);
-        Cerr << "Got new read session event: " << DebugString(*event) << Endl;
+        Cerr << "Got new write session event: " << DebugString(*event) << Endl;
 
         readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
         Y_ASSERT(readyToAcceptEvent);
@@ -792,10 +793,44 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteSession->WaitEvent().Wait(TDuration::Seconds(1));
         event = WriteSession->GetEvent(false);
         Y_ASSERT(event);
-        Cerr << "Got new read session event: " << DebugString(*event) << Endl;
+        Cerr << "Got new write session event: " << DebugString(*event) << Endl;
 
         auto* acksEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*event);
         Y_ASSERT(acksEvent);
+
+        WriteSession->Close(TDuration::MilliSeconds(10));
+    }
+
+    Y_UNIT_TEST(CloseWriteSessionImmediately) {
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(
+            TEST_CASE_NAME, false, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, 2);
+
+        setup->Start(true, true);
+
+        TFederationDiscoveryServiceMock fdsMock;
+        fdsMock.Port = setup->GetGrpcPort();
+
+        ui16 newServicePort = setup->GetPortManager()->GetPort(4285);
+        auto grpcServer = setup->StartGrpcService(newServicePort, &fdsMock);
+
+        std::shared_ptr<NYdb::NTopic::IWriteSession> WriteSession;
+
+        // Create topic client.
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
+        cfg.SetDatabase("/Root");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        NYdb::TDriver driver(cfg);
+        NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver);
+
+        // Create write session.
+        auto writeSettings = NTopic::TWriteSessionSettings()
+            .DirectWriteToPartition(false)
+            .Path(setup->GetTestTopic())
+            .MessageGroupId("src_id");
+
+        WriteSession = topicClient.CreateWriteSession(writeSettings);
+        Cerr << "Session was created" << Endl;
 
         WriteSession->Close(TDuration::MilliSeconds(10));
     }

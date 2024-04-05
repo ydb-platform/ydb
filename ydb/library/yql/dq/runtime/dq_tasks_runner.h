@@ -136,7 +136,9 @@ public:
         TVector<IDqOutput::TPtr>&& outputs) const = 0;
 
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const = 0;
-    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem, bool isConcurrent) const = 0;
+    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const = 0;
+
+    virtual std::function<void()> GetWakeupCallback() const = 0;
 };
 
 class TDqTaskRunnerExecutionContextBase : public IDqTaskRunnerExecutionContext {
@@ -154,9 +156,13 @@ public:
         return {};
     };
 
-    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/, NActors::TActorSystem* /*actorSystem*/, bool /*isConcurrent*/) const override {
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/, NActors::TActorSystem* /*actorSystem*/) const override {
         return {};
     };
+
+    std::function<void()> GetWakeupCallback() const override {
+        return {};
+    }
 
 };
 
@@ -367,7 +373,7 @@ public:
     virtual IDqAsyncInputBuffer::TPtr GetSource(ui64 inputIndex) = 0;
     virtual IDqOutputChannel::TPtr GetOutputChannel(ui64 channelId) = 0;
     virtual IDqAsyncOutputBuffer::TPtr GetSink(ui64 outputIndex) = 0;
-    virtual std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr> GetInputTransform(ui64 inputIndex) = 0;
+    virtual std::optional<std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> GetInputTransform(ui64 inputIndex) = 0;
     virtual std::pair<IDqAsyncOutputBuffer::TPtr, IDqOutputConsumer::TPtr> GetOutputTransform(ui64 outputIndex) = 0;
 
     virtual IRandomProvider* GetRandomProvider() const = 0;
@@ -394,6 +400,8 @@ public:
 
     virtual void SetWatermarkIn(TInstant time) = 0;
     virtual const NKikimr::NMiniKQL::TWatermark& GetWatermark() const = 0;
+
+    virtual void SetSpillerFactory(std::shared_ptr<NKikimr::NMiniKQL::ISpillerFactory> spillerFactory) = 0;
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(

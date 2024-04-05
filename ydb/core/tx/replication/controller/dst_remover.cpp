@@ -2,12 +2,11 @@
 #include "logging.h"
 #include "private_events.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
-
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr::NReplication::NController {
 
@@ -183,6 +182,13 @@ private:
     TActorId PipeCache;
 
 }; // TDstRemover
+
+IActor* CreateDstRemover(TReplication::TPtr replication, ui64 targetId, const TActorContext& ctx) {
+    const auto* target = replication->FindTarget(targetId);
+    Y_ABORT_UNLESS(target);
+    return CreateDstRemover(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId());
+}
 
 IActor* CreateDstRemover(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId)

@@ -171,7 +171,7 @@ private:
         if (Index) {
             return &*Index;
         }
-        auto pageId = GroupId.IsHistoric() ? Part->IndexPages.Historic[GroupId.Index] : Part->IndexPages.Groups[GroupId.Index];
+        auto pageId = Part->IndexPages.GetFlat(GroupId);
         auto page = Env->TryGetPage(Part, pageId);
         if (page) {
             Index = TIndex(*page);

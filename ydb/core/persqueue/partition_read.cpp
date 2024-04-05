@@ -89,47 +89,58 @@ void TPartition::FillReadFromTimestamps(const TActorContext& ctx) {
     }
 }
 
+TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished) {
+    TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> res(new TEvPersQueue::TEvHasDataInfoResponse());
+
+    res->Record.SetEndOffset(EndOffset);
+    res->Record.SetSizeLag(lagSize);
+    res->Record.SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
+    if (cookie) {
+        res->Record.SetCookie(*cookie);
+    }
+    res->Record.SetReadingFinished(readingFinished);
+
+    return res;
+}
+
 void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
-    if (!InitDone)
+    if (!InitDone) {
         return;
+    }
 
     auto now = ctx.Now();
 
-    for (auto it = HasDataRequests.begin(); it != HasDataRequests.end();) {
-        if (it->Offset < EndOffset) {
-            TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> res(new TEvPersQueue::TEvHasDataInfoResponse());
-            res->Record.SetEndOffset(EndOffset);
-            res->Record.SetSizeLag(GetSizeLag(it->Offset));
-            res->Record.SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
-            if (it->Cookie)
-                res->Record.SetCookie(*(it->Cookie));
-            ctx.Send(it->Sender, res.Release());
-            if (!it->ClientId.empty()) {
-                auto& userInfo = UsersInfoStorage->GetOrCreate(it->ClientId, ctx);
-                userInfo.ForgetSubscription(now);
-            }
-            it = HasDataRequests.erase(it);
+    auto forgetSubscription = [&](const TString clientId) {
+        if (!clientId.empty()) {
+            auto& userInfo = UsersInfoStorage->GetOrCreate(clientId, ctx);
+            userInfo.ForgetSubscription(now);
+        }
+    };
+
+    for (auto request = HasDataRequests.begin(); request != HasDataRequests.end();) {
+        if (request->Offset < EndOffset) {
+            auto response = MakeHasDataInfoResponse(GetSizeLag(request->Offset), request->Cookie);
+            ctx.Send(request->Sender, response.Release());
+        } else if (!IsActive()) {
+            auto response = MakeHasDataInfoResponse(0, request->Cookie, true);
+            ctx.Send(request->Sender, response.Release());
         } else {
             break;
         }
+
+        forgetSubscription(request->ClientId);
+        request = HasDataRequests.erase(request);
     }
 
     for (auto it = HasDataDeadlines.begin(); it != HasDataDeadlines.end();) {
         if (it->Deadline <= now) {
-            auto jt = HasDataRequests.find(it->Request);
-            if (jt != HasDataRequests.end()) {
-                TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> res(new TEvPersQueue::TEvHasDataInfoResponse());
-                res->Record.SetEndOffset(EndOffset);
-                res->Record.SetSizeLag(0);
-                res->Record.SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
-                if (it->Request.Cookie)
-                    res->Record.SetCookie(*(it->Request.Cookie));
-                ctx.Send(it->Request.Sender, res.Release());
-                if (!it->Request.ClientId.empty()) {
-                    auto& userInfo = UsersInfoStorage->GetOrCreate(it->Request.ClientId, ctx);
-                    userInfo.ForgetSubscription(now);
-                }
-                HasDataRequests.erase(jt);
+            auto request = HasDataRequests.find(it->Request);
+            if (request != HasDataRequests.end()) {
+                auto response = MakeHasDataInfoResponse(0, request->Cookie);
+                ctx.Send(request->Sender, response.Release());
+
+                forgetSubscription(request->ClientId);
+                HasDataRequests.erase(request);
             }
             it = HasDataDeadlines.erase(it);
         } else {
@@ -138,38 +149,34 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
     }
 }
 
-void TPartition::UpdateAvailableSize(const TActorContext& ctx) {
-    FilterDeadlinedWrites(ctx);
-    ScheduleUpdateAvailableSize(ctx);
-}
-
 void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.HasSender());
 
+    auto cookie = record.HasCookie() ? TMaybe<ui64>(record.GetCookie()) : TMaybe<ui64>();
+
     TActorId sender = ActorIdFromProto(record.GetSender());
     if (InitDone && EndOffset > (ui64)record.GetOffset()) { //already has data, answer right now
-        TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> res(new TEvPersQueue::TEvHasDataInfoResponse());
-        res->Record.SetEndOffset(EndOffset);
-        res->Record.SetSizeLag(GetSizeLag(record.GetOffset()));
-        res->Record.SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
-        if (record.HasCookie())
-            res->Record.SetCookie(record.GetCookie());
-        ctx.Send(sender, res.Release());
-        return;
+        auto response = MakeHasDataInfoResponse(GetSizeLag(record.GetOffset()), cookie);
+        ctx.Send(sender, response.Release());
+    } else if (InitDone && !IsActive()) {
+        auto response = MakeHasDataInfoResponse(0, cookie, true);
+        ctx.Send(sender, response.Release());
     } else {
-        THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, record.HasCookie() ? TMaybe<ui64>(record.GetCookie()) : TMaybe<ui64>(),
-                                                                                        record.HasClientId() && InitDone ? record.GetClientId() : ""};
+        THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
+                        record.HasClientId() && InitDone ? record.GetClientId() : ""};
         THasDataDeadline dl{TInstant::MilliSeconds(record.GetDeadline()), req};
         auto res = HasDataRequests.insert(req);
         HasDataDeadlines.insert(dl);
         Y_ABORT_UNLESS(res.second);
 
         if (InitDone && record.HasClientId() && !record.GetClientId().empty()) {
+            auto now = ctx.Now();
+
             auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
             ++userInfo.Subscriptions;
-            userInfo.UpdateReadOffset((i64)EndOffset - 1, ctx.Now(), ctx.Now(), ctx.Now());
-            userInfo.UpdateReadingTimeAndState(ctx.Now());
+            userInfo.UpdateReadOffset((i64)EndOffset - 1, now, now, now);
+            userInfo.UpdateReadingTimeAndState(now);
         }
     }
 }
@@ -982,7 +989,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
         TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp->ByteSize());
 
         ctx.Send(info.Destination != 0 ? Tablet : ctx.SelfID, answer.Event.Release());
-        OnReadRequestFinished(cookie, answer.Size, info.User, ctx);
+        OnReadRequestFinished(info.Destination, answer.Size, info.User, ctx);
         return;
     }
 

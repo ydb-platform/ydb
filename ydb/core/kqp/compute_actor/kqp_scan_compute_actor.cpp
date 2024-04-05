@@ -181,7 +181,7 @@ void TKqpScanComputeActor::DoBootstrap() {
     NDq::TDqTaskRunnerContext execCtx;
     execCtx.FuncRegistry = AppData()->FunctionRegistry;
     execCtx.ComputeCtx = &ComputeCtx;
-    execCtx.ComputationFactory = NMiniKQL::GetKqpActorComputeFactory(&ComputeCtx);
+    execCtx.ComputationFactory = NMiniKQL::GetKqpActorComputeFactory(&ComputeCtx, std::nullopt);
     execCtx.RandomProvider = TAppData::RandomProvider.Get();
     execCtx.TimeProvider = TAppData::TimeProvider.Get();
     execCtx.ApplyCtx = nullptr;

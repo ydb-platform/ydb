@@ -2348,6 +2348,15 @@ size_t CalcMaxBlockItemSize(const TType* type) {
         return CalcMaxBlockItemSize(AS_TYPE(TOptionalType, type)->GetItemType());
     }
 
+    if (type->IsStruct()) {
+        auto structType = AS_TYPE(TStructType, type);
+        size_t result = 0;
+        for (ui32 i = 0; i < structType->GetMembersCount(); i++) {
+            result = std::max(result, CalcMaxBlockItemSize(structType->GetMemberType(i)));
+        }
+        return result;
+    }
+
     if (type->IsTuple()) {
         auto tupleType = AS_TYPE(TTupleType, type);
         size_t result = 0;

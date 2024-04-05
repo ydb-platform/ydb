@@ -246,6 +246,9 @@ protected:
             if (Signature.AccessKeyId) {
                 return MaskTicket(Signature.AccessKeyId);
             }
+            if (TokenType == TDerived::ETokenType::Certificate) {
+                return MaskCertificate(Certificate);
+            }
             return MaskTicket(Ticket);
         }
     };

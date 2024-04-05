@@ -26,4 +26,20 @@ TString MaskTicket(const TString& token) {
     return MaskTicket(TStringBuf(token));
 }
 
+TString MaskCertificate(TStringBuf certificate) {
+    size_t beginCertificateContent = 0;
+    if (size_t pos = certificate.find('\n'); pos != TStringBuf::npos) {
+        beginCertificateContent = pos + 1;
+    }
+    size_t endCertificateContent = beginCertificateContent;
+    if (size_t pos = certificate.rfind("\n-----END"); pos != TStringBuf::npos) {
+        endCertificateContent = pos;
+    }
+    return MaskTicket(certificate.substr(beginCertificateContent, endCertificateContent - beginCertificateContent));
+}
+
+TString MaskCertificate(const TString& token) {
+    return MaskCertificate(TStringBuf(token));
+}
+
 } // namespace NKikimr

@@ -8,9 +8,9 @@ IF (YQL_PACKAGED)
 
     END()
 ELSE()
+    IF (OS_LINUX AND CLANG)
 
-    YQL_UDF_YDB(hyperscan_udf)
-        NO_BUILD_IF(NOT OS_LINUX OR NOT CLANG)
+        YQL_UDF_YDB(hyperscan_udf)
 
         YQL_ABI_VERSION(
             2
@@ -27,7 +27,13 @@ ELSE()
             library/cpp/regex/pcre
         )
 
-    END()
+        END()
+
+    ELSE()
+        LIBRARY()
+        END()
+    ENDIF()
+
 ENDIF()
 
 RECURSE_FOR_TESTS(

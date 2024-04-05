@@ -29,12 +29,18 @@ struct TMul : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMul<TLeft,
 
 template<typename TLeft, typename TRight, typename TOutput>
 struct TNumMulInterval {
-    static_assert(TOutput::Features & NYql::NUdf::TimeIntervalType, "Interval type expected");
-    static_assert(std::is_integral_v<typename TLeft::TLayout>, "left must be integral");
-    static_assert(std::is_integral_v<typename TRight::TLayout>, "right must be integral");
+    static_assert(TOutput::Features & NYql::NUdf::TimeIntervalType, "Output must be interval type");
+    static_assert(std::is_integral_v<typename TLeft::TLayout>, "Left must be integral");
+    static_assert(std::is_integral_v<typename TRight::TLayout>, "Right must be integral");
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
+        const auto lv = static_cast<typename TOutput::TLayout>(left.template Get<typename TLeft::TLayout>());
+        const auto rv = static_cast<typename TOutput::TLayout>(right.template Get<typename TRight::TLayout>());
+        const auto ret = lv * rv;
+        if (ret == 0) {
+            return NUdf::TUnboxedValuePod(ret);
+        }
         if constexpr (std::is_same_v<ui64, typename TLeft::TLayout>) {
             if (left.Get<ui64>() > static_cast<ui64>(std::numeric_limits<i64>::max())) {
                 return NUdf::TUnboxedValuePod();
@@ -45,14 +51,11 @@ struct TNumMulInterval {
                 return NUdf::TUnboxedValuePod();
             }
         }
-        const auto lv = static_cast<typename TOutput::TLayout>(left.template Get<typename TLeft::TLayout>());
-        const auto rv = static_cast<typename TOutput::TLayout>(right.template Get<typename TRight::TLayout>());
         i64 lvAbs = (lv > 0) ? lv : -lv;
         i64 rvAbs = (rv > 0) ? rv : -rv;
         if (rvAbs != 0 && (std::numeric_limits<i64>::max() / rvAbs < lvAbs)) {
             return NUdf::TUnboxedValuePod();
         }
-        const auto ret = lv * rv;
         return IsBadInterval<TOutput>(ret) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(ret);
     }
 
@@ -90,9 +93,12 @@ struct TNumMulInterval {
                 GenIsInt64Overflow<typename TLeft::TLayout>(lv, context, block),
                 GenIsInt64Overflow<typename TRight::TLayout>(rv, context, block),
                 "i64Overflow", block);
-        const auto bad = BinaryOperator::CreateOr(
-                BinaryOperator::CreateOr(i64Overflow, mulOverflow, "overflow", block),
-                GenIsBadInterval<TOutput>(mul, context, block),
+        const auto bad = BinaryOperator::CreateAnd(
+                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, mul, zero, "resultNonZero", block),
+                BinaryOperator::CreateOr(
+                    BinaryOperator::CreateOr(i64Overflow, mulOverflow, "overflow", block),
+                    GenIsBadInterval<TOutput>(mul, context, block),
+                    "overflowOrBad", block),
                 "bad", block);
         const auto null = ConstantInt::get(Type::getInt128Ty(context), 0);
         return SelectInst::Create(bad, null, result, "sel", block);

@@ -340,8 +340,8 @@ void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
     info.SetExpire(node.Expire.GetValue());
     node.Location.Serialize(info.MutableLocation(), false);
     if (EnableDynamicNodeNameGeneration && node.SlotIndex.has_value()) {
-        const TString nodeName = TStringBuilder() << "slot-" << node.SlotIndex;
-        info.SetNodeName(nodeName);
+        const TString name = TStringBuilder() << "slot-" << node.SlotIndex;
+        info.SetName(name);
     }
 }
 

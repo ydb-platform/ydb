@@ -123,6 +123,10 @@ void TFileCache::AddFile(const TString& path, const TString& objectId)
         LRU.push_back(objectId);
         file.Position = --LRU.end();
         UsedSize += file.Size;
+        auto maybeFile = Files.find(objectId);
+        if (maybeFile != Files.end()) {
+            UsedSize -= maybeFile->second.Size;
+        }
         Files[objectId] = file;
     }
 

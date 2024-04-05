@@ -137,8 +137,16 @@ Y_UNIT_TEST(AddAfterRemoveAcquired) {
     fc.AddFile(GetFile(15), "2");
     fc.AddFile(GetFile(15), "3");
     UNIT_ASSERT(!fc.Contains("1"));
+    UNIT_ASSERT_EQUAL(fc.UsedDiskSize(), 20 + 15 + 15);
     fc.AddFile(GetFile(20), "1");
+    UNIT_ASSERT_EQUAL(fc.UsedDiskSize(), 20 + 15);
     UNIT_ASSERT(fc.Contains("1"));
+    UNIT_ASSERT(fc.Contains("3"));
+    UNIT_ASSERT(!fc.Contains("2"));
+    fc.ReleaseFile("1");
+    UNIT_ASSERT(fc.Contains("1"));
+    UNIT_ASSERT(fc.Contains("3"));
+    UNIT_ASSERT(!fc.Contains("2"));
 }
 
 } // Y_UNIT_TEST_SUITE(TestFileCache) {

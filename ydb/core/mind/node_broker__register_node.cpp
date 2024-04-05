@@ -62,7 +62,7 @@ public:
                          ctx);
         }
 
-        if (Self->EnableSlotNameGeneration && rec.HasPath() && ServicedSubDomain == InvalidSubDomainKey) {
+        if (Self->EnableDynamicNodeNameGeneration && rec.HasPath() && ServicedSubDomain == InvalidSubDomainKey) {
             return Error(TStatus::ERROR,
                          TStringBuilder() << "Cannot resolve subdomain key for path " << rec.GetPath(),
                          ctx);
@@ -100,7 +100,7 @@ public:
             }
             node.AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
             
-            if (Self->EnableSlotNameGeneration) {
+            if (Self->EnableDynamicNodeNameGeneration) {
                 if (ServicedSubDomain != node.ServicedSubDomain) {
                     if (node.SlotIndex.has_value()) {
                         Self->SlotIndexesPools[node.ServicedSubDomain].Release(node.SlotIndex.value());
@@ -131,7 +131,7 @@ public:
         Node->Lease = 1;
         Node->Expire = expire;
 
-        if (Self->EnableSlotNameGeneration) {
+        if (Self->EnableDynamicNodeNameGeneration) {
             Node->ServicedSubDomain = ServicedSubDomain;
             Node->SlotIndex = Self->SlotIndexesPools[Node->ServicedSubDomain].AcquireLowestFreeIndex();
         }

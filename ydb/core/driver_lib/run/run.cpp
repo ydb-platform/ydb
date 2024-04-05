@@ -1075,8 +1075,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     AppData->TenantName = runConfig.TenantName;
 
-    if (runConfig.AppConfig.GetDynamicNodeConfig().GetNodeInfo().HasSlotName()) {
-        AppData->SlotName = runConfig.AppConfig.GetDynamicNodeConfig().GetNodeInfo().GetSlotName();
+    if (runConfig.AppConfig.GetDynamicNodeConfig().GetNodeInfo().HasName()) {
+        AppData->NodeName = runConfig.AppConfig.GetDynamicNodeConfig().GetNodeInfo().GetName();
     }
 
     if (runConfig.AppConfig.HasBootstrapConfig()) {

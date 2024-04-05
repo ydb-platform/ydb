@@ -723,9 +723,9 @@ protected:
         }
 
         if (config.ParseResult->Has("tenant")) {
-            if (AppConfig.GetDynamicNodeConfig().GetNodeInfo().HasSlotName()) {
-                const TString& slotName = AppConfig.GetDynamicNodeConfig().GetNodeInfo().GetSlotName();
-                AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(slotName);
+            if (AppConfig.GetDynamicNodeConfig().GetNodeInfo().HasName()) {
+                const TString& nodeName = AppConfig.GetDynamicNodeConfig().GetNodeInfo().GetName();
+                AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(nodeName);
                 TRACE_CONFIG_CHANGE_INPLACE_T(MonitoringConfig, UpdateExplicitly);
             } else if (InterconnectPort != DefaultInterconnectPort) {
                 AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort());
@@ -1074,8 +1074,8 @@ protected:
                 nodeInfo->SetAddress(node.Address);
                 nodeInfo->SetExpire(node.Expire);
                 CopyNodeLocation(nodeInfo->MutableLocation(), node.Location);
-                if (result.HasSlotName()) {
-                    nodeInfo->SetSlotName(result.GetSlotName());
+                if (result.HasNodeName()) {
+                    nodeInfo->SetName(result.GetNodeName());
                 }
             } else {
                 auto &info = *nsConfig.AddNode();

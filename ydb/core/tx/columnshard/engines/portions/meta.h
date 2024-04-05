@@ -28,6 +28,10 @@ public:
     EProduced Produced{EProduced::UNSPECIFIED};
     ui32 FirstPkColumn = 0;
 
+    ui64 GetMetadataMemorySize() const {
+        return sizeof(TPortionMeta) + ReplaceKeyEdges->GetMemorySize();
+    }
+
     void SetStatisticsStorage(NStatistics::TPortionStorage&& storage) {
         AFL_VERIFY(StatisticsStorage.IsEmpty());
         StatisticsStorage = std::move(storage);

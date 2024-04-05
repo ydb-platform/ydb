@@ -84,4 +84,26 @@ std::shared_ptr<NKikimr::NOlap::NReader::NSysView::NAbstract::TReadStatsMetadata
         read.GetProgram(), index ? index->GetVersionedIndex().GetSchema(read.GetSnapshot()) : nullptr, read.GetSnapshot());
 }
 
+void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const {
+    ui64 recordsCount = 0;
+    while (auto portion = granule.PopFrontPortion()) {
+        recordsCount += portion->GetRecords().size() + portion->GetIndexes().size();
+        AppendStats(builders, *portion);
+        if (recordsCount > 10000) {
+            break;
+        }
+    }
+}
+
+ui32 TStatsIterator::PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const {
+    ui32 recordsCount = 0;
+    for (auto&& portion : granule.GetPortions()) {
+        recordsCount += portion->GetRecords().size() + portion->GetIndexes().size();
+        if (recordsCount > 10000) {
+            break;
+        }
+    }
+    return recordsCount;
+}
+
 }

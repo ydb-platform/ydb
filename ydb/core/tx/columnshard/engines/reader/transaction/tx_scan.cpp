@@ -6,6 +6,7 @@
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/chunks/chunks.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/portions/portions.h>
+#include <ydb/core/tx/columnshard/engines/reader/sys_view/granules/granules.h>
 
 namespace NKikimr::NOlap::NReader {
 
@@ -137,6 +138,10 @@ bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/
         if (read.TableName.EndsWith(TIndexInfo::STORE_INDEX_PORTION_STATS_TABLE) ||
             read.TableName.EndsWith(TIndexInfo::TABLE_INDEX_PORTION_STATS_TABLE)) {
             return std::unique_ptr<IScannerConstructor>(new NSysView::NPortions::TConstructor(snapshot, itemsLimit, record.GetReverse()));
+        }
+        if (read.TableName.EndsWith(TIndexInfo::STORE_INDEX_GRANULE_STATS_TABLE) ||
+            read.TableName.EndsWith(TIndexInfo::TABLE_INDEX_GRANULE_STATS_TABLE)) {
+            return std::unique_ptr<IScannerConstructor>(new NSysView::NGranules::TConstructor(snapshot, itemsLimit, record.GetReverse()));
         }
         isIndex = true;
         return std::unique_ptr<IScannerConstructor>(new NPlain::TIndexScannerConstructor(snapshot, itemsLimit, record.GetReverse()));

@@ -16,8 +16,10 @@ public:
     static constexpr const char* SPEC_COL_TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID;
     static const TString STORE_INDEX_STATS_TABLE;
     static const TString STORE_INDEX_PORTION_STATS_TABLE;
+    static const TString STORE_INDEX_GRANULE_STATS_TABLE;
     static const TString TABLE_INDEX_STATS_TABLE;
     static const TString TABLE_INDEX_PORTION_STATS_TABLE;
+    static const TString TABLE_INDEX_GRANULE_STATS_TABLE;
 
     static const std::vector<std::string>& GetSpecialColumnNames() {
         static const std::vector<std::string> result = {std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID)};

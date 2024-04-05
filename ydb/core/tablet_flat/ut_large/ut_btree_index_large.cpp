@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartLarge) {
         TPartCook cook(lay, conf);
         
         for (ui32 i = 0; cook.GetDataBytes(0) < 1ull*1024*1024*1024; i++) {
-            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(120, 'x') + std::to_string(i)));
+            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(110, 'x') + std::to_string(i)));
         }
 
         TPartEggs eggs = cook.Finish();

@@ -93,10 +93,10 @@ void ValidateRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId
     ui64 rowCount = 0;
     while (rowCount == 0) {
         NStat::TRequest req;
-        req.StatType = NStat::EStatType::SIMPLE;
         req.PathId = pathId;
 
         auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
+        evGet->StatType = NStat::EStatType::SIMPLE;
         evGet->StatRequests.push_back(req);
 
         auto sender = runtime.AllocateEdgeActor(nodeIndex);
@@ -108,7 +108,7 @@ void ValidateRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId
         UNIT_ASSERT(evResult->Get()->StatResponses.size() == 1);
 
         auto rsp = evResult->Get()->StatResponses[0];
-        auto stat = std::get<TStatSimple>(rsp.Statistics);
+        auto stat = rsp.Simple;
 
         rowCount = stat.RowCount;
 

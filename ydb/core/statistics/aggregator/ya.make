@@ -15,7 +15,12 @@ SRCS(
     tx_configure.cpp
     tx_init.cpp
     tx_init_schema.cpp
+    tx_navigate.cpp
+    tx_resolve.cpp
+    tx_save_query_response.cpp
+    tx_scan_table.cpp
     tx_schemeshard_stats.cpp
+    tx_statistics_scan_response.cpp
 )
 
 PEERDIR(

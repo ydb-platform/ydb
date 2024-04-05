@@ -6,6 +6,7 @@
 #include <ydb/core/protos/counters_statistics_aggregator.pb.h>
 
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/statistics/common.h>
 #include <ydb/core/statistics/events.h>
 
@@ -13,6 +14,9 @@
 #include <ydb/core/cms/console/console.h>
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/util/count_min_sketch.h>
 
 #include <random>
 
@@ -37,6 +41,11 @@ private:
     struct TTxInit;
     struct TTxConfigure;
     struct TTxSchemeShardStats;
+    struct TTxScanTable;
+    struct TTxNavigate;
+    struct TTxResolve;
+    struct TTxStatisticsScanResponse;
+    struct TTxSaveQueryResponse;
 
     struct TEvPrivate {
         enum EEv {
@@ -88,7 +97,22 @@ private:
     size_t PropagatePart(const std::vector<TNodeId>& nodeIds, const std::vector<TSSId>& ssIds,
         size_t lastSSIndex, bool useSizeLimit);
 
+    void Handle(TEvStatistics::TEvScanTable::TPtr& ev);
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev);
+    void Handle(TEvDataShard::TEvStatisticsScanResponse::TPtr& ev);
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
+    void Handle(TEvStatistics::TEvStatTableCreationResponse::TPtr& ev);
+    void Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev);
+
+    void Initialize();
+    void Navigate();
+    void Resolve();
+    void NextRange();
+    void SaveStatisticsToTable();
+
     void PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value);
+    void PersistScanTableId(NIceDb::TNiceDb& db);
 
     STFUNC(StateInit) {
         StateInitImpl(ev, SelfId());
@@ -110,6 +134,14 @@ private:
             hFunc(TEvStatistics::TEvPropagateStatisticsResponse, Handle);
             hFunc(TEvPrivate::TEvProcessUrgent, Handle);
             hFunc(TEvPrivate::TEvPropagateTimeout, Handle);
+
+            hFunc(TEvStatistics::TEvScanTable, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
+            hFunc(TEvDataShard::TEvStatisticsScanResponse, Handle);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+            hFunc(TEvStatistics::TEvStatTableCreationResponse, Handle);
+            hFunc(TEvStatistics::TEvSaveStatisticsQueryResponse, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     LOG_CRIT(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
@@ -154,6 +186,29 @@ private:
 
     std::queue<TEvStatistics::TEvRequestStats::TPtr> PendingRequests;
     bool ProcessUrgentInFlight = false;
+
+    //
+
+    TTableId ScanTableId;
+    TActorId ReplyToActorId;
+
+    bool IsStatisticsTableCreated = false;
+    bool PendingSaveStatistics = false;
+
+    std::vector<NScheme::TTypeInfo> KeyColumnTypes;
+    TVector<TKeyDesc::TColumnOp> Columns;
+    std::unordered_map<ui32, TString> ColumnNames;
+
+    struct TRange {
+        TSerializedCellVec EndKey;
+        ui64 DataShardId = 0;
+    };
+    std::deque<TRange> ShardRanges;
+
+    bool InitStartKey = true;
+    TSerializedCellVec StartKey;
+
+    std::unordered_map<ui32, std::unique_ptr<TCountMinSketch>> CountMinSketches;
 };
 
 } // NKikimr::NStat

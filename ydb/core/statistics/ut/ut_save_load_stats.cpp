@@ -28,14 +28,14 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         auto saveResponse = runtime.GrabEdgeEvent<TEvStatistics::TEvSaveStatisticsQueryResponse>(sender);
         UNIT_ASSERT(saveResponse->Get()->Success);
 
-        runtime.Register(CreateLoadStatisticsQuery(pathId, statType, "colA"),
+        runtime.Register(CreateLoadStatisticsQuery(pathId, statType, "colA", 1),
             0, 0, TMailboxType::Simple, 0, sender);
         auto loadResponseA = runtime.GrabEdgeEvent<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
         UNIT_ASSERT(loadResponseA->Get()->Success);
         UNIT_ASSERT(loadResponseA->Get()->Data);
         UNIT_ASSERT_VALUES_EQUAL(*loadResponseA->Get()->Data, "dataA");
 
-        runtime.Register(CreateLoadStatisticsQuery(pathId, statType, "colB"),
+        runtime.Register(CreateLoadStatisticsQuery(pathId, statType, "colB", 1),
             0, 0, TMailboxType::Simple, 0, sender);
         auto loadResponseB = runtime.GrabEdgeEvent<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
         UNIT_ASSERT(loadResponseB->Get()->Success);

@@ -1454,6 +1454,7 @@ message TEvCdcStreamScanResponse {
 
 message TEvStatisticsScanRequest {
     optional NKikimrDataEvents.TTableId TableId = 1;
+    optional bytes StartKey = 2;
 }
 
 message TEvStatisticsScanResponse {

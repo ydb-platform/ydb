@@ -1,8 +1,11 @@
 #include "aggregator_impl.h"
 
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/statistics/save_load_stats.h>
 #include <ydb/core/statistics/stat_service.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -386,9 +389,101 @@ size_t TStatisticsAggregator::PropagatePart(const std::vector<TNodeId>& nodeIds,
     return index;
 }
 
+void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+    Resolve();
+}
+
+void TStatisticsAggregator::Handle(TEvStatistics::TEvStatTableCreationResponse::TPtr&) {
+    IsStatisticsTableCreated = true;
+    if (PendingSaveStatistics) {
+        PendingSaveStatistics = false;
+        SaveStatisticsToTable();
+    }
+}
+
+void TStatisticsAggregator::Initialize() {
+    Register(CreateStatisticsTableCreator(std::make_unique<TEvStatistics::TEvStatTableCreationResponse>()));
+}
+
+void TStatisticsAggregator::Navigate() {
+    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+    TNavigate::TEntry entry;
+    entry.TableId = ScanTableId;
+    entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+    entry.Operation = TNavigate::OpTable;
+
+    auto request = std::make_unique<TNavigate>();
+    request->ResultSet.emplace_back(entry);
+
+    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
+}
+
+void TStatisticsAggregator::Resolve() {
+    TVector<TCell> plusInf;
+    TTableRange range(StartKey.GetCells(), true, plusInf, true, false);
+    auto keyDesc = MakeHolder<TKeyDesc>(
+        ScanTableId, range, TKeyDesc::ERowOperation::Read, KeyColumnTypes, Columns);
+
+    auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
+    request->ResultSet.emplace_back(std::move(keyDesc));
+
+    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request.release()));
+}
+
+void TStatisticsAggregator::NextRange() {
+    if (ShardRanges.empty()) {
+        SaveStatisticsToTable();
+        return;
+    }
+
+    auto& range = ShardRanges.front();
+    auto request = std::make_unique<TEvDataShard::TEvStatisticsScanRequest>();
+    auto& record = request->Record;
+    record.MutableTableId()->SetOwnerId(ScanTableId.PathId.OwnerId);
+    record.MutableTableId()->SetTableId(ScanTableId.PathId.LocalPathId);
+    record.SetStartKey(StartKey.GetBuffer());
+
+    Send(MakePipePeNodeCacheID(false),
+        new TEvPipeCache::TEvForward(request.release(), range.DataShardId, true),
+        IEventHandle::FlagTrackDelivery);
+}
+
+void TStatisticsAggregator::SaveStatisticsToTable() {
+    if (!IsStatisticsTableCreated) {
+        PendingSaveStatistics = true;
+        return;
+    }
+
+    PendingSaveStatistics = false;
+
+    std::vector<TString> columnNames;
+    std::vector<TString> data;
+    auto count = CountMinSketches.size();
+    columnNames.reserve(count);
+    data.reserve(count);
+
+    for (auto& [tag, sketch] : CountMinSketches) {
+        auto itColumnName = ColumnNames.find(tag);
+        if (itColumnName == ColumnNames.end()) {
+            continue;
+        }
+        columnNames.push_back(itColumnName->second);
+        TString strSketch(sketch->AsStringBuf());
+        data.push_back(strSketch);
+    }
+
+    Register(CreateSaveStatisticsQuery(ScanTableId.PathId, EStatType::COUNT_MIN_SKETCH,
+        std::move(columnNames), std::move(data)));
+}
+
 void TStatisticsAggregator::PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value) {
     db.Table<Schema::SysParams>().Key(id).Update(
         NIceDb::TUpdate<Schema::SysParams::Value>(value));
+}
+
+void TStatisticsAggregator::PersistScanTableId(NIceDb::TNiceDb& db) {
+    PersistSysParam(db, Schema::SysParam_ScanTableOwnerId, ToString(ScanTableId.PathId.OwnerId));
+    PersistSysParam(db, Schema::SysParam_ScanTableLocalPathId, ToString(ScanTableId.PathId.LocalPathId));
 }
 
 bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,

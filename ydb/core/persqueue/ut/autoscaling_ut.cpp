@@ -358,8 +358,6 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         SplitPartition(setup, ++txId, 0, "a");
 
         readSession.WaitAndAssertPartitions({0, 1, 2}, 2, "After split must read all partitions because parent partition is empty");
-
-        readSession.Semaphore.Release();
     }
 
     Y_UNIT_TEST(PartitionSplit_ReadNotEmptyPartitions) {
@@ -368,7 +366,6 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
 
         TTopicClient client = setup.MakeClient();
         TTestPartitionReadSession readSession(client);
-        //readSession.Offsets[0] = 0;
 
         auto writeSession = CreateWriteSession(client, "producer-1", 0);
 
@@ -386,8 +383,6 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
 
         readSession.Offsets[0] = 1;
         readSession.WaitAndAssertPartitions({0, 1, 2}, 3, "Must read from all partitions because had been read from the end of partition");
-
-        readSession.Semaphore.Release();
     }
 
 }

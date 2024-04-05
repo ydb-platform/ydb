@@ -3,13 +3,6 @@
 
 namespace NKikimr::NOlap {
 
-void TGranulesStorage::UpdateGranuleInfo(const TGranuleMeta& granule) {
-    if (PackModificationFlag) {
-        PackModifiedGranules[granule.GetPathId()] = &granule;
-        return;
-    }
-}
-
 std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
     const TInstant now = HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now();
     std::map<NStorageOptimizer::TOptimizationPriority, std::shared_ptr<TGranuleMeta>> granulesSorted;
@@ -52,19 +45,6 @@ std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCom
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "all_significant_granules_locked")("count", granulesSorted.size());
     return nullptr;
-}
-
-void TGranulesStorage::OnRemovePortion(const TPortionInfo& portion) {
-    MetadataMemoryPortionsSize -= portion.GetMetadataMemoryPortionsSize();
-    AFL_VERIFY(MetadataMemoryPortionsSize >= 0);
-    const i64 value = SumMetadataMemoryPortionsSize.Sub(portion.GetMetadataMemoryPortionsSize());
-    Counters.OnIndexMetadataUsageBytes(value);
-}
-
-void TGranulesStorage::OnAddPortion(const TPortionInfo& portion) {
-    MetadataMemoryPortionsSize += portion.GetMetadataMemoryPortionsSize();
-    const i64 value = SumMetadataMemoryPortionsSize.Add(portion.GetMetadataMemoryPortionsSize());
-    Counters.OnIndexMetadataUsageBytes(value);
 }
 
 } // namespace NKikimr::NOlap

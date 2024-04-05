@@ -101,7 +101,7 @@ public:
     bool Load(IDbWrapper& db) override;
 
     virtual bool IsOverloadedByMetadata(const ui64 limit) const override {
-        return limit < TGranulesStorage::GetSumMetadataMemoryPortionsSize();
+        return limit < TGranulesStat::GetSumMetadataMemoryPortionsSize();
     }
 
     std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept override;

@@ -237,7 +237,7 @@ public:
     const TString& GetEntityStorageId(const ui32 entityId, const TIndexInfo& indexInfo) const;
 
     ui64 GetTxVolume() const; // fake-correct method for determ volume on rewrite this portion in transaction progress
-    ui64 GetMetadataMemoryPortionsSize() const;
+    ui64 GetMetadataMemorySize() const;
 
     class TPage {
     private:

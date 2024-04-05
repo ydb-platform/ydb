@@ -12,6 +12,7 @@
 namespace NKikimr::NOlap {
 
 class TGranulesStorage;
+class TGranulesStat;
 class TColumnChunkLoadContext;
 
 class TDataClassSummary: public NColumnShard::TBaseGranuleDataClassSummary {
@@ -26,7 +27,7 @@ public:
     void AddPortion(const TPortionInfo& info) {
         ColumnPortionsSize += info.GetColumnBlobBytes();
         TotalPortionsSize += info.GetTotalBlobBytes();
-        MetadataMemoryPortionsSize += info.GetMetadataMemoryPortionsSize();
+        MetadataMemoryPortionsSize += info.GetMetadataMemorySize();
         RecordsCount += info.NumRows();
         ++PortionsCount;
 
@@ -41,7 +42,7 @@ public:
     }
 
     void RemovePortion(const TPortionInfo& info) {
-        MetadataMemoryPortionsSize -= info.GetMetadataMemoryPortionsSize();
+        MetadataMemoryPortionsSize -= info.GetMetadataMemorySize();
         Y_ABORT_UNLESS(MetadataMemoryPortionsSize >= 0);
         ColumnPortionsSize -= info.GetColumnBlobBytes();
         Y_ABORT_UNLESS(ColumnPortionsSize >= 0);
@@ -143,9 +144,9 @@ private:
     std::set<EActivity> Activity;
     mutable bool AllowInsertionFlag = false;
     const ui64 PathId;
-    std::shared_ptr<TGranulesStorage> Owner;
     const NColumnShard::TGranuleDataCounters Counters;
     NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
+    std::shared_ptr<TGranulesStat> Stats;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> OptimizerPlanner;
     std::shared_ptr<NActualizer::TGranuleActualizationIndex> ActualizationIndex;
     std::map<NArrow::TReplaceKey, THashMap<ui64, std::shared_ptr<TPortionInfo>>> PortionsByPK;
@@ -307,7 +308,7 @@ public:
 
     bool ErasePortion(const ui64 portion);
 
-    explicit TGranuleMeta(const ui64 pathId, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex);
+    explicit TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex);
 
     bool Empty() const noexcept { return Portions.empty(); }
 };

@@ -167,7 +167,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
     THashMap<ui64, ui64> granuleToPathIdDecoder;
     {
         TMemoryProfileGuard g("TTxInit/LoadColumns");
-        auto guard = GranulesStorage->StartPackModification();
+        auto guard = GranulesStorage->GetStats()->StartPackModification();
         if (!LoadColumns(db)) {
             return false;
         }
@@ -534,7 +534,7 @@ void TColumnEngineForLogs::OnTieringModified(const std::shared_ptr<NColumnShard:
 }
 
 void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
-    std::shared_ptr<TGranuleMeta> g = GranulesStorage->RegisterTable(pathId, GranulesStorage, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex);
+    std::shared_ptr<TGranuleMeta> g = GranulesStorage->RegisterTable(pathId, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex);
     if (ActualizationStarted) {
         g->StartActualizationIndex();
         g->RefreshScheme();

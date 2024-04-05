@@ -449,6 +449,8 @@ const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNo
         pgType = "int8";
         break;
     case NUdf::EDataSlot::Uint64:
+    case NUdf::EDataSlot::Decimal:
+    case NUdf::EDataSlot::DyNumber:
         pgType = "numeric";
         break;
     case NUdf::EDataSlot::Float:

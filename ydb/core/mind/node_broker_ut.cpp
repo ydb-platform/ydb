@@ -1366,7 +1366,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           sharedScopeId);
     }
 
-    Y_UNIT_TEST(nameExpiration)
+    Y_UNIT_TEST(NameExpiration)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 4, { "/dc-1/my-database" });
@@ -1408,7 +1408,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
     }
 
-    Y_UNIT_TEST(nameReuseRestart)
+    Y_UNIT_TEST(NameReuseRestart)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 4, { "/dc-1/my-database" });
@@ -1435,7 +1435,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-0");
     }
 
-    Y_UNIT_TEST(nameReuseRestartWithHostChanges)
+    Y_UNIT_TEST(NameReuseRestartWithHostChanges)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 4, { "/dc-1/my-database" });
@@ -1477,7 +1477,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
     }
 
-    Y_UNIT_TEST(nameWithDifferentTenants)
+    Y_UNIT_TEST(NameWithDifferentTenants)
     {
         TTestBasicRuntime runtime(8, false);
 

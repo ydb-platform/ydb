@@ -10,6 +10,14 @@
 
 namespace NYdb::NFederatedTopic {
 
+std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseByHash(
+    NTopic::TFederatedWriteSessionSettings const& settings,
+    std::vector<std::shared_ptr<TDbInfo>> const& dbInfos);
+
+std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabase(
+    NTopic::TFederatedWriteSessionSettings const& settings,
+    std::vector<std::shared_ptr<TDbInfo>> const& dbInfos, TString const& selfLocation);
+
 class TFederatedWriteSessionImpl : public NTopic::TContinuationTokenIssuer,
                                    public NTopic::TEnableSelfContext<TFederatedWriteSessionImpl> {
     friend class TFederatedWriteSession;

@@ -950,6 +950,13 @@ namespace {
                     Types.OptimizerFlags.insert(to_lower(ToString(arg)));
                 }
             }
+            else if (name == "_EnableStreamLookupJoin" || name == "DisableStreamLookupJoin") {
+                if (args.size() != 0) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                    return false;
+                }
+                Types.StreamLookupJoin = name == "_EnableStreamLookupJoin";
+            }
             else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;

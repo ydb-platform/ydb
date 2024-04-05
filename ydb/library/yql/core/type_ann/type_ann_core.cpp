@@ -11978,7 +11978,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["HoppingTraits"] = &HoppingTraitsWrapper;
         Functions["HoppingCore"] = &HoppingCoreWrapper;
         Functions["MultiHoppingCore"] = &MultiHoppingCoreWrapper;
-        Functions["EquiJoin"] = &EquiJoinWrapper;
+        ExtFunctions["EquiJoin"] = &EquiJoinWrapper;
         Functions["OptionalReduce"] = &OptionalReduceWrapper;
         Functions["OptionalItemType"] = &TypeArgWrapper<ETypeArgument::OptionalItem>;
         Functions["ListItemType"] = &TypeArgWrapper<ETypeArgument::ListItem>;

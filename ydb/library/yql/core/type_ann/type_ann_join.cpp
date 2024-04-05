@@ -234,11 +234,30 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus EquiJoinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus EquiJoinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinArgsCount(*input, 4, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         const size_t numLists = input->ChildrenSize() - 2;
+
+        auto equiJoinTuple = input->Child(input->ChildrenSize() - 2);
+        if (!EnsureArgsCount(*equiJoinTuple, 6, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (!EnsureTuple(*equiJoinTuple->Child(5), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        for (const auto& o: equiJoinTuple->Child(5)->Children()) {
+            if (o->IsList()) {
+                for (auto nested: o->Children()) {
+                    if (nested->IsAtom() && nested->Content() == "forceStreamLookup" && !ctx.Types.StreamLookupJoin) {
+                        ctx.Expr.AddError(
+                            TIssue(ctx.Expr.GetPosition(nested->Pos()), "Unsupported join strategy: streamlookup")
+                        );
+                    }
+                }
+            }
+        }
 
         auto optionsNode = input->Child(input->ChildrenSize() - 1);
         TJoinOptions options;

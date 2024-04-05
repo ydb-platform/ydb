@@ -60,9 +60,9 @@ protected:
 
         Ydb::StatusIds::StatusCode ydbStatus = NKikimr::YdbStatusFromProxyStatus(msg);
         if (!NKikimr::IsTxProxyInProgress(ydbStatus)) {
-            return this->ReplyWithResult(ydbStatus, issueMessage, ctx);
+            return this->Reply(ydbStatus, issueMessage, ctx);
         }
-    
+
         ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId();
         auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(msg->Record.GetTxId());
         SetSchemeShardId(schemeShardTabletId);

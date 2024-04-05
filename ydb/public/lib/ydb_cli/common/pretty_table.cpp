@@ -105,11 +105,12 @@ size_t TPrettyTable::TRow::ColumnWidth(size_t columnIndex) const {
     return width;
 }
 
-size_t TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>& widths, size_t offset, TString& oldColor) const {
+bool TPrettyTable::TRow::PrintColumnsNextLine(IOutputStream& o, const TVector<size_t>& widths, size_t it, TString& oldColor) const {
     bool next = false;
-    size_t firstColLen = 0;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    
+
+    size_t fullPrintedColumnsCnt = 0;
+
     for (size_t columnIndex : xrange(Columns.size())) {
         enum {
             TEXT,
@@ -138,11 +139,15 @@ size_t TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>&
             bool endcolor = false;
 
             absCurLen = 0;
+            
+            fullPrintedColumnsCnt += column.empty();
+
             for (const auto& line : column) {
                 data = line;
                 TString s = "";
                 
-                data.Skip(offset);
+                data.Skip(it * width);
+                fullPrintedColumnsCnt += data.empty();
                 // len of utf8 symbol
                 int utf8Len = 0;
                 
@@ -257,20 +262,19 @@ size_t TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>&
                     o << s;
                 }
             }
+
             o << TString(width - curLen, ' ');
-            if (columnIndex == 0) {
-                firstColLen = absCurLen - 1;
-            }
         }
     }
     
     o << colors.Default();
     o << " │" << Endl;
-    if (next) {
-        return firstColLen;
-    } else {
+
+    if (fullPrintedColumnsCnt == Columns.size()) {
         return 0;
     }
+
+    return 1;
 }
 
 bool TPrettyTable::TRow::HasFreeText() const {
@@ -325,12 +329,10 @@ void TPrettyTable::Print(IOutputStream& o) const {
     for (auto i : xrange(Rows.size())) {
         const auto& row = Rows.at(i);
 
-        size_t res = 1;
-        size_t offset = 0;
         TString oldColor = "";
-        while (res != 0) {
-            res = row.PrintColumns(o, widths, offset, oldColor);
-            offset += res;
+        size_t it = 0;
+        while (row.PrintColumnsNextLine(o, widths, it, oldColor)) {
+            ++it;
         }
 
         if (row.HasFreeText()) {

@@ -122,10 +122,8 @@ void TFileCache::AddFile(const TString& path, const TString& objectId)
         TGuard<TMutex> guard(Mutex);
         LRU.push_back(objectId);
         file.Position = --LRU.end();
-        UsedSize += file.Size;
-        auto maybeFile = Files.find(objectId);
-        if (maybeFile != Files.end()) {
-            UsedSize -= maybeFile->second.Size;
+        if (!Files.contains(objectId)) {
+            UsedSize += file.Size;
         }
         Files[objectId] = file;
     }

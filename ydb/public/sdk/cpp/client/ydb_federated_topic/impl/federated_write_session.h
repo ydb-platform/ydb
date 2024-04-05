@@ -135,11 +135,7 @@ private:
     std::deque<TWrappedWriteMessage> OriginalMessagesToGetAck;
     i64 BufferFreeSpace;
 
-    NThreading::TPromise<void> HasBeenClosed;
-    NThreading::TPromise<void> MessageQueuesHaveBeenDrained;
-
-    // Exiting.
-    bool Closing = false;
+    std::atomic_bool Closing = false;
 };
 
 class TFederatedWriteSession : public NTopic::IWriteSession,

@@ -1985,8 +1985,8 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
         if (!node.ServicedDomains.empty()) {
             nodeStats.MutableNodeDomain()->CopyFrom(node.ServicedDomains.front());
         }
-        if (!node.NodeName.empty()) {
-            nodeStats.SetNodeName(node.NodeName);
+        if (!node.Name.empty()) {
+            nodeStats.SetNodeName(node.Name);
         }
         if (request.GetReturnExtendedTabletInfo()) {
             if (request.HasFilterTabletsByPathId()) {

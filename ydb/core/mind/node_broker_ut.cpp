@@ -173,7 +173,7 @@ void SetupServices(TTestActorRuntime &runtime,
     dnConfig->MinDynamicNodeId = 1024;
     dnConfig->MaxDynamicNodeId = 1024 + (maxDynNodes - 1);
     runtime.GetAppData().FeatureFlags.SetEnableNodeBrokerSingleDomainMode(true);
-    runtime.GetAppData().FeatureFlags.SetEnableDynamicNodeNameGeneration(true);
+    runtime.GetAppData().FeatureFlags.SetEnableDynamicnameGeneration(true);
      
     if (!runtime.IsRealThreads()) {
         TDispatchOptions options;
@@ -321,7 +321,7 @@ void CheckRegistration(TTestActorRuntime &runtime,
                        bool fixed = false,
                        const TString &path = DOMAIN_NAME,
                        const TMaybe<TKikimrScopeId> &scopeId = {},
-                       const TString &nodeName = "")
+                       const TString &name = "")
 {
     auto event = MakeRegistrationRequest(host, port, resolveHost, address, path, dc, room, rack, body, fixed);
     runtime.SendToPipe(MakeNodeBrokerID(), sender, event.Release(), 0, GetPipeConfigWithRetries());
@@ -349,8 +349,8 @@ void CheckRegistration(TTestActorRuntime &runtime,
             UNIT_ASSERT_VALUES_EQUAL(rec.GetScopeTabletId(), scopeId->GetSchemeshardId());
             UNIT_ASSERT_VALUES_EQUAL(rec.GetScopePathId(), scopeId->GetPathItemId());
         }
-        if (nodeName) {
-            UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetNodeName(), nodeName);
+        if (name) {
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetName(), name);
         }
     }
 }
@@ -363,10 +363,10 @@ void CheckRegistration(TTestActorRuntime &runtime,
                        TStatus::ECode code = TStatus::OK,
                        ui32 nodeId = 0,
                        ui64 expire = 0,
-                       const TString &nodeName = "")
+                       const TString &name = "")
 {
     CheckRegistration(runtime, sender, host, port, host, "", 0, 0, 0, 0, code, nodeId, expire,
-                      false, path, Nothing(), nodeName);
+                      false, path, Nothing(), name);
 }
 
 NKikimrNodeBroker::TEpoch GetEpoch(TTestActorRuntime &runtime,
@@ -1366,7 +1366,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           sharedScopeId);
     }
 
-    Y_UNIT_TEST(NodeNameExpiration)
+    Y_UNIT_TEST(nameExpiration)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 4, { "/dc-1/my-database" });
@@ -1408,7 +1408,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
     }
 
-    Y_UNIT_TEST(NodeNameReuseRestart)
+    Y_UNIT_TEST(nameReuseRestart)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 4, { "/dc-1/my-database" });
@@ -1435,7 +1435,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-0");
     }
 
-    Y_UNIT_TEST(NodeNameReuseRestartWithHostChanges)
+    Y_UNIT_TEST(nameReuseRestartWithHostChanges)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 4, { "/dc-1/my-database" });
@@ -1477,7 +1477,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
     }
 
-    Y_UNIT_TEST(NodeNameWithDifferentTenants)
+    Y_UNIT_TEST(nameWithDifferentTenants)
     {
         TTestBasicRuntime runtime(8, false);
 

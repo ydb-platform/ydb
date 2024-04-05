@@ -167,7 +167,7 @@ class TDefaultNodeBrokerClient
                     nodeInfo.SetExpire(node.Expire);
                     NConfig::CopyNodeLocation(nodeInfo.MutableLocation(), node.Location);
                     if (result.HasNodeName()) {
-                        nodeInfo.SetNodeName(result.GetNodeName());
+                        nodeInfo.SetName(result.GetNodeName());
                     }
                 } else {
                     auto &info = *nsConfig.AddNode();

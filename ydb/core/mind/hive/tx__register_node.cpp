@@ -41,12 +41,12 @@ public:
             } else {
                 Sort(servicedDomains);
             }
-            const TString& slotName = Record.GetSlotName();
+            const TString& nodeName = Record.GetNodeName();
             db.Table<Schema::Node>().Key(nodeId).Update(
                 NIceDb::TUpdate<Schema::Node::Local>(Local),
                 NIceDb::TUpdate<Schema::Node::ServicedDomains>(servicedDomains),
                 NIceDb::TUpdate<Schema::Node::Statistics>(node.Statistics),
-                NIceDb::TUpdate<Schema::Node::Name>(slotName)
+                NIceDb::TUpdate<Schema::Node::Name>(nodeName)
             );
  
             node.BecomeDisconnected();
@@ -59,7 +59,7 @@ public:
             node.Local = Local;
             node.ServicedDomains.swap(servicedDomains);
             node.LastSeenServicedDomains = node.ServicedDomains;
-            node.SlotName = slotName;
+            node.NodeName = nodeName;
         }
         if (Record.HasSystemLocation() && Record.GetSystemLocation().HasDataCenter()) {
             node.Location = TNodeLocation(Record.GetSystemLocation());

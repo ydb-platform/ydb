@@ -597,9 +597,9 @@ struct TCommonAppOptions {
         }
 
         if (TenantName) {
-            if (appConfig.GetDynamicNodeConfig().GetNodeInfo().HasSlotName()) {
-                const TString& slotName = appConfig.GetDynamicNodeConfig().GetNodeInfo().GetSlotName();
-                appConfig.MutableMonitoringConfig()->SetHostLabelOverride(slotName);
+            if (appConfig.GetDynamicNodeConfig().GetNodeInfo().HasNodeName()) {
+                const TString& nodeName = appConfig.GetDynamicNodeConfig().GetNodeInfo().GetNodeName();
+                appConfig.MutableMonitoringConfig()->SetHostLabelOverride(nodeName);
                 ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
             } else if (InterconnectPort != DefaultInterconnectPort) {
                 appConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort(env));

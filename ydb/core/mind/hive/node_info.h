@@ -88,7 +88,7 @@ public:
     mutable TInstant LastResourceChangeReaction;
     NKikimrHive::TNodeStatistics Statistics;
     bool DeletionScheduled = false;
-    TString SlotName;
+    TString NodeName;
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;

@@ -166,8 +166,8 @@ class TDefaultNodeBrokerClient
                     nodeInfo.SetAddress(node.Address);
                     nodeInfo.SetExpire(node.Expire);
                     NConfig::CopyNodeLocation(nodeInfo.MutableLocation(), node.Location);
-                    if (result.HasSlotName()) {
-                        nodeInfo.SetSlotName(result.GetSlotName());
+                    if (result.HasNodeName()) {
+                        nodeInfo.SetNodeName(result.GetNodeName());
                     }
                 } else {
                     auto &info = *nsConfig.AddNode();

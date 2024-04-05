@@ -7,19 +7,25 @@
 
 namespace NKikimr {
 
-TString MaskTicket(TStringBuf token) {
+namespace {
+TString MaskString(TStringBuf str) {
     TStringBuilder mask;
-    if (token.size() >= 16) {
-        mask << token.substr(0, 4);
+    if (str.size() >= 16) {
+        mask << str.substr(0, 4);
         mask << "****";
-        mask << token.substr(token.size() - 4, 4);
+        mask << str.substr(str.size() - 4, 4);
     } else {
         mask << "****";
     }
     mask << " (";
-    mask << Sprintf("%08X", Crc32c(token.data(), token.size()));
+    mask << Sprintf("%08X", Crc32c(str.data(), str.size()));
     mask << ")";
     return mask;
+}
+}
+
+TString MaskTicket(TStringBuf token) {
+    return MaskString(token);
 }
 
 TString MaskTicket(const TString& token) {
@@ -35,7 +41,7 @@ TString MaskCertificate(TStringBuf certificate) {
     if (size_t pos = certificate.rfind("\n-----END"); pos != TStringBuf::npos) {
         endCertificateContent = pos;
     }
-    return MaskTicket(certificate.substr(beginCertificateContent, endCertificateContent - beginCertificateContent));
+    return MaskString(certificate.substr(beginCertificateContent, endCertificateContent - beginCertificateContent));
 }
 
 TString MaskCertificate(const TString& token) {

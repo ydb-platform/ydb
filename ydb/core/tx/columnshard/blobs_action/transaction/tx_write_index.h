@@ -22,7 +22,6 @@ private:
 
     TEvPrivate::TEvWriteIndex::TPtr Ev;
     const ui32 TabletTxNo;
-    TBackgroundActivity TriggerActivity = TBackgroundActivity::All();
     bool CompleteReady = false;
 
     TStringBuilder TxPrefix() const {

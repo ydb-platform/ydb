@@ -8,42 +8,6 @@ class TColumnEngineChanges;
 
 namespace NKikimr::NColumnShard {
 
-class TBackgroundActivity {
-public:
-    enum EBackActivity : ui32 {
-        NONE = 0x00,
-        INDEX = 0x01,
-        COMPACT = 0x02,
-        CLEAN  = 0x04,
-        TTL = 0x08,
-        ALL = 0xffff
-    };
-
-    static TBackgroundActivity Indexation() { return TBackgroundActivity(INDEX); }
-    static TBackgroundActivity Compaction() { return TBackgroundActivity(COMPACT); }
-    static TBackgroundActivity Cleanup() { return TBackgroundActivity(CLEAN); }
-    static TBackgroundActivity Ttl() { return TBackgroundActivity(TTL); }
-    static TBackgroundActivity All() { return TBackgroundActivity(ALL); }
-    static TBackgroundActivity None() { return TBackgroundActivity(NONE); }
-
-    TBackgroundActivity() = default;
-
-    bool HasIndexation() const { return Activity & INDEX; }
-    bool HasCompaction() const { return Activity & COMPACT; }
-    bool HasCleanup() const { return Activity & CLEAN; }
-    bool HasTtl() const { return Activity & TTL; }
-    bool HasAll() const { return Activity == ALL; }
-
-    TString DebugString() const;
-
-private:
-    EBackActivity Activity = NONE;
-
-    TBackgroundActivity(EBackActivity activity)
-        : Activity(activity)
-    {}
-};
-
 class TBackgroundController {
 private:
     THashMap<TString, TMonotonic> ActiveIndexationTasks;

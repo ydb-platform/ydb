@@ -1908,15 +1908,15 @@ private:
     bool ConvertLength = false;
 };
 
-const i32 PgDateShift = 10957;
-const i64 PgTimestampShift = 946684800000000ll;
+const i32 PgDateShift = UNIX_EPOCH_JDATE - POSTGRES_EPOCH_JDATE;
+const i64 PgTimestampShift = USECS_PER_DAY * (UNIX_EPOCH_JDATE - POSTGRES_EPOCH_JDATE);
 
-inline i32 Date2Pg(ui16 value) {
-    return i32(value) - PgDateShift;
+inline i32 Date2Pg(i32 value) {
+    return value + PgDateShift;
 }
 
-inline i64 Timestamp2Pg(ui64 value) {
-    return i64(value) - PgTimestampShift;
+inline i64 Timestamp2Pg(i64 value) {
+    return value + PgTimestampShift;
 }
 
 inline Interval* Interval2Pg(i64 value) {
@@ -1979,9 +1979,22 @@ NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUd
         auto res = Timestamp2Pg(value.Get<ui64>());
         return ScalarDatumToPod(res);
     }
-    case NUdf::EDataSlot::Interval: {
+    case NUdf::EDataSlot::Interval: 
+    case NUdf::EDataSlot::Interval64: {
         auto res = Interval2Pg(value.Get<i64>());
         return PointerDatumToPod(PointerGetDatum(res));
+    }
+    case NUdf::EDataSlot::Date32: {
+        auto res = Date2Pg(value.Get<i32>());
+        return ScalarDatumToPod(res);
+    }
+    case NUdf::EDataSlot::Datetime64: {
+        auto res = Timestamp2Pg(value.Get<i64>() * 1000000ull);
+        return ScalarDatumToPod(res);
+    }
+    case NUdf::EDataSlot::Timestamp64: {
+        auto res = Timestamp2Pg(value.Get<i64>());
+        return ScalarDatumToPod(res);
     }
     case NUdf::EDataSlot::Json: {
         auto input = MakeCString(value.AsStringRef());
@@ -2781,7 +2794,32 @@ struct TToPgExec {
             }
             break;
         }
-        case NUdf::EDataSlot::Interval: {
+        case NUdf::EDataSlot::Date32: {
+            auto inputPtr = array.GetValues<i32>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int32GetDatum(Date2Pg(inputPtr[i]));
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Datetime64: {
+            auto inputPtr = array.GetValues<i64>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int64GetDatum(Timestamp2Pg(inputPtr[i] * 1000000ull));
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Timestamp64: {
+            auto inputPtr = array.GetValues<i64>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int64GetDatum(Timestamp2Pg(inputPtr[i]));
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Interval64: {
             NUdf::TFixedSizeBlockReader<i64, true> reader;
             NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
             for (size_t i = 0; i < length; ++i) {
@@ -2881,10 +2919,14 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, T
     case NUdf::EDataSlot::Date:
     case NUdf::EDataSlot::Datetime:
     case NUdf::EDataSlot::Timestamp:
+    case NUdf::EDataSlot::Date32:
+    case NUdf::EDataSlot::Datetime64:
+    case NUdf::EDataSlot::Timestamp64:
         break;
     case NUdf::EDataSlot::String:
     case NUdf::EDataSlot::Utf8:
     case NUdf::EDataSlot::Interval:
+    case NUdf::EDataSlot::Interval64:
     case NUdf::EDataSlot::Uint64:
     case NUdf::EDataSlot::Yson:
     case NUdf::EDataSlot::Json:
@@ -3159,6 +3201,14 @@ TComputationNodeFactory GetPgFactory() {
                     return new TToPg<NUdf::EDataSlot::TzDatetime>(ctx.Mutables, arg);
                 case NUdf::EDataSlot::TzTimestamp:
                     return new TToPg<NUdf::EDataSlot::TzTimestamp>(ctx.Mutables, arg);
+                case NUdf::EDataSlot::Date32:
+                    return new TToPg<NUdf::EDataSlot::Date32>(ctx.Mutables, arg);
+                case NUdf::EDataSlot::Datetime64:
+                    return new TToPg<NUdf::EDataSlot::Datetime64>(ctx.Mutables, arg);
+                case NUdf::EDataSlot::Timestamp64:
+                    return new TToPg<NUdf::EDataSlot::Timestamp64>(ctx.Mutables, arg);
+                case NUdf::EDataSlot::Interval64:
+                    return new TToPg<NUdf::EDataSlot::Interval64>(ctx.Mutables, arg);
                 case NUdf::EDataSlot::Uuid:
                     return new TToPg<NUdf::EDataSlot::Uuid>(ctx.Mutables, arg);
                 case NUdf::EDataSlot::Yson:

@@ -2,6 +2,6 @@ pragma UseBlocks;
 USE plato;
 
 SELECT
-    ToPg(a)
+    ToPg(a), ToPg(b)
 FROM Input
 

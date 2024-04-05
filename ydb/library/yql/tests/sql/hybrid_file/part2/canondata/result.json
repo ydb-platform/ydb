@@ -547,16 +547,16 @@
     ],
     "test.test[blocks-pg_to_dates--Debug]": [
         {
-            "checksum": "7b27a46c12fca1e4c93955dc8679907b",
-            "size": 2217,
-            "uri": "https://{canondata_backend}/1777230/b92e431977264c9ea692680ce53b743e11917f7e/resource.tar.gz#test.test_blocks-pg_to_dates--Debug_/opt.yql_patched"
+            "checksum": "535be8e04cd69d91cf61a33d9c7c356f",
+            "size": 2696,
+            "uri": "https://{canondata_backend}/1937424/a908c4e693f21e1647b686850ea7a309a18649b9/resource.tar.gz#test.test_blocks-pg_to_dates--Debug_/opt.yql_patched"
         }
     ],
     "test.test[blocks-pg_to_dates--Plan]": [
         {
-            "checksum": "f188bb08c8373aa290c754a896c5e681",
-            "size": 4093,
-            "uri": "https://{canondata_backend}/1777230/b92e431977264c9ea692680ce53b743e11917f7e/resource.tar.gz#test.test_blocks-pg_to_dates--Plan_/plan.txt"
+            "checksum": "6a7dcefd5e086c1d4cce82a49786ff75",
+            "size": 4168,
+            "uri": "https://{canondata_backend}/1937424/a908c4e693f21e1647b686850ea7a309a18649b9/resource.tar.gz#test.test_blocks-pg_to_dates--Plan_/plan.txt"
         }
     ],
     "test.test[blocks-sort_two_desc--Debug]": [

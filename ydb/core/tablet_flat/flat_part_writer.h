@@ -488,13 +488,14 @@ namespace NTable {
             // The first group must write the last key
             Y_ABORT_UNLESS(std::exchange(Phase, 1) == 0, "Called twice");
 
-            for (auto& g : Groups) {
-                g.Data.Flush(*this);
+            for (size_t i : xrange<size_t>(1, Groups.size())) {
+                Groups[i].Data.Flush(*this);
             }
-
             for (auto& g : Histories) {
                 g.Data.Flush(*this);
             }
+            // Main index should have correct groups data size
+            Groups[0].Data.Flush(*this);
 
             if (Current.Rows > 0) {
                 Y_ABORT_UNLESS(Phase == 2, "Missed the last Save call");

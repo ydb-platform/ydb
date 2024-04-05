@@ -914,6 +914,7 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
     }
 
     if (EndOffset > ReadOffset) {
+        FirstRead = false;
         ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Partition, WTime, SizeLag, ReadOffset, EndOffset));
     } else {
         WaitForData = true;
@@ -981,6 +982,9 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
 
 
 void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
+    if (ReadingFinishedSent) {
+        return;
+    }
 
     if (WaitDataInfly.size() > 1) //already got 2 requests inflight
         return;
@@ -988,8 +992,9 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
 
     Y_ABORT_UNLESS(PipeClient);
 
-    if (!WaitForData)
+    if (!WaitForData) {
         return;
+    }
 
     Y_ABORT_UNLESS(ReadOffset >= EndOffset);
 
@@ -1204,7 +1209,6 @@ void TPartitionActor::Handle(TEvPQProxy::TEvDeadlineExceeded::TPtr& ev, const TA
     }
 
 }
-
 
 void TPartitionActor::HandleWakeup(const TActorContext& ctx) {
     if (ReadOffset >= EndOffset && WaitDataInfly.size() <= 1 && PipeClient) { //send one more

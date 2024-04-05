@@ -482,10 +482,14 @@ public:
 
         if (objectNode->Child(TS3Object::idx_Format)->Content() == "parquet") {
             YQL_ENSURE(State_->Types->ArrowResolver);
+            bool allTypesSupported = true;
             for (const auto& item : rowType->Cast<TStructExprType>()->GetItems()) {
                 if (!EnsureParquetTypeSupported(input->Pos(), item->GetItemType(), ctx, State_->Types->ArrowResolver)) {
-                    return TStatus::Error;
+                    allTypesSupported = false;
                 }
+            }
+            if (!allTypesSupported) {
+                return TStatus::Error;
             }
         }
 

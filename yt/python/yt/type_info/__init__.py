@@ -7,5 +7,5 @@ from .typing import (  # noqa
     Double, String, Utf8, Yson, Json, Uuid, Date, Datetime, Timestamp,
     Interval, TzDate, TzDatetime, TzTimestamp, Void, Null, Optional, List,
     Tuple, Dict, Struct, Variant, Tagged, Decimal, EmptyTuple, EmptyStruct,
-    serialize_yson, deserialize_yson,
+    serialize_yson, deserialize_yson, deserialize_yson_v1,
 )

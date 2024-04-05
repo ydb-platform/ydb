@@ -43,6 +43,7 @@ default:
   oss: true
   feature_not_null_for_pk: true
   feature_not_null: true
+  feature_temp_tables: true
   has_create_table_link: true
   ydb_non_deterministic_functions: true
 

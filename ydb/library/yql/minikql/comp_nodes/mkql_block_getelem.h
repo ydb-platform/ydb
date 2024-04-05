@@ -4,6 +4,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
+IComputationNode* WrapBlockMember(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapBlockNth(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
 } // namespace NMiniKQL

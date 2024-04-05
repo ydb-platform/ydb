@@ -75,6 +75,11 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockGetElementKernel(const TV
     return kernel;
 }
 
+TType* GetElementType(const TStructType* structType, ui32 index) {
+    MKQL_ENSURE(index < structType->GetMembersCount(), "Bad member index");
+    return structType->GetMemberType(index);
+}
+
 TType* GetElementType(const TTupleType* tupleType, ui32 index) {
     MKQL_ENSURE(index < tupleType->GetElementsCount(), "Bad tuple index");
     return tupleType->GetElementType(index);
@@ -101,6 +106,10 @@ IComputationNode* WrapBlockGetElement(TCallable& callable, const TComputationNod
 }
 
 } // namespace
+
+IComputationNode* WrapBlockMember(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    return WrapBlockGetElement<TStructType>(callable, ctx);
+}
 
 IComputationNode* WrapBlockNth(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapBlockGetElement<TTupleType>(callable, ctx);

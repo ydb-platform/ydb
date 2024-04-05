@@ -176,6 +176,10 @@ public:
         return RequestEv->GetUsePublicResponseDataFormat();
     }
 
+    ui64 GetOutputChunkMaxSize() const {
+        return RequestEv->GetOutputChunkMaxSize();
+    }
+
     void UpdateTempTablesState(const TKqpTempTablesState& tempTablesState) {
         TempTablesState = std::make_shared<const TKqpTempTablesState>(tempTablesState);
     }

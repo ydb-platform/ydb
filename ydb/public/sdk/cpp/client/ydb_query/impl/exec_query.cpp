@@ -219,6 +219,10 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
         request.set_concurrent_result_sets(*settings.ConcurrentResultSets_);
     }
 
+    if (settings.OutputChunkMaxSize_) {
+        request.set_response_part_limit_bytes(*settings.OutputChunkMaxSize_);
+    }
+
     if (txControl.HasTx()) {
         auto requestTxControl = request.mutable_tx_control();
         requestTxControl->set_commit_tx(txControl.CommitTx_);

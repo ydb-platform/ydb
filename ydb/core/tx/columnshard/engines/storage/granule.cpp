@@ -7,15 +7,6 @@
 
 namespace NKikimr::NOlap {
 
-TGranuleAdditiveSummary::ECompactionClass TGranuleMeta::GetCompactionType(const TCompactionLimits& limits) const {
-    return GetAdditiveSummary().GetCompactionClass(
-        limits, ModificationLastTime, TMonotonic::Now());
-}
-
-ui64 TGranuleMeta::Size() const {
-    return GetAdditiveSummary().GetGranuleSize();
-}
-
 void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info.DebugString())("path_id", GetPathId());
     auto it = Portions.find(info.GetPortion());
@@ -73,10 +64,11 @@ void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> port
             NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
             ActualizationIndex->AddPortion(portionAfter, context);
         }
+        Owner->OnAddPortion(*portionAfter);
     }
     if (!!AdditiveSummaryCache) {
-        auto g = AdditiveSummaryCache->StartEdit(Counters);
         if (portionAfter && !portionAfter->HasRemoveSnapshot()) {
+            auto g = AdditiveSummaryCache->StartEdit(Counters);
             g.AddPortion(*portionAfter);
         }
     }
@@ -103,10 +95,11 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
             OptimizerPlanner->StartModificationGuard().RemovePortion(portionBefore);
             ActualizationIndex->RemovePortion(portionBefore);
         }
+        Owner->OnRemovePortion(*portionBefore);
     }
     if (!!AdditiveSummaryCache) {
-        auto g = AdditiveSummaryCache->StartEdit(Counters);
         if (portionBefore && !portionBefore->HasRemoveSnapshot()) {
+            auto g = AdditiveSummaryCache->StartEdit(Counters);
             g.RemovePortion(*portionBefore);
         }
     }

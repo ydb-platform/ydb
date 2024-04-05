@@ -64,6 +64,8 @@ TEngineLogsCounters::TEngineLogsCounters()
 
     GranuleOptimizerLocked = TBase::GetDeriviative("Optimizer/Granules/Locked");
 
+    IndexMetadataUsageBytes = TBase::GetValue("IndexMetadata/Usage/Bytes");
+
     StatUsageForTTLCount = TBase::GetDeriviative("Ttl/StatUsageForTTLCount/Count");
     ChunkUsageForTTLCount = TBase::GetDeriviative("Ttl/ChunkUsageForTTLCount/Count");
 }
@@ -112,6 +114,7 @@ NKikimr::NColumnShard::TBaseGranuleDataClassSummary TBaseGranuleDataClassSummary
     AFL_VERIFY(result.ColumnPortionsSize >= 0);
     result.PortionsCount = PortionsCount + item.PortionsCount;
     result.RecordsCount = RecordsCount + item.RecordsCount;
+    result.MetadataMemoryPortionsSize = MetadataMemoryPortionsSize + item.MetadataMemoryPortionsSize;
     return result;
 }
 

@@ -31,9 +31,6 @@ class TDestinationSession;
 }
 
 struct TReadMetadata;
-class TGranulesTable;
-class TColumnsTable;
-class TCountersTable;
 
 /// Engine with 2 tables:
 /// - Granules: PK -> granules (use part of PK)
@@ -97,12 +94,15 @@ public:
 
     const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const override;
     const TColumnEngineStats& GetTotalStats() override;
-    ui64 MemoryUsage() const override;
     TSnapshot LastUpdate() const override { return LastSnapshot; }
 
     virtual void DoRegisterTable(const ui64 pathId) override;
 public:
     bool Load(IDbWrapper& db) override;
+
+    virtual bool IsOverloadedByMetadata(const ui64 limit) const override {
+        return limit < TGranulesStorage::GetSumMetadataMemoryPortionsSize();
+    }
 
     std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
@@ -112,11 +112,7 @@ public:
         const std::shared_ptr<NDataLocks::TManager>& locksManager, const ui64 memoryUsageLimit) noexcept override;
 
     void ReturnToIndexes(const THashMap<ui64, THashSet<ui64>>& portions) const {
-        for (auto&& [g, portionIds] : portions) {
-            auto it = Tables.find(g);
-            AFL_VERIFY(it != Tables.end());
-            it->second->ReturnToIndexes(portionIds);
-        }
+        return GranulesStorage->ReturnToIndexes(portions);
     }
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
                       const TSnapshot& snapshot) noexcept override;
@@ -128,11 +124,7 @@ public:
                                         const TPKRangesFilter& pkRangesFilter) const override;
 
     bool IsPortionExists(const ui64 pathId, const ui64 portionId) const {
-        auto it = Tables.find(pathId);
-        if (it == Tables.end()) {
-            return false;
-        }
-        return !!it->second->GetPortionPtr(portionId);
+        return !!GranulesStorage->GetPortionOptional(pathId, portionId);
     }
 
     virtual bool HasDataInPathId(const ui64 pathId) const override {
@@ -155,25 +147,11 @@ public:
     }
 
     std::shared_ptr<TGranuleMeta> GetGranuleOptional(const ui64 pathId) const {
-        auto it = Tables.find(pathId);
-        if (it == Tables.end()) {
-            return nullptr;
-        }
-        return it->second;
+        return GranulesStorage->GetGranuleOptional(pathId);
     }
 
     std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<ui64> pathIdFrom, const std::optional<ui64> pathIdTo) const {
-        std::vector<std::shared_ptr<TGranuleMeta>> result;
-        for (auto&& i : Tables) {
-            if (pathIdFrom && i.first < *pathIdFrom) {
-                continue;
-            }
-            if (pathIdTo && i.first > *pathIdTo) {
-                continue;
-            }
-            result.emplace_back(i.second);
-        }
-        return result;
+        return GranulesStorage->GetTables(pathIdFrom, pathIdTo);
     }
 
     ui64 GetTabletId() const {
@@ -183,9 +161,6 @@ public:
 private:
     TVersionedIndex VersionedIndex;
     ui64 TabletId;
-    std::shared_ptr<TColumnsTable> ColumnsTable;
-    std::shared_ptr<TCountersTable> CountersTable;
-    THashMap<ui64, std::shared_ptr<TGranuleMeta>> Tables; // pathId into Granule that equal to Table
     TMap<ui64, std::shared_ptr<TColumnEngineStats>> PathStats; // per path_id stats sorted by path_id
     std::map<TSnapshot, std::vector<TPortionInfo>> CleanupPortions;
     TColumnEngineStats Counters;

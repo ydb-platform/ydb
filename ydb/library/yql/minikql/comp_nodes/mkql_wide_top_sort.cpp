@@ -577,7 +577,6 @@ private:
                 break;
             case EOperatingMode::Spilling:
             {
-                // std::cerr << "!!! Switch to spilling mode !!!" << std::endl;
                 auto spiller = ctx.SpillerFactory->CreateSpiller();
                 const size_t PACK_SIZE = 5_MB;
                 SpilledStates.emplace_back(std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, TupleMultiType, PACK_SIZE));
@@ -585,7 +584,6 @@ private:
             }
             case EOperatingMode::ProcessSpilled:
             {
-                // std::cerr << "!!! Switch to process spilled mode !!!" << std::endl;
                 SpilledUnboxedValuesIterators.reserve(SpilledStates.size());
                 for (auto &state: SpilledStates) {
                     SpilledUnboxedValuesIterators.emplace_back(LessFunc, &state, Indexes.size(), &ctx);

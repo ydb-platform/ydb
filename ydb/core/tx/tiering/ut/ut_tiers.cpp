@@ -46,9 +46,9 @@ public:
 
 };
 
-class TLocalHelper: public Tests::NCS::THelper {
+class TLocalHelper: public Tests::NCS::THelper<false> {
 private:
-    using TBase = Tests::NCS::THelper;
+    using TBase = Tests::NCS::THelper<false>;
 public:
     using TBase::TBase;
     void CreateTestOlapTable(TString tableName = "olapTable", ui32 tableShardsCount = 3,

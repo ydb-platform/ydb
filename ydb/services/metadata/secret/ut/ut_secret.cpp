@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(Secret) {
             runtime.SimulateSleep(TDuration::Seconds(10));
             Cerr << "Initialization finished" << Endl;
 
-            Tests::NCS::THelper lHelper(*server);
+            Tests::NCS::THelper<false> lHelper(*server);
             lHelper.SetUseQueryService(useQueryService);
 
             lHelper.StartSchemaRequest("CREATE OBJECT secret1 (TYPE SECRET) WITH value = `100`");
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(Secret) {
             runtime.SimulateSleep(TDuration::Seconds(10));
             Cerr << "Initialization finished" << Endl;
 
-            Tests::NCS::THelper lHelper(*server);
+            Tests::NCS::THelper<false> lHelper(*server);
             lHelper.SetUseQueryService(useQueryService);
 
             lHelper.StartSchemaRequest("CREATE OBJECT secret-1 (TYPE SECRET) WITH value = `100`", false);
@@ -345,7 +345,7 @@ Y_UNIT_TEST_SUITE(Secret) {
             runtime.SimulateSleep(TDuration::Seconds(10));
             Cerr << "Initialization finished" << Endl;
 
-            Tests::NCS::THelper lHelper(*server);
+            Tests::NCS::THelper<false> lHelper(*server);
             lHelper.SetUseQueryService(useQueryService);
 
             lHelper.StartSchemaRequest("CREATE OBJECT secret1 (TYPE SECRET) WITH value = `100`", false);

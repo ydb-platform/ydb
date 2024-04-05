@@ -93,14 +93,14 @@ namespace NKqp {
 
     void TTestHelper::BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
         Y_UNUSED(opStatus);
-        NKikimr::Tests::NCS::THelper helper(Kikimr.GetTestServer());
+        NKikimr::Tests::NCS::THelper<false> helper(Kikimr.GetTestServer());
         auto batch = updates.BuildArrow();
         helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
     }
 
     void TTestHelper::BulkUpsert(const TColumnTable& table, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
         Y_UNUSED(opStatus);
-        NKikimr::Tests::NCS::THelper helper(Kikimr.GetTestServer());
+        NKikimr::Tests::NCS::THelper<false> helper(Kikimr.GetTestServer());
         helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
     }
 

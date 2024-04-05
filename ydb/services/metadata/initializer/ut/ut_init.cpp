@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(Initializer) {
         auto sender = runtime.AllocateEdgeActor();
         server->SetupRootStoragePools(sender);
 
-        Tests::NCS::THelper lHelper(*server);
+        Tests::NCS::THelper<false> lHelper(*server);
         lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/test`", false);
 
         TInitUserEmulator* emulator = new TInitUserEmulator;

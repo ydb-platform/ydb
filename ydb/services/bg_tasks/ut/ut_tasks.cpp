@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(BGTaskTests) {
         }
         Cerr << "Initialization finished" << Endl;
 
-        Tests::NCS::THelper lHelper(*server);
+        Tests::NCS::THelper<false> lHelper(*server);
         lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/initialization/migrations`", false);
         lHelper.StartDataRequest("SELECT * FROM `/Root/.bg_tasks/tasks`", false);
 

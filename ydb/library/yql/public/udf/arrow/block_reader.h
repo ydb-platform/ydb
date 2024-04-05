@@ -481,6 +481,16 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
         type = unpacked;
     }
 
+    TStructTypeInspector typeStruct(typeInfoHelper, type);
+    if (typeStruct) {
+        TVector<std::unique_ptr<typename TTraits::TResult>> members;
+        for (ui32 i = 0; i < typeStruct.GetMembersCount(); i++) {
+            members.emplace_back(MakeBlockReaderImpl<TTraits>(typeInfoHelper, typeStruct.GetMemberType(i), pgBuilder));
+        }
+        // XXX: Use Tuple block reader for Struct.
+        return MakeTupleBlockReaderImpl<TTraits>(isOptional, std::move(members));
+    }
+
     TTupleTypeInspector typeTuple(typeInfoHelper, type);
     if (typeTuple) {
         TVector<std::unique_ptr<typename TTraits::TResult>> children;

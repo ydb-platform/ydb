@@ -1,6 +1,5 @@
 #include "yql_yt_transform.h"
 
-
 #include <ydb/library/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>

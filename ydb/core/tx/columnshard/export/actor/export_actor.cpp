@@ -7,14 +7,15 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
     SwitchStage(EStage::WaitData, EStage::WaitWriting);
     auto data = ev->Get()->ArrowBatch;
     AFL_VERIFY(!!data || ev->Get()->Finished);
-    CurrentData = data;
-    if (CurrentData) {
+    if (data) {
+        CurrentData = NArrow::ToBatch(data, true);
         CurrentDataBlob = Serializer->SerializeFull(CurrentData);
         if (data) {
             auto controller = std::make_shared<TWriteController>(SelfId(), std::vector<TString>({CurrentDataBlob}), BlobsOperator->StartWritingAction("EXPORT"), Cursor, ShardTabletId, Selector->GetPathId());
             Register(CreateWriteActor((ui64)ShardTabletId, controller, TInstant::Max()));
         }
     } else {
+        CurrentData = nullptr;
         CurrentDataBlob = "";
         TBase::Send(SelfId(), new NEvents::TEvExportWritingFinished);
     }

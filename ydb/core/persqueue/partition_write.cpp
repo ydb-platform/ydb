@@ -333,6 +333,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             const ui16& partNo = writeResponse.Msg.PartNo;
             const ui16& totalParts = writeResponse.Msg.TotalParts;
             const TMaybe<ui64>& wrOffset = writeResponse.Offset;
+            DBGTRACE_LOG("s=" << s << ", seqNo=" << seqNo << ", partNo=" << partNo << ", totalParts=" << totalParts << ", wrOffset=" << wrOffset);
 
             bool already = false;
 
@@ -353,6 +354,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                     already = true;
                 }
             }
+            DBGTRACE_LOG("already=" << already << ", maxSeqNo=" << maxSeqNo << ", maxOffset=" << maxOffset);
 
             if (!already) {
                 if (wrOffset) {
@@ -874,6 +876,7 @@ void TPartition::StartProcessChangeOwnerRequests(const TActorContext& ctx)
 
 void TPartition::Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr&, const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvProcessChangeOwnerRequests)");
     ProcessChangeOwnerRequests(ctx);
 }
 
@@ -901,7 +904,7 @@ void TPartition::CancelOneWriteOnWrite(const TActorContext& ctx,
                                        NPersQueue::NErrorCode::EErrorCode errorCode)
 {
     DBGTRACE("TPartition::CancelOneWriteOnWrite");
-    ReplyError(ctx, p.Cookie, errorCode, errorStr);
+    ScheduleReplyError(p.Cookie, errorCode, errorStr);
     for (auto it = Owners.begin(); it != Owners.end();) {
         it = DropOwner(it, ctx);
     }
@@ -943,7 +946,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TRegisterMessageGroupMsg& 
     body.AssignedOffset = parameters.CurOffset;
     parameters.SourceIdBatch.RegisterSourceId(body.SourceId, body.SeqNo, parameters.CurOffset, CurrentTimestamp, std::move(keyRange));
 
-    return EProcessResult::Continue;
+    return EProcessResult::Reply;
 }
 
 TPartition::EProcessResult TPartition::ProcessRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters& parameters) {
@@ -956,7 +959,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TDeregisterMessageGroupMsg
 
     parameters.SourceIdBatch.DeregisterSourceId(msg.Body.SourceId);
 
-    return EProcessResult::Continue;
+    return EProcessResult::Reply;
 }
 
 TPartition::EProcessResult TPartition::ProcessRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters) {
@@ -981,7 +984,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TSplitMessageGroupMsg& msg
         parameters.SourceIdBatch.RegisterSourceId(body.SourceId, body.SeqNo, parameters.CurOffset, CurrentTimestamp, std::move(keyRange), true);
     }
 
-    return EProcessResult::Continue;
+    return EProcessResult::Reply;
 }
 
 TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
@@ -1043,7 +1046,8 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
             }
 
             TString().swap(p.Msg.Data);
-            return EProcessResult::Continue;
+
+            return EProcessResult::Reply;
         }
 
         if (const auto& hbVersion = p.Msg.HeartbeatVersion) {
@@ -1051,20 +1055,20 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
             if (!sourceId.SeqNo()) {
 //                CancelAllWritesOnWrite(ctx, request, TStringBuilder()
 //                    << "Cannot apply heartbeat on unknown sourceId: " << EscapeC(p.Msg.SourceId), p, sourceIdBatch);
-                ReplyError(ctx,
-                           p.Cookie,
-                           NPersQueue::NErrorCode::BAD_REQUEST,
-                           TStringBuilder() << "Cannot apply heartbeat on unknown sourceId: " << EscapeC(p.Msg.SourceId));
-                return EProcessResult::Abort;
+                CancelOneWriteOnWrite(ctx,
+                                      TStringBuilder() << "Cannot apply heartbeat on unknown sourceId: " << EscapeC(p.Msg.SourceId),
+                                      p,
+                                      NPersQueue::NErrorCode::BAD_REQUEST);
+                return EProcessResult::Continue;
             }
             if (!sourceId.Explicit()) {
 //                CancelAllWritesOnWrite(ctx, request, TStringBuilder()
 //                    << "Cannot apply heartbeat on implcit sourceId: " << EscapeC(p.Msg.SourceId), p, sourceIdBatch);
-                ReplyError(ctx,
-                           p.Cookie,
-                           NPersQueue::NErrorCode::BAD_REQUEST,
-                           TStringBuilder() << "Cannot apply heartbeat on implcit sourceId: " << EscapeC(p.Msg.SourceId));
-                return EProcessResult::Abort;
+                CancelOneWriteOnWrite(ctx,
+                                      TStringBuilder() << "Cannot apply heartbeat on implcit sourceId: " << EscapeC(p.Msg.SourceId),
+                                      p,
+                                      NPersQueue::NErrorCode::BAD_REQUEST);
+                return EProcessResult::Continue;
             }
 
             LOG_DEBUG_S(
@@ -1085,15 +1089,15 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
 //                                    TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId) << " seqNo: " << p.Msg.SeqNo
 //                                        << " partNo: " << p.Msg.PartNo << " has incorrect offset " << poffset << ", must be at least " << curOffset,
 //                                        p, sourceIdBatch, NPersQueue::NErrorCode::EErrorCode::WRITE_ERROR_BAD_OFFSET);
-            ReplyError(ctx,
-                       p.Cookie,
-                       NPersQueue::NErrorCode::EErrorCode::WRITE_ERROR_BAD_OFFSET,
-                       TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId) <<
-                       " seqNo: " << p.Msg.SeqNo <<
-                       " partNo: " << p.Msg.PartNo <<
-                       " has incorrect offset " << poffset <<
-                       ", must be at least " << curOffset);
-            return EProcessResult::Abort;
+            CancelOneWriteOnWrite(ctx,
+                                  TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId) <<
+                                  " seqNo: " << p.Msg.SeqNo <<
+                                  " partNo: " << p.Msg.PartNo <<
+                                  " has incorrect offset " << poffset <<
+                                  ", must be at least " << curOffset,
+                                  p,
+                                  NPersQueue::NErrorCode::EErrorCode::WRITE_ERROR_BAD_OFFSET);
+            return EProcessResult::Continue;
         }
 
         Y_ABORT_UNLESS(poffset >= curOffset);
@@ -1311,7 +1315,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
 
         TString().swap(p.Msg.Data);
 
-        return EProcessResult::Continue;
+        return EProcessResult::Reply;
 }
 
 //bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx,
@@ -1827,7 +1831,7 @@ void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActor
 
 void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)
 {
-    DBGTRACE_LOG("TPartition::BeginAppendHeadWithNewWrites");
+    DBGTRACE("TPartition::BeginAppendHeadWithNewWrites");
     Parameters.ConstructInPlace(*SourceIdBatch);
     Parameters->CurOffset = PartitionedBlob.IsInited() ? PartitionedBlob.GetOffset() : EndOffset;
     DBGTRACE_LOG("CurOffset=" << Parameters->CurOffset << ", PartitionedBlob.IsInited=" << PartitionedBlob.IsInited() << ", EndOffset=" << EndOffset);

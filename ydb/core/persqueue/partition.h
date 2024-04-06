@@ -114,6 +114,7 @@ private:
 
     void AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx);
     void AnswerCurrentWrites(const TActorContext& ctx);
+    void AnswerCurrentReplies(const TActorContext& ctx);
 //    void CancelAllWritesOnIdle(const TActorContext& ctx);
 //    void CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::TEvRequest* request, const TString& errorStr, const TWriteMsg& p, TPartitionSourceManager::TModificationBatch& sourceIdBatch, NPersQueue::NErrorCode::EErrorCode errorCode = NPersQueue::NErrorCode::BAD_REQUEST);
     void CancelOneWriteOnWrite(const TActorContext& ctx,
@@ -580,6 +581,7 @@ private:
 private:
     enum class EProcessResult {
         Continue,
+        Reply,
         Abort,
         Break
     };

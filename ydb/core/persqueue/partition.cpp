@@ -655,8 +655,8 @@ void TPartition::Handle(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorC
     ProcessTxsAndUserActs(ctx);
 }
 
-
 void TPartition::Handle(TEvPQ::TEvPipeDisconnected::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvPipeDisconnected)");
     const TString& owner = ev->Get()->Owner;
     const TActorId& pipeClient = ev->Get()->PipeClient;
 
@@ -1669,7 +1669,8 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
 
         switch (std::visit(visitor, front)) {
         case EProcessResult::Continue:
-            DBGTRACE_LOG("continue");
+        case EProcessResult::Reply:
+            DBGTRACE_LOG("continue|reply");
             UserActionAndTransactionEvents.pop_front();
             FirstEvent = false;
             break;
@@ -1712,7 +1713,18 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
     } else {
         Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateIdle);
         AnswerCurrentWrites(ctx);
+        AnswerCurrentReplies(ctx);
     }
+}
+
+void TPartition::AnswerCurrentReplies(const TActorContext& ctx)
+{
+    DBGTRACE("TPartition::AnswerCurrentReplies");
+    DBGTRACE_LOG("Replies.size=" << Replies.size());
+    for (auto& [actor, reply] : Replies) {
+        ctx.Send(actor, reply.release());
+    }
+    Replies.clear();
 }
 
 void TPartition::RemoveDistrTx()
@@ -2048,14 +2060,10 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
         }
     }
 
-    DBGTRACE_LOG("Replies.size=" << Replies.size());
-    for (auto& [actor, reply] : Replies) {
-        ctx.Send(actor, reply.release());
-    }
+    AnswerCurrentReplies(ctx);
 
     DBGTRACE_LOG("PendingUsersInfo.clear");
     PendingUsersInfo.clear();
-    Replies.clear();
     AffectedUsers.clear();
 
     TxIdHasChanged = false;
@@ -2246,7 +2254,7 @@ TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TMessage& 
         Y_ABORT_UNLESS(msg.IsOwnership());
     }
 
-    if (result == EProcessResult::Continue) {
+    if ((result == EProcessResult::Reply) || msg.IsOwnership()) {
         EmplaceResponse(std::move(msg), ctx);
     }
 

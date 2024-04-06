@@ -872,6 +872,7 @@ Y_UNIT_TEST(TestWaitInOwners) {
 
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Record.HasStatus());
+        DBGTRACE_LOG("ErrorCode=" << (int)result->Record.GetErrorCode() << ", BAD_REQUEST=" << (int)NPersQueue::NErrorCode::BAD_REQUEST);
         UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
 
         try {
@@ -1198,6 +1199,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
 
             UNIT_ASSERT(result);
             UNIT_ASSERT(result->Record.HasStatus());
+            DBGTRACE_LOG("ErrorCode=" << (int)result->Record.GetErrorCode() << ", BAD_REQUEST=" << (int)NPersQueue::NErrorCode::BAD_REQUEST);
             UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
 
             //check partNo gaps

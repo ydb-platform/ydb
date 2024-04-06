@@ -9,6 +9,7 @@ PEERDIR(
 )
 
 SRCS(
+    batch_iterator.cpp
     merger.cpp
     position.cpp
     heap.cpp

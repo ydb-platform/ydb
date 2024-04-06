@@ -61,7 +61,7 @@ public:
     }
 
     bool IsEmpty() const {
-        return IsEmptyFilter() || (Table && !Table->num_rows());
+        return IsEmptyFilter() || !Table || !Table->num_rows();
     }
 
     void AddFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter) {

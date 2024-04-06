@@ -58,7 +58,7 @@ bool TBaseMergeTask::DoApply(IDataReader& indexedDataRead) const {
 
 bool TStartMergeTask::DoExecute() {
     if (EmptyFiltersOnly()) {
-        ResultBatch = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({NArrow::MakeEmptyBatch(Context->GetProgramInputColumns()->GetSchema())}));
+        ResultBatch = nullptr;
         return true;
     }
     bool sourcesInMemory = true;

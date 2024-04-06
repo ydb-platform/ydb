@@ -21,6 +21,7 @@ RECURSE(
     scheme_tests
     serializable
     serverless
+    sdk/cpp/sdk_credprovider
     sqs
     suite_tests
     tenants

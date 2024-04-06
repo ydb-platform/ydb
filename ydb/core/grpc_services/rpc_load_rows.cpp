@@ -132,7 +132,7 @@ private:
 
     void OnBeforePoison(const TActorContext&) override {
         // Client is gone, but we need to "reply" anyway?
-        Request->SendResult(Ydb::StatusIds::CANCELLED, {});
+        Request->ReplyWithYdbStatus(Ydb::StatusIds::CANCELLED);
     }
 
     bool ReportCostInfoEnabled() const {
@@ -299,7 +299,7 @@ private:
 
     void OnBeforePoison(const TActorContext&) override {
         // Client is gone, but we need to "reply" anyway?
-        Request->SendResult(Ydb::StatusIds::CANCELLED, {});
+        Request->ReplyWithYdbStatus(Ydb::StatusIds::CANCELLED);
     }
 
     bool ReportCostInfoEnabled() const {

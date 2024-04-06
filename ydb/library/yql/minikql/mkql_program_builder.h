@@ -236,6 +236,7 @@ public:
     TRuntimeNode BlockCompress(TRuntimeNode flow, ui32 bitmapIndex);
     TRuntimeNode BlockExpandChunked(TRuntimeNode flow);
     TRuntimeNode BlockCoalesce(TRuntimeNode first, TRuntimeNode second);
+    TRuntimeNode BlockExists(TRuntimeNode data);
     TRuntimeNode BlockNth(TRuntimeNode tuple, ui32 index);
     TRuntimeNode BlockAsTuple(const TArrayRef<const TRuntimeNode>& args);
     TRuntimeNode BlockToPg(TRuntimeNode input, TType* returnType);

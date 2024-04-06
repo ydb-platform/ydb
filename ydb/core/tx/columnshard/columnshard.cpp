@@ -52,6 +52,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
         TryRegisterMediatorTimeCast();
         EnqueueProgressTx(ctx);
     }
+    CSCounters.OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
 }

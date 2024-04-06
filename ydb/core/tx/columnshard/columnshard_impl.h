@@ -277,6 +277,7 @@ public:
         ShardWritesInFly /* "shard_writes" */,
         ShardWritesSizeInFly /* "shard_writes_size" */,
         InsertTable /* "insert_table" */,
+        OverloadMetadata /* "overload_metadata" */,
         Disk /* "disk" */,
         None /* "none" */
     };

@@ -11866,6 +11866,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Nanvl"] = &NanvlWrapper;
         Functions["Unwrap"] = &UnwrapWrapper;
         Functions["Exists"] = &ExistsWrapper;
+        Functions["BlockExists"] = &BlockExistsWrapper;
         Functions["Just"] = &JustWrapper;
         Functions["Optional"] = &OptionalWrapper;
         Functions["OptionalIf"] = &OptionalIfWrapper;

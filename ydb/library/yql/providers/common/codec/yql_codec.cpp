@@ -2088,11 +2088,11 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, ui64 nativeYtType
                 const NDecimal::TInt128 data128 = value.GetInt128();
                 char tmpBuf[NYT::NDecimal::TDecimal::MaxBinarySize];
                 if (params.first < 10) {
-                    TStringBuf resBuf = NYT::NDecimal::TDecimal::WriteBinary32(params.first, data128, tmpBuf, NYT::NDecimal::TDecimal::MaxBinarySize);
+                    TStringBuf resBuf = NYT::NDecimal::TDecimal::WriteBinary32(params.first, static_cast<i32>(data128), tmpBuf, NYT::NDecimal::TDecimal::MaxBinarySize);
                     buf.WriteVarI32(resBuf.size());
                     buf.WriteMany(resBuf.data(), resBuf.size());
                 } else if (params.first < 19) {
-                    TStringBuf resBuf = NYT::NDecimal::TDecimal::WriteBinary64(params.first, data128, tmpBuf, NYT::NDecimal::TDecimal::MaxBinarySize);
+                    TStringBuf resBuf = NYT::NDecimal::TDecimal::WriteBinary64(params.first, static_cast<i64>(data128), tmpBuf, NYT::NDecimal::TDecimal::MaxBinarySize);
                     buf.WriteVarI32(resBuf.size());
                     buf.WriteMany(resBuf.data(), resBuf.size());
                 } else {

@@ -84,19 +84,30 @@ public:
                                   .Settings(settings)
                                 .Done();
 
+                auto systemColumns = Build<TCoAtomList>(ctx, read.Pos());
+                systemColumns.Add<TCoAtom>().Value("kind").Build();
+                systemColumns.Add<TCoAtom>().Value("ts").Build();
+                systemColumns.Add<TCoAtom>().Value("labels").Build();
+                systemColumns.Add<TCoAtom>().Value("value").Build();
+
+                auto labelNames = Build<TCoAtomList>(ctx, read.Pos());
+                labelNames.Add<TCoAtom>().Value("name").Build();
+
                 return userSchema.back()
                     ? Build<TSoReadObject>(ctx, read.Pos())
                         .World(read.World())
                         .DataSource(read.DataSource())
-                        //.RowType(std::move(userSchema.front()))
                         .Object(soObject)
+                        .SystemColumns(systemColumns.Done())
+                        .LabelNames(labelNames.Done())
                         .ColumnOrder(std::move(userSchema.back()))
                       .Done().Ptr()
                     : Build<TSoReadObject>(ctx, read.Pos())
                         .World(read.World())
                         .DataSource(read.DataSource())
-                        //.RowType(std::move(userSchema.front()))
                         .Object(soObject)
+                        .SystemColumns(systemColumns.Done())
+                        .LabelNames(labelNames.Done())
                       .Done().Ptr();
             }
 

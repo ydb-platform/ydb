@@ -107,6 +107,7 @@ public:
             auto settings = soReadObject.Object().Settings();
 
             auto emptyNode = Build<TCoVoid>(ctx, read->Pos()).Done().Ptr();
+            const auto rowType = soReadObject.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType();
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TSoSourceSettings>()
                     .Token<TCoSecureParam>()
@@ -117,6 +118,7 @@ public:
                     .Settings(settings)
                     .Build()
                 .DataSource(soReadObject.DataSource().Cast<TCoDataSource>())
+                .RowType(ExpandType(soReadObject.Pos(), *rowType, ctx))
                 .Settings(settings)
                 .Done().Ptr();
         }

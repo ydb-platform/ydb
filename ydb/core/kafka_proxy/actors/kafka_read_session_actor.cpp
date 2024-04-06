@@ -36,11 +36,10 @@ void TKafkaReadSessionActor::HandleWakeup(TEvKafka::TEvWakeup::TPtr, const TActo
         return;
     }
 
-    for (auto& topicToPartitions: NewPartitionsToLockOnTime) {
-        auto& partitions = topicToPartitions.second;
+    for (auto& [topicName, partitions]: NewPartitionsToLockOnTime) {
         for (auto partitionsIt = partitions.begin(); partitionsIt != partitions.end(); ) {
             if (partitionsIt->LockOn <= ctx.Now()) {
-                TopicPartitions[topicToPartitions.first].ToLock.emplace(partitionsIt->PartitionId);
+                TopicPartitions[topicName].ToLock.emplace(partitionsIt->PartitionId);
                 NeedRebalance = true;
                 partitionsIt = partitions.erase(partitionsIt);
             } else {
@@ -579,8 +578,7 @@ void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePart
     auto newPartitionsToLockCount = newPartitionsToLockIt == NewPartitionsToLockOnTime.end() ? 0 : newPartitionsToLockIt->second.size();
 
     auto topicPartitionsIt = TopicPartitions.find(pathIt->second->GetInternalName());
-    Y_ABORT_UNLESS(topicPartitionsIt != TopicPartitions.end());
-    Y_ABORT_UNLESS(record.GetCount() <= topicPartitionsIt->second.ToLock.size() + topicPartitionsIt->second.ReadingNow.size() + newPartitionsToLockCount);
+    Y_ABORT_UNLESS(record.GetCount() <= (topicPartitionsIt.IsEnd() ? 0 : topicPartitionsIt->second.ToLock.size() + topicPartitionsIt->second.ReadingNow.size()) + newPartitionsToLockCount);
 
     for (ui32 c = 0; c < record.GetCount(); ++c) {   
         // if some partition not locked yet, then release it without rebalance

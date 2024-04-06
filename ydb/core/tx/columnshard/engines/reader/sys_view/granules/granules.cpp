@@ -6,14 +6,13 @@
 
 namespace NKikimr::NOlap::NReader::NSysView::NGranules {
 
-void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const {
+bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const {
     NArrow::Append<arrow::UInt64Type>(*builders[0], granule.GetPathId());
     NArrow::Append<arrow::UInt64Type>(*builders[1], ReadMetadata->TabletId);
     NArrow::Append<arrow::UInt64Type>(*builders[2], granule.GetPortions().size());
     NArrow::Append<arrow::StringType>(*builders[3], HostNameField);
     NArrow::Append<arrow::UInt64Type>(*builders[4], NActors::TActivationContext::AsActorContext().SelfID.NodeId());
-    while (granule.PopFrontPortion()) {
-    }
+    return false;
 }
 
 std::unique_ptr<TScanIteratorBase> TReadStatsMetadata::StartScan(const std::shared_ptr<TReadContext>& readContext) const {

@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/sys_view/common/schema.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/iterator.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/constructor/constructor.h>
 #include <util/system/hostname.h>
 
@@ -34,7 +34,7 @@ private:
     virtual ui32 PredictRecordsCount(const NAbstract::TGranuleMetaView& /*granule*/) const override {
         return 1;
     }
-    virtual void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const override;
+    virtual bool AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const override;
 public:
     using TBase::TBase;
 };

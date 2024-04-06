@@ -1,7 +1,6 @@
 #include "yql_dq_exectransformer.h"
 
 #include <ydb/library/yql/udfs/common/module/yql_modules.h>
-
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_state.h>
 

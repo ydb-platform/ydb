@@ -1684,10 +1684,12 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
     }
 
     if (HaveWriteMsg) {
-        EndAppendHeadWithNewWrites(request.Get(), ctx);
-        EndProcessWrites(request.Get(), ctx);  // всегда
+        if (!DiskIsFull) {
+            EndAppendHeadWithNewWrites(request.Get(), ctx);
+            EndProcessWrites(request.Get(), ctx);
+        }
+        EndHandleRequests(request.Get(), ctx);
     }
-    EndHandleRequests(request.Get(), ctx);
 
     WriteStartTime = TActivationContext::Now();
     DBGTRACE_LOG("WriteStartTime=" << WriteStartTime);

@@ -55,6 +55,16 @@ using namespace NKikimr::NMiniKQL;
 
 namespace {
 
+enum ESystemColumn{
+    SC_KIND = 0,
+    SC_LABELS,
+    SC_VALUE,
+    SC_TYPE,
+    SC_TS
+};
+
+constexpr size_t INVALID_POSITION = -1;
+
 struct TDqSolomonReadParams {
     NSo::NProto::TDqSolomonSource Source;
 };
@@ -127,6 +137,53 @@ public:
         Y_UNUSED(counters);
         SINK_LOG_D("Init");
         IngressStats.Level = statsLevel;
+
+        auto stringType = ProgramBuilder.NewDataType(NYql::NUdf::TDataType<char*>::Id);
+        DictType = ProgramBuilder.NewDictType(stringType, stringType, false);
+
+        FillSystemColumnPositionindex();
+    }
+
+    void FillSystemColumnPositionindex() {
+        SystemColumnPositionIndex = std::vector<size_t>(ReadParams.Source.GetSystemColumns().size(), INVALID_POSITION);
+
+        size_t i = 0;
+        for (const auto &c : ReadParams.Source.GetSystemColumns()) {
+            if (c == "kind"sv) {
+                SystemColumnPositionIndex[SC_KIND] = i++;
+                continue;
+            }
+
+            if (c == "type"sv) {
+                SystemColumnPositionIndex[SC_TYPE] = i++;
+                continue;
+            }
+
+            if (c == "labels"sv) {
+                SystemColumnPositionIndex[SC_LABELS] = i++;
+                continue;
+            }
+
+            if (c == "value"sv) {
+                SystemColumnPositionIndex[SC_VALUE] = i++;
+                continue;
+            }
+
+            if (c == "ts"sv) {
+                SystemColumnPositionIndex[SC_TS] = i++;
+                continue;
+            }
+
+            throw yexception() << "Unknown system column " << c;
+        }
+
+        std::vector<TString> names(ReadParams.Source.GetSystemColumns().begin(), ReadParams.Source.GetSystemColumns().end());
+        names.insert(names.end(), ReadParams.Source.GetLabelNames().begin(), ReadParams.Source.GetLabelNames().end());
+        std::sort(names.begin(), names.end());
+        size_t index = 0;
+        for (auto& n : names) {
+            Index[n] = index++;
+        }
     }
 
     void Bootstrap() {
@@ -145,9 +202,6 @@ public:
         Y_UNUSED(HolderFactory);
         YQL_ENSURE(!buffer.IsWide(), "Wide stream is not supported");
 
-        auto stringType = ProgramBuilder.NewDataType(NYql::NUdf::TDataType<char*>::Id);
-        auto dictType = ProgramBuilder.NewDictType(stringType,stringType, false);
-
         for (auto j : Batch) {
             auto& a = j["vector"].GetArray();
             for (auto& aa : a) {
@@ -155,7 +209,7 @@ public:
                 auto& kind = series["kind"];
                 auto& type = series["type"];
                 auto& labels = series["labels"];
-                auto dictValueBuilder = HolderFactory.NewDict(dictType, 0);
+                auto dictValueBuilder = HolderFactory.NewDict(DictType, 0);
                 for (auto& [k, v]: labels.GetMap()) {
                     dictValueBuilder->Add(NKikimr::NMiniKQL::MakeString(k), NKikimr::NMiniKQL::MakeString(v.GetString()));
                 }                
@@ -166,12 +220,56 @@ public:
 
                 for (size_t i = 0; i < timestamps.size(); ++i){
                     NUdf::TUnboxedValue* items = nullptr;
-                    auto value = HolderFactory.CreateDirectArrayHolder(5, items);
-                    items[0] = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(kind.GetString()));
-                    items[1] = dictValue;
-                    items[2] = NUdf::TUnboxedValuePod(values[i].GetDouble());
-                    items[3] = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(type.GetString()));
-                    items[4] = NUdf::TUnboxedValuePod((ui64)timestamps[i].GetUInteger() / 1000);
+                    auto value = HolderFactory.CreateDirectArrayHolder(ReadParams.Source.GetSystemColumns().size() + ReadParams.Source.GetLabelNames().size(), items);
+                    // if (SystemColumnPositionIndex[SC_KIND] != INVALID_POSITION) {
+                    //     items[SystemColumnPositionIndex[SC_KIND]] = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(kind.GetString()));
+                    // }
+
+                    // if (SystemColumnPositionIndex[SC_LABELS] != INVALID_POSITION) {
+                    //     items[SystemColumnPositionIndex[SC_LABELS]] = dictValue;
+                    // }
+
+                    // if (SystemColumnPositionIndex[SC_VALUE] != INVALID_POSITION) {
+                    //     items[SystemColumnPositionIndex[SC_VALUE]] = NUdf::TUnboxedValuePod(values[i].GetDouble());
+                    // }
+
+                    // if (SystemColumnPositionIndex[SC_TYPE] != INVALID_POSITION) {
+                    //     items[SystemColumnPositionIndex[SC_TYPE]] = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(type.GetString()));;
+                    // }
+
+                    // if (SystemColumnPositionIndex[SC_TS] != INVALID_POSITION) {
+                    //     items[SystemColumnPositionIndex[SC_TS]] = NUdf::TUnboxedValuePod((ui64)timestamps[i].GetUInteger() / 1000);
+                    // }
+
+                    if (auto it = Index.find("kind"); it != Index.end()) {
+                        items[it->second] = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(kind.GetString()));
+                    }
+
+                    if (auto it = Index.find("labels"); it != Index.end()) {
+                        items[it->second] = dictValue;
+                    }
+
+                    if (auto it = Index.find("value"); it != Index.end()) {
+                        items[it->second] = NUdf::TUnboxedValuePod(values[i].GetDouble());
+                    }
+
+                    if (auto it = Index.find("type"); it != Index.end()) {
+                        items[it->second] = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(type.GetString()));
+                    }
+
+                    if (auto it = Index.find("ts"); it != Index.end()) {
+                        items[it->second] = NUdf::TUnboxedValuePod((ui64)timestamps[i].GetUInteger() / 1000);
+                    }
+
+                    //size_t labelIndex = 0;
+                    for (const auto& c : ReadParams.Source.GetLabelNames()) {
+                        // empty optional by default
+                        auto& v = items[Index[c]];
+                        auto it = labels.GetMap().find(c);
+                        if (it != labels.GetMap().end()) {
+                            v = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(it->second.GetString()));
+                        }
+                    }
 
                     buffer.push_back(value);
                 }
@@ -344,6 +442,9 @@ private:
 
     TString SourceId;
     std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
+    TType* DictType = nullptr;
+    std::vector<size_t> SystemColumnPositionIndex;
+    THashMap<TString, size_t> Index;
     std::vector<NJson::TJsonValue> Batch;
 };
 

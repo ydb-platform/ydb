@@ -86,12 +86,13 @@ public:
 
                 auto systemColumns = Build<TCoAtomList>(ctx, read.Pos());
                 systemColumns.Add<TCoAtom>().Value("kind").Build();
-                systemColumns.Add<TCoAtom>().Value("ts").Build();
                 systemColumns.Add<TCoAtom>().Value("labels").Build();
                 systemColumns.Add<TCoAtom>().Value("value").Build();
+                systemColumns.Add<TCoAtom>().Value("type").Build();
+                systemColumns.Add<TCoAtom>().Value("ts").Build();
 
                 auto labelNames = Build<TCoAtomList>(ctx, read.Pos());
-                labelNames.Add<TCoAtom>().Value("name").Build();
+                //labelNames.Add<TCoAtom>().Value("name").Build();
 
                 return userSchema.back()
                     ? Build<TSoReadObject>(ctx, read.Pos())

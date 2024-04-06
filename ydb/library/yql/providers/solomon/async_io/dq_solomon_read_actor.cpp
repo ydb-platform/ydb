@@ -168,10 +168,11 @@ public:
                     NUdf::TUnboxedValue* items = nullptr;
                     auto value = HolderFactory.CreateDirectArrayHolder(5, items);
                     items[0] = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(kind.GetString()));
-                    items[1] = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(type.GetString()));
-                    items[2] = NUdf::TUnboxedValuePod((ui64)timestamps[i].GetUInteger() / 1000);
-                    items[3] = NUdf::TUnboxedValuePod(values[i].GetDouble());
-                    items[4] = dictValue;
+                    items[1] = dictValue;
+                    items[2] = NUdf::TUnboxedValuePod(values[i].GetDouble());
+                    items[3] = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(type.GetString()));
+                    items[4] = NUdf::TUnboxedValuePod((ui64)timestamps[i].GetUInteger() / 1000);
+
                     buffer.push_back(value);
                 }
             }
@@ -279,6 +280,7 @@ private:
         //     })";
 
         const TStringBuf body = w.Str();
+        Cerr << "EX: Sending request: " << body << Endl;
         const NHttp::THttpOutgoingRequestPtr httpRequest = BuildSolomonRequest(w.Str());
 
         const size_t bodySize = body.size();
@@ -286,13 +288,16 @@ private:
         ui8 cookie = 0;
         Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), /*flags=*/0, cookie);
         SINK_LOG_T("Sent read to solomon, body size: " << bodySize);
+        Cerr << "EX: RequestMetrics" << Endl;
     }
 
     void Handle(TEvHttpBase::TEvSendResult::TPtr& ev) {
+        Cerr << "EX: Handle(TEvHttpBase::TEvSendResult::TPtr& ev)" << Endl;
         const auto* res = ev->Get();
         const TString& error = res->HttpIncomingResponse->Get()->GetError();
 
-        if (!error.empty()) {
+        Cerr << "EX: Handle(TEvHttpBase::TEvSendResult::TPtr& ev), error: " << error << Endl;
+        if (!error.empty() || (res->HttpIncomingResponse->Get()->Response && res->HttpIncomingResponse->Get()->Response->Status != "200")) {
             TStringBuilder errorBuilder;
             errorBuilder << "Error while sending request to monitoring api: " << error;
             const auto& response = res->HttpIncomingResponse->Get()->Response;
@@ -302,6 +307,7 @@ private:
 
             TIssues issues { TIssue(errorBuilder) };
             SINK_LOG_W("Got " << (res->IsTerminal ? "terminal " : "") << "error response[" << ev->Cookie << "] from solomon: " << issues.ToOneLineString());
+            Cerr << "Got " << (res->IsTerminal ? "terminal " : "") << "error response[" << ev->Cookie << "] from solomon: " << issues.ToOneLineString();
             return;
         }
 
@@ -309,6 +315,7 @@ private:
     }
 
     void HandleSuccessSolomonResponse(const NHttp::TEvHttpProxy::TEvHttpIncomingResponse& response, ui64 cookie) {
+        Cerr << "EX: HandleSuccessSolomonResponse" << Endl;
         SINK_LOG_E("Solomon response[" << cookie << "]: " << response.Response->GetObfuscatedData());
         Cerr << "EX:" << response.Response->Body << Endl;
         NJson::TJsonValue json;

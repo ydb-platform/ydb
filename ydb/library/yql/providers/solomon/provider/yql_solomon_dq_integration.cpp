@@ -130,42 +130,51 @@ public:
     }
 
     void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t) override {
-        const TDqSource source(&node);
-        if (const auto maySettings = source.Settings().Maybe<TSoSourceSettings>()) {
-            const auto settings = maySettings.Cast();
-            const auto& cluster = source.DataSource().Cast<TSoDataSource>().Cluster().StringValue();
-            const auto* clusterDesc = State_->Configuration->ClusterConfigs.FindPtr(cluster);
-            YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
-            NSo::NProto::TDqSolomonSource source;
-            source.SetEndpoint(clusterDesc->GetCluster());
-            source.SetProject("yq");
-
-            source.SetClusterType(
-                MapClusterType(clusterDesc->GetClusterType()));
-            source.SetUseSsl(clusterDesc->GetUseSsl());
-            source.SetFrom(TInstant::ParseIso8601("2023-12-08T14:40:39Z").Seconds());
-            source.SetTo(TInstant::ParseIso8601("2023-12-08T14:45:39Z").Seconds());
-            source.SetProgram("{execpool=User,activity=YQ_STORAGE_PROXY,sensor=ActorsAliveByActivity}");
-
-            auto& downsampling = *source.MutableDownsampling();
-            downsampling.SetDisabled(false);
-            downsampling.SetAggregation("MAX");
-            downsampling.SetFill("PREVIOUS");
-            downsampling.SetGridMs(15 * 1000);
-
-            source.MutableToken()->SetName(TString(settings.Token().Name().Value()));
-
-            for (const auto& c : settings.SystemColumns()) {
-                source.AddSystemColumns(c.StringValue());
-            }
-
-            for (const auto& c : settings.LabelNames()) {
-                source.AddLabelNames(c.StringValue());
-            }
-
-            protoSettings.PackFrom(source);
-            sourceType = "SolomonSource";
+        const TDqSource dqSource(&node);
+        const auto maybeSettings = dqSource.Settings().Maybe<TSoSourceSettings>();
+        if (!maybeSettings) {
+            return;
         }
+
+        const auto settings = maybeSettings.Cast();
+        const auto& cluster = dqSource.DataSource().Cast<TSoDataSource>().Cluster().StringValue();
+        const auto* clusterDesc = State_->Configuration->ClusterConfigs.FindPtr(cluster);
+        YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
+        NSo::NProto::TDqSolomonSource source;
+        source.SetEndpoint(clusterDesc->GetCluster());
+        source.SetProject("yq");
+
+        source.SetClusterType(MapClusterType(clusterDesc->GetClusterType()));
+        source.SetUseSsl(clusterDesc->GetUseSsl());
+        source.SetFrom(TInstant::ParseIso8601("2023-11-09T14:40:39Z").Seconds());
+        source.SetTo(TInstant::ParseIso8601("2023-11-10T14:45:39Z").Seconds());
+        source.SetProgram("{execpool=User,activity=YQ_STORAGE_PROXY,sensor=ActorsAliveByActivity}");
+
+        auto& downsampling = *source.MutableDownsampling();
+        downsampling.SetDisabled(false);
+        downsampling.SetAggregation("MAX");
+        downsampling.SetFill("PREVIOUS");
+        downsampling.SetGridMs(15 * 1000);
+
+        source.MutableToken()->SetName(settings.Token().Name().StringValue());
+
+        THashSet<TString> uniqueColumns;
+        for (const auto& c : settings.SystemColumns()) {
+            const auto& columnAsString = c.StringValue();
+            uniqueColumns.insert(columnAsString);
+            source.AddSystemColumns(columnAsString);
+        }
+
+        for (const auto& c : settings.LabelNames()) {
+            const auto& columnAsString = c.StringValue();
+            if (!uniqueColumns.insert(columnAsString).second) {
+                throw yexception() << "Column " << columnAsString << " already registered";
+            }
+            source.AddLabelNames(columnAsString);
+        }
+
+        protoSettings.PackFrom(source);
+        sourceType = "SolomonSource";
     }
 
     void FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sinkType) override {

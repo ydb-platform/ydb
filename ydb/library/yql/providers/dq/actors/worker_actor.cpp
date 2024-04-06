@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 #include "worker_actor.h"
 
 #include <ydb/library/yql/dq/actors/dq.h>
@@ -831,6 +832,8 @@ NActors::IActor* CreateWorkerActor(
 
 } // namespace NYql::NDqs
 =======
+=======
+>>>>>>> fix build
 #include "worker_actor.h"
 
 #include <ydb/library/yql/dq/actors/dq.h>
@@ -1662,4 +1665,3 @@ NActors::IActor* CreateWorkerActor(
 }
 
 } // namespace NYql::NDqs
->>>>>>> WIP

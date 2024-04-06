@@ -1,6 +1,6 @@
 #include "yql_config_provider.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_modules.h>
+
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
@@ -12,6 +12,7 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
 #include <ydb/library/yql/ast/yql_gc_nodes.h>
+#include <ydb/library/yql/module/yql_modules.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/fetch/fetch.h>
 #include <ydb/library/yql/utils/retry.h>

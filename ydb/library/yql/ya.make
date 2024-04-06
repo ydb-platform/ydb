@@ -3,6 +3,7 @@ RECURSE(
     core
     dq
     minikql
+    module
     parser
     protos
     providers

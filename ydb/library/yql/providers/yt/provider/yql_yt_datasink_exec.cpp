@@ -11,12 +11,12 @@
 #include <ydb/library/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
 #include <ydb/library/yql/providers/yt/lib/hash/yql_hash_builder.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
-#include <ydb/library/yql/providers/common/provider/yql_modules.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/transform/yql_exec.h>
 #include <ydb/library/yql/core/type_ann/type_ann_expr.h>
 #include <ydb/library/yql/core/yql_execution.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <ydb/library/yql/module/yql_modules.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/ast/yql_ast.h>
 

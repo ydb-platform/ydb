@@ -9,7 +9,7 @@
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/providers/common/provider/yql_modules.h>
+#include <ydb/library/yql/module/yql_modules.h>
 
 #include <util/folder/path.h>
 #include <util/generic/is_in.h>

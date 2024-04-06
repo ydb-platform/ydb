@@ -3,11 +3,11 @@
 #include "yql_yt_optimize.h"
 #include "yql_yt_op_hash.h"
 
+#include <ydb/library/yql/module/yql_modules.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <ydb/library/yql/providers/yt/lib/hash/yql_hash_builder.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
-#include <ydb/library/yql/providers/common/provider/yql_modules.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/transform/yql_exec.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>

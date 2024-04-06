@@ -13,6 +13,7 @@ PEERDIR(
     ydb/library/yql/utils/log
     ydb/library/yql/core
     ydb/library/yql/core/expr_nodes
+    ydb/library/yql/module
     ydb/library/yql/providers/common/proto
     ydb/library/yql/providers/common/provider
     ydb/library/yql/providers/common/activation

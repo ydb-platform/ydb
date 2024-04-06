@@ -50,6 +50,7 @@ PEERDIR(
     yt/cpp/mapreduce/interface
     ydb/library/yql/ast
     ydb/library/yql/core/extract_predicate
+    ydb/library/yql/module
     ydb/library/yql/public/udf
     ydb/library/yql/public/udf/tz
     ydb/library/yql/sql

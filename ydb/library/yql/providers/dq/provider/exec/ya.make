@@ -16,7 +16,7 @@ PEERDIR(
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/tasks
     ydb/library/yql/dq/type_ann
-    ydb/library/yql/module
+    ydb/library/yql/udfs/common/module
     ydb/library/yql/providers/common/gateway
     ydb/library/yql/providers/common/metrics
     ydb/library/yql/providers/common/schema/expr

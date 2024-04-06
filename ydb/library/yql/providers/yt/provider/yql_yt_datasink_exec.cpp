@@ -16,7 +16,7 @@
 #include <ydb/library/yql/core/type_ann/type_ann_expr.h>
 #include <ydb/library/yql/core/yql_execution.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/module/yql_modules.h>
+#include <ydb/library/yql/udfs/common/module/yql_modules.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/ast/yql_ast.h>
 

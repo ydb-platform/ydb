@@ -3,7 +3,7 @@
 #include "yql_yt_optimize.h"
 #include "yql_yt_op_hash.h"
 
-#include <ydb/library/yql/module/yql_modules.h>
+#include <ydb/library/yql/udfs/common/module/yql_modules.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <ydb/library/yql/providers/yt/lib/hash/yql_hash_builder.h>

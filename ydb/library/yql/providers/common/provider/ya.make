@@ -13,7 +13,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/yql/minikql
-    ydb/library/yql/module
+    ydb/library/yql/udfs/common/module
     ydb/library/yql/public/udf
     ydb/library/yql/sql # fixme
     ydb/library/yql/core

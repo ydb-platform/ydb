@@ -9,7 +9,7 @@
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
 
-#include <ydb/library/yql/module/yql_modules.h>
+#include <ydb/library/yql/udfs/common/module/yql_modules.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/utils/yql_panic.h>

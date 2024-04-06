@@ -1,4 +1,4 @@
-select s.*, cast(c_timestamp as string) from solomon_prod.yq
+select * from solomon_prod.yq
 with (
   selector = @@{execpool=User,activity=YQ_STORAGE_PROXY,sensor=ActorsAliveByActivity}@@,
   labels = "label1, label2, label3",

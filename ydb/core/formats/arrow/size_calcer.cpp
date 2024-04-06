@@ -160,6 +160,19 @@ ui64 GetTableMemorySize(const std::shared_ptr<arrow::Table>& batch) {
     return bytes;
 }
 
+ui64 GetTableDataSize(const std::shared_ptr<arrow::Table>& batch) {
+    if (!batch) {
+        return 0;
+    }
+    ui64 bytes = 0;
+    for (auto& column : batch->columns()) {
+        for (auto&& chunk : column->chunks()) {
+            bytes += GetArrayDataSize(chunk);
+        }
+    }
+    return bytes;
+}
+
 template <typename TType>
 ui64 GetArrayDataSizeImpl(const std::shared_ptr<arrow::Array>& column) {
     return sizeof(typename TType::c_type) * column->length();

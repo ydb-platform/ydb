@@ -84,12 +84,12 @@ private:
 
 private:
     void Start();
-    void OpenSubSessionImpl(std::shared_ptr<TDbInfo> db);
+    void OpenSubsessionImpl(std::shared_ptr<TDbInfo> db);
 
     std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseImpl();
 
-    void OnFederatedStateUpdateImpl();
-    void ScheduleFederatedStateUpdateImpl(TDuration delay);
+    void OnFederationStateUpdateImpl();
+    void ScheduleFederationStateUpdateImpl(TDuration delay);
 
     void WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& message);
     bool PrepareDeferredWrite(TDeferredWrite& deferred);
@@ -97,9 +97,9 @@ private:
     void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
     void CloseImpl(NTopic::TSessionClosedEvent const& ev);
 
-    bool MessageQueuesAreEmpty() const {
-        return OriginalMessagesToGetAck.empty() && OriginalMessagesToPassDown.empty();
-    }
+    bool MessageQueuesAreEmpty() const;
+    void IssueTokenIfAllowed();
+    void UpdateFederationState();
 
     TStringBuilder GetLogPrefix() const;
 
@@ -107,7 +107,7 @@ private:
     // For subsession creation
     const NTopic::TFederatedWriteSessionSettings Settings;
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
-    const NTopic::TTopicClientSettings SubClientSetttings;
+    const NTopic::TTopicClientSettings SubclientSettings;
     std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> ProvidedCodecs;
 
     NTopic::IRetryPolicy::IRetryState::TPtr RetryState;
@@ -135,7 +135,16 @@ private:
     std::deque<TWrappedWriteMessage> OriginalMessagesToGetAck;
     i64 BufferFreeSpace;
 
-    std::atomic_bool Closing = false;
+    enum class State {
+        CREATED,  // The session has not been started.
+        STARTING, // Start method has been called, but the session is not ready yet.
+        STARTED,  // The session is ready to send messages.
+        CLOSING,  // Close method has been called, but the session may still send some messages.
+        CLOSED    // The session is closed, either due to the user request or some server error.
+    };
+    State SessionState{State::CREATED};
+    NThreading::TPromise<void> MessageQueuesHaveBeenEmptied;
+    NThreading::TPromise<void> HasBeenClosed;
 };
 
 class TFederatedWriteSession : public NTopic::IWriteSession,

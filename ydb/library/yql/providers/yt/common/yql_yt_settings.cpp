@@ -312,8 +312,30 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, MaxExtraJobMemoryToFuseOperations);
     REGISTER_SETTING(*this, MaxReplicationFactorToFuseOperations).Lower(1.0);
     REGISTER_SETTING(*this, MaxOperationFiles).Lower(2).Upper(1000);
-    REGISTER_SETTING(*this, GeobaseDownloadUrl);
-    REGISTER_SETTING(*this, GeobaseConfigUrl);
+    REGISTER_SETTING(*this, GeobaseDownloadUrl);  // TODO(dieash@) disable|remove?
+    REGISTER_SETTING(*this, ModulesSettings)
+        .Parser([](const TString& v) { return NYT::NodeFromYsonString(v, ::NYson::EYsonType::Node); })
+        .Validator([] (const TString&, const NYT::TNode& value) {
+            // POSSIBLE INIT
+            // PRAGMA yt.ModulesSettings = '{"Module1" = {"Param1" = "Value1"; ...; "ParamN" = "ValueN"}; ... ; "ModuleN" = { ... }};
+            if (!value.IsMap()) {
+                throw yexception() << "Expected yson-map with modules settings, but got \"" << value.GetType() << "\"";
+            }
+            for (auto& [moduleName, paramsNode]: value.AsMap()) {
+                if (!paramsNode.IsMap()) {
+                    throw yexception() << "Expected yson-map with settings for " << moduleName.Quote() << "'-module, but got \"" << paramsNode.GetType() << "\"";
+                }
+                for (auto& [paramName, valueNode]: paramsNode.AsMap()) {
+                    if (!valueNode.IsString()) { // TODO(dieash@) maybe checks for other required types should be added
+                        throw yexception() << "Expected string-value for " << moduleName.Quote() << "/" << paramName.Quote() << "-param but got \"" << valueNode.GetType() << "\"";
+                    }
+                }
+            }
+        })
+        .ValueSetter([this](const TString& cluster, const NYT::TNode& spec) {
+            OperationSpec[cluster] = spec;
+            HybridDqExecution = false;
+        });
     REGISTER_SETTING(*this, MinPublishedAvgChunkSize);
     REGISTER_SETTING(*this, MinTempAvgChunkSize);
     REGISTER_SETTING(*this, TopSortMaxLimit);

@@ -721,7 +721,7 @@ private:
     THashMap<TString, TUserInfoBase> PendingUsersInfo;
     TVector<std::pair<TActorId, std::unique_ptr<IEventBase>>> Replies;
     THashSet<TString> AffectedUsers;
-    bool UsersInfoWriteInProgress = false;
+    bool KVWriteInProgress = false;
     bool TxInProgress = false;
     TMaybe<ui64> PlanStep;
     TMaybe<ui64> TxId;

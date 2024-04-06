@@ -531,8 +531,8 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
 void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx) {
     DBGTRACE("TPartition::Handle(TEvPQ::TEvHandleWriteResponse)");
     PQ_LOG_T("TPartition::HandleOnWrite TEvHandleWriteResponse.");
-    UsersInfoWriteInProgress = false;
-    DBGTRACE_LOG("UsersInfoWriteInProgress=" << UsersInfoWriteInProgress);
+    KVWriteInProgress = false;
+    DBGTRACE_LOG("KVWriteInProgress=" << KVWriteInProgress);
     OnProcessTxsAndUserActsWriteComplete(SET_OFFSET_COOKIE, ctx);
     HandleWriteResponse(ctx);
     ProcessTxsAndUserActs(ctx);

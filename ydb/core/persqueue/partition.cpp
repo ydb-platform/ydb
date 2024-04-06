@@ -1515,8 +1515,8 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     DBGTRACE_LOG("writeDuration=" << writeDuration);
     const auto minWriteLatency = TDuration::MilliSeconds(AppData(ctx)->PQConfig.GetMinWriteLatencyMs());
     if (writeDuration > minWriteLatency) {
-        UsersInfoWriteInProgress = false;
-        DBGTRACE_LOG("UsersInfoWriteInProgress=" << UsersInfoWriteInProgress);
+        KVWriteInProgress = false;
+        DBGTRACE_LOG("KVWriteInProgress=" << KVWriteInProgress);
         OnProcessTxsAndUserActsWriteComplete(SET_OFFSET_COOKIE, ctx);
         HandleWriteResponse(ctx);
         ProcessTxsAndUserActs(ctx);
@@ -1584,14 +1584,11 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 {
     DBGTRACE("TPartition::ProcessTxsAndUserActs");
 //    DBGTRACE_LOG("Responses.size=" << Responses.size());
-    DBGTRACE_LOG("UsersInfoWriteInProgress=" << UsersInfoWriteInProgress <<
+    DBGTRACE_LOG("KVWriteInProgress=" << KVWriteInProgress <<
                  //", ReserveRequests.size=" << ReserveRequests.size() <<
                  //", UserActionAndTransactionEvents.size=" << UserActionAndTransactionEvents.size() <<
                  ", TxInProgress=" << TxInProgress);
-    bool skip = UsersInfoWriteInProgress;
-    //skip |= ReserveRequests.empty() && UserActionAndTransactionEvents.empty();
-    skip |= TxInProgress;
-    if (skip) {
+    if (KVWriteInProgress | TxInProgress) {
         return;
     }
 
@@ -1606,7 +1603,7 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
 {
     DBGTRACE("TPartition::ContinueProcessTxsAndUserActs");
     DBGTRACE_LOG("UserActionAndTransactionEvents.size=" << UserActionAndTransactionEvents.size());
-    Y_ABORT_UNLESS(!UsersInfoWriteInProgress);
+    Y_ABORT_UNLESS(!KVWriteInProgress);
     Y_ABORT_UNLESS(!TxInProgress);
 
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
@@ -1647,7 +1644,7 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
             BecomeWrite();
             AddMetaKey(request.Get());
             ctx.Send(Tablet, request.Release());
-            UsersInfoWriteInProgress = true;
+            KVWriteInProgress = true;
             HaveWriteMsg = true;
         }
 
@@ -1707,8 +1704,8 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
     if (request->Record.CmdDeleteRangeSize() || request->Record.CmdWriteSize() || request->Record.CmdRenameSize()) {
         DBGTRACE_LOG("send TEvKeyValue::TEvRequest");
         ctx.Send(HaveWriteMsg ? BlobCache : Tablet, request.Release());
-        UsersInfoWriteInProgress = true;
-        DBGTRACE_LOG("UsersInfoWriteInProgress=" << UsersInfoWriteInProgress);
+        KVWriteInProgress = true;
+        DBGTRACE_LOG("KVWriteInProgress=" << KVWriteInProgress);
         BecomeWrite();
     } else {
         Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateIdle);
@@ -2264,7 +2261,7 @@ TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TMessage& 
 void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
                                 const TActorContext& ctx)
 {
-    Y_ABORT_UNLESS(!UsersInfoWriteInProgress);
+    Y_ABORT_UNLESS(!KVWriteInProgress);
 
     const TString& user = act.ClientId;
     const bool strictCommitOffset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.Strict);

@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 #include "local_worker_manager.h"
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 
@@ -510,6 +511,8 @@ NActors::IActor* CreateLocalWorkerManager(const TLocalWorkerManagerOptions& opti
 
 } // namespace NYql::NDqs
 =======
+=======
+>>>>>>> fix build
 #include "local_worker_manager.h"
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 
@@ -924,4 +927,3 @@ NActors::IActor* CreateLocalWorkerManager(const TLocalWorkerManagerOptions& opti
 }
 
 } // namespace NYql::NDqs
->>>>>>> WIP

@@ -13,7 +13,7 @@ namespace NYql {
 struct TYtSettings;
 using TYtSettingsConstPtr = std::shared_ptr<const TYtSettings>;
 
-class IYqlModule {
+class IUdfBaseModule {
 public:
     struct TDatafileTraits {
         TString Name;
@@ -21,7 +21,7 @@ public:
     };
 
 public:
-    virtual ~IYqlModule() {
+    virtual ~IUdfBaseModule() {
     }
 
     virtual const TString& GetName() const = 0;
@@ -34,17 +34,17 @@ public:
 
 class TYqlExternalModuleProcessor {
 public:
-    static void AddModule(const IYqlModule* ptr);
+    static void AddModule(const IUdfBaseModule* ptr);
 
     static bool ApplyConfigFlag(const TPosition& pos, TStringBuf flagName, TExprContext& ctx, const TVector<TStringBuf>& args, TUserDataTable& crutches);
-    static TVector<IYqlModule::TDatafileTraits> GetUsedFilenamePaths(TStringBuf moduleName);
+    static TVector<IUdfBaseModule::TDatafileTraits> GetUsedFilenamePaths(TStringBuf moduleName);
     static void PragmaProcessing(TYtSettingsConstPtr settingsPtr, const TString& cluster, TUserDataTable& crutches);
 
 private:
-    static const IYqlModule* GetModule(TStringBuf name);
+    static const IUdfBaseModule* GetModule(TStringBuf name);
 
 private:
-    static THashMap<TString, const IYqlModule*> KnownModules;
+    static THashMap<TString, const IUdfBaseModule*> KnownModules;
 };
 
 } // NYql

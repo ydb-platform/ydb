@@ -2,9 +2,9 @@
 
 namespace NYql {
 
-THashMap<TString, const IYqlModule*> TYqlExternalModuleProcessor::KnownModules;
+THashMap<TString, const IUdfBaseModule*> TYqlExternalModuleProcessor::KnownModules;
 
-void TYqlExternalModuleProcessor::AddModule(const IYqlModule* ptr) {
+void TYqlExternalModuleProcessor::AddModule(const IUdfBaseModule* ptr) {
     if (!ptr) {
         KnownModules[ptr->GetName()] = ptr;
     }
@@ -19,7 +19,7 @@ bool TYqlExternalModuleProcessor::ApplyConfigFlag(const TPosition& pos, TStringB
     return true;
 }
 
-TVector<IYqlModule::TDatafileTraits> TYqlExternalModuleProcessor::GetUsedFilenamePaths(TStringBuf moduleName) {
+TVector<IUdfBaseModule::TDatafileTraits> TYqlExternalModuleProcessor::GetUsedFilenamePaths(TStringBuf moduleName) {
     if (const auto modulePtr = GetModule(moduleName)) {
         return modulePtr->GetUsedFilenamePaths();
     }
@@ -33,7 +33,7 @@ void TYqlExternalModuleProcessor::PragmaProcessing(TYtSettingsConstPtr settingsP
     }
 }
 
-const IYqlModule* TYqlExternalModuleProcessor::GetModule(TStringBuf name) {
+const IUdfBaseModule* TYqlExternalModuleProcessor::GetModule(TStringBuf name) {
     const TString nameStr{name};
     return KnownModules.contains(nameStr) ? KnownModules.at(nameStr) : nullptr;
 }

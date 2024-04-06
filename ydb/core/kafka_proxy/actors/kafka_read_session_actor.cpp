@@ -407,6 +407,8 @@ void TKafkaReadSessionActor::HandlePipeDestroyed(TEvTabletPipe::TEvClientDestroy
 }
 
 void TKafkaReadSessionActor::ProcessBalancerDead(ui64 tabletId, const TActorContext& ctx) {
+    NewPartitionsToLockOnTime.clear();
+    
     for (auto& [topicName, topicInfo] : TopicsInfo) {
         if (topicInfo.TabletID == tabletId) {
             auto partitionsIt = TopicPartitions.find(topicName);

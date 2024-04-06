@@ -232,10 +232,10 @@ bool TColumnShardScan::ProduceResults() noexcept {
             }
         }
         TMemoryProfileGuard mGuard("SCAN_PROFILE::RESULT::TO_KQP", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-        Result->ArrowBatch = NArrow::ToBatch(shardedBatch.GetRecordBatch(), true);
+        Result->ArrowBatch = shardedBatch.GetRecordBatch();
         Rows += batch->num_rows();
-        Bytes += NArrow::GetBatchDataSize(Result->ArrowBatch);
-        ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetBatchDataSize(Result->ArrowBatch))("num_rows", numRows)("batch_columns", JoinSeq(",", batch->schema()->field_names()));
+        Bytes += NArrow::GetTableDataSize(Result->ArrowBatch);
+        ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetTableDataSize(Result->ArrowBatch))("num_rows", numRows)("batch_columns", JoinSeq(",", batch->schema()->field_names()));
     }
     if (CurrentLastReadKey) {
         NArrow::NMerger::TSortableBatchPosition pNew(result.GetLastReadKey(), 0, result.GetLastReadKey()->schema()->field_names(), {}, false);

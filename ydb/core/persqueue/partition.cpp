@@ -532,13 +532,13 @@ void TPartition::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx)
         ReplyError(ctx, ev->Cookie, NPersQueue::NErrorCode::INITIALIZING, ss);
     }
 
-    for (const auto& w : Requests) {
-        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::INITIALIZING, ss);
-    }
+//    for (const auto& w : Requests) {
+//        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::INITIALIZING, ss);
+//    }
 
-    for (const auto& wr : Responses) {
-        ReplyError(ctx, wr.GetCookie(), NPersQueue::NErrorCode::INITIALIZING, TStringBuilder() << ss << " (WriteResponses)");
-    }
+//    for (const auto& wr : Responses) {
+//        ReplyError(ctx, wr.GetCookie(), NPersQueue::NErrorCode::INITIALIZING, TStringBuilder() << ss << " (WriteResponses)");
+//    }
 
     for (const auto& ri : ReadInfo) {
         ReplyError(ctx, ri.second.Destination, NPersQueue::NErrorCode::INITIALIZING,
@@ -1017,7 +1017,7 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
 }
 
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx) {
-    if (ClosedInternalPartition || WaitingForPreviousBlobQuota() || (CurrentStateFunc() != &TThis::StateIdle) || !Requests.empty()) {
+    if (ClosedInternalPartition || WaitingForPreviousBlobQuota() || (CurrentStateFunc() != &TThis::StateIdle)/* || !Requests.empty()*/) {
         auto* response = new TEvPQ::TEvGetWriteInfoError(Partition.InternalPartitionId,
                                                        "Write info requested while writes are not complete");
         ctx.Send(ev->Sender, response);
@@ -1583,7 +1583,7 @@ size_t TPartition::GetUserActCount(const TString& consumer) const
 void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 {
     DBGTRACE("TPartition::ProcessTxsAndUserActs");
-    DBGTRACE_LOG("Responses.size=" << Responses.size());
+//    DBGTRACE_LOG("Responses.size=" << Responses.size());
     DBGTRACE_LOG("UsersInfoWriteInProgress=" << UsersInfoWriteInProgress <<
                  //", ReserveRequests.size=" << ReserveRequests.size() <<
                  //", UserActionAndTransactionEvents.size=" << UserActionAndTransactionEvents.size() <<
@@ -1699,7 +1699,7 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
     DBGTRACE_LOG("CmdDeleteRange.size=" << request->Record.CmdDeleteRangeSize() <<
                  ", CmdWrite.size=" << request->Record.CmdWriteSize() <<
                  ", CmdRename.size=" << request->Record.CmdRenameSize());
-    DBGTRACE_LOG("Responses.size=" << Responses.size());
+//    DBGTRACE_LOG("Responses.size=" << Responses.size());
 
     if (request->Record.CmdDeleteRangeSize() || request->Record.CmdWriteSize() || request->Record.CmdRenameSize()) {
         DBGTRACE_LOG("send TEvKeyValue::TEvRequest");
@@ -2214,8 +2214,10 @@ TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TMessage& 
     DBGTRACE_LOG("HaveWriteMsg=" << HaveWriteMsg);
     if (!HaveWriteMsg) {
         BeginHandleRequests(request, ctx);
-        BeginProcessWrites(ctx);
-        BeginAppendHeadWithNewWrites(ctx);
+        if (!DiskIsFull) {
+            BeginProcessWrites(ctx);
+            BeginAppendHeadWithNewWrites(ctx);
+        }
 
         HaveWriteMsg = true;
     }

@@ -27,7 +27,7 @@
 namespace NKikimr::NPQ {
 
 static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
-static const ui32 MAX_WRITE_CYCLE_SIZE = 16_MB;
+//static const ui32 MAX_WRITE_CYCLE_SIZE = 16_MB;
 static const ui32 MAX_INLINE_SIZE = 1000;
 
 static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode = NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE;
@@ -101,61 +101,61 @@ void TPartition::HandleOnWrite(TEvPQ::TEvUpdateAvailableSize::TPtr&, const TActo
     UpdateAvailableSize(ctx);
 }
 
-void TPartition::CancelAllWritesOnIdle(const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::CancelAllWritesOnIdle.");
+//void TPartition::CancelAllWritesOnIdle(const TActorContext& ctx) {
+//    PQ_LOG_T("TPartition::CancelAllWritesOnIdle.");
+//
+//    for (const auto& w : Requests) {
+//        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL, "Disk is full");
+//        if (w.IsWrite()) {
+//            const auto& msg = w.GetWrite().Msg;
+//            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
+//            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
+//            WriteInflightSize -= msg.Data.size();
+//            DBGTRACE_LOG("WriteInflightSize=" << WriteInflightSize);
+//        }
+//    }
+//
+//    UpdateWriteBufferIsFullState(ctx.Now());
+//    Requests.clear();
+//    Y_ABORT_UNLESS(Responses.empty());
+//
+//    WriteCycleSize = 0;
+//
+//    ProcessReserveRequests(ctx);
+//}
 
-    for (const auto& w : Requests) {
-        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL, "Disk is full");
-        if (w.IsWrite()) {
-            const auto& msg = w.GetWrite().Msg;
-            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
-            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
-            WriteInflightSize -= msg.Data.size();
-            DBGTRACE_LOG("WriteInflightSize=" << WriteInflightSize);
-        }
-    }
-
-    UpdateWriteBufferIsFullState(ctx.Now());
-    Requests.clear();
-    Y_ABORT_UNLESS(Responses.empty());
-
-    WriteCycleSize = 0;
-
-    ProcessReserveRequests(ctx);
-}
-
-void TPartition::FailBadClient(const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::FailBadClient.");
-
-    for (auto it = Owners.begin(); it != Owners.end();) {
-        it = DropOwner(it, ctx);
-    }
-    Y_ABORT_UNLESS(Owners.empty());
-    Y_ABORT_UNLESS(ReservedSize == 0);
-
-    for (const auto& w : Requests) {
-        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::BAD_REQUEST, "previous write request failed");
-        if (w.IsWrite()) {
-            const auto& msg = w.GetWrite().Msg;
-            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
-            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
-            WriteInflightSize -= msg.Data.size();
-            DBGTRACE_LOG("WriteInflightSize=" << WriteInflightSize);
-        }
-    }
-    UpdateWriteBufferIsFullState(ctx.Now());
-    Requests.clear();
-    for (const auto& w : Responses) {
-        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::BAD_REQUEST, "previous write request failed");
-        if (w.IsWrite())
-            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
-    }
-    TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(WriteNewSize);
-    Responses.clear();
-
-    StartProcessChangeOwnerRequests(ctx);
-    ProcessReserveRequests(ctx);
-}
+//void TPartition::FailBadClient(const TActorContext& ctx) {
+//    PQ_LOG_T("TPartition::FailBadClient.");
+//
+//    for (auto it = Owners.begin(); it != Owners.end();) {
+//        it = DropOwner(it, ctx);
+//    }
+//    Y_ABORT_UNLESS(Owners.empty());
+//    Y_ABORT_UNLESS(ReservedSize == 0);
+//
+//    for (const auto& w : Requests) {
+//        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::BAD_REQUEST, "previous write request failed");
+//        if (w.IsWrite()) {
+//            const auto& msg = w.GetWrite().Msg;
+//            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
+//            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
+//            WriteInflightSize -= msg.Data.size();
+//            DBGTRACE_LOG("WriteInflightSize=" << WriteInflightSize);
+//        }
+//    }
+//    UpdateWriteBufferIsFullState(ctx.Now());
+//    Requests.clear();
+//    for (const auto& w : Responses) {
+//        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::BAD_REQUEST, "previous write request failed");
+//        if (w.IsWrite())
+//            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
+//    }
+//    TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(WriteNewSize);
+//    Responses.clear();
+//
+//    StartProcessChangeOwnerRequests(ctx);
+//    ProcessReserveRequests(ctx);
+//}
 
 void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, const TActorContext& ctx) {
     DBGTRACE("TPartition::ProcessChangeOwnerRequest");
@@ -908,24 +908,31 @@ void TPartition::CancelOneWriteOnWrite(const TActorContext& ctx,
     StartProcessChangeOwnerRequests(ctx);
 }
 
-void TPartition::CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::TEvRequest* request, const TString& errorStr, const TWriteMsg& p, TPartitionSourceManager::TModificationBatch& sourceIdBatch, NPersQueue::NErrorCode::EErrorCode errorCode) {
-    PQ_LOG_T("TPartition::CancelAllWritesOnWrite.");
-
-    ReplyError(ctx, p.Cookie, errorCode, errorStr);
-    TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
-    TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(p.Msg.Data.size() + p.Msg.SourceId.size());
-    FailBadClient(ctx);
-    NewHead.Clear();
-    NewHead.Offset = EndOffset;
-    sourceIdBatch.Cancel();
-    request->Record.Clear();
-    PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
-    CompactedKeys.clear();
-
-    WriteCycleSize = 0;
-}
+//void TPartition::CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::TEvRequest* request, const TString& errorStr, const TWriteMsg& p, TPartitionSourceManager::TModificationBatch& sourceIdBatch, NPersQueue::NErrorCode::EErrorCode errorCode) {
+//    PQ_LOG_T("TPartition::CancelAllWritesOnWrite.");
+//
+//    ReplyError(ctx, p.Cookie, errorCode, errorStr);
+//    TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
+//    TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(p.Msg.Data.size() + p.Msg.SourceId.size());
+//    FailBadClient(ctx);
+//    NewHead.Clear();
+//    NewHead.Offset = EndOffset;
+//    sourceIdBatch.Cancel();
+//    request->Record.Clear();
+//    PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
+//    CompactedKeys.clear();
+//
+//    WriteCycleSize = 0;
+//}
 
 TPartition::EProcessResult TPartition::ProcessRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& parameters) {
+    if (DiskIsFull) {
+        ScheduleReplyError(msg.Cookie,
+                           NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
+                           "Disk is full");
+        return EProcessResult::Continue;
+    }
+
     auto& body = msg.Body;
 
     TMaybe<TPartitionKeyRange> keyRange;
@@ -940,12 +947,26 @@ TPartition::EProcessResult TPartition::ProcessRequest(TRegisterMessageGroupMsg& 
 }
 
 TPartition::EProcessResult TPartition::ProcessRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters& parameters) {
+    if (DiskIsFull) {
+        ScheduleReplyError(msg.Cookie,
+                           NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
+                           "Disk is full");
+        return EProcessResult::Continue;
+    }
+
     parameters.SourceIdBatch.DeregisterSourceId(msg.Body.SourceId);
 
     return EProcessResult::Continue;
 }
 
 TPartition::EProcessResult TPartition::ProcessRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters) {
+    if (DiskIsFull) {
+        ScheduleReplyError(msg.Cookie,
+                           NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
+                           "Disk is full");
+        return EProcessResult::Continue;
+    }
+
     for (auto& body : msg.Deregistrations) {
         parameters.SourceIdBatch.DeregisterSourceId(body.SourceId);
     }
@@ -964,6 +985,13 @@ TPartition::EProcessResult TPartition::ProcessRequest(TSplitMessageGroupMsg& msg
 }
 
 TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
+    if (DiskIsFull) {
+        ScheduleReplyError(p.Cookie,
+                           NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
+                           "Disk is full");
+        return EProcessResult::Continue;
+    }
+
     DBGTRACE("TPartition::ProcessRequest(TWriteMsg)");
     DBGTRACE_LOG("p.Msg.SourceId=" << p.Msg.SourceId << ", p.Msg.SegNo=" << p.Msg.SeqNo << ", p.Msg.PartNo=" << p.Msg.PartNo << ", p.Msg.TotalParts=" << p.Msg.TotalParts);
         ui64& curOffset = parameters.CurOffset;
@@ -1021,13 +1049,21 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
         if (const auto& hbVersion = p.Msg.HeartbeatVersion) {
             DBGTRACE("heartbeat");
             if (!sourceId.SeqNo()) {
-                CancelAllWritesOnWrite(ctx, request, TStringBuilder()
-                    << "Cannot apply heartbeat on unknown sourceId: " << EscapeC(p.Msg.SourceId), p, sourceIdBatch);
+//                CancelAllWritesOnWrite(ctx, request, TStringBuilder()
+//                    << "Cannot apply heartbeat on unknown sourceId: " << EscapeC(p.Msg.SourceId), p, sourceIdBatch);
+                ReplyError(ctx,
+                           p.Cookie,
+                           NPersQueue::NErrorCode::BAD_REQUEST,
+                           TStringBuilder() << "Cannot apply heartbeat on unknown sourceId: " << EscapeC(p.Msg.SourceId));
                 return EProcessResult::Abort;
             }
             if (!sourceId.Explicit()) {
-                CancelAllWritesOnWrite(ctx, request, TStringBuilder()
-                    << "Cannot apply heartbeat on implcit sourceId: " << EscapeC(p.Msg.SourceId), p, sourceIdBatch);
+//                CancelAllWritesOnWrite(ctx, request, TStringBuilder()
+//                    << "Cannot apply heartbeat on implcit sourceId: " << EscapeC(p.Msg.SourceId), p, sourceIdBatch);
+                ReplyError(ctx,
+                           p.Cookie,
+                           NPersQueue::NErrorCode::BAD_REQUEST,
+                           TStringBuilder() << "Cannot apply heartbeat on implcit sourceId: " << EscapeC(p.Msg.SourceId));
                 return EProcessResult::Abort;
             }
 
@@ -1278,118 +1314,118 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
         return EProcessResult::Continue;
 }
 
-bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx,
-                                         TPartitionSourceManager::TModificationBatch& sourceIdBatch)
-{
-    PQ_LOG_T("TPartition::AppendHeadWithNewWrites.");
-
-    ProcessParameters parameters(sourceIdBatch);
-    parameters.CurOffset = PartitionedBlob.IsInited() ? PartitionedBlob.GetOffset() : EndOffset;
-    DBGTRACE_LOG("parameters.CurOffset=" << parameters.CurOffset << ", PartitionedBlob.IsInited=" << PartitionedBlob.IsInited() << ", EndOffset=" << EndOffset);
-
-    WriteCycleSize = 0;
-    WriteNewSize = 0;
-    WriteNewSizeUncompressed = 0;
-    WriteNewMessages = 0;
-    UpdateWriteBufferIsFullState(ctx.Now());
-    CurrentTimestamp = ctx.Now();
-
-    NewHead.Offset = EndOffset;
-    NewHead.PartNo = 0;
-    NewHead.PackedSize = 0;
-
-    Y_ABORT_UNLESS(NewHead.Batches.empty());
-
-    parameters.OldPartsCleared = false;
-    parameters.HeadCleared = (Head.PackedSize == 0);
-
-
-    //TODO: Process here not TClientBlobs, but also TBatches from LB(LB got them from pushclient too)
-    //Process is following: if batch contains already written messages or only one client message part -> unpack it and process as several TClientBlobs
-    //otherwise write this batch as is to head;
-
-    bool run = true;
-    while (run && !Requests.empty() && WriteCycleSize < MAX_WRITE_CYCLE_SIZE) { //head is not too big
-        auto pp = Requests.front();
-        Requests.pop_front();
-
-        auto result = EProcessResult::Continue;
-        if (pp.IsWrite()) {
-            result = ProcessRequest(pp.GetWrite(), parameters, request, ctx);
-        } else if (pp.IsRegisterMessageGroup()) {
-            result = ProcessRequest(pp.GetRegisterMessageGroup(), parameters);
-        } else if (pp.IsDeregisterMessageGroup()) {
-            result = ProcessRequest(pp.GetDeregisterMessageGroup(), parameters);
-        } else if (pp.IsSplitMessageGroup()) {
-            result = ProcessRequest(pp.GetSplitMessageGroup(), parameters);
-        } else {
-            Y_ABORT_UNLESS(pp.IsOwnership());
-        }
-
-        switch (result) {
-            case EProcessResult::Abort:
-                return false;
-            case EProcessResult::Break:
-                Requests.push_front(pp);
-                run = false;
-                break;
-            case EProcessResult::Continue:
-                EmplaceResponse(std::move(pp), ctx);
-                break;
-        }
-    }
-    if (const auto heartbeat = sourceIdBatch.CanEmitHeartbeat()) {
-        if (heartbeat->Version > LastEmittedHeartbeat) {
-            LOG_INFO_S(
-                    ctx, NKikimrServices::PERSQUEUE,
-                    "Topic '" << TopicName() << "' partition " << Partition
-                        << " emit heartbeat " << heartbeat->Version
-            );
-
-            auto hbMsg = TWriteMsg{Max<ui64>() /* cookie */, Nothing(), TEvPQ::TEvWrite::TMsg{
-                .SourceId = NSourceIdEncoding::EncodeSimple(ToString(TabletID)),
-                .SeqNo = 0, // we don't use SeqNo because we disable deduplication
-                .PartNo = 0,
-                .TotalParts = 1,
-                .TotalSize = static_cast<ui32>(heartbeat->Data.size()),
-                .CreateTimestamp = CurrentTimestamp.MilliSeconds(),
-                .ReceiveTimestamp = CurrentTimestamp.MilliSeconds(),
-                .DisableDeduplication = true,
-                .WriteTimestamp = CurrentTimestamp.MilliSeconds(),
-                .Data = heartbeat->Data,
-                .UncompressedSize = 0,
-                .PartitionKey = {},
-                .ExplicitHashKey = {},
-                .External = false,
-                .IgnoreQuotaDeadline = true,
-                .HeartbeatVersion = std::nullopt,
-            }, std::nullopt};
-
-            WriteInflightSize += heartbeat->Data.size();
-            DBGTRACE_LOG("WriteInflightSize=" << WriteInflightSize);
-            auto result = ProcessRequest(hbMsg, parameters, request, ctx);
-            Y_ABORT_UNLESS(result == EProcessResult::Continue);
-
-            LastEmittedHeartbeat = heartbeat->Version;
-        }
-    }
-
-
-    UpdateWriteBufferIsFullState(ctx.Now());
-
-    if (!NewHead.Batches.empty() && !NewHead.Batches.back().Packed) {
-        NewHead.Batches.back().Pack();
-        NewHead.PackedSize += NewHead.Batches.back().GetPackedSize(); //add real packed size for this blob
-
-        NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound
-        NewHead.PackedSize -= NewHead.Batches.back().GetUnpackedSize();
-    }
-
-    Y_ABORT_UNLESS((parameters.HeadCleared ? 0 : Head.PackedSize) + NewHead.PackedSize <= MaxBlobSize); //otherwise last PartitionedBlob.Add must compact all except last cl
-    MaxWriteResponsesSize = Max<ui32>(MaxWriteResponsesSize, Responses.size());
-
-    return parameters.HeadCleared;
-}
+//bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx,
+//                                         TPartitionSourceManager::TModificationBatch& sourceIdBatch)
+//{
+//    PQ_LOG_T("TPartition::AppendHeadWithNewWrites.");
+//
+//    ProcessParameters parameters(sourceIdBatch);
+//    parameters.CurOffset = PartitionedBlob.IsInited() ? PartitionedBlob.GetOffset() : EndOffset;
+//    DBGTRACE_LOG("parameters.CurOffset=" << parameters.CurOffset << ", PartitionedBlob.IsInited=" << PartitionedBlob.IsInited() << ", EndOffset=" << EndOffset);
+//
+//    WriteCycleSize = 0;
+//    WriteNewSize = 0;
+//    WriteNewSizeUncompressed = 0;
+//    WriteNewMessages = 0;
+//    UpdateWriteBufferIsFullState(ctx.Now());
+//    CurrentTimestamp = ctx.Now();
+//
+//    NewHead.Offset = EndOffset;
+//    NewHead.PartNo = 0;
+//    NewHead.PackedSize = 0;
+//
+//    Y_ABORT_UNLESS(NewHead.Batches.empty());
+//
+//    parameters.OldPartsCleared = false;
+//    parameters.HeadCleared = (Head.PackedSize == 0);
+//
+//
+//    //TODO: Process here not TClientBlobs, but also TBatches from LB(LB got them from pushclient too)
+//    //Process is following: if batch contains already written messages or only one client message part -> unpack it and process as several TClientBlobs
+//    //otherwise write this batch as is to head;
+//
+//    bool run = true;
+//    while (run && !Requests.empty() && WriteCycleSize < MAX_WRITE_CYCLE_SIZE) { //head is not too big
+//        auto pp = Requests.front();
+//        Requests.pop_front();
+//
+//        auto result = EProcessResult::Continue;
+//        if (pp.IsWrite()) {
+//            result = ProcessRequest(pp.GetWrite(), parameters, request, ctx);
+//        } else if (pp.IsRegisterMessageGroup()) {
+//            result = ProcessRequest(pp.GetRegisterMessageGroup(), parameters);
+//        } else if (pp.IsDeregisterMessageGroup()) {
+//            result = ProcessRequest(pp.GetDeregisterMessageGroup(), parameters);
+//        } else if (pp.IsSplitMessageGroup()) {
+//            result = ProcessRequest(pp.GetSplitMessageGroup(), parameters);
+//        } else {
+//            Y_ABORT_UNLESS(pp.IsOwnership());
+//        }
+//
+//        switch (result) {
+//            case EProcessResult::Abort:
+//                return false;
+//            case EProcessResult::Break:
+//                Requests.push_front(pp);
+//                run = false;
+//                break;
+//            case EProcessResult::Continue:
+//                EmplaceResponse(std::move(pp), ctx);
+//                break;
+//        }
+//    }
+//    if (const auto heartbeat = sourceIdBatch.CanEmitHeartbeat()) {
+//        if (heartbeat->Version > LastEmittedHeartbeat) {
+//            LOG_INFO_S(
+//                    ctx, NKikimrServices::PERSQUEUE,
+//                    "Topic '" << TopicName() << "' partition " << Partition
+//                        << " emit heartbeat " << heartbeat->Version
+//            );
+//
+//            auto hbMsg = TWriteMsg{Max<ui64>() /* cookie */, Nothing(), TEvPQ::TEvWrite::TMsg{
+//                .SourceId = NSourceIdEncoding::EncodeSimple(ToString(TabletID)),
+//                .SeqNo = 0, // we don't use SeqNo because we disable deduplication
+//                .PartNo = 0,
+//                .TotalParts = 1,
+//                .TotalSize = static_cast<ui32>(heartbeat->Data.size()),
+//                .CreateTimestamp = CurrentTimestamp.MilliSeconds(),
+//                .ReceiveTimestamp = CurrentTimestamp.MilliSeconds(),
+//                .DisableDeduplication = true,
+//                .WriteTimestamp = CurrentTimestamp.MilliSeconds(),
+//                .Data = heartbeat->Data,
+//                .UncompressedSize = 0,
+//                .PartitionKey = {},
+//                .ExplicitHashKey = {},
+//                .External = false,
+//                .IgnoreQuotaDeadline = true,
+//                .HeartbeatVersion = std::nullopt,
+//            }, std::nullopt};
+//
+//            WriteInflightSize += heartbeat->Data.size();
+//            DBGTRACE_LOG("WriteInflightSize=" << WriteInflightSize);
+//            auto result = ProcessRequest(hbMsg, parameters, request, ctx);
+//            Y_ABORT_UNLESS(result == EProcessResult::Continue);
+//
+//            LastEmittedHeartbeat = heartbeat->Version;
+//        }
+//    }
+//
+//
+//    UpdateWriteBufferIsFullState(ctx.Now());
+//
+//    if (!NewHead.Batches.empty() && !NewHead.Batches.back().Packed) {
+//        NewHead.Batches.back().Pack();
+//        NewHead.PackedSize += NewHead.Batches.back().GetPackedSize(); //add real packed size for this blob
+//
+//        NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound
+//        NewHead.PackedSize -= NewHead.Batches.back().GetUnpackedSize();
+//    }
+//
+//    Y_ABORT_UNLESS((parameters.HeadCleared ? 0 : Head.PackedSize) + NewHead.PackedSize <= MaxBlobSize); //otherwise last PartitionedBlob.Add must compact all except last cl
+//    MaxWriteResponsesSize = Max<ui32>(MaxWriteResponsesSize, Responses.size());
+//
+//    return parameters.HeadCleared;
+//}
 
 
 std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
@@ -1535,57 +1571,57 @@ void TPartition::Handle(TEvPQ::TEvQuotaDeadlineCheck::TPtr&, const TActorContext
     FilterDeadlinedWrites(ctx);
 }
 
-bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::ProcessWrites.");
-    FilterDeadlinedWrites(ctx);
-
-    QuotaDeadline = TInstant::Zero();
-
-    if (Requests.empty()) {
-        return false;
-    }
-
-    Y_ABORT_UNLESS(request->Record.CmdWriteSize() == 0);
-    Y_ABORT_UNLESS(request->Record.CmdRenameSize() == 0);
-    Y_ABORT_UNLESS(request->Record.CmdDeleteRangeSize() == 0);
-
-    auto sourceIdBatch = SourceManager.CreateModificationBatch(ctx);
-
-    bool headCleared = AppendHeadWithNewWrites(request, ctx, sourceIdBatch);
-    if (headCleared) {
-        Y_ABORT_UNLESS(!CompactedKeys.empty() || Head.PackedSize == 0);
-        for (ui32 i = 0; i < TotalLevels; ++i) {
-            DataKeysHead[i].Clear();
-        }
-    }
-
-    if (NewHead.PackedSize == 0) { //nothing added to head - just compaction or tmp part blobs writed
-        if (!sourceIdBatch.HasModifications()) {
-            return request->Record.CmdWriteSize() > 0
-                || request->Record.CmdRenameSize() > 0
-                || request->Record.CmdDeleteRangeSize() > 0;
-        } else {
-            sourceIdBatch.FillRequest(request);
-            return true;
-        }
-    }
-
-    sourceIdBatch.FillRequest(request);
-
-    std::pair<TKey, ui32> res = GetNewWriteKey(headCleared);
-    const auto& key = res.first;
-
-    LOG_DEBUG_S(
-            ctx, NKikimrServices::PERSQUEUE,
-            "Add new write blob: topic '" << TopicName() << "' partition " << Partition
-                << " compactOffset " << key.GetOffset() << "," << key.GetCount()
-                << " HeadOffset " << Head.Offset << " endOffset " << EndOffset << " curOffset "
-                << NewHead.GetNextOffset() << " " << key.ToString()
-                << " size " << res.second << " WTime " << ctx.Now().MilliSeconds()
-    );
-    AddNewWriteBlob(res, request, headCleared, ctx);
-    return true;
-}
+//bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const TActorContext& ctx) {
+//    PQ_LOG_T("TPartition::ProcessWrites.");
+//    FilterDeadlinedWrites(ctx);
+//
+//    QuotaDeadline = TInstant::Zero();
+//
+//    if (Requests.empty()) {
+//        return false;
+//    }
+//
+//    Y_ABORT_UNLESS(request->Record.CmdWriteSize() == 0);
+//    Y_ABORT_UNLESS(request->Record.CmdRenameSize() == 0);
+//    Y_ABORT_UNLESS(request->Record.CmdDeleteRangeSize() == 0);
+//
+//    auto sourceIdBatch = SourceManager.CreateModificationBatch(ctx);
+//
+//    bool headCleared = AppendHeadWithNewWrites(request, ctx, sourceIdBatch);
+//    if (headCleared) {
+//        Y_ABORT_UNLESS(!CompactedKeys.empty() || Head.PackedSize == 0);
+//        for (ui32 i = 0; i < TotalLevels; ++i) {
+//            DataKeysHead[i].Clear();
+//        }
+//    }
+//
+//    if (NewHead.PackedSize == 0) { //nothing added to head - just compaction or tmp part blobs writed
+//        if (!sourceIdBatch.HasModifications()) {
+//            return request->Record.CmdWriteSize() > 0
+//                || request->Record.CmdRenameSize() > 0
+//                || request->Record.CmdDeleteRangeSize() > 0;
+//        } else {
+//            sourceIdBatch.FillRequest(request);
+//            return true;
+//        }
+//    }
+//
+//    sourceIdBatch.FillRequest(request);
+//
+//    std::pair<TKey, ui32> res = GetNewWriteKey(headCleared);
+//    const auto& key = res.first;
+//
+//    LOG_DEBUG_S(
+//            ctx, NKikimrServices::PERSQUEUE,
+//            "Add new write blob: topic '" << TopicName() << "' partition " << Partition
+//                << " compactOffset " << key.GetOffset() << "," << key.GetCount()
+//                << " HeadOffset " << Head.Offset << " endOffset " << EndOffset << " curOffset "
+//                << NewHead.GetNextOffset() << " " << key.ToString()
+//                << " size " << res.second << " WTime " << ctx.Now().MilliSeconds()
+//    );
+//    AddNewWriteBlob(res, request, headCleared, ctx);
+//    return true;
+//}
 
 void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
     if (QuotaDeadline == TInstant::Zero() || QuotaDeadline > ctx.Now()) {
@@ -1661,10 +1697,10 @@ void TPartition::RemovePendingRequests(TMessageQueue& requests)
     RemoveMessages(PendingRequests, requests);
 }
 
-void TPartition::RemoveQuotaWaitingRequests()
-{
-    RemoveMessages(QuotaWaitingRequests, Requests);
-}
+//void TPartition::RemoveQuotaWaitingRequests()
+//{
+//    RemoveMessages(QuotaWaitingRequests, Requests);
+//}
 
 bool TPartition::RequestBlobQuota()
 {
@@ -1716,7 +1752,7 @@ void TPartition::BeginHandleRequests(TEvKeyValue::TEvRequest* request, const TAc
         return;
     }
 
-    CancelAllWritesOnIdle(ctx);
+//    CancelAllWritesOnIdle(ctx);
     AddCheckDiskRequest(request, NumChannels);
     HaveCheckDisk = true;
 }
@@ -1868,54 +1904,54 @@ void TPartition::EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, co
     HeadCleared = Parameters->HeadCleared;
 }
 
-void TPartition::HandleRequests(const TActorContext& ctx)
-{
-    if (!CanWrite()) {
-        if (!CanEnqueue()) {
-            CancelReserveRequests(ctx);
-            CancelRequests(ctx, PendingRequests);
-            CancelRequests(ctx, QuotaWaitingRequests);
-            CancelRequests(ctx, Requests);
-        }
-        return;
-    }
-
-    if (CurrentStateFunc() == &TThis::StateWrite) {
-        return;
-    }
-
-    PQ_LOG_T("TPartition::HandleWrites. Requests.size()=" << Requests.size());
-    BecomeWrite();
-
-    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
-
-    Y_ABORT_UNLESS(Head.PackedSize + NewHead.PackedSize <= 2 * MaxSizeCheck);
-
-    TInstant now = ctx.Now();
-    WriteCycleStartTime = now;
-
-    bool haveData = false;
-    bool haveCheckDisk = false;
-
-    if (!Requests.empty() && DiskIsFull) {
-        CancelAllWritesOnIdle(ctx);
-        AddCheckDiskRequest(request.Get(), NumChannels);
-        haveCheckDisk = true;
-    } else {
-        haveData = ProcessWrites(request.Get(), now, ctx);
-    }
-    bool haveDrop = CleanUp(request.Get(), ctx);
-
-    ProcessReserveRequests(ctx);
-    if (!haveData && !haveDrop && !haveCheckDisk) { //no data writed/deleted
-        AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
-        BecomeIdle();
-        return;
-    }
-
-    WritesTotal.Inc();
-    WritePendingBlob(std::move(request));
-}
+//void TPartition::HandleRequests(const TActorContext& ctx)
+//{
+//    if (!CanWrite()) {
+//        if (!CanEnqueue()) {
+//            CancelReserveRequests(ctx);
+//            CancelRequests(ctx, PendingRequests);
+//            CancelRequests(ctx, QuotaWaitingRequests);
+//            CancelRequests(ctx, Requests);
+//        }
+//        return;
+//    }
+//
+//    if (CurrentStateFunc() == &TThis::StateWrite) {
+//        return;
+//    }
+//
+//    PQ_LOG_T("TPartition::HandleWrites. Requests.size()=" << Requests.size());
+//    BecomeWrite();
+//
+//    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+//
+//    Y_ABORT_UNLESS(Head.PackedSize + NewHead.PackedSize <= 2 * MaxSizeCheck);
+//
+//    TInstant now = ctx.Now();
+//    WriteCycleStartTime = now;
+//
+//    bool haveData = false;
+//    bool haveCheckDisk = false;
+//
+//    if (!Requests.empty() && DiskIsFull) {
+//        CancelAllWritesOnIdle(ctx);
+//        AddCheckDiskRequest(request.Get(), NumChannels);
+//        haveCheckDisk = true;
+//    } else {
+//        haveData = ProcessWrites(request.Get(), now, ctx);
+//    }
+//    bool haveDrop = CleanUp(request.Get(), ctx);
+//
+//    ProcessReserveRequests(ctx);
+//    if (!haveData && !haveDrop && !haveCheckDisk) { //no data writed/deleted
+//        AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
+//        BecomeIdle();
+//        return;
+//    }
+//
+//    WritesTotal.Inc();
+//    WritePendingBlob(std::move(request));
+//}
 
 void TPartition::RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie) {
     LOG_DEBUG_S(

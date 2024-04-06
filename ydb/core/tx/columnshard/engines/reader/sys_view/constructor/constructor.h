@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/reader/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/iterator.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 

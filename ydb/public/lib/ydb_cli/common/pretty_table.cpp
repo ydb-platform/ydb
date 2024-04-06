@@ -18,99 +18,40 @@ TPrettyTable::TRow::TRow(size_t nColumns)
 {
 }
 
-size_t TPrettyTable::TRow::ColumnWidth(size_t columnIndex) const {
-    Y_ABORT_UNLESS(columnIndex < Columns.size());
-    enum {
-        TEXT,
-        COLOR,
-        UTF8,
-    } state = TEXT;
-
-    size_t width = 0;
-    TStringBuf data;
-    for (const auto& line : Columns.at(columnIndex)) {
-        data = line;
-
-        // flag of first symbol in color
-        bool first = false;
-        // flag of enfing of color
-        bool endcolor = false;
-        int utf8Len = 0;
-        // count of visible chars
-        size_t curLen = 0;
-        for (char ch : data) {
-            switch (state) {
-                case TEXT:
-                    // begin of color
-                    if (ch == '\033') {
-                        state = COLOR;
-                        first = true;
-                        endcolor = false;
-                    // begin utf8
-                    } else  if ((ch & 0x80) != 0) {
-                        curLen++;
-                        utf8Len = 0;
-                        // if the first bit of the character is not 0, we met a multibyte
-                        // counting the number of single bits at the beginning of a byte
-                        while ((ch & 0x80) != 0) {
-                            utf8Len++;
-                            ch <<= 1;
-                        }
-                        state = UTF8;
-                    // common text
-                    } else {
-                        curLen++;
-                    }
-                    break;
-                case UTF8:
-                    // skip n chars
-                    utf8Len -= 1;
-                    if (utf8Len == 0) {
-                        curLen++;
-                        while ((ch & 0x80) != 0) {
-                            utf8Len++;
-                            ch <<= 1;
-                        }
-                        if (utf8Len != 0) {
-                            state = UTF8;
-                        } else {
-                            state = TEXT;
-                        }
-                    }
-                    break;
-                case COLOR:
-                    // first symbol must be [
-                    if (first) {
-                        if (ch != '[') {
-                            state = TEXT;
-                        }
-                        first = false;
-                    // at the end of color can be digits, m and ;
-                    } else if (endcolor) {
-                        if (ch != ';' && !isdigit(ch) && ch != 'm' ) {
-                            curLen++;
-                            state = TEXT;
-                        }
-                    // ending after ;
-                    } else {
-                        if (ch == ';') {
-                            endcolor = true;
-                        }
-                    }
-                    break;
-            }
-        }
-
-        width = Max(width, curLen);
-    }
-
-    return width;
-}
-
 enum {
     COLOR_BEGIN = '\033',
     COLOR_END = 'm',
 };
+
+size_t TPrettyTable::TRow::ColumnWidth(size_t columnIndex) const {
+    Y_ABORT_UNLESS(columnIndex < Columns.size());
+
+    size_t width = 0;
+
+    for (const auto& column: Columns.at(columnIndex)) {
+        size_t printableSymbols = 0;
+
+        for (size_t i = 0; i < column.size();) {
+            if (column[i] == COLOR_BEGIN) {
+                while (i < column.size() && column[i] != COLOR_END) {
+                    ++i;
+                }
+                continue;
+            }
+
+
+            ++i;
+            while (i < column.size() && IsUTF8ContinuationByte(column[i])) {
+                ++i;
+            }
+            ++printableSymbols;
+        }
+
+        width = Max(width, printableSymbols);
+    }
+
+    return width;
+}
 
 class TColumnLinesPrinter {
 public:

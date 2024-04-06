@@ -36,19 +36,6 @@ private:
 
     std::optional<TSortableBatchPosition> DrainCurrentPosition();
 
-    template <class TDataContainer>
-    void AddNewToHeap(const std::shared_ptr<TDataContainer>& batch, const std::shared_ptr<NArrow::TColumnFilter>& filter) {
-        if (!batch->num_rows()) {
-            return;
-        }
-        if (!filter || filter->IsTotalAllowFilter()) {
-            SortHeap.Push(TBatchIterator(batch, nullptr, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames));
-        } else if (filter->IsTotalDenyFilter()) {
-            return;
-        } else {
-            SortHeap.Push(TBatchIterator(batch, filter, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames));
-        }
-    }
     void CheckSequenceInDebug(const TSortableBatchPosition& nextKeyColumnsPosition);
 public:
     TMergePartialStream(std::shared_ptr<arrow::Schema> sortSchema, std::shared_ptr<arrow::Schema> dataSchema, const bool reverse, const std::vector<std::string>& versionColumnNames)
@@ -124,7 +111,8 @@ public:
             return;
         }
 //        Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, SortSchema));
-        AddNewToHeap(batch, filter);
+        auto filterImpl = (!filter || filter->IsTotalAllowFilter()) ? nullptr : filter;
+        SortHeap.Push(TBatchIterator(batch, filterImpl, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames));
     }
 
     bool IsEmpty() const {

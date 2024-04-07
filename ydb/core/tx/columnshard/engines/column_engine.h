@@ -159,7 +159,6 @@ public:
 
     i64 Tables{};
     i64 ColumnRecords{};
-    i64 ColumnMetadataBytes{};
     THashMap<TPortionMeta::EProduced, TPortionsStats> StatsByType;
 
     std::vector<ui32> GetKinds() const {

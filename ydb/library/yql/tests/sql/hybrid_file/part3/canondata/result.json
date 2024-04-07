@@ -1849,9 +1849,9 @@
     ],
     "test.test[pg-dates_to_pg-default.txt-Debug]": [
         {
-            "checksum": "3ee30f1b5fa3a5216f61e8d439c4a3fa",
-            "size": 558,
-            "uri": "https://{canondata_backend}/1946324/208a50d83749c76dc119c7025e7f828673e1f366/resource.tar.gz#test.test_pg-dates_to_pg-default.txt-Debug_/opt.yql_patched"
+            "checksum": "9e997f27e83c4d2a812a1c9b809237e2",
+            "size": 930,
+            "uri": "https://{canondata_backend}/1917492/28d814aabd2759eeec59d3b09e217e6ed63cad18/resource.tar.gz#test.test_pg-dates_to_pg-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-dates_to_pg-default.txt-Plan]": [

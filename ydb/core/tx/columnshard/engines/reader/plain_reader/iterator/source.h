@@ -93,10 +93,6 @@ public:
         StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
     }
 
-    bool IsEmptyData() const {
-        return GetStageData().IsEmpty();
-    }
-
     void ApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) {
         return DoApplyIndex(indexMeta);
     }

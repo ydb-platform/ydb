@@ -57,8 +57,8 @@ bool TBaseMergeTask::DoApply(IDataReader& indexedDataRead) const {
 }
 
 bool TStartMergeTask::DoExecute() {
-    if (EmptyFiltersOnly()) {
-        ResultBatch = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({NArrow::MakeEmptyBatch(Context->GetProgramInputColumns()->GetSchema())}));
+    if (OnlyEmptySources) {
+        ResultBatch = nullptr;
         return true;
     }
     bool sourcesInMemory = true;
@@ -129,21 +129,17 @@ bool TStartMergeTask::DoExecute() {
     return true;
 }
 
-bool TStartMergeTask::EmptyFiltersOnly() const {
-    for (auto&& [_, i] : Sources) {
-        if (!i->IsEmptyData()) {
-            return false;
-        }
-    }
-    return true;
-}
-
 TStartMergeTask::TStartMergeTask(const std::shared_ptr<TMergingContext>& mergingContext, const std::shared_ptr<TSpecialReadContext>& readContext, std::map<ui32, std::shared_ptr<IDataSource>>&& sources)
     : TBase(mergingContext, readContext)
     , Sources(std::move(sources))
 {
     for (auto&& s : Sources) {
         AFL_VERIFY(s.second->IsDataReady());
+    }
+    for (auto&& [_, i] : Sources) {
+        if (!i->GetStageResult().IsEmpty()) {
+            OnlyEmptySources = false;
+        }
     }
 }
 

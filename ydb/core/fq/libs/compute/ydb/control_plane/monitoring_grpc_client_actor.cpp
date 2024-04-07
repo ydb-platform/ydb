@@ -28,6 +28,8 @@ struct TEvPrivate {
     enum EEv {
         EvSelfCheckRequest = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvSelfCheckResponse,
+        EvTenantInfoRequest,
+        EvTenantInfoResponse,
 
         EvEnd
     };
@@ -36,6 +38,8 @@ struct TEvPrivate {
 
     struct TEvSelfCheckRequest : NCloud::TEvGrpcProtoRequest<TEvSelfCheckRequest, EvSelfCheckRequest, Ydb::Monitoring::SelfCheckRequest> {};
     struct TEvSelfCheckResponse : NCloud::TEvGrpcProtoResponse<TEvSelfCheckResponse, EvSelfCheckResponse, Ydb::Monitoring::SelfCheckResponse> {};
+    struct TEvTenantInfoRequest : NCloud::TEvGrpcProtoRequest<TEvTenantInfoRequest, EvTenantInfoRequest, Ydb::Monitoring::TenantInfoRequest> {};
+    struct TEvTenantInfoResponse : NCloud::TEvGrpcProtoResponse<TEvTenantInfoResponse, EvTenantInfoResponse, Ydb::Monitoring::TenantInfoResponse> {};
 };
 
 }
@@ -43,30 +47,46 @@ struct TEvPrivate {
 class TMonitoringGrpcServiceActor : public NActors::TActor<TMonitoringGrpcServiceActor>, NGrpcActorClient::TGrpcServiceClient<Ydb::Monitoring::V1::MonitoringService> {
 public:
     using TBase = NActors::TActor<TMonitoringGrpcServiceActor>;
+
     struct TSelfCheckGrpcRequest : TGrpcRequest {
         static constexpr auto Request = &Ydb::Monitoring::V1::MonitoringService::Stub::AsyncSelfCheck;
         using TRequestEventType = TEvPrivate::TEvSelfCheckRequest;
         using TResponseEventType = TEvPrivate::TEvSelfCheckResponse;
     };
 
-    TMonitoringGrpcServiceActor(const NGrpcActorClient::TGrpcClientSettings& settings, const NYdb::TCredentialsProviderPtr& credentialsProvider)
+    struct TTenantInfoGrpcRequest : TGrpcRequest {
+        static constexpr auto Request = &Ydb::Monitoring::V1::MonitoringService::Stub::AsyncTenantInfo;
+        using TRequestEventType = TEvPrivate::TEvTenantInfoRequest;
+        using TResponseEventType = TEvPrivate::TEvTenantInfoResponse;
+    };
+
+    TMonitoringGrpcServiceActor(const NGrpcActorClient::TGrpcClientSettings& settings, const TString& database, const NYdb::TCredentialsProviderPtr& credentialsProvider)
         : TBase(&TMonitoringGrpcServiceActor::StateFunc)
         , TGrpcServiceClient(settings)
         , Settings(settings)
+        , Database(database)
         , CredentialsProvider(credentialsProvider)
     {}
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvYdbCompute::TEvCpuLoadRequest, Handle);
         hFunc(TEvPrivate::TEvSelfCheckResponse, Handle);
+        hFunc(TEvPrivate::TEvTenantInfoResponse, Handle);
     )
 
     void Handle(TEvYdbCompute::TEvCpuLoadRequest::TPtr& ev) {
+/*
         auto forwardRequest = std::make_unique<TEvPrivate::TEvSelfCheckRequest>();
         forwardRequest->Request.set_return_verbose_status(true);
         forwardRequest->Token = CredentialsProvider->GetAuthInfo();
         TEvPrivate::TEvSelfCheckRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvSelfCheckRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
         MakeCall<TSelfCheckGrpcRequest>(std::move(forwardEvent));
+*/
+        auto forwardRequest = std::make_unique<TEvPrivate::TEvTenantInfoRequest>();
+        forwardRequest->Token = CredentialsProvider->GetAuthInfo();
+        TEvPrivate::TEvTenantInfoRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvTenantInfoRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
+        MakeCall<TTenantInfoGrpcRequest>(std::move(forwardEvent));
+
         Requests[Cookie++] = ev;
     }
 
@@ -117,15 +137,66 @@ public:
         Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
     }
 
+    void Handle(TEvPrivate::TEvTenantInfoResponse::TPtr& ev) {
+        const auto& status = ev->Get()->Status;
+
+        auto it = Requests.find(ev->Cookie);
+        if (it == Requests.end()) {
+            LOG_E("Request doesn't exist (SelfCheckResponse). Need to fix this bug urgently");
+            return;
+        }
+        auto request = it->second;
+        Requests.erase(it);
+
+        auto forwardResponse = std::make_unique<TEvYdbCompute::TEvCpuLoadResponse>();
+        if (!status.Ok()) {
+            forwardResponse->Issues.AddIssue("GrpcCode: " + ToString(status.GRpcStatusCode));
+            forwardResponse->Issues.AddIssue("Message: " + status.Msg);
+            forwardResponse->Issues.AddIssue("Details: " + status.Details);
+            Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
+            return;
+        }
+
+        Ydb::Monitoring::TenantInfoResult response;
+        ev->Get()->Response.operation().result().UnpackTo(&response);
+Cerr << TStringBuilder() << "TENANT RESPONSE " << response.DebugString() << Endl;
+        bool tenantFound = false;
+        bool poolFound = false;
+
+        for (auto& tenantInfo : response.tenant_info()) {
+            if (tenantInfo.name() == Database) {
+                tenantFound = true;
+                for (auto& poolStats : tenantInfo.pool_stats()) {
+                    if (poolStats.name() == "User") {
+                        poolFound = true;
+                        forwardResponse->InstantLoad = poolStats.usage();
+                        forwardResponse->CpuNumber = poolStats.threads();
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+
+        if (!tenantFound) {
+            forwardResponse->Issues.AddIssue(TStringBuilder() << "Info for database " << Database << " not found");
+        } else if (!poolFound) {
+            forwardResponse->Issues.AddIssue("Info for User pool not found");
+        }
+
+        Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
+    }
+
 private:
     NGrpcActorClient::TGrpcClientSettings Settings;
     TMap<uint64_t, TEvYdbCompute::TEvCpuLoadRequest::TPtr> Requests;
+    TString Database;
     NYdb::TCredentialsProviderPtr CredentialsProvider;
     int64_t Cookie = 0;
 };
 
-std::unique_ptr<NActors::IActor> CreateMonitoringGrpcClientActor(const NGrpcActorClient::TGrpcClientSettings& settings, const NYdb::TCredentialsProviderPtr& credentialsProvider) {
-    return std::make_unique<TMonitoringGrpcServiceActor>(settings, credentialsProvider);
+std::unique_ptr<NActors::IActor> CreateMonitoringGrpcClientActor(const NGrpcActorClient::TGrpcClientSettings& settings, const TString& database, const NYdb::TCredentialsProviderPtr& credentialsProvider) {
+    return std::make_unique<TMonitoringGrpcServiceActor>(settings, database, credentialsProvider);
 }
 
 }

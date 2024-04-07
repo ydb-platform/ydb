@@ -1,4 +1,7 @@
 #pragma once
+
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/core/base/tablet.h>
@@ -12,6 +15,7 @@
 #include <ydb/core/viewer/protos/viewer.pb.h>
 #include <ydb/core/viewer/json/json.h>
 #include "viewer.h"
+#include "json_tabletinfo.h"
 #include "json_pipe_req.h"
 #include "wb_aggregate.h"
 #include "wb_merge.h"
@@ -23,9 +27,9 @@ namespace NViewer {
 
 using namespace NActors;
 
-class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
-    using TBase = TViewerPipeClient<TJsonTenantInfo>;
-    IViewer* Viewer;
+class TTenantInfo : public TViewerPipeClient<TTenantInfo> {
+    using TBase = TViewerPipeClient<TTenantInfo>;
+protected:
     THashMap<TString, NKikimrViewer::TTenant> TenantByPath;
     THashMap<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
     THashMap<TString, THolder<NSchemeCache::TSchemeCacheNavigate>> NavigateResult;
@@ -60,11 +64,6 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonTenantInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : Viewer(viewer)
-        , Event(ev)
-    {}
-
     TString GetLogPrefix() {
         static TString prefix = "json/tenantinfo ";
         return prefix;
@@ -92,20 +91,6 @@ public:
 
     void Bootstrap() {
         BLOG_TRACE("Bootstrap()");
-        const auto& params(Event->Get()->Request.GetParams());
-        JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
-        JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        Followers = false;
-        Metrics = true;
-        InitConfig(params);
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        Tablets = FromStringWithDefault<bool>(params.Get("tablets"), Tablets);
-        SystemTablets = FromStringWithDefault<bool>(params.Get("system_tablets"), Tablets); // Tablets here is by design
-        Storage = FromStringWithDefault<bool>(params.Get("storage"), Storage);
-        Nodes = FromStringWithDefault<bool>(params.Get("nodes"), Nodes);
-        User = params.Get("user");
-        Path = params.Get("path");
-        OffloadMerge = FromStringWithDefault<bool>(params.Get("offload_merge"), OffloadMerge);
 
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto *domain = domains->GetDomain();
@@ -517,6 +502,7 @@ public:
             if (itNavigate != NavigateResult.end()) {
                 NSchemeCache::TSchemeCacheNavigate::TEntry entry = itNavigate->second->ResultSet.front();
                 TString path = CanonizePath(entry.Path);
+Cerr << TStringBuilder() << "ENTRY " << path << Endl;
                 if (!IsValidTenant(path)) {
                     continue;
                 }
@@ -741,9 +727,7 @@ public:
             [](const NKikimrViewer::TTenant& a, const NKikimrViewer::TTenant& b) {
                 return a.name() < b.name();
             });
-        TStringStream json;
-        TProtoToJson::ProtoToJson(json, Result, JsonSettings);
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        SendResult();
         PassAway();
     }
 
@@ -751,6 +735,39 @@ public:
         BLOG_TRACE("Timeout occurred");
         Result.AddErrors("Timeout occurred");
         ReplyAndPassAway();
+    }
+
+    virtual void SendResult() = 0;
+};
+
+class TJsonTenantInfo : public TTenantInfo {
+    IViewer* Viewer;
+    NMon::TEvHttpInfo::TPtr Event;
+public:
+    TJsonTenantInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+        : Viewer(viewer)
+        , Event(ev)
+    {
+        const auto& params(Event->Get()->Request.GetParams());
+        JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
+        JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
+        Followers = false;
+        Metrics = true;
+        InitConfig(params);
+        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
+        Tablets = FromStringWithDefault<bool>(params.Get("tablets"), Tablets);
+        SystemTablets = FromStringWithDefault<bool>(params.Get("system_tablets"), Tablets); // Tablets here is by design
+        Storage = FromStringWithDefault<bool>(params.Get("storage"), Storage);
+        Nodes = FromStringWithDefault<bool>(params.Get("nodes"), Nodes);
+        User = params.Get("user");
+        Path = params.Get("path");
+        OffloadMerge = FromStringWithDefault<bool>(params.Get("offload_merge"), OffloadMerge);
+    }
+
+    void SendResult() override {
+        TStringStream json;
+        TProtoToJson::ProtoToJson(json, Result, JsonSettings);
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
     }
 };
 

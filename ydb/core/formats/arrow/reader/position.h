@@ -284,6 +284,7 @@ public:
         Y_ABORT_UNLESS(batch);
         Y_ABORT_UNLESS(batch->num_rows());
         RecordsCount = batch->num_rows();
+        AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
 
         if (dataColumns.size()) {
             Data = std::make_shared<TSortableScanData>(batch, dataColumns);

@@ -116,10 +116,11 @@ TConclusion<bool> TApplyIndexStep::DoExecuteInplace(const std::shared_ptr<IDataS
 }
 
 TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSource>& source) {
+    AFL_VERIFY(source);
     NMiniKQL::TThrowingBindTerminator bind;
     AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
     while (!Script->IsFinished(CurrentStepIdx)) {
-        if (source->IsEmptyData()) {
+        if (source->GetStageData().IsEmpty()) {
             break;
         }
         auto step = Script->GetStep(CurrentStepIdx);

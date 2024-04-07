@@ -56,12 +56,8 @@ public:
         }
     }
 
-    bool IsEmptyFilter() const {
-        return Filter && Filter->IsTotalDenyFilter();
-    }
-
     bool IsEmpty() const {
-        return IsEmptyFilter() || !Table || !Table->num_rows();
+        return (Filter && Filter->IsTotalDenyFilter()) || (Table && !Table->num_rows());
     }
 
     void AddFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter) {
@@ -125,6 +121,10 @@ public:
     TFetchedResult(std::unique_ptr<TFetchedData>&& data)
         : Batch(data->GetTable())
         , NotAppliedFilter(data->GetNotAppliedFilter()) {
+    }
+
+    bool IsEmpty() const {
+        return !Batch || Batch->num_rows() == 0 || (NotAppliedFilter && NotAppliedFilter->IsTotalDenyFilter());
     }
 };
 

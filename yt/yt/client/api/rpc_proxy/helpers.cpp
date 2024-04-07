@@ -3,6 +3,8 @@
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/table_client.h>
 
+#include <yt/yt/client/sequoia_client/public.h>
+
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/column_sort_schema.h>
 #include <yt/yt/client/table_client/logical_type.h>
@@ -1888,8 +1890,20 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet);
 }
 
-bool IsRetriableError(const TError& error, bool retryProxyBanned)
+bool IsRetriableError(const TError& error, bool retryProxyBanned, bool retrySequoiaErrorsOnly)
 {
+    // For now transient Sequoia failures are always retriable even if client's
+    // retries are disabled.
+    // TODO(kvk1920): consider to make a separate flag "EnableSequoiaRetries"
+    // for this.
+    if (error.FindMatching(NSequoiaClient::EErrorCode::SequoiaRetriableError)) {
+        return true;
+    }
+
+    if (retrySequoiaErrorsOnly) {
+        return false;
+    }
+
     if (error.FindMatching(NRpcProxy::EErrorCode::ProxyBanned) ||
         error.FindMatching(NRpc::EErrorCode::PeerBanned))
     {

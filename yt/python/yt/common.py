@@ -359,6 +359,10 @@ class YtError(Exception):
         """Cross-cell "copy"/"move" command is explicitly disabled"""
         return self.contains_code(1002)
 
+    def is_sequoia_retriable_error(self):
+        """Probably lock conflict in Sequoia tables"""
+        return self.contains_code(6002)
+
 
 class YtResponseError(YtError):
     """Represents an error in YT response."""

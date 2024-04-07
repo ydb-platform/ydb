@@ -366,6 +366,11 @@ message TRowsetStatistics
 
 message TReqStartTransaction
 {
+    message TReplicateToMasterCellTags
+    {
+        repeated int32 cell_tags = 1;
+    }
+
     required ETransactionType type = 1;
 
     optional int64 timeout = 2;
@@ -392,6 +397,8 @@ message TReqStartTransaction
     repeated NYT.NProto.TGuid prerequisite_transaction_ids = 13;
 
     optional uint64 start_timestamp = 14;
+
+    optional TReplicateToMasterCellTags replicate_to_master_cell_tags = 15;
 
     optional TMutatingOptions mutating_options = 103;
 }

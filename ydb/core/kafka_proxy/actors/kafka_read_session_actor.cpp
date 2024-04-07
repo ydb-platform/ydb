@@ -600,7 +600,7 @@ void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePart
 
         NeedRebalance = true;
         ui32 partitionToRelease = 0;
-        size_t i = 0;
+        ui32 i = 0;
 
         for (auto curPartition : topicPartitionsIt->second.ReadingNow) {
             if (!topicPartitionsIt->second.ToRelease.contains(curPartition) && (group == 0 || curPartition + 1 == group)) {

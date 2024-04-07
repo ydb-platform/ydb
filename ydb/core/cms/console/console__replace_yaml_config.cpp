@@ -37,6 +37,26 @@ public:
     {
     }
 
+    void DoAudit(TTransactionContext &txc, const TActorContext &ctx)
+    {
+        auto logData = NKikimrConsole::TLogRecordData{};
+
+        // for backward compatibility in ui
+        logData.MutableAction()->AddActions()->MutableModifyConfigItem()->MutableConfigItem();
+        logData.AddAffectedKinds(NKikimrConsole::TConfigItem::YamlConfigChangeItem);
+
+        auto& yamlConfigChange = *logData.MutableYamlConfigChange();
+        yamlConfigChange.SetOldYamlConfig(Self->YamlConfig);
+        yamlConfigChange.SetNewYamlConfig(UpdatedConfig);
+        for (auto& [id, config] : Self->VolatileYamlConfigs) {
+            auto& oldVolatileConfig = *yamlConfigChange.AddOldVolatileYamlConfigs();
+            oldVolatileConfig.SetId(id);
+            oldVolatileConfig.SetConfig(config);
+        }
+
+        Self->Logger.DbLogData(UserSID, logData, txc, ctx);
+    }
+
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         NIceDb::TNiceDb db(txc.DB);
@@ -83,18 +103,7 @@ public:
                 }
 
                 if (!DryRun) {
-                    auto logData = NKikimrConsole::TLogRecordData{};
-                    logData.AddAffectedKinds(NKikimrConsole::TConfigItem::YamlConfigChangeItem);
-                    auto& yamlConfigChange = *logData.MutableYamlConfigChange();
-                    yamlConfigChange.SetOldYamlConfig(Self->YamlConfig);
-                    yamlConfigChange.SetNewYamlConfig(UpdatedConfig);
-                    for (auto& [id, config] : Self->VolatileYamlConfigs) {
-                        auto& oldVolatileConfig = *yamlConfigChange.AddOldVolatileYamlConfigs();
-                        oldVolatileConfig.SetId(id);
-                        oldVolatileConfig.SetConfig(config);
-                    }
-
-                    Self->Logger.DbLogData(UserSID, logData, txc, ctx);
+                    DoAudit(txc, ctx);
 
                     db.Table<Schema::YamlConfig>().Key(Version + 1)
                         .Update<Schema::YamlConfig::Config>(UpdatedConfig)

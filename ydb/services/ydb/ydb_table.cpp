@@ -40,63 +40,70 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #error ADD_STREAM_REQUEST_LIMIT macro already defined
 #endif
 
-#define ADD_REQUEST_LIMIT(NAME, CB, LIMIT_TYPE, ...)                                                                  \
+#define ADD_REQUEST_LIMIT(NAME, CB, LIMIT_TYPE, REQUEST_TYPE, ...)                                                    \
     for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {                                                         \
         for (auto* cq: CQS) {                                                                                         \
             MakeIntrusive<TGRpcRequest<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response, TGRpcYdbTableService>>  \
                 (this, &Service_, cq,                                                                                 \
-                    [this, proxyCounter](NYdbGrpc::IRequestContextBase *ctx) {                                           \
+                    [this, proxyCounter](NYdbGrpc::IRequestContextBase *ctx) {                                        \
                         NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                              \
                         ActorSystem_->Send(GRpcProxies_[proxyCounter % GRpcProxies_.size()],                          \
                             new TGrpcRequestOperationCall<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response>      \
-                                (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), nullptr __VA_OPT__(, TAuditMode::__VA_ARGS__)})); \
+                                (ctx, &CB, TRequestAuxSettings {                                                      \
+                                    .RlMode = RLSWITCH(TRateLimiterMode::LIMIT_TYPE),                                 \
+                                    __VA_OPT__(.AuditMode = TAuditMode::__VA_ARGS__,)                                 \
+                                    .RequestType = NJaegerTracing::ERequestType::TABLE_##REQUEST_TYPE,                \
+                                }));                                                                                  \
                     }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                  \
                     #NAME, logger, getCounterBlock("table", #NAME))->Run();                                           \
             ++proxyCounter;                                                                                           \
         }                                                                                                             \
     }
 
-#define ADD_STREAM_REQUEST_LIMIT(NAME, IN, OUT, CB, LIMIT_TYPE) \
+#define ADD_STREAM_REQUEST_LIMIT(NAME, IN, OUT, CB, LIMIT_TYPE, REQUEST_TYPE) \
     for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {                                                         \
         for (auto* cq: CQS) {                                                                                         \
             MakeIntrusive<TGRpcRequest<Ydb::Table::IN, Ydb::Table::OUT, TGRpcYdbTableService>>                        \
                 (this, &Service_, cq,                                                                                 \
-                    [this, proxyCounter](NYdbGrpc::IRequestContextBase *ctx) {                                           \
+                    [this, proxyCounter](NYdbGrpc::IRequestContextBase *ctx) {                                        \
                         NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                              \
                         ActorSystem_->Send(GRpcProxies_[proxyCounter % GRpcProxies_.size()],                          \
                             new TGrpcRequestNoOperationCall<Ydb::Table::IN, Ydb::Table::OUT>                          \
-                                (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), nullptr}));    \
+                                (ctx, &CB, TRequestAuxSettings {                                                      \
+                                    .RlMode = RLSWITCH(TRateLimiterMode::LIMIT_TYPE),                                 \
+                                    .RequestType = NJaegerTracing::ERequestType::TABLE_##REQUEST_TYPE,                \
+                                }));                                                                                  \
                     }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                  \
                     #NAME, logger, getCounterBlock("table", #NAME))->Run();                                           \
             ++proxyCounter;                                                                                           \
         }                                                                                                             \
     }
 
-    ADD_REQUEST_LIMIT(CreateSession, DoCreateSessionRequest, Rps)
-    ADD_REQUEST_LIMIT(KeepAlive, DoKeepAliveRequest, Rps)
-    ADD_REQUEST_LIMIT(AlterTable, DoAlterTableRequest, Rps)
-    ADD_REQUEST_LIMIT(CreateTable, DoCreateTableRequest, Rps)
-    ADD_REQUEST_LIMIT(DropTable, DoDropTableRequest, Rps)
-    ADD_REQUEST_LIMIT(DescribeTable, DoDescribeTableRequest, Rps)
-    ADD_REQUEST_LIMIT(CopyTable, DoCopyTableRequest, Rps)
-    ADD_REQUEST_LIMIT(CopyTables, DoCopyTablesRequest, Rps)
-    ADD_REQUEST_LIMIT(RenameTables, DoRenameTablesRequest, Rps)
-    ADD_REQUEST_LIMIT(ExplainDataQuery, DoExplainDataQueryRequest, Rps)
-    ADD_REQUEST_LIMIT(ExecuteSchemeQuery, DoExecuteSchemeQueryRequest, Rps)
-    ADD_REQUEST_LIMIT(BeginTransaction, DoBeginTransactionRequest, Rps, Auditable)
-    ADD_REQUEST_LIMIT(DescribeTableOptions, DoDescribeTableOptionsRequest, Rps)
+    ADD_REQUEST_LIMIT(CreateSession, DoCreateSessionRequest, Rps, CREATESESSION)
+    ADD_REQUEST_LIMIT(KeepAlive, DoKeepAliveRequest, Rps, KEEPALIVE)
+    ADD_REQUEST_LIMIT(AlterTable, DoAlterTableRequest, Rps, ALTERTABLE)
+    ADD_REQUEST_LIMIT(CreateTable, DoCreateTableRequest, Rps, CREATETABLE)
+    ADD_REQUEST_LIMIT(DropTable, DoDropTableRequest, Rps, DROPTABLE)
+    ADD_REQUEST_LIMIT(DescribeTable, DoDescribeTableRequest, Rps, DESCRIBETABLE)
+    ADD_REQUEST_LIMIT(CopyTable, DoCopyTableRequest, Rps, COPYTABLE)
+    ADD_REQUEST_LIMIT(CopyTables, DoCopyTablesRequest, Rps, COPYTABLES)
+    ADD_REQUEST_LIMIT(RenameTables, DoRenameTablesRequest, Rps, RENAMETABLES)
+    ADD_REQUEST_LIMIT(ExplainDataQuery, DoExplainDataQueryRequest, Rps, EXPLAINDATAQUERY)
+    ADD_REQUEST_LIMIT(ExecuteSchemeQuery, DoExecuteSchemeQueryRequest, Rps, EXECUTESCHEMEQUERY)
+    ADD_REQUEST_LIMIT(BeginTransaction, DoBeginTransactionRequest, Rps, BEGINTRANSACTION, Auditable)
+    ADD_REQUEST_LIMIT(DescribeTableOptions, DoDescribeTableOptionsRequest, Rps, DESCRIBETABLEOPTIONS)
 
-    ADD_REQUEST_LIMIT(DeleteSession, DoDeleteSessionRequest, Off)
-    ADD_REQUEST_LIMIT(CommitTransaction, DoCommitTransactionRequest, Off, Auditable)
-    ADD_REQUEST_LIMIT(RollbackTransaction, DoRollbackTransactionRequest, Off, Auditable)
+    ADD_REQUEST_LIMIT(DeleteSession, DoDeleteSessionRequest, Off, DELETESESSION)
+    ADD_REQUEST_LIMIT(CommitTransaction, DoCommitTransactionRequest, Off, COMMITTRANSACTION, Auditable)
+    ADD_REQUEST_LIMIT(RollbackTransaction, DoRollbackTransactionRequest, Off, ROLLBACKTRANSACTION, Auditable)
 
-    ADD_REQUEST_LIMIT(PrepareDataQuery, DoPrepareDataQueryRequest, Ru, Auditable)
-    ADD_REQUEST_LIMIT(ExecuteDataQuery, DoExecuteDataQueryRequest, Ru, Auditable)
-    ADD_REQUEST_LIMIT(BulkUpsert, DoBulkUpsertRequest, Ru, Auditable)
+    ADD_REQUEST_LIMIT(PrepareDataQuery, DoPrepareDataQueryRequest, Ru, PREPAREDATAQUERY, Auditable)
+    ADD_REQUEST_LIMIT(ExecuteDataQuery, DoExecuteDataQueryRequest, Ru, EXECUTEDATAQUERY, Auditable)
+    ADD_REQUEST_LIMIT(BulkUpsert, DoBulkUpsertRequest, Ru, BULKUPSERT, Auditable)
 
-    ADD_STREAM_REQUEST_LIMIT(StreamExecuteScanQuery, ExecuteScanQueryRequest, ExecuteScanQueryPartialResponse, DoExecuteScanQueryRequest, RuOnProgress)
-    ADD_STREAM_REQUEST_LIMIT(StreamReadTable, ReadTableRequest, ReadTableResponse, DoReadTableRequest, RuOnProgress)
-    ADD_STREAM_REQUEST_LIMIT(ReadRows, ReadRowsRequest, ReadRowsResponse, DoReadRowsRequest, Ru)
+    ADD_STREAM_REQUEST_LIMIT(StreamExecuteScanQuery, ExecuteScanQueryRequest, ExecuteScanQueryPartialResponse, DoExecuteScanQueryRequest, RuOnProgress, STREAMEXECUTESCANQUERY)
+    ADD_STREAM_REQUEST_LIMIT(StreamReadTable, ReadTableRequest, ReadTableResponse, DoReadTableRequest, RuOnProgress, STREAMREADTABLE)
+    ADD_STREAM_REQUEST_LIMIT(ReadRows, ReadRowsRequest, ReadRowsResponse, DoReadRowsRequest, Ru, READROWS)
 
 #undef ADD_REQUEST_LIMIT
 #undef ADD_STREAM_REQUEST_LIMIT

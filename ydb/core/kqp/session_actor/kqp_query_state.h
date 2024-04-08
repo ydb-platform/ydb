@@ -63,7 +63,7 @@ public:
         SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
         auto action = GetAction();
         KqpSessionSpan = NWilson::TSpan(
-            TWilsonKqp::KqpSession, std::move(RequestEv->GetWilsonTraceId()),
+            TWilsonKqp::KqpSession, std::move(ev->TraceId),
             "Session.query." + NKikimrKqp::EQueryAction_Name(action), NWilson::EFlags::AUTO_END);
         if (RequestEv->GetUserRequestContext()) {
             UserRequestContext = RequestEv->GetUserRequestContext();

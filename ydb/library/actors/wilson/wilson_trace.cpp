@@ -4,7 +4,7 @@
 #include <util/string/hex.h>
 
 namespace NWilson {
-    TTraceId TTraceId::FromTraceparentHeader(const TStringBuf header) {
+    TTraceId TTraceId::FromTraceparentHeader(const TStringBuf header, ui8 verbosity) {
         constexpr size_t versionChars = 2; // Only version 0 is supported
         constexpr size_t versionStart = 0;
 
@@ -61,7 +61,7 @@ namespace NWilson {
             return {};
         }
 
-        return TTraceId(traceId, spanId, 15, Max<ui32>());
+        return TTraceId(traceId, spanId, verbosity, Max<ui32>());
     }
 
     TString TTraceId::GetHexTraceId() const {

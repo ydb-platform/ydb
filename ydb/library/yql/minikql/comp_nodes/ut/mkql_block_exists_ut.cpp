@@ -12,25 +12,25 @@ void DoBlockExistsOffset(size_t length, size_t offset) {
     TSetup<false> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto i32Type    = pb.NewDataType(NUdf::TDataType<i32>::Id);
-    const auto opti32Type = pb.NewOptionalType(i32Type);
+    const auto ui64Type    = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto optui64Type = pb.NewOptionalType(ui64Type);
     const auto boolType   = pb.NewDataType(NUdf::TDataType<bool>::Id);
 
-    const auto inputTupleType  = pb.NewTupleType({i32Type, opti32Type, opti32Type, opti32Type});
-    const auto outputTupleType = pb.NewTupleType({i32Type, boolType, boolType, boolType});
+    const auto inputTupleType  = pb.NewTupleType({ui64Type, optui64Type, optui64Type, optui64Type});
+    const auto outputTupleType = pb.NewTupleType({ui64Type, boolType, boolType, boolType});
 
     TRuntimeNode::TList input;
     static_assert(MaxBlockSizeInBytes % 4 == 0);
 
     for (size_t i = 0; i < length; i++) {
-        const auto maybeNull = (i % 2) ? pb.NewOptional(pb.NewDataLiteral<i32>(i / 2))
-                                       : pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<i32>::Id);
+        const auto maybeNull = (i % 2) ? pb.NewOptional(pb.NewDataLiteral<ui64>(i / 2))
+                                       : pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id);
 
         const auto inputTuple = pb.NewTuple(inputTupleType, {
-            pb.NewDataLiteral<i32>(i),
+            pb.NewDataLiteral<ui64>(i),
             maybeNull,
-            pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<i32>::Id),
-            pb.NewOptional(pb.NewDataLiteral<i32>(i))
+            pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id),
+            pb.NewOptional(pb.NewDataLiteral<ui64>(i))
         });
 
         input.push_back(inputTuple);
@@ -76,7 +76,7 @@ void DoBlockExistsOffset(size_t length, size_t offset) {
 
         NUdf::TUnboxedValue outputTuple;
         UNIT_ASSERT(iterator.Next(outputTuple));
-        const i32 key = outputTuple.GetElement(0).Get<i32>();
+        const ui32 key = outputTuple.GetElement(0).Get<ui64>();
         const bool maybeNull = outputTuple.GetElement(1).Get<bool>();
         const bool alwaysNull = outputTuple.GetElement(2).Get<bool>();
         const bool neverNull = outputTuple.GetElement(3).Get<bool>();

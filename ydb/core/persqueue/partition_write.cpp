@@ -533,7 +533,7 @@ void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContex
     PQ_LOG_T("TPartition::HandleOnWrite TEvHandleWriteResponse.");
     KVWriteInProgress = false;
     DBGTRACE_LOG("KVWriteInProgress=" << KVWriteInProgress);
-    OnProcessTxsAndUserActsWriteComplete(SET_OFFSET_COOKIE, ctx);
+    OnProcessTxsAndUserActsWriteComplete(ctx);
     HandleWriteResponse(ctx);
     ProcessTxsAndUserActs(ctx);
 }

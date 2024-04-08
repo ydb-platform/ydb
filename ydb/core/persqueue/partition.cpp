@@ -1517,7 +1517,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     if (writeDuration > minWriteLatency) {
         KVWriteInProgress = false;
         DBGTRACE_LOG("KVWriteInProgress=" << KVWriteInProgress);
-        OnProcessTxsAndUserActsWriteComplete(SET_OFFSET_COOKIE, ctx);
+        OnProcessTxsAndUserActsWriteComplete(ctx);
         HandleWriteResponse(ctx);
         ProcessTxsAndUserActs(ctx);
     } else {
@@ -1607,7 +1607,6 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
     Y_ABORT_UNLESS(!TxInProgress);
 
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
-    request->Record.SetCookie(SET_OFFSET_COOKIE);
 
     HaveWriteMsg = false;
 
@@ -2001,9 +2000,8 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
     }
 }
 
-void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorContext& ctx) {
+void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) {
     DBGTRACE("TPartition::OnProcessTxsAndUserActsWriteComplete");
-    Y_ABORT_UNLESS(cookie == SET_OFFSET_COOKIE);
 
     if (ChangeConfig) {
         DBGTRACE_LOG("ChangeConfig");

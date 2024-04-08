@@ -333,7 +333,7 @@ private:
 
     void BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
                                     const TActorContext& ctx);
-    void OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorContext& ctx);
+    void OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx);
     void EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
                                   NPersQueue::TTopicConverterPtr topicConverter,
                                   const TActorContext& ctx);

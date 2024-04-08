@@ -310,9 +310,9 @@ TBytesStatistics WriteColumnValuesFromArrowSpecImpl(TAccessor editAccessor,
         currentIdxFrom = rowIndexFrom;
 
         if (!chunkIdx || *chunkIdx != address->GetChunkIdx()) {
+            currentArray = static_cast<const typename TElementAccessor::TArrayType*>(address->GetArray().get());
             TElementAccessor::Validate(*currentArray);
             chunkIdx = address->GetChunkIdx();
-            currentArray = static_cast<const typename TElementAccessor::TArrayType*>(address->GetArray().get());
         }
 
         auto& rowItem = editAccessor(rowIndexTo, columnIndex);

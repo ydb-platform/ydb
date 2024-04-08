@@ -61,8 +61,6 @@ ui64 GetFullTimeValue(const TString& output)
 
 THashSet<TString> GetCodecsList(const TString& output)
 {
-    Cerr << "output=" << output << Endl;
-
     THashSet<TString> result;
 
     TVector<TString> lines;
@@ -73,7 +71,6 @@ THashSet<TString> GetCodecsList(const TString& output)
         Split(line, ":", fields);
 
         if (fields[0] == "SupportedCodecs") {
-            Cerr << "codecs=" << fields[1] << Endl;
             TVector<TString> codecs;
             Split(fields[1], ",", codecs);
             for (auto& codec : codecs) {

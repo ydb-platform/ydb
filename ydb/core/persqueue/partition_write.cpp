@@ -563,11 +563,11 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     DBGTRACE("TPartition::HandleWriteResponse");
     DBGTRACE_LOG("HaveWriteMsg=" << HaveWriteMsg);
     PQ_LOG_T("TPartition::HandleWriteResponse.");
-    Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
+//    Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
 
     if (!HaveWriteMsg) {
         DBGTRACE_LOG("skip");
-        BecomeIdle();
+//        BecomeIdle();
         return;
     }
 
@@ -621,7 +621,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
     ProcessTimestampsForNewData(prevEndOffset, ctx);
 
-    BecomeIdle();
+//    BecomeIdle();
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
@@ -1768,7 +1768,7 @@ void TPartition::EndHandleRequests(TEvKeyValue::TEvRequest* request, const TActo
     ProcessReserveRequests(ctx);
     if (!HaveData && !HaveDrop && !HaveCheckDisk) { //no data writed/deleted
         //AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
-        BecomeIdle();
+//        BecomeIdle();
         return;
     }
 
@@ -1996,21 +1996,21 @@ void TPartition::RequestBlobQuota(size_t quotaSize)
     RequestQuotaForWriteBlobRequest(quotaSize, TopicQuotaRequestCookie);
 }
 
-void TPartition::WritePendingBlob(THolder<TEvKeyValue::TEvRequest> request) {
-    UpdateAfterWriteCounters(false);
-    Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
-
-    AddMetaKey(request.Get());
-    WriteStartTime = TActivationContext::Now();
-    DBGTRACE_LOG("WriteStartTime=" << WriteStartTime);
-    // Write blob
-#if 1
-    // PQ -> CacheProxy -> KV
-    Send(BlobCache, request.Release());
-#else
-    Send(Tablet, request.Release());
-#endif
-}
+//void TPartition::WritePendingBlob(THolder<TEvKeyValue::TEvRequest> request) {
+//    UpdateAfterWriteCounters(false);
+//    Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
+//
+//    AddMetaKey(request.Get());
+//    WriteStartTime = TActivationContext::Now();
+//    DBGTRACE_LOG("WriteStartTime=" << WriteStartTime);
+//    // Write blob
+//#if 1
+//    // PQ -> CacheProxy -> KV
+//    Send(BlobCache, request.Release());
+//#else
+//    Send(Tablet, request.Release());
+//#endif
+//}
 
 void TPartition::ConsumeBlobQuota()
 {

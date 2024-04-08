@@ -210,8 +210,8 @@ private:
     void UpdateAvailableSize(const TActorContext& ctx);
 
     void AddMetaKey(TEvKeyValue::TEvRequest* request);
-    void BecomeIdle();
-    void BecomeWrite();
+//    void BecomeIdle();
+//    void BecomeWrite();
     void CheckHeadConsistency() const;
     void HandlePendingRequests(const TActorContext& ctx);
     void HandleQuotaWaitingRequests(const TActorContext& ctx);
@@ -220,7 +220,7 @@ private:
     bool RequestBlobQuota();
     void RequestBlobQuota(size_t quotaSize);
     void ConsumeBlobQuota();
-    void WritePendingBlob(THolder<TEvKeyValue::TEvRequest> request);
+//    void WritePendingBlob(THolder<TEvKeyValue::TEvRequest> request);
     void UpdateAfterWriteCounters(bool writeComplete);
     void UpdateUserInfoEndOffset(const TInstant& now);
     void UpdateWriteBufferIsFullState(const TInstant& now);
@@ -520,63 +520,63 @@ private:
         };
     }
 
-    STFUNC(StateWrite)
-    {
-        NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
-
-        ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateWrite", ev));
-
-        TRACE_EVENT(NKikimrServices::PERSQUEUE);
-        switch (ev->GetTypeRewrite()) {
-            CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
-            HFuncTraced(TEvKeyValue::TEvResponse, Handle);
-            HFuncTraced(TEvPQ::TEvHandleWriteResponse, Handle);
-            HFuncTraced(TEvPQ::TEvBlobResponse, Handle);
-            HFuncTraced(TEvPQ::TEvWrite, HandleOnWrite);
-            HFuncTraced(TEvPQ::TEvRead, Handle);
-            HFuncTraced(TEvPQ::TEvApproveReadQuota, Handle);
-            HFuncTraced(TEvPQ::TEvReadTimeout, Handle);
-            HFuncTraced(TEvents::TEvPoisonPill, Handle);
-            HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
-            HFuncTraced(TEvPQ::TEvGetMaxSeqNoRequest, Handle);
-            HFuncTraced(TEvPQ::TEvGetClientOffset, Handle);
-            HFuncTraced(TEvPQ::TEvUpdateWriteTimestamp, Handle);
-            HFuncTraced(TEvPQ::TEvSetClientInfo, Handle);
-            HFuncTraced(TEvPQ::TEvPartitionOffsets, Handle);
-            HFuncTraced(TEvPQ::TEvPartitionStatus, Handle);
-            HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle);
-            HFuncTraced(TEvPQ::TEvChangeOwner, Handle);
-            HFuncTraced(TEvPQ::TEvChangePartitionConfig, Handle);
-            HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
-            HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
-            HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
-            HFuncTraced(TEvPQ::TEvError, Handle);
-            HFuncTraced(TEvPQ::TEvReserveBytes, Handle);
-            HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
-            HFuncTraced(TEvPQ::TEvPipeDisconnected, Handle);
-            HFuncTraced(TEvPQ::TEvUpdateAvailableSize, HandleOnWrite);
-            HFuncTraced(TEvPQ::TEvQuotaDeadlineCheck, Handle);
-            HFuncTraced(TEvPQ::TEvApproveWriteQuota, Handle);
-            HFuncTraced(TEvPQ::TEvRegisterMessageGroup, HandleOnWrite);
-            HFuncTraced(TEvPQ::TEvDeregisterMessageGroup, HandleOnWrite);
-            HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnWrite);
-            HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
-            HFuncTraced(TEvPQ::TEvTxCalcPredicate, Handle);
-            HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, Handle);
-            HFuncTraced(TEvPQ::TEvProposePartitionConfig, Handle);
-            HFuncTraced(TEvPQ::TEvTxCommit, Handle);
-            HFuncTraced(TEvPQ::TEvTxRollback, Handle);
-            HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
-            HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
-            HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
-            HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
-            HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
-            HFuncTraced(TEvPQ::TEvProcessChangeOwnerRequests, Handle);
-        default:
-            ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateWrite", ev));
-            break;
-        };
-    }
+//    STFUNC(StateWrite)
+//    {
+//        NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
+//
+//        ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateWrite", ev));
+//
+//        TRACE_EVENT(NKikimrServices::PERSQUEUE);
+//        switch (ev->GetTypeRewrite()) {
+//            CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+//            HFuncTraced(TEvKeyValue::TEvResponse, Handle);
+//            HFuncTraced(TEvPQ::TEvHandleWriteResponse, Handle);
+//            HFuncTraced(TEvPQ::TEvBlobResponse, Handle);
+//            HFuncTraced(TEvPQ::TEvWrite, HandleOnWrite);
+//            HFuncTraced(TEvPQ::TEvRead, Handle);
+//            HFuncTraced(TEvPQ::TEvApproveReadQuota, Handle);
+//            HFuncTraced(TEvPQ::TEvReadTimeout, Handle);
+//            HFuncTraced(TEvents::TEvPoisonPill, Handle);
+//            HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
+//            HFuncTraced(TEvPQ::TEvGetMaxSeqNoRequest, Handle);
+//            HFuncTraced(TEvPQ::TEvGetClientOffset, Handle);
+//            HFuncTraced(TEvPQ::TEvUpdateWriteTimestamp, Handle);
+//            HFuncTraced(TEvPQ::TEvSetClientInfo, Handle);
+//            HFuncTraced(TEvPQ::TEvPartitionOffsets, Handle);
+//            HFuncTraced(TEvPQ::TEvPartitionStatus, Handle);
+//            HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle);
+//            HFuncTraced(TEvPQ::TEvChangeOwner, Handle);
+//            HFuncTraced(TEvPQ::TEvChangePartitionConfig, Handle);
+//            HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
+//            HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
+//            HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
+//            HFuncTraced(TEvPQ::TEvError, Handle);
+//            HFuncTraced(TEvPQ::TEvReserveBytes, Handle);
+//            HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
+//            HFuncTraced(TEvPQ::TEvPipeDisconnected, Handle);
+//            HFuncTraced(TEvPQ::TEvUpdateAvailableSize, HandleOnWrite);
+//            HFuncTraced(TEvPQ::TEvQuotaDeadlineCheck, Handle);
+//            HFuncTraced(TEvPQ::TEvApproveWriteQuota, Handle);
+//            HFuncTraced(TEvPQ::TEvRegisterMessageGroup, HandleOnWrite);
+//            HFuncTraced(TEvPQ::TEvDeregisterMessageGroup, HandleOnWrite);
+//            HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnWrite);
+//            HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
+//            HFuncTraced(TEvPQ::TEvTxCalcPredicate, Handle);
+//            HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, Handle);
+//            HFuncTraced(TEvPQ::TEvProposePartitionConfig, Handle);
+//            HFuncTraced(TEvPQ::TEvTxCommit, Handle);
+//            HFuncTraced(TEvPQ::TEvTxRollback, Handle);
+//            HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
+//            HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
+//            HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
+//            HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
+//            HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
+//            HFuncTraced(TEvPQ::TEvProcessChangeOwnerRequests, Handle);
+//        default:
+//            ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateWrite", ev));
+//            break;
+//        };
+//    }
 
 private:
     enum class EProcessResult {

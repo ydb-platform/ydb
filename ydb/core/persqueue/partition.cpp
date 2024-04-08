@@ -105,8 +105,8 @@ TString TPartition::LogPrefix() const {
         state = "StateInit";
     } else if (CurrentStateFunc() == &TThis::StateIdle) {
         state = "StateIdle";
-    } else if (CurrentStateFunc() == &TThis::StateWrite) {
-        state = "StateWrite";
+//    } else if (CurrentStateFunc() == &TThis::StateWrite) {
+//        state = "StateWrite";
     } else {
         state = "Unknown";
     }
@@ -1019,7 +1019,7 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx) {
     if (ClosedInternalPartition || WaitingForPreviousBlobQuota() || (CurrentStateFunc() != &TThis::StateIdle)/* || !Requests.empty()*/) {
         auto* response = new TEvPQ::TEvGetWriteInfoError(Partition.InternalPartitionId,
-                                                       "Write info requested while writes are not complete");
+                                                         "Write info requested while writes are not complete");
         ctx.Send(ev->Sender, response);
         ClosedInternalPartition = true;
         return;
@@ -1640,7 +1640,7 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
             TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero();
             PartitionQuotaWaitTimeForCurrentBlob = TDuration::Zero();
             WritesTotal.Inc();
-            BecomeWrite();
+            //BecomeWrite();
             AddMetaKey(request.Get());
             ctx.Send(Tablet, request.Release());
             KVWriteInProgress = true;
@@ -1705,9 +1705,9 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
         ctx.Send(HaveWriteMsg ? BlobCache : Tablet, request.Release());
         KVWriteInProgress = true;
         DBGTRACE_LOG("KVWriteInProgress=" << KVWriteInProgress);
-        BecomeWrite();
+//        BecomeWrite();
     } else {
-        Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateIdle);
+//        Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateIdle);
         AnswerCurrentWrites(ctx);
         AnswerCurrentReplies(ctx);
     }
@@ -2758,15 +2758,15 @@ void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {
     ctx.Schedule(UPDATE_AVAIL_SIZE_INTERVAL, new TEvPQ::TEvUpdateAvailableSize());
 }
 
-void TPartition::BecomeIdle()
-{
-    Become(&TThis::StateIdle);
-}
+//void TPartition::BecomeIdle()
+//{
+//    Become(&TThis::StateIdle);
+//}
 
-void TPartition::BecomeWrite()
-{
-    Become(&TThis::StateWrite);
-}
+//void TPartition::BecomeWrite()
+//{
+//    Become(&TThis::StateWrite);
+//}
 
 void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue::TEvRequest* request) {
     for (auto it = HeadKeys.rbegin(); it != HeadKeys.rend(); ++it) {

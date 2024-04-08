@@ -4,35 +4,19 @@ namespace NYT::NConcurrency::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCoroutineBase::TCoroutineBase(const EExecutionStackKind stackKind)
-    : CoroutineStack_(CreateExecutionStack(stackKind))
-    , CoroutineContext_({
-        this,
-        TArrayRef(static_cast<char*>(CoroutineStack_->GetStack()), CoroutineStack_->GetSize())})
-{ }
-
-void TCoroutineBase::DoRun()
+TCoroutineBase::~TCoroutineBase()
 {
-    try {
-        Invoke();
-    } catch (...) {
-        CoroutineException_ = std::current_exception();
-    }
-
-    Completed_ = true;
-    JumpToCaller();
-
-    YT_ABORT();
+    std::destroy_at(&CoroutineContext);
 }
 
-void TCoroutineBase::JumpToCaller()
+void TCoroutineBase::Suspend() noexcept
 {
-    CoroutineContext_.SwitchTo(&CallerContext_);
+    CoroutineContext.SwitchTo(&CallerContext_);
 }
 
-void TCoroutineBase::JumpToCoroutine()
+void TCoroutineBase::Resume()
 {
-    CallerContext_.SwitchTo(&CoroutineContext_);
+    CallerContext_.SwitchTo(&CoroutineContext);
 
     if (CoroutineException_) {
         std::exception_ptr exception;
@@ -41,7 +25,7 @@ void TCoroutineBase::JumpToCoroutine()
     }
 }
 
-bool TCoroutineBase::IsCompleted() const
+bool TCoroutineBase::IsCompleted() const noexcept
 {
     return Completed_;
 }

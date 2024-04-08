@@ -62,20 +62,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         }
     }
     auto queryType = request.content().type();
-    ui64 executionLimitMills = 0;
-    if (event.Quotas) {
-        if (queryType == FederatedQuery::QueryContent::ANALYTICS) {
-            auto execTtlIt = event.Quotas->find(QUOTA_ANALYTICS_DURATION_LIMIT);
-            if (execTtlIt != event.Quotas->end()) {
-                executionLimitMills = execTtlIt->second.Limit.Value * 60 * 1000;
-            }
-        } else if (queryType == FederatedQuery::QueryContent::STREAMING) {
-            auto execTtlIt = event.Quotas->find(QUOTA_STREAMING_DURATION_LIMIT);
-            if (execTtlIt != event.Quotas->end()) {
-                executionLimitMills = execTtlIt->second.Limit.Value * 60 * 1000;
-            }
-        }
-    }
+    ui64 executionLimitMills = GetExecutionLimitMills(queryType, event.Quotas);
     const TString scope = event.Scope;
     TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_CREATE_QUERY, RTC_CREATE_QUERY);
     requestCounters.IncInFly();
@@ -780,21 +767,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         return;
     }
 
-    ui64 executionLimitMills = 0;
-    if (event.Quotas) {
-        auto queryType = request.content().type();
-        if (queryType == FederatedQuery::QueryContent::ANALYTICS) {
-            auto execTtlIt = event.Quotas->find(QUOTA_ANALYTICS_DURATION_LIMIT);
-            if (execTtlIt != event.Quotas->end()) {
-                executionLimitMills = execTtlIt->second.Limit.Value * 60 * 1000;
-            }
-        } else if (queryType == FederatedQuery::QueryContent::STREAMING) {
-            auto execTtlIt = event.Quotas->find(QUOTA_STREAMING_DURATION_LIMIT);
-            if (execTtlIt != event.Quotas->end()) {
-                executionLimitMills = execTtlIt->second.Limit.Value * 60 * 1000;
-            }
-        }
-    }
+    ui64 executionLimitMills = GetExecutionLimitMills(request.content().type(), event.Quotas);
 
     const TString idempotencyKey = request.idempotency_key();
 
@@ -1854,6 +1827,25 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
             TDuration delta = TInstant::Now() - startTime;
             LWPROBE(DescribeJobRequest, scope, user, jobId, delta, byteSize, future.GetValue());
         });
+}
+
+ui64 TYdbControlPlaneStorageActor::GetExecutionLimitMills(
+    FederatedQuery::QueryContent_QueryType queryType,
+    const TMaybe<TQuotaMap>& quotas) {
+
+    ui64 executionLimitMills = 0;
+    if (!quotas) {
+        return executionLimitMills;
+    }
+    auto key = queryType == FederatedQuery::QueryContent::ANALYTICS
+        ? QUOTA_ANALYTICS_DURATION_LIMIT
+        : QUOTA_STREAMING_DURATION_LIMIT;
+
+    auto execTtlIt = quotas->find(key);
+    if (execTtlIt != quotas->end()) {
+        executionLimitMills = execTtlIt->second.Limit.Value * 60 * 1000;
+    }
+    return executionLimitMills;
 }
 
 } // NFq

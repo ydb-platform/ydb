@@ -919,6 +919,10 @@ private:
         std::shared_ptr<TResponseTasks> responseTasks,
         const TVector<TValidationQuery>& validators = {},
         TTxSettings transactionMode = TTxSettings::SerializableRW());
+
+    ui64 GetExecutionLimitMills(
+        FederatedQuery::QueryContent_QueryType queryType,
+        const TMaybe<TQuotaMap>& quotas);
 };
 
 }

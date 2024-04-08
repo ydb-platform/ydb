@@ -780,6 +780,22 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         return;
     }
 
+    ui64 executionLimitMills = 0;
+    if (event.Quotas) {
+        auto queryType = request.content().type();
+        if (queryType == FederatedQuery::QueryContent::ANALYTICS) {
+            auto execTtlIt = event.Quotas->find(QUOTA_ANALYTICS_DURATION_LIMIT);
+            if (execTtlIt != event.Quotas->end()) {
+                executionLimitMills = execTtlIt->second.Limit.Value * 60 * 1000;
+            }
+        } else if (queryType == FederatedQuery::QueryContent::STREAMING) {
+            auto execTtlIt = event.Quotas->find(QUOTA_STREAMING_DURATION_LIMIT);
+            if (execTtlIt != event.Quotas->end()) {
+                executionLimitMills = execTtlIt->second.Limit.Value * 60 * 1000;
+            }
+        }
+    }
+
     const TString idempotencyKey = request.idempotency_key();
 
     std::shared_ptr<std::pair<FederatedQuery::ModifyQueryResult, TAuditDetails<FederatedQuery::Query>>> response =
@@ -835,6 +851,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             commonCounters->ParseProtobufError->Inc();
             ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
         }
+        *internal.mutable_execution_ttl() = NProtoInterop::CastToProto(TDuration::MilliSeconds(executionLimitMills));
 
         const TString resultId = request.execute_mode() == FederatedQuery::SAVE ? parser.ColumnParser(RESULT_ID_COLUMN_NAME).GetOptionalString().GetOrElse("") : "";
 

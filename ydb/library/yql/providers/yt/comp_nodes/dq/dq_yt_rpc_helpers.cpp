@@ -91,11 +91,8 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
         Cerr << "YT RPC Reader exception:\n";
     }
     result.ValueOrThrow().swap(rawInputs);
-    
-    Y_ENSURE(tables.size());
-    Y_ENSURE(tables[0].first.Columns_);
 
-    return std::make_unique<TSettingsHolder>(std::move(connection), std::move(client), std::move(rawInputs), std::move(originalIndexes), tables[0].first.Columns_->Parts_);
+    return std::make_unique<TSettingsHolder>(std::move(connection), std::move(client), std::move(rawInputs), std::move(originalIndexes));
 }
 
 }

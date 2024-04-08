@@ -312,7 +312,11 @@ public:
         std::vector<arrow::Datum> result;
         result.resize(ColumnConverters_.size());
         for (size_t i = 0; i < ColumnConverters_.size(); ++i) {
-            auto columnIdx = ColumnOrderMapping[batch->schema()->field_names()[i]];
+            auto columnIdxIt = ColumnOrderMapping.find(batch->schema()->field_names()[i]);
+            if (ColumnOrderMapping.end() == columnIdxIt) {
+                continue;
+            }
+            auto columnIdx =  columnIdxIt->second;
             result[columnIdx] = std::move(ColumnConverters_[columnIdx]->Convert(batch->column(i)->data()));
         }
         Consumer_->HandleResult(std::make_shared<TResultBatch>(batch->num_rows(), std::move(result)));
@@ -383,8 +387,8 @@ public:
                 try {
                     self->Accept(inputIdx, std::move(res));
                     self->RunRead();
-                } catch (std::exception& e) {
-                    self->Listener_->HandleError(e.what());
+                } catch (...) {
+                    self->Listener_->HandleError(CurrentExceptionMessage());
                 }
             }));
         }));
@@ -542,18 +546,23 @@ public:
             return NUdf::EFetchStatus::Finish;
         }
         YQL_ENSURE(width == Width_ + 1);
-        auto batch = Source_->Next();
-        if (!batch) {
-            GotFinish_ = 1;
-            Source_->Finish();
-            return NUdf::EFetchStatus::Finish;
+        try {
+            auto batch = Source_->Next();
+            if (!batch) {
+                GotFinish_ = 1;
+                Source_->Finish();
+                return NUdf::EFetchStatus::Finish;
+            }
+            
+            for (size_t i = 0; i < Width_; ++i) {
+                YQL_ENSURE(batch->Columns[i].type()->Equals(Types_->at(i)));
+                output[i] = Source_->HolderFactory.CreateArrowBlock(std::move(batch->Columns[i]));
+            }
+            output[Width_] = Source_->HolderFactory.CreateArrowBlock(arrow::Datum(ui64(batch->RowsCnt)));
+        } catch (...) {
+            Cerr << "YT RPC Reader exception:\n";
+            throw;
         }
-        
-        for (size_t i = 0; i < Width_; ++i) {
-            YQL_ENSURE(batch->Columns[i].type()->Equals(Types_->at(i)));
-            output[i] = Source_->HolderFactory.CreateArrowBlock(std::move(batch->Columns[i]));
-        }
-        output[Width_] = Source_->HolderFactory.CreateArrowBlock(arrow::Datum(ui64(batch->RowsCnt)));
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -600,9 +609,12 @@ public:
         settings->Pool = arrow::default_memory_pool();
         settings->PgBuilder = &ctx.Builder->GetPgBuilder();
         auto types = std::make_shared<std::vector<std::shared_ptr<arrow::DataType>>>(Width_);
+        TVector<TString> columnNames;
         for (size_t i = 0; i < Width_; ++i) {
+            columnNames.emplace_back(AS_TYPE(TStructType, Type_)->GetMemberName(i));
             YQL_ENSURE(ConvertArrowType(AS_TYPE(TStructType, Type_)->GetMemberType(i), types->at(i)), "Can't convert type to arrow");
         }
+        settings->SetColumns(columnNames);
         auto source = std::make_shared<TSource>(std::move(settings), Inflight_, Type_, types, ctx.HolderFactory, JobStats_);
         source->SetSelfAndRun(source);
         return ctx.HolderFactory.Create<TReaderState>(source, Width_, types);

@@ -48,16 +48,16 @@ private:
 
 struct TSettingsHolder : public TNonCopyable {
     TSettingsHolder(NYT::NApi::IConnectionPtr&& connection, NYT::TIntrusivePtr<NYT::NApi::NRpcProxy::TClient>&& client,
-        TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>&& inputs, TVector<size_t>&& originalIndexes, const TVector<TString>& columnNames)
+        TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>&& inputs, TVector<size_t>&& originalIndexes)
         : Connection(std::move(connection))
         , Client(std::move(client))
         , RawInputs(std::move(inputs))
-        , OriginalIndexes(std::move(originalIndexes))
-        { 
-            for (ui32 i = 0; i < columnNames.size(); ++i) {
-                ColumnNameMapping[columnNames[i]] = i;
-            }
-        };
+        , OriginalIndexes(std::move(originalIndexes)) {};
+    void SetColumns(const TVector<TString>& columnNames) {
+        for (ui32 i = 0; i < columnNames.size(); ++i) {
+            ColumnNameMapping[columnNames[i]] = i;
+        }
+    }
     NYT::NApi::IConnectionPtr Connection;
     NYT::TIntrusivePtr<NYT::NApi::NRpcProxy::TClient> Client;
     const TMkqlIOSpecs* Specs = nullptr;

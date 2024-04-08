@@ -115,8 +115,6 @@ private:
     void AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx);
     void AnswerCurrentWrites(const TActorContext& ctx);
     void AnswerCurrentReplies(const TActorContext& ctx);
-//    void CancelAllWritesOnIdle(const TActorContext& ctx);
-//    void CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::TEvRequest* request, const TString& errorStr, const TWriteMsg& p, TPartitionSourceManager::TModificationBatch& sourceIdBatch, NPersQueue::NErrorCode::EErrorCode errorCode = NPersQueue::NErrorCode::BAD_REQUEST);
     void CancelOneWriteOnWrite(const TActorContext& ctx,
                                const TString& errorStr,
                                const TWriteMsg& p,
@@ -124,7 +122,6 @@ private:
     void ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue::TEvRequest* request);
     void CreateMirrorerActor();
     void DoRead(TEvPQ::TEvRead::TPtr&& ev, TDuration waitQuotaTime, const TActorContext& ctx);
-//    void FailBadClient(const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);
     void FilterDeadlinedWrites(const TActorContext& ctx);
     void FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& requests);
@@ -210,33 +207,24 @@ private:
     void UpdateAvailableSize(const TActorContext& ctx);
 
     void AddMetaKey(TEvKeyValue::TEvRequest* request);
-//    void BecomeIdle();
-//    void BecomeWrite();
     void CheckHeadConsistency() const;
     void HandlePendingRequests(const TActorContext& ctx);
     void HandleQuotaWaitingRequests(const TActorContext& ctx);
-//    void HandleRequests(const TActorContext& ctx);
     void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie);
     bool RequestBlobQuota();
     void RequestBlobQuota(size_t quotaSize);
     void ConsumeBlobQuota();
-//    void WritePendingBlob(THolder<TEvKeyValue::TEvRequest> request);
     void UpdateAfterWriteCounters(bool writeComplete);
     void UpdateUserInfoEndOffset(const TInstant& now);
     void UpdateWriteBufferIsFullState(const TInstant& now);
-//    void CancelReserveRequests(const TActorContext& ctx);
-//    void CancelRequests(const TActorContext& ctx, TMessageQueue& requests);
 
     TInstant GetWriteTimeEstimate(ui64 offset) const;
-//    bool AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx,
-//        TPartitionSourceManager::TModificationBatch& sourceIdBatch);
     bool CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
 
     // Removes blobs that are no longer required. Blobs are no longer required if the storage time of all messages
     // stored in this blob has expired and they have been read by all important consumers.
     bool CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorContext& ctx);
     bool IsQuotingEnabled() const;
-//    bool ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant now, const TActorContext& ctx);
     bool WaitingForPreviousBlobQuota() const;
     bool WaitingForSubDomainQuota(const TActorContext& ctx, const ui64 withSize = 0) const;
     size_t GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request);
@@ -520,64 +508,6 @@ private:
         };
     }
 
-//    STFUNC(StateWrite)
-//    {
-//        NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
-//
-//        ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateWrite", ev));
-//
-//        TRACE_EVENT(NKikimrServices::PERSQUEUE);
-//        switch (ev->GetTypeRewrite()) {
-//            CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
-//            HFuncTraced(TEvKeyValue::TEvResponse, Handle);
-//            HFuncTraced(TEvPQ::TEvHandleWriteResponse, Handle);
-//            HFuncTraced(TEvPQ::TEvBlobResponse, Handle);
-//            HFuncTraced(TEvPQ::TEvWrite, HandleOnWrite);
-//            HFuncTraced(TEvPQ::TEvRead, Handle);
-//            HFuncTraced(TEvPQ::TEvApproveReadQuota, Handle);
-//            HFuncTraced(TEvPQ::TEvReadTimeout, Handle);
-//            HFuncTraced(TEvents::TEvPoisonPill, Handle);
-//            HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
-//            HFuncTraced(TEvPQ::TEvGetMaxSeqNoRequest, Handle);
-//            HFuncTraced(TEvPQ::TEvGetClientOffset, Handle);
-//            HFuncTraced(TEvPQ::TEvUpdateWriteTimestamp, Handle);
-//            HFuncTraced(TEvPQ::TEvSetClientInfo, Handle);
-//            HFuncTraced(TEvPQ::TEvPartitionOffsets, Handle);
-//            HFuncTraced(TEvPQ::TEvPartitionStatus, Handle);
-//            HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle);
-//            HFuncTraced(TEvPQ::TEvChangeOwner, Handle);
-//            HFuncTraced(TEvPQ::TEvChangePartitionConfig, Handle);
-//            HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
-//            HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
-//            HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
-//            HFuncTraced(TEvPQ::TEvError, Handle);
-//            HFuncTraced(TEvPQ::TEvReserveBytes, Handle);
-//            HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
-//            HFuncTraced(TEvPQ::TEvPipeDisconnected, Handle);
-//            HFuncTraced(TEvPQ::TEvUpdateAvailableSize, HandleOnWrite);
-//            HFuncTraced(TEvPQ::TEvQuotaDeadlineCheck, Handle);
-//            HFuncTraced(TEvPQ::TEvApproveWriteQuota, Handle);
-//            HFuncTraced(TEvPQ::TEvRegisterMessageGroup, HandleOnWrite);
-//            HFuncTraced(TEvPQ::TEvDeregisterMessageGroup, HandleOnWrite);
-//            HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnWrite);
-//            HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
-//            HFuncTraced(TEvPQ::TEvTxCalcPredicate, Handle);
-//            HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, Handle);
-//            HFuncTraced(TEvPQ::TEvProposePartitionConfig, Handle);
-//            HFuncTraced(TEvPQ::TEvTxCommit, Handle);
-//            HFuncTraced(TEvPQ::TEvTxRollback, Handle);
-//            HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
-//            HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
-//            HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
-//            HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
-//            HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
-//            HFuncTraced(TEvPQ::TEvProcessChangeOwnerRequests, Handle);
-//        default:
-//            ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateWrite", ev));
-//            break;
-//        };
-//    }
-
 private:
     enum class EProcessResult {
         Continue,
@@ -605,7 +535,6 @@ private:
 
     static void RemoveMessages(TMessageQueue& src, TMessageQueue& dst);
     void RemovePendingRequests(TMessageQueue& requests);
-//    void RemoveQuotaWaitingRequests();
     void RemoveMessagesToQueue(TMessageQueue& requests);
 
 private:
@@ -645,8 +574,6 @@ private:
 
     TMessageQueue PendingRequests;
     TMessageQueue QuotaWaitingRequests;
-    //TMessageQueue Requests;
-    //TMessageQueue Responses;
 
     THead Head;
     THead NewHead;

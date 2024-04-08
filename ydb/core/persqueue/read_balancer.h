@@ -307,15 +307,15 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         // ReadSession reach EndOffset of the partition
         bool ReadingFinished = false;
         // ReadSession connected with new SDK with garantee of read order
-        bool NewSDK = false;
+        bool ScaleAwareSDK = false;
         // ReadSession reach EndOffset of the partition by first request
-        bool FirstRead = false;
+        bool StartedReadingFromEndOffset = false;
 
         size_t Iteration = 0;
         ui64 Cookie = 0;
 
-        bool IsFinished() const { return Commited || (ReadingFinished && (FirstRead || NewSDK)); };
-        bool Commit() { return !std::exchange(Commited, true); };
+        bool IsFinished() const { return Commited || (ReadingFinished && (StartedReadingFromEndOffset || ScaleAwareSDK)); };
+        bool SetCommittedState() { return !std::exchange(Commited, true); };
         bool Unlock() { ReadingFinished = false; ++Cookie; return ReleaseChildren(); };
         bool ReleaseChildren() { return !Commited; }
     };
@@ -362,7 +362,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
         bool IsReadeable(ui32 partitionId) const;
         bool IsFinished(ui32 partitionId) const;
-        bool Commit(ui32 partitionId);
+        bool SetCommittedState(ui32 partitionId);
 
         TClientGroupInfo* FindGroup(ui32 partitionId);
     };

@@ -995,8 +995,8 @@ message TEvReadingPartitionStatusRequest {
 message TEvReadingPartitionFinishedRequest {
     optional string Consumer = 1;
     optional uint32 PartitionId = 2;
-    optional bool NewSDK = 3;
-    optional bool FirstMessage = 4;
+    optional bool ScaleAwareSDK = 3;
+    optional bool StartedReadingFromEndOffset = 4;
 };
 
 message TTransaction {

@@ -275,11 +275,11 @@ struct TEvPersQueue {
     struct TEvReadingPartitionFinishedRequest : public TEventPB<TEvReadingPartitionFinishedRequest, NKikimrPQ::TEvReadingPartitionFinishedRequest, EvReadingPartitionFinished> {
         TEvReadingPartitionFinishedRequest() = default;
 
-        TEvReadingPartitionFinishedRequest(const TString& consumer, ui32 partitionId, bool newSDK, bool firstMessage) {
+        TEvReadingPartitionFinishedRequest(const TString& consumer, ui32 partitionId, bool scaleAwareSDK, bool startedReadingFromEndOffset) {
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
-            Record.SetNewSDK(newSDK);
-            Record.SetFirstMessage(firstMessage);
+            Record.SetScaleAwareSDK(scaleAwareSDK);
+            Record.SetStartedReadingFromEndOffset(startedReadingFromEndOffset);
         }
     };
 };

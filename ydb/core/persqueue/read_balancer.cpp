@@ -724,7 +724,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
                 auto it = ClientsInfo.find(consumer.GetConsumer());
                 if (it != ClientsInfo.end()) {
                     auto& clientInfo = it->second;
-                    if (clientInfo.Commit(partRes.GetPartition()) && clientInfo.ProccessReadingFinished(partRes.GetPartition())) {
+                    if (clientInfo.SetCommittedState(partRes.GetPartition()) && clientInfo.ProccessReadingFinished(partRes.GetPartition())) {
                         consumersForBalance.insert(consumer.GetConsumer());
                     }
                 }
@@ -1135,8 +1135,8 @@ bool TPersQueueReadBalancer::TClientInfo::IsFinished(ui32 partitionId) const {
     return it->second.IsFinished();
 }
 
-bool TPersQueueReadBalancer::TClientInfo::Commit(ui32 partitionId) {
-    return ReadingPartitionStatus[partitionId].Commit();
+bool TPersQueueReadBalancer::TClientInfo::SetCommittedState(ui32 partitionId) {
+    return ReadingPartitionStatus[partitionId].SetCommittedState();
 }
 
 TPersQueueReadBalancer::TClientGroupInfo* TPersQueueReadBalancer::TClientInfo::FindGroup(ui32 partitionId) {
@@ -1940,7 +1940,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPt
     if (it != ClientsInfo.end()) {
         auto& clientInfo = it->second;
 
-        if (clientInfo.Commit(r.GetPartitionId())) {
+        if (clientInfo.SetCommittedState(r.GetPartitionId())) {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 "Reading of partition " << r.GetPartitionId() << " was finished by " << r.GetConsumer());
 
@@ -1959,31 +1959,31 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedReq
         auto& clientInfo = it->second;
         auto& status = clientInfo.GetPartitionReadingStatus(r.GetPartitionId());
 
-        if (r.GetNewSDK()) {
-            if (!status.NewSDK || !status.ReadingFinished) {
+        if (r.GetScaleAwareSDK()) {
+            if (!status.ScaleAwareSDK || !status.ReadingFinished) {
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                             "Reading of partition " << r.GetPartitionId() << " was finished by " << r.GetConsumer()
-                            << ", firstMessage=" << r.GetFirstMessage() << ", new SDK");
+                            << ", firstMessage=" << r.GetStartedReadingFromEndOffset() << ", ScaleAwareSDK");
 
-                status.NewSDK = true;
+                status.ScaleAwareSDK = true;
                 status.ReadingFinished = true;
-                status.FirstRead = r.GetFirstMessage();
+                status.StartedReadingFromEndOffset = r.GetStartedReadingFromEndOffset();
 
                 if (clientInfo.ProccessReadingFinished(r.GetPartitionId())) {
                     ctx.Send(ctx.SelfID, new TEvPersQueue::TEvWakeupClient(r.GetConsumer(), TClientInfo::MAIN_GROUP));
                 }
             }
         } else {
-            if (status.NewSDK || !status.ReadingFinished) {
+            if (status.ScaleAwareSDK || !status.ReadingFinished) {
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                             "Reading of partition " << r.GetPartitionId() << " was finished by " << r.GetConsumer()
-                            << ", firstMessage=" << r.GetFirstMessage() << ", old SDK, iteration=" << status.Iteration);
+                            << ", firstMessage=" << r.GetStartedReadingFromEndOffset() << ", old SDK, iteration=" << status.Iteration);
 
-                status.NewSDK = false;
+                status.ScaleAwareSDK = false;
                 status.ReadingFinished = true;
-                status.FirstRead = r.GetFirstMessage();
+                status.StartedReadingFromEndOffset = r.GetStartedReadingFromEndOffset();
 
-                if (status.FirstRead) {
+                if (status.StartedReadingFromEndOffset) {
                     if (clientInfo.ProccessReadingFinished(r.GetPartitionId())) {
                         ctx.Send(ctx.SelfID, new TEvPersQueue::TEvWakeupClient(r.GetConsumer(), TClientInfo::MAIN_GROUP));
                     }

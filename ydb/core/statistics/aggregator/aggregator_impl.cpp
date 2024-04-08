@@ -389,7 +389,15 @@ size_t TStatisticsAggregator::PropagatePart(const std::vector<TNodeId>& nodeIds,
     return index;
 }
 
-void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+    auto tabletId = ev->Get()->TabletId;
+    if (ShardRanges.empty()) {
+        return;
+    }
+    auto& range = ShardRanges.front();
+    if (tabletId != range.DataShardId) {
+        return;
+    }
     Resolve();
 }
 

@@ -6,6 +6,7 @@ namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxStatisticsScanResponse : public TTxBase {
     NKikimrTxDataShard::TEvStatisticsScanResponse Record;
+    bool IsCorrectShardId = false;
 
     TTxStatisticsScanResponse(TSelf* self, NKikimrTxDataShard::TEvStatisticsScanResponse&& record)
         : TTxBase(self)
@@ -19,7 +20,20 @@ struct TStatisticsAggregator::TTxStatisticsScanResponse : public TTxBase {
 
         NIceDb::TNiceDb db(txc.DB);
 
-        // TODO: handle errors
+        // TODO: handle scan errors
+
+        if (Self->ShardRanges.empty()) {
+            return true;
+        }
+
+        auto& range = Self->ShardRanges.front();
+        auto replyShardId = Record.GetShardTabletId();
+
+        if (replyShardId != range.DataShardId) {
+            return true;
+        }
+
+        IsCorrectShardId = true;
 
         for (auto& column : Record.GetColumns()) {
             auto tag = column.GetTag();
@@ -45,9 +59,6 @@ struct TStatisticsAggregator::TTxStatisticsScanResponse : public TTxBase {
             }
         }
 
-        Y_ABORT_UNLESS(!Self->ShardRanges.empty());
-        auto& range = Self->ShardRanges.front();
-
         Self->StartKey = range.EndKey;
         Self->PersistSysParam(db, Schema::SysParam_StartKey, Self->StartKey.GetBuffer());
 
@@ -57,8 +68,10 @@ struct TStatisticsAggregator::TTxStatisticsScanResponse : public TTxBase {
     void Complete(const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxStatisticsScanResponse::Complete");
 
-        Self->ShardRanges.pop_front();
-        Self->NextRange();
+        if (IsCorrectShardId && !Self->ShardRanges.empty()) {
+            Self->ShardRanges.pop_front();
+            Self->NextRange();
+        }
     }
 };
 

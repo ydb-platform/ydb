@@ -777,10 +777,7 @@ std::shared_ptr<arrow::Table> TPortionInfo::TPreparedBatchData::AssembleTable(co
 }
 
 std::shared_ptr<arrow::RecordBatch> TPortionInfo::TPreparedBatchData::Assemble(const TAssembleOptions& options) const {
-    auto table = AssembleTable(options);
-    auto res = table->CombineChunks();
-    Y_ABORT_UNLESS(res.ok());
-    return NArrow::ToBatch(*res);
+    return NArrow::ToBatch(AssembleTable(options), true);
 }
 
 }

@@ -56,6 +56,15 @@ std::partial_ordering IChunkedArray::TReader::CompareColumns(const std::vector<T
     return std::partial_ordering::equivalent;
 }
 
+IChunkedArray::TAddress IChunkedArray::TReader::GetReadChunk(const ui64 position) const {
+    AFL_VERIFY(position < ChunkedArray->GetRecordsCount());
+    if (CurrentChunkAddress && position < CurrentChunkAddress->GetStartPosition() + CurrentChunkAddress->GetArray()->length() && CurrentChunkAddress->GetStartPosition() <= position) {
+    } else {
+        CurrentChunkAddress = ChunkedArray->DoGetChunk(CurrentChunkAddress, position);
+    }
+    return IChunkedArray::TAddress(CurrentChunkAddress->GetArray(), position - CurrentChunkAddress->GetStartPosition(), CurrentChunkAddress->GetChunkIndex());
+}
+
 const std::partial_ordering IChunkedArray::TAddress::Compare(const TAddress& item) const {
     return TComparator::TypedCompare<true>(*Array, Position, *item.Array, item.Position);
 }

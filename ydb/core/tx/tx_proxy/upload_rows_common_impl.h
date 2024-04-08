@@ -40,15 +40,12 @@ class TUploadCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
-    NMonitoring::TDynamicCounters::TCounterPtr RepliesCount;
     NMonitoring::THistogramPtr ReplyDuration;
 
     NMonitoring::TDynamicCounters::TCounterPtr RowsCount;
     NMonitoring::THistogramPtr PackageSize;
 
-    NMonitoring::TDynamicCounters::TCounterPtr FailsCount;
-    NMonitoring::THistogramPtr FailDuration;
-
+    THashMap<TString, NMonitoring::TDynamicCounters::TCounterPtr> CodesCount;
 public:
     TUploadCounters();
 
@@ -58,15 +55,7 @@ public:
         PackageSize->Collect(rowsCount);
     }
 
-    void OnReply( const TDuration d) const {
-        RepliesCount->Add(1);
-        ReplyDuration->Collect(d.MilliSeconds());
-    }
-
-    void OnFail(const TDuration d) const {
-        FailsCount->Add(1);
-        FailDuration->Collect(d.MilliSeconds());
-    }
+    void OnReply(const TDuration d, const ::Ydb::StatusIds::StatusCode code) const;
 };
 
 
@@ -690,7 +679,7 @@ private:
                     if (!ColumnsToConvertInplace.empty()) {
                         auto convertResult = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
                         if (!convertResult.ok()) {
-                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot upsert arrow batch:" << convertResult.status().ToString(), ctx);
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot convert arrow batch inplace:" << convertResult.status().ToString(), ctx);
                         }
                         Batch = *convertResult;
                     }
@@ -698,7 +687,7 @@ private:
                     if (!ColumnsToConvert.empty()) {
                         auto convertResult = NArrow::ConvertColumns(Batch, ColumnsToConvert);
                         if (!convertResult.ok()) {
-                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot upsert arrow batch:" << convertResult.status().ToString(), ctx);
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot convert arrow batch:" << convertResult.status().ToString(), ctx);
                         }
                         Batch = *convertResult;
                     }
@@ -1264,7 +1253,7 @@ private:
     }
 
     void ReplyWithResult(::Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
-        UploadCounters.OnReply(TAppData::TimeProvider->Now() - StartTime);
+        UploadCounters.OnReply(TAppData::TimeProvider->Now() - StartTime, status);
         SendResult(ctx, status);
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << "completed with status " << status);

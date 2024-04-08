@@ -443,10 +443,8 @@ std::pair<TString, TActorId> CmdSetOwner(TTestActorRuntime* runtime, ui64 tablet
 
 void WritePartData(const ui32 partition, const TString& sourceId, const i64 offset, const ui64 seqNo, const ui16 partNo, const ui16 totalParts,
                     const ui32 totalSize, const TString& data, TTestContext& tc, const TString& cookie, i32 msgSeqNo) {
-
     THolder<TEvPersQueue::TEvRequest> request;
     tc.Runtime->ResetScheduledCount();
-
     request.Reset(new TEvPersQueue::TEvRequest);
     auto req = request->Record.MutablePartitionRequest();
     req->SetPartition(partition);
@@ -454,7 +452,6 @@ void WritePartData(const ui32 partition, const TString& sourceId, const i64 offs
     req->SetMessageNo(msgSeqNo);
     if (offset != -1)
         req->SetCmdWriteOffset(offset);
-
     auto write = req->AddCmdWrite();
     write->SetSourceId(sourceId);
     write->SetSeqNo(seqNo);

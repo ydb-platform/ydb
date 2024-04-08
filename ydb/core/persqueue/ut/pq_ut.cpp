@@ -1050,7 +1050,6 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
         Y_ABORT_UNLESS(parts.size() > 5);
 
         CmdWrite(0, "sourceid4", data, tc);
-
         {
             TString cookie = CmdSetOwner(0, tc).first;
 
@@ -1063,7 +1062,6 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
             UNIT_ASSERT(result);
 
             UNIT_ASSERT(result->Record.HasStatus());
-//            UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
             UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::INITIALIZING);
         }
 
@@ -1091,7 +1089,6 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
 
                 UNIT_ASSERT(result->Record.HasStatus());
                 if (j == toWrite) {
-//                    UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
                     UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::INITIALIZING);
                 } else {
                     UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK);

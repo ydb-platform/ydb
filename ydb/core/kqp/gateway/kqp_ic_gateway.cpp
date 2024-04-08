@@ -861,39 +861,6 @@ public:
         return NotImplemented<TGenericResult>();
     }
 
-    NThreading::TFuture<TGenericResult> MakeDirectory(const TString& dst, const TMaybe<NActors::TActorId>& ownerActorId) override {
-        auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-        auto& record = ev->Record;
-
-        std::pair<TString, TString> pathPair;
-        TString error;
-        if (!NSchemeHelpers::SplitTablePath(dst, GetDatabase(), pathPair, error, /* createDir */ true)) {
-            return MakeFuture(ResultFromError<TGenericResult>(error));
-        }
-
-        record.SetDatabaseName(Database);
-        if (UserToken) {
-            record.SetUserToken(UserToken->GetSerializedToken());
-        }
-
-        auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme->SetWorkingDir(pathPair.first);
-        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
-        auto* makeDir = modifyScheme->MutableMkDir();
-        makeDir->SetName(pathPair.second);
-        if (ownerActorId) {
-            ActorIdToProto(*ownerActorId, makeDir->MutableOwnerActorId());
-        }
-
-        auto promise = NewPromise<IKqpGateway::TGenericResult>();
-        SendSchemeRequest(ev.Release()).Apply(
-            [promise](const TFuture<TGenericResult>& future) mutable {
-                promise.SetValue(future.GetValue());
-            });
-
-        return promise.GetFuture();
-    }
-
     TFuture<TGenericResult> ModifyScheme(NKikimrSchemeOp::TModifyScheme&& modifyScheme) override {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 

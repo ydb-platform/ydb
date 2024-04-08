@@ -85,7 +85,6 @@ public:
     }
 
     void CreateTmpDirectory() {
-        // TODO: move it to gateway
         auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         auto& record = ev->Record;
 

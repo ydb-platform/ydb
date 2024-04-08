@@ -11,6 +11,18 @@ namespace NPQ {
 using namespace NTabletFlatExecutor;
 using namespace NPQRBPrivate;
 
+struct TPartInfo {
+    ui32 PartitionId;
+    ui32 Group;
+    ui64 TabletId;
+
+    TPartInfo(const ui32 partitionId, const ui64 tabletId, const ui32 group)
+        : PartitionId(partitionId)
+        , Group(group)
+        , TabletId(tabletId)
+    {}
+};
+
 struct TPersQueueReadBalancer::TTxWrite : public ITransaction {
     TPersQueueReadBalancer * const Self;
     TVector<ui32> DeletedPartitions;

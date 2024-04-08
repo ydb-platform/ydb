@@ -43,38 +43,11 @@ private:
 };
 
 
-enum EPartitionState {
-    StateRegular = 0,
-    StateWaitingFromSS,
-};
-
 class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTabletExecutedFlat {
 
     struct TTxPreInit;
-    friend struct TTxPreInit;
-
     struct TTxInit;
-    friend struct TTxInit;
-
-    struct TPartInfo {
-        ui32 PartitionId;
-        ui64 TabletId;
-        ui32 Group;
-
-        TPartInfo(const ui32 partitionId, const ui64 tabletId, const ui32 group)
-            : PartitionId(partitionId)
-            , TabletId(tabletId)
-            , Group(group)
-        {}
-    };
-
-    struct TTabletInfo {
-        ui64 Owner;
-        ui64 Idx;
-    };
-
     struct TTxWrite;
-    friend struct TTxWrite;
 
     void HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx);
     void HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx);
@@ -146,7 +119,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
 
     void RegisterSession(const TActorId& pipe, const TActorContext& ctx);
-    struct TPipeInfo;
     void UnregisterSession(const TActorId& pipe, const TActorContext& ctx);
     void RebuildStructs();
     ui64 PartitionReserveSize() {
@@ -189,14 +161,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     TVector<TEvPersQueue::TEvCheckACL::TPtr> WaitingACLRequests;
     TVector<TEvPersQueue::TEvDescribe::TPtr> WaitingDescribeRequests;
 
-    struct TPipeInfo {
-        TString ClientId;
-        TString Session;
-        TActorId Sender;
-        bool WithGroups;
-        ui32 ServerActors;
-    };
-
     enum EPartitionState {
         EPS_FREE = 0,
         EPS_ACTIVE = 1
@@ -212,7 +176,45 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         void Lock(const TActorId& session) { Session = session; State = EPS_ACTIVE; }
     };
 
+    THashMap<ui32, TPartitionInfo> PartitionsInfo;
+    THashMap<ui32, TVector<ui32>> GroupsInfo;
+
+    struct TTabletInfo {
+        ui64 Owner;
+        ui64 Idx;
+    };
+
+    THashMap<ui64, TTabletInfo> TabletsInfo;
+    ui64 MaxIdx;
+
+    ui32 NextPartitionId;
+    ui32 NextPartitionIdForWrite;
+    ui32 StartPartitionIdForWrite;
+    ui32 TotalGroups;
+    bool NoGroupsInBase;
+
+private:
     struct TClientInfo;
+
+    struct TReadingPartitionStatus {
+        // Client had commited rad offset equals EndOffset of the partition
+        bool Commited = false;
+        // ReadSession reach EndOffset of the partition
+        bool ReadingFinished = false;
+        // ReadSession connected with new SDK with garantee of read order
+        bool ScaleAwareSDK = false;
+        // ReadSession reach EndOffset of the partition by first request
+        bool StartedReadingFromEndOffset = false;
+
+        size_t Iteration = 0;
+        ui64 Cookie = 0;
+
+        bool IsFinished() const { return Commited || (ReadingFinished && (StartedReadingFromEndOffset || ScaleAwareSDK)); };
+        bool SetCommittedState() { return !std::exchange(Commited, true); };
+        bool Unlock() { ReadingFinished = false; ++Cookie; return ReleaseChildren(); };
+        bool ReleaseChildren() { return !Commited; }
+    };
+
     struct TClientGroupInfo {
         struct TSessionInfo {
             TSessionInfo(const TString& session, const TActorId sender, const TString& clientNode, ui32 proxyNodeId, TInstant ts)
@@ -289,37 +291,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         bool WakeupScheduled = false;
     };
 
-    THashMap<ui32, TPartitionInfo> PartitionsInfo;
-    THashMap<ui32, TVector<ui32>> GroupsInfo;
-
-    THashMap<ui64, TTabletInfo> TabletsInfo;
-    ui64 MaxIdx;
-
-    ui32 NextPartitionId;
-    ui32 NextPartitionIdForWrite;
-    ui32 StartPartitionIdForWrite;
-    ui32 TotalGroups;
-    bool NoGroupsInBase;
-
-    struct TReadingPartitionStatus {
-        // Client had commited rad offset equals EndOffset of the partition
-        bool Commited = false;
-        // ReadSession reach EndOffset of the partition
-        bool ReadingFinished = false;
-        // ReadSession connected with new SDK with garantee of read order
-        bool ScaleAwareSDK = false;
-        // ReadSession reach EndOffset of the partition by first request
-        bool StartedReadingFromEndOffset = false;
-
-        size_t Iteration = 0;
-        ui64 Cookie = 0;
-
-        bool IsFinished() const { return Commited || (ReadingFinished && (StartedReadingFromEndOffset || ScaleAwareSDK)); };
-        bool SetCommittedState() { return !std::exchange(Commited, true); };
-        bool Unlock() { ReadingFinished = false; ++Cookie; return ReleaseChildren(); };
-        bool ReleaseChildren() { return !Commited; }
-    };
-
     struct TClientInfo {
         constexpr static ui32 MAIN_GROUP = 0;
 
@@ -368,6 +339,15 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     };
 
     THashMap<TString, TClientInfo> ClientsInfo; //map from userId -> to info
+
+private:
+    struct TPipeInfo {
+        TString ClientId;
+        TString Session;
+        TActorId Sender;
+        bool WithGroups;
+        ui32 ServerActors;
+    };
 
     THashMap<TActorId, TPipeInfo> PipesInfo;
 

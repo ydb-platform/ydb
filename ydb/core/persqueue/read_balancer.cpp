@@ -468,7 +468,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     TotalGroups = record.HasTotalGroupCount() ? record.GetTotalGroupCount() : 0;
     ui32 prevNextPartitionId = NextPartitionId;
     NextPartitionId = record.HasNextPartitionId() ? record.GetNextPartitionId() : 0;
-    THashMap<ui32, TPartitionInfo> partitionsInfo;
+    std::unordered_map<ui32, TPartitionInfo> partitionsInfo;
     if (record.HasSubDomainPathId()) {
         SubDomainPathId.emplace(record.GetSchemeShardId(), record.GetSubDomainPathId());
     }
@@ -637,7 +637,7 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
     Y_VERIFY_DEBUG_S(ev->Get()->Generation, "Tablet generation should be greater than 0");
 
     auto it = TabletPipes.find(tabletId);
-    if (!it.IsEnd()) {
+    if (it != TabletPipes.end()) {
         it->second.Generation = ev->Get()->Generation;
         it->second.NodeId = ev->Get()->ServerId.NodeId();
 
@@ -1064,7 +1064,7 @@ void TPersQueueReadBalancer::TClientGroupInfo::FreePartition(ui32 partitionId) {
     }
 }
 
-void TPersQueueReadBalancer::TClientInfo::FillEmptyGroup(const ui32 group, const THashMap<ui32, TPartitionInfo>& partitionsInfo) {
+void TPersQueueReadBalancer::TClientInfo::FillEmptyGroup(const ui32 group, const std::unordered_map<ui32, TPartitionInfo>& partitionsInfo) {
     auto& groupInfo = AddGroup(group);
 
     for (auto& [partitionId, partitionInfo] : partitionsInfo) {
@@ -1075,7 +1075,7 @@ void TPersQueueReadBalancer::TClientInfo::FillEmptyGroup(const ui32 group, const
     }
 }
 
-void TPersQueueReadBalancer::TClientInfo::AddSession(const ui32 groupId, const THashMap<ui32, TPartitionInfo>& partitionsInfo,
+void TPersQueueReadBalancer::TClientInfo::AddSession(const ui32 groupId, const std::unordered_map<ui32, TPartitionInfo>& partitionsInfo,
                                                     const TActorId& sender, const NKikimrPQ::TRegisterReadSession& record) {
 
     TActorId pipe = ActorIdFromProto(record.GetPipeClient());
@@ -1510,7 +1510,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr
             return false;
         }
         auto iter = TabletPipes.find(tabletId);
-        if (iter.IsEnd()) {
+        if (iter == TabletPipes.end()) {
             GetPipeClient(tabletId, ctx);
             return false;
         }
@@ -1538,7 +1538,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr
     } else {
         for (const auto& partitionInRequest : request.GetPartitions()) {
             auto partitionInfoIter = PartitionsInfo.find(partitionInRequest);
-            if (partitionInfoIter.IsEnd()) {
+            if (partitionInfoIter == PartitionsInfo.end()) {
                 return sendResponse(false);
             }
             ok = addPartitionToResponse(partitionInRequest, partitionInfoIter->second.TabletId) && ok;

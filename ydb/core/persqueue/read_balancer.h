@@ -362,7 +362,7 @@ private:
     };
 
     std::unordered_map<ui64, TPipeLocation> TabletPipes;
-    THashSet<ui64> PipesRequested;
+    std::unordered_set<ui64> PipesRequested;
 
     bool WaitingForACL;
 

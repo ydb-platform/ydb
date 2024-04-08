@@ -36,7 +36,9 @@ namespace NKikimr {
         , Recipient(recipient)
         , RecipientCookie(recipientCookie)
         , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.Log.Put")
-    {}
+    {
+        Span.Attribute("blob_id", id.ToString());
+    }
 
     void TLoggedRecVPut::Replay(THull &hull, const TActorContext &ctx) {
         TLogoBlobID genId(Id, 0);
@@ -77,7 +79,9 @@ namespace NKikimr {
         , Recipient(recipient)
         , RecipientCookie(recipientCookie)
         , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.Log.MultiPutItem")
-    {}
+    {
+        Span.Attribute("blob_id", Id.ToString());
+    }
 
     void TLoggedRecVMultiPutItem::Replay(THull &hull, const TActorContext &ctx) {
         TLogoBlobID genId(Id, 0);
@@ -109,7 +113,9 @@ namespace NKikimr {
         , HugeKeeperId(hugeKeeperId)
         , Ev(ev)
         , Span(TWilson::VDiskInternals, std::move(Ev->TraceId), "VDisk.Log.PutHuge")
-    {}
+    {
+        Span.Attribute("blob_id", Ev->Get()->LogoBlobID.ToString());
+    }
 
     void TLoggedRecVPutHuge::Replay(THull &hull, const TActorContext &ctx) {
         TEvHullLogHugeBlob *msg = Ev->Get();

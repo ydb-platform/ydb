@@ -29,8 +29,10 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
             if (!part.Range) {
                 continue;
             }
-            auto& endKey = part.Range->EndKeyPrefix;
-            Self->ShardRanges.emplace_back(endKey, part.ShardId);
+            TRange range;
+            range.EndKey = part.Range->EndKeyPrefix;
+            range.DataShardId = part.ShardId;
+            Self->ShardRanges.push_back(range);
         }
         return true;
     }

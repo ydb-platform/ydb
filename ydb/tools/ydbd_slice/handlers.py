@@ -4,8 +4,6 @@ import logging
 import subprocess
 from collections import deque, defaultdict
 
-from ydb.tools.cfg.walle import NopHostsInformationProvider
-
 
 logger = logging.getLogger(__name__)
 
@@ -44,14 +42,14 @@ def clear_logs(nodes):
     nodes.execute_async(cmd)
 
 
-def slice_format(components, nodes, cluster_details):
-    slice_stop(components, nodes, cluster_details)
+def slice_format(components, nodes, cluster_details, walle_provider):
+    slice_stop(components, nodes, cluster_details), walle_provider
     format_drivers(nodes)
-    slice_start(components, nodes, cluster_details)
+    slice_start(components, nodes, cluster_details, walle_provider)
 
 
-def slice_clear(components, nodes, cluster_details):
-    slice_stop(components, nodes, cluster_details)
+def slice_clear(components, nodes, cluster_details, walle_provider):
+    slice_stop(components, nodes, cluster_details, walle_provider)
 
     if 'dynamic_slots' in components:
         for slot in cluster_details.dynamic_slots.values():
@@ -97,8 +95,8 @@ def dynamic_configure(configurations):
     )
 
 
-def slice_install(components, nodes, cluster_details, configurator, do_clear_logs, args):
-    slice_stop(components, nodes, cluster_details)
+def slice_install(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider):
+    slice_stop(components, nodes, cluster_details, walle_provider)
 
     if 'dynamic_slots' in components or 'kikimr' in components:
         stop_all_slots(nodes)
@@ -121,15 +119,14 @@ def slice_install(components, nodes, cluster_details, configurator, do_clear_log
         start_static(nodes)
         dynamic_configure(configurator)
 
-    deploy_slot_configs(components, nodes, cluster_details)
-    start_dynamic(components, nodes, cluster_details)
+    deploy_slot_configs(components, nodes, cluster_details, walle_provider)
+    start_dynamic(components, nodes, cluster_details, walle_provider)
 
 
-def get_available_slots(components, nodes, cluster_details):
+def get_available_slots(components, nodes, cluster_details, walle_provider):
     if 'dynamic_slots' not in components:
         return {}
 
-    walle = NopHostsInformationProvider()
     slots_per_domain = {}
 
     for domain in cluster_details.domains:
@@ -140,7 +137,7 @@ def get_available_slots(components, nodes, cluster_details):
             if slot.domain == domain.domain_name:
                 for node in nodes.nodes_list:
                     item = (slot, node)
-                    available_slots_per_zone[walle.get_datacenter(node).lower()].append(item)
+                    available_slots_per_zone[walle_provider.get_datacenter(node).lower()].append(item)
                     available_slots_per_zone['any'].append(item)
                     all_available_slots_count += 1
         slots_per_domain[domain.domain_name] = available_slots_per_zone
@@ -179,11 +176,11 @@ mon={mon}""".format(
     nodes.execute_async(cmd, check_retcode=False, nodes=[node])
 
 
-def deploy_slot_configs(components, nodes, cluster_details):
+def deploy_slot_configs(components, nodes, cluster_details, walle_provider):
     if 'dynamic_slots' not in components:
         return
 
-    slots_per_domain = get_available_slots(components, nodes, cluster_details)[0]
+    slots_per_domain = get_available_slots(components, nodes, cluster_details, walle_provider)[0]
     for domain in cluster_details.domains:
         slots_taken = set()
         available_slots_per_zone = slots_per_domain[domain.domain_name]
@@ -248,7 +245,7 @@ def start_static(nodes):
     nodes.execute_async("sudo service kikimr start", check_retcode=False)
 
 
-def start_dynamic(components, nodes, cluster_details):
+def start_dynamic(components, nodes, cluster_details, walle_provider):
     if 'dynamic_slots' in components:
 
         def get_numa_nodes(nodes):
@@ -263,7 +260,7 @@ def start_dynamic(components, nodes, cluster_details):
         numa_nodes = None  # get_numa_nodes(nodes)
         numa_nodes_counters = {node: 0 for node in nodes.nodes_list}
 
-        (slots_per_domain, all_available_slots_count,) = get_available_slots(components, nodes, cluster_details)
+        (slots_per_domain, all_available_slots_count,) = get_available_slots(components, nodes, cluster_details, walle_provider)
 
         for domain in cluster_details.domains:
 
@@ -298,11 +295,11 @@ def start_dynamic(components, nodes, cluster_details):
             logger.warning('{count} unused slots'.format(count=all_available_slots_count - len(slots_taken)))
 
 
-def slice_start(components, nodes, cluster_details):
+def slice_start(components, nodes, cluster_details, walle_provider):
     if 'kikimr' in components:
         start_static(nodes)
 
-    start_dynamic(components, nodes, cluster_details)
+    start_dynamic(components, nodes, cluster_details, walle_provider)
 
 
 def stop_all_slots(nodes):
@@ -343,7 +340,7 @@ def stop_dynamic(components, nodes, cluster_details):
         nodes._check_async_execution(tasks, False)
 
 
-def slice_stop(components, nodes, cluster_details):
+def slice_stop(components, nodes, cluster_details, walle_provider):
     stop_dynamic(components, nodes, cluster_details)
 
     if 'kikimr' in components:
@@ -398,7 +395,7 @@ def deploy_secrets(nodes, yav_version):
     )
 
 
-def slice_update(components, nodes, cluster_details, configurator, do_clear_logs, args):
+def slice_update(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider):
     if do_clear_logs:
         clear_logs(nodes)
 
@@ -406,22 +403,22 @@ def slice_update(components, nodes, cluster_details, configurator, do_clear_logs
         if 'bin' in components.get('kikimr', []):
             update_kikimr(nodes, configurator.kikimr_bin, configurator.kikimr_compressed_bin)
 
-    slice_stop(components, nodes, cluster_details)
+    slice_stop(components, nodes, cluster_details, walle_provider)
     if 'kikimr' in components:
         if 'cfg' in components.get('kikimr', []):
             static = configurator.create_static_cfg()
             update_cfg(nodes, static)
             deploy_secrets(nodes, args.yav_version)
 
-    deploy_slot_configs(components, nodes, cluster_details)
-    slice_start(components, nodes, cluster_details)
+    deploy_slot_configs(components, nodes, cluster_details, walle_provider)
+    slice_start(components, nodes, cluster_details, walle_provider)
 
 
-def slice_update_raw_configs(components, nodes, cluster_details, config_path):
-    slice_stop(components, nodes, cluster_details)
+def slice_update_raw_configs(components, nodes, cluster_details, config_path, walle_provider):
+    slice_stop(components, nodes, cluster_details, walle_provider)
     if 'kikimr' in components:
         if 'cfg' in components.get('kikimr', []):
             kikimr_cfg = os.path.join(config_path, 'kikimr-static')
             update_cfg(nodes, kikimr_cfg)
 
-    slice_start(components, nodes, cluster_details)
+    slice_start(components, nodes, cluster_details, walle_provider)

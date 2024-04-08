@@ -18,15 +18,7 @@ inline bool IsSubset(const TNodeSet& lhs, const TNodeSet& rhs) {
 
 template <typename TNodeSet>
 inline bool HasSingleBit(TNodeSet nodeSet) {
-    size_t bitCount = 0;
-
-    for (size_t i = 0; i < nodeSet.size(); ++i) {
-        if (nodeSet[i] && ++bitCount > 1) {
-            return false;
-        }
-    }
-
-    return (bitCount == 1);
+    return nodeSet.count() == 1;
 }
 
 template <typename TNodeSet>

@@ -449,6 +449,8 @@ const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNo
         pgType = "int8";
         break;
     case NUdf::EDataSlot::Uint64:
+    case NUdf::EDataSlot::Decimal:
+    case NUdf::EDataSlot::DyNumber:
         pgType = "numeric";
         break;
     case NUdf::EDataSlot::Float:
@@ -468,13 +470,17 @@ const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNo
         pgType = "text";
         break;
     case NUdf::EDataSlot::Date:
+    case NUdf::EDataSlot::Date32:
         pgType = "date";
         break;
     case NUdf::EDataSlot::Datetime:
+    case NUdf::EDataSlot::Datetime64:
     case NUdf::EDataSlot::Timestamp:
+    case NUdf::EDataSlot::Timestamp64:
         pgType = "timestamp";
         break;
     case NUdf::EDataSlot::Interval:
+    case NUdf::EDataSlot::Interval64:
         pgType = "interval";
         break;
     case NUdf::EDataSlot::Json:

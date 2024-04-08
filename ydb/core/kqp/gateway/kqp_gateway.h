@@ -155,6 +155,8 @@ public:
 
         NTopic::TTopicOperations TopicOperations;
 
+        ui64 OutputChunkMaxSize = 0;
+
         bool IsTrailingResultsAllowed() const {
             return AllowTrailingResults && (
                 QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY ||

@@ -199,8 +199,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             }
             tabletAvailability->SetPriority(tabletInfo.Priority);
         }
-        if (const TString& slotName = AppData(ctx)->SlotName; !slotName.Empty()) {
-            request->Record.SetSlotName(slotName);
+        if (const TString& nodeName = AppData(ctx)->NodeName; !nodeName.Empty()) {
+            request->Record.SetName(nodeName);
         }
 
         NTabletPipe::SendData(ctx, HivePipeClient, request.Release());

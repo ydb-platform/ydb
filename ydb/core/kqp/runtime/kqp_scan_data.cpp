@@ -3,6 +3,7 @@
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/formats/arrow/size_calcer.h>
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/pack.h>
@@ -285,30 +286,33 @@ public:
 
 template <class TElementAccessor, class TAccessor>
 TBytesStatistics WriteColumnValuesFromArrowSpecImpl(TAccessor editAccessor,
-    const TBatchDataAccessor& batch, const ui32 columnIndex, arrow::Array* arrayExt, NScheme::TTypeInfo columnType) {
-    auto& array = *reinterpret_cast<typename TElementAccessor::TArrayType*>(arrayExt);
-    TElementAccessor::Validate(array);
+    const TBatchDataAccessor& batch, const ui32 columnIndex, arrow::ChunkedArray* chunkedArrayExt, NScheme::TTypeInfo columnType) {
     auto statAccumulator = TElementAccessor::BuildStatAccumulator(columnType);
+    for (auto&& i : chunkedArrayExt->chunks()) {
+        auto& arrayExt = *i;
+        auto& array = *reinterpret_cast<typename TElementAccessor::TArrayType*>(&arrayExt);
+        TElementAccessor::Validate(array);
 
-    const auto applyToIndex = [&](const ui32 rowIndexFrom, const ui32 rowIndexTo) {
-        auto& rowItem = editAccessor(rowIndexTo, columnIndex);
-        if (array.IsNull(rowIndexFrom)) {
-            statAccumulator.AddNull();
-            rowItem = NUdf::TUnboxedValue();
+        const auto applyToIndex = [&](const ui32 rowIndexFrom, const ui32 rowIndexTo) {
+            auto& rowItem = editAccessor(rowIndexTo, columnIndex);
+            if (array.IsNull(rowIndexFrom)) {
+                statAccumulator.AddNull();
+                rowItem = NUdf::TUnboxedValue();
+            } else {
+                rowItem = TElementAccessor::ExtractValue(array, rowIndexFrom);
+                statAccumulator.AddValue(rowItem);
+            }
+        };
+
+        if (batch.HasDataIndexes()) {
+            ui32 idx = 0;
+            for (const i64 rowIndex : batch.GetDataIndexes()) {
+                applyToIndex(rowIndex, idx++);
+            }
         } else {
-            rowItem = TElementAccessor::ExtractValue(array, rowIndexFrom);
-            statAccumulator.AddValue(rowItem);
-        }
-    };
-
-    if (batch.HasDataIndexes()) {
-        ui32 idx = 0;
-        for (const i64 rowIndex: batch.GetDataIndexes()) {
-            applyToIndex(rowIndex, idx++);
-        }
-    } else {
-        for (i64 rowIndex = 0; rowIndex < batch.GetRecordsCount(); ++rowIndex) {
-            applyToIndex(rowIndex, rowIndex);
+            for (i64 rowIndex = 0; rowIndex < batch.GetRecordsCount(); ++rowIndex) {
+                applyToIndex(rowIndex, rowIndex);
+            }
         }
     }
     return statAccumulator.Finish();
@@ -318,8 +322,8 @@ TBytesStatistics WriteColumnValuesFromArrowSpecImpl(TAccessor editAccessor,
 template <class TAccessor>
 TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
     const TBatchDataAccessor& batch, i64 columnIndex, NScheme::TTypeInfo columnType) {
-    std::shared_ptr<arrow::Array> columnSharedPtr = batch.GetBatch()->column(columnIndex);
-    arrow::Array* columnPtr = columnSharedPtr.get();
+    std::shared_ptr<arrow::ChunkedArray> columnSharedPtr = batch.GetBatch()->column(columnIndex);
+    arrow::ChunkedArray* columnPtr = columnSharedPtr.get();
     namespace NTypeIds = NScheme::NTypeIds;
     switch (columnType.GetTypeId()) {
         case NTypeIds::Bool:
@@ -607,35 +611,36 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TRowBatchReader::AddData(con
     return stats;
 }
 
-TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(const TBatchDataAccessor& batch, TMaybe<ui64> /*shardId*/,
+TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(const TBatchDataAccessor& dataAccessor, TMaybe<ui64> /*shardId*/,
     const THolderFactory& holderFactory)
 {
     TBytesStatistics stats;
     auto totalColsCount = TotalColumnsCount + 1;
-    TUnboxedValueVector batchValues;
-    batchValues.resize(totalColsCount);
-    std::shared_ptr<arrow::RecordBatch> filtered = batch.GetFiltered();
-    for (int i = 0; i < filtered->num_columns(); ++i) {
-        batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(filtered->column_data(i)));
+    auto batches = NArrow::SliceToRecordBatches(dataAccessor.GetFiltered());
+    for (auto&& filtered : batches) {
+        TUnboxedValueVector batchValues;
+        batchValues.resize(totalColsCount);
+        for (int i = 0; i < filtered->num_columns(); ++i) {
+            batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(filtered->column(i)));
+        }
+        const ui64 batchByteSize = NArrow::GetBatchDataSize(filtered);
+        stats.AddStatistics({batchByteSize, batchByteSize});
+
+        // !!! TODO !!!
+        // if (!SystemColumns.empty()) {
+        //     for (i64 rowIndex = 0; rowIndex < batch.num_rows(); ++rowIndex) {
+        //         FillSystemColumns(&cells[rowIndex * ColumnsCount() + ResultColumns.size()], shardId, SystemColumns);
+        //     }
+
+        //     stats.AllocatedBytes += batch.num_rows() * SystemColumns.size() * sizeof(NUdf::TUnboxedValue);
+        // }
+
+        batchValues[totalColsCount - 1] = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(filtered->num_rows())));
+        stats.AddStatistics({sizeof(ui64) * filtered->num_rows(), sizeof(ui64) * filtered->num_rows()});
+
+        BlockBatches.emplace(TBlockBatch(totalColsCount, filtered->num_rows(), std::move(batchValues), stats.AllocatedBytes));
+        StoredBytes += stats.AllocatedBytes;
     }
-    const ui64 batchByteSize = NYql::NUdf::GetSizeOfArrowBatchInBytes(*filtered);
-    stats.AddStatistics({batchByteSize, batchByteSize});
-
-    // !!! TODO !!!
-    // if (!SystemColumns.empty()) {
-    //     for (i64 rowIndex = 0; rowIndex < batch.num_rows(); ++rowIndex) {
-    //         FillSystemColumns(&cells[rowIndex * ColumnsCount() + ResultColumns.size()], shardId, SystemColumns);
-    //     }
-
-    //     stats.AllocatedBytes += batch.num_rows() * SystemColumns.size() * sizeof(NUdf::TUnboxedValue);
-    // }
-
-    batchValues[totalColsCount - 1] = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch.GetRecordsCount())));
-    stats.AddStatistics({ sizeof(ui64) * batch.GetRecordsCount(), sizeof(ui64) * batch.GetRecordsCount()});
-
-    BlockBatches.emplace(TBlockBatch(totalColsCount, batch.GetRecordsCount(), std::move(batchValues), stats.AllocatedBytes));
-    StoredBytes += stats.AllocatedBytes;
-
     return stats;
 }
 

@@ -78,6 +78,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , AllowSinglePartitionOpt(args.AllowSinglePartitionOpt)
     , UserRequestContext(args.UserRequestContext)
     , FederatedQuerySetup(args.FederatedQuerySetup)
+    , OutputChunkMaxSize(args.OutputChunkMaxSize)
 {
     if (!Database) {
         // a piece of magic for tests
@@ -196,6 +197,10 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     if (Snapshot.IsValid()) {
         request.MutableSnapshot()->SetTxId(Snapshot.TxId);
         request.MutableSnapshot()->SetStep(Snapshot.Step);
+    }
+
+    if (OutputChunkMaxSize) {
+        request.SetOutputChunkMaxSize(OutputChunkMaxSize);
     }
 
     return result;
@@ -332,6 +337,7 @@ void TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, bool shareMailbox, bool op
 
     NYql::NDq::TComputeMemoryLimits limits;
     limits.ChannelBufferSize = 32_MB;  // Depends on NYql::NDq::TDqOutputChannelSettings::ChunkSizeLimit (now 48 MB) with a ratio of 1.5
+    limits.OutputChunkMaxSize = OutputChunkMaxSize;
     limits.MkqlLightProgramMemoryLimit = MkqlMemoryLimit > 0 ? std::min(500_MB, MkqlMemoryLimit) : 500_MB;
     limits.MkqlHeavyProgramMemoryLimit = MkqlMemoryLimit > 0 ? std::min(2_GB, MkqlMemoryLimit) : 2_GB;
 

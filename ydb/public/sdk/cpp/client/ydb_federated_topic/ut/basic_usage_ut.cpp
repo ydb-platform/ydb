@@ -1063,7 +1063,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         using Settings = TFederatedWriteSessionSettings;
 
         {
-            auto [db, status] = SelectDatabaseByHash(Settings(), dbInfos);
+            auto [db, status] = SelectDatabaseByHashImpl(Settings(), dbInfos);
             UNIT_ASSERT(!db);
             UNIT_ASSERT_EQUAL(status, EStatus::NOT_FOUND);
         }
@@ -1071,7 +1071,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         AddDatabase(dbInfos, 1, 0);
 
         {
-            auto [db, status] = SelectDatabaseByHash(Settings(), dbInfos);
+            auto [db, status] = SelectDatabaseByHashImpl(Settings(), dbInfos);
             UNIT_ASSERT(!db);
             UNIT_ASSERT_EQUAL(status, EStatus::NOT_FOUND);
         }
@@ -1079,7 +1079,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         AddDatabase(dbInfos, 2, 100);
 
         {
-            auto [db, status] = SelectDatabaseByHash(Settings(), dbInfos);
+            auto [db, status] = SelectDatabaseByHashImpl(Settings(), dbInfos);
             UNIT_ASSERT(db);
             UNIT_ASSERT_EQUAL(db->id(), "2");
             UNIT_ASSERT_EQUAL(status, EStatus::SUCCESS);
@@ -1102,7 +1102,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             */
             for (bool allow : {false, true}) {
                 auto settings = Settings().PreferredDatabase("db0").AllowFallback(allow);
-                auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+                auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc1");
                 UNIT_ASSERT(!db);
                 UNIT_ASSERT_EQUAL(status, EStatus::NOT_FOUND);
             }
@@ -1116,7 +1116,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             */
             for (bool allow : {false, true}) {
                 auto settings = Settings().PreferredDatabase("db8").AllowFallback(allow);
-                auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+                auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc1");
                 UNIT_ASSERT(db);
                 UNIT_ASSERT_EQUAL(db->id(), "8");
             }
@@ -1130,7 +1130,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             */
             DisableDatabase(dbInfos, 8);
             auto settings = Settings().PreferredDatabase("db8").AllowFallback(false);
-            auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+            auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc1");
             UNIT_ASSERT(!db);
             UNIT_ASSERT_EQUAL(status, EStatus::UNAVAILABLE);
             EnableDatabase(dbInfos, 8);
@@ -1144,7 +1144,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             */
             DisableDatabase(dbInfos, 8);
             auto settings = Settings().PreferredDatabase("db8").AllowFallback(true);
-            auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+            auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc1");
             UNIT_ASSERT(db);
             UNIT_ASSERT_UNEQUAL(db->id(), "8");
             UNIT_ASSERT_EQUAL(status, EStatus::SUCCESS);
@@ -1158,7 +1158,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             | unset       | -               | not found   | false         | NOT_FOUND   |
             */
             auto settings = Settings().AllowFallback(false);
-            auto [db, status] = SelectDatabase(settings, dbInfos, "dc0");
+            auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc0");
             UNIT_ASSERT(!db);
             UNIT_ASSERT_EQUAL(status, EStatus::NOT_FOUND);
         }
@@ -1169,7 +1169,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             | unset       | -               | not found   | true          | by hash     |
             */
             auto settings = Settings().AllowFallback(true);
-            auto [db, status] = SelectDatabase(settings, dbInfos, "dc0");
+            auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc0");
             UNIT_ASSERT(db);
             UNIT_ASSERT_EQUAL(status, EStatus::SUCCESS);
         }
@@ -1182,7 +1182,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             */
             for (bool allow : {false, true}) {
                 auto settings = Settings().AllowFallback(allow);
-                auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+                auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc1");
                 UNIT_ASSERT(db);
                 UNIT_ASSERT_EQUAL(db->id(), "1");
             }
@@ -1196,7 +1196,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             */
             DisableDatabase(dbInfos, 1);
             auto settings = Settings().AllowFallback(false);
-            auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+            auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc1");
             UNIT_ASSERT(!db);
             UNIT_ASSERT_EQUAL(status, EStatus::UNAVAILABLE);
             EnableDatabase(dbInfos, 1);
@@ -1210,7 +1210,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             */
             DisableDatabase(dbInfos, 1);
             auto settings = Settings().AllowFallback(true);
-            auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+            auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc1");
             UNIT_ASSERT(db);
             UNIT_ASSERT_UNEQUAL(db->id(), "1");
             UNIT_ASSERT_EQUAL(status, EStatus::SUCCESS);

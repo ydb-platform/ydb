@@ -10,11 +10,11 @@
 
 namespace NYdb::NFederatedTopic {
 
-std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseByHash(
+std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseByHashImpl(
     NTopic::TFederatedWriteSessionSettings const& settings,
     std::vector<std::shared_ptr<TDbInfo>> const& dbInfos);
 
-std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabase(
+std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseImpl(
     NTopic::TFederatedWriteSessionSettings const& settings,
     std::vector<std::shared_ptr<TDbInfo>> const& dbInfos, TString const& selfLocation);
 
@@ -86,22 +86,20 @@ private:
     void Start();
     void OpenSubsessionImpl(std::shared_ptr<TDbInfo> db);
 
-    std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseImpl();
-
     void OnFederationStateUpdateImpl();
     void ScheduleFederationStateUpdateImpl(TDuration delay);
 
     void WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& message);
-    bool PrepareDeferredWrite(TDeferredWrite& deferred);
+    bool PrepareDeferredWriteImpl(TDeferredWrite& deferred);
 
     void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
     void CloseImpl(NTopic::TSessionClosedEvent const& ev);
 
-    bool MessageQueuesAreEmpty() const;
-    void IssueTokenIfAllowed();
-    void UpdateFederationState();
+    bool MessageQueuesAreEmptyImpl() const;
+    void IssueTokenIfAllowedImpl();
+    void UpdateFederationStateImpl();
 
-    TStringBuilder GetLogPrefix() const;
+    TStringBuilder GetLogPrefixImpl() const;
 
 private:
     // For subsession creation

@@ -1671,14 +1671,14 @@ void TPartition::CancelReserveRequests(const TActorContext& ctx)
     ReserveRequests.clear();
 }
 
-void TPartition::CancelRequests(const TActorContext& ctx, TMessageQueue& requests)
-{
-    for(const auto& r : requests) {
-        ReplyError(ctx, r.GetCookie(), InactivePartitionErrorCode,
-                   "Write to inactive partition");
-    }
-    requests.clear();
-}
+//void TPartition::CancelRequests(const TActorContext& ctx, TMessageQueue& requests)
+//{
+//    for(const auto& r : requests) {
+//        ReplyError(ctx, r.GetCookie(), InactivePartitionErrorCode,
+//                   "Write to inactive partition");
+//    }
+//    requests.clear();
+//}
 
 void TPartition::RemoveMessages(TMessageQueue& src, TMessageQueue& dst)
 {

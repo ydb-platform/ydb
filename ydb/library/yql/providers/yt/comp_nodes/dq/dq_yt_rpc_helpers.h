@@ -53,6 +53,11 @@ struct TSettingsHolder : public TNonCopyable {
         , Client(std::move(client))
         , RawInputs(std::move(inputs))
         , OriginalIndexes(std::move(originalIndexes)) {};
+    void SetColumns(const TVector<TString>& columnNames) {
+        for (ui32 i = 0; i < columnNames.size(); ++i) {
+            ColumnNameMapping[columnNames[i]] = i;
+        }
+    }
     NYT::NApi::IConnectionPtr Connection;
     NYT::TIntrusivePtr<NYT::NApi::NRpcProxy::TClient> Client;
     const TMkqlIOSpecs* Specs = nullptr;
@@ -60,6 +65,7 @@ struct TSettingsHolder : public TNonCopyable {
     const NUdf::IPgBuilder* PgBuilder = nullptr;
     TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> RawInputs;
     TVector<size_t> OriginalIndexes;
+    std::unordered_map<std::string, ui32> ColumnNameMapping;
 };
 
 std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString& token, const TString& clusterName, const ui64 timeout, bool unordered, const TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>& tables, NYT::TNode samplingSpec);

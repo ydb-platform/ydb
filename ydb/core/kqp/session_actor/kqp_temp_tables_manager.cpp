@@ -120,14 +120,15 @@ private:
         }
 
         for (const auto& entry : navigate->ResultSet) {
-            Y_ABORT_UNLESS(entry.ListNodeEntry);
-            for (const auto& child : entry.ListNodeEntry->Children) {
-                if (child.Kind == NSchemeCache::TSchemeCacheNavigate::KindPath) {
-                    PathsToTraverse.push_back(entry.Path);
-                    PathsToTraverse.back().push_back(child.Name);
-                } else if (child.Kind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
-                    TablesToDrop.push_back(entry.Path);
-                    TablesToDrop.back().push_back(child.Name);
+            if (entry.ListNodeEntry) {
+                for (const auto& child : entry.ListNodeEntry->Children) {
+                    if (child.Kind == NSchemeCache::TSchemeCacheNavigate::KindPath) {
+                        PathsToTraverse.push_back(entry.Path);
+                        PathsToTraverse.back().push_back(child.Name);
+                    } else if (child.Kind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
+                        TablesToDrop.push_back(entry.Path);
+                        TablesToDrop.back().push_back(child.Name);
+                    }
                 }
             }
         }

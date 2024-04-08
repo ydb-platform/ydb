@@ -395,7 +395,7 @@ message TTableDescription {
 
     optional TTableReplicationConfig ReplicationConfig = 40;
 
-    optional bool Temporary = 41; // TODO: delete
+    optional bool Temporary = 41;
 }
 
 message TDictionaryEncodingSettings {
@@ -1742,7 +1742,7 @@ message TModifyScheme {
 
     optional TViewDescription CreateView = 64;
 
-    optional NActorsProto.TActorId TempTableOwnerActorId = 65; // TODO: rename to PathOwnerActorId
+    reserved 65; // deprecated TempTableOwnerActorId
 
     optional TCopySequence CopySequence = 66;
     optional TReplicationDescription AlterReplication = 67;

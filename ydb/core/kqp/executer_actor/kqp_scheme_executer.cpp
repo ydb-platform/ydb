@@ -97,11 +97,11 @@ public:
         modifyScheme->SetWorkingDir(CanonizePath(JoinPath({Database, ".tmp", "sessions"})));
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
         auto* makeDir = modifyScheme->MutableMkDir();
-        makeDir->SetName(TStringBuilder() << SessionId);
+        makeDir->SetName(SessionId);
         ActorIdToProto(KqpTempTablesAgentActor, makeDir->MutableOwnerActorId());
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
-        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, true);
+        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
         RegisterWithSameMailbox(requestHandler);
 
         auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
@@ -147,9 +147,6 @@ public:
                     }
                     tableDesc->SetName(CanonizePath(JoinPath({".tmp", "sessions", SessionId, Database, tableDesc->GetPath(), tableDesc->GetName()})));
                     tableDesc->SetPath(Database);
-                    YQL_ENSURE(KqpTempTablesAgentActor != TActorId(),
-                        "Create temp table with empty KqpTempTablesAgentActor");
-                    ActorIdToProto(KqpTempTablesAgentActor, modifyScheme.MutableTempTableOwnerActorId());
                 }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
@@ -434,9 +431,11 @@ public:
     }
 
     void Handle(TEvPrivate::TEvMakeDirResult::TPtr& result) {
-        // if (!result->Get()->Result.Success()) {   
-        // }
-        Y_UNUSED(result);
+        if (!result->Get()->Result.Success()) {   
+            InternalError(TStringBuilder()
+                << "Error creating temporary directory for session " << SessionId
+                << ": " << result->Get()->Result.Issues().ToString(true));
+        }
         MakeSchemeOperationRequest();
     }
 

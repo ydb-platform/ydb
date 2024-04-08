@@ -68,7 +68,7 @@ TClient::TClient(
     TConnectionPtr connection,
     const TClientOptions& clientOptions)
     : Connection_(std::move(connection))
-    , RetryingChannel_(MaybeCreateRetryingChannel(
+    , RetryingChannel_(CreateSequoiaAwareRetryingChannel(
         CreateCredentialsInjectingChannel(
             Connection_->CreateChannel(false),
             clientOptions),
@@ -103,19 +103,18 @@ void TClient::Terminate()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IChannelPtr TClient::MaybeCreateRetryingChannel(NRpc::IChannelPtr channel, bool retryProxyBanned) const
+IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(NRpc::IChannelPtr channel, bool retryProxyBanned) const
 {
     const auto& config = Connection_->GetConfig();
-    if (config->EnableRetries) {
-        return NRpc::CreateRetryingChannel(
-            config->RetryingChannel,
-            std::move(channel),
-            BIND([=] (const TError& error) {
-                return IsRetriableError(error, retryProxyBanned);
-            }));
-    } else {
-        return channel;
-    }
+    bool retrySequoiaErrorsOnly = !config->EnableRetries;
+    // NB: even if client's retries are disabled Sequoia transient failures are
+    // still retriable. See IsRetriableError().
+    return NRpc::CreateRetryingChannel(
+        config->RetryingChannel,
+        std::move(channel),
+        BIND([=] (const TError& error) {
+            return IsRetriableError(error, retryProxyBanned, retrySequoiaErrorsOnly);
+        }));
 }
 
 IChannelPtr TClient::CreateNonRetryingChannelByAddress(const TString& address) const
@@ -153,7 +152,7 @@ IChannelPtr TClient::CreateNonRetryingStickyChannel() const
 
 IChannelPtr TClient::WrapStickyChannelIntoRetrying(IChannelPtr underlying) const
 {
-    return MaybeCreateRetryingChannel(
+    return CreateSequoiaAwareRetryingChannel(
         std::move(underlying),
         /*retryProxyBanned*/ false);
 }

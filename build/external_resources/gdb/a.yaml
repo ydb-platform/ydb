@@ -39,6 +39,7 @@ ci:
             platforms:
               title: Build only for particular platforms (comma separated)
               type: string
+              default: ""
       filters:
         - discovery: dir
           abs-paths:

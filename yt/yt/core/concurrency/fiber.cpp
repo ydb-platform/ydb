@@ -4,6 +4,7 @@
 
 #include <yt/yt/core/profiling/timing.h>
 
+#include <yt/yt/core/misc/intrusive_mpsc_stack.h>
 #include <yt/yt/core/misc/singleton.h>
 #include <yt/yt/core/misc/finally.h>
 
@@ -113,6 +114,9 @@ private:
 
 class TFiberRegistry
 {
+    template <class Tag>
+    using TFiberStack = TIntrusiveMPSCStack<TFiber, Tag>;
+
 public:
     //! Do not rename, change the signature, or drop Y_NO_INLINE.
     //! Used in devtools/gdb/yt_fibers_printer.py.
@@ -121,43 +125,107 @@ public:
         return LeakySingleton<TFiberRegistry>();
     }
 
-    TFiber::TCookie Register(TFiber* fiber)
+    void Register(TFiber* fiber)
     {
-        auto guard = Guard(Lock_);
-        return Fibers_.insert(Fibers_.begin(), fiber);
-    }
+        RegisterQueue_.Push(fiber);
 
-    void Unregister(TFiber::TCookie cookie)
-    {
-        auto guard = Guard(Lock_);
-        Fibers_.erase(cookie);
-    }
-
-    std::vector<TFiberPtr> List()
-    {
-        auto guard = Guard(Lock_);
-        std::vector<TFiberPtr> fibers;
-        for (const auto& fiber : Fibers_) {
-            fibers.push_back(fiber);
+        if (auto guard = TTryGuard(Lock_)) {
+            GuardedProcessQueues();
         }
-        return fibers;
+    }
+
+    void Unregister(TFiber* fiber)
+    {
+        UnregisterQueue_.Push(fiber);
+
+        if (auto guard = TTryGuard(Lock_)) {
+            GuardedProcessQueues();
+        }
+    }
+
+    void ReadFibers(TFunctionView<void(TFiber::TFiberList&)> callback)
+    {
+        auto guard = Guard(Lock_);
+
+        GuardedProcessQueues();
+
+        callback(Fibers_);
+
+        GuardedProcessQueues();
+    }
+
+    ~TFiberRegistry()
+    {
+        GuardedProcessQueues();
     }
 
 private:
+    TFiberStack<NDetail::TFiberRegisterTag> RegisterQueue_;
+    TFiberStack<NDetail::TFiberUnregisterTag> UnregisterQueue_;
+
     NThreading::TForkAwareSpinLock Lock_;
-    std::list<TFiber*> Fibers_;
+    TFiber::TFiberList Fibers_;
+
+    void GuardedProcessQueues()
+    {
+        Fibers_.Append(RegisterQueue_.PopAll());
+
+        auto toUnregister = UnregisterQueue_.PopAll();
+
+        while (auto fiber = toUnregister.PopBack()) {
+            fiber->UnregisterAndDelete();
+        }
+
+        // NB: Around this line guard is released. We do not properly double check
+        // if queues are actually empty after this.
+        // We are okay with this since we expect to have occasional calls of this method
+        // which would unstuck most of the fibers. In dtor of this singleton we
+        // release the last batch of stuck fibers.
+    };
+
+    void DebugPrint()
+    {
+        Cerr << "Debug print begin\n";
+        Cerr << "---------------------------------------------------------------" << '\n';
+        for (auto* iter = Fibers_.Begin(); iter != Fibers_.End(); iter = iter->Next) {
+            auto* fiber = static_cast<TFiber*>(iter);
+            auto* regNode = static_cast<TIntrusiveNode<TFiber, NDetail::TFiberRegisterTag>*>(fiber);
+            auto* delNode = static_cast<TIntrusiveNode<TFiber, NDetail::TFiberUnregisterTag>*>(fiber);
+
+            Cerr << Format("Fiber node at %v. Next is %v, Prev is %v", iter, iter->Next, iter->Prev) << '\n';
+            Cerr << Format("Fiber address after cast is %v", fiber) << '\n';
+            Cerr << Format("Fiber registration queue status: Next: %v, Prev: %v", regNode->Next, regNode->Prev) << '\n';
+            // NB: Reading deletion queue is data race. Don't do this under tsan.
+            Cerr << Format("Fiber deletion queue status: Next: %v, Prev: %v", delNode->Next, delNode->Prev) << '\n';
+            Cerr << "---------------------------------------------------------------" << '\n';
+        }
+        Cerr << "Debug print end\n";
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TFiber* TFiber::CreateFiber(EExecutionStackKind stackKind)
+{
+    return new TFiber(stackKind);
+}
+
+void TFiber::ReleaseFiber(TFiber* fiber)
+{
+    YT_VERIFY(fiber);
+    fiber->SetFinished();
+    fiber->Clear();
+    TFiberRegistry::Get()->Unregister(fiber);
+}
+
 TFiber::TFiber(EExecutionStackKind stackKind)
     : Stack_(CreateExecutionStack(stackKind))
-    , RegistryCookie_(TFiberRegistry::Get()->Register(this))
     , MachineContext_({
         this,
         TArrayRef(static_cast<char*>(Stack_->GetStack()), Stack_->GetSize()),
     })
 {
+    TFiberRegistry::Get()->Register(this);
     TFiberProfiler::Get()->OnFiberCreated();
     TFiberProfiler::Get()->OnStackAllocated(Stack_->GetSize());
 }
@@ -166,7 +234,6 @@ TFiber::~TFiber()
 {
     YT_VERIFY(GetState() == EFiberState::Finished);
     TFiberProfiler::Get()->OnStackFreed(Stack_->GetSize());
-    TFiberRegistry::Get()->Unregister(RegistryCookie_);
 }
 
 bool TFiber::CheckFreeStackSpace(size_t space) const
@@ -222,7 +289,6 @@ void TFiber::SetWaiting()
 void TFiber::SetFinished()
 {
     State_.store(EFiberState::Finished);
-    Clear();
 }
 
 void TFiber::SetIdle()
@@ -276,9 +342,17 @@ void TFiber::Clear()
     Fls_.reset();
 }
 
-std::vector<TFiberPtr> TFiber::List()
+void TFiber::ReadFibers(TFunctionView<void(TFiberList&)> callback)
 {
-    return TFiberRegistry::Get()->List();
+    return TFiberRegistry::Get()->ReadFibers(callback);
+}
+
+void TFiber::UnregisterAndDelete() noexcept
+{
+    YT_VERIFY(!static_cast<TUnregisterBase*>(this)->IsLinked());
+
+    static_cast<TRegisterBase*>(this)->Unlink();
+    delete this;
 }
 
 namespace NDetail {

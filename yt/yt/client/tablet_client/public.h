@@ -10,6 +10,12 @@ namespace NYT::NTabletClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NProto {
+
+class TLockMask;
+
+} // namespace NProto
+
 DEFINE_ENUM(ETabletState,
     // Individual states
     ((Mounting)        (0))

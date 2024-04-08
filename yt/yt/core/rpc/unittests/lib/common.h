@@ -115,10 +115,10 @@ class TTestNodeMemoryTracker
 public:
     explicit TTestNodeMemoryTracker(size_t limit);
 
-    i64 GetLimit() const;
-    i64 GetUsed() const;
-    i64 GetFree() const;
-    bool IsExceeded() const;
+    i64 GetLimit() const override;
+    i64 GetUsed() const override;
+    i64 GetFree() const override;
+    bool IsExceeded() const override;
 
     TError TryAcquire(i64 size) override;
     TError TryChange(i64 size) override;

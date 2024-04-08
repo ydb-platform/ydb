@@ -1,6 +1,28 @@
 #include "memory_reference_tracker.h"
+#include "singleton.h"
 
 namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TNullMemoryReferenceTracker
+    : public IMemoryReferenceTracker
+{
+public:
+    TSharedRef Track(
+        TSharedRef reference,
+        bool /*keepExistingTracking*/) override
+    {
+        return reference;
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+IMemoryReferenceTrackerPtr GetNullMemoryReferenceTracker()
+{
+    return LeakyRefCountedSingleton<TNullMemoryReferenceTracker>();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

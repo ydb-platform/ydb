@@ -29,7 +29,29 @@ public:
 
     void SetLimit(i64 /*size*/) override
     { }
+
+    i64 GetLimit()  const override
+    {
+        return std::numeric_limits<i64>::max();
+    }
+
+    i64 GetUsed() const override
+    {
+        return 0;
+    }
+
+    i64 GetFree() const override
+    {
+        return std::numeric_limits<i64>::max();
+    }
+
+    bool IsExceeded() const override
+    {
+        return false;
+    }
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 IMemoryUsageTrackerPtr GetNullMemoryUsageTracker()
 {

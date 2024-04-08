@@ -17,9 +17,15 @@ struct IMemoryUsageTracker
     virtual bool Acquire(i64 size) = 0;
     virtual void Release(i64 size) = 0;
     virtual void SetLimit(i64 size) = 0;
+    virtual i64 GetLimit() const = 0;
+    virtual i64 GetUsed() const = 0;
+    virtual i64 GetFree() const = 0;
+    virtual bool IsExceeded() const = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IMemoryUsageTracker)
+
+////////////////////////////////////////////////////////////////////////////////
 
 IMemoryUsageTrackerPtr GetNullMemoryUsageTracker();
 

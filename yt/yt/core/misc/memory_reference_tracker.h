@@ -30,6 +30,10 @@ DEFINE_REFCOUNTED_TYPE(IMemoryReferenceTracker)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+IMemoryReferenceTrackerPtr GetNullMemoryReferenceTracker();
+
+////////////////////////////////////////////////////////////////////////////////
+
 TSharedRef TrackMemory(
     const IMemoryReferenceTrackerPtr& tracker,
     TSharedRef reference,

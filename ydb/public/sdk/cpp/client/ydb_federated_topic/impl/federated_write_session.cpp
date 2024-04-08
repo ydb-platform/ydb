@@ -273,7 +273,7 @@ void TFederatedWriteSessionImpl::OnFederationStateUpdateImpl() {
             ScheduleFederationStateUpdateImpl(*delay);
         } else {
             TString message = "Failed to select database: no available database";
-            LOG_LAZY(Log, TLOG_ERR, GetLogPrefixImpl() << message);
+            LOG_LAZY(Log, TLOG_ERR, GetLogPrefixImpl() << message << ". Status: " << status);
             CloseImpl(status, NYql::TIssues{NYql::TIssue(message)});
         }
         return;

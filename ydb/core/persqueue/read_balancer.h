@@ -215,34 +215,34 @@ private:
         bool ReleaseChildren() { return !Commited; }
     };
 
+    struct TSessionInfo {
+        TSessionInfo(const TString& session, const TActorId sender, const TString& clientNode, ui32 proxyNodeId, TInstant ts)
+            : Session(session)
+            , Sender(sender)
+            , NumSuspended(0)
+            , NumActive(0)
+            , NumInactive(0)
+            , ClientNode(clientNode)
+            , ProxyNodeId(proxyNodeId)
+            , Timestamp(ts)
+        {}
+
+        TString Session;
+        TActorId Sender;
+        ui32 NumSuspended;
+        ui32 NumActive;
+        ui32 NumInactive;
+
+        std::set<ui32> ActivePartitions;
+
+        TString ClientNode;
+        ui32 ProxyNodeId;
+        TInstant Timestamp;
+
+        void Unlock(bool inactive) { --NumActive; --NumSuspended; if (inactive) { -- NumInactive; } }
+    };
+
     struct TClientGroupInfo {
-        struct TSessionInfo {
-            TSessionInfo(const TString& session, const TActorId sender, const TString& clientNode, ui32 proxyNodeId, TInstant ts)
-                : Session(session)
-                , Sender(sender)
-                , NumSuspended(0)
-                , NumActive(0)
-                , NumInactive(0)
-                , ClientNode(clientNode)
-                , ProxyNodeId(proxyNodeId)
-                , Timestamp(ts)
-            {}
-
-            TString Session;
-            TActorId Sender;
-            ui32 NumSuspended;
-            ui32 NumActive;
-            ui32 NumInactive;
-
-            std::set<ui32> ActivePartitions;
-
-            TString ClientNode;
-            ui32 ProxyNodeId;
-            TInstant Timestamp;
-
-            void Unlock(bool inactive) { --NumActive; --NumSuspended; if (inactive) { -- NumInactive; } }
-        };
-
         TClientGroupInfo(const TClientInfo& clientInfo)
             : ClientInfo(clientInfo) {}
 

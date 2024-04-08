@@ -1090,7 +1090,7 @@ void TPersQueueReadBalancer::TClientInfo::AddSession(const ui32 groupId, const T
     auto& group = it->second;
     group.SessionsInfo.insert({
         group.SessionKey(pipe),
-        TClientGroupInfo::TSessionInfo(
+        TSessionInfo(
             record.GetSession(),
             sender,
             record.HasClientNode() ? record.GetClientNode() : "none",
@@ -1602,7 +1602,7 @@ bool TPersQueueReadBalancer::TClientGroupInfo::EraseSession(const TActorId pipe)
     return SessionsInfo.erase(SessionKey(pipe));
 }
 
-TPersQueueReadBalancer::TClientGroupInfo::TSessionInfo* TPersQueueReadBalancer::TClientGroupInfo::FindSession(const TActorId pipe) {
+TPersQueueReadBalancer::TSessionInfo* TPersQueueReadBalancer::TClientGroupInfo::FindSession(const TActorId pipe) {
     auto it = SessionsInfo.find(SessionKey(pipe));
     if (it == SessionsInfo.end()) {
         return nullptr;

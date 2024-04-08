@@ -50,7 +50,7 @@ enum EMigrationState {
 enum EDrainDownPolicy {
     DRAIN_POLICY_NO_DOWN = 0;
     DRAIN_POLICY_KEEP_DOWN_UNTIL_RESTART = 1;
-    DRAIN__POLICY_KEEP_DOWN = 2;
+    DRAIN_POLICY_KEEP_DOWN = 2;
 }
 
 message TChannelInfo {
@@ -361,8 +361,9 @@ message TTabletOwner {
 message TEvDrainNode {
     optional uint32 NodeID = 1;
     optional bool Persist = 3 [default = true];
-    optional EDrainDownPolicy KeepDown = 4 [default = DRAIN_POLICY_KEEP_DOWN_UNTIL_RESTART];
+    optional bool KeepDown = 4 [default = false]; // deprecated in favor of DownPolicy
     optional uint32 DrainInFlight = 5;
+    optional EDrainDownPolicy DownPolicy = 6 [default = DRAIN_POLICY_KEEP_DOWN_UNTIL_RESTART];
 }
 
 message TEvDrainNodeResult {

@@ -2126,10 +2126,20 @@ void THive::Handle(TEvHive::TEvCutTabletHistory::TPtr& ev) {
 }
 
 void THive::Handle(TEvHive::TEvDrainNode::TPtr& ev) {
+    NKikimrHive::EDrainDownPolicy policy;
+    if (!ev->Get()->Record.HasDownPolicy() && ev->Get()->Record.HasKeepDown()) {
+        if (ev->Get()->Record.GetKeepDown()) {
+            policy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_KEEP_DOWN;
+        } else {
+            policy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN;
+        }
+    } else {
+        policy = ev->Get()->Record.GetDownPolicy();
+    }
     Execute(CreateSwitchDrainOn(ev->Get()->Record.GetNodeID(),
     {
         .Persist = ev->Get()->Record.GetPersist(),
-        .DownPolicy = ev->Get()->Record.GetKeepDown(),
+        .DownPolicy = policy,
         .DrainInFlight = ev->Get()->Record.GetDrainInFlight(),
     }, ev->Sender));
 }

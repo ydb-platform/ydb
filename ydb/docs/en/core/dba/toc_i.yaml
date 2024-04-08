@@ -18,4 +18,3 @@ items:
   href: cdc.md
 - name: Terraform
   href: terraform.md
-  hidden: true

@@ -4540,13 +4540,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         }
     }
 
-    void CompactBorrowed(TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId) {
-        auto msg = MakeHolder<TEvDataShard::TEvCompactBorrowed>(tableId.PathId);
-        auto sender = runtime.AllocateEdgeActor();
-        runtime.SendToPipe(shardId, sender, msg.Release(), 0, GetPipeConfigWithRetries());
-        runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactBorrowedResult>(sender);
-    }
-
     Y_UNIT_TEST(PostMergeNotCompactedTooEarly) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

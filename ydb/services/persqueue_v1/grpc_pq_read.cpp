@@ -175,7 +175,10 @@ void TPQReadService::Handle(NGRpcService::TEvCommitOffsetRequest::TPtr& ev, cons
     if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "new commit offset request failed - cluster is not known yet");
 
-        ev->Get()->SendResult(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING), FillInfoResponse("cluster initializing", PersQueue::ErrorCode::INITIALIZING)); //CANCELLED
+        NYql::TIssues issues;
+        IssuesFromMessage(FillInfoResponse("cluster initializing", PersQueue::ErrorCode::INITIALIZING), issues); //CANCELLED
+        ev->Get()->RaiseIssues(issues);
+        ev->Get()->ReplyWithYdbStatus(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING));
         return;
     } else {
         ctx.Register(new TCommitOffsetActor(ev->Release().Release(), *TopicsHandler, SchemeCache, NewSchemeCache, Counters));
@@ -189,7 +192,10 @@ void TPQReadService::Handle(NGRpcService::TEvPQReadInfoRequest::TPtr& ev, const 
     if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "new read info request failed - cluster is not known yet");
 
-        ev->Get()->SendResult(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING), FillInfoResponse("cluster initializing", PersQueue::ErrorCode::INITIALIZING)); //CANCELLED
+        NYql::TIssues issues;
+        IssuesFromMessage(FillInfoResponse("cluster initializing", PersQueue::ErrorCode::INITIALIZING), issues); //CANCELLED
+        ev->Get()->RaiseIssues(issues);
+        ev->Get()->ReplyWithYdbStatus(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING));
         return;
     } else {
         //ctx.Register(new TReadInfoActor(ev->Release().Release(), Clusters, LocalCluster, SchemeCache, NewSchemeCache, Counters));

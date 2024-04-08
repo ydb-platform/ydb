@@ -30,7 +30,6 @@ class TTransactionContext;
 namespace NKikimr::NColumnShard {
 class TBlobManagerDb;
 class TColumnShard;
-class TBackgroundActivity;
 }
 
 namespace NKikimr::NOlap {
@@ -156,15 +155,13 @@ public:
     const ui32 BlobsWritten;
     const ui64 BytesWritten;
     const TDuration Duration;
-    NColumnShard::TBackgroundActivity& TriggerActivity;
     TColumnEngineForLogs& EngineLogs;
     TWriteIndexCompleteContext(const TActorContext& actorContext, const ui32 blobsWritten, const ui64 bytesWritten
-        , const TDuration d, NColumnShard::TBackgroundActivity& triggerActivity, TColumnEngineForLogs& engineLogs)
+        , const TDuration d, TColumnEngineForLogs& engineLogs)
         : ActorContext(actorContext)
         , BlobsWritten(blobsWritten)
         , BytesWritten(bytesWritten)
         , Duration(d)
-        , TriggerActivity(triggerActivity)
         , EngineLogs(engineLogs)
     {
 

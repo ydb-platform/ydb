@@ -1793,6 +1793,7 @@ class MSVCToolchainOptions(ToolchainOptions):
 
         self.under_wine_compiler = self.params.get('wine', False)
         self.under_wine_tools = not build.host.is_windows
+        self.under_wine_lib = self.under_wine_tools
         self.system_msvc = self.params.get('system_msvc', False)
         self.ide_msvs = self.params.get('ide_msvs', False)
         self.use_clang = self.params.get('use_clang', False)
@@ -1865,7 +1866,15 @@ class MSVCToolchainOptions(ToolchainOptions):
 
             self.masm_compiler = win_path_fix(os.path.join(bindir, tools_name, asm_name))
             self.link = win_path_fix(os.path.join(bindir, tools_name, 'link.exe'))
-            self.lib = win_path_fix(os.path.join(bindir, tools_name, 'lib.exe'))
+
+            if self.use_clang:
+                self.lib = self.host.exe(self.name_marker, "bin", "llvm-lib")
+                self.under_wine_lib = False
+            else:
+                self.lib = win_path_fix(os.path.join(bindir, tools_name, 'lib.exe'))
+                self.under_wine_lib = self.under_wine_tools
+
+            logger.debug("link {}; lib {}".format(self.link, self.lib))
 
 
 class MSVC(object):
@@ -1905,6 +1914,8 @@ class MSVCToolchain(MSVC, Toolchain):
 
         if self.tc.under_wine_tools:
             emit('_UNDER_WINE_TOOLS', 'yes')
+        if self.tc.under_wine_lib:
+            emit('_UNDER_WINE_LIB', 'yes')
         if self.tc.under_wine_compiler:
             emit('_UNDER_WINE_COMPILER', 'yes')
         if self.tc.use_clang:

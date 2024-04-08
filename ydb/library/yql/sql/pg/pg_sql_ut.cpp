@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         )";
         const auto expectedAst = NYql::ParseAst(program);
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
-    }    
+    }
 
     Y_UNIT_TEST(CreateTableStmt_PKAndNotNull) {
         auto res = PgSqlToYql("CREATE TABLE t (a int PRIMARY KEY NOT NULL, b text)");
@@ -257,6 +257,23 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
             (
                 (let world (Configure! world (DataSource 'config) 'OrderedColumns))
                 (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '()) '('temporary))))
+                (let world (CommitAll! world))
+                (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(CreateSeqStmt) {
+        auto res = PgSqlToYql(
+            "CREATE TEMP SEQUENCE IF NOT EXISTS seq AS integer START WITH 10 INCREMENT BY 2 NO MINVALUE NO MAXVALUE CACHE 3;");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+                (let world (Write! world (DataSink '"kikimr" '"") (Key '('pgObject (String 'seq) (String 'pgSequence))) (Void) '('('mode 'create_if_not_exists) '('temporary) '('"as" '"int4") '('"start" '10) '('"increment" '2) '('"cache" '3))))
                 (let world (CommitAll! world))
                 (return world)
             )
@@ -482,7 +499,7 @@ SELECT COUNT(*) FROM public.t;");
             settings);
         UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
         UNIT_ASSERT(res.Root);
-        
+
         res = SqlToYqlWithMode(
             R"(select oid,
 typinput::int4 as typinput,
@@ -514,7 +531,7 @@ from pg_catalog.pg_type)",
             settings);
         UNIT_ASSERT(res.IsOk());
         UNIT_ASSERT(res.Root);
-        
+
         res = SqlToYqlWithMode(
             R"(select set_config('search_path', 'public', false);)",
             NSQLTranslation::ESqlMode::QUERY,

@@ -297,8 +297,7 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
 
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
-    NColumnShard::TBackgroundActivity triggered;
-    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), triggered, engine);
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     changes->AbortEmergency();
     return result;
@@ -328,8 +327,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
     const bool result = engine.ApplyChanges(db, changes, snap);
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
-    NColumnShard::TBackgroundActivity triggered;
-    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), triggered, engine);
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     if (blobsPool) {
         for (auto&& i : changes->AppendedPortions) {
@@ -356,8 +354,7 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
     const bool result = engine.ApplyChanges(db, changes, snap);
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
-    NColumnShard::TBackgroundActivity triggered;
-    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), triggered, engine);
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     changes->AbortEmergency();
     return result;
@@ -375,8 +372,7 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
     const bool result = engine.ApplyChanges(db, changes, TSnapshot(1,1));
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
-    NColumnShard::TBackgroundActivity triggered;
-    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), triggered, engine);
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     changes->AbortEmergency();
     return result;

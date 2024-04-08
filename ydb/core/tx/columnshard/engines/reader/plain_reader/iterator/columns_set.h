@@ -120,6 +120,16 @@ public:
         return false;
     }
 
+    std::set<ui32> Intersect(const TColumnsSet& columnsSet) const {
+        std::set<ui32> result;
+        for (auto&& i : columnsSet.ColumnIds) {
+            if (ColumnIds.contains(i)) {
+                result.emplace(i);
+            }
+        }
+        return result;
+    }
+
     bool IsEqual(const TColumnsSet& columnsSet) const {
         if (columnsSet.GetColumnIds().size() != ColumnIds.size()) {
             return false;

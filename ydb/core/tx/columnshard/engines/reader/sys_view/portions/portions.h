@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/sys_view/common/schema.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/iterator.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/constructor/constructor.h>
 
 namespace NKikimr::NOlap::NReader::NSysView::NPortions {
@@ -29,10 +29,9 @@ public:
 class TStatsIterator : public NAbstract::TStatsIterator<NKikimr::NSysView::Schema::PrimaryIndexPortionStats> {
 private:
     using TBase = NAbstract::TStatsIterator<NKikimr::NSysView::Schema::PrimaryIndexPortionStats>;
-    virtual void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo& portion) const override;
-    virtual ui32 GetConstructionRecordsCount(const TPortionInfo& /*portion*/) const override {
-        return 1;
-    }
+    virtual bool AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const override;
+    virtual ui32 PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const override;
+    void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo& portion) const;
 public:
     using TBase::TBase;
 };

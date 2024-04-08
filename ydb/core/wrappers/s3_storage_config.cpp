@@ -130,6 +130,41 @@ TS3User::~TS3User() {
     Singleton<TApiOwner>()->UnRef();
 }
 
+class TS3ThreadsPoolByEndpoint {
+private:
+
+    class TPool {
+    public:
+        std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor> Executor;
+        ui32 ThreadsCount = 0;
+        TPool(const std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor>& executor, const ui32 threadsCount)
+            : Executor(executor)
+            , ThreadsCount(threadsCount)
+        {
+
+        }
+    };
+
+    THashMap<TString, TPool> Pools;
+    TMutex Mutex;
+    std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor> GetPoolImpl(const TString& endpoint, const ui32 threadsCount) {
+        TGuard<TMutex> g(Mutex);
+        auto it = Pools.find(endpoint);
+        if (it == Pools.end()) {
+            TPool pool(std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(threadsCount), threadsCount);
+            it = Pools.emplace(endpoint, std::move(pool)).first;
+        } else if (it->second.ThreadsCount < threadsCount) {
+            TPool pool(std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(threadsCount), threadsCount);
+            it->second = std::move(pool);
+        }
+        return it->second.Executor;
+    }
+public:
+    static std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor> GetPool(const TString& endpoint, const ui32 threadsCount) {
+        return Singleton<TS3ThreadsPoolByEndpoint>()->GetPoolImpl(endpoint, threadsCount);
+    }
+};
+
 Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(const NKikimrSchemeOp::TS3Settings& settings) {
     Aws::Client::ClientConfiguration config;
 
@@ -143,7 +178,7 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
     if (settings.HasHttpRequestTimeoutMs()) {
         config.httpRequestTimeoutMs = settings.GetHttpRequestTimeoutMs();
     }
-    config.executor = std::make_shared<Aws::Utils::Threading::PooledThreadExecutor>(settings.GetExecutorThreadsCount());
+    config.executor = TS3ThreadsPoolByEndpoint::GetPool(settings.GetEndpoint(), settings.GetExecutorThreadsCount());
     config.enableTcpKeepAlive = true;
     //    config.lowSpeedLimit = 0;
     config.maxConnections = settings.HasMaxConnectionsCount() ? settings.GetMaxConnectionsCount() : settings.GetExecutorThreadsCount();

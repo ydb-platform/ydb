@@ -202,7 +202,11 @@ protected:
 
         TDqTaskRunnerMemoryLimits limits;
         limits.ChannelBufferSize = this->MemoryLimits.ChannelBufferSize;
-        limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
+        limits.OutputChunkMaxSize = this->MemoryLimits.OutputChunkMaxSize;
+
+        if (!limits.OutputChunkMaxSize) {
+            limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
+	}
 
         TaskRunner->Prepare(this->Task, limits, execCtx);
 
@@ -216,7 +220,7 @@ protected:
         }
 
         for (auto& [inputIndex, transform] : this->InputTransformsMap) {
-            std::tie(transform.Input, transform.Buffer) = TaskRunner->GetInputTransform(inputIndex);
+            std::tie(transform.Input, transform.Buffer) = *TaskRunner->GetInputTransform(inputIndex);
         }
 
         for (auto& [channelId, channel] : this->OutputChannelsMap) {

@@ -495,6 +495,8 @@ public:
             return ParseTransactionStmt(CAST_NODE(TransactionStmt, node));
         case T_IndexStmt:
             return ParseIndexStmt(CAST_NODE(IndexStmt, node)) != nullptr;
+        case T_CreateSeqStmt:
+            return ParseCreateSeqStmt(CAST_NODE(CreateSeqStmt, node)) != nullptr;
         default:
             NodeNotImplemented(value, node);
             return false;
@@ -2650,6 +2652,91 @@ public:
         return State.Statements.back();
     }
 
+    [[nodiscard]]
+    TAstNode* ParseCreateSeqStmt(const CreateSeqStmt* value) {
+
+        std::vector<TAstNode*> options;
+
+        TString mode = (value->if_not_exists) ? "create_if_not_exists" : "create";
+        options.push_back(QL(QA("mode"), QA(mode)));
+
+        auto [sink, key] = ParseQualifiedPgObjectName(
+            value->sequence->catalogname,
+            value->sequence->schemaname,
+            value->sequence->relname,
+            "pgSequence"
+        );
+
+        if (!sink || !key) {
+            return nullptr;
+        }
+
+        const auto relPersistence = static_cast<NPg::ERelPersistence>(value->sequence->relpersistence);
+        switch (relPersistence) {
+            case NPg::ERelPersistence::Temp:
+                options.push_back(QL(QA("temporary")));
+                break;
+            case NPg::ERelPersistence::Unlogged:
+                AddError("UNLOGGED sequence not supported");
+                return nullptr;
+                break;
+            case NPg::ERelPersistence::Permanent:
+                break;
+        }
+
+        for (int i = 0; i < ListLength(value->options); ++i) {
+            auto rawNode = ListNodeNth(value->options, i);
+
+            switch (NodeTag(rawNode)) {
+                case T_DefElem: {
+                    const auto* defElem = CAST_NODE(DefElem, rawNode);
+                    TString nameElem = defElem->defname;
+                    if (defElem->arg) {
+                        switch (NodeTag(defElem->arg))
+                        {
+                            case T_Integer:
+                                options.emplace_back(QL(QAX(nameElem), QA(ToString(intVal(defElem->arg)))));
+                                break;
+                            case T_Float:
+                                options.emplace_back(QL(QAX(nameElem), QA(strVal(defElem->arg))));
+                                break;
+                            case T_TypeName: {
+                                const auto* typeName = CAST_NODE_EXT(PG_TypeName, T_TypeName, defElem->arg);
+                                if (ListLength(typeName->names) > 0) {
+                                    options.emplace_back(QL(QAX(nameElem),
+                                        QAX(StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)))));
+                                    }
+                                break;
+                            }
+                            default:
+                                NodeNotImplemented(defElem->arg);
+                                return nullptr;
+                        }
+                    }
+                    break;
+                }
+                default:
+                    NodeNotImplemented(rawNode);
+                    return nullptr;
+            }
+        }
+
+        if (value->for_identity) {
+            options.push_back(QL(QA("for_identity")));
+        }
+
+        if (value->ownerId != InvalidOid) {
+            options.push_back(QL(QA("owner_id"), QA(ToString(value->ownerId))));
+        }
+
+        State.Statements.push_back(
+                L(A("let"), A("world"),
+                  L(A("Write!"), A("world"), sink, key, L(A("Void")),
+                    QVL(options.data(), options.size()))));
+
+        return State.Statements.back();
+    }
+
     TFromDesc ParseFromClause(const Node* node) {
         switch (NodeTag(node)) {
         case T_RangeVar:
@@ -4780,7 +4867,7 @@ TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQ
     TConverter converter(results, settings, query, stmtParseInfo, true);
     NYql::PGParse(query, converter);
     for (auto& res : results) {
-        res.ActualSyntaxType = NYql::ESyntaxType::Pg; 
+        res.ActualSyntaxType = NYql::ESyntaxType::Pg;
     }
     return results;
 }

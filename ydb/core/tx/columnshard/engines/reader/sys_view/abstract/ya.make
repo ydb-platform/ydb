@@ -5,7 +5,9 @@ PEERDIR(
 )
 
 SRCS(
-    abstract.cpp
+    iterator.cpp
+    metadata.cpp
+    granule_view.cpp
 )
 
 END()

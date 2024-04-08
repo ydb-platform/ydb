@@ -1,0 +1,15 @@
+{"_yql_row_spec"={
+    "Type"=["StructType";[
+        ["i8";["DataType";"Int8"]];
+        ["ui8";["DataType";"Uint8"]];
+        ["i16";["DataType";"Int16"]];
+        ["ui16";["DataType";"Uint16"]];
+        ["i32";["DataType";"Int32"]];
+        ["ui32";["DataType";"Uint32"]];
+        ["i64";["DataType";"Int64"]];
+        ["ui64";["DataType";"Uint64"]];
+        ["f4";["DataType";"Float"]];
+        ["f8";["DataType";"Double"]];
+    ]];
+}}
+

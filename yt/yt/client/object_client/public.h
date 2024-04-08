@@ -341,7 +341,7 @@ DEFINE_ENUM(EObjectType,
     ((Pipeline)                                    (1600))
 
     // Queue stuff
-    ((Consumer)                                    (1700))
+    ((QueueConsumer)                               (1700))
     ((Producer)                                    (1701))
 );
 

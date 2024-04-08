@@ -2418,7 +2418,8 @@ private:
             .AsyncIoFactory = AsyncIoFactory,
             .AllowSinglePartitionOpt = singlePartitionOptAllowed,
             .UserRequestContext = GetUserRequestContext(),
-            .FederatedQuerySetup = FederatedQuerySetup
+            .FederatedQuerySetup = FederatedQuerySetup,
+            .OutputChunkMaxSize = Request.OutputChunkMaxSize
         });
 
         auto err = Planner->PlanExecution();

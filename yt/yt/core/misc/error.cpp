@@ -8,6 +8,7 @@
 #include <yt/yt/core/actions/callback.h>
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
+#include <yt/yt/core/misc/string_helpers.h>
 #include <yt/yt/core/misc/proc.h>
 
 #include <yt/yt/core/net/local_address.h>
@@ -43,6 +44,8 @@ using NYT::ToProto;
 ////////////////////////////////////////////////////////////////////////////////
 
 constexpr TStringBuf OriginalErrorDepthAttribute = "original_error_depth";
+
+constexpr TStringBuf ErrorMessageTruncatedSuffix = "...<message truncated>";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -369,12 +372,24 @@ TError::TErrorOr(TError&& other) noexcept
 
 TError::TErrorOr(const std::exception& ex)
 {
-    if (const auto* compositeException = dynamic_cast<const TCompositeException*>(&ex)) {
+    if (auto simpleException = dynamic_cast<const TSimpleException*>(&ex)) {
+        *this = TError(NYT::EErrorCode::Generic, simpleException->GetMessage());
+        // NB: clang-14 is incapable of capturing structured binding variables
+        //  so we force materialize them via this function call.
+        auto addAttribute = [this] (const auto& key, const auto& value) {
+            std::visit([&] (const auto& actual) {
+                *this <<= TErrorAttribute(key, actual);
+            }, value);
+        };
+        for (const auto& [key, value] : simpleException->GetAttributes()) {
+            addAttribute(key, value);
+        }
         try {
-            std::rethrow_exception(compositeException->GetInnerException());
+            if (simpleException->GetInnerException()) {
+                std::rethrow_exception(simpleException->GetInnerException());
+            }
         } catch (const std::exception& innerEx) {
-            *this = TError(NYT::EErrorCode::Generic, compositeException->GetMessage())
-                << TError(innerEx);
+            *this <<= TError(innerEx);
         }
     } else if (const auto* errorEx = dynamic_cast<const TErrorException*>(&ex)) {
         *this = errorEx->Error();
@@ -624,13 +639,6 @@ TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<
         return innerError.Truncate(maxInnerErrorCount, stringLimit, attributeWhitelist);
     };
 
-    auto truncateString = [stringLimit] (TString string) {
-        if (std::ssize(string) > stringLimit) {
-            return Format("%v...<message truncated>", string.substr(0, stringLimit));
-        }
-        return string;
-    };
-
     auto truncateAttributes = [stringLimit, &attributeWhitelist] (const IAttributeDictionary& attributes) {
         auto truncatedAttributes = CreateEphemeralAttributes();
         for (const auto& key : attributes.ListKeys()) {
@@ -652,7 +660,7 @@ TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<
 
     auto result = std::make_unique<TImpl>();
     result->SetCode(GetCode());
-    result->SetMessage(truncateString(GetMessage()));
+    result->SetMessage(TruncateString(GetMessage(), stringLimit, ErrorMessageTruncatedSuffix));
     if (Impl_->HasAttributes()) {
         result->SetAttributes(truncateAttributes(Impl_->Attributes()));
     }
@@ -683,12 +691,6 @@ TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<
         innerError = std::move(innerError).Truncate(maxInnerErrorCount, stringLimit, attributeWhitelist);
     };
 
-    auto truncateString = [stringLimit] (TString* string) {
-        if (std::ssize(*string) > stringLimit) {
-            *string = Format("%v...<message truncated>", string->substr(0, stringLimit));
-        }
-    };
-
     auto truncateAttributes = [stringLimit, &attributeWhitelist] (IAttributeDictionary* attributes) {
         for (const auto& key : attributes->ListKeys()) {
             if (std::ssize(attributes->FindYson(key).AsStringBuf()) > stringLimit && !attributeWhitelist.contains(key)) {
@@ -700,7 +702,7 @@ TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<
         }
     };
 
-    truncateString(Impl_->MutableMessage());
+    TruncateStringInplace(Impl_->MutableMessage(), stringLimit, ErrorMessageTruncatedSuffix);
     if (Impl_->HasAttributes()) {
         truncateAttributes(Impl_->MutableAttributes());
     }

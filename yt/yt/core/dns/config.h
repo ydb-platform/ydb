@@ -14,6 +14,7 @@ class TAresDnsResolverConfig
 public:
     bool EnableIPv4;
     bool EnableIPv6;
+
     //! If true, when determining local host name, it will additionally be resolved
     //! into FQDN by calling |getaddrinfo|. Setting this option to false may be
     //! useful in MTN environment, in which hostnames are barely resolvable.
@@ -32,6 +33,14 @@ public:
     TDuration WarningTimeout;
     //! Used to check that bootstrap is being initialized from a correct container.
     std::optional<TString> ExpectedLocalHostName;
+
+    //! If set, Ares forcefully uses TCP for DNS queries.
+    //! See ARES_FLAG_USEVC.
+    bool ForceTcp;
+
+    //! If set, Ares keeps socket open even if there are no active queries.
+    //! See ARES_FLAG_STAYOPEN.
+    bool KeepSocket;
 
     REGISTER_YSON_STRUCT(TAresDnsResolverConfig);
 

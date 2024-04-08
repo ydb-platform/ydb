@@ -246,6 +246,11 @@ std::vector<NKikimr::NOlap::TPortionInfo::TPage> TPortionInfo::BuildPages() cons
     return pages;
 }
 
+ui64 TPortionInfo::GetMetadataMemorySize() const {
+    return sizeof(TPortionInfo) + Records.size() * (sizeof(TColumnRecord) + 8) + Indexes.size() * sizeof(TIndexChunk) + BlobIds.size() * sizeof(TUnifiedBlobId)
+        - sizeof(TPortionMeta) + Meta.GetMetadataMemorySize();
+}
+
 ui64 TPortionInfo::GetTxVolume() const {
     return 1024 + Records.size() * 256 + Indexes.size() * 256;
 }

@@ -283,6 +283,11 @@ TYtConfiguration::TYtConfiguration()
             LayerPaths[cluster] = value;
             HybridDqExecution = false;
         });
+    REGISTER_SETTING(*this, DockerImage).NonEmpty()
+        .ValueSetter([this](const TString& cluster, const TString& value) {
+            DockerImage[cluster] = value;
+            HybridDqExecution = false;
+        });
     REGISTER_SETTING(*this, _EnableDq);
     // Deprecated. Use MaxInputTables instead
     REGISTER_SETTING(*this, ExtendTableLimit).Lower(2).Upper(3000)

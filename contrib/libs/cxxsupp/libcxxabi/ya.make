@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(14.0.6)
+VERSION(16.0.6)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-14.0.6.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-16.0.6.tar.gz)
 
 PEERDIR(
     library/cpp/sanitizer/include

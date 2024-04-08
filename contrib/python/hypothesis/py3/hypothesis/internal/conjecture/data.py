@@ -290,6 +290,14 @@ class Example:
         return self.owner.ends[self.index]
 
     @property
+    def ir_start(self) -> int:
+        return self.owner.ir_starts[self.index]
+
+    @property
+    def ir_end(self) -> int:
+        return self.owner.ir_ends[self.index]
+
+    @property
     def depth(self):
         """Depth of this example in the example tree. The top-level example has a
         depth of 0."""
@@ -315,6 +323,11 @@ class Example:
     def length(self) -> int:
         """The number of bytes in this example."""
         return self.end - self.start
+
+    @property
+    def ir_length(self) -> int:
+        """The number of ir nodes in this example."""
+        return self.ir_end - self.ir_start
 
     @property
     def children(self) -> "List[Example]":
@@ -457,7 +470,11 @@ class ExampleRecord:
     def record_ir_draw(self, ir_type, value, *, kwargs, was_forced):
         self.trail.append(IR_NODE_RECORD)
         node = IRNode(
-            ir_type=ir_type, value=value, kwargs=kwargs, was_forced=was_forced
+            ir_type=ir_type,
+            value=value,
+            kwargs=kwargs,
+            was_forced=was_forced,
+            index=len(self.ir_nodes),
         )
         self.ir_nodes.append(node)
 
@@ -528,6 +545,32 @@ class Examples:
     @property
     def ends(self) -> IntList:
         return self.starts_and_ends[1]
+
+    class _ir_starts_and_ends(ExampleProperty):
+        def begin(self):
+            self.starts = IntList.of_length(len(self.examples))
+            self.ends = IntList.of_length(len(self.examples))
+
+        def start_example(self, i: int, label_index: int) -> None:
+            self.starts[i] = self.ir_node_count
+
+        def stop_example(self, i: int, *, discarded: bool) -> None:
+            self.ends[i] = self.ir_node_count
+
+        def finish(self) -> Tuple[IntList, IntList]:
+            return (self.starts, self.ends)
+
+    ir_starts_and_ends: "Tuple[IntList, IntList]" = calculated_example_property(
+        _ir_starts_and_ends
+    )
+
+    @property
+    def ir_starts(self) -> IntList:
+        return self.ir_starts_and_ends[0]
+
+    @property
+    def ir_ends(self) -> IntList:
+        return self.ir_starts_and_ends[1]
 
     class _discarded(ExampleProperty):
         def begin(self) -> None:
@@ -856,9 +899,6 @@ class _Overrun:
     def __repr__(self):
         return "Overrun"
 
-    def as_result(self) -> "_Overrun":
-        return self
-
 
 Overrun = _Overrun()
 
@@ -913,12 +953,136 @@ class DataObserver:
         pass
 
 
-@attr.s(slots=True)
+@attr.s(slots=True, repr=False, eq=False)
 class IRNode:
     ir_type: IRTypeName = attr.ib()
     value: IRType = attr.ib()
     kwargs: IRKWargsType = attr.ib()
     was_forced: bool = attr.ib()
+    index: Optional[int] = attr.ib(default=None)
+
+    def copy(self, *, with_value: IRType) -> "IRNode":
+        # we may want to allow this combination in the future, but for now it's
+        # a footgun.
+        assert not self.was_forced, "modifying a forced node doesn't make sense"
+        # explicitly not copying index. node indices are only assigned via
+        # ExampleRecord. This prevents footguns with relying on stale indices
+        # after copying.
+        return IRNode(
+            ir_type=self.ir_type,
+            value=with_value,
+            kwargs=self.kwargs,
+            was_forced=self.was_forced,
+        )
+
+    @property
+    def trivial(self):
+        """
+        A node is trivial if it cannot be simplified any further. This does not
+        mean that modifying a trivial node can't produce simpler test cases when
+        viewing the tree as a whole. Just that when viewing this node in
+        isolation, this is the simplest the node can get.
+        """
+        if self.was_forced:
+            return True
+
+        if self.ir_type == "integer":
+            shrink_towards = self.kwargs["shrink_towards"]
+            min_value = self.kwargs["min_value"]
+            max_value = self.kwargs["max_value"]
+
+            if min_value is not None:
+                shrink_towards = max(min_value, shrink_towards)
+            if max_value is not None:
+                shrink_towards = min(max_value, shrink_towards)
+
+            return self.value == shrink_towards
+        if self.ir_type == "float":
+            # floats shrink "like integers" (for now, anyway), except shrink_towards
+            # is not configurable and is always 0.
+            shrink_towards = 0
+            shrink_towards = max(self.kwargs["min_value"], shrink_towards)
+            shrink_towards = min(self.kwargs["max_value"], shrink_towards)
+
+            return ir_value_equal("float", self.value, shrink_towards)
+        if self.ir_type == "boolean":
+            return self.value is False
+        if self.ir_type == "string":
+            # smallest size and contains only the smallest-in-shrink-order character.
+            minimal_char = self.kwargs["intervals"].char_in_shrink_order(0)
+            return self.value == (minimal_char * self.kwargs["min_size"])
+        if self.ir_type == "bytes":
+            # smallest size and all-zero value.
+            return len(self.value) == self.kwargs["size"] and not any(self.value)
+
+        raise NotImplementedError(f"unhandled ir_type {self.ir_type}")
+
+    def __eq__(self, other):
+        if not isinstance(other, IRNode):
+            return NotImplemented
+
+        return (
+            self.ir_type == other.ir_type
+            and ir_value_equal(self.ir_type, self.value, other.value)
+            and ir_kwargs_equal(self.ir_type, self.kwargs, other.kwargs)
+            and self.was_forced == other.was_forced
+        )
+
+    def __repr__(self):
+        # repr to avoid "BytesWarning: str() on a bytes instance" for bytes nodes
+        forced_marker = " [forced]" if self.was_forced else ""
+        return f"{self.ir_type} {self.value!r}{forced_marker} {self.kwargs!r}"
+
+
+def ir_value_permitted(value, ir_type, kwargs):
+    if ir_type == "integer":
+        if kwargs["min_value"] is not None and value < kwargs["min_value"]:
+            return False
+        if kwargs["max_value"] is not None and value > kwargs["max_value"]:
+            return False
+
+        return True
+    elif ir_type == "float":
+        if math.isnan(value):
+            return kwargs["allow_nan"]
+        return (
+            sign_aware_lte(kwargs["min_value"], value)
+            and sign_aware_lte(value, kwargs["max_value"])
+        ) and not (0 < abs(value) < kwargs["smallest_nonzero_magnitude"])
+    elif ir_type == "string":
+        if len(value) < kwargs["min_size"]:
+            return False
+        if kwargs["max_size"] is not None and len(value) > kwargs["max_size"]:
+            return False
+        return all(ord(c) in kwargs["intervals"] for c in value)
+    elif ir_type == "bytes":
+        return len(value) == kwargs["size"]
+    elif ir_type == "boolean":
+        if kwargs["p"] <= 2 ** (-64):
+            return value is False
+        if kwargs["p"] >= (1 - 2 ** (-64)):
+            return value is True
+        return True
+
+    raise NotImplementedError(f"unhandled type {type(value)} of ir value {value}")
+
+
+def ir_value_equal(ir_type, v1, v2):
+    if ir_type != "float":
+        return v1 == v2
+    return float_to_int(v1) == float_to_int(v2)
+
+
+def ir_kwargs_equal(ir_type, kwargs1, kwargs2):
+    if ir_type != "float":
+        return kwargs1 == kwargs2
+    return (
+        float_to_int(kwargs1["min_value"]) == float_to_int(kwargs2["min_value"])
+        and float_to_int(kwargs1["max_value"]) == float_to_int(kwargs2["max_value"])
+        and kwargs1["allow_nan"] == kwargs2["allow_nan"]
+        and kwargs1["smallest_nonzero_magnitude"]
+        == kwargs2["smallest_nonzero_magnitude"]
+    )
 
 
 @dataclass_transform()
@@ -1835,9 +1999,10 @@ class ConjectureData:
 
         if self.ir_tree_nodes is not None and observe:
             node = self._pop_ir_tree_node("integer", kwargs)
-            assert isinstance(node.value, int)
-            forced = node.value
-            fake_forced = not node.was_forced
+            if forced is None:
+                assert isinstance(node.value, int)
+                forced = node.value
+                fake_forced = True
 
         value = self.provider.draw_integer(
             **kwargs, forced=forced, fake_forced=fake_forced
@@ -1891,9 +2056,10 @@ class ConjectureData:
 
         if self.ir_tree_nodes is not None and observe:
             node = self._pop_ir_tree_node("float", kwargs)
-            assert isinstance(node.value, float)
-            forced = node.value
-            fake_forced = not node.was_forced
+            if forced is None:
+                assert isinstance(node.value, float)
+                forced = node.value
+                fake_forced = True
 
         value = self.provider.draw_float(
             **kwargs, forced=forced, fake_forced=fake_forced
@@ -1932,9 +2098,10 @@ class ConjectureData:
         )
         if self.ir_tree_nodes is not None and observe:
             node = self._pop_ir_tree_node("string", kwargs)
-            assert isinstance(node.value, str)
-            forced = node.value
-            fake_forced = not node.was_forced
+            if forced is None:
+                assert isinstance(node.value, str)
+                forced = node.value
+                fake_forced = True
 
         value = self.provider.draw_string(
             **kwargs, forced=forced, fake_forced=fake_forced
@@ -1967,9 +2134,10 @@ class ConjectureData:
 
         if self.ir_tree_nodes is not None and observe:
             node = self._pop_ir_tree_node("bytes", kwargs)
-            assert isinstance(node.value, bytes)
-            forced = node.value
-            fake_forced = not node.was_forced
+            if forced is None:
+                assert isinstance(node.value, bytes)
+                forced = node.value
+                fake_forced = True
 
         value = self.provider.draw_bytes(
             **kwargs, forced=forced, fake_forced=fake_forced
@@ -1991,8 +2159,8 @@ class ConjectureData:
         p: float = 0.5,
         *,
         forced: Optional[bool] = None,
-        observe: bool = True,
         fake_forced: bool = False,
+        observe: bool = True,
     ) -> bool:
         # Internally, we treat probabilities lower than 1 / 2**64 as
         # unconditionally false.
@@ -2008,9 +2176,10 @@ class ConjectureData:
 
         if self.ir_tree_nodes is not None and observe:
             node = self._pop_ir_tree_node("boolean", kwargs)
-            assert isinstance(node.value, bool)
-            forced = node.value
-            fake_forced = not node.was_forced
+            if forced is None:
+                assert isinstance(node.value, bool)
+                forced = node.value
+                fake_forced = True
 
         value = self.provider.draw_boolean(
             **kwargs, forced=forced, fake_forced=fake_forced
@@ -2049,9 +2218,30 @@ class ConjectureData:
 
     def _pop_ir_tree_node(self, ir_type: IRTypeName, kwargs: IRKWargsType) -> IRNode:
         assert self.ir_tree_nodes is not None
+
+        if self.ir_tree_nodes == []:
+            self.mark_overrun()
+
         node = self.ir_tree_nodes.pop(0)
-        assert node.ir_type == ir_type
-        assert kwargs == node.kwargs
+        # If we're trying to draw a different ir type at the same location, then
+        # this ir tree has become badly misaligned. We don't have many good/simple
+        # options here for realigning beyond giving up.
+        #
+        # This is more of an issue for ir nodes while shrinking than it was for
+        # buffers: misaligned buffers are still usually valid, just interpreted
+        # differently. This would be somewhat like drawing a random value for
+        # the new ir type here. For what it's worth, misaligned buffers are
+        # rather unlikely to be *useful* buffers, so giving up isn't a big downgrade.
+        # (in fact, it is possible that giving up early here results in more time
+        # for useful shrinks to run).
+        if node.ir_type != ir_type:
+            self.mark_invalid()
+
+        # if a node has different kwargs (and so is misaligned), but has a value
+        # that is allowed by the expected kwargs, then we can coerce this node
+        # into an aligned one by using its value. It's unclear how useful this is.
+        if not ir_value_permitted(node.value, node.ir_type, kwargs):
+            self.mark_invalid()
 
         return node
 

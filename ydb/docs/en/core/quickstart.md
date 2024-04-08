@@ -80,23 +80,22 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
       mkdir ydb_data
       mkdir ydb_certs
       ```
-   2. Pull the current version of the Docker image:
 
-      ```bash
-      docker pull {{ ydb_local_docker_image }}:{{ ydb_local_docker_image_tag }}
-      ```
-
-   3. Run the Docker container:
+   2. Run the Docker container:
 
       ```bash
       docker run -d --rm --name ydb-local -h localhost \
+        --platform linux/amd64 \
         -p 2135:2135 -p 2136:2136 -p 8765:8765 \
         -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
         -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
+        -e YDB_USE_IN_MEMORY_PDISKS=true \
         {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
       ```
 
       If the container starts successfully, you'll see the container's ID. The container might take a few minutes to initialize. The database will not be available until container initialization is complete.
+
+      The `YDB_USE_IN_MEMORY_PDISKS` setting makes all data volatile, stored only in RAM. Currently, data persistence by turning it off is supported only on x86_64 processors.
 
 {% endlist %}
 

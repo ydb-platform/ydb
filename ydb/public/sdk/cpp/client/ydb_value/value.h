@@ -48,6 +48,10 @@ enum class EPrimitiveType {
     Datetime     = 0x0031,
     Timestamp    = 0x0032,
     Interval     = 0x0033,
+    Date32       = 0x0040,
+    Datetime64   = 0x0041,
+    Timestamp64  = 0x0042,
+    Interval64   = 0x0043,
     TzDate       = 0x0034,
     TzDatetime   = 0x0035,
     TzTimestamp  = 0x0036,
@@ -301,6 +305,10 @@ public:
     TInstant GetDatetime() const;
     TInstant GetTimestamp() const;
     i64 GetInterval() const;
+    i32 GetDate32() const;
+    i64 GetDatetime64() const;
+    i64 GetTimestamp64() const;
+    i64 GetInterval64() const;
     const TString& GetTzDate() const;
     const TString& GetTzDatetime() const;
     const TString& GetTzTimestamp() const;
@@ -329,6 +337,10 @@ public:
     TMaybe<TInstant> GetOptionalDatetime() const;
     TMaybe<TInstant> GetOptionalTimestamp() const;
     TMaybe<i64> GetOptionalInterval() const;
+    TMaybe<i32> GetOptionalDate32() const;
+    TMaybe<i64> GetOptionalDatetime64() const;
+    TMaybe<i64> GetOptionalTimestamp64() const;
+    TMaybe<i64> GetOptionalInterval64() const;
     TMaybe<TString> GetOptionalTzDate() const;
     TMaybe<TString> GetOptionalTzDatetime() const;
     TMaybe<TString> GetOptionalTzTimestamp() const;

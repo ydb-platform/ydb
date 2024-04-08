@@ -128,6 +128,7 @@ public:
 
     void SetGridFactor(std::function<int(const TString&)> gridFactor);
     void SetWindowSize(int windowSize);
+    void SetProducerCollectionBatchSize(int batchSize);
     void ProcessRegistrations();
     void Collect(IInvokerPtr offloadInvoker = GetSyncInvoker());
     void ReadSensors(

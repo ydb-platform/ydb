@@ -507,16 +507,6 @@ private:
         return nullptr;
     }
 
-    IDqOptimization* GetDqOptCallback(const TExprBase& providerRead) const {
-        if (providerRead.Ref().ChildrenSize() > 1 && TCoDataSource::Match(providerRead.Ref().Child(1))) {
-            auto dataSourceName = providerRead.Ref().Child(1)->Child(0)->Content();
-            auto datasource = TypesCtx.DataSourceMap.FindPtr(dataSourceName);
-            YQL_ENSURE(datasource);
-            return (*datasource)->GetDqOptimization();
-        }
-        return nullptr;
-    }
-
 private:
     TDqConfiguration::TPtr Config;
     TTypeAnnotationContext& TypesCtx;

@@ -296,30 +296,18 @@ std::shared_ptr<arrow::RecordBatch> ExtractExistedColumns(const std::shared_ptr<
     return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), srcBatch->num_rows(), std::move(columns));
 }
 
-std::shared_ptr<arrow::Table> CombineInTable(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
-    auto res = arrow::Table::FromRecordBatches(batches);
-    if (!res.ok()) {
-        return nullptr;
-    }
-
-    res = (*res)->CombineChunks();
-    if (!res.ok()) {
-        return nullptr;
-    }
-
-    return res.ValueOrDie();
-}
-
 std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
     if (batches.empty()) {
         return nullptr;
     }
-    auto table = CombineInTable(batches);
-    return table ? ToBatch(table) : nullptr;
+    auto table = TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));
+    return table ? ToBatch(table, true) : nullptr;
 }
 
 std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& tableExt, const bool combine) {
-    Y_ABORT_UNLESS(tableExt);
+    if (!tableExt) {
+        return nullptr;
+    }
     std::shared_ptr<arrow::Table> table;
     if (combine) {
         auto res = tableExt->CombineChunks();
@@ -331,7 +319,8 @@ std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>&
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(table->num_columns());
     for (auto& col : table->columns()) {
-        Y_ABORT_UNLESS(col->num_chunks() == 1);
+        AFL_VERIFY(col->num_chunks() == 1)("size", col->num_chunks())("size_bytes", GetTableDataSize(tableExt))
+            ("schema", tableExt->schema()->ToString())("size_new", GetTableDataSize(table));
         columns.push_back(col->chunk(0));
     }
     return arrow::RecordBatch::Make(table->schema(), table->num_rows(), columns);

@@ -2,11 +2,11 @@
 
 namespace NYql {
 
-IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, size_t maxRetries) {
-    if (!maxTime) {
-        maxTime = TDuration::Minutes(5);
+IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions&& options) {
+    if (!options.MaxTime) {
+        options.MaxTime = TDuration::Minutes(5);
     }
-    return IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy([](CURLcode curlCode, long httpCode) {
+    return IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy([options](CURLcode curlCode, long httpCode) {
 
         switch (curlCode) {
             case CURLE_OK:
@@ -25,8 +25,13 @@ IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, si
                 // retry small number of known errors
                 return ERetryErrorClass::ShortRetry;
             default:
-                // do not retry others
-                return ERetryErrorClass::NoRetry;
+                if (options.ExtendedRetriedCodes.contains(curlCode)) {
+                    // retry explicitly enumerated codes
+                    return ERetryErrorClass::ShortRetry;
+                } else {
+                    // do not retry others
+                    return ERetryErrorClass::NoRetry;
+                }
         }
 
         switch (httpCode) {
@@ -48,8 +53,12 @@ IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, si
     TDuration::MilliSeconds(10), // minDelay
     TDuration::MilliSeconds(200), // minLongRetryDelay
     TDuration::Seconds(30), // maxDelay
-    maxRetries, // maxRetries
-    maxTime); // maxTime
+    options.MaxRetries, // maxRetries
+    options.MaxTime); // maxTime
+}
+
+IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, size_t maxRetries) {
+    return GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions{.MaxTime = maxTime, .MaxRetries = maxRetries});
 }
 
 }

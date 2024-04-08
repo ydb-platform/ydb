@@ -58,9 +58,9 @@ bool TFederatedWriteSessionImpl::MessageQueuesAreEmptyImpl() const {
 void TFederatedWriteSessionImpl::IssueTokenIfAllowedImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    // The session will not issue tokens after it has been requested to close or has been closed already.
-    // A user may have one spare token, so at most one additional message could be written
-    // to the internal queue after the transition to CLOSING or CLOSED state.
+    // The session should not issue tokens after it has transitioned to CLOSING or CLOSE state.
+    // A user may have one spare token, so at most one additional message
+    // could be written to the internal queue after the transition.
     if (BufferFreeSpace > 0 && !ClientHasToken && SessionState < State::CLOSING) {
         ClientEventsQueue->PushEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
         ClientHasToken = true;
@@ -84,7 +84,7 @@ void TFederatedWriteSessionImpl::Start() {
         if (SessionState != State::CREATED) {
             return;
         }
-        SessionState = State::STARTING;
+        SessionState = State::WORKING;
         IssueTokenIfAllowedImpl();
     }
 
@@ -94,11 +94,6 @@ void TFederatedWriteSessionImpl::Start() {
         Y_UNUSED(f);
         if (auto self = selfCtx->LockShared()) {
             with_lock(self->Lock) {
-                // It's possible the session transitioned to CLOSING/CLOSE state before we've reached this place,
-                // and in that case we shouldn't change the state here.
-                if (self->SessionState == State::STARTING) {
-                    self->SessionState = State::STARTED;
-                }
                 self->UpdateFederationStateImpl();
             }
         }

@@ -135,8 +135,7 @@ private:
 
     enum class State {
         CREATED,  // The session has not been started.
-        STARTING, // Start method has been called, but the session is not ready yet.
-        STARTED,  // The session is ready to send messages.
+        WORKING,  // Start method has been called.
         CLOSING,  // Close method has been called, but the session may still send some messages.
         CLOSED    // The session is closed, either due to the user request or some server error.
     };

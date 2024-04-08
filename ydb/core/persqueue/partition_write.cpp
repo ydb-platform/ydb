@@ -1662,14 +1662,14 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& 
     requests = std::move(newRequests);
 }
 
-void TPartition::CancelReserveRequests(const TActorContext& ctx)
-{
-    for(const auto& r : ReserveRequests) {
-        ReplyError(ctx, r->Cookie, InactivePartitionErrorCode,
-                   "Write to inactive partition");
-    }
-    ReserveRequests.clear();
-}
+//void TPartition::CancelReserveRequests(const TActorContext& ctx)
+//{
+//    for(const auto& r : ReserveRequests) {
+//        ReplyError(ctx, r->Cookie, InactivePartitionErrorCode,
+//                   "Write to inactive partition");
+//    }
+//    ReserveRequests.clear();
+//}
 
 //void TPartition::CancelRequests(const TActorContext& ctx, TMessageQueue& requests)
 //{

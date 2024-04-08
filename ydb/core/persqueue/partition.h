@@ -224,7 +224,7 @@ private:
     void UpdateAfterWriteCounters(bool writeComplete);
     void UpdateUserInfoEndOffset(const TInstant& now);
     void UpdateWriteBufferIsFullState(const TInstant& now);
-    void CancelReserveRequests(const TActorContext& ctx);
+//    void CancelReserveRequests(const TActorContext& ctx);
 //    void CancelRequests(const TActorContext& ctx, TMessageQueue& requests);
 
     TInstant GetWriteTimeEstimate(ui64 offset) const;

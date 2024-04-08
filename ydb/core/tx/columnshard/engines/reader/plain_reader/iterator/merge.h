@@ -77,9 +77,8 @@ public:
 class TStartMergeTask: public TBaseMergeTask {
 private:
     using TBase = TBaseMergeTask;
+    bool OnlyEmptySources = true;
     std::map<ui32, std::shared_ptr<IDataSource>> Sources;
-
-    bool EmptyFiltersOnly() const;
 protected:
     virtual bool DoExecute() override;
 public:

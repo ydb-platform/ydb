@@ -277,7 +277,8 @@ private:
             .SetKeepSession(false)
             .SetUseCancelAfter(false)
             .SetSyntax(syntax)
-            .SetSupportStreamTrailingResult(true);
+            .SetSupportStreamTrailingResult(true)
+            .SetOutputChunkMaxSize(req->response_part_limit_bytes());
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             QueryAction,

@@ -12,60 +12,6 @@ void TMergePartialStream::PutControlPoint(std::shared_ptr<TSortableBatchPosition
     SortHeap.Push(TBatchIterator(*point));
 }
 
-void TMergePartialStream::AddSource(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter) {
-    if (!batch || !batch->num_rows()) {
-        return;
-    }
-    Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, SortSchema));
-    AddNewToHeap(batch, filter);
-}
-
-void TMergePartialStream::AddSource(std::shared_ptr<TGeneralContainer> batch, std::shared_ptr<NArrow::TColumnFilter> filter) {
-    if (!batch || !batch->num_rows()) {
-        return;
-    }
-//    Y_DEBUG_ABORT_UNLESS(batch->IsSorted(SortSchema));
-    AddNewToHeap(batch, filter);
-}
-
-void TMergePartialStream::AddSource(std::shared_ptr<arrow::Table> batch, std::shared_ptr<NArrow::TColumnFilter> filter) {
-    if (!batch || !batch->num_rows()) {
-        return;
-    }
-//    Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, SortSchema));
-    AddNewToHeap(batch, filter);
-}
-
-void TMergePartialStream::AddNewToHeap(std::shared_ptr<TGeneralContainer> batch, std::shared_ptr<NArrow::TColumnFilter> filter) {
-    if (!filter || filter->IsTotalAllowFilter()) {
-        SortHeap.Push(TBatchIterator(batch, nullptr, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames));
-    } else if (filter->IsTotalDenyFilter()) {
-        return;
-    } else {
-        SortHeap.Push(TBatchIterator(batch, filter, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames));
-    }
-}
-
-void TMergePartialStream::AddNewToHeap(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter) {
-    if (!filter || filter->IsTotalAllowFilter()) {
-        SortHeap.Push(TBatchIterator(batch, nullptr, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames));
-    } else if (filter->IsTotalDenyFilter()) {
-        return;
-    } else {
-        SortHeap.Push(TBatchIterator(batch, filter, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames));
-    }
-}
-
-void TMergePartialStream::AddNewToHeap(std::shared_ptr<arrow::Table> batch, std::shared_ptr<NArrow::TColumnFilter> filter) {
-    if (!filter || filter->IsTotalAllowFilter()) {
-        SortHeap.Push(TBatchIterator(batch, nullptr, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames));
-    } else if (filter->IsTotalDenyFilter()) {
-        return;
-    } else {
-        SortHeap.Push(TBatchIterator(batch, filter, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames));
-    }
-}
-
 void TMergePartialStream::RemoveControlPoint() {
     Y_ABORT_UNLESS(ControlPoints == 1);
     Y_ABORT_UNLESS(ControlPointEnriched());
@@ -249,13 +195,6 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> TMergePartialStream::DrainAllPa
     if (result.back()->num_rows() == 0) {
         result.pop_back();
     }
-    return result;
-}
-
-NJson::TJsonValue TMergePartialStream::TBatchIterator::DebugJson() const {
-    NJson::TJsonValue result;
-    result["is_cp"] = IsControlPoint();
-    result["key"] = KeyColumns.DebugJson();
     return result;
 }
 

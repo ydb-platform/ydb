@@ -277,6 +277,7 @@ public:
         ShardWritesInFly /* "shard_writes" */,
         ShardWritesSizeInFly /* "shard_writes_size" */,
         InsertTable /* "insert_table" */,
+        OverloadMetadata /* "overload_metadata" */,
         Disk /* "disk" */,
         None /* "none" */
     };
@@ -535,7 +536,7 @@ private:
     TWriteId BuildNextWriteId(NIceDb::TNiceDb& db);
 
     void EnqueueProgressTx(const TActorContext& ctx);
-    void EnqueueBackgroundActivities(bool periodic = false, TBackgroundActivity activity = TBackgroundActivity::All());
+    void EnqueueBackgroundActivities(const bool periodic = false);
     virtual void Enqueue(STFUNC_SIG) override;
 
     void UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc);

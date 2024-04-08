@@ -562,6 +562,7 @@ message TEvStartKqpTasksRequest {
     optional NActorsProto.TActorId ExecuterActorId = 4;
     optional TKqpSnapshot Snapshot = 5;
     optional bool StartAllOrFail = 6 [default = true];
+    optional uint64 OutputChunkMaxSize = 7 [default = 0]; // 0 - use some default value 
 }
 
 message TEvStartKqpTasksResponse {

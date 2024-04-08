@@ -22,6 +22,10 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
             IncCounter(COUNTER_WRITE_OVERLOAD);
             CSCounters.OnOverloadInsertTable(writeData.GetSize());
             break;
+        case EOverloadStatus::OverloadMetadata:
+            IncCounter(COUNTER_WRITE_OVERLOAD);
+            CSCounters.OnOverloadMetadata(writeData.GetSize());
+            break;
         case EOverloadStatus::ShardTxInFly:
             IncCounter(COUNTER_WRITE_OVERLOAD);
             CSCounters.OnOverloadShardTx(writeData.GetSize());
@@ -52,6 +56,11 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloaded(const ui64 tableId) 
 
     if (InsertTable && InsertTable->IsOverloadedByCommitted(tableId)) {
         return EOverloadStatus::InsertTable;
+    }
+
+    CSCounters.OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
+    if (TablesManager.GetPrimaryIndex() && TablesManager.GetPrimaryIndex()->IsOverloadedByMetadata(NOlap::IColumnEngine::GetMetadataLimit())) {
+        return EOverloadStatus::OverloadMetadata;
     }
 
     ui64 txLimit = Settings.OverloadTxInFlight;

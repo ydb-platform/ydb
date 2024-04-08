@@ -235,6 +235,119 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    std::pair<ui32, ui32> CalcRowsAndBatches(TExecuteQueryIterator& it) {
+        ui32 totalRows = 0;
+        ui32 totalBatches = 0;
+        for (;;) {
+            auto streamPart = it.ReadNext().GetValueSync();
+            if (!streamPart.IsSuccess()) {
+                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                break;
+            }
+
+            if (streamPart.HasResultSet()) {
+                auto result = streamPart.ExtractResultSet();
+                UNIT_ASSERT(!result.Truncated());
+                totalRows += result.RowsCount();
+                totalBatches++;
+            }
+        }
+        return {totalRows, totalBatches};
+    }
+
+    Y_UNIT_TEST(FlowControllOnHugeLiteralAsTable) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        const TString query = "SELECT * FROM AS_TABLE(ListReplicate(AsStruct(\"12345678\" AS Key), 100000))";
+
+//TODO: it looks like this check triggers grpc request proxy request leak
+/*
+        {
+            // Check range for chunk size settings
+            auto settings = TExecuteQuerySettings().OutputChunkMaxSize(48_MB);
+            auto it = db.StreamExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            auto streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::BAD_REQUEST, streamPart.GetIssues().ToString());
+        }
+*/
+        auto settings = TExecuteQuerySettings().OutputChunkMaxSize(10000);
+        auto it = db.StreamExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+        auto [totalRows, totalBatches] = CalcRowsAndBatches(it);
+
+        UNIT_ASSERT_VALUES_EQUAL(totalRows, 100000);
+        // 100000 rows * 9 (?) byte per row / 10000 chunk size limit -> expect 90 batches
+        UNIT_ASSERT(totalBatches >= 90); // but got 91 in our case
+        UNIT_ASSERT(totalBatches < 100);
+    }
+
+    TString GetQueryToFillTable(bool longRow) {
+        TString s = "12345678";
+        int rows = 100000;
+        if (longRow) {
+            rows /= 1000;
+            s.resize(1000, 'x');
+        }
+        return Sprintf("UPSERT INTO test SELECT * FROM AS_TABLE (ListMap(ListEnumerate(ListReplicate(\"%s\", %d)), "
+                       "($x) -> {RETURN AsStruct($x.0 AS Key, $x.1 as Value)}))",
+                       s.c_str(), rows);
+    }
+
+    void DoFlowControllOnHugeRealTable(bool longRow) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            const TString q = "CREATE TABLE test (Key Uint64, Value String, PRIMARY KEY (Key))";
+            auto r = db.ExecuteQuery(q, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::SUCCESS, r.GetIssues().ToString());
+        }
+
+        {
+            auto q = GetQueryToFillTable(longRow);
+            auto r = db.ExecuteQuery(q, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::SUCCESS, r.GetIssues().ToString());
+        }
+
+        const TString query = "SELECT * FROM test";
+        if (longRow) {
+            // Check the case of limit less than one row size - expect one batch for each row
+            auto settings = TExecuteQuerySettings().OutputChunkMaxSize(100);
+            auto it = db.StreamExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+            auto [totalRows, totalBatches] = CalcRowsAndBatches(it);
+
+            UNIT_ASSERT_VALUES_EQUAL(totalRows, 100);
+            UNIT_ASSERT_VALUES_EQUAL(totalBatches, 100);
+        }
+
+        auto settings = TExecuteQuerySettings().OutputChunkMaxSize(10000);
+        auto it = db.StreamExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+        auto [totalRows, totalBatches] = CalcRowsAndBatches(it);
+
+        if (longRow) {
+            UNIT_ASSERT_VALUES_EQUAL(totalRows, 100);
+            // 100 rows * 1000 byte per row / 10000 chunk size limit -> expect 10 batches
+            UNIT_ASSERT(10 <= totalBatches);
+            UNIT_ASSERT(totalBatches < 12);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(totalRows, 100000);
+            // 100000 rows * 12 byte per row / 10000 chunk size limit -> expect 120 batches
+            UNIT_ASSERT(120 <= totalBatches);
+            UNIT_ASSERT(totalBatches < 122);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(FlowControllOnHugeRealTable, LongRow) {
+        DoFlowControllOnHugeRealTable(LongRow);
+    }
+
     Y_UNIT_TEST(ExecuteQueryExplicitTxTLI) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

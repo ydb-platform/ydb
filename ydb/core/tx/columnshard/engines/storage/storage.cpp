@@ -3,19 +3,12 @@
 
 namespace NKikimr::NOlap {
 
-void TGranulesStorage::UpdateGranuleInfo(const TGranuleMeta& granule) {
-    if (PackModificationFlag) {
-        PackModifiedGranules[granule.GetPathId()] = &granule;
-        return;
-    }
-}
-
-std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCompaction(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
+std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
     const TInstant now = HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now();
     std::map<NStorageOptimizer::TOptimizationPriority, std::shared_ptr<TGranuleMeta>> granulesSorted;
     ui32 countChecker = 0;
     std::optional<NStorageOptimizer::TOptimizationPriority> priorityChecker;
-    for (auto&& i : granules) {
+    for (auto&& i : Tables) {
         NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("path_id", i.first);
         i.second->ActualizeOptimizer(now);
         auto gPriority = i.second->GetCompactionPriority();

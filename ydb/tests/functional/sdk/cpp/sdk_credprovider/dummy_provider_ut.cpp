@@ -1,4 +1,8 @@
-#include <ydb/services/ydb/ydb_common_ut.h>
+#include <util/system/env.h>
+#include <library/cpp/testing/unittest/registar.h>
+
+#include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
+
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/core_facility/core_facility.h>
 
@@ -27,25 +31,27 @@ class TExampleDummyProviderFactory : public ICredentialsProviderFactory {
                 if (!strong)
                     return false;
 
-                auto responseCb = [this](Draft::Dummy::PingResponse* resp, TPlainStatus status) -> void {
+                auto responseCb = [this](Ydb::Table::CreateSessionResponse* resp, TPlainStatus status) -> void {
                     if (status.Status == EStatus::CLIENT_CANCELLED)
                         return;
 
                     UNIT_ASSERT_C(status.Ok(), status.Status);
-                    UNIT_ASSERT_VALUES_EQUAL(resp->payload(), "abc");
+                    UNIT_ASSERT(resp->operation().ready());
                     (*RunCnt)++;
                 };
 
-                Draft::Dummy::PingRequest request;
-                request.set_copy(true);
-                request.set_payload("abc");
+                // use CreateSession as ping pong
+                Ydb::Table::CreateSessionRequest request;
 
                 TRpcRequestSettings rpcSettings;
                 rpcSettings.ClientTimeout = TDuration::Seconds(1);
 
-                TGRpcConnectionsImpl::RunOnDiscoveryEndpoint<Draft::Dummy::DummyService, Draft::Dummy::PingRequest, Draft::Dummy::PingResponse>(
-                    strong, std::move(request), std::move(responseCb), &Draft::Dummy::DummyService::Stub::AsyncPing,
-                    rpcSettings);
+                TGRpcConnectionsImpl::RunOnDiscoveryEndpoint<Ydb::Table::V1::TableService,
+                    Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse>
+                (
+                    strong, std::move(request), std::move(responseCb), &Ydb::Table::V1::TableService::Stub::AsyncCreateSession,
+                    rpcSettings
+                );
                 return true;
             };
             return periodicCb;
@@ -92,17 +98,13 @@ private:
 };
 
 void RunTest(bool sync) {
-    TKikimrWithGrpcAndRootSchema server;
-    ui16 grpc = server.GetPort();
-
-    TString location = TStringBuilder() << "localhost:" << grpc;
-
     int runCnt = 0;
     int maxWait = 10;
 
+    TString connectionString = GetEnv("YDB_ENDPOINT") + "/?database=" + GetEnv("YDB_DATABASE");
+
     auto driver = NYdb::TDriver(
-        TDriverConfig()
-            .SetEndpoint(location)
+        TDriverConfig(connectionString)
             .SetDiscoveryMode(sync ? EDiscoveryMode::Sync : EDiscoveryMode::Async)
             .SetCredentialsProviderFactory(std::make_shared<TExampleDummyProviderFactory>(&runCnt)));
     // Creates DbDriverState in case of empty database
@@ -128,4 +130,3 @@ Y_UNIT_TEST_SUITE(SdkCredProvider) {
         RunTest(false);
     }
 }
-

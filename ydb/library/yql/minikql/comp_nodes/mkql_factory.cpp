@@ -8,6 +8,7 @@
 #include "mkql_blocks.h"
 #include "mkql_block_agg.h"
 #include "mkql_block_coalesce.h"
+#include "mkql_block_exists.h"
 #include "mkql_block_if.h"
 #include "mkql_block_just.h"
 #include "mkql_block_logical.h"
@@ -287,6 +288,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"AsScalar", &WrapAsScalar},
         {"ReplicateScalar", &WrapReplicateScalar},
         {"BlockCoalesce", &WrapBlockCoalesce},
+        {"BlockExists", &WrapBlockExists},
         {"BlockIf", &WrapBlockIf},
         {"BlockAnd", &WrapBlockAnd},
         {"BlockOr", &WrapBlockOr},

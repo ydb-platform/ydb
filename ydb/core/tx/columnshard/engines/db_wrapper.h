@@ -2,6 +2,10 @@
 #include "defs.h"
 #include <ydb/core/tx/columnshard/common/blob.h>
 
+namespace NKikimrTxColumnShard {
+class TIndexPortionMeta;
+}
+
 namespace NKikimr::NTable {
 class TDatabase;
 }
@@ -32,9 +36,13 @@ public:
     virtual bool Load(TInsertTableAccessor& insertTable,
                       const TInstant& loadTime) = 0;
 
-    virtual void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row) = 0;
+    virtual void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) = 0;
     virtual void EraseColumn(const TPortionInfo& portion, const TColumnRecord& row) = 0;
     virtual bool LoadColumns(const std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)>& callback) = 0;
+
+    virtual void WritePortion(const NOlap::TPortionInfo& portion) = 0;
+    virtual void ErasePortion(const NOlap::TPortionInfo& portion) = 0;
+    virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfo&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) = 0;
 
     virtual void WriteIndex(const TPortionInfo& portion, const TIndexChunk& row) = 0;
     virtual void EraseIndex(const TPortionInfo& portion, const TIndexChunk& row) = 0;
@@ -60,7 +68,11 @@ public:
 
     bool Load(TInsertTableAccessor& insertTable, const TInstant& loadTime) override;
 
-    void WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;
+    void WritePortion(const NOlap::TPortionInfo& portion) override;
+    void ErasePortion(const NOlap::TPortionInfo& portion) override;
+    bool LoadPortions(const std::function<void(NOlap::TPortionInfo&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override;
+
+    void WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override;
     void EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;
     bool LoadColumns(const std::function<void(const NOlap::TPortionInfo&, const TColumnChunkLoadContext&)>& callback) override;
 

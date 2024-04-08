@@ -79,11 +79,20 @@ public:
         return true;
     }
 
-    void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row) override {
-        auto proto = portion.GetMeta().SerializeToProto(row.ColumnId, row.Chunk);
+    virtual void WritePortion(const NOlap::TPortionInfo& /*portion*/) override {
+
+    }
+    virtual void ErasePortion(const NOlap::TPortionInfo& /*portion*/) override {
+
+    }
+    virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfo&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
+        return true;
+    }
+
+    void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override {
         auto rowProto = row.GetMeta().SerializeToProto();
-        if (proto) {
-            *rowProto.MutablePortionMeta() = std::move(*proto);
+        if (firstPKColumnId == row.GetColumnId() && row.GetChunkIdx() == 0) {
+            *rowProto.MutablePortionMeta() = portion.GetMeta().SerializeToProto();
         }
 
         auto& data = Indices[0].Columns[portion.GetPathId()];

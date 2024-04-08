@@ -51,7 +51,8 @@ struct Schema : NIceDb::Schema {
         DestinationSessionsTableId,
         OperationTxIdsId,
         BackupIdsDeprecated,
-        ExportSessionsId
+        ExportSessionsId,
+        PortionsTableId
     };
 
     enum class ETierTables: ui32 {
@@ -451,6 +452,19 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<LockId, TxId>;
     };
 
+    struct IndexPortions: NIceDb::Schema::Table<PortionsTableId> {
+        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PortionId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct PlanStep: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct TxId: Column<4, NScheme::NTypeIds::Uint64> {};
+        struct XPlanStep: Column<5, NScheme::NTypeIds::Uint64> {};
+        struct XTxId: Column<6, NScheme::NTypeIds::Uint64> {};
+        struct Metadata: Column<7, NScheme::NTypeIds::String> {}; // NKikimrTxColumnShard.TIndexColumnMeta
+
+        using TKey = TableKey<PathId, PortionId>;
+        using TColumns = TableColumns<PathId, PortionId, PlanStep, TxId, XPlanStep, XTxId, Metadata>;
+    };
+
     using TTables = SchemaTables<
         Value,
         TxInfo,
@@ -480,7 +494,8 @@ struct Schema : NIceDb::Schema {
         SourceSessions,
         DestinationSessions,
         OperationTxIds,
-        ExportPersistentSessions
+        ExportPersistentSessions,
+        IndexPortions
         >;
 
     //

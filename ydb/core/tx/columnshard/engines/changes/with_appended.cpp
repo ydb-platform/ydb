@@ -9,11 +9,12 @@ namespace NKikimr::NOlap {
 
 void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     THashSet<ui64> usedPortionIds;
+    auto schemaPtr = context.EngineLogs.GetVersionedIndex().GetLastSchema();
     for (auto& [_, portionInfo] : PortionsToRemove) {
         Y_ABORT_UNLESS(!portionInfo.Empty());
         Y_ABORT_UNLESS(portionInfo.HasRemoveSnapshot());
         AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
-        portionInfo.SaveToDatabase(context.DBWrapper);
+        portionInfo.SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), true);
     }
     const auto predRemoveDroppedTable = [self](const TPortionInfoWithBlobs& item) {
         auto& portionInfo = item.GetPortionInfo();
@@ -29,7 +30,7 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
         auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
         Y_ABORT_UNLESS(!portionInfo.Empty());
         AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
-        portionInfo.SaveToDatabase(context.DBWrapper);
+        portionInfo.SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
     }
 }
 

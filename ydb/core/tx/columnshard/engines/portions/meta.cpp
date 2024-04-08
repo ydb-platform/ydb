@@ -35,7 +35,6 @@ bool TPortionMeta::DeserializeFromProto(const NKikimrTxColumnShard::TIndexPortio
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", "parsing duplication");
         return true;
     }
-    FirstPkColumn = indexInfo.GetPKFirstColumnId();
     {
         auto parsed = NStatistics::TPortionStorage::BuildFromProto(portionMeta.GetStatisticsStorage());
         if (!parsed) {
@@ -115,14 +114,6 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
         portionMeta.MutableRecordSnapshotMax()->SetTxId(RecordSnapshotMax->GetTxId());
     }
     return portionMeta;
-}
-
-std::optional<NKikimrTxColumnShard::TIndexPortionMeta> TPortionMeta::SerializeToProto(const ui32 columnId, const ui32 chunk) const {
-    if (!IsChunkWithPortionInfo(columnId, chunk)) {
-        return {};
-    }
-
-    return SerializeToProto();
 }
 
 TString TPortionMeta::DebugString() const {

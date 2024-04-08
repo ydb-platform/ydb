@@ -344,6 +344,56 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         UNIT_ASSERT_LE(counters->ActiveBytes->Val(), 800*1024); // one index
     }
 
+    Y_UNIT_TEST(SharedCacheGarbage2) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        auto opts = TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false}, 
+                {"value", "String", true, false}});
+        CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
+
+        const int batches = 10;
+        const int batchItems = 10;
+        for (auto batch : xrange(batches)) {
+            TString query = "UPSERT INTO `/Root/table-1` (key, value) VALUES ";
+            for (auto item = 0; item < batchItems; item++) {
+                if (item != 0)
+                    query += ", ";
+                query += "(" + ToString(batch * batchItems + item) + ", \"" + TString(7000, 'x') + ToString(batch * batchItems + item) + "\") ";
+            }
+            Cerr << query << Endl << Endl;
+            ExecSQL(server, sender, query);
+            CompactTable(runtime, shard1, tableId1, false);
+
+            Cerr << "... waiting for stats after compaction" << Endl;
+            auto stats = WaitTableStats(runtime, shard1, 1, (batch + 1) * batchItems);
+            Cerr << "... GetRowCount: " << stats.GetTableStats().GetRowCount() << Endl;
+            Cerr << "... GetPartCount: " << stats.GetTableStats().GetPartCount() << Endl;
+            Cerr << "... GetDataSize: " << stats.GetTableStats().GetDataSize() << Endl;
+            Cerr << "... GetIndexSize: " << stats.GetTableStats().GetIndexSize() << Endl;
+        }
+
+        // each batch ~70KB, ~700KB in total
+        // auto counters = MakeIntrusive<TSharedPageCacheCounters>(runtime.GetDynamicCounters());
+        // Cerr << "ActiveBytes = " << counters->ActiveBytes->Val() << " PassiveBytes = " << counters->PassiveBytes->Val() << Endl;
+        // UNIT_ASSERT_LE(counters->ActiveBytes->Val(), 800*1024); // one index
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardStats)
 
 } // namespace NKikimr

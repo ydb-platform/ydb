@@ -468,7 +468,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     TotalGroups = record.HasTotalGroupCount() ? record.GetTotalGroupCount() : 0;
     ui32 prevNextPartitionId = NextPartitionId;
     NextPartitionId = record.HasNextPartitionId() ? record.GetNextPartitionId() : 0;
-    std::unordered_map<ui32, TPartitionInfo> partitionsInfo;
+    std::map<ui32, TPartitionInfo> partitionsInfo;
     if (record.HasSubDomainPathId()) {
         SubDomainPathId.emplace(record.GetSchemeShardId(), record.GetSubDomainPathId());
     }
@@ -550,7 +550,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             deletedPartitions.push_back(p.first);
         }
     }
-    PartitionsInfo = partitionsInfo;
+    PartitionsInfo = std::unordered_map<ui32, TPartitionInfo>(partitionsInfo.rbegin(), partitionsInfo.rend());
 
     for (auto& [_, clientInfo] : ClientsInfo) {
         auto mainGroup = clientInfo.ClientGroupsInfo.find(TClientInfo::MAIN_GROUP);

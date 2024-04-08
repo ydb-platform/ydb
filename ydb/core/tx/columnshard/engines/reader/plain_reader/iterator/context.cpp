@@ -61,6 +61,10 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         }
         if (!exclusiveSource) {
             columnsFetch = columnsFetch + *PKColumns + *SpecColumns;
+        } else {
+            if (columnsFetch.GetColumnsCount() == 1 && SpecColumns->Contains(columnsFetch)) {
+                return nullptr;
+            }
         }
         if (columnsFetch.GetColumnsCount()) {
             result->AddStep(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsFetch)));

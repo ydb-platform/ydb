@@ -247,7 +247,7 @@ public:
         return BlobsAction;
     }
 
-    TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager, const TString& consumerId)
+    TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager, const NBlobOperations::EConsumer consumerId)
         : BlobsAction(storagesManager, consumerId)
     {
 

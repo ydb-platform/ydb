@@ -31,7 +31,7 @@ protected:
 
 public:
     TCleanupTablesColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
-        : TBase(storagesManager, StaticTypeName()) {
+        : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_TABLES) {
 
     }
 

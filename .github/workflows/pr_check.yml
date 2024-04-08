@@ -5,6 +5,7 @@ on:
       - 'main'
       - 'stable-*'
       - 'stream-nb-*'
+      - '*-stable-*'
     paths-ignore:
       - 'ydb/docs/**'
       - '*'

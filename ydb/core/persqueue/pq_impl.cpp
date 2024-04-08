@@ -26,7 +26,6 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/string/escape.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 #define PQ_LOG_ERROR_AND_DIE(expr) \
     PQ_LOG_ERROR(expr); \
@@ -1967,7 +1966,6 @@ void TPersQueue::HandleUpdateWriteTimestampRequest(const ui64 responseCookie, co
 void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& partActor,
                                     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::HandleWriteRequest");
     Y_ABORT_UNLESS(req.CmdWriteSize());
     MeteringSink.MayFlush(ctx.Now()); // To ensure hours' border;
     if (Config.GetMeteringMode() != NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS) {
@@ -2006,9 +2004,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                     ", WriteId: " << req.GetWriteId());
     }
 
-    DBGTRACE_LOG("req.CmdWriteSize=" << req.CmdWriteSize());
     for (ui32 i = 0; i < req.CmdWriteSize(); ++i) {
-        DBGTRACE_LOG("cmd #" << i);
         const auto& cmd = req.GetCmdWrite(i);
 
         if (AppData(ctx)->Counters && !AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
@@ -2085,8 +2081,6 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
             heartbeatVersion.emplace(cmd.GetHeartbeat().GetStep(), cmd.GetHeartbeat().GetTxId());
         }
 
-        DBGTRACE_LOG("cmd.SourceId=" << cmd.GetSourceId() << ", cmd.SeqNo=" << cmd.GetSeqNo() << ", cmd.PartNo=" << cmd.GetPartNo() << ", cmd.TotalParts=" << cmd.GetTotalParts());
-        DBGTRACE_LOG("cmd.GetData().size=" << cmd.GetData().size() << ", mSize=" << mSize);
         if (cmd.GetData().size() > mSize) {
             if (cmd.HasPartNo()) {
                 ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -2102,18 +2096,15 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
             ui16 totalParts = (totalSize - 1) / mSize + 1;
             ui32 diff = 0;
             ui32 lastPartSize = (totalSize - 1) % mSize + 1; // mSize for x*mSize , x for x (x < mSize)
-            DBGTRACE_LOG("totalSize=" << totalSize << ", totalParts=" << totalParts << ", lastPartSize=" << lastPartSize);
             ui32 uncompressedSize = cmd.HasUncompressedSize() ? cmd.GetUncompressedSize() : 0;
             if (lastPartSize < 100) { //size of first part will be reduced by diff, => size of last part will be increased by diff => = 100 bytes
                 diff = 100 - lastPartSize;
             }
-            DBGTRACE_LOG("diff=" << diff);
             Y_ABORT_UNLESS(!cmd.HasTotalParts(), "too big part"); //change this verify for errorStr, when LB will be ready
             while (pos < totalSize) {
                 TString data = cmd.GetData().substr(pos, mSize - diff);
                 pos += mSize - diff;
                 diff = 0;
-                DBGTRACE_LOG("add new part: partNo=" << partNo << ", pos=" << pos);
                 msgs.push_back({cmd.GetSourceId(), static_cast<ui64>(cmd.GetSeqNo()), partNo,
                     totalParts, totalSize, createTimestampMs, receiveTimestampMs,
                     disableDeduplication, writeTimestampMs, data, uncompressedSize,
@@ -2171,7 +2162,6 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
     if (req.HasInitialSeqNo()) {
         initialSeqNo = req.GetInitialSeqNo();
     }
-    DBGTRACE_LOG("initialSeqNo=" << initialSeqNo);
     THolder<TEvPQ::TEvWrite> event =
         MakeHolder<TEvPQ::TEvWrite>(responseCookie, req.GetMessageNo(),
                                     req.HasOwnerCookie() ? req.GetOwnerCookie() : "",

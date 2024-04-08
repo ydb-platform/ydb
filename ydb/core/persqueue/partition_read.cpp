@@ -20,7 +20,6 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 #define VERIFY_RESULT_BLOB(blob, pos) \
     Y_ABORT_UNLESS(!blob.Data.empty(), "Empty data. SourceId: %s, SeqNo: %" PRIu64, blob.SourceId.data(), blob.SeqNo); \
@@ -222,9 +221,6 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
 }
 
 void TPartition::Handle(TEvPQ::TEvPartitionOffsets::TPtr& ev, const TActorContext& ctx) {
-    DBGTRACE("TPartition::Handle(TEvPQ::TEvPartitionOffsets)");
-    DBGTRACE_LOG("CliendId=" << ev->Get()->ClientId);
-    DBGTRACE_LOG("Partition=" << Partition << ", StartOffset=" << StartOffset << ", EndOffset=" << EndOffset);
     NKikimrPQ::TOffsetsResponse::TPartResult result;
     result.SetPartition(Partition.InternalPartitionId);
     result.SetStartOffset(StartOffset);
@@ -234,7 +230,6 @@ void TPartition::Handle(TEvPQ::TEvPartitionOffsets::TPtr& ev, const TActorContex
 
     if (!ev->Get()->ClientId.empty()) {
         TUserInfo* userInfo = UsersInfoStorage->GetIfExists(ev->Get()->ClientId);
-        DBGTRACE_LOG("userInfo=" << (void*)userInfo);
         if (userInfo) {
             i64 offset = Max<i64>(userInfo->Offset, 0);
             result.SetClientOffset(userInfo->Offset);
@@ -247,7 +242,6 @@ void TPartition::Handle(TEvPQ::TEvPartitionOffsets::TPtr& ev, const TActorContex
             result.SetReadCreateTimestampMS(userInfo->GetReadCreateTimestamp().MilliSeconds());
         }
     }
-    DBGTRACE_LOG("send TEvPQ::TEvPartitionOffsetsResponse");
     ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionOffsetsResponse(result, Partition));
 }
 
@@ -274,7 +268,6 @@ void TPartition::Handle(TEvPQ::TEvGetClientOffset::TPtr& ev, const TActorContext
 }
 
 void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& ctx) {
-    DBGTRACE("TPartition::Handle(TEvPQ::TEvSetClientInfo)");
     if (size_t count = GetUserActCount(ev->Get()->ClientId); count > MAX_USER_ACTS) {
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::OVERLOAD,

@@ -8,7 +8,6 @@
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 namespace NKikimr::NPQ {
 
 namespace {
@@ -75,7 +74,6 @@ struct THttpRequest : NMonitoring::IHttpRequest {
 Y_UNIT_TEST_SUITE(PQCountersSimple) {
 
 Y_UNIT_TEST(Partition) {
-    DBGTRACE("Partition");
     TTestContext tc;
     TFinalizer finalizer(tc);
     bool activeZone{false};
@@ -83,40 +81,29 @@ Y_UNIT_TEST(Partition) {
     tc.Runtime->SetScheduledLimit(100);
 
     PQTabletPrepare({}, {}, tc);
-    DBGTRACE_LOG("CmdWrite");
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
-    DBGTRACE_LOG("CmdWrite");
     CmdWrite(0, "sourceid1", TestData(), tc, false);
-    DBGTRACE_LOG("CmdWrite");
     CmdWrite(0, "sourceid2", TestData(), tc, false);
-    DBGTRACE_LOG("CmdWrite");
     CmdWrite(0, "sourceid1", TestData(), tc, false);
-    DBGTRACE_LOG("CmdWrite");
     CmdWrite(0, "sourceid2", TestData(), tc, false);
-    DBGTRACE_LOG("PQGetPartInfo");
     PQGetPartInfo(0, 30, tc);
 
 
     {
-        DBGTRACE("pqproxy");
         auto counters = tc.Runtime->GetAppData(0).Counters;
         auto dbGroup = GetServiceCounters(counters, "pqproxy");
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
         TString referenceCounters = NResource::Find(TStringBuf("counters_pqproxy.html"));
-        DBGTRACE_LOG("referenceCounters=" << referenceCounters);
-        DBGTRACE_LOG("countersStr=" << countersStr.Str());
 
         UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 
     {
-        DBGTRACE("datastreams");
         auto counters = tc.Runtime->GetAppData(0).Counters;
         auto dbGroup = GetServiceCounters(counters, "datastreams");
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
-        DBGTRACE_LOG("countersStr=" << countersStr.Str());
         UNIT_ASSERT_VALUES_EQUAL(countersStr.Str(), "<pre></pre>");
     }
 }

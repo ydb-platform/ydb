@@ -12,7 +12,6 @@
 
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 
 namespace NKikimr::NPQ {
@@ -186,7 +185,6 @@ Y_UNIT_TEST(TestPartitionTotalQuota) {
 }
 
 Y_UNIT_TEST(TestAccountReadQuota) {
-    DBGTRACE("TestAccountReadQuota");
     TTestContext tc;
     TAtomic stop = 0;
     TAtomicCounter quoterRequests = 0;
@@ -222,13 +220,10 @@ Y_UNIT_TEST(TestAccountReadQuota) {
     data.push_back({1, s});
 
     auto runTest = [&]() {
-        DBGTRACE("runTest");
         Cerr << "CmdWrite\n";
-        DBGTRACE_LOG("CmdWrite");
         CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
         data[0].first++;
         Cerr << "CmdRead\n";
-        DBGTRACE_LOG("CmdRead");
         CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {0}, 0, 0, "user");
     };
     Cerr << "Run 1\n";
@@ -816,7 +811,6 @@ Y_UNIT_TEST(TestWaitInOwners) {
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        DBGTRACE("TestWaitInOwners");
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
@@ -832,38 +826,28 @@ Y_UNIT_TEST(TestWaitInOwners) {
         data.push_back({1, s.substr(pp)});
         data.push_back({2, s.substr(pp)});
 
-        DBGTRACE_LOG("CmdSetOwner");
         CmdSetOwner(0, tc, "owner", false);
-        DBGTRACE_LOG("CmdSetOwner");
         CmdSetOwner(0, tc, "owner", true); //will break last owner
 
-        DBGTRACE_LOG("SetOwner");
         TActorId newPipe = SetOwner(0, tc, "owner", false); //this owner will wait
 
-        DBGTRACE_LOG("CmdSetOwner");
         auto p = CmdSetOwner(0, tc, "owner", true); //will break last owner
 
         TAutoPtr<IEventHandle> handle;
         TEvPersQueue::TEvResponse *result;
         try {
-            DBGTRACE("wait for TEvPersQueue::TEvResponse");
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
         } catch (NActors::TSchedulingLimitReachedException) {
-            DBGTRACE_LOG("NActors::TSchedulingLimitReachedException");
             result = nullptr;
         }
 
         Y_ABORT_UNLESS(!result); //no answer yet
 
-        DBGTRACE_LOG("CmdSetOwner");
         CmdSetOwner(0, tc);
-        DBGTRACE_LOG("CmdSetOwner");
         CmdSetOwner(0, tc, "owner2"); //just to be dropped by next command
 
-        DBGTRACE_LOG("WritePartData p.first=" << p.first);
         WritePartData(0, "sourceid", 12, 1, 1, 5, 20, "value", tc, p.first, 0);
 
-        DBGTRACE_LOG("wait for TEvPersQueue::TEvResponse");
         result = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle, [](const TEvPersQueue::TEvResponse& ev){
                 if (ev.Record.HasPartitionResponse() && ev.Record.GetPartitionResponse().CmdWriteResultSize() > 0 || ev.Record.GetErrorCode() != NPersQueue::NErrorCode::OK)
                     return true;
@@ -872,14 +856,11 @@ Y_UNIT_TEST(TestWaitInOwners) {
 
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Record.HasStatus());
-        DBGTRACE_LOG("ErrorCode=" << (int)result->Record.GetErrorCode() << ", BAD_REQUEST=" << (int)NPersQueue::NErrorCode::BAD_REQUEST);
         UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
 
         try {
-            DBGTRACE("wait for TEvPersQueue::TEvResponse");
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
         } catch (NActors::TSchedulingLimitReachedException) {
-            DBGTRACE_LOG("NActors::TSchedulingLimitReachedException");
             result = nullptr;
         }
 
@@ -889,20 +870,16 @@ Y_UNIT_TEST(TestWaitInOwners) {
         UNIT_ASSERT(result->Record.HasPartitionResponse());
         UNIT_ASSERT(result->Record.GetPartitionResponse().HasCmdGetOwnershipResult());
 
-        DBGTRACE_LOG("SetOwner");
         SetOwner(0, tc, "owner", false); //will wait
 
         try {
-            DBGTRACE("wait for TEvPersQueue::TEvResponse");
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
         } catch (NActors::TSchedulingLimitReachedException) {
-            DBGTRACE_LOG("NActors::TSchedulingLimitReachedException");
             result = nullptr;
         }
 
         Y_ABORT_UNLESS(!result); //no answer yet, waiting of dying of old ownership session
 
-        DBGTRACE_LOG("send TEvents::TEvPoisonPill");
         tc.Runtime->Send(new IEventHandle(newPipe, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and old session
 
         TDispatchOptions options;
@@ -910,10 +887,8 @@ Y_UNIT_TEST(TestWaitInOwners) {
         tc.Runtime->DispatchEvents(options);
 
         try {
-            DBGTRACE("wait for TEvPersQueue::TEvResponse");
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
         } catch (NActors::TSchedulingLimitReachedException) {
-            DBGTRACE_LOG("NActors::TSchedulingLimitReachedException");
             result = nullptr;
         }
 
@@ -1046,7 +1021,6 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        DBGTRACE("TestPartitionedBlobFails");
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
@@ -1062,7 +1036,6 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
         s += ss;
         s += char((1) % 256);
         ++k;
-        DBGTRACE_LOG("ss.size=" << ss.size() << ", s.size=" << s.size());
 
         TVector<std::pair<ui64, TString>> data;
         data.push_back({1, s});
@@ -1074,65 +1047,50 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
             parts.push_back(s.substr(pos, size - diff));
             pos += size - diff;
         }
-        DBGTRACE_LOG("parts.size=" << parts.size());
         Y_ABORT_UNLESS(parts.size() > 5);
 
-        DBGTRACE_LOG("CmdWrite");
         CmdWrite(0, "sourceid4", data, tc);
 
         {
-            DBGTRACE_LOG("CmdSetOwner");
             TString cookie = CmdSetOwner(0, tc).first;
-            DBGTRACE_LOG("cookie=" << cookie);
 
-            DBGTRACE_LOG("WritePartDataWithBigMsg");
             WritePartDataWithBigMsg(0, "sourceid0", 1, 1, 5, s.size(), parts[1], tc, cookie, 0, 12_MB);
             TAutoPtr<IEventHandle> handle;
             TEvPersQueue::TEvResponse *result;
 
-            DBGTRACE_LOG("wait for TEvPersQueue::TEvResponse");
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);
 
             UNIT_ASSERT(result->Record.HasStatus());
-            DBGTRACE_LOG("ErrorCode=" << (int)result->Record.GetErrorCode() << ", BAD_REQUEST=" << (int)NPersQueue::NErrorCode::BAD_REQUEST);
 //            UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
             UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::INITIALIZING);
         }
 
-        DBGTRACE_LOG("PQGetPartInfo");
         PQGetPartInfo(0, 1, tc);
-        DBGTRACE_LOG("CmdWrite");
         CmdWrite(0, "sourceid5", data, tc);
-        DBGTRACE_LOG("PQTabletRestart");
         PQTabletRestart(tc);
-        DBGTRACE_LOG("PQGetPartInfo");
         PQGetPartInfo(0, 2, tc);
 
         ui32 toWrite = 5;
         for (ui32 i = 0; i < 2; ++i) {
-            DBGTRACE_LOG("CmdSetOwner");
             TString cookie = CmdSetOwner(0, tc).first;
 
             for (ui32 j = 0; j < toWrite + 1; ++j) {
                 ui32 k = j;
                 if (j == toWrite)
                     k = parts.size() - 1;
-                DBGTRACE_LOG("WritePartData");
                 WritePartData(0, "sourceid1", -1, j == toWrite ? 2 : 1, k, parts.size(), s.size(), parts[k], tc, cookie, j);
 
                 TAutoPtr<IEventHandle> handle;
                 TEvPersQueue::TEvResponse *result;
 
-                DBGTRACE_LOG("wait for TEvPersQueue::TEvResponse");
                 result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
 
                 UNIT_ASSERT(result);
 
                 UNIT_ASSERT(result->Record.HasStatus());
                 if (j == toWrite) {
-                    DBGTRACE_LOG("ErrorCode=" << (int)result->Record.GetErrorCode() << ", BAD_REQUEST=" << (int)NPersQueue::NErrorCode::BAD_REQUEST);
 //                    UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
                     UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::INITIALIZING);
                 } else {
@@ -1147,30 +1105,23 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
                     UNIT_ASSERT(!result->Record.GetPartitionResponse().GetCmdWriteResult(0).GetAlreadyWritten());
                 }
             }
-            DBGTRACE_LOG("PQGetPartInfo");
             PQGetPartInfo(0, i + 2, tc);
             toWrite = parts.size();
         }
         data.back().second.resize(64_KB);
-        DBGTRACE_LOG("CmdWrite");
         CmdWrite(0, "sourceid3", data, tc);
-        DBGTRACE_LOG("CmdWrite");
         CmdWrite(0, "sourceid5", data, tc);
         activeZone = true;
         data.back().second.resize(8_MB);
-        DBGTRACE_LOG("CmdWrite");
         CmdWrite(0, "sourceid7", data, tc);
         activeZone = false;
         {
-            DBGTRACE_LOG("CmdSetOwner");
             TString cookie = CmdSetOwner(0, tc).first;
-            DBGTRACE_LOG("WritePartData");
             WritePartData(0, "sourceidX", 10, 1, 0, 5, s.size(), parts[1], tc, cookie, 0);
 
             TAutoPtr<IEventHandle> handle;
             TEvPersQueue::TEvResponse *result;
 
-            DBGTRACE_LOG("wait for TEvPersQueue::TEvResponse");
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);
@@ -1178,12 +1129,9 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
             UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK);
 
             //check that after CmdSetOwner all partial data cleared
-            DBGTRACE_LOG("CmdSetOwner");
             cookie = CmdSetOwner(0, tc).first;
-            DBGTRACE_LOG("WritePartData");
             WritePartData(0, "sourceidX", 12, 1, 0, 5, s.size(), parts[1], tc, cookie, 0);
 
-            DBGTRACE_LOG("wait for TEvPersQueue::TEvResponse");
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);
@@ -1191,23 +1139,18 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
             UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK);
 
             //check gaps
-            DBGTRACE_LOG("WritePartData");
             WritePartData(0, "sourceidX", 15, 1, 1, 5, s.size(), parts[1], tc, cookie, 1);
 
-            DBGTRACE_LOG("wait for TEvPersQueue::TEvResponse");
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);
             UNIT_ASSERT(result->Record.HasStatus());
-            DBGTRACE_LOG("ErrorCode=" << (int)result->Record.GetErrorCode() << ", BAD_REQUEST=" << (int)NPersQueue::NErrorCode::BAD_REQUEST);
             UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
 
             //check partNo gaps
-            DBGTRACE_LOG("CmdSetOwner");
             cookie = CmdSetOwner(0, tc).first;
             WritePartData(0, "sourceidX", 12, 1, 0, 5, s.size(), parts[1], tc, cookie, 0);
 
-            DBGTRACE_LOG("wait for TEvPersQueue::TEvResponse");
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);
@@ -1215,10 +1158,8 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
             UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK);
 
             //check gaps
-            DBGTRACE_LOG("WritePartData");
             WritePartData(0, "sourceidX", 12, 1, 4, 5, s.size(), parts[1], tc, cookie, 1);
 
-            DBGTRACE_LOG("wait for TEvPersQueue::TEvResponse");
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);
@@ -1227,19 +1168,15 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
             UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::INITIALIZING);
 
             //check very big msg
-            DBGTRACE_LOG("CmdSetOwner");
             cookie = CmdSetOwner(0, tc).first;
-            DBGTRACE_LOG("WritePartData");
             WritePartData(0, "sourceidY", 13, 1, 0, 5, s.size(), TString{10_MB, 'a'}, tc, cookie, 0);
 
-            DBGTRACE_LOG("wait for TEvPersQueue::TEvResponse");
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);
             UNIT_ASSERT(result->Record.HasStatus());
             UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
         }
-        DBGTRACE_LOG("PQTabletRestart");
         PQTabletRestart(tc);
     });
 }
@@ -1301,7 +1238,6 @@ Y_UNIT_TEST(TestWritePQCompact) {
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        DBGTRACE("TestWritePQCompact");
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
@@ -1321,28 +1257,24 @@ Y_UNIT_TEST(TestWritePQCompact) {
             data.push_back({i + 1, ss.substr(pp)});
         }
         CmdWrite(0, "sourceid0", data, tc, false, {}, true); //now 1 blob
-        DBGTRACE_LOG("");
         PQGetPartInfo(0, 8, tc);
         data.clear();
         for (ui32 i = 0; i + s1.size() < 7_MB + 4 * s1.size(); i += s1.size()) {
             data.push_back({i + 1, s1.substr(pp)});
         }
         CmdWrite(0, "sourceid1", data, tc);
-        DBGTRACE_LOG("");
         PQGetPartInfo(0, 63 + 4, tc);
         data.clear();
         for (ui32 i = 0; i + s2.size() < s1.size(); i += s2.size()) {
             data.push_back({i + 1, s2.substr(pp)});
         }
         CmdWrite(0, "sourceid2", data, tc);
-        DBGTRACE_LOG("");
         PQGetPartInfo(8, 2 * 63 + 4, tc); //first is partial, not counted
         data.clear();
         for (ui32 i = 0; i + s3.size() + 540 < s2.size(); i += s3.size()) {
             data.push_back({i + 1, s3.substr(pp)});
         }
         CmdWrite(0, "sourceid3", data, tc); //now 1 blob and at most one
-        DBGTRACE_LOG("");
 
         PQGetPartInfo(8, 177, tc);
         data.resize(1);
@@ -1351,7 +1283,6 @@ Y_UNIT_TEST(TestWritePQCompact) {
         activeZone = true;
         CmdWrite(0, "sourceid5", data, tc); //next message just to force drop, don't wait for WakeUp
         activeZone = false;
-        DBGTRACE_LOG("");
 
         PQGetPartInfo(8, 179, tc);
 

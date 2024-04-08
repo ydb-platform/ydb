@@ -188,15 +188,32 @@ TExprBase RearrangeEquiJoinTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
 
 class TOptimizerNativeNewDpHyp: public IOptimizerNew {
 public:
-    using TNodeSet = std::bitset<128>;
-
     TOptimizerNativeNewDpHyp(IProviderContext& ctx)
         : IOptimizerNew(ctx) 
     {}
 
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(const std::shared_ptr<TJoinOptimizerNode>& joinTree) override {
+        auto relsCount = joinTree->Labels().size();
+
+        if (relsCount > 128) {
+            return joinTree;
+        }
+
+        if (relsCount <= 64) {
+            return JoinSearchImpl<TNodeSet64>(joinTree);
+        }
+
+        return JoinSearchImpl<TNodeSet128>(joinTree);
+    }
+
+private:
+    using TNodeSet64 = std::bitset<64>;
+    using TNodeSet128 = std::bitset<128>;
+
+    template <typename TNodeSet>
+    std::shared_ptr<TJoinOptimizerNode> JoinSearchImpl(const std::shared_ptr<TJoinOptimizerNode>& joinTree) {
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree);
-        TDPHypSolver solver(hypergraph, this->Pctx);
+        TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx);
 
         Y_ASSERT(hypergraph.GetNodeCount() > 0 && hypergraph.GetEdges().size() > 0);
 
@@ -213,9 +230,10 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect
 ) {
-    if (optLevel == 0) {
-        return node;
-    }
+    (void)optLevel;
+    // if (optLevel == 0) {
+    //     return node;
+    // }
 
     if (!node.Maybe<TCoEquiJoin>()) {
         return node;

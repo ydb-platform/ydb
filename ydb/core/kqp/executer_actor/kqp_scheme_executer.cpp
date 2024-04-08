@@ -39,9 +39,14 @@ class TKqpSchemeExecuter : public TActorBootstrapped<TKqpSchemeExecuter> {
     struct TEvPrivate {
         enum EEv {
             EvResult = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvMakeDirResult,
         };
 
         struct TEvResult : public TEventLocal<TEvResult, EEv::EvResult> {
+            IKqpGateway::TGenericResult Result;
+        };
+
+        struct TEvMakeDirResult : public TEventLocal<TEvMakeDirResult, EEv::EvMakeDirResult> {
             IKqpGateway::TGenericResult Result;
         };
     };
@@ -76,6 +81,37 @@ public:
 
     void StartBuildOperation() {
         Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
+        Become(&TKqpSchemeExecuter::ExecuteState);
+    }
+
+    void CreateTmpDirectory() {
+        // TODO: move it to gateway
+        auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto& record = ev->Record;
+
+        record.SetDatabaseName(Database);
+        if (UserToken) {
+            record.SetUserToken(UserToken->GetSerializedToken());
+        }
+
+        auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        modifyScheme->SetWorkingDir(CanonizePath(JoinPath({Database, ".tmp", "sessions"})));
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
+        auto* makeDir = modifyScheme->MutableMkDir();
+        makeDir->SetName(TStringBuilder() << SessionId);
+        ActorIdToProto(KqpTempTablesAgentActor, makeDir->MutableOwnerActorId());
+
+        auto promise = NewPromise<IKqpGateway::TGenericResult>();
+        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, true);
+        RegisterWithSameMailbox(requestHandler);
+
+        auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
+        auto selfId = SelfId();
+        promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
+            auto ev = MakeHolder<TEvPrivate::TEvMakeDirResult>();
+            ev->Result = future.GetValue();
+            actorSystem->Send(selfId, ev.Release());
+        });
         Become(&TKqpSchemeExecuter::ExecuteState);
     }
 
@@ -354,7 +390,11 @@ public:
         if (schemeOp.GetObjectType()) {
             MakeObjectRequest();
         } else {
-            MakeSchemeOperationRequest();
+            if (Temporary) {
+                CreateTmpDirectory();
+            } else {
+                MakeSchemeOperationRequest();
+            }
         }
     }
 
@@ -363,6 +403,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvPrivate::TEvResult, HandleExecute);
+                hFunc(TEvPrivate::TEvMakeDirResult, Handle);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
@@ -393,6 +434,12 @@ public:
         }
     }
 
+    void Handle(TEvPrivate::TEvMakeDirResult::TPtr& result) {
+        // if (!result->Get()->Result.Success()) {   
+        // }
+        Y_UNUSED(result);
+        MakeSchemeOperationRequest();
+    }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
         const auto* msg = ev->Get();

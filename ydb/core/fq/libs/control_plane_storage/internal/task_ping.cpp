@@ -57,6 +57,8 @@ struct TFinalStatus {
     NYql::NDqProto::StatusIds::StatusCode StatusCode = NYql::NDqProto::StatusIds::UNSPECIFIED;
     NYql::TIssues Issues;
     NYql::TIssues TransientIssues;
+    StatsValuesList FinalStatistics;
+    TString CloudId;
 };
 
 TPingTaskParams ConstructHardPingTask(
@@ -64,7 +66,7 @@ TPingTaskParams ConstructHardPingTask(
     const TString& tablePathPrefix, const TDuration& automaticQueriesTtl, const TDuration& taskLeaseTtl,
     const THashMap<ui64, TRetryPolicyItem>& retryPolicies, ::NMonitoring::TDynamicCounterPtr rootCounters,
     uint64_t maxRequestSize, bool dumpRawStatistics, const std::shared_ptr<TFinalStatus>& finalStatus,
-    const TRequestCommonCountersPtr& commonCounters, const std::shared_ptr<StatsValuesList>& finalStatistics) {
+    const TRequestCommonCountersPtr& commonCounters) {
 
     auto scope = request.scope();
     auto query_id = request.query_id().value();
@@ -417,6 +419,7 @@ TPingTaskParams ConstructHardPingTask(
 
         finalStatus->Status = query.meta().status();
         finalStatus->StatusCode = internal.status_code();
+        finalStatus->CloudId = internal.cloud_id();
         NYql::IssuesFromMessage(query.issue(), finalStatus->Issues);
         NYql::IssuesFromMessage(query.transient_issue(), finalStatus->TransientIssues);
 
@@ -510,7 +513,7 @@ TPingTaskParams ConstructHardPingTask(
                     // YQv2 may not provide statistics with terminal status, use saved one
                     statistics = query.statistics().json();
                 }
-                *finalStatistics = ExtractStatisticsFromProtobuf(internal.statistics());
+                finalStatus->FinalStatistics = ExtractStatisticsFromProtobuf(internal.statistics());
                 auto records = GetMeteringRecords(statistics, isBillable, jobId, request.scope(), HostName());
                 meteringRecords->swap(records);
             } catch (const std::exception&) {
@@ -597,7 +600,6 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
 {
     TInstant startTime = TInstant::Now();
     Fq::Private::PingTaskRequest& request = ev->Get()->Request;
-    const TString cloudId = "";
     const TString scope = request.scope();
     TRequestCounters requestCounters = Counters.GetCounters("" /*CloudId*/, scope, RTS_PING_TASK, RTC_PING_TASK);
     requestCounters.IncInFly();
@@ -626,12 +628,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
 
     std::shared_ptr<Fq::Private::PingTaskResult> response = std::make_shared<Fq::Private::PingTaskResult>();
     std::shared_ptr<TFinalStatus> finalStatus = std::make_shared<TFinalStatus>();
-    std::shared_ptr finalStatistics = std::make_shared<StatsValuesList>();
 
     auto pingTaskParams = DoesPingTaskUpdateQueriesTable(request) ?
         ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config->AutomaticQueriesTtl,
             Config->TaskLeaseTtl, Config->RetryPolicies, Counters.Counters, Config->Proto.GetMaxRequestSize(),
-            Config->Proto.GetDumpRawStatistics(), finalStatus, requestCounters.Common, finalStatistics) :
+            Config->Proto.GetDumpRawStatistics(), finalStatus, requestCounters.Common) :
         ConstructSoftPingTask(request, response, YdbConnection->TablePathPrefix, Config->TaskLeaseTtl, requestCounters.Common);
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = ReadModifyWrite(pingTaskParams.Query, pingTaskParams.Params, pingTaskParams.Prepare, requestCounters, debugInfo);
@@ -659,7 +660,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
 
             if (success) {
                 actorSystem->Send(ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvFinalStatusReport(
-                    request.query_id().value(), request.job_id().value(), cloudId, scope, std::move(*finalStatistics),
+                    request.query_id().value(), request.job_id().value(), finalStatus->CloudId, scope, std::move(finalStatus->FinalStatistics),
                     finalStatus->Status, finalStatus->StatusCode, finalStatus->Issues, finalStatus->TransientIssues));
             }
         });

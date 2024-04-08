@@ -257,7 +257,9 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             , DiskAddr()
             , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.HugeBlobKeeper.Write")
         {
-            Span.Attribute("blob_id", Item->LogoBlobId.ToString());
+            if (Span) {
+                Span.Attribute("blob_id", Item->LogoBlobId.ToString());
+            }
         }
     };
 

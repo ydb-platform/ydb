@@ -85,7 +85,7 @@ template<typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::Neighs(TNodeSet s, 
         neighs |= nodes[nodeId].SimpleNeighborhood;
 
         for (const auto& edgeId: nodes[nodeId].ComplexEdgesId) {
-            auto& edge = Graph_.GetEdges()[edgeId];
+            auto& edge = Graph_.GetEdge(edgeId);
             if (
                 IsSubset(edge.Left, s) &&
                 !AreOverlaps(edge.Right, x) &&
@@ -99,6 +99,11 @@ template<typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::Neighs(TNodeSet s, 
 
     neighs &= ~x;
     return neighs;
+}
+
+template<>
+inline std::bitset<64> TDPHypSolver<std::bitset<64>>::NextBitset(const std::bitset<64>& prev, const std::bitset<64>& final) {
+    return std::bitset<64>((prev | ~final).to_ulong() + 1) & final;
 }
 
 template<typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::NextBitset(const TNodeSet& prev, const TNodeSet& final) {
@@ -344,9 +349,9 @@ template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeS
     Y_ENSURE(DpTable_.contains(s1), "DP Table does not contain S1");
     Y_ENSURE(DpTable_.contains(s2), "DP Table does not conaint S2");
 
-    const auto* reversedEdge = Graph_.FindEdgeBetween(s2, s1);
+    const auto* reversedEdge = &Graph_.GetEdge(csgCmpEdge->ReversedEdgeId);
 
-    if (csgCmpEdge->Reversed) {
+    if (csgCmpEdge->IsReversed) {
         std::swap(csgCmpEdge, reversedEdge);
     }
 

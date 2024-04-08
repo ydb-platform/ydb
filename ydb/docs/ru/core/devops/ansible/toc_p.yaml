@@ -5,3 +5,5 @@ items:
   href: initial-deployment.md
 - name: Подготовка виртуальных машин с Terraform
   href: preparing-vms-with-terraform.md
+- name: Увеличение ресурсов кластера  
+  href: increasing-cluster-resources.md

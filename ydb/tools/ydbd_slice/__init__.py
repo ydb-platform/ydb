@@ -466,6 +466,11 @@ def binaries_args():
         help="explicit path to compressed kikimr binary file used for transfer acceleration"
     )
     args.add_argument(
+        "--ydbd",
+        action='store_true',
+        help="build ydb/apps/ydbd/ydbd binary from arcadia, figure out root by finding .arcadia.root upstairs"
+    )
+    args.add_argument(
         "--arcadia",
         action='store_true',
         help="build all binaries from arcadia, figure out root by finding .arcadia.root upstairs"

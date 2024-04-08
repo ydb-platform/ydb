@@ -70,11 +70,10 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
     UpdatePortionStats(*PathStats[pathId], portionInfo, updateType, exPortionInfo);
 }
 
-TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo, ui64& metadataBytes) {
+TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo) {
     TColumnEngineStats::TPortionsStats deltaStats;
     deltaStats.Bytes = 0;
     for (auto& rec : portionInfo.Records) {
-        metadataBytes += rec.GetMeta().GetMetadataSize();
         deltaStats.BytesByColumn[rec.ColumnId] += rec.BlobRange.Size;
         deltaStats.RawBytesByColumn[rec.ColumnId] += rec.GetMeta().GetRawBytes();
     }
@@ -90,8 +89,7 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
                                               EStatsUpdateType updateType,
                                               const TPortionInfo* exPortionInfo) const {
     ui64 columnRecords = portionInfo.Records.size();
-    ui64 metadataBytes = 0;
-    TColumnEngineStats::TPortionsStats deltaStats = DeltaStats(portionInfo, metadataBytes);
+    TColumnEngineStats::TPortionsStats deltaStats = DeltaStats(portionInfo);
 
     Y_ABORT_UNLESS(!exPortionInfo || exPortionInfo->GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
     Y_ABORT_UNLESS(portionInfo.GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
@@ -110,23 +108,19 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
 
     if (isErase) { // PortionsToDrop
         engineStats.ColumnRecords -= columnRecords;
-        engineStats.ColumnMetadataBytes -= metadataBytes;
 
         stats -= deltaStats;
     } else if (isAdd) { // Load || AppendedPortions
         engineStats.ColumnRecords += columnRecords;
-        engineStats.ColumnMetadataBytes += metadataBytes;
 
         stats += deltaStats;
     } else if (&srcStats != &stats || exPortionInfo) { // SwitchedPortions || PortionsToEvict
         stats += deltaStats;
 
         if (exPortionInfo) {
-            ui64 rmMetadataBytes = 0;
-            srcStats -= DeltaStats(*exPortionInfo, rmMetadataBytes);
+            srcStats -= DeltaStats(*exPortionInfo);
 
             engineStats.ColumnRecords += columnRecords - exPortionInfo->Records.size();
-            engineStats.ColumnMetadataBytes += metadataBytes - rmMetadataBytes;
         } else {
             srcStats -= deltaStats;
         }

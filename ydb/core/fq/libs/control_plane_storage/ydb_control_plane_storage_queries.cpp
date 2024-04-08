@@ -1833,19 +1833,18 @@ ui64 TYdbControlPlaneStorageActor::GetExecutionLimitMills(
     FederatedQuery::QueryContent_QueryType queryType,
     const TMaybe<TQuotaMap>& quotas) {
 
-    ui64 executionLimitMills = 0;
     if (!quotas) {
-        return executionLimitMills;
+        return 0;
     }
     auto key = queryType == FederatedQuery::QueryContent::ANALYTICS
         ? QUOTA_ANALYTICS_DURATION_LIMIT
         : QUOTA_STREAMING_DURATION_LIMIT;
 
     auto execTtlIt = quotas->find(key);
-    if (execTtlIt != quotas->end()) {
-        executionLimitMills = execTtlIt->second.Limit.Value * 60 * 1000;
+    if (execTtlIt == quotas->end()) {
+        return 0;
     }
-    return executionLimitMills;
+    return execTtlIt->second.Limit.Value * 60 * 1000;
 }
 
 } // NFq

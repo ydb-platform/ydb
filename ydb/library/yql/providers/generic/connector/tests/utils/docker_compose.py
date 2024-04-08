@@ -1,10 +1,9 @@
-import os
-import subprocess
-import shutil
-import yaml
 import json
+import os
 import shutil
 import socket
+import subprocess
+import yaml
 from typing import Dict, Any, Sequence
 
 import yatest.common
@@ -27,7 +26,9 @@ class DockerComposeHelper:
         self.docker_compose_bin_path = None
         try:
             self.docker_compose_bin_path = yatest.common.build_path('library/recipes/docker_compose/bin/docker-compose')
-        except:
+        except Exception as e:
+            LOGGER.warn(f"Exception while determining docker-compose path: {e}")
+
             self.docker_compose_bin_path = shutil.which('docker-compose')
         finally:
             if self.docker_compose_bin_path is None:

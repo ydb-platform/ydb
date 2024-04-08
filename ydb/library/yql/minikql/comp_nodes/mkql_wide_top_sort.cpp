@@ -639,7 +639,7 @@ private:
     TFields Fields;
     TMultiType* TupleMultiType;
     std::vector<TSpilledData> SpilledStates;
-    EOperatingMode Mode;
+    EOperatingMode Mode = EOperatingMode::InMemory;
     std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators;
     bool IsHeapBuilt = false;
 };

@@ -70,7 +70,7 @@ public:
         bool allColumnsPrinted = true; 
 
         for (size_t i = 0; i < PrintedIndexByColumnIndex_.size(); ++i) {
-            if (Columns_[i][0].size() > PrintedIndexByColumnIndex_[i]) {
+            if (!Columns_[i].empty() && Columns_[i][0].size() > PrintedIndexByColumnIndex_[i]) {
                 allColumnsPrinted = false;
             }
         }
@@ -101,8 +101,13 @@ public:
 private:
     /* return's printed symbols cnt */
     size_t PrintColumnLine(size_t columnIndex) {
+        if (Columns_[columnIndex].empty()) {
+            return 0;
+        }
+
         size_t printedSymbols = 0;
         const auto& column = Columns_[columnIndex][0];
+
         size_t i = PrintedIndexByColumnIndex_[columnIndex];
 
         for (; i < column.size() && printedSymbols < Widths_[columnIndex];) {

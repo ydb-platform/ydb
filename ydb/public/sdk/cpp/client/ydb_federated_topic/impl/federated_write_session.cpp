@@ -55,15 +55,19 @@ bool TFederatedWriteSessionImpl::MessageQueuesAreEmptyImpl() const {
     return OriginalMessagesToGetAck.empty() && OriginalMessagesToPassDown.empty();
 }
 
-void TFederatedWriteSessionImpl::IssueTokenIfAllowedImpl() {
-    Y_ABORT_UNLESS(Lock.IsLocked());
-
+void TFederatedWriteSessionImpl::IssueTokenIfAllowed() {
     // The session should not issue tokens after it has transitioned to CLOSING or CLOSE state.
     // A user may have one spare token, so at most one additional message
     // could be written to the internal queue after the transition.
-    if (BufferFreeSpace > 0 && !ClientHasToken && SessionState < State::CLOSING) {
+    bool issue = false;
+    with_lock(Lock) {
+        if (BufferFreeSpace > 0 && !ClientHasToken && SessionState < State::CLOSING) {
+            ClientHasToken = true;
+            issue = true;
+        }
+    }
+    if (issue) {
         ClientEventsQueue->PushEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
-        ClientHasToken = true;
     }
 }
 
@@ -86,9 +90,9 @@ void TFederatedWriteSessionImpl::Start() {
         }
         SessionState = State::WORKING;
         Settings.EventHandlers_.HandlersExecutor_->Start();
-        IssueTokenIfAllowedImpl();
     }
 
+    IssueTokenIfAllowed();
 
     AsyncInit.Subscribe([selfCtx = SelfContext](const auto& f) {
         Y_UNUSED(f);
@@ -136,14 +140,13 @@ void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db)
                         self->OriginalMessagesToGetAck.pop_front();
                     }
 
-                    self->ClientEventsQueue->PushEvent(std::move(ev));
-
-                    self->IssueTokenIfAllowedImpl();
-
                     if (self->MessageQueuesAreEmptyImpl() && self->MessageQueuesHaveBeenEmptied.Initialized() && !self->MessageQueuesHaveBeenEmptied.HasValue()) {
                         self->MessageQueuesHaveBeenEmptied.SetValue();
                     }
                 }
+
+                self->ClientEventsQueue->PushEvent(std::move(ev));
+                self->IssueTokenIfAllowed();
             }
         })
         .SessionClosedHandler([selfCtx = SelfContext](const NTopic::TSessionClosedEvent & ev) {
@@ -369,9 +372,7 @@ void TFederatedWriteSessionImpl::WriteInternal(NTopic::TContinuationToken&&, TWr
 
     deferred.DoWrite();
 
-    with_lock(Lock) {
-        IssueTokenIfAllowedImpl();
-    }
+    IssueTokenIfAllowed();
 }
 
 bool TFederatedWriteSessionImpl::PrepareDeferredWriteImpl(TDeferredWrite& deferred) {
@@ -400,10 +401,13 @@ void TFederatedWriteSessionImpl::CloseImpl(NTopic::TSessionClosedEvent const& ev
         return;
     }
     SessionState = State::CLOSED;
-    ClientEventsQueue->Close(ev);
     NTopic::Cancel(UpdateStateDelayContext);
     if (!HasBeenClosed.HasValue()) {
         HasBeenClosed.SetValue();
+    }
+    {
+        auto unguard = Unguard(Lock);
+        ClientEventsQueue->Close(ev);
     }
 }
 

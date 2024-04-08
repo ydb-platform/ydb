@@ -96,8 +96,9 @@ private:
     void CloseImpl(NTopic::TSessionClosedEvent const& ev);
 
     bool MessageQueuesAreEmptyImpl() const;
-    void IssueTokenIfAllowedImpl();
     void UpdateFederationStateImpl();
+
+    void IssueTokenIfAllowed();
 
     TStringBuilder GetLogPrefixImpl() const;
 

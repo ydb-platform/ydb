@@ -1063,27 +1063,19 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         std::shared_ptr<NTopic::IWriteSession> WriteSession;
 
-        // 1. The session issues the first token: write a message inside ReadyToAcceptHandler.
-        // 2. The session issues another token: write a message inside AcksHandler.
-        // 3. The session issues another token: close the session, write a message inside SessionClosedHandler.
+        // 1. The session issues the first token: write a message inside AcksHandler.
+        // 2. The session issues another token: close the session, write a message inside SessionClosedHandler.
 
         bool gotAcksEvent = false;
-        bool gotReadyToAcceptEvent = false;
         std::optional<NTopic::TContinuationToken> token;
-        auto [acksHandlerPromise, sessionClosedHandlerPromise, createSessionPromise] = std::tuple{NThreading::NewPromise(), NThreading::NewPromise(), NThreading::NewPromise()};
+        auto [acksHandlerPromise, sessionClosedHandlerPromise] = std::tuple{NThreading::NewPromise(), NThreading::NewPromise()};
         auto [sentFromAcksHandler, sentFromSessionClosedHandler] = std::tuple{acksHandlerPromise.GetFuture(), sessionClosedHandlerPromise.GetFuture()};
         writeSettings.EventHandlers(
             NTopic::TWriteSessionSettings::TEventHandlers()
-                .ReadyToAcceptHandler([&token, &gotReadyToAcceptEvent, &WriteSession,
-                                       sessionCreated = createSessionPromise.GetFuture()](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& e) {
+                .HandlersExecutor(NTopic::CreateSyncExecutor())
+                .ReadyToAcceptHandler([&token](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& e) {
                     Cerr << "=== Inside ReadyToAcceptHandler" << Endl;
                     token = std::move(e.ContinuationToken);
-                    if (!gotReadyToAcceptEvent) {
-                        gotReadyToAcceptEvent = true;
-                        sessionCreated.Wait();
-                        WriteSession->Write(std::move(*token), "From ReadyToAcceptHandler");
-                        Cerr << "=== ReadyToAcceptHandler has written a message" << Endl;
-                    }
                 })
                 .AcksHandler([&token, &gotAcksEvent, &WriteSession, promise = std::move(acksHandlerPromise)](NTopic::TWriteSessionEvent::TAcksEvent&) mutable {
                     Cerr << "=== Inside AcksHandler" << Endl;
@@ -1104,7 +1096,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteSession = client.CreateWriteSession(writeSettings);
         Cerr << "=== Session created" << Endl;
 
-        createSessionPromise.SetValue();
+        WriteSession->Write(std::move(*token), "After CreateWriteSession");
+
         sentFromAcksHandler.Wait();
         Cerr << "=== AcksHandler has written a message, closing the session" << Endl;
 

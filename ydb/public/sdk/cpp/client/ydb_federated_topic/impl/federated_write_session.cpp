@@ -147,10 +147,7 @@ std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseByHash(
         return {nullptr, EStatus::NOT_FOUND};
     }
 
-    std::sort(available.begin(), available.end(), [](auto const& lhs, auto const& rhs) {
-        return lhs->weight() > rhs->weight()
-               || lhs->weight() == rhs->weight() && lhs->name() < rhs->name();
-    });
+    std::sort(available.begin(), available.end(), [](auto const& lhs, auto const& rhs) { return lhs->name() < rhs->name(); });
 
     ui64 hashValue = THash<TString>()(settings.Path_);
     hashValue = CombineHashes(hashValue, THash<TString>()(settings.ProducerId_));
@@ -234,9 +231,12 @@ void TFederatedWriteSessionImpl::OnFederatedStateUpdateImpl() {
             RetryState = Settings.RetryPolicy_->CreateRetryState();
         }
         if (auto delay = RetryState->GetNextRetryDelay(status)) {
+            LOG_LAZY(Log, TLOG_NOTICE, GetLogPrefix() << "Retry to update federation state in " << delay);
             ScheduleFederatedStateUpdateImpl(*delay);
         } else {
-            CloseImpl(status, NYql::TIssues{NYql::TIssue("Failed to select database: no available database")});
+            TString message = "Failed to select database: no available database";
+            LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << message);
+            CloseImpl(status, NYql::TIssues{NYql::TIssue(message)});
         }
         return;
     }

@@ -1043,6 +1043,76 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteSession->Close();
     }
 
+    Y_UNIT_TEST(WriteSessionWriteInHandlers) {
+        // Write messages from all event handlers. It shouldn't deadlock.
+
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(
+            TEST_CASE_NAME, false, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, 2);
+        setup->Start(true, true);
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << setup->GetGrpcPort());
+        cfg.SetDatabase("/Root");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        NYdb::TDriver driver(cfg);
+        NYdb::NFederatedTopic::TFederatedTopicClient client(driver);
+
+        auto writeSettings = NTopic::TWriteSessionSettings()
+            .DirectWriteToPartition(false)
+            .Path(setup->GetTestTopic())
+            .MessageGroupId("src_id");
+
+        std::shared_ptr<NTopic::IWriteSession> WriteSession;
+
+        // 1. The session issues the first token: write a message inside ReadyToAcceptHandler.
+        // 2. The session issues another token: write a message inside AcksHandler.
+        // 3. The session issues another token: close the session, write a message inside SessionClosedHandler.
+
+        bool gotAcksEvent = false;
+        bool gotReadyToAcceptEvent = false;
+        std::optional<NTopic::TContinuationToken> token;
+        auto [acksHandlerPromise, sessionClosedHandlerPromise, createSessionPromise] = std::tuple{NThreading::NewPromise(), NThreading::NewPromise(), NThreading::NewPromise()};
+        auto [sentFromAcksHandler, sentFromSessionClosedHandler] = std::tuple{acksHandlerPromise.GetFuture(), sessionClosedHandlerPromise.GetFuture()};
+        writeSettings.EventHandlers(
+            NTopic::TWriteSessionSettings::TEventHandlers()
+                .ReadyToAcceptHandler([&token, &gotReadyToAcceptEvent, &WriteSession,
+                                       sessionCreated = createSessionPromise.GetFuture()](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& e) {
+                    Cerr << "=== Inside ReadyToAcceptHandler" << Endl;
+                    token = std::move(e.ContinuationToken);
+                    if (!gotReadyToAcceptEvent) {
+                        gotReadyToAcceptEvent = true;
+                        sessionCreated.Wait();
+                        WriteSession->Write(std::move(*token), "From ReadyToAcceptHandler");
+                        Cerr << "=== ReadyToAcceptHandler has written a message" << Endl;
+                    }
+                })
+                .AcksHandler([&token, &gotAcksEvent, &WriteSession, promise = std::move(acksHandlerPromise)](NTopic::TWriteSessionEvent::TAcksEvent&) mutable {
+                    Cerr << "=== Inside AcksHandler" << Endl;
+                    if (!gotAcksEvent) {
+                        gotAcksEvent = true;
+                        WriteSession->Write(std::move(*token), "From AcksHandler");
+                        promise.SetValue();
+                    }
+                })
+                .SessionClosedHandler([&token, &WriteSession, promise = std::move(sessionClosedHandlerPromise)](NTopic::TSessionClosedEvent const&) mutable {
+                    Cerr << "=== Inside SessionClosedHandler" << Endl;
+                    WriteSession->Write(std::move(*token), "From SessionClosedHandler");
+                    promise.SetValue();
+                })
+        );
+
+        Cerr << "=== Before CreateWriteSession" << Endl;
+        WriteSession = client.CreateWriteSession(writeSettings);
+        Cerr << "=== Session created" << Endl;
+
+        createSessionPromise.SetValue();
+        sentFromAcksHandler.Wait();
+        Cerr << "=== AcksHandler has written a message, closing the session" << Endl;
+
+        WriteSession->Close();
+        sentFromSessionClosedHandler.Wait();
+        Cerr << "=== SessionClosedHandler has 'written' a message" << Endl;
+    }
+
     void AddDatabase(std::vector<std::shared_ptr<TDbInfo>>& dbInfos, int id, int weight) {
         auto db = std::make_shared<TDbInfo>();
         db->set_id(ToString(id));

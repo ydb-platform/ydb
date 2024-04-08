@@ -85,10 +85,10 @@ void TFederatedWriteSessionImpl::Start() {
             return;
         }
         SessionState = State::WORKING;
+        Settings.EventHandlers_.HandlersExecutor_->Start();
         IssueTokenIfAllowedImpl();
     }
 
-    Settings.EventHandlers_.HandlersExecutor_->Start();
 
     AsyncInit.Subscribe([selfCtx = SelfContext](const auto& f) {
         Y_UNUSED(f);

@@ -35,7 +35,8 @@ class OneTimeWaiter:
         # This should be enough for tables to initialize
         start = datetime.now()
 
-        while (datetime.now() - start).total_seconds() < 10:
+        timeout = 60
+        while (datetime.now() - start).total_seconds() < timeout:
             actual_tables = set(self.docker_compose_helper.list_ydb_tables())
 
             # check if all the required tables have been created
@@ -46,7 +47,7 @@ class OneTimeWaiter:
             LOGGER.warning(f"Not enough YDB tables: expected={self.expected_tables}, actual={actual_tables}")
             time.sleep(3)
 
-        raise ValueError("no expected tables were found in the YDB database")
+        raise ValueError(f"YDB was not able to initialize in {timeout} seconds")
 
 
 one_time_waiter = OneTimeWaiter(

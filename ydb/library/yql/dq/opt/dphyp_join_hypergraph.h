@@ -25,7 +25,7 @@ public:
             , JoinKind(joinKind)
             , IsCommutative(isCommutative)
             , JoinConditions(joinConditions)
-            , Reversed(false)
+            , IsReversed(false)
         {
             BuildCondVectors();
         }
@@ -41,7 +41,8 @@ public:
         std::set<std::pair<TJoinColumn, TJoinColumn>> JoinConditions;
         TVector<TString> LeftJoinKeys;
         TVector<TString> RightJoinKeys;
-        bool Reversed;
+        bool IsReversed;
+        int64_t ReversedEdgeId;
 
         void BuildCondVectors() {
             LeftJoinKeys.clear();
@@ -97,6 +98,10 @@ public:
     }
 
     void AddEdge(TEdge edge) {
+        size_t edgeId = Edges_.size();
+        size_t reversedEdgeId = edgeId + 1;
+        edge.ReversedEdgeId = reversedEdgeId;
+
         AddEdgeImpl(edge);
 
         std::set<std::pair<TJoinColumn, TJoinColumn>> reversedJoinConditions;
@@ -107,7 +112,8 @@ public:
         TEdge reversedEdge = std::move(edge);
         std::swap(reversedEdge.Left, reversedEdge.Right);
         reversedEdge.JoinConditions = std::move(reversedJoinConditions);
-        reversedEdge.Reversed = true;
+        reversedEdge.IsReversed = true;
+        reversedEdge.ReversedEdgeId = edgeId;
     
         AddEdgeImpl(reversedEdge);
     }
@@ -128,6 +134,11 @@ public:
 
     TVector<TEdge>& GetEdges() {
         return Edges_;
+    }
+
+    TEdge& GetEdge(size_t edgeId) {
+        Y_ASSERT(edgeId < Edges_.size());
+        return Edges_[edgeId];
     }
 
     inline TVector<TNode>& GetNodes() {

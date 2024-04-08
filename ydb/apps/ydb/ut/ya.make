@@ -15,6 +15,7 @@ SRCS(
     workload-transfer-topic-to-table.cpp
     run_ydb.cpp
     supported_codecs.cpp
+    supported_codecs_fixture.cpp
 )
 
 PEERDIR(

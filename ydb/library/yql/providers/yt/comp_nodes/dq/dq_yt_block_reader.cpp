@@ -279,10 +279,16 @@ private:
 
 class TLocalListener : public arrow::ipc::Listener {
 public:
-    TLocalListener(std::shared_ptr<TListener> consumer, std::shared_ptr<std::vector<TType*>> columnTypes, std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> arrowTypes, arrow::MemoryPool& pool, const NUdf::IPgBuilder* pgBuilder, bool isNative, NKikimr::NMiniKQL::IStatsRegistry* jobStats) 
+    TLocalListener(std::shared_ptr<TListener> consumer
+        , std::unordered_map<std::string, ui32>& columnOrderMapping
+        , std::shared_ptr<std::vector<TType*>> columnTypes
+        , std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> arrowTypes
+        , arrow::MemoryPool& pool, const NUdf::IPgBuilder* pgBuilder
+        , bool isNative, NKikimr::NMiniKQL::IStatsRegistry* jobStats) 
         : Consumer_(consumer)
         , ColumnTypes_(columnTypes)
         , JobStats_(jobStats)
+        , ColumnOrderMapping(columnOrderMapping)
     {
         ColumnConverters_.reserve(columnTypes->size());
         for (size_t i = 0; i < columnTypes->size(); ++i) {
@@ -304,9 +310,10 @@ public:
         YQL_ENSURE(batch);
         MKQL_ADD_STAT(JobStats_, BlockCount, 1);
         std::vector<arrow::Datum> result;
-        result.reserve(ColumnConverters_.size());
+        result.resize(ColumnConverters_.size());
         for (size_t i = 0; i < ColumnConverters_.size(); ++i) {
-            result.emplace_back(ColumnConverters_[i]->Convert(batch->column(i)->data()));
+            auto columnIdx = ColumnOrderMapping[batch->schema()->field_names()[i]];
+            result[columnIdx] = std::move(ColumnConverters_[columnIdx]->Convert(batch->column(i)->data()));
         }
         Consumer_->HandleResult(std::make_shared<TResultBatch>(batch->num_rows(), std::move(result)));
         return arrow::Status::OK();
@@ -326,6 +333,7 @@ private:
     std::shared_ptr<std::vector<TType*>> ColumnTypes_;
     NKikimr::NMiniKQL::IStatsRegistry* JobStats_;
     std::vector<std::unique_ptr<IYtColumnConverter>> ColumnConverters_;
+    std::unordered_map<std::string, ui32>& ColumnOrderMapping;
 };
 
 class TSource : public TNonCopyable {
@@ -352,7 +360,7 @@ public:
             InputsQueue_.emplace(i);
             auto& decoder = Settings_->Specs->Inputs[Settings_->OriginalIndexes[i]];
             bool native = decoder->NativeYtTypeFlags && !decoder->FieldsVec[i].ExplicitYson;
-            LocalListeners_.emplace_back(std::make_shared<TLocalListener>(Listener_, ptr, types, *Settings_->Pool, Settings_->PgBuilder, native, jobStats));
+            LocalListeners_.emplace_back(std::make_shared<TLocalListener>(Listener_, Settings_->ColumnNameMapping, ptr, types, *Settings_->Pool, Settings_->PgBuilder, native, jobStats));
             LocalListeners_.back()->Init(LocalListeners_.back());
         }
         BlockBuilder_.Init(ptr, *Settings_->Pool, Settings_->PgBuilder);

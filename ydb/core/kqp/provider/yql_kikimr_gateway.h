@@ -926,6 +926,8 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false, bool replaceIfExists = false) = 0;
 
+    virtual NThreading::TFuture<TGenericResult> MakeDirectory(const TString& dst, const TMaybe<NActors::TActorId>& ownerActorId) = 0;
+
     virtual NThreading::TFuture<TGenericResult> SendSchemeExecuterRequest(const TString& cluster,
         const TMaybe<TString>& requestType,
         const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder> &phyTx) = 0;

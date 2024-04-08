@@ -63,7 +63,7 @@ public:
             return;
         }
 
-        PathesToTraverse.push_back(NKikimr::SplitPath(NKikimr::JoinPath({Database, ".tmp", "sessions", TempTablesState.SessionId})));
+        PathsToTraverse.push_back(NKikimr::SplitPath(NKikimr::JoinPath({Database, ".tmp", "sessions", TempTablesState.SessionId})));
         TraverseNext();
         Become(&TKqpTempTablesManager::PathSearchState);
     }
@@ -98,17 +98,17 @@ private:
         auto schemeCacheRequest = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
 
         schemeCacheRequest->UserToken = UserToken;
-        schemeCacheRequest->ResultSet.resize(PathesToTraverse.size());
+        schemeCacheRequest->ResultSet.resize(PathsToTraverse.size());
 
-        for (size_t i = 0; i < PathesToTraverse.size(); ++i) {
-            DirsToDrop.push_back(PathesToTraverse[i]);
-            schemeCacheRequest->ResultSet[i].Path = PathesToTraverse[i];
+        for (size_t i = 0; i < PathsToTraverse.size(); ++i) {
+            DirsToDrop.push_back(PathsToTraverse[i]);
+            schemeCacheRequest->ResultSet[i].Path = PathsToTraverse[i];
             schemeCacheRequest->ResultSet[i].Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
             schemeCacheRequest->ResultSet[i].SyncVersion = false;
             schemeCacheRequest->ResultSet[i].ShowPrivatePath = true;
         }
 
-        PathesToTraverse.clear();
+        PathsToTraverse.clear();
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.Release()));
     }
@@ -123,8 +123,8 @@ private:
             Y_ABORT_UNLESS(entry.ListNodeEntry);
             for (const auto& child : entry.ListNodeEntry->Children) {
                 if (child.Kind == NSchemeCache::TSchemeCacheNavigate::KindPath) {
-                    PathesToTraverse.push_back(entry.Path);
-                    PathesToTraverse.back().push_back(child.Name);
+                    PathsToTraverse.push_back(entry.Path);
+                    PathsToTraverse.back().push_back(child.Name);
                 } else if (child.Kind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
                     TablesToDrop.push_back(entry.Path);
                     TablesToDrop.back().push_back(child.Name);
@@ -132,7 +132,7 @@ private:
             }
         }
 
-        if (!PathesToTraverse.empty()) {
+        if (!PathsToTraverse.empty()) {
             TraverseNext();
         } else {
             DropTables();
@@ -241,7 +241,7 @@ private:
     }
 
     TKqpTempTablesState TempTablesState;
-    TVector<TPath> PathesToTraverse;
+    TVector<TPath> PathsToTraverse;
 
     TVector<TPath> TablesToDrop;
     size_t DroppedTablesCount = 0;

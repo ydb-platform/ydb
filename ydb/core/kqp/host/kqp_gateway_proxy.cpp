@@ -654,6 +654,10 @@ public:
         return tablePromise.GetFuture();
     }
 
+    NThreading::TFuture<TGenericResult> MakeDirectory(const TString& dst, const TMaybe<NActors::TActorId>& ownerActorId) override {
+        return Gateway->MakeDirectory(dst, ownerActorId);
+    }
+
     TFuture<TGenericResult> PrepareAlterTable(const TString&, Ydb::Table::AlterTableRequest&& req,
         const TMaybe<TString>&, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings)
     {

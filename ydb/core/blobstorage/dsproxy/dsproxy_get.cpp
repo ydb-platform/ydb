@@ -390,11 +390,11 @@ public:
     TBlobStorageGroupGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
             const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
             const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev, ui64 cookie,
-            NWilson::TTraceId traceId, TNodeLayoutInfoPtr&& nodeLayout, TMaybe<TGroupStat::EKind> latencyQueueKind,
+            NWilson::TSpan&& span, TNodeLayoutInfoPtr&& nodeLayout, TMaybe<TGroupStat::EKind> latencyQueueKind,
             TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
+        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_GET, ev->IsVerboseNoDataEnabled || ev->CollectDebugInfo,
-                latencyQueueKind, now, storagePoolCounters, ev->RestartCounter, "DSProxy.Get",
+                latencyQueueKind, now, storagePoolCounters, ev->RestartCounter, std::move(span),
                 std::move(ev->ExecutionRelay))
         , GetImpl(info, state, ev, std::move(nodeLayout), LogCtx.RequestPrefix)
         , Orbit(std::move(ev->Orbit))
@@ -405,7 +405,6 @@ public:
         , ResponsesReceived(0)
         , ReportedBytes(0)
     {
-        Span.Attribute("event", ev->ToString());
         ReportBytes(sizeof(*this));
         MaxSaneRequests = ev->QuerySize * info->Type.TotalPartCount() * (1 + info->Type.Handoff()) * 3;
 
@@ -469,7 +468,12 @@ IActor* CreateBlobStorageGroupGetRequest(const TIntrusivePtr<TBlobStorageGroupIn
         ui64 cookie, NWilson::TTraceId traceId, TNodeLayoutInfoPtr&& nodeLayout,
         TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
         TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    return new TBlobStorageGroupGetRequest(info, state, source, mon, ev, cookie, std::move(traceId),
+    NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.Get");
+    if (span) {
+        span.Attribute("event", ev->ToString());
+    }
+
+    return new TBlobStorageGroupGetRequest(info, state, source, mon, ev, cookie, std::move(span),
             std::move(nodeLayout), latencyQueueKind, now, storagePoolCounters);
 }
 

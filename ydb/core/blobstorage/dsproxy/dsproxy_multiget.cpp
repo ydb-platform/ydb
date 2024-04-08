@@ -98,11 +98,11 @@ public:
     TBlobStorageGroupMultiGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
             const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
             const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev, ui64 cookie,
-            NWilson::TTraceId traceId, TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
+            NWilson::TSpan&& span, TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
+        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_MULTIGET, false, latencyQueueKind, now, storagePoolCounters, 0,
-                "DSProxy.MultiGet", std::move(ev->ExecutionRelay))
+                std::move(span), std::move(ev->ExecutionRelay))
         , QuerySize(ev->QuerySize)
         , Queries(ev->Queries.Release())
         , Deadline(ev->Deadline)
@@ -114,9 +114,7 @@ public:
         , MustRestoreFirst(ev->MustRestoreFirst)
         , GetHandleClass(ev->GetHandleClass)
         , ForceBlockTabletData(ev->ForceBlockTabletData)
-    {
-        Span.Attribute("event", ev->ToString());
-    }
+    {}
 
     void PrepareRequest(ui32 beginIdx, ui32 endIdx) {
         Y_ABORT_UNLESS(endIdx > beginIdx);
@@ -215,7 +213,12 @@ IActor* CreateBlobStorageGroupMultiGetRequest(const TIntrusivePtr<TBlobStorageGr
         const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev,
         ui64 cookie, NWilson::TTraceId traceId, TMaybe<TGroupStat::EKind> latencyQueueKind,
         TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    return new TBlobStorageGroupMultiGetRequest(info, state, source, mon, ev, cookie, std::move(traceId),
+    NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.MultiGet");
+    if (span) {
+        span.Attribute("event", ev->ToString());
+    }
+
+    return new TBlobStorageGroupMultiGetRequest(info, state, source, mon, ev, cookie, std::move(span),
         latencyQueueKind, now, storagePoolCounters);
 }
 

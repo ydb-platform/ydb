@@ -20,11 +20,16 @@ void DoBlockExistsOffset(size_t length, size_t offset) {
     const auto outputTupleType = pb.NewTupleType({ui64Type, boolType, boolType, boolType});
 
     TRuntimeNode::TList input;
+    TVector<bool> isNull;
     static_assert(MaxBlockSizeInBytes % 4 == 0);
 
+    const auto drng = CreateDeterministicRandomProvider(std::time(nullptr));
+
     for (size_t i = 0; i < length; i++) {
-        const auto maybeNull = (i % 2) ? pb.NewOptional(pb.NewDataLiteral<ui64>(i / 2))
-                                       : pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id);
+        const ui64 randomValue = drng->GenRand();
+        const auto maybeNull = (randomValue % 2)
+            ? pb.NewOptional(pb.NewDataLiteral<ui64>(randomValue / 2))
+            : pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id);
 
         const auto inputTuple = pb.NewTuple(inputTupleType, {
             pb.NewDataLiteral<ui64>(i),
@@ -34,6 +39,7 @@ void DoBlockExistsOffset(size_t length, size_t offset) {
         });
 
         input.push_back(inputTuple);
+        isNull.push_back((randomValue % 2) != 0);
     }
 
     const auto list = pb.NewList(inputTupleType, std::move(input));
@@ -82,7 +88,7 @@ void DoBlockExistsOffset(size_t length, size_t offset) {
         const bool neverNull = outputTuple.GetElement(3).Get<bool>();
 
         UNIT_ASSERT_VALUES_EQUAL(key, i);
-        UNIT_ASSERT_VALUES_EQUAL(maybeNull, (i % 2) ? true : false);
+        UNIT_ASSERT_VALUES_EQUAL(maybeNull, isNull[i]);
         UNIT_ASSERT_VALUES_EQUAL(alwaysNull, false);
         UNIT_ASSERT_VALUES_EQUAL(neverNull, true);
     }

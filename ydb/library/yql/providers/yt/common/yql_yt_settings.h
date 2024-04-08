@@ -137,7 +137,6 @@ struct TYtSettings {
     NCommon::TConfSetting<NYT::EOptimizeForAttr, true> OptimizeFor; // {scan, lookup}
     NCommon::TConfSetting<TInstant, true> ExpirationDeadline;
     NCommon::TConfSetting<TDuration, true> ExpirationInterval;
-    NCommon::TConfSetting<TDuration, true> ExpirationTimeout;
     NCommon::TConfSetting<double, true> ScriptCpu;
     NCommon::TConfSetting<double, true> PythonCpu;
     NCommon::TConfSetting<double, true> JavascriptCpu;

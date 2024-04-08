@@ -489,11 +489,11 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
     PartitionGraph = MakePartitionGraph(record);
 
-    TVector<TPartInfo> newPartitions;
-    TVector<ui32> deletedPartitions;
-    TVector<std::pair<ui64, TTabletInfo>> newTablets;
-    TVector<std::pair<ui32, ui32>> newGroups;
-    TVector<std::pair<ui64, TTabletInfo>> reallocatedTablets;
+    std::vector<TPartInfo> newPartitions;
+    std::vector<ui32> deletedPartitions;
+    std::vector<std::pair<ui64, TTabletInfo>> newTablets;
+    std::vector<std::pair<ui32, ui32>> newGroups;
+    std::vector<std::pair<ui64, TTabletInfo>> reallocatedTablets;
 
     for (auto& p : record.GetTablets()) {
         auto it = TabletsInfo.find(p.GetTabletId());
@@ -798,13 +798,13 @@ void TPersQueueReadBalancer::TAggregatedStats::AggrStats(ui64 avgWriteSpeedPerSe
 }
 
 void TPersQueueReadBalancer::AnswerWaitingRequests(const TActorContext& ctx) {
-    TVector<TEvPersQueue::TEvCheckACL::TPtr> ww;
+    std::vector<TEvPersQueue::TEvCheckACL::TPtr> ww;
     ww.swap(WaitingACLRequests);
     for (auto& r : ww) {
         Handle(r, ctx);
     }
 
-    TVector<TEvPersQueue::TEvDescribe::TPtr> dr;
+    std::vector<TEvPersQueue::TEvDescribe::TPtr> dr;
     dr.swap(WaitingDescribeRequests);
     for (auto& r : dr) {
         Handle(r, ctx);
@@ -1231,7 +1231,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
         return;
     }
 
-    TVector<ui32> groups;
+    std::vector<ui32> groups;
     groups.reserve(record.GroupsSize());
     for (auto& group : record.GetGroups()) {
         groups.push_back(group);

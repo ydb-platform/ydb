@@ -150,7 +150,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     struct TConsumerInfo {
         NKikimrPQ::EConsumerScalingSupport ScalingSupport;
 
-        TVector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
+        std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
         THolder<TTabletLabeledCountersBase> Aggr;
     };
 
@@ -159,9 +159,9 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     ui64 TxId;
     ui32 NumActiveParts;
 
-    TVector<TActorId> WaitingResponse;
-    TVector<TEvPersQueue::TEvCheckACL::TPtr> WaitingACLRequests;
-    TVector<TEvPersQueue::TEvDescribe::TPtr> WaitingDescribeRequests;
+    std::vector<TActorId> WaitingResponse;
+    std::vector<TEvPersQueue::TEvCheckACL::TPtr> WaitingACLRequests;
+    std::vector<TEvPersQueue::TEvDescribe::TPtr> WaitingDescribeRequests;
 
     enum EPartitionState {
         EPS_FREE = 0,
@@ -179,7 +179,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     };
 
     std::unordered_map<ui32, TPartitionInfo> PartitionsInfo;
-    std::unordered_map<ui32, TVector<ui32>> GroupsInfo;
+    std::unordered_map<ui32, std::vector<ui32>> GroupsInfo;
 
     struct TTabletInfo {
         ui64 Owner;
@@ -366,7 +366,7 @@ private:
 
     bool WaitingForACL;
 
-    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
+    std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
 
     TString DatabasePath;
     TString DatabaseId;

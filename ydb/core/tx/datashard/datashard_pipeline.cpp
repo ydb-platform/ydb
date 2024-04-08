@@ -401,13 +401,25 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
         if (Self->IsMvccEnabled()) {
             TStepOrder stepOrder = op->GetStepOrder();
             TRowVersion version(stepOrder.Step, stepOrder.TxId);
-            TRowVersion completeEdge = Max(
-                    Self->SnapshotManager.GetCompleteEdge(),
-                    Self->SnapshotManager.GetUnprotectedReadEdge());
-            if (version <= completeEdge) {
-                op->SetFlag(TTxFlags::BlockingImmediateOps);
-            } else if (version <= Self->SnapshotManager.GetIncompleteEdge()) {
-                op->SetFlag(TTxFlags::BlockingImmediateWrites);
+            if (version <= Self->SnapshotManager.GetCompleteEdge() ||
+                version < Self->SnapshotManager.GetImmediateWriteEdge() ||
+                version < Self->SnapshotManager.GetUnprotectedReadEdge())
+            {
+                // This transaction would have been marked as logically complete
+                if (!op->HasFlag(TTxFlags::BlockingImmediateOps)) {
+                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                        "Adding BlockingImmediateOps for op " << *op << " at " << Self->TabletID());
+                    op->SetFlag(TTxFlags::BlockingImmediateOps);
+                }
+            } else if (version <= Self->SnapshotManager.GetIncompleteEdge() ||
+                       version <= Self->SnapshotManager.GetUnprotectedReadEdge())
+            {
+                // This transaction would have been marked as logically incomplete
+                if (!op->HasFlag(TTxFlags::BlockingImmediateWrites)) {
+                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                        "Adding BlockingImmediateWrites for op " << *op << " at " << Self->TabletID());
+                    op->SetFlag(TTxFlags::BlockingImmediateWrites);
+                }
             }
         }
         auto pr = ActivePlannedOps.emplace(op->GetStepOrder(), op);
@@ -415,10 +427,14 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
         Y_ABORT_UNLESS(pr.first == std::prev(ActivePlannedOps.end()), "AddActiveOp must always add transactions in order");
         bool isComplete = op->HasFlag(TTxFlags::BlockingImmediateOps);
         if (ActivePlannedOpsLogicallyCompleteEnd == ActivePlannedOps.end() && !isComplete) {
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Operation " << *op << " is the new logically complete end at " << Self->TabletID());
             ActivePlannedOpsLogicallyCompleteEnd = pr.first;
         }
         bool isIncomplete = isComplete || op->HasFlag(TTxFlags::BlockingImmediateWrites);
         if (ActivePlannedOpsLogicallyIncompleteEnd == ActivePlannedOps.end() && !isIncomplete) {
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Operation " << *op << " is the new logically incomplete end at " << Self->TabletID());
             ActivePlannedOpsLogicallyIncompleteEnd = pr.first;
         }
     }

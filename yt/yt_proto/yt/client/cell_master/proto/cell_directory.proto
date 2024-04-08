@@ -17,46 +17,46 @@ message TCellDirectoryItem
 {
     repeated uint32 roles = 2; // EMasterCellRole(s)
 
-    required int64 rpc_timeout = 4;
+    optional int64 rpc_timeout = 4;
 
     // TPeerConnectionConfig
     required NYT.NProto.TGuid cell_id = 1;
-    required bool ignore_peer_state = 5;
+    optional bool ignore_peer_state = 5;
 
     // TBalancingChannelConfig
     repeated string addresses = 3;
-    required bool disable_balancing_on_single_address = 6;
-    required TServiceDiscoveryEndpointsConfig endpoints = 7;
+    optional bool disable_balancing_on_single_address = 6;
+    optional TServiceDiscoveryEndpointsConfig endpoints = 7;
     optional int64 hedging_delay = 8;
-    required bool cancel_primary_request_on_hedging = 9;
+    optional bool cancel_primary_request_on_hedging = 9;
 
     // TDynamicChannelPoolConfig
-    required int64 max_concurrent_discover_requests = 10;
-    required int64 random_peer_eviction_period = 11;
-    required bool enable_peer_polling = 12;
-    required int64 peer_polling_period = 13;
-    required int64 peer_polling_period_splay = 14;
-    required int64 peer_polling_request_timeout = 15;
-    required int64 discovery_session_timeout = 16;
+    optional int64 max_concurrent_discover_requests = 10;
+    optional int64 random_peer_eviction_period = 11;
+    optional bool enable_peer_polling = 12;
+    optional int64 peer_polling_period = 13;
+    optional int64 peer_polling_period_splay = 14;
+    optional int64 peer_polling_request_timeout = 15;
+    optional int64 discovery_session_timeout = 16;
 
     // TViablePeerRegistryConfig
-    required int64 max_peer_count = 17;
-    required int64 hashes_per_peer = 18;
-    required uint32 peer_priority_strategy = 19; // EPeerPriorityStrategy
-    required int64 min_peer_count_for_priority_awareness = 20;
-    required bool enable_power_of_two_choices_strategy = 21;
+    optional int64 max_peer_count = 17;
+    optional int64 hashes_per_peer = 18;
+    optional uint32 peer_priority_strategy = 19; // EPeerPriorityStrategy
+    optional int64 min_peer_count_for_priority_awareness = 20;
+    optional bool enable_power_of_two_choices_strategy = 21;
 
     // TBalancingChannelConfigBase
-    required int64 discover_timeout = 22;
-    required int64 acknowledgement_timeout = 23;
-    required int64 rediscover_period = 24;
-    required int64 rediscover_splay = 25;
-    required int64 hard_backoff_time = 26;
-    required int64 soft_backoff_time = 27;
+    optional int64 discover_timeout = 22;
+    optional int64 acknowledgement_timeout = 23;
+    optional int64 rediscover_period = 24;
+    optional int64 rediscover_splay = 25;
+    optional int64 hard_backoff_time = 26;
+    optional int64 soft_backoff_time = 27;
         
     // TRetryingChannelConfig
-    required int64 retry_backoff_time = 28;
-    required int64 retry_attempts = 29;
+    optional int64 retry_backoff_time = 28;
+    optional int64 retry_attempts = 29;
     optional int64 retry_timeout = 30;
 }
 

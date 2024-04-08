@@ -10,9 +10,10 @@ import "yt_proto/yt/core/misc/proto/guid.proto";
 import "yt_proto/yt/core/misc/proto/error.proto";
 import "yt_proto/yt/core/ytree/proto/attributes.proto";
 import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
-import "yt_proto/yt/client/hive/proto/timestamp_map.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
 import "yt_proto/yt/client/chaos_client/proto/replication_card.proto";
+import "yt_proto/yt/client/hive/proto/timestamp_map.proto";
+import "yt_proto/yt/client/tablet_client/proto/lock_mask.proto";
 
 ////////////////////////////////////////////////////////////////////////////////
 // Scalars
@@ -365,6 +366,11 @@ message TRowsetStatistics
 
 message TReqStartTransaction
 {
+    message TReplicateToMasterCellTags
+    {
+        repeated int32 cell_tags = 1;
+    }
+
     required ETransactionType type = 1;
 
     optional int64 timeout = 2;
@@ -391,6 +397,8 @@ message TReqStartTransaction
     repeated NYT.NProto.TGuid prerequisite_transaction_ids = 13;
 
     optional uint64 start_timestamp = 14;
+
+    optional TReplicateToMasterCellTags replicate_to_master_cell_tags = 15;
 
     optional TMutatingOptions mutating_options = 103;
 }
@@ -905,13 +913,16 @@ message TReqModifyRows
     required string path = 2;
     repeated ERowModificationType row_modification_types = 3;
     // COMPAT(lukyan): Remove after RPC protocol version update
-    repeated uint32 row_read_locks = 7;
-    repeated uint64 row_locks = 8;
+    repeated uint32 row_legacy_read_locks = 7;
+    // COMPAT(ponasenko-rs): Remove after RPC protocol version update
+    repeated uint64 row_legacy_locks = 8;
 
     optional bool require_sync_replica = 4;
     optional NYT.NProto.TGuid upstream_replica_id = 5;
 
     optional bool allow_missing_key_columns = 10;
+
+    repeated NYT.NTabletClient.NProto.TLockMask row_locks = 11;
 
     required TRowsetDescriptor rowset_descriptor = 200;
 }

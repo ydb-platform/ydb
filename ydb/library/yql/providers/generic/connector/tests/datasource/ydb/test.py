@@ -21,7 +21,7 @@ class OneTimeWaiter:
             return
 
         # This should be enough for tables to initialize
-        time.sleep(3)
+        time.sleep(10)
         self.__launched = True
 
 

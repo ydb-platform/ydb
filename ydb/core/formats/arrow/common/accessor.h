@@ -48,10 +48,13 @@ public:
     private:
         YDB_READONLY_DEF(std::shared_ptr<arrow::Array>, Array);
         YDB_READONLY(ui64, Position, 0);
+        YDB_READONLY(ui64, ChunkIdx, 0);
     public:
-        TAddress(const std::shared_ptr<arrow::Array>& arr, const ui64 position)
+        TAddress(const std::shared_ptr<arrow::Array>& arr, const ui64 position, const ui64 chunkIdx)
             : Array(arr)
-            , Position(position) {
+            , Position(position)
+            , ChunkIdx(chunkIdx)
+        {
 
         }
 
@@ -126,16 +129,7 @@ public:
             return ChunkedArray->GetRecordsCount();
         }
 
-        TAddress GetReadChunk(const ui64 position) const {
-            AFL_VERIFY(position < ChunkedArray->GetRecordsCount());
-            if (CurrentChunkAddress && position < CurrentChunkAddress->GetStartPosition() + CurrentChunkAddress->GetArray()->length() && CurrentChunkAddress->GetStartPosition() <= position) {
-                return IChunkedArray::TAddress(CurrentChunkAddress->GetArray(), position - CurrentChunkAddress->GetStartPosition());
-            } else {
-                CurrentChunkAddress = ChunkedArray->DoGetChunk(CurrentChunkAddress, position);
-                return IChunkedArray::TAddress(CurrentChunkAddress->GetArray(), position - CurrentChunkAddress->GetStartPosition());
-            }
-        }
-
+        TAddress GetReadChunk(const ui64 position) const;
         static std::partial_ordering CompareColumns(const std::vector<TReader>& l, const ui64 lPosition, const std::vector<TReader>& r, const ui64 rPosition);
         void AppendPositionTo(arrow::ArrayBuilder& builder, const ui64 position, ui64* recordSize) const;
         std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;

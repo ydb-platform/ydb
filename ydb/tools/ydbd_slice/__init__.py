@@ -239,6 +239,7 @@ Example:
 '''
 
 
+KIKIMR_EXECUTABLE = 'kikimr/driver/kikimr'
 YDBD_EXECUTABLE = 'ydb/apps/ydbd/ydbd'
 
 
@@ -382,9 +383,12 @@ def arcadia_root(begin_path='.'):
 def deduce_kikimr_bin_from_args(args):
     if args.kikimr is not None:
         path = os.path.abspath(args.kikimr)
-    elif args.arcadia:
+    elif args.ydbd:
         root = arcadia_root()
         path = ya_build(root, YDBD_EXECUTABLE, args.build_args, args.dry_run)
+    elif args.arcadia:
+        root = arcadia_root()
+        path = ya_build(root, KIKIMR_EXECUTABLE, args.build_args, args.dry_run)
     else:
         sys.exit("unable to deduce kikimr bin")
 
@@ -698,7 +702,10 @@ def add_format_mode(modes, walle_provider):
 # docker and kube scenarios
 def build_and_push_docker_image(build_args, docker_package, build_ydbd, image, force_rebuild):
     if docker_package is None:
-        docker_package = docker.DOCKER_IMAGE_YDBD_PACKAGE_SPEC
+        if build_ydbd:
+            docker_package = docker.DOCKER_IMAGE_YDBD_PACKAGE_SPEC
+        else:
+            docker_package = docker.DOCKER_IMAGE_KIKIMR_PACKAGE_SPEC
 
     logger.debug(f'using docker package spec: {docker_package}')
 
@@ -727,6 +734,11 @@ def add_arguments_docker_build_with_remainder(mode, add_force_rebuild=False):
             action='store_true',
         )
     group.add_argument(
+        "--ydbd",
+        action='store_true',
+        help="build docker image with ydb/apps/ydbd/ydbd binary from arcadia, figure out root by finding .arcadia.root upstairs"
+    )
+    group.add_argument(
         '-d', '--docker-package',
         help='Optional: path to docker package description file relative from ARCADIA_ROOT.',
     )
@@ -752,7 +764,7 @@ def add_docker_build_mode(modes):
         logger.debug("starting docker-build cmd with args '%s'", args)
         try:
             image = docker.get_image_from_args(args)
-            build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=True)
+            build_and_push_docker_image(args.build_args, args.docker_package, args.ydbd, image, force_rebuild=True)
 
             logger.info('docker-build finished')
         except RuntimeError as e:
@@ -828,7 +840,7 @@ def add_kube_install_mode(modes):
         try:
             image = docker.get_image_from_args(args)
             if not args.use_prebuilt_image:
-                build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=args.force_rebuild)
+                build_and_push_docker_image(args.build_args, args.docker_package, args.ydbd, image, force_rebuild=args.force_rebuild)
 
             manifests = kube_handlers.get_all_manifests(args.path)
             kube_handlers.manifests_ydb_set_image(args.path, manifests, image)
@@ -875,7 +887,7 @@ def add_kube_update_mode(modes):
         try:
             image = docker.get_image_from_args(args)
             if not args.use_prebuilt_image:
-                build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=args.force_rebuild)
+                build_and_push_docker_image(args.build_args, args.docker_package, args.ydbd, image, force_rebuild=args.force_rebuild)
 
             manifests = kube_handlers.get_all_manifests(args.path)
             manifests = kube_handlers.manifests_ydb_filter_components(args.path, manifests, args.components)

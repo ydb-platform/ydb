@@ -1,4 +1,5 @@
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/federated_topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federated_write_session.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils/managed_executor.h>
 
@@ -833,6 +834,266 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         Cerr << "Session was created" << Endl;
 
         WriteSession->Close(TDuration::MilliSeconds(10));
+    }
+
+    Y_UNIT_TEST(PreferredDatabaseNoFallback) {
+        // The test checks that the session keeps trying to connect to the preferred database
+        // and does not fall back to other databases.
+
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(
+            TEST_CASE_NAME, false, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, 2);
+
+        setup->Start(true, true);
+
+        TFederationDiscoveryServiceMock fdsMock;
+        fdsMock.Port = setup->GetGrpcPort();
+        ui16 newServicePort = setup->GetPortManager()->GetPort(4285);
+        auto grpcServer = setup->StartGrpcService(newServicePort, &fdsMock);
+
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
+        cfg.SetDatabase("/Root");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        NYdb::TDriver driver(cfg);
+        NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver);
+
+        auto retryPolicy = std::make_shared<NPersQueue::NTests::TYdbPqTestRetryPolicy>();
+
+        auto writeSettings = TFederatedWriteSessionSettings()
+            .AllowFallback(false)
+            .PreferredDatabase("dc2");
+
+        writeSettings
+            .RetryPolicy(retryPolicy)
+            .DirectWriteToPartition(false)
+            .Path(setup->GetTestTopic())
+            .MessageGroupId("src_id");
+
+        retryPolicy->Initialize();
+        retryPolicy->ExpectBreakDown();
+
+        auto writer = topicClient.CreateWriteSession(writeSettings);
+
+        Ydb::FederationDiscovery::ListFederationDatabasesResponse response;
+        auto op = response.mutable_operation();
+        op->set_status(Ydb::StatusIds::SUCCESS);
+        response.mutable_operation()->set_ready(true);
+        response.mutable_operation()->set_id("12345");
+        Ydb::FederationDiscovery::ListFederationDatabasesResult mockResult;
+        mockResult.set_control_plane_endpoint("cp.logbroker-federation:2135");
+        mockResult.set_self_location("fancy_datacenter");
+        auto c1 = mockResult.add_federation_databases();
+        c1->set_name("dc1");
+        c1->set_path("/Root");
+        c1->set_id("account-dc1");
+        c1->set_endpoint("localhost:" + ToString(fdsMock.Port));
+        c1->set_location("dc1");
+        c1->set_status(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_AVAILABLE);
+        c1->set_weight(1000);
+        auto c2 = mockResult.add_federation_databases();
+        c2->set_name("dc2");
+        c2->set_path("/Root");
+        c2->set_id("account-dc2");
+        c2->set_endpoint("localhost:" + ToString(fdsMock.Port));
+        c2->set_location("dc2");
+        c2->set_status(::Ydb::FederationDiscovery::DatabaseInfo::Status::DatabaseInfo_Status_UNAVAILABLE);
+        c2->set_weight(500);
+        op->mutable_result()->PackFrom(mockResult);
+        auto fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue({std::move(response), grpc::Status::OK});
+
+        Cerr << "=== Session was created, waiting for retries" << Endl;
+        retryPolicy->WaitForRetriesSync(3);
+
+        Cerr << "=== In the next federation discovery response dc2 will be available" << Endl;
+        // fdsMock.PreparedResponse.Clear();
+        // std::optional<TFederationDiscoveryServiceMock::TManualRequest> fdsRequest;
+        fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResult());
+
+        Cerr << "=== Waiting for repair" << Endl;
+        retryPolicy->WaitForRepairSync();
+
+        Cerr << "=== Closing the session" << Endl;
+        writer->Close(TDuration::MilliSeconds(10));
+    }
+
+    void AddDatabase(std::vector<std::shared_ptr<TDbInfo>>& dbInfos, int id, int weight) {
+        auto db = std::make_shared<TDbInfo>();
+        db->set_id(ToString(id));
+        db->set_name("db" + ToString(id));
+        db->set_location("dc" + ToString(id));
+        db->set_weight(weight);
+        db->set_status(Ydb::FederationDiscovery::DatabaseInfo_Status_AVAILABLE);
+        dbInfos.push_back(db);
+    }
+
+    void EnableDatabase(std::vector<std::shared_ptr<TDbInfo>>& dbInfos, int id) {
+        dbInfos[id - 1]->set_status(Ydb::FederationDiscovery::DatabaseInfo_Status_AVAILABLE);
+    }
+
+    void DisableDatabase(std::vector<std::shared_ptr<TDbInfo>>& dbInfos, int id) {
+        dbInfos[id - 1]->set_status(Ydb::FederationDiscovery::DatabaseInfo_Status_UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST(SelectDatabaseByHash) {
+        std::vector<std::shared_ptr<TDbInfo>> dbInfos;
+        using Settings = TFederatedWriteSessionSettings;
+
+        {
+            auto [db, status] = SelectDatabaseByHash(Settings(), dbInfos);
+            UNIT_ASSERT(!db);
+            UNIT_ASSERT_EQUAL(status, EStatus::NOT_FOUND);
+        }
+
+        AddDatabase(dbInfos, 1, 0);
+
+        {
+            auto [db, status] = SelectDatabaseByHash(Settings(), dbInfos);
+            UNIT_ASSERT(!db);
+            UNIT_ASSERT_EQUAL(status, EStatus::NOT_FOUND);
+        }
+
+        AddDatabase(dbInfos, 2, 100);
+
+        {
+            auto [db, status] = SelectDatabaseByHash(Settings(), dbInfos);
+            UNIT_ASSERT(db);
+            UNIT_ASSERT_EQUAL(db->id(), "2");
+            UNIT_ASSERT_EQUAL(status, EStatus::SUCCESS);
+        }
+    }
+
+    Y_UNIT_TEST(SelectDatabase) {
+        std::vector<std::shared_ptr<TDbInfo>> dbInfos;
+        for (int i = 1; i < 11; ++i) {
+            AddDatabase(dbInfos, i, 1000);
+        }
+
+        using Settings = TFederatedWriteSessionSettings;
+
+        {
+            /*
+            | PreferredDb | Preferred state | Local state | AllowFallback | Return      |
+            |-------------+-----------------+-------------+---------------+-------------|
+            | set         | not found       | -           | any           | NOT_FOUND   |
+            */
+            for (bool allow : {false, true}) {
+                auto settings = Settings().PreferredDatabase("db0").AllowFallback(allow);
+                auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+                UNIT_ASSERT(!db);
+                UNIT_ASSERT_EQUAL(status, EStatus::NOT_FOUND);
+            }
+        }
+
+        {
+            /*
+            | PreferredDb | Preferred state | Local state | AllowFallback | Return      |
+            |-------------+-----------------+-------------+---------------+-------------|
+            | set         | available       | -           | any           | preferred   |
+            */
+            for (bool allow : {false, true}) {
+                auto settings = Settings().PreferredDatabase("db8").AllowFallback(allow);
+                auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+                UNIT_ASSERT(db);
+                UNIT_ASSERT_EQUAL(db->id(), "8");
+            }
+        }
+
+        {
+            /*
+            | PreferredDb | Preferred state | Local state | AllowFallback | Return      |
+            |-------------+-----------------+-------------+---------------+-------------|
+            | set         | unavailable     | -           | false         | UNAVAILABLE |
+            */
+            DisableDatabase(dbInfos, 8);
+            auto settings = Settings().PreferredDatabase("db8").AllowFallback(false);
+            auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+            UNIT_ASSERT(!db);
+            UNIT_ASSERT_EQUAL(status, EStatus::UNAVAILABLE);
+            EnableDatabase(dbInfos, 8);
+        }
+
+        {
+            /*
+            | PreferredDb | Preferred state | Local state | AllowFallback | Return      |
+            |-------------+-----------------+-------------+---------------+-------------|
+            | set         | unavailable     | -           | true          | by hash     |
+            */
+            DisableDatabase(dbInfos, 8);
+            auto settings = Settings().PreferredDatabase("db8").AllowFallback(true);
+            auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+            UNIT_ASSERT(db);
+            UNIT_ASSERT_UNEQUAL(db->id(), "8");
+            UNIT_ASSERT_EQUAL(status, EStatus::SUCCESS);
+            EnableDatabase(dbInfos, 8);
+        }
+
+        {
+            /*
+            | PreferredDb | Preferred state | Local state | AllowFallback | Return      |
+            |-------------+-----------------+-------------+---------------+-------------|
+            | unset       | -               | not found   | false         | NOT_FOUND   |
+            */
+            auto settings = Settings().AllowFallback(false);
+            auto [db, status] = SelectDatabase(settings, dbInfos, "dc0");
+            UNIT_ASSERT(!db);
+            UNIT_ASSERT_EQUAL(status, EStatus::NOT_FOUND);
+        }
+        {
+            /*
+            | PreferredDb | Preferred state | Local state | AllowFallback | Return      |
+            |-------------+-----------------+-------------+---------------+-------------|
+            | unset       | -               | not found   | true          | by hash     |
+            */
+            auto settings = Settings().AllowFallback(true);
+            auto [db, status] = SelectDatabase(settings, dbInfos, "dc0");
+            UNIT_ASSERT(db);
+            UNIT_ASSERT_EQUAL(status, EStatus::SUCCESS);
+        }
+
+        {
+            /*
+            | PreferredDb | Preferred state | Local state | AllowFallback | Return      |
+            |-------------+-----------------+-------------+---------------+-------------|
+            | unset       | -               | available   | any           | local       |
+            */
+            for (bool allow : {false, true}) {
+                auto settings = Settings().AllowFallback(allow);
+                auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+                UNIT_ASSERT(db);
+                UNIT_ASSERT_EQUAL(db->id(), "1");
+            }
+        }
+
+        {
+            /*
+            | PreferredDb | Preferred state | Local state | AllowFallback | Return      |
+            |-------------+-----------------+-------------+---------------+-------------|
+            | unset       | -               | unavailable | false         | UNAVAILABLE |
+            */
+            DisableDatabase(dbInfos, 1);
+            auto settings = Settings().AllowFallback(false);
+            auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+            UNIT_ASSERT(!db);
+            UNIT_ASSERT_EQUAL(status, EStatus::UNAVAILABLE);
+            EnableDatabase(dbInfos, 1);
+        }
+
+        {
+            /*
+            | PreferredDb | Preferred state | Local state | AllowFallback | Return      |
+            |-------------+-----------------+-------------+---------------+-------------|
+            | unset       | -               | unavailable | true          | by hash     |
+            */
+            DisableDatabase(dbInfos, 1);
+            auto settings = Settings().AllowFallback(true);
+            auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+            UNIT_ASSERT(db);
+            UNIT_ASSERT_UNEQUAL(db->id(), "1");
+            UNIT_ASSERT_EQUAL(status, EStatus::SUCCESS);
+            EnableDatabase(dbInfos, 1);
+        }
     }
 
 }

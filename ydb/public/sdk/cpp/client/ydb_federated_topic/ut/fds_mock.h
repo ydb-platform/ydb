@@ -46,6 +46,16 @@ public:
         return result;
     }
 
+    TManualRequest WaitNextPendingRequest() {
+        do {
+            auto result = GetNextPendingRequest();
+            if (result.has_value()) {
+                return *result;
+            }
+            Sleep(TDuration::MilliSeconds(50));
+        } while (true);
+    }
+
     virtual grpc::Status ListFederationDatabases(grpc::ServerContext*,
                               const TRequest* request,
                               TResponse* response) override {

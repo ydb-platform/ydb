@@ -129,48 +129,91 @@ void TFederatedWriteSessionImpl::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db)
     CurrentDatabase = db;
 }
 
-std::shared_ptr<TDbInfo> TFederatedWriteSessionImpl::SelectDatabaseImpl() {
-    std::vector<std::shared_ptr<TDbInfo>> availableDatabases;
+std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseByHash(
+    NTopic::TFederatedWriteSessionSettings const& settings,
+    std::vector<std::shared_ptr<TDbInfo>> const& dbInfos
+) {
     ui64 totalWeight = 0;
+    std::vector<std::shared_ptr<TDbInfo>> available;
 
-    for (const auto& db : FederationState->DbInfos) {
-        if (db->status() != TDbInfo::Status::DatabaseInfo_Status_AVAILABLE) {
-            continue;
-        }
-
-        if (Settings.PreferredDatabase_ && (AsciiEqualsIgnoreCase(db->name(), *Settings.PreferredDatabase_) ||
-                                            AsciiEqualsIgnoreCase(db->id(), *Settings.PreferredDatabase_))) {
-            return db;
-        } else if (AsciiEqualsIgnoreCase(FederationState->SelfLocation, db->location())) {
-            return db;
-        } else {
-            availableDatabases.push_back(db);
+    for (const auto& db : dbInfos) {
+        if (db->status() == TDbInfo::Status::DatabaseInfo_Status_AVAILABLE) {
+            available.push_back(db);
             totalWeight += db->weight();
         }
     }
 
-    if (availableDatabases.empty() || totalWeight == 0) {
-        // close session, return error
-        return nullptr;
+    if (available.empty() || totalWeight == 0) {
+        return {nullptr, EStatus::NOT_FOUND};
     }
 
-    std::sort(availableDatabases.begin(), availableDatabases.end(), [](const std::shared_ptr<TDbInfo>& lhs, const std::shared_ptr<TDbInfo>& rhs){
-        return lhs->weight() > rhs->weight()
-               || lhs->weight() == rhs->weight() && lhs->name() < rhs->name();
-    });
+    std::sort(available.begin(), available.end(), [](auto const& lhs, auto const& rhs) { return lhs->name() < rhs->name(); });
 
-    ui64 hashValue = THash<TString>()(Settings.Path_);
-    hashValue = CombineHashes(hashValue, THash<TString>()(Settings.ProducerId_));
+    ui64 hashValue = THash<TString>()(settings.Path_);
+    hashValue = CombineHashes(hashValue, THash<TString>()(settings.ProducerId_));
     hashValue %= totalWeight;
 
     ui64 borderWeight = 0;
-    for (const auto& db : availableDatabases) {
+    for (auto const& db : available) {
         borderWeight += db->weight();
         if (hashValue < borderWeight) {
-            return db;
+            return {db, EStatus::SUCCESS};
         }
     }
     Y_UNREACHABLE();
+}
+
+std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabase(
+    NTopic::TFederatedWriteSessionSettings const& settings,
+    std::vector<std::shared_ptr<TDbInfo>> const& dbInfos, TString const& selfLocation
+) {
+    /* Logic of the function should follow this table:
+
+    | PreferredDb | Preferred state | Local state | AllowFallback | Return      |
+    |-------------+-----------------+-------------+---------------+-------------|
+    | set         | not found       | -           | any           | NOT_FOUND   |
+    | set         | available       | -           | any           | preferred   |
+    | set         | unavailable     | -           | false         | UNAVAILABLE |
+    | set         | unavailable     | -           | true          | by hash     |
+    | unset       | -               | not found   | false         | NOT_FOUND   |
+    | unset       | -               | not found   | true          | by hash     |
+    | unset       | -               | available   | any           | local       |
+    | unset       | -               | unavailable | false         | UNAVAILABLE |
+    | unset       | -               | unavailable | true          | by hash     |
+    */
+
+    decltype(begin(dbInfos)) it;
+    if (settings.PreferredDatabase_) {
+        it = std::find_if(begin(dbInfos), end(dbInfos), [&preferred = settings.PreferredDatabase_](auto const& db) {
+            return AsciiEqualsIgnoreCase(*preferred, db->name()) || AsciiEqualsIgnoreCase(*preferred, db->id());
+        });
+        if (it == end(dbInfos)) {
+            return {nullptr, EStatus::NOT_FOUND};
+        }
+    } else {
+        it = std::find_if(begin(dbInfos), end(dbInfos), [&selfLocation](auto const& db) {
+            return AsciiEqualsIgnoreCase(selfLocation, db->location());
+        });
+        if (it == end(dbInfos)) {
+            if (!settings.AllowFallback_) {
+                return {nullptr, EStatus::NOT_FOUND};
+            }
+            return SelectDatabaseByHash(settings, dbInfos);
+        }
+    }
+
+    auto db = *it;
+    if (db->status() == TDbInfo::Status::DatabaseInfo_Status_AVAILABLE) {
+        return {db, EStatus::SUCCESS};
+    }
+    if (!settings.AllowFallback_) {
+        return {nullptr, EStatus::UNAVAILABLE};
+    }
+    return SelectDatabaseByHash(settings, dbInfos);
+}
+
+std::pair<std::shared_ptr<TDbInfo>, EStatus> TFederatedWriteSessionImpl::SelectDatabaseImpl() {
+    return SelectDatabase(Settings, FederationState->DbInfos, FederationState->SelfLocation);
 }
 
 void TFederatedWriteSessionImpl::OnFederatedStateUpdateImpl() {
@@ -181,13 +224,23 @@ void TFederatedWriteSessionImpl::OnFederatedStateUpdateImpl() {
 
     Y_ABORT_UNLESS(!FederationState->DbInfos.empty());
 
-    auto preferrableDb = SelectDatabaseImpl();
+    auto [preferrableDb, status] = SelectDatabaseImpl();
 
     if (!preferrableDb) {
-        CloseImpl(EStatus::UNAVAILABLE,
-                  NYql::TIssues{NYql::TIssue("Fail to select database: no available database with positive weight")});
+        if (!RetryState) {
+            RetryState = Settings.RetryPolicy_->CreateRetryState();
+        }
+        if (auto delay = RetryState->GetNextRetryDelay(status)) {
+            LOG_LAZY(Log, TLOG_NOTICE, GetLogPrefix() << "Retry to update federation state in " << delay);
+            ScheduleFederatedStateUpdateImpl(*delay);
+        } else {
+            TString message = "Failed to select database: no available database";
+            LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << message);
+            CloseImpl(status, NYql::TIssues{NYql::TIssue(message)});
+        }
         return;
     }
+    RetryState.reset();
 
     if (!DatabasesAreSame(preferrableDb, CurrentDatabase)) {
         LOG_LAZY(Log, TLOG_INFO, GetLogPrefix()

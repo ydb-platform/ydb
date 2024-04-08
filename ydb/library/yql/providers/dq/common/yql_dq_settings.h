@@ -58,7 +58,7 @@ struct TDqSettings {
         static constexpr ESpillingEngine SpillingEngine = ESpillingEngine::Disable;
         static constexpr ui32 CostBasedOptimizationLevel = 0;
         static constexpr ui32 MaxDPccpDPTableSize = 16400U;
-
+        static constexpr ui64 MaxAttachmentsSize = 2_GB;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -129,6 +129,8 @@ struct TDqSettings {
     NCommon::TConfSetting<ESpillingEngine, false> SpillingEngine;
     NCommon::TConfSetting<bool, false> DisableLLVMForBlockStages;
     NCommon::TConfSetting<bool, false> SplitStageOnDqReplicate;
+
+    NCommon::TConfSetting<ui64, false> _MaxAttachmentsSize;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>

@@ -294,21 +294,33 @@ TBytesStatistics WriteColumnValuesFromArrowSpecImpl(TAccessor editAccessor,
     NArrow::NAccessor::IChunkedArray::TReader reader(trivialChunkedArray);
 
     std::optional<ui32> chunkIdx;
+    std::optional<ui32> currentIdxFrom;
+    std::optional<NArrow::NAccessor::IChunkedArray::TAddress> address;
+    const typename TElementAccessor::TArrayType* currentArray = nullptr;
     const auto applyToIndex = [&](const ui32 rowIndexFrom, const ui32 rowIndexTo) {
-        auto address = reader.GetReadChunk(rowIndexFrom);
-        auto* currentArray = static_cast<const typename TElementAccessor::TArrayType*>(address.GetArray().get());
-        
-        if (!chunkIdx || *chunkIdx != address.GetChunkIdx()) {
+        if (!currentIdxFrom) {
+            address = reader.GetReadChunk(rowIndexFrom);
+            AFL_VERIFY(rowIndexFrom == 0)("real", rowIndexFrom);
+        } else {
+            AFL_VERIFY(rowIndexFrom == *currentIdxFrom + 1)("next", rowIndexFrom)("current", *currentIdxFrom);
+            if (!address->NextPosition()) {
+                address = reader.GetReadChunk(rowIndexFrom);
+            }
+        }
+        currentIdxFrom = rowIndexFrom;
+
+        if (!chunkIdx || *chunkIdx != address->GetChunkIdx()) {
             TElementAccessor::Validate(*currentArray);
-            chunkIdx = address.GetChunkIdx();
+            chunkIdx = address->GetChunkIdx();
+            currentArray = static_cast<const typename TElementAccessor::TArrayType*>(address->GetArray().get());
         }
 
         auto& rowItem = editAccessor(rowIndexTo, columnIndex);
-        if (currentArray->IsNull(address.GetPosition())) {
+        if (currentArray->IsNull(address->GetPosition())) {
             statAccumulator.AddNull();
             rowItem = NUdf::TUnboxedValue();
         } else {
-            rowItem = TElementAccessor::ExtractValue(*currentArray, address.GetPosition());
+            rowItem = TElementAccessor::ExtractValue(*currentArray, address->GetPosition());
             statAccumulator.AddValue(rowItem);
         }
     };

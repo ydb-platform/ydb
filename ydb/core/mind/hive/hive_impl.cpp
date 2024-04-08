@@ -2129,7 +2129,7 @@ void THive::Handle(TEvHive::TEvDrainNode::TPtr& ev) {
     Execute(CreateSwitchDrainOn(ev->Get()->Record.GetNodeID(),
     {
         .Persist = ev->Get()->Record.GetPersist(),
-        .KeepDown = ev->Get()->Record.GetKeepDown(),
+        .DownPolicy = ev->Get()->Record.GetKeepDown(),
         .DrainInFlight = ev->Get()->Record.GetDrainInFlight(),
     }, ev->Sender));
 }

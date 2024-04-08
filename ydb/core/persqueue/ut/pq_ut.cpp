@@ -1161,7 +1161,6 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
 
             UNIT_ASSERT(result);
             UNIT_ASSERT(result->Record.HasStatus());
-//            UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
             UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::INITIALIZING);
 
             //check very big msg

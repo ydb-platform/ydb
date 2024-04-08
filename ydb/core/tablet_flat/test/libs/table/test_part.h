@@ -184,6 +184,23 @@ namespace NTest {
             return result;
         }
 
+        inline ui64 CountDataSize(const TPart& part, TGroupId groupId) {
+            size_t result = 0;
+
+            TTestEnv env;
+            auto index = CreateIndexIter(&part, &env, groupId);
+            for (size_t i = 0; ; i++) {
+                auto ready = i == 0 ? index->Seek(0) : index->Next();
+                if (ready != EReady::Data) {
+                    Y_ABORT_UNLESS(ready != EReady::Page, "Unexpected page fault");
+                    break;
+                }
+                result += part.GetPageSize(index->GetPageId(), groupId);
+            }
+
+            return result;
+        }
+
         inline TRowId GetEndRowId(const TPart& part) {
             TTestEnv env;
             auto index = CreateIndexIter(&part, &env, { });

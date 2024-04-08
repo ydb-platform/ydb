@@ -5,6 +5,7 @@ import uuid
 import pytz
 
 from enum import Enum
+from io import IOBase
 from typing import Any, Tuple, Dict, Sequence, Optional, Union, Generator
 from datetime import date, datetime, tzinfo
 
@@ -487,6 +488,12 @@ def to_arrow(content: bytes):
     pyarrow = check_arrow()
     reader = pyarrow.ipc.RecordBatchFileReader(content)
     return reader.read_all()
+
+
+def to_arrow_batches(buffer: IOBase) -> StreamContext:
+    pyarrow = check_arrow()
+    reader = pyarrow.ipc.open_stream(buffer)
+    return StreamContext(buffer, reader)
 
 
 def arrow_buffer(table) -> Tuple[Sequence[str], bytes]:

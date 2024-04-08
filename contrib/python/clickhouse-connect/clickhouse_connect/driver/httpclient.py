@@ -449,8 +449,11 @@ class HttpClient(Client):
 
     def raw_query(self, query: str,
                   parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                  settings: Optional[Dict[str, Any]] = None, fmt: str = None,
-                  use_database: bool = True, external_data: Optional[ExternalData] = None) -> bytes:
+                  settings: Optional[Dict[str, Any]] = None,
+                  fmt: str = None,
+                  use_database: bool = True,
+                  external_data: Optional[ExternalData] = None,
+                  stream: bool = False) -> Union[bytes, HTTPResponse]:
         """
         See BaseClient doc_string for this method
         """
@@ -469,7 +472,8 @@ class HttpClient(Client):
         else:
             body = final_query
             fields = None
-        return self._raw_request(body, params, fields=fields).data
+        response = self._raw_request(body, params, fields=fields, stream=stream)
+        return response if stream else response.data
 
     def close(self):
         if self._owns_pool_manager:

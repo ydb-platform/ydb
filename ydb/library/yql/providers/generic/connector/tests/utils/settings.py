@@ -6,7 +6,7 @@ import yatest.common
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
-from ydb.library.yql.providers.generic.connector.tests.utils.docker_compose import EndpointDeterminer
+from ydb.library.yql.providers.generic.connector.tests.utils.docker_compose import DockerComposeHelper
 
 
 @dataclass
@@ -63,7 +63,7 @@ class Settings:
     def from_env(cls, docker_compose_dir: pathlib.Path, data_source_kinds: Sequence[EDataSourceKind]) -> 'Settings':
         docker_compose_file_relative_path = str(docker_compose_dir / 'docker-compose.yml')
         docker_compose_file_abs_path = yatest.common.source_path(docker_compose_file_relative_path)
-        endpoint_determiner = EndpointDeterminer(docker_compose_file_abs_path)
+        endpoint_determiner = DockerComposeHelper(docker_compose_file_abs_path)
 
         data_sources = dict()
 

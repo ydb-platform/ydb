@@ -2,8 +2,10 @@ import os
 import subprocess
 import shutil
 import yaml
+import json
+import shutil
 import socket
-from typing import Dict, Any
+from typing import Dict, Any, Sequence
 
 import yatest.common
 
@@ -12,7 +14,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.log import make_log
 LOGGER = make_logger(__name__)
 
 
-class EndpointDeterminer:
+class DockerComposeHelper:
     docker_bin_path: os.PathLike
     docker_compose_bin_path: os.PathLike
 
@@ -21,7 +23,16 @@ class EndpointDeterminer:
 
     def __init__(self, docker_compose_yml_path: os.PathLike):
         self.docker_bin_path = shutil.which('docker')
-        self.docker_compose_bin_path = yatest.common.build_path('library/recipes/docker_compose/bin/docker-compose')
+
+        self.docker_compose_bin_path = None
+        try:
+            self.docker_compose_bin_path = yatest.common.build_path('library/recipes/docker_compose/bin/docker-compose')
+        except:
+            self.docker_compose_bin_path = shutil.which('docker-compose')
+        finally:
+            if self.docker_compose_bin_path is None:
+                raise ValueError("no `docker-compose` installed on the host")
+
         self.docker_compose_yml_path = docker_compose_yml_path
 
         with open(self.docker_compose_yml_path) as f:
@@ -71,7 +82,7 @@ class EndpointDeterminer:
 
     @staticmethod
     def __is_valid_ip_address(address: str) -> bool:
-        return EndpointDeterminer.__is_valid_ipv4_address(address) or EndpointDeterminer.__is_valid_ipv6_address(
+        return DockerComposeHelper.__is_valid_ipv4_address(address) or DockerComposeHelper.__is_valid_ipv6_address(
             address
         )
 
@@ -87,7 +98,7 @@ class EndpointDeterminer:
         try:
             out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8').strip().strip("'")
 
-            if not EndpointDeterminer.__is_valid_ip_address(out):
+            if not DockerComposeHelper.__is_valid_ip_address(out):
                 raise ValueError(f"IP determined for container '{container_name}' is invalid: '{out}'")
 
             return out
@@ -96,3 +107,32 @@ class EndpointDeterminer:
 
     def get_container_name(self, service_name: str) -> str:
         return self.docker_compose_yml_data['services'][service_name]['container_name']
+
+    def list_ydb_tables(self) -> Sequence[str]:
+        cmd = [
+            self.docker_bin_path,
+            'exec',
+            self.docker_compose_yml_data["services"]["ydb"]["container_name"],
+            '/ydb',
+            '--endpoint=grpc://localhost:2136',
+            '--database=/local',
+            'scheme',
+            'ls',
+            '--format=json',
+        ]
+
+        LOGGER.debug("calling command: " + " ".join(cmd))
+
+        try:
+            out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"docker-compose error: {e.output} (code {e.returncode})")
+
+        data = json.loads(out)
+
+        result = []
+        for item in data:
+            if item['type'] == 'table':
+                result.append(item['path'])
+
+        return result

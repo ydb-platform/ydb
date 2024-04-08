@@ -359,7 +359,6 @@ class IRequestProxyCtx
     friend class TGRpcRequestProxySimple;
     friend class TGRpcRequestProxyHandleMethods;
 private:
-    virtual void ReplyUnavaliable() = 0;
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
 public:
     virtual ~IRequestProxyCtx() = default;
@@ -574,7 +573,7 @@ public:
     }
 
     void ReplyUnauthenticated(const TString&) override;
-    void ReplyUnavaliable() override;
+    void ReplyUnavaliable();
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         switch (status) {
             case Ydb::StatusIds::UNAVAILABLE:
@@ -719,13 +718,6 @@ class TGRpcRequestBiStreamWrapper
     , public TEventLocal<TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp, RlMode>, TRpcId>
 {
 private:
-    void ReplyUnavaliable() override {
-        Ctx_->Attach(TActorId());
-        TResponse resp;
-        FillYdbStatus(resp, IssueManager_.GetIssues(), Ydb::StatusIds::UNAVAILABLE);
-        Ctx_->WriteAndFinish(std::move(resp), grpc::Status::OK);
-    }
-
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         Ctx_->Attach(TActorId());
         TResponse resp;
@@ -1114,18 +1106,14 @@ public:
         Ctx_->UseDatabase(database);
     }
 
-    void ReplyUnavaliable() override {
-        TResponse* resp = CreateResponseMessage();
-        TCommonResponseFiller<TResp, TDerived::IsOp>::Fill(*resp, IssueManager.GetIssues(), CostInfo, Ydb::StatusIds::UNAVAILABLE);
-        FinishRequest();
-        Reply(resp, Ydb::StatusIds::UNAVAILABLE);
-    }
-
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         TResponse* resp = CreateResponseMessage();
         TCommonResponseFiller<TResponse, TDerived::IsOp>::Fill(*resp, IssueManager.GetIssues(), CostInfo, status);
         FinishRequest();
         Reply(resp, status);
+        if (Ctx_->IsStreamCall()) {
+            Ctx_->FinishStreamingOk();
+        }
     }
 
     TString GetPeerName() const override {

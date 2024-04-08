@@ -169,7 +169,7 @@ private:
             const TString error = "Unable to resolve token";
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error);
             requestBaseCtx->RaiseIssue(issue);
-            requestBaseCtx->ReplyUnavaliable();
+            requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
             requestBaseCtx->FinishSpan();
             return;
         }
@@ -213,7 +213,7 @@ private:
                     LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, "Limit for deferred events per database %s reached", databaseName.c_str());
                     const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error);
                     requestBaseCtx->RaiseIssue(issue);
-                    requestBaseCtx->ReplyUnavaliable();
+                    requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
                     requestBaseCtx->FinishSpan();
                     return;
                 }
@@ -295,7 +295,7 @@ private:
     virtual void PassAway() override {
         for (auto& [_, queue] : DeferredEvents) {
             for (TEventReqHolder& req : queue) {
-                req.Ctx->ReplyUnavaliable();
+                req.Ctx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
                 req.Ctx->FinishSpan();
             }
         }

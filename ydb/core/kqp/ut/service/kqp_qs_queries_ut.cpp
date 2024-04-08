@@ -261,8 +261,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         const TString query = "SELECT * FROM AS_TABLE(ListReplicate(AsStruct(\"12345678\" AS Key), 100000))";
 
-//TODO: it looks like this check triggers grpc request proxy request leak
-/*
         {
             // Check range for chunk size settings
             auto settings = TExecuteQuerySettings().OutputChunkMaxSize(48_MB);
@@ -271,7 +269,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto streamPart = it.ReadNext().GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::BAD_REQUEST, streamPart.GetIssues().ToString());
         }
-*/
+
         auto settings = TExecuteQuerySettings().OutputChunkMaxSize(10000);
         auto it = db.StreamExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());

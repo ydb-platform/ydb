@@ -32,26 +32,31 @@ public:
     EState GetState() const {
         return State;
     }
-    
-
-
 
     bool IsAcceptingData() {
-        return CurrentVector.empty() && !WriteOperation.has_value();
+        return State == EState::AcceptingData;
+    }
+
+    bool IsDataReady() {
+        return State == EState::DataReady;
+    }
+
+    bool IsAcceptingDataRequests() {
+        return State == EState::AcceptingDataRequests;
     }
 
     
-    bool AddData(std::vector<T>&& vec) {
+    void AddData(std::vector<T>&& vec) {
         MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
         MKQL_ENSURE(!WriteOperation.has_value(), "Internal logic error");
 
         MKQL_ENSURE(State == EState::AcceptingData, "Internal logic error");
 
         CurrentVector = vec;
-        StoredChunksSizes.push(vec.size());
+        StoredChunksSizes.push(vec.size() * sizeof(T));
         NextPositionToSave = 0;
 
-        return SaveNextChunk();
+        SaveNextChunk();
     }
 
     void Update() {
@@ -61,6 +66,10 @@ public:
 
             StoredChunks.push(WriteOperation->ExtractValue());
             WriteOperation = std::nullopt;
+            if (IsFinalizing) {
+                State = EState::AcceptingDataRequests;
+                return;
+            }
 
             SaveNextChunk();
             return;
@@ -84,39 +93,46 @@ public:
 
     void RequestNextVector() {
         MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
-        MKQL_ENSURE(State == EState::AcceptindDataRequests, "Internal logic error");
+        MKQL_ENSURE(State == EState::AcceptingDataRequests, "Internal logic error");
         MKQL_ENSURE(!StoredChunksSizes.empty(), "Internal logic error");
 
         CurrentVector.reserve(StoredChunks.front());
-
+        State = EState::RestoringData;
         LoadNextVector();
 
     }
 
-    bool Finalize() {
+    void Finalize() {
         MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
         MKQL_ENSURE(!WriteOperation.has_value(), "Internal logic error");
-        if (CurrentChunk.empty()) return true;
+        if (CurrentChunk.empty()) {
+            State = EState::AcceptingDataRequests;
+            return;
+        }
 
         SaveCurrentChunk();
-        return false;
+        IsFinalizing = true;
     }
 
 private:
 
-    bool LoadNextVector() {
-        if (ReadOperation.has_value()) return false;
+    void LoadNextVector() {
+        if (ReadOperation.has_value()) return;
 
         auto requestedVectorSize = StoredChunksSizes.front();
 
         // if vector is fully loaded to memory now
         if (CurrentChunk.size() >= requestedVectorSize) {
             auto data = CurrentChunk.GetContiguousSpan();
-            CurrentVector.insert(CurrentVector.End(), data.Data(), requestedVectorSize);
+            const char* from = data.SubSpan(0, requestedVectorSize).Data();
+            const char* to = from + requestedVectorSize;
+            CurrentVector.insert(CurrentVector.end(), from, to);
             CurrentChunk = TRope(TString(data.Data() + requestedVectorSize, data.size() - requestedVectorSize));
             State = EState::DataReady;
         } else {
-            CurrentVector.insert(CurrentVector.End(), CurrentChunk.GetContiguousSpan());
+            const char* from = CurrentChunk.GetContiguousSpan().Data();
+            const char* to = from + CurrentChunk.GetContiguousSpan().Size();
+            CurrentVector.insert(CurrentVector.end(), from, to);
             ReadOperation = Spiller->Extract(StoredChunks.front());
             StoredChunks.pop();
         }
@@ -125,6 +141,7 @@ private:
     void SaveCurrentChunk() {
         State = EState::SpillingData;
         WriteOperation = Spiller->Put(std::move(CurrentChunk));
+        CurrentChunk.clear();
     }
 
     bool IsDataFittingInCurrentChunk() {
@@ -132,12 +149,15 @@ private:
     }
 
     void AddDataToRope(T* data, size_t count) {
-        CurrentChunk.End(), TRope(TString(reinterpret_cast<const char*>(data, count * sizeof(T))));
+        CurrentChunk.Insert(CurrentChunk.End(), TRope(TString(reinterpret_cast<const char*>(data), count * sizeof(T))));
     }
 
     // TODO check empty vector in the middle
-    bool SaveNextChunk() {
-        MKQL_ENSURE(!CurrentVector.empty(), "Internal logic error");
+    void SaveNextChunk() {
+        if (CurrentVector.empty()) {
+            State = EState::AcceptingData;
+            return;
+        }
 
         if (IsDataFittingInCurrentChunk()) {
             AddDataToRope(CurrentVector.data() + NextPositionToSave,  CurrentVector.size() - NextPositionToSave);
@@ -151,13 +171,15 @@ private:
 
         if (SizeLimit - CurrentChunk.size() < sizeof(T)) {
             SaveCurrentChunk();
-            return false;
+            return;
         }
 
-        return true;
+        State = EState::AcceptingData;
+
+        return;
     }
 
-    bool LoadNextChunk() {
+    void LoadNextChunk() {
         MKQL_ENSURE(State == EState::RestoringData, "Internal logic error");
         MKQL_ENSURE(!ReadOperation.has_value(), "Internal logic error");
 
@@ -183,6 +205,8 @@ private:
 
     std::optional<NThreading::TFuture<ISpiller::TKey>> WriteOperation;
     std::optional<NThreading::TFuture<std::optional<TRope>>> ReadOperation;
+
+    bool IsFinalizing = false;
 };
 
 }//namespace NKikimr::NMiniKQL

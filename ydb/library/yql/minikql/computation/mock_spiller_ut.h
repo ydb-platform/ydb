@@ -54,7 +54,7 @@ private:
     ISpiller::TKey NextKey;
     std::unordered_map<ISpiller::TKey, TRope> Storage;
 };
-inline ISpiller::TPtr MakeMockSpiller() {
+inline ISpiller::TPtr CreateMockSpiller() {
     return std::make_shared<TMockSpiller>();
 }
 

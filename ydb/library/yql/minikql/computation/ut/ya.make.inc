@@ -23,6 +23,7 @@ SRCS(
     mkql_validate_ut.cpp
     mkql_value_builder_ut.cpp
     presort_ut.cpp
+    mkql_vector_spiller_adapter_ut.cpp
 )
 
 PEERDIR(

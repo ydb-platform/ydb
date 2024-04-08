@@ -252,7 +252,9 @@ namespace NKikimr::NTable::NPage {
             : Raw(std::move(raw))
         {
             const auto data = NPage::TLabelWrapper().Read(Raw, EPage::BTreeIndex);
-            Y_ABORT_UNLESS(data == ECodec::Plain && data.Version == 0);
+
+            // Version = 0 didn't have GroupDataSize field
+            Y_ABORT_UNLESS(data == ECodec::Plain && data.Version == 1);
 
             Header = TDeref<const THeader>::At(data.Page.data());
             size_t offset = sizeof(THeader);

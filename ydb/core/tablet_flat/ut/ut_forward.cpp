@@ -704,15 +704,19 @@ Y_UNIT_TEST_SUITE(NFwd_TCache) {
             {7, 7, 3, 1, 0});
         wrap.To(5).Get(2, true, false, true, 
             {7, 7, 3, 1, 0});
+        wrap.To(6).Get(3, true, false, true, 
+            {7, 7, 3, 1, 0});
 
         // page 3 goes to trace:
-        wrap.To(6).Get(4, true, false, true, 
+        wrap.To(7).Get(4, true, false, true, 
             {7, 7, 4, 1, 0});
 
         // trace: page 2, page 3:
-        wrap.To(7).Get(2, true, false, true, 
+        wrap.To(8).Get(2, true, false, true, 
             {7, 7, 4, 1, 0});
-        wrap.To(8).Get(3, true, false, true, 
+        wrap.To(9).Get(3, true, false, true, 
+            {7, 7, 4, 1, 0});
+        wrap.To(10).Get(4, true, false, true, 
             {7, 7, 4, 1, 0});
     }
 

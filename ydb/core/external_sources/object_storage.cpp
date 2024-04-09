@@ -230,7 +230,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             return issues;
         }
 
-        ui64 realSchemaRowCount = 0;
+        ui64 realSchemaColumnsCount = 0;
         Ydb::Column lastColumn;
         TSet<TString> partitionedBySet{partitionedBy.begin(), partitionedBy.end()};
 
@@ -241,15 +241,15 @@ struct TObjectStorageExternalSource : public IExternalSource {
             if (!ValidateStringType(column.type())) {
                 issues.AddIssue(MakeErrorIssue(
                     Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder{} << TStringBuilder() << "Only string type field in schema supported in raw format (you have " 
-                        << NYdb::TType(column.type()).ToString() <<" type)"));
+                    TStringBuilder{} << TStringBuilder() << "Only string type column in schema supported in raw format (you have '" 
+                        << column.name() << " " << NYdb::TType(column.type()).ToString() << "' field)"));
             }
-            ++realSchemaRowCount;
+            ++realSchemaColumnsCount;
         }
 
-        if (realSchemaRowCount > 1) {
-            issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder{} << TStringBuilder() << "Only one field in schema supported in raw format (you have " 
-                << realSchemaRowCount << " fields)"));
+        if (realSchemaColumnsCount > 1) {
+            issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder{} << TStringBuilder() << "Only one column in schema supported in raw format (you have " 
+                << realSchemaColumnsCount << " fields)"));
         }
         return issues;
     }

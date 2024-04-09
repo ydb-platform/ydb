@@ -1398,33 +1398,29 @@ bool ValidateFormatForInput(
     }
     
     if (schemaStructRowType && format == TStringBuf("raw")) {
-        ui64 realSchemaRowCount = 0;
-        const TTypeAnnotationNode* rowType= nullptr; 
+        ui64 realSchemaColumnsCount = 0;
 
         for (const TItemExprType* item : schemaStructRowType->GetItems()) {
             if (excludeFields && excludeFields(item->GetName())) {
                 continue;
             }
-            rowType = item->GetItemType();
-            ++realSchemaRowCount;
-        }
-        if (!realSchemaRowCount) {
-            return true;
+            const TTypeAnnotationNode* rowType = item->GetItemType();
+            if (rowType->GetKind() == ETypeAnnotationKind::Optional) {
+                rowType = rowType->Cast<TOptionalExprType>()->GetItemType();
+            }
+
+            if (rowType->GetKind() != ETypeAnnotationKind::Data
+                || !IsDataTypeString(rowType->Cast<TDataExprType>()->GetSlot())) {
+                ctx.AddError(TIssue(TStringBuilder() << "Only string type column in schema supported in raw format (you have '"
+                    << item->GetName() << " " << FormatType(rowType) << "' field)"));
+                return false;
+            }
+            ++realSchemaColumnsCount;
         }
 
-        if (realSchemaRowCount > 1) {
-            ctx.AddError(TIssue(TStringBuilder() << "Only one field in schema supported in raw format (you have " 
-                << realSchemaRowCount << " fields)"));
-            return false;
-        }
-
-        if (rowType->GetKind() == ETypeAnnotationKind::Optional) {
-            rowType = rowType->Cast<TOptionalExprType>()->GetItemType();
-        }
-
-        if (rowType->GetKind() != ETypeAnnotationKind::Data
-            || !IsDataTypeString(rowType->Cast<TDataExprType>()->GetSlot())) {
-            ctx.AddError(TIssue(TStringBuilder() << "Only string type field in schema supported in raw format"));
+        if (realSchemaColumnsCount > 1) {
+            ctx.AddError(TIssue(TStringBuilder() << "Only one column in schema supported in raw format (you have " 
+                << realSchemaColumnsCount << " fields)"));
             return false;
         }
     }

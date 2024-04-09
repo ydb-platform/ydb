@@ -184,6 +184,8 @@ namespace NKikimr::NSchemeShard {
             case NYql::NProto::Date:
             case NYql::NProto::Datetime:
             case NYql::NProto::Timestamp:
+            case NYql::NProto::Timestamp64:
+            case NYql::NProto::Interval64:
                 return true;
             case NYql::NProto::Interval:
             case NYql::NProto::Decimal:

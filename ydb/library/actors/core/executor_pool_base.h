@@ -4,7 +4,7 @@
 #include "executor_thread.h"
 #include "mon_stats.h"
 #include "scheduler_queue.h"
-#include <ydb/library/actors/util/activation_queue.h>
+#include <ydb/library/actors/queues/activation_queue.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>

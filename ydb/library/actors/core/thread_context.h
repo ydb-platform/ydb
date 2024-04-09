@@ -3,7 +3,7 @@
 #include "defs.h"
 
 #include <ydb/library/actors/util/datetime.h>
-#include <ydb/library/actors/util/mpmc_ring_queue.h>
+#include <ydb/library/actors/queues/mpmc_ring_queue.h>
 
 #include <util/system/tls.h>
 

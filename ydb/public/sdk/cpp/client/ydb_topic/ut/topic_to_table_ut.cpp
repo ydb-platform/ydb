@@ -16,12 +16,14 @@ class TFixture : public NUnitTest::TBaseFixture {
 protected:
     void SetUp(NUnitTest::TTestContext&) override;
 
-    NTable::TSession CreateSession();
+    NTable::TSession CreateTableSession();
     NTable::TTransaction BeginTx(NTable::TSession& session);
-    void CommitTx(NTable::TTransaction& tx, EStatus status);
+    void CommitTx(NTable::TTransaction& tx, EStatus status = EStatus::SUCCESS);
 
     using TTopicReadSession = NTopic::IReadSession;
     using TTopicReadSessionPtr = std::shared_ptr<TTopicReadSession>;
+    using TTopicWriteSession = NTopic::ISimpleBlockingWriteSession;
+    using TTopicWriteSessionPtr = std::shared_ptr<TTopicWriteSession>;
 
     TTopicReadSessionPtr CreateReader();
 
@@ -42,6 +44,23 @@ protected:
 
     void WriteToTopicWithInvalidTxId(bool invalidTxId);
 
+    TTopicWriteSessionPtr CreateTopicWriteSession(const TString& topicPath,
+                                                  const TString& messageGroupId);
+    TTopicWriteSessionPtr GetTopicWriteSession(const TString& topicPath,
+                                               const TString& messageGroupId);
+
+    TTopicReadSessionPtr CreateTopicReadSession(const TString& topicPath,
+                                                const TString& consumerName);
+    TTopicReadSessionPtr GetTopicReadSession(const TString& topicPath,
+                                             const TString& consumerName);
+
+    void WriteToTopic(const TString& topicPath,
+                      const TString& messageGroupId,
+                      const TString& message,
+                      NTable::TTransaction& tx);
+    TVector<TString> ReadFromTopic(const TString& topicPath,
+                                   const TString& consumerName);
+
 protected:
     const TDriver& GetDriver() const;
 
@@ -53,6 +72,9 @@ private:
 
     std::unique_ptr<TTopicSdkTestSetup> Setup;
     std::unique_ptr<TDriver> Driver;
+
+    THashMap<TString, TTopicWriteSessionPtr> TopicWriteSessions;
+    THashMap<TString, TTopicReadSessionPtr> TopicReadSessions;
 };
 
 void TFixture::SetUp(NUnitTest::TTestContext&)
@@ -64,7 +86,7 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
     Driver = std::make_unique<TDriver>(Setup->MakeDriver());
 }
 
-NTable::TSession TFixture::CreateSession()
+NTable::TSession TFixture::CreateTableSession()
 {
     NTable::TTableClient client(GetDriver());
     auto result = client.CreateSession().ExtractValueSync();
@@ -189,7 +211,7 @@ const TDriver& TFixture::GetDriver() const
 
 void TFixture::WriteToTopicWithInvalidTxId(bool invalidTxId)
 {
-    auto tableSession = CreateSession();
+    auto tableSession = CreateTableSession();
     auto tx = BeginTx(tableSession);
 
     NTopic::TWriteSessionSettings options;
@@ -232,7 +254,7 @@ Y_UNIT_TEST_F(SessionAbort, TFixture)
 {
     {
         auto reader = CreateReader();
-        auto session = CreateSession();
+        auto session = CreateTableSession();
         auto tx = BeginTx(session);
 
         StartPartitionSession(reader, tx, 0);
@@ -245,7 +267,7 @@ Y_UNIT_TEST_F(SessionAbort, TFixture)
     }
 
     {
-        auto session = CreateSession();
+        auto session = CreateTableSession();
         auto tx = BeginTx(session);
         auto reader = CreateReader();
 
@@ -267,7 +289,7 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
 {
     WriteMessage("message #0");
 
-    auto session1 = CreateSession();
+    auto session1 = CreateTableSession();
     auto tx1 = BeginTx(session1);
 
     {
@@ -278,7 +300,7 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
         ReadMessage(reader, tx1, 0);
     }
 
-    auto session2 = CreateSession();
+    auto session2 = CreateTableSession();
     auto tx2 = BeginTx(session2);
 
     {
@@ -302,7 +324,7 @@ Y_UNIT_TEST_F(WriteToTopic, TFixture)
 
     CreateTopic(topic[1]);
 
-    auto session = CreateSession();
+    auto session = CreateTableSession();
     auto tx = BeginTx(session);
 
     WriteMessages({"#1", "#2", "#3"}, topic[0], TEST_MESSAGE_GROUP_ID, tx);
@@ -349,7 +371,7 @@ Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession, TFixture)
         ws->Write(std::move(token), std::move(params));
     };
 
-    auto tableSession = CreateSession();
+    auto tableSession = CreateTableSession();
     auto tx = BeginTx(tableSession);
 
     NTopic::TTopicClient client(GetDriver());
@@ -383,6 +405,129 @@ Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession, TFixture)
     }
 
     UNIT_ASSERT_VALUES_EQUAL(acks, 2);
+}
+
+auto TFixture::CreateTopicWriteSession(const TString& topicPath,
+                                       const TString& messageGroupId) -> TTopicWriteSessionPtr
+{
+    NTopic::TTopicClient client(GetDriver());
+    NTopic::TWriteSessionSettings options;
+    options.Path(topicPath);
+    options.MessageGroupId(messageGroupId);
+    return client.CreateSimpleBlockingWriteSession(options);
+}
+
+auto TFixture::GetTopicWriteSession(const TString& topicPath,
+                                    const TString& messageGroupId) -> TTopicWriteSessionPtr
+{
+    TTopicWriteSessionPtr session;
+
+    if (auto i = TopicWriteSessions.find(topicPath); i == TopicWriteSessions.end()) {
+        session = CreateTopicWriteSession(topicPath, messageGroupId);
+        TopicWriteSessions.emplace(topicPath, session);
+    } else {
+        session = i->second;
+    }
+
+    return session;
+}
+
+auto TFixture::CreateTopicReadSession(const TString& topicPath,
+                                      const TString& consumerName) -> TTopicReadSessionPtr
+{
+    NTopic::TTopicClient client(GetDriver());
+    NTopic::TReadSessionSettings options;
+    options.AppendTopics(topicPath);
+    options.ConsumerName(consumerName);
+    return client.CreateReadSession(options);
+}
+
+auto TFixture::GetTopicReadSession(const TString& topicPath,
+                                   const TString& consumerName) -> TTopicReadSessionPtr
+{
+    TTopicReadSessionPtr session;
+
+    if (auto i = TopicReadSessions.find(topicPath); i == TopicReadSessions.end()) {
+        session = CreateTopicReadSession(topicPath, consumerName);
+        auto event = ReadEvent<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(session);
+        event.Confirm();
+        TopicReadSessions.emplace(topicPath, session);
+    } else {
+        session = i->second;
+    }
+
+    return session;
+}
+
+void TFixture::WriteToTopic(const TString& topicPath,
+                            const TString& messageGroupId,
+                            const TString& message,
+                            NTable::TTransaction& tx)
+{
+    auto session = GetTopicWriteSession(topicPath, messageGroupId);
+
+    NTopic::TWriteMessage params(message);
+    params.Tx(tx);
+
+    UNIT_ASSERT(session->Write(std::move(params)));
+}
+
+TVector<TString> TFixture::ReadFromTopic(const TString& topicPath, const TString& consumerName)
+{
+    auto session = GetTopicReadSession(topicPath, consumerName);
+
+    NTopic::TReadSessionGetEventSettings options;
+    auto event = session->GetEvent(options);
+    if (!event) {
+        return {};
+    }
+
+    auto ev = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event);
+    UNIT_ASSERT(ev);
+
+    TVector<TString> messages;
+
+    for (auto& m : ev->GetMessages()) {
+        messages.push_back(m.GetData());
+    }
+
+    return messages;
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo, TFixture)
+{
+    CreateTopic("topic_A");
+    CreateTopic("topic_B");
+
+    auto tableSession = CreateTableSession();
+    auto tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "Лидер", tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "бодро", tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "гордо", tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "бредил", tx);
+
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "Тарту", tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "дорог", tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "как", tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "город", tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "утрат", tx);
+
+    TVector<TString> messages;
+
+    messages = ReadFromTopic("topic_A", TEST_CONSUMER);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
+
+    messages = ReadFromTopic("topic_B", TEST_CONSUMER);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
+
+    CommitTx(tx);
+
+    messages = ReadFromTopic("topic_A", TEST_CONSUMER);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4);
+
+    messages = ReadFromTopic("topic_B", TEST_CONSUMER);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 5);
 }
 
 }

@@ -398,7 +398,7 @@ namespace NKikimr {
             Y_UNUSED(ctx);
             const ui32 blocksInChunk = LocRecCtx->PDiskCtx->Dsk->ChunkSize / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
             Y_ABORT_UNLESS(LocRecCtx->PDiskCtx->Dsk->AppendBlockSize * blocksInChunk == LocRecCtx->PDiskCtx->Dsk->ChunkSize);
-            
+
             ui32 MaxLogoBlobDataSizeInBlocks = Config->MaxLogoBlobDataSize / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
             MaxLogoBlobDataSizeInBlocks += !!(Config->MaxLogoBlobDataSize -
                     MaxLogoBlobDataSizeInBlocks * LocRecCtx->PDiskCtx->Dsk->AppendBlockSize);
@@ -418,11 +418,11 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->ChunkSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
+                            Config->MinHugeBlobInBytes,
                             Config->MilestoneHugeBlobInBytes,
                             Config->MaxLogoBlobDataSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
-                            Config->HugeBlobOldMapCompatible,
                             logFunc);
             } else {
                 // read existing one
@@ -440,17 +440,16 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->ChunkSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
+                            Config->MinHugeBlobInBytes,
                             Config->MilestoneHugeBlobInBytes,
                             Config->MaxLogoBlobDataSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
-                            Config->HugeBlobOldMapCompatible,
                             lsn, entryPoint, logFunc);
             }
-            const ui32 minHugeBlobInBlocks = (Config->HugeBlobOldMapCompatible ? Config->MilestoneHugeBlobInBytes : Config->MinHugeBlobInBytes) / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
-            Y_ABORT_UNLESS(minHugeBlobInBlocks >= 1);
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(
-                    minHugeBlobInBlocks * LocRecCtx->PDiskCtx->Dsk->AppendBlockSize + 1,
+                    Config->MinHugeBlobInBytes,
+                    LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                     LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(),
                     Config->AddHeader);
             HugeKeeperInitialized = true;
@@ -715,3 +714,4 @@ namespace NKikimr {
     }
 
 } // NKikimr
+

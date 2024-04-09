@@ -408,24 +408,26 @@ namespace NKikimr {
                 const TString &vdiskLogPrefix,
                 ui32 chunkSize,
                 ui32 appendBlockSize,
-                ui32 minBlobInBytes,
+                ui32 minHugeBlobInBytes,
+                ui32 oldMinHugeBlobSizeInBytes,
                 ui32 milestoneBlobInBytes,
                 ui32 maxBlobInBytes,
-                ui32 overhead,
-                bool oldMapCompatible)
+                ui32 overhead)
             : VDiskLogPrefix(vdiskLogPrefix)
             , ChunkSize(chunkSize)
             , AppendBlockSize(appendBlockSize)
-            , MinBlobInBytes(minBlobInBytes)
+            , MinHugeBlobInBytes(minHugeBlobInBytes)
+            , OldMinHugeBlobSizeInBytes(oldMinHugeBlobSizeInBytes)
             , MilestoneBlobInBytes(milestoneBlobInBytes)
             , MaxBlobInBytes(maxBlobInBytes)
             , Overhead(overhead)
-            , OldMapCompatible(oldMapCompatible)
         {
-            Y_VERIFY_S(MinBlobInBytes != 0 &&
-                    MinBlobInBytes <= MilestoneBlobInBytes &&
+            Y_VERIFY_S(MinHugeBlobInBytes != 0 &&
+                    MinHugeBlobInBytes >= AppendBlockSize &&
+                    MinHugeBlobInBytes <= MilestoneBlobInBytes &&
+                    MinHugeBlobInBytes <= OldMinHugeBlobSizeInBytes &&
                     MilestoneBlobInBytes < MaxBlobInBytes, "INVALID CONFIGURATION! (SETTINGS ARE:"
-                            << " MaxBlobInBytes# " << MaxBlobInBytes << " MinBlobInBytes# " << MinBlobInBytes
+                            << " MaxBlobInBytes# " << MaxBlobInBytes << " MinHugeBlobInBytes# " << MinHugeBlobInBytes << " OldMinHugeBlobSizeInBytes# " << OldMinHugeBlobSizeInBytes
                             << " MilestoneBlobInBytes# " << MilestoneBlobInBytes << " ChunkSize# " << ChunkSize
                             << " AppendBlockSize# " << AppendBlockSize << ")");
             BuildLayout();
@@ -471,29 +473,25 @@ namespace NKikimr {
         }
 
         void TAllChains::Save(IOutputStream *s) const {
-            if (OldMapCompatible && (StartMode == EStartMode::Empty || StartMode == EStartMode::Migrated)) {
-                // this branch takes place when:
-                // 1. OldMapCompatible = true, i.e. we are in 19-1 stable branch
-                // 2. we didn't rollback from 19-2, i.e. we read empty db or migrated on start
-                // => save only second part of data
-                TAllChainDelegators chainDelegators = BuildChains(MilestoneBlobInBytes);
-                ui32 size = chainDelegators.size();
-                ::Save(s, size);
-                ui32 skip = ChainDelegators.size() - size;
-                for (auto &x : ChainDelegators) {
-                    if (skip > 0) {
-                        Y_ABORT_UNLESS(!x.HaveBeenUsed());
-                        --skip;
-                        continue;
-                    }
-                    ::Save(s, x);
-                }
-            } else {
-                // save all
+            if (StartMode == EStartMode::Loaded) {
                 ui32 size = ChainDelegators.size();
                 ::Save(s, size);
+                for (auto& d : ChainDelegators) {
+                    ::Save(s, d);
+                }
+            } else { 
+                std::vector<const TChainDelegator*> delegators;
                 for (auto &x : ChainDelegators) {
-                    ::Save(s, x);
+                    if (!x.HaveBeenUsed() && x.SlotSize < FirstLoadedSlotSize) { 
+                        continue; // preserving backward compatibility until no allocations
+                    }
+                    delegators.emplace_back(&x);
+                }
+
+                ui32 size = delegators.size();
+                ::Save(s, size);
+                for (auto x : delegators) {
+                    ::Save(s, *x);
                 }
             }
         }
@@ -511,8 +509,8 @@ namespace NKikimr {
             } else if (size < ChainDelegators.size()) {
                 // map size has been changed, run migration
                 StartMode = EStartMode::Migrated;
-                TAllChainDelegators chainDelegators = BuildChains(MilestoneBlobInBytes);
-                Y_VERIFY_S(size == chainDelegators.size(), "size# " << size
+                TAllChainDelegators chainDelegators = BuildChains(OldMinHugeBlobSizeInBytes);
+                Y_VERIFY_S(size > 0 && size == chainDelegators.size(), "size# " << size
                         << " chainDelegators.size()# " << chainDelegators.size());
 
                 // load into temporary delegators
@@ -524,6 +522,7 @@ namespace NKikimr {
                 using TIt = TAllChainDelegators::iterator;
                 TIt loadedIt = chainDelegators.begin();
                 TIt loadedEnd = chainDelegators.end();
+                FirstLoadedSlotSize = loadedIt->SlotSize;
                 for (TIt it = ChainDelegators.begin(); it != ChainDelegators.end(); ++it) {
                     Y_ABORT_UNLESS(loadedIt != loadedEnd);
                     if (loadedIt->SlotSize == it->SlotSize) {
@@ -536,7 +535,7 @@ namespace NKikimr {
                 // entry point size rollback case
                 Y_ABORT_UNLESS(size > ChainDelegators.size());
                 ui32 curChainDelegatorsSize = ChainDelegators.size();
-                Y_FAIL_S("Impossible case; MinBlobInBytes# " << MinBlobInBytes
+                Y_FAIL_S("Impossible case; MinHugeBlobInBytes# " << MinHugeBlobInBytes
                         << " MilestoneBlobInBytes# " << MilestoneBlobInBytes
                         << " loadedSize# " << size
                         << " curChainDelegatorsSize# " << curChainDelegatorsSize);
@@ -552,7 +551,7 @@ namespace NKikimr {
         TString TAllChains::ToString() const {
             TStringStream str;
             str << "{ChunkSize# " << ChunkSize << " AppendBlockSize# " << AppendBlockSize
-                << " MinBlobInBytes# " << MinBlobInBytes << " MaxBlobInBytes# " << MaxBlobInBytes;
+                << " MinHugeBlobInBytes# " << MinHugeBlobInBytes << " MaxBlobInBytes# " << MaxBlobInBytes;
             for (const auto & x : ChainDelegators) {
                 str << " {CHAIN " << x.ToString() << "}";
             }
@@ -628,9 +627,9 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TAllChains: Private
         ////////////////////////////////////////////////////////////////////////////
-        TAllChains::TAllChainDelegators TAllChains::BuildChains(ui32 minBlobInBytes) const {
-            // minBlobInBytes -- is the only variable parameter, used for migration
-            const ui32 startBlocks = minBlobInBytes / AppendBlockSize;
+        TAllChains::TAllChainDelegators TAllChains::BuildChains(ui32 minHugeBlobInBytes) const {
+            // minHugeBlobInBytes -- is the only variable parameter, used for migration
+            const ui32 startBlocks = minHugeBlobInBytes / AppendBlockSize;
             const ui32 mileStoneBlocks = MilestoneBlobInBytes / AppendBlockSize;
             const ui32 endBlocks = GetEndBlocks();
 
@@ -667,7 +666,7 @@ namespace NKikimr {
 
         void TAllChains::BuildLayout()
         {
-            ChainDelegators = BuildChains(MinBlobInBytes);
+            ChainDelegators = BuildChains(MinHugeBlobInBytes);
             Y_ABORT_UNLESS(!ChainDelegators.empty());
             BuildSearchTable();
         }
@@ -692,17 +691,17 @@ namespace NKikimr {
         THeap::THeap(const TString &vdiskLogPrefix,
                 ui32 chunkSize,
                 ui32 appendBlockSize,
-                ui32 minBlobInBytes,
+                ui32 minHugeBlobInBytes,
+                ui32 oldMinHugeBlobSizeInBytes,
                 ui32 mileStoneBlobInBytes,
                 ui32 maxBlobInBytes,
                 ui32 overhead,
-                ui32 freeChunksReservation,
-                bool oldMapCompatible)
+                ui32 freeChunksReservation)
             : VDiskLogPrefix(vdiskLogPrefix)
             , FreeChunksReservation(freeChunksReservation)
             , FreeChunks()
-            , Chains(vdiskLogPrefix, chunkSize, appendBlockSize, minBlobInBytes, mileStoneBlobInBytes,
-                    maxBlobInBytes, overhead, oldMapCompatible)
+            , Chains(vdiskLogPrefix, chunkSize, appendBlockSize, minHugeBlobInBytes, oldMinHugeBlobSizeInBytes,
+                    mileStoneBlobInBytes, maxBlobInBytes, overhead)
         {}
 
         //////////////////////////////////////////////////////////////////////////////////////////

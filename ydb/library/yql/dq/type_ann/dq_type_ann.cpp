@@ -1024,10 +1024,6 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
                 return AnnotateDqCnMerge(input, ctx);
             }
             
-            if (TDqCnStreamLookup::Match(input.Get())) {
-                return AnnotateDqCnStreamLookup(input, ctx);
-            }
-
             if (TDqReplicate::Match(input.Get())) {
                 return AnnotateDqReplicate(input, ctx);
             }

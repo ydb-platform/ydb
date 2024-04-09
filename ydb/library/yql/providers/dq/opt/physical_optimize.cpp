@@ -212,11 +212,13 @@ protected:
         }
 
         const auto pos = node.Pos();
-        const auto left = join.LeftInput().Maybe<TDqConnection>(); //Maybe<TDqConnection>
-
+        const auto left = join.LeftInput().Maybe<TDqConnection>();
+        if (!left) {
+            return node;
+        }
         auto cn = Build<TDqCnStreamLookup>(ctx, pos)
             .Output(left.Output().Cast())
-            .LeftLabel(join.LeftLabel())
+            .LeftLabel(join.LeftLabel().Cast<NNodes::TCoAtom>())
             .RightInputRowType(ExpandType(pos, *GetSeqItemType(join.RightInput().Raw()->GetTypeAnn()), ctx))
             .RightLabel(join.RightLabel().Cast<NNodes::TCoAtom>())
             .JoinKeys(join.JoinKeys())

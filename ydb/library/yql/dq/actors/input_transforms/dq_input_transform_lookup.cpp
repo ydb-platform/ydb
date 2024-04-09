@@ -50,7 +50,6 @@ public:
         //TODO implement me
     }
 
-private:
 private: //IDqComputeActorAsyncInput
     ui64 GetInputIndex() const final {
         return InputIndex;

@@ -243,6 +243,7 @@ private:
             HFunc(TEvPQProxy::TEvCommitDone, Handle); // from PartitionActor
             HFunc(TEvPQProxy::TEvPartitionStatus, Handle); // from partitionActor
             HFunc(TEvPQProxy::TEvUpdateSession, Handle); // from partitionActor
+            HFunc(TEvPQProxy::TEvReadingStarted, Handle); // from partitionActor
             HFunc(TEvPQProxy::TEvReadingFinished, Handle); // from partitionActor
 
 
@@ -295,6 +296,7 @@ private:
     void Handle(TEvPQProxy::TEvCommitDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvUpdateSession::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx);
 
     // Balancer events

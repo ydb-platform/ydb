@@ -1140,10 +1140,19 @@ bool TPersQueueReadBalancer::TClientInfo::SetCommittedState(ui32 partitionId) {
 }
 
 TPersQueueReadBalancer::TClientGroupInfo* TPersQueueReadBalancer::TClientInfo::FindGroup(ui32 partitionId) {
-    for (auto& [_, group] : ClientGroupsInfo) {
-        if (group.PartitionsInfo.contains(partitionId)) {
-            return &group;
-        }
+    auto it = ClientGroupsInfo.find(partitionId + 1);
+    if (it != ClientGroupsInfo.end()) {
+        return &it->second;
+    }
+
+    it = ClientGroupsInfo.find(MAIN_GROUP);
+    if (it == ClientGroupsInfo.end()) {
+        return nullptr;
+    }
+
+    auto& group = it->second;
+    if (group.PartitionsInfo.contains(partitionId)) {
+        return &group;
     }
 
     return nullptr;
@@ -1154,51 +1163,34 @@ bool TPersQueueReadBalancer::TClientInfo::ProccessReadingFinished(ui32 partition
         return false;
     }
 
-    auto* n = Balancer.PartitionGraph.GetPartition(partitionId);
-    if (!n) {
-        return false;
+    auto* groupInfo = FindGroup(partitionId);
+    if (!groupInfo) {
+        return false; // TODO is it correct?
     }
-
-    auto it = ClientGroupsInfo.find(MAIN_GROUP);
-    if (it == ClientGroupsInfo.end()) {
-        return false;
-    }
+    groupInfo->InactivatePartition(partitionId);
 
     bool hasChanges = false;
 
-    auto& groupInfo = it->second;
-    if (groupInfo.PartitionsInfo.contains(partitionId)) {
-        auto& freePartitions = groupInfo.FreePartitions;
-
-        std::deque<const TPartitionGraph::Node*> queue;
-        queue.push_back(n);
-        while (!queue.empty()) {
-            const auto* node = queue.front();
-            queue.pop_front();
-
-            for (const auto* c : node->Children) {
-                if (IsReadeable(c->Id)) {
-                    auto it = groupInfo.PartitionsInfo.find(c->Id);
-                    Y_ABORT_UNLESS(it != groupInfo.PartitionsInfo.end());
-                    auto& partitionInfo = it->second;
-
-                    if (partitionInfo.State != EPS_ACTIVE) {
-                        freePartitions.push_back(c->Id);
-                        hasChanges = true;
-                    }
-                    queue.push_back(c);
-                }
+    Balancer.PartitionGraph.Travers(partitionId, [&](ui32 id) {
+        if (IsReadeable(id)) {
+            auto* groupInfo = FindGroup(id);
+            if (!groupInfo) {
+                return false; // TODO is it correct?
             }
-        }
+            auto it = groupInfo->PartitionsInfo.find(id);
+            if (it == groupInfo->PartitionsInfo.end()) {
+                return false; // TODO is it correct?
+            }
+            auto& partitionInfo = it->second;
 
-        groupInfo.InactivatePartition(partitionId);
-    } else {
-        auto git = ClientGroupsInfo.find(partitionId + 1);
-        if (git != ClientGroupsInfo.end()) {
-            git->second.InactivatePartition(partitionId);
+            if (partitionInfo.State == EPS_FREE) {
+                groupInfo->FreePartitions.push_back(id);
+                hasChanges = true;
+            }
+            return true;
         }
-    }
-
+        return false;
+    });
 
     return hasChanges;
 }
@@ -1709,6 +1701,10 @@ void TPersQueueReadBalancer::TClientGroupInfo::Balance(const TActorContext& ctx)
 
     auto [totalActive, totalInactive, totalUnreadable] = TotalPartitions();
 
+    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "client " << ClientId << " balance: "
+                            << " TotalActive=" << totalActive << ", TotalInactive=" << totalInactive << ", TotalUnreadable=" << totalUnreadable);
+
+
     //FreePartitions and PipeInfo[].NumActive are consistent
     ui32 desiredActive = totalActive / sessionsCount;
     ui32 allowPlusOne = totalActive % sessionsCount;
@@ -1952,6 +1948,34 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPt
     }
 }
 
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx) {
+    auto& r = ev->Get()->Record;
+
+    auto it = ClientsInfo.find(r.GetConsumer());
+    if (it != ClientsInfo.end()) {
+        auto& clientInfo = it->second;
+        auto& status = clientInfo.GetPartitionReadingStatus(r.GetPartitionId());
+
+        if (status.StartReading()) {
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                        "Reading of partition " << r.GetPartitionId() << " was started by " << r.GetConsumer() << ". Stop reading from children's partitions.");
+
+            // We releasing all children's partitions because we don't start reading the partition from EndOffset
+            PartitionGraph.Travers(r.GetPartitionId(), [&](ui32 partitionId) {
+                auto& status = clientInfo.GetPartitionReadingStatus(partitionId);
+                status.Reset();
+
+                auto* group = clientInfo.FindGroup(partitionId);
+                if (group) {
+                    group->ReleasePartition(partitionId, ctx);
+                }
+
+                return true;
+            });
+        }
+    }
+}
+
 void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
     auto& r = ev->Get()->Record;
 
@@ -1966,9 +1990,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedReq
                             "Reading of partition " << r.GetPartitionId() << " was finished by " << r.GetConsumer()
                             << ", firstMessage=" << r.GetStartedReadingFromEndOffset() << ", ScaleAwareSDK");
 
-                status.ScaleAwareSDK = true;
-                status.ReadingFinished = true;
-                status.StartedReadingFromEndOffset = r.GetStartedReadingFromEndOffset();
+                status.SetFinishedState(true, r.GetStartedReadingFromEndOffset());
 
                 if (clientInfo.ProccessReadingFinished(r.GetPartitionId())) {
                     ctx.Send(ctx.SelfID, new TEvPersQueue::TEvWakeupClient(r.GetConsumer(), TClientInfo::MAIN_GROUP));
@@ -1980,18 +2002,13 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedReq
                             "Reading of partition " << r.GetPartitionId() << " was finished by " << r.GetConsumer()
                             << ", firstMessage=" << r.GetStartedReadingFromEndOffset() << ", old SDK, iteration=" << status.Iteration);
 
-                status.ScaleAwareSDK = false;
-                status.ReadingFinished = true;
-                status.StartedReadingFromEndOffset = r.GetStartedReadingFromEndOffset();
+                status.SetFinishedState(false, r.GetStartedReadingFromEndOffset());
 
                 if (status.StartedReadingFromEndOffset) {
                     if (clientInfo.ProccessReadingFinished(r.GetPartitionId())) {
                         ctx.Send(ctx.SelfID, new TEvPersQueue::TEvWakeupClient(r.GetConsumer(), TClientInfo::MAIN_GROUP));
                     }
                 } else {
-                    ++status.Iteration;
-                    ++status.Cookie;
-
                     auto deleay = std::min<size_t>(1ul << status.Iteration, TabletConfig.GetPartitionConfig().GetLifetimeSeconds());
                     ctx.Schedule(TDuration::Seconds(deleay), new TEvPQ::TEvWakeupReleasePartition(r.GetConsumer(), r.GetPartitionId(), status.Cookie));
                 }

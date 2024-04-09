@@ -92,6 +92,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx); // from Partition/PQ
+    void Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx); // from ReadSession
     void Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx); // from ReadSession
 
     TStringBuilder GetPrefix() const;
@@ -211,10 +212,15 @@ private:
         size_t Iteration = 0;
         ui64 Cookie = 0;
 
-        bool IsFinished() const { return Commited || (ReadingFinished && (StartedReadingFromEndOffset || ScaleAwareSDK)); };
-        bool SetCommittedState() { return !std::exchange(Commited, true); };
-        bool Unlock() { ReadingFinished = false; ++Cookie; return ReleaseChildren(); };
-        bool ReleaseChildren() { return !Commited; }
+        bool IsFinished() const;
+        bool NeedReleaseChildren() const;
+
+        bool StartReading();
+        bool SetCommittedState();
+        bool SetFinishedState(bool scaleAwareSDK, bool startedReadingFromEndOffset);
+
+        bool Unlock();
+        void Reset();
     };
 
     struct TSessionInfo {
@@ -241,7 +247,7 @@ private:
         ui32 ProxyNodeId;
         TInstant Timestamp;
 
-        void Unlock(bool inactive) { --NumActive; --NumSuspended; if (inactive) { -- NumInactive; } }
+        void Unlock(bool inactive);
     };
 
     struct TClientGroupInfo {
@@ -484,6 +490,7 @@ public:
             HFunc(TEvPersQueue::TEvStatus, Handle);
             HFunc(TEvPersQueue::TEvGetPartitionsLocation, Handle);
             HFunc(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
+            HFunc(TEvPersQueue::TEvReadingPartitionStartedRequest, Handle);
             HFunc(TEvPersQueue::TEvReadingPartitionFinishedRequest, Handle);
             HFunc(TEvPQ::TEvWakeupReleasePartition, Handle);
 

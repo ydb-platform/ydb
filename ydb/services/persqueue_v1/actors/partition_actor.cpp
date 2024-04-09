@@ -715,7 +715,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         Y_ABORT_UNLESS(!RequestInfly);
 
         if (EndOffset > ReadOffset) {
-            ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Partition, WTime, SizeLag, ReadOffset, EndOffset));
+            SendPartitionReady(ctx);
         } else {
             WaitForData = true;
             if (PipeClient) //pipe will be recreated soon
@@ -761,7 +761,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
     Y_ABORT_UNLESS(!WaitForData);
 
     if (EndOffset > ReadOffset) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Partition, WTime, SizeLag, ReadOffset, EndOffset));
+        SendPartitionReady(ctx);
     } else {
         WaitForData = true;
         if (PipeClient) //pipe will be recreated soon
@@ -797,6 +797,16 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
     }
 
     PipeGeneration = 0; //reset tries counter - all ok
+}
+
+void TPartitionActor::SendPartitionReady(const TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
+                        << " ready for read with readOffset " << ReadOffset << " endOffset " << EndOffset);
+    if (FirstRead) {
+        ctx.Send(ParentId, new TEvPQProxy::TEvReadingStarted(Topic->GetInternalName(), Partition.Partition));
+        FirstRead = false;
+    }
+    ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Partition, WTime, SizeLag, ReadOffset, EndOffset));
 }
 
 
@@ -914,8 +924,7 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
     }
 
     if (EndOffset > ReadOffset) {
-        FirstRead = false;
-        ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Partition, WTime, SizeLag, ReadOffset, EndOffset));
+        SendPartitionReady(ctx);
     } else {
         WaitForData = true;
         if (PipeClient) //pipe will be recreated soon
@@ -1051,9 +1060,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     if (ReadOffset < EndOffset) {
         WaitForData = false;
         WaitDataInfly.clear();
-        ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Partition, WTime, SizeLag, ReadOffset, EndOffset));
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                        << " ready for read with readOffset " << ReadOffset << " endOffset " << EndOffset);
+        SendPartitionReady(ctx);
     } else if (PipeClient) {
         WaitDataInPartition(ctx);
     }
@@ -1064,9 +1071,10 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
 
             // TODO Tx
             ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, FirstRead));
-        } else {
-            FirstRead = false;
+        } else if (FirstRead) {
+            ctx.Send(ParentId, new TEvPQProxy::TEvReadingStarted(Topic->GetInternalName(), Partition.Partition));
         }
+        FirstRead = false;
     }
 }
 

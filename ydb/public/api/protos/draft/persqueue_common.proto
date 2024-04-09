@@ -35,8 +35,7 @@ enum ECodec {
 
 message Credentials {
     oneof credentials {
-        bytes tvm_service_ticket = 1;
-        bytes oauth_token = 2;
+        bytes tvm_service_ticket = 1 [(Ydb.sensitive) = true];
+        bytes oauth_token = 2 [(Ydb.sensitive) = true];
     }
 }
-

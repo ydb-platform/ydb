@@ -38,7 +38,7 @@ message OffsetsRange {
 
 // In-session reauthentication and reauthorization, lets user increase session lifetime. You should wait for 'update_token_response' before sending next 'update_token_request'.
 message UpdateTokenRequest {
-    string token = 1;
+    string token = 1 [(Ydb.sensitive) = true];
 }
 
 message UpdateTokenResponse {
@@ -788,7 +788,7 @@ message MigrationStreamingReadClientMessage {
     }
 
     // User credentials if update is needed or empty string.
-    bytes token = 20;
+    bytes token = 20 [(Ydb.sensitive) = true];
 }
 
 /**
@@ -1073,8 +1073,8 @@ message Credentials {
         string service_account_key = 2;
     }
     oneof credentials {
-        string oauth_token = 1;
-        string jwt_params = 2;
+        string oauth_token = 1 [(Ydb.sensitive) = true];
+        string jwt_params = 2 [(Ydb.sensitive) = true];
         Iam iam = 3;
     }
 }

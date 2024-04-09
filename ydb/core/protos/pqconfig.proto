@@ -219,11 +219,11 @@ message TMirrorPartitionConfig {
     message TCredentials {
         message IamCredentials {
             optional string Endpoint = 1;
-            optional string ServiceAccountKey = 2;
+            optional string ServiceAccountKey = 2 [(Ydb.sensitive) = true];
         }
         oneof Credentials {
-            string OauthToken = 1;
-            string JwtParams = 2;
+            string OauthToken = 1 [(Ydb.sensitive) = true];
+            string JwtParams = 2 [(Ydb.sensitive) = true];
             IamCredentials Iam = 3;
         }
     }

@@ -21,8 +21,11 @@ public:
     {}
 
     bool ExecuteSchemeQuery(const TString& query) const {
+        StartSchemeTraceOpt();
+
         TSchemeMeta meta;
         TRequestResult status = YdbSetup_.SchemeQueryRequest(query, meta);
+        TYdbSetup::StopTraceOpt();
 
         PrintSchemeQueryAst(meta.Ast);
 
@@ -35,6 +38,8 @@ public:
     }
 
     bool ExecuteScript(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId) {
+        StartScriptTraceOpt();
+
         TRequestResult status = YdbSetup_.ScriptRequest(script, action, traceId, ExecutionOperation_);
 
         if (!status.IsSuccess()) {
@@ -45,9 +50,12 @@ public:
         return WaitScriptExecutionOperation();
     }
 
-    bool ExecuteQuery(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
+    bool ExecuteQuery(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) {
+        StartScriptTraceOpt();
+
         TQueryMeta meta;
-        TRequestResult status = YdbSetup_.QueryRequest(query, action, traceId, meta);
+        TRequestResult status = YdbSetup_.QueryRequest(query, action, traceId, meta, ResultSets_);
+        TYdbSetup::StopTraceOpt();
 
         PrintScriptAst(meta.Ast);
 
@@ -61,20 +69,30 @@ public:
         return true;
     }
 
-    bool WriteScriptResults() const {
+    bool FetchScriptResults() {
+        TYdbSetup::StopTraceOpt();
+
+        ResultSets_.resize(ExecutionMeta_.ResultSetsCount);
         for (i32 resultSetId = 0; resultSetId < ExecutionMeta_.ResultSetsCount; ++resultSetId) {
-            Ydb::ResultSet resultSet;
-            TRequestResult status = YdbSetup_.FetchScriptExecutionResultsRequest(ExecutionOperation_, resultSetId, Options_.ResultsRowsLimit, resultSet);
+            TRequestResult status = YdbSetup_.FetchScriptExecutionResultsRequest(ExecutionOperation_, resultSetId, ResultSets_[resultSetId]);
 
             if (!status.IsSuccess()) {
                 Cerr << CerrColors_.Red() << "Failed to fetch result set with id " << resultSetId << ", reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
                 return false;
             }
-
-            PrintScriptResult(resultSet);
         }
 
         return true;
+    }
+
+    void PrintScriptResults() const {
+        Cout << CoutColors_.Cyan() << "Writing script query results" << CoutColors_.Default() << Endl;
+        for (size_t i = 0; i < ResultSets_.size(); ++i) {
+            if (ResultSets_.size() > 1) {
+                *Options_.ResultOutput << CoutColors_.Cyan() << "Result set " << i + 1 << ":" << CoutColors_.Default() << Endl;
+            }
+            PrintScriptResult(ResultSets_[i]);
+        }
     }
 
 private:
@@ -107,6 +125,18 @@ private:
         return true;
     }
 
+    void StartSchemeTraceOpt() const {
+        if (Options_.TraceOptType == TRunnerOptions::ETraceOptType::All || Options_.TraceOptType == TRunnerOptions::ETraceOptType::Scheme) {
+            YdbSetup_.StartTraceOpt();
+        }
+    }
+
+    void StartScriptTraceOpt() const {
+        if (Options_.TraceOptType == TRunnerOptions::ETraceOptType::All || Options_.TraceOptType == TRunnerOptions::ETraceOptType::Script) {
+            YdbSetup_.StartTraceOpt();
+        }
+    }
+
     void PrintSchemeQueryAst(const TString& ast) const {
         if (Options_.SchemeQueryAstOutput) {
             Cout << CoutColors_.Cyan() << "Writing scheme query ast" << CoutColors_.Default() << Endl;
@@ -122,7 +152,7 @@ private:
     }
 
     void PrintScriptPlan(const TString& plan) const {
-        if (Options_.ScriptQueryAstOutput) {
+        if (Options_.ScriptQueryPlanOutput) {
             Cout << CoutColors_.Cyan() << "Writing script query plan" << CoutColors_.Default() << Endl;
 
             NYdb::NConsoleClient::TQueryPlanPrinter printer(Options_.PlanOutputFormat, true, *Options_.ScriptQueryPlanOutput);
@@ -132,9 +162,17 @@ private:
 
     void PrintScriptResult(const Ydb::ResultSet& resultSet) const {
         switch (Options_.ResultOutputFormat) {
-        case TRunnerOptions::EResultOutputFormat::RowsJson:
-            Options_.ResultOutput->Write(NYdb::FormatResultSetJson(resultSet, NYdb::EBinaryStringEncoding::Unicode));
+        case TRunnerOptions::EResultOutputFormat::RowsJson: {
+            NYdb::TResultSet result(resultSet);
+            NYdb::TResultSetParser parser(result);
+            while (parser.TryNextRow()) {
+                NJsonWriter::TBuf writer(NJsonWriter::HEM_UNSAFE, Options_.ResultOutput);
+                writer.SetWriteNanAsString(true);
+                NYdb::FormatResultRowJson(parser, result.GetColumnsMeta(), writer, NYdb::EBinaryStringEncoding::Unicode);
+                *Options_.ResultOutput << Endl;
+            }
             break;
+        }
 
         case TRunnerOptions::EResultOutputFormat::FullJson:
             resultSet.PrintJSON(*Options_.ResultOutput);
@@ -151,6 +189,7 @@ private:
 
     TString ExecutionOperation_;
     TExecutionMeta ExecutionMeta_;
+    std::vector<Ydb::ResultSet> ResultSets_;
 };
 
 
@@ -172,8 +211,12 @@ bool TKqpRunner::ExecuteQuery(const TString& query, NKikimrKqp::EQueryAction act
     return Impl_->ExecuteQuery(query, action, traceId);
 }
 
-bool TKqpRunner::WriteScriptResults() const {
-    return Impl_->WriteScriptResults();
+bool TKqpRunner::FetchScriptResults() {
+    return Impl_->FetchScriptResults();
+}
+
+void TKqpRunner::PrintScriptResults() const {
+    Impl_->PrintScriptResults();
 }
 
 }  // namespace NKqpRun

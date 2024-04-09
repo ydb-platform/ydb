@@ -21,6 +21,8 @@ SRCS(
     yql_generic_settings.cpp
     yql_generic_state.h
     yql_generic_state.cpp
+    yql_generic_utils.h
+    yql_generic_utils.cpp
 )
 
 YQL_LAST_ABI_VERSION()
@@ -45,13 +47,16 @@ PEERDIR(
     ydb/library/yql/providers/common/provider
     ydb/library/yql/providers/common/pushdown
     ydb/library/yql/providers/common/structured_token
+    ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/common/transform
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes
     ydb/library/yql/providers/generic/expr_nodes
     ydb/library/yql/providers/generic/proto
+    ydb/library/yql/providers/generic/connector/api/common
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/utils/plan
+    ydb/public/sdk/cpp/client/ydb_types/credentials
 )
 
 END()

@@ -21,4 +21,5 @@ message TSource {
     bool RowGroupReordering = 10;
     uint64 ParallelDownloadCount = 11;
     uint64 RowsLimitHint = 12;
+    bool UseRuntimeListing = 13;
 }

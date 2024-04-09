@@ -66,11 +66,12 @@ void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescri
     }
 
     static const TSet<TString> properties {
-        "database_name",
-        "protocol",
-        "mdb_cluster_id",
+        "database_name", 
+        "protocol", // managed PG, CH
+        "mdb_cluster_id", // managed PG, CH
+        "database_id", // managed YDB
         "use_tls",
-        "schema"
+        "schema", // managed PG
     };
 
     for (const auto& property: properties) {

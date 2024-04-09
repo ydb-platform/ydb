@@ -13,6 +13,7 @@ std::unique_ptr<NActors::IActor> CreateResultWriterActor(const TRunActorParams& 
                                                          const NActors::TActorId& connector,
                                                          const NActors::TActorId& pinger,
                                                          const NKikimr::NOperationId::TOperationId& operationId,
+                                                         bool operationEntryExpected,
                                                          const ::NYql::NCommon::TServiceCounters& queryCounters);
 
 }

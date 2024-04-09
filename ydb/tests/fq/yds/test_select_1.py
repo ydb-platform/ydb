@@ -120,11 +120,11 @@ class TestSelect1(object):
             assert "Failed to parse query" in describe_string, describe_string
 
     @yq_all
-    def test_ast_in_failed_query(self, client):
-        sql = "SELECT unwrap(1 / 0)"
+    def test_ast_in_failed_query_runtime(self, client):
+        sql = "SELECT unwrap(42 / 0) AS error_column"
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
 
-        ast = str(client.describe_query(query_id).result.query.ast)
-        assert ast != "", "Query ast not found"
+        ast = client.describe_query(query_id).result.query.ast.data
+        assert "(\'\"error_column\" (Unwrap (/ (Int32 \'\"42\")" in ast, "Invalid query ast"

@@ -180,7 +180,7 @@ public:
                 .Ptr();
         ::google::protobuf::Any settings;
         TString sourceType;
-        dqIntegration->FillSourceSettings(*dqSourceNode, settings, sourceType);
+        dqIntegration->FillSourceSettings(*dqSourceNode, settings, sourceType, 1);
         UNIT_ASSERT_STRINGS_EQUAL(sourceType, "PostgreSqlGeneric");
         UNIT_ASSERT(settings.Is<Generic::TSource>());
         settings.UnpackTo(DqSourceSettings_);
@@ -243,6 +243,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
             TypesCtx.Get(),
             FunctionRegistry.Get(),
             DatabaseResolver,
+            nullptr,
             GenericClient,
             GatewaysCfg.GetGeneric());
 

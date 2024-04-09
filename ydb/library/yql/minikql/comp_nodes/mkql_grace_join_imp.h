@@ -169,6 +169,8 @@ class TTable {
 
     bool Table2Initialized_ = false;    // True when iterator counters for second table already initialized
 
+    ui64 TuplesFound_ = 0; // Total number of matching keys found during join
+
 public:
 
     // Adds new tuple to the table.  intColumns, stringColumns - data of columns, 

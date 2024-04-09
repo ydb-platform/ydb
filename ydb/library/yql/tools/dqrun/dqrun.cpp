@@ -46,6 +46,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
 #include <ydb/library/yql/providers/common/metrics/protos/metrics_registry.pb.h>
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
@@ -92,6 +93,7 @@
 #include <util/system/user.h>
 #include <util/system/env.h>
 #include <util/system/file.h>
+#include <util/string/builder.h>
 #include <util/string/strip.h>
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
@@ -226,14 +228,20 @@ private:
     IOutputStream* TracePlan;
 };
 
-NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, IHTTPGateway::TPtr httpGateway, NYql::NConnector::IClient::TPtr genericClient, size_t HTTPmaxTimeSeconds, size_t maxRetriesCount) {
+NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(
+    const NYdb::TDriver& driver,
+    IHTTPGateway::TPtr httpGateway,
+    NYql::NConnector::IClient::TPtr genericClient,
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    size_t HTTPmaxTimeSeconds, 
+    size_t maxRetriesCount) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
     RegisterDqPqReadActorFactory(*factory, driver, nullptr);
     RegisterYdbReadActorFactory(*factory, driver, nullptr);
     RegisterS3ReadActorFactory(*factory, nullptr, httpGateway, GetHTTPDefaultRetryPolicy(TDuration::Seconds(HTTPmaxTimeSeconds), maxRetriesCount), {}, nullptr);
     RegisterS3WriteActorFactory(*factory, nullptr, httpGateway);
     RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
-    RegisterGenericReadActorFactory(*factory, nullptr, genericClient);
+    RegisterGenericReadActorFactory(*factory, credentialsFactory, genericClient);
 
     RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
 
@@ -267,7 +275,8 @@ struct TActorIds {
 std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
     const TGatewaysConfig& gatewaysConfig,
     IMetricsRegistryPtr& metricsRegistry,
-    NYql::NLog::ELevel loggingLevel
+    NYql::NLog::ELevel loggingLevel,
+    ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory
 ) {
     auto actorSystemManager = std::make_unique<TActorSystemManager>(metricsRegistry, YqlToActorsLogLevel(loggingLevel));
     TActorIds actorIds;
@@ -288,7 +297,7 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
         auto httpProxy = NHttp::CreateHttpProxy();
         actorIds.HttpProxy = actorSystemManager->GetActorSystem()->Register(httpProxy);
 
-        auto databaseResolver = NFq::CreateDatabaseResolver(actorIds.HttpProxy, nullptr);
+        auto databaseResolver = NFq::CreateDatabaseResolver(actorIds.HttpProxy, credentialsFactory);
         actorIds.DatabaseResolver = actorSystemManager->GetActorSystem()->Register(databaseResolver);
     }
 
@@ -427,6 +436,7 @@ int RunMain(int argc, const char* argv[])
     TString mountConfig;
     TString mestricsPusherConfig;
     TString udfResolver;
+    TString tokenAccessorEndpoint;
     bool udfResolverFilterSyscalls = false;
     TString statFile;
     TString metricsFile;
@@ -585,6 +595,10 @@ int RunMain(int argc, const char* argv[])
                 failureInjections[key] = std::make_pair(ui32(0), FromString<ui32>(fail));
             }
         });
+    opts.AddLongOption("token-accessor-endpoint", "Network address of Token Accessor service in format grpc(s)://host:port")
+        .Optional()
+        .RequiredArgument("ENDPOINT")
+        .StoreResult(&tokenAccessorEndpoint);
     opts.AddHelpOption('h');
 
     opts.SetFreeArgsNum(0);
@@ -745,12 +759,21 @@ int RunMain(int argc, const char* argv[])
         dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
     }
 
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
+
+    if (tokenAccessorEndpoint) {
+        TVector<TString> ss = StringSplitter(tokenAccessorEndpoint).SplitByString("://");
+        YQL_ENSURE(ss.size() == 2, "Invalid tokenAccessorEndpoint: " << tokenAccessorEndpoint); 
+
+        credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(ss[1], ss[0] == "grpcs", "");
+    }
+
     auto dqCompFactory = NMiniKQL::GetCompositeWithBuiltinFactory(factories);
 
     // Actor system starts here and will be automatically destroyed when goes out of the scope.
     std::unique_ptr<TActorSystemManager> actorSystemManager;
     TActorIds actorIds;
-    std::tie(actorSystemManager, actorIds) = RunActorSystem(gatewaysConfig, metricsRegistry, loggingLevel);
+    std::tie(actorSystemManager, actorIds) = RunActorSystem(gatewaysConfig, metricsRegistry, loggingLevel, credentialsFactory);
 
     IHTTPGateway::TPtr httpGateway;
     if (gatewaysConfig.HasClickHouse()) {
@@ -781,7 +804,8 @@ int RunMain(int argc, const char* argv[])
         }
 
         genericClient = NConnector::MakeClientGRPC(gatewaysConfig.GetGeneric().GetConnector());
-        dataProvidersInit.push_back(GetGenericDataProviderInitializer(genericClient, dbResolver));
+
+        dataProvidersInit.push_back(GetGenericDataProviderInitializer(genericClient, dbResolver, credentialsFactory));
     }
 
     if (gatewaysConfig.HasYdb()) {
@@ -847,10 +871,9 @@ int RunMain(int argc, const char* argv[])
             size_t requestTimeout = gatewaysConfig.HasHttpGateway() && gatewaysConfig.GetHttpGateway().HasRequestTimeoutSeconds() ? gatewaysConfig.GetHttpGateway().GetRequestTimeoutSeconds() : 100;
             size_t maxRetries = gatewaysConfig.HasHttpGateway() && gatewaysConfig.GetHttpGateway().HasMaxRetries() ? gatewaysConfig.GetHttpGateway().GetMaxRetries() : 2;
 
-
             bool enableSpilling = res.Has("enable-spilling");
             dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories, enableSpilling,
-                CreateAsyncIoFactory(driver, httpGateway, genericClient, requestTimeout, maxRetries), threads,
+                CreateAsyncIoFactory(driver, httpGateway, genericClient, credentialsFactory, requestTimeout, maxRetries), threads,
                 metricsRegistry, metricsPusherFactory);
         }
 

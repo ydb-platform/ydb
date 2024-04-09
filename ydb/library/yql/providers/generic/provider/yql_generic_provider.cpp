@@ -6,13 +6,14 @@
 namespace NYql {
 
     TDataProviderInitializer GetGenericDataProviderInitializer(NConnector::IClient::TPtr genericClient,
-                                                               const std::shared_ptr<IDatabaseAsyncResolver> dbResolver)
+                                                               const IDatabaseAsyncResolver::TPtr& dbResolver,
+                                                               const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory)
     {
-        return [genericClient, dbResolver](const TString& userName, const TString& sessionId, const TGatewaysConfig* gatewaysConfig,
-                                           const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-                                           TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-                                           const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
-                                           THiddenQueryAborter)
+        return [genericClient, dbResolver, credentialsFactory](const TString& userName, const TString& sessionId, const TGatewaysConfig* gatewaysConfig,
+                                                               const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+                                                               TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
+                                                               const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
+                                                               THiddenQueryAborter)
         {
             Y_UNUSED(sessionId);
             Y_UNUSED(userName);
@@ -25,6 +26,7 @@ namespace NYql {
                 typeCtx.Get(),
                 functionRegistry,
                 dbResolver,
+                credentialsFactory,
                 genericClient,
                 gatewaysConfig->GetGeneric());
 

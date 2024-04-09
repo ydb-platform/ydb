@@ -51,11 +51,15 @@ public:
 
     TRequestResult ScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, TString& operation) const;
 
-    TRequestResult QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta) const;
+    TRequestResult QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const;
 
     TRequestResult GetScriptExecutionOperationRequest(const TString& operation, TExecutionMeta& meta) const;
 
-    TRequestResult FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId, i64 limit, Ydb::ResultSet& resultSet) const;
+    TRequestResult FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId, Ydb::ResultSet& resultSet) const;
+
+    void StartTraceOpt() const;
+
+    static void StopTraceOpt();
 
 private:
     class TImpl;

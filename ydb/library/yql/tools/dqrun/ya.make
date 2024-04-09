@@ -42,6 +42,7 @@ ENDIF()
         ydb/library/yql/providers/clickhouse/provider
         ydb/library/yql/providers/common/comp_nodes
         ydb/library/yql/providers/common/proto
+        ydb/library/yql/providers/common/token_accessor/client
         ydb/library/yql/providers/common/udf_resolve
         ydb/library/yql/providers/generic/actors
         ydb/library/yql/providers/generic/provider

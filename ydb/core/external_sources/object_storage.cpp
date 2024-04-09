@@ -28,19 +28,20 @@ struct TObjectStorageExternalSource : public IExternalSource {
                          const NKikimrExternalSources::TGeneral& general) const override {
         NKikimrExternalSources::TObjectStorage objectStorage;
         for (const auto& [key, value]: general.attributes()) {
-            if (key == "format") {
+            auto lowerKey = to_lower(key);
+            if (lowerKey == "format") {
                 objectStorage.set_format(value);
-            } else if (key == "compression") {
+            } else if (lowerKey == "compression") {
                 objectStorage.set_compression(value);
             } else if (key.StartsWith("projection.") || key == "storage.location.template") {
                 objectStorage.mutable_projection()->insert({key, value});
-            } else if (key == "partitioned_by") {
+            } else if (lowerKey == "partitioned_by") {
                 auto json = NSc::TValue::FromJsonThrow(value);
                 for (const auto& column: json.GetArray()) {
                     *objectStorage.add_partitioned_by() = column;
                 }
-            } else if (IsIn({"file_pattern"sv, "data.interval.unit"sv, "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv, "csv_delimiter"sv}, key)) {
-                objectStorage.mutable_format_setting()->insert({key, value});
+            } else if (IsIn({"file_pattern"sv, "data.interval.unit"sv, "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv, "csv_delimiter"sv}, lowerKey)) {
+                objectStorage.mutable_format_setting()->insert({lowerKey, value});
             } else {
                 ythrow TExternalSourceException() << "Unknown attribute " << key;
             }

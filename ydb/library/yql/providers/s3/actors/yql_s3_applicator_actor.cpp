@@ -204,6 +204,8 @@ class TS3ApplicatorActor;
 using TObjectStorageRequest = std::function<void(TS3ApplicatorActor& actor)>;
 
 class TS3ApplicatorActor : public NActors::TActorBootstrapped<TS3ApplicatorActor> {
+    static constexpr ui64 GLOBAL_RETRY_LIMIT = 100;
+
 public:
     using NActors::TActorBootstrapped<TS3ApplicatorActor>::Send;
 
@@ -230,7 +232,7 @@ public:
     , ExternalEffect(externalEffect)
     , ActorSystem(NActors::TActivationContext::ActorSystem())
     , RetryPolicy(NYql::GetHTTPDefaultRetryPolicy(TDuration::Zero(), 3))
-    , RetryCount(100) {
+    , RetryCount(GLOBAL_RETRY_LIMIT) {
         // ^^^ 3 retries in HTTP GW per operation
         // up to 100 retries at app level for all operations ^^^
     }
@@ -271,12 +273,15 @@ public:
         hFunc(TEvPrivate::TEvListParts, Handle);
     )
 
-    bool RetryOperation(CURLcode curlResponseCode, ui32 httpResponseCode) {
+    bool RetryOperation(CURLcode curlResponseCode, ui32 httpResponseCode, const TString& url, const TString& operationName) {
         auto result = RetryCount && RetryPolicy->CreateRetryState()->GetNextRetryDelay(curlResponseCode, httpResponseCode);
+        Issues.AddIssue(TStringBuilder() << "Retry operation " << operationName << ", curl error: " << curl_easy_strerror(curlResponseCode) << ", http code: " << httpResponseCode << ", url: " << url);
         if (result) {
             RetryCount--;
         } else {
-            Finish(true);
+            Finish(true, RetryCount
+                ? TString("Number of retries exceeded limit per operation")
+                : TStringBuilder() << "Number of retries exceeded global limit in " << GLOBAL_RETRY_LIMIT << " retries");
         }
         return result;
     }
@@ -370,8 +375,9 @@ public:
                 return;
             }
         }
-        LOG_D("CommitMultipartUpload ERROR " << ev->Get()->State->BuildUrl());
-        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode)) {
+        const TString& url = ev->Get()->State->BuildUrl();
+        LOG_D("CommitMultipartUpload ERROR " << url);
+        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode, url, "CommitMultipartUpload")) {
             PushCommitMultipartUpload(ev->Get()->State);
         }
     }
@@ -444,8 +450,9 @@ public:
             }
             return;
         }
-        LOG_D("ListMultipartUploads ERROR " << ev->Get()->State->BuildUrl());
-        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode)) {
+        const TString& url = ev->Get()->State->BuildUrl();
+        LOG_D("ListMultipartUploads ERROR " << url);
+        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode, url, "ListMultipartUploads")) {
             PushListMultipartUploads(ev->Get()->State);
         }
     }
@@ -467,8 +474,9 @@ public:
                 return;
             }
         }
-        LOG_D("AbortMultipartUpload ERROR " << ev->Get()->State->BuildUrl());
-        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode)) {
+        const TString& url = ev->Get()->State->BuildUrl();
+        LOG_D("AbortMultipartUpload ERROR " << url);
+        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode, url, "AbortMultipartUpload")) {
             PushAbortMultipartUpload(ev->Get()->State);
         }
     }
@@ -507,8 +515,9 @@ public:
             }
             return;
         }
-        LOG_D("ListParts ERROR " << ev->Get()->State->BuildUrl());
-        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode)) {
+        const TString& url = ev->Get()->State->BuildUrl();
+        LOG_D("ListParts ERROR " << url);
+        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode, url, "ListParts")) {
             PushListParts(ev->Get()->State);
         }
     }

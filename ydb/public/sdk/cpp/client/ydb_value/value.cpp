@@ -2901,6 +2901,30 @@ TDerived& TValueBuilderBase<TDerived>::Interval(i64 value) {
 }
 
 template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::Date32(const i32 value) {
+    Impl_->Date32(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::Datetime64(const i64 value) {
+    Impl_->Datetime64(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::Timestamp64(const i64 value) {
+    Impl_->Timestamp64(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::Interval64(const i64 value) {
+    Impl_->Interval64(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::TzDate(const TString& value) {
     Impl_->TzDate(value);
     return static_cast<TDerived&>(*this);

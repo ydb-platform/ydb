@@ -304,7 +304,15 @@ public:
         Self->ReadGroups(groupsToDiscard, true, res.get(), nodeId);
 
         for (auto it = Self->PDisks.lower_bound(minPDiskId); it != Self->PDisks.end() && it->first.NodeId == nodeId; ++it) {
-            Self->ReadPDisk(it->first, *it->second, res.get(), NKikimrBlobStorage::INITIAL);
+            auto& pdisk = it->second;
+
+            NKikimrBlobStorage::EEntityStatus entityStatus = NKikimrBlobStorage::INITIAL;
+
+            if (pdisk->Mood == TPDiskMood::Restarting) {
+                entityStatus = NKikimrBlobStorage::RESTART;
+            }
+
+            Self->ReadPDisk(it->first, *pdisk, res.get(), entityStatus);
         }
 
         res->Record.SetInstanceId(Self->InstanceId);

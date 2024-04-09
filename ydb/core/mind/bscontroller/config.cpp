@@ -81,6 +81,9 @@ namespace NKikimr::NBsController {
                     // PDisk's config has changed
                     NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk *pdisk = CreatePDiskEntry(pdiskId, cur);
                     pdisk->SetEntityStatus(NKikimrBlobStorage::RESTART);
+                } else if (prev.Mood != cur.Mood) {
+                    // PDisk's mood has changed
+                    CreatePDiskEntry(pdiskId, cur);
                 }
             }
 
@@ -114,6 +117,14 @@ namespace NKikimr::NBsController {
                     // TODO(alexvru): report this somehow
                 }
                 pdisk->SetSpaceColorBorder(Self->PDiskSpaceColorBorder);
+
+                switch (pdiskInfo.Mood) {
+                    case NBsController::TPDiskMood::EValue::Normal:
+                        break;
+                    case NBsController::TPDiskMood::EValue::Restarting:
+                        pdisk->SetEntityStatus(NKikimrBlobStorage::RESTART);
+                        break;
+                }
 
                 return pdisk;
             }

@@ -687,7 +687,6 @@ namespace NKikimr::NBsController {
         DestroyVSlot(vslotId);
     }
 
-
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TWipeVDisk& cmd, TStatus& /*status*/) {
         // first, find matching vslot
         const TVSlotId& vslotId = cmd.GetVSlotId();

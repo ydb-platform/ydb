@@ -83,6 +83,7 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
         ReadMetadataRange, SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy);
     ScanIterator = ReadMetadataRange->StartScan(context);
     auto startResult = ScanIterator->Start();
+    StartInstant = TMonotonic::Now();
     if (!startResult) {
         ACFL_ERROR("event", "BootstrapError")("error", startResult.GetErrorMessage());
         SendScanError("scanner_start_error:" + startResult.GetErrorMessage());
@@ -93,7 +94,6 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
         Send(ScanComputeActorId, new NKqp::TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen, TabletId), IEventHandle::FlagTrackDelivery);
 
         Become(&TColumnShardScan::StateScan);
-        StartInstant = TMonotonic::Now();
         ContinueProcessing();
     }
 }

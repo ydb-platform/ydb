@@ -180,7 +180,10 @@ namespace NKikimr::NSchemeShard {
 
     bool TOlapColumnAdd::IsAllowedPkType(ui32 typeId) {
         switch (typeId) {
+            case NYql::NProto::Int8:
             case NYql::NProto::Uint8: // Byte
+            case NYql::NProto::Int16:
+            case NYql::NProto::Uint16:
             case NYql::NProto::Int32:
             case NYql::NProto::Uint32:
             case NYql::NProto::Int64:
@@ -265,8 +268,8 @@ namespace NKikimr::NSchemeShard {
             if (column.IsKeyColumn()) {
                 if (!TOlapColumnAdd::IsAllowedPkType(column.GetType().GetTypeId())) {
                     errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
-                        << "Type '" << column.GetType().GetTypeId() << "' specified for column '" << column.GetName()
-                        << "' is not supported in first PK position");
+                        << "Type '" << column.GetTypeName() << "' specified for column '" << column.GetName()
+                        << "' is not supported as primary key");
                     return false;
                 }
             }

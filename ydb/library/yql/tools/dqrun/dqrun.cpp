@@ -21,6 +21,7 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
+#include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
 #include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.h>
 #include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h>
@@ -237,6 +238,7 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(
     size_t HTTPmaxTimeSeconds, 
     size_t maxRetriesCount) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
+    RegisterDqInputTransformLookupActorFactory(*factory);
     RegisterDqPqReadActorFactory(*factory, driver, nullptr);
     RegisterYdbReadActorFactory(*factory, driver, nullptr);
     RegisterS3ReadActorFactory(*factory, nullptr, httpGateway, GetHTTPDefaultRetryPolicy(TDuration::Seconds(HTTPmaxTimeSeconds), maxRetriesCount), {}, nullptr);

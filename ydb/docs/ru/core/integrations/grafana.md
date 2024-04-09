@@ -1,4 +1,4 @@
-# Плагин-источник данных Grafana для интеграции с YDB
+# Плагин-источник данных Grafana для интеграции с {{ ydb-short-name }}
 
 [{{ ydb-short-name }} data source plugin](https://grafana.com/grafana/plugins/ydbtech-ydb-datasource/) позволяет использовать [Grafana](https://grafana.com) для запросов и визуализации данных из {{ ydb-short-name }}.
 
@@ -35,7 +35,7 @@
 
 ### Аутентификация
 
-Плагин поддерживает следующие [типы аутентификации](../reference/ydb-sdk/auth.md) в YDB: Anonymous, Access Token, Metadata, Service Account Key и Static Credentials.
+Плагин поддерживает следующие [типы аутентификации](../reference/ydb-sdk/auth.md) в {{ ydb-short-name }}: Anonymous, Access Token, Metadata, Service Account Key и Static Credentials.
 
 Пример для настройки источника данных {{ ydb-short-name }} с использованием аутентификации в через логин/пароль:
 
@@ -66,7 +66,7 @@ datasources:
 | serviceAccAuthAccessKey | Ключ доступа для сервисного аккаунта  | `string` (защищенное поле) |
 | accessToken | OAuth-токен  | `string` (защищенное поле) |
 | password | Пароль  | `string` (защищенное поле) |
-| certificate | Если на вашем кластере {{ ydb-short-name }} используются самоподписанные сертификаты TLS, то для соединения с YDB необходимо указать сертификат [сертификационного центра](https://en.wikipedia.org/wiki/Certificate_authority), через который они были выпущены | `string` (защищенное поле) |
+| certificate | Если на вашем кластере {{ ydb-short-name }} используются самоподписанные сертификаты TLS, то для соединения с {{ ydb-short-name }} необходимо указать сертификат [сертификационного центра](https://en.wikipedia.org/wiki/Certificate_authority), через который они были выпущены | `string` (защищенное поле) |
 
 ## Написание запросов
 

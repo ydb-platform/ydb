@@ -68,8 +68,6 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
         str = "State is StateInit";
     } else if (CurrentStateFunc() == &TThis::StateIdle) {
         str = "State is StateIdle";
-    } else if (CurrentStateFunc() == &TThis::StateWrite) {
-        str = "State is StateWrite";
     } else {
         Y_ABORT("");
     }

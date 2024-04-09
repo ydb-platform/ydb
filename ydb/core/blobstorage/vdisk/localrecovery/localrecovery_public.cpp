@@ -398,7 +398,7 @@ namespace NKikimr {
             Y_UNUSED(ctx);
             const ui32 blocksInChunk = LocRecCtx->PDiskCtx->Dsk->ChunkSize / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
             Y_ABORT_UNLESS(LocRecCtx->PDiskCtx->Dsk->AppendBlockSize * blocksInChunk == LocRecCtx->PDiskCtx->Dsk->ChunkSize);
-
+            
             ui32 MaxLogoBlobDataSizeInBlocks = Config->MaxLogoBlobDataSize / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
             MaxLogoBlobDataSizeInBlocks += !!(Config->MaxLogoBlobDataSize -
                     MaxLogoBlobDataSizeInBlocks * LocRecCtx->PDiskCtx->Dsk->AppendBlockSize);
@@ -417,7 +417,7 @@ namespace NKikimr {
                             LocRecCtx->VCtx,
                             LocRecCtx->PDiskCtx->Dsk->ChunkSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
-                            Config->MinHugeBlobInBytes,
+                            LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MilestoneHugeBlobInBytes,
                             Config->MaxLogoBlobDataSize,
                             Config->HugeBlobOverhead,
@@ -439,7 +439,7 @@ namespace NKikimr {
                             LocRecCtx->VCtx,
                             LocRecCtx->PDiskCtx->Dsk->ChunkSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
-                            Config->MinHugeBlobInBytes,
+                            LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MilestoneHugeBlobInBytes,
                             Config->MaxLogoBlobDataSize,
                             Config->HugeBlobOverhead,
@@ -447,8 +447,10 @@ namespace NKikimr {
                             Config->HugeBlobOldMapCompatible,
                             lsn, entryPoint, logFunc);
             }
+            const ui32 minHugeBlobInBlocks = (Config->HugeBlobOldMapCompatible ? Config->MilestoneHugeBlobInBytes : Config -> MilestoneHugeBlobInBytes) / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
+            Y_ABORT_UNLESS(minHugeBlobInBlocks >= 1);
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(
-                    LocRecCtx->RepairedHuge->GetMinREALHugeBlobInBytes(),
+                    minHugeBlobInBlocks * LocRecCtx->PDiskCtx->Dsk->AppendBlockSize + 1,
                     LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(),
                     Config->AddHeader);
             HugeKeeperInitialized = true;

@@ -406,10 +406,6 @@ namespace NKikimr {
             Heap->RenderHtml(str);
         }
 
-        ui32 THullHugeKeeperPersState::GetMinREALHugeBlobInBytes() const {
-            return Heap->GetMinREALHugeBlobInBytes();
-        }
-
         ui64 THullHugeKeeperPersState::FirstLsnToKeep() const {
             return Min(LogPos.FirstLsnToKeep(), LogTracker.FirstLsnToKeep(),
                 // special case if these LSM tree entrypoints with deletions would be applied by the recovery code

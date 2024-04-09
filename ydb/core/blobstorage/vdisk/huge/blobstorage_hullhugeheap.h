@@ -179,12 +179,11 @@ namespace NKikimr {
             TAllChains(const TString &vdiskLogPrefix,
                 ui32 chunkSize,
                 ui32 appendBlockSize,
-                ui32 minHugeBlobInBytes,
+                ui32 minBlobInBytes,
                 ui32 milestoneBlobInBytes,
                 ui32 maxBlobInBytes,
                 ui32 overhead,
                 bool oldMapCompatible);
-            ui32 GetMinREALHugeBlobInBytes() const;
             // return a pointer to corresponding chain delegator by object byte size
             TChainDelegator *GetChain(ui32 size);
             const TChainDelegator *GetChain(ui32 size) const;
@@ -207,15 +206,10 @@ namespace NKikimr {
             std::shared_ptr<THugeSlotsMap> BuildHugeSlotsMap() const;
 
         private:
-            struct TBuiltChainDelegators {
-                TAllChainDelegators ChainDelegators;
-                ui32 MinREALHugeBlobInBlocks = 0;
-                ui32 MilestoneREALHugeBlobInBlocks = 0;
-            };
 
-            TBuiltChainDelegators BuildChains(ui32 minHugeBlobInBytes) const;
+            TAllChainDelegators BuildChains(ui32 minBlobInBytes) const;
             void BuildSearchTable();
-            void BuildLayout(bool oldMapCompatible);
+            void BuildLayout();
             inline ui32 SizeToBlocks(ui32 size) const;
             inline ui32 GetEndBlocks() const;
 
@@ -228,13 +222,12 @@ namespace NKikimr {
             const TString VDiskLogPrefix;
             const ui32 ChunkSize;
             const ui32 AppendBlockSize;
-            const ui32 MinHugeBlobInBytes;
+            const ui32 MinBlobInBytes;
             const ui32 MilestoneBlobInBytes;
             const ui32 MaxBlobInBytes;
             const ui32 Overhead;
             const bool OldMapCompatible;
             EStartMode StartMode = EStartMode::Empty;
-            ui32 MinREALHugeBlobInBlocks = 0;
             TAllChainDelegators ChainDelegators;
             TSearchTable SearchTable;
         };
@@ -259,7 +252,7 @@ namespace NKikimr {
                 ui32 chunkSize,
                 ui32 appendBlockSize,
                 // min size of the huge blob
-                ui32 minHugeBlobInBytes,
+                ui32 minBlobInBytes,
                 // fixed point to calculate layout (for backward compatibility)
                 ui32 mileStoneBlobInBytes,
                 // max size of the blob
@@ -269,9 +262,6 @@ namespace NKikimr {
                 ui32 freeChunksReservation,
                 bool oldMapCompatible);
 
-            ui32 GetMinREALHugeBlobInBytes() const {
-                return Chains.GetMinREALHugeBlobInBytes();
-            }
 
             ui32 SlotNumberOfThisSize(ui32 size) const {
                 const TChainDelegator *chainD = Chains.GetChain(size);

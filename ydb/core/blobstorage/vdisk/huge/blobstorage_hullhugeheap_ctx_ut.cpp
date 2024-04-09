@@ -35,7 +35,7 @@ namespace NKikimr {
                     logFunc);
 
             return std::make_shared<THugeBlobCtx>(
-                    repairedHuge->GetMinREALHugeBlobInBytes(),
+                    ChunkSize / AppendBlockSize * AppendBlockSize + 1,
                     repairedHuge->Heap->BuildHugeSlotsMap(),
                     true);
         }

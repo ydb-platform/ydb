@@ -198,10 +198,10 @@ namespace NKikimr {
         Y_UNIT_TEST(TestProdConf) {
             // just build a layout we want in prod, check it manually
             const ui32 overhead = 8;
-            const ui32 left = 64 << 10;
             const ui32 milestone = 512 << 10;
             const ui32 right = 10 << 20;
             const ui32 AppendBlockSize = 4064;
+            const ui32 left = AppendBlockSize;
 
             const ui32 leftBlocks = left / AppendBlockSize;
             const ui32 milestoneBlocks = milestone / AppendBlockSize;
@@ -213,6 +213,7 @@ namespace NKikimr {
             TString tableStr = builder.ToString(AppendBlockSize);
             STR << tableStr << "\n";
             TVector<NPrivate::TChainLayoutBuilder::TSeg> canonical = {
+                {1, 2}, {2, 3}, {3, 4}, {4, 5}, {5, 6}, {6, 7}, {7, 8}, {8, 10}, {10, 12}, {12, 14}, {14, 16},
                 {16, 18}, {18, 21}, {21, 24}, {24, 28}, {28, 32}, {32, 37}, {37, 42}, {42, 48}, {48, 55},
                 {55, 62}, {62, 70}, {70, 79}, {79, 89}, {89, 101}, {101, 114}, {114, 129}, {129, 145},
                 {145, 163}, {163, 183}, {183, 205}, {205, 230}, {230, 258}, {258, 290}, {290, 326}, {326, 366},
@@ -284,11 +285,11 @@ namespace NKikimr {
         Y_UNIT_TEST(AllocateAllFromOneChunk) {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;
-            ui32 minHugeBlobInBytes = 512u << 10u;
+            ui32 minBlobInBytes = 56u << 10u;
             ui32 maxBlobInBytes = 10u << 20u;
             ui32 overhead = 8;
             ui32 freeChunksReservation = 0;
-            THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes,
+            THeap heap("vdisk", chunkSize, appendBlockSize, minBlobInBytes, minBlobInBytes,
                     maxBlobInBytes, overhead, freeChunksReservation, false);
             ui32 hugeBlobSize = 6u << 20u;
 
@@ -312,7 +313,7 @@ namespace NKikimr {
 
             // just serialize/deserialize
             TString serialized = heap.Serialize();
-            THeap newHeap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes,
+            THeap newHeap("vdisk", chunkSize, appendBlockSize, minBlobInBytes, minBlobInBytes,
                     maxBlobInBytes, overhead, freeChunksReservation, false);
             newHeap.ParseFromString(serialized);
         }
@@ -351,7 +352,7 @@ namespace NKikimr {
         Y_UNIT_TEST(AllocateAllReleaseAll) {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;
-            ui32 minHugeBlobInBytes = 512u << 10u;
+            ui32 minHugeBlobInBytes = 56u << 10u;
             ui32 maxBlobInBytes = 10u << 20u;
             ui32 overhead = 8;
             ui32 freeChunksReservation = 0;
@@ -366,7 +367,7 @@ namespace NKikimr {
         Y_UNIT_TEST(AllocateAllSerializeDeserializeReleaseAll) {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;
-            ui32 minHugeBlobInBytes = 512u << 10u;
+            ui32 minHugeBlobInBytes = 56u << 10u;
             ui32 maxBlobInBytes = 10u << 20u;
             ui32 overhead = 8;
             ui32 freeChunksReservation = 0;
@@ -386,7 +387,7 @@ namespace NKikimr {
         Y_UNIT_TEST(RecoveryMode) {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;
-            ui32 minHugeBlobInBytes = 512u << 10u;
+            ui32 minHugeBlobInBytes = 56u << 10u;
             ui32 maxBlobInBytes = 10u << 20u;
             ui32 overhead = 8;
             ui32 freeChunksReservation = 0;
@@ -415,7 +416,8 @@ namespace NKikimr {
         Y_UNIT_TEST(BorderValues) {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;
-            ui32 minHugeBlobInBytes = 512u << 10u;
+            ui32 minHugeBlobInBytes = 56u << 10u;
+            ui32 minREALHugeBlobInBytes = minHugeBlobInBytes / appendBlockSize * appendBlockSize + 1;
             ui32 maxBlobInBytes = MaxVDiskBlobSize;
             ui32 overhead = 8u;
             ui32 freeChunksReservation = 1;
@@ -424,7 +426,6 @@ namespace NKikimr {
 
             THugeSlot hugeSlot;
             ui32 slotSize;
-            ui32 minREALHugeBlobInBytes = heap.GetMinREALHugeBlobInBytes();
             bool res = false;
             res = heap.Allocate(minREALHugeBlobInBytes, &hugeSlot, &slotSize);
             UNIT_ASSERT_EQUAL(res, false); // no chunks

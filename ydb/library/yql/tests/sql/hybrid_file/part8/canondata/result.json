@@ -1457,16 +1457,16 @@
     ],
     "test.test[join-lookupjoin_semi_1o2o--Debug]": [
         {
-            "checksum": "d2cf67579b5e09c2f38a22d6f439909b",
-            "size": 3458,
-            "uri": "https://{canondata_backend}/1889210/a6f1d19efb8c2d66757fb3f23bc191e0ff7fca4e/resource.tar.gz#test.test_join-lookupjoin_semi_1o2o--Debug_/opt.yql_patched"
+            "checksum": "cb877967deef4234f6275702dfa262f6",
+            "size": 4004,
+            "uri": "https://{canondata_backend}/1784117/9ac52e457dd37d6685b0cea084018e4ae4afe98f/resource.tar.gz#test.test_join-lookupjoin_semi_1o2o--Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-lookupjoin_semi_1o2o--Plan]": [
         {
-            "checksum": "180f2af274c0d5b73a60e69d41b213cb",
-            "size": 6982,
-            "uri": "https://{canondata_backend}/1900335/dd59ce09b5b70054bb239659c9dedc5218a4d0cd/resource.tar.gz#test.test_join-lookupjoin_semi_1o2o--Plan_/plan.txt"
+            "checksum": "b02ced194f7e29073c7d1f442a0d90cf",
+            "size": 7018,
+            "uri": "https://{canondata_backend}/1924537/fe0a72f2541bf1bde39817157dd06a460ad76d65/resource.tar.gz#test.test_join-lookupjoin_semi_1o2o--Plan_/plan.txt"
         }
     ],
     "test.test[join-mapjoin_left_null_column--Debug]": [
@@ -1723,16 +1723,16 @@
     ],
     "test.test[key_filter-string_with-default.txt-Debug]": [
         {
-            "checksum": "1b0ce9cd1d42d2ff5cc0c462ad17316e",
-            "size": 1613,
-            "uri": "https://{canondata_backend}/1937150/a3ed05ae8ad4fea60a051f6171424c733487f045/resource.tar.gz#test.test_key_filter-string_with-default.txt-Debug_/opt.yql_patched"
+            "checksum": "efb0c83441a280aa3f0a86adbf31c02b",
+            "size": 2221,
+            "uri": "https://{canondata_backend}/1942671/b3497ea14384613aeaf6c621f5fd303cd0b02f64/resource.tar.gz#test.test_key_filter-string_with-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[key_filter-string_with-default.txt-Plan]": [
         {
-            "checksum": "b59f1264995b5b377a58a392fc1d87c8",
-            "size": 3938,
-            "uri": "https://{canondata_backend}/1900335/dd59ce09b5b70054bb239659c9dedc5218a4d0cd/resource.tar.gz#test.test_key_filter-string_with-default.txt-Plan_/plan.txt"
+            "checksum": "1926c856908f9da5f8fb9a0560324330",
+            "size": 4104,
+            "uri": "https://{canondata_backend}/1599023/d6fdd0d80eb129a154a85d684a3390dda5b4e7c9/resource.tar.gz#test.test_key_filter-string_with-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[library-library_alias--Debug]": [
@@ -1793,16 +1793,16 @@
     ],
     "test.test[optimizers-passthrough_sortness_over_map-default.txt-Debug]": [
         {
-            "checksum": "b3618cfaae3773652b870ced062984da",
-            "size": 4559,
-            "uri": "https://{canondata_backend}/1937150/a3ed05ae8ad4fea60a051f6171424c733487f045/resource.tar.gz#test.test_optimizers-passthrough_sortness_over_map-default.txt-Debug_/opt.yql_patched"
+            "checksum": "a826c18a55829db16b9234accce8c595",
+            "size": 5298,
+            "uri": "https://{canondata_backend}/1871182/96af9a1b8eb71f8706a0182af766aa8d97de5fa6/resource.tar.gz#test.test_optimizers-passthrough_sortness_over_map-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[optimizers-passthrough_sortness_over_map-default.txt-Plan]": [
         {
-            "checksum": "8c860b1c9344108715f3397035e3ea7f",
-            "size": 14556,
-            "uri": "https://{canondata_backend}/1900335/dd59ce09b5b70054bb239659c9dedc5218a4d0cd/resource.tar.gz#test.test_optimizers-passthrough_sortness_over_map-default.txt-Plan_/plan.txt"
+            "checksum": "d7153dd3a7b54084b364d0d16ced013b",
+            "size": 15643,
+            "uri": "https://{canondata_backend}/1814674/e782d6756fe1b6b774ca36906ce0a00bc367ef9d/resource.tar.gz#test.test_optimizers-passthrough_sortness_over_map-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[optimizers-yql-10042_disable_flow_fuse_depends_on-default.txt-Debug]": [

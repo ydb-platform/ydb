@@ -9,7 +9,7 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-class TPlainReadData: public IDataReader, TNonCopyable {
+class TPlainReadData: public IDataReader, TNonCopyable, NColumnShard::TMonitoringObjectsCounter<TPlainReadData> {
 private:
     using TBase = IDataReader;
     std::shared_ptr<TScanHead> Scanner;

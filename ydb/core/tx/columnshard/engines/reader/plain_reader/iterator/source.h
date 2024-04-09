@@ -33,7 +33,7 @@ private:
     NArrow::TReplaceKey FinishReplaceKey;
     YDB_READONLY_DEF(std::shared_ptr<TSpecialReadContext>, Context);
     YDB_READONLY(TSnapshot, RecordSnapshotMax, TSnapshot::Zero());
-    std::optional<ui32> RecordsCount;
+    YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY(ui32, IntervalsCount, 0);
     virtual NJson::TJsonValue DoDebugJson() const = 0;
     bool MergingStartedFlag = false;
@@ -142,9 +142,7 @@ public:
 
     virtual NJson::TJsonValue DebugJsonForMemory() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
-        if (RecordsCount) {
-            result.InsertValue("count", *RecordsCount);
-        }
+        result.InsertValue("count", RecordsCount);
         return result;
     }
 
@@ -173,20 +171,11 @@ public:
         return *StageData;
     }
 
-    ui32 GetRecordsCountVerified() const {
-        AFL_VERIFY(RecordsCount);
-        return *RecordsCount;
-    }
-
-    const std::optional<ui32>& GetRecordsCountOptional() const {
-        return RecordsCount;
-    }
-
     void RegisterInterval(TFetchingInterval& interval);
 
     IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, 
         const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish,
-        const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount)
+        const TSnapshot& recordSnapshotMax, const ui32 recordsCount)
         : SourceIdx(sourceIdx)
         , Start(context->GetReadMetadata()->BuildSortedPosition(start))
         , Finish(context->GetReadMetadata()->BuildSortedPosition(finish))
@@ -368,7 +357,7 @@ public:
 
     TCommittedDataSource(const ui32 sourceIdx, const TCommittedBlob& committed, const std::shared_ptr<TSpecialReadContext>& context,
         const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish)
-        : TBase(sourceIdx, context, start, finish, committed.GetSnapshot(), {})
+        : TBase(sourceIdx, context, start, finish, committed.GetSnapshot(), committed.GetRecordsCount())
         , CommittedBlob(committed) {
 
     }

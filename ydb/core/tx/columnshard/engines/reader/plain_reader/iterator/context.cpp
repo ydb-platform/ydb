@@ -40,7 +40,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
     {
         std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>();
         result->SetBranchName("FAKE");
-        result->AddStep(std::make_shared<TBuildFakeSpec>(source->GetRecordsCountVerified()));
+        result->AddStep(std::make_shared<TBuildFakeSpec>(source->GetRecordsCount()));
         return result;
     }
 }

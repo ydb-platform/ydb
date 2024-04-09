@@ -97,7 +97,7 @@ BENCHMARK_DEFINE_F(TPartFixture, SeekRowId)(benchmark::State& state) {
         THolder<IPartGroupIndexIter> iter;
 
         if (useBTree) {
-            iter = MakeHolder<TPartGroupBtreeIndexIter>(Part, &Env, GroupId);
+            iter = MakeHolder<TPartGroupBtreeIndexIterer>(Part, &Env, GroupId);
         } else {
             iter = MakeHolder<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
         }
@@ -112,7 +112,7 @@ BENCHMARK_DEFINE_F(TPartFixture, Next)(benchmark::State& state) {
     THolder<IPartGroupIndexIter> iter;
 
     if (useBTree) {
-        iter = MakeHolder<TPartGroupBtreeIndexIter>(Part, &Env, GroupId);
+        iter = MakeHolder<TPartGroupBtreeIndexIterer>(Part, &Env, GroupId);
     } else {
         iter = MakeHolder<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
     }
@@ -133,7 +133,7 @@ BENCHMARK_DEFINE_F(TPartFixture, Prev)(benchmark::State& state) {
     THolder<IPartGroupIndexIter> iter;
 
     if (useBTree) {
-        iter = MakeHolder<TPartGroupBtreeIndexIter>(Part, &Env, GroupId);
+        iter = MakeHolder<TPartGroupBtreeIndexIterer>(Part, &Env, GroupId);
     } else {
         iter = MakeHolder<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
     }
@@ -162,7 +162,7 @@ BENCHMARK_DEFINE_F(TPartFixture, SeekKey)(benchmark::State& state) {
         THolder<IPartGroupIndexIter> iter;
 
         if (useBTree) {
-            iter = MakeHolder<TPartGroupBtreeIndexIter>(Part, &Env, GroupId);
+            iter = MakeHolder<TPartGroupBtreeIndexIterer>(Part, &Env, GroupId);
         } else {
             iter = MakeHolder<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
         }

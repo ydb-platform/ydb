@@ -6,7 +6,7 @@
 
 namespace NKikimr::NTable {
 
-class TPartGroupBtreeIndexIter : public IPartGroupIndexIter {
+class TPartGroupBtreeIndexIterer : public IPartGroupIndexIter {
     using TCells = NPage::TCells;
     using TBtreeIndexNode = NPage::TBtreeIndexNode;
     using TGroupId = NPage::TGroupId;
@@ -109,7 +109,7 @@ class TPartGroupBtreeIndexIter : public IPartGroupIndexIter {
     };
 
 public:
-    TPartGroupBtreeIndexIter(const TPart* part, IPages* env, TGroupId groupId)
+    TPartGroupBtreeIndexIterer(const TPart* part, IPages* env, TGroupId groupId)
         : Part(part)
         , Env(env)
         , GroupId(groupId)

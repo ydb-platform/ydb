@@ -28,5 +28,4 @@ RECURSE(
     ydb_cli
     query_cache
     script_execution
-    logs_test
 )

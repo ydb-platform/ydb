@@ -287,8 +287,13 @@ def _start_dynamic(components, nodes, cluster_details, walle_provider):
                                     continue
                                 slots_taken.add((slot, node))
                                 if domain.bind_slots_to_numa_nodes and numa_nodes[node] > 0:
-                                    _start_slot_for_tenant(nodes, slot, tenant, host=node,
-                                                          node_bind=numa_nodes_counters[node])
+                                    _start_slot_for_tenant(
+                                        nodes,
+                                        slot,
+                                        tenant,
+                                        host=node,
+                                        node_bind=numa_nodes_counters[node]
+                                    )
                                     numa_nodes_counters[node] += 1
                                     numa_nodes_counters[node] %= numa_nodes[node]
                                 else:

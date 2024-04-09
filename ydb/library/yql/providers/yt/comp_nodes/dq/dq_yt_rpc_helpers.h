@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/providers/yt/codec/yt_codec.h>
+#include <ydb/library/yql/public/udf/udf_value_builder.h>
 
 #include <yt/cpp/mapreduce/interface/io.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
@@ -17,10 +18,6 @@
 #include <yt/yt/client/api/rpc_proxy/row_stream.h>
 
 #include <arrow/memory_pool.h>
-
-namespace NUdf {
-class PgBuilder;
-}
 
 namespace NYql::NDqs {
 NYT::NYPath::TRichYPath ConvertYPathFromOld(const NYT::TRichYPath& richYPath);

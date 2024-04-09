@@ -3,6 +3,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 
 extern "C" {
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
@@ -69,6 +70,10 @@ namespace NKikimr::NSchemeShard {
                 errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
                 return false;
             }
+        }
+        if (auto arrowTypeStatus = NArrow::GetArrowType(Type).status();!arrowTypeStatus.ok()) {
+            errors.AddError(TStringBuilder() << "Column '" << Name << "': " << arrowTypeStatus.ToString());
+            return false;
         }
         return true;
     }
@@ -264,14 +269,6 @@ namespace NKikimr::NSchemeShard {
             TOlapColumnAdd column(keyOrder);
             if (!column.ParseFromRequest(columnSchema, errors)) {
                 return false;
-            }
-            if (column.GetKeyOrder() && *column.GetKeyOrder() == 0) {
-                if (!TOlapColumnAdd::IsAllowedFirstPkType(column.GetType().GetTypeId())) {
-                    errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
-                        << "Type '" << column.GetType().GetTypeId() << "' specified for column '" << column.GetName()
-                        << "' is not supported in first PK position");
-                    return false;
-                }
             }
             if (columnNames.contains(column.GetName())) {
                 errors.AddError(NKikimrScheme::StatusMultipleModifications, TStringBuilder() << "Duplicate column '" << column.GetName() << "'");

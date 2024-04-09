@@ -92,6 +92,7 @@ public:
 
     std::vector<T> ExtractVector() {
         StoredChunksSizes.pop();
+        State = EState::AcceptingDataRequests;
         return std::move(CurrentVector);
     }
 

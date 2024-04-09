@@ -91,6 +91,71 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_SingleVector) {
         RunTestForSingleVector<int>(vectorSize, chunkSize, false);
         RunTestForSingleVector<char>(vectorSize, chunkSize, false);
     }
+}
+
+Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
+    Y_UNIT_TEST(MultipleVectorsDifferentSizes) {
+
+        std::vector<std::vector<int>> vectors;
+        
+        for (size_t vectorSize = 0; vectorSize < 4; ++vectorSize) {
+            std::vector v = CreateSimpleVectorOfSize<int>(vectorSize);
+            vectors.push_back(v);
+        }
+
+        SaveRestoreAndCompareVectors<int>(vectors, 20);
+    }
+
+    Y_UNIT_TEST(TwoVectors) {
+
+        std::vector<std::vector<int>> vectors;
+        
+        std::vector v1 = CreateSimpleVectorOfSize<int>(20);
+        vectors.push_back(v1);
+
+        std::vector v2 = CreateSimpleVectorOfSize<int>(30);
+        vectors.push_back(v2);
+
+        SaveRestoreAndCompareVectors<int>(vectors, 20);
+    }
+
+    Y_UNIT_TEST(MultipleVectorsInOneChunk) {
+
+        std::vector<std::vector<int>> vectors;
+        
+        size_t totalSize = 0;
+
+        for (size_t vectorSize = 1; vectorSize < 5; ++vectorSize) {
+            std::vector v = CreateSimpleVectorOfSize<int>(vectorSize);
+            totalSize += vectorSize;
+            vectors.push_back(v);
+        }
+
+        SaveRestoreAndCompareVectors<int>(vectors, totalSize * sizeof(int) + 10);
+    }
+
+    Y_UNIT_TEST(EmptyVectorsInTheMiddle) {
+
+        std::vector<std::vector<int>> vectors;
+        
+        size_t totalSize = 0;
+
+        for (size_t vectorSize = 1; vectorSize < 5; ++vectorSize) {
+            std::vector v = CreateSimpleVectorOfSize<int>(vectorSize);
+            totalSize += vectorSize;
+            vectors.push_back(v);
+        }
+        vectors.push_back({});
+        vectors.push_back({});
+
+        for (size_t vectorSize = 1; vectorSize < 5; ++vectorSize) {
+            std::vector v = CreateSimpleVectorOfSize<int>(vectorSize);
+            totalSize += vectorSize;
+            vectors.push_back(v);
+        }
+
+        SaveRestoreAndCompareVectors<int>(vectors, totalSize * sizeof(int) + 10);
+    }
 
 }
 

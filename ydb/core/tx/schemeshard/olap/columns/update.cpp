@@ -178,7 +178,7 @@ namespace NKikimr::NSchemeShard {
         return false;
     }
 
-    bool TOlapColumnAdd::IsAllowedFirstPkType(ui32 typeId) {
+    bool TOlapColumnAdd::IsAllowedPkType(ui32 typeId) {
         switch (typeId) {
             case NYql::NProto::Uint8: // Byte
             case NYql::NProto::Int32:
@@ -190,21 +190,12 @@ namespace NKikimr::NSchemeShard {
             case NYql::NProto::Date:
             case NYql::NProto::Datetime:
             case NYql::NProto::Timestamp:
+            case NYql::NProto::Timestamp64:
+            case NYql::NProto::Interval64:
                 return true;
-            case NYql::NProto::Interval:
-            case NYql::NProto::Decimal:
-            case NYql::NProto::DyNumber:
-            case NYql::NProto::Yson:
-            case NYql::NProto::Json:
-            case NYql::NProto::JsonDocument:
-            case NYql::NProto::Float:
-            case NYql::NProto::Double:
-            case NYql::NProto::Bool:
-                return false;
             default:
-                break;
+                return false;
         }
-        return false;
     }
 
     bool TOlapColumnsUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
@@ -270,6 +261,14 @@ namespace NKikimr::NSchemeShard {
             TOlapColumnAdd column(keyOrder);
             if (!column.ParseFromRequest(columnSchema, errors)) {
                 return false;
+            }
+            if (column.IsKeyColumn()) {
+                if (!TOlapColumnAdd::IsAllowedPkType(column.GetType().GetTypeId())) {
+                    errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                        << "Type '" << column.GetType().GetTypeId() << "' specified for column '" << column.GetName()
+                        << "' is not supported in first PK position");
+                    return false;
+                }
             }
             if (columnNames.contains(column.GetName())) {
                 errors.AddError(NKikimrScheme::StatusMultipleModifications, TStringBuilder() << "Duplicate column '" << column.GetName() << "'");

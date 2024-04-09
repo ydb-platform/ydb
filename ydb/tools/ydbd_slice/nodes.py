@@ -32,6 +32,8 @@ class Nodes(object):
 
         for cmd, process, host in running_jobs:
             out, err = process.communicate()
+            out = out.decode("utf-8", errors='replace')
+            err = err.decode("utf-8", errors='replace')
             retcode = process.poll()
             if retcode != 0:
                 status_line = "execution '{cmd}' finished with '{retcode}' retcode".format(
@@ -128,6 +130,9 @@ class Nodes(object):
             local_path = compressed_path
             original_remote_path = remote_path
             remote_path += '.zstd'
+
+        self.execute_async("sudo mkdir -p {}".format(os.path.dirname(remote_path)))
+
         hub = self._nodes[0]
         self._copy_on_node(local_path, hub, remote_path)
         self._copy_between_nodes(hub, remote_path, self._nodes[1:], remote_path)

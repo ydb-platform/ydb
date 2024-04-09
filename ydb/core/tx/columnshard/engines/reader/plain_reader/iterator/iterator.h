@@ -64,6 +64,11 @@ public:
     TColumnShardScanIterator(const std::shared_ptr<TReadContext>& context, const TReadMetadata::TConstPtr& readMetadata);
     ~TColumnShardScanIterator();
 
+    virtual TConclusionStatus Start() override {
+        AFL_VERIFY(IndexedData);
+        return IndexedData->Start();
+    }
+
     virtual std::optional<ui32> GetAvailableResultsCount() const override {
         return ReadyResults.size();
     }

@@ -26,7 +26,8 @@ namespace NKikimr::NColumnShard {
 
         NEvWrite::TWriteMeta writeMeta((ui64)WriteId, tableId, source);
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(owner.TabletID(), ctx.SelfID, owner.BufferizationWriteActorId,
-            NEvWrite::TWriteData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(), owner.StoragesManager->GetInsertOperator()->StartWritingAction("WRITING_OPERATOR")));
+            NEvWrite::TWriteData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(),
+                owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR)));
         NConveyor::TCompServiceOperator::SendTaskToExecute(task);
 
         Status = EOperationStatus::Started;

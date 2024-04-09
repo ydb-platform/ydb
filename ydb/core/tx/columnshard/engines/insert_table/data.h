@@ -132,7 +132,8 @@ class TCommittedBlob {
 private:
     TBlobRange BlobRange;
     TSnapshot CommitSnapshot;
-    YDB_READONLY_DEF(ui64, SchemaVersion);
+    YDB_READONLY(ui64, SchemaVersion, 0);
+    YDB_READONLY(ui64, RecordsCount, 0);
     YDB_READONLY_DEF(std::optional<NArrow::TReplaceKey>, First);
     YDB_READONLY_DEF(std::optional<NArrow::TReplaceKey>, Last);
 public:
@@ -150,10 +151,11 @@ public:
         return *Last;
     }
 
-    TCommittedBlob(const TBlobRange& blobRange, const TSnapshot& snapshot, const ui64 schemaVersion, const std::optional<NArrow::TReplaceKey>& first, const std::optional<NArrow::TReplaceKey>& last)
+    TCommittedBlob(const TBlobRange& blobRange, const TSnapshot& snapshot, const ui64 schemaVersion, const ui64 recordsCount, const std::optional<NArrow::TReplaceKey>& first, const std::optional<NArrow::TReplaceKey>& last)
         : BlobRange(blobRange)
         , CommitSnapshot(snapshot)
         , SchemaVersion(schemaVersion)
+        , RecordsCount(recordsCount)
         , First(first)
         , Last(last)
     {}

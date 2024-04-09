@@ -396,18 +396,41 @@ void TPortionInfo::FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange
 
 void TPortionInfo::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TIndexInfo& indexInfo) const {
     THashMap<TString, THashSet<TBlobRangeLink16::TLinkId>> local;
+    THashSet<TBlobRangeLink16::TLinkId>* currentHashLocal;
+    THashSet<TUnifiedBlobId>* currentHashResult;
+    ui32 lastEntityId = 0;
+    TString lastStorageId;
+    ui32 lastBlobIdx = BlobIds.size();
     for (auto&& i : Records) {
-        const TString& storageId = GetColumnStorageId(i.GetColumnId(), indexInfo);
-        if (local[storageId].emplace(i.GetBlobRange().GetBlobIdxVerified()).second) {
+        if (lastEntityId != i.GetEntityId()) {
+            const TString& storageId = GetColumnStorageId(i.GetEntityId(), indexInfo);
+            if (storageId != lastStorageId) {
+                currentHashResult = &result[storageId];
+                currentHashLocal = &local[storageId];
+                lastStorageId = storageId;
+                lastBlobIdx = BlobIds.size();
+            }
+        }
+        if (lastBlobIdx != i.GetBlobRange().GetBlobIdxVerified() && currentHashLocal->emplace(i.GetBlobRange().GetBlobIdxVerified()).second) {
             auto blobId = GetBlobId(i.GetBlobRange().GetBlobIdxVerified());
-            AFL_VERIFY(result[storageId].emplace(blobId).second)("blob_id", blobId.ToStringNew());
+            AFL_VERIFY(currentHashResult->emplace(blobId).second)("blob_id", blobId.ToStringNew());
+            lastBlobIdx = i.GetBlobRange().GetBlobIdxVerified();
         }
     }
     for (auto&& i : Indexes) {
-        const TString& storageId = indexInfo.GetIndexStorageId(i.GetIndexId());
-        if (local[storageId].emplace(i.GetBlobRange().GetBlobIdxVerified()).second) {
+        if (lastEntityId != i.GetEntityId()) {
+            const TString& storageId = indexInfo.GetIndexStorageId(i.GetEntityId());
+            if (storageId != lastStorageId) {
+                currentHashResult = &result[storageId];
+                currentHashLocal = &local[storageId];
+                lastStorageId = storageId;
+                lastBlobIdx = BlobIds.size();
+            }
+        }
+        if (lastBlobIdx != i.GetBlobRange().GetBlobIdxVerified() && currentHashLocal->emplace(i.GetBlobRange().GetBlobIdxVerified()).second) {
             auto blobId = GetBlobId(i.GetBlobRange().GetBlobIdxVerified());
-            AFL_VERIFY(result[storageId].emplace(blobId).second)("blob_id", blobId.ToStringNew());
+            AFL_VERIFY(currentHashResult->emplace(blobId).second)("blob_id", blobId.ToStringNew());
+            lastBlobIdx = i.GetBlobRange().GetBlobIdxVerified();
         }
     }
 }

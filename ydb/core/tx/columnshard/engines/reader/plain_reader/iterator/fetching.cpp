@@ -38,7 +38,7 @@ TConclusion<bool> TColumnBlobsFetchingStep::DoExecuteInplace(const std::shared_p
 ui64 TColumnBlobsFetchingStep::DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const {
     const ui64 result = source->GetColumnRawBytes(Columns->GetColumnIds());
     if (!result) {
-        return Columns->GetColumnIds().size() * source->GetRecordsCountVerified() * sizeof(ui32); // null for all records for all columns in future will be
+        return Columns->GetColumnIds().size() * source->GetRecordsCount() * sizeof(ui32); // null for all records for all columns in future will be
     } else {
         return result;
     }
@@ -86,7 +86,7 @@ TConclusion<bool> TFilterProgramStep::DoExecuteInplace(const std::shared_ptr<IDa
 }
 
 ui64 TFilterProgramStep::DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const {
-    return NArrow::TColumnFilter::GetPredictedMemorySize(source->GetRecordsCountOptional().value_or(0));
+    return NArrow::TColumnFilter::GetPredictedMemorySize(source->GetRecordsCount());
 }
 
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {

@@ -110,7 +110,7 @@ public:
     }
 
     TTTLColumnEngineChanges(const NActualizer::TRWAddress& address, const TSaverContext& saverContext)
-        : TBase(saverContext, StaticTypeName())
+        : TBase(saverContext, NBlobOperations::EConsumer::TTL)
         , RWAddress(address)
     {
 

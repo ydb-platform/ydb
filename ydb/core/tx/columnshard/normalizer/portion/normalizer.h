@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
@@ -62,7 +63,7 @@ public:
 
     void Start(const TNormalizationController& controller, const TNormalizationContext& nCtx) override {
         controller.GetCounters().CountObjects(Package.size());
-        auto readingAction = controller.GetStoragesManager()->GetInsertOperator()->StartReadingAction("CS::NORMALIZER");
+        auto readingAction = controller.GetStoragesManager()->GetInsertOperator()->StartReadingAction(NBlobOperations::EConsumer::NORMALIZER);
         ui64 memSize = 0;
         for (auto&& data : Package) {
             TConveyorTask::FillBlobRanges(readingAction, data);

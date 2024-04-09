@@ -468,7 +468,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     TotalGroups = record.HasTotalGroupCount() ? record.GetTotalGroupCount() : 0;
     ui32 prevNextPartitionId = NextPartitionId;
     NextPartitionId = record.HasNextPartitionId() ? record.GetNextPartitionId() : 0;
-    THashMap<ui32, TPartitionInfo> partitionsInfo;
+    std::map<ui32, TPartitionInfo> partitionsInfo;
     if (record.HasSubDomainPathId()) {
         SubDomainPathId.emplace(record.GetSchemeShardId(), record.GetSubDomainPathId());
     }
@@ -489,11 +489,11 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
     PartitionGraph = MakePartitionGraph(record);
 
-    TVector<TPartInfo> newPartitions;
-    TVector<ui32> deletedPartitions;
-    TVector<std::pair<ui64, TTabletInfo>> newTablets;
-    TVector<std::pair<ui32, ui32>> newGroups;
-    TVector<std::pair<ui64, TTabletInfo>> reallocatedTablets;
+    std::vector<TPartInfo> newPartitions;
+    std::vector<ui32> deletedPartitions;
+    std::vector<std::pair<ui64, TTabletInfo>> newTablets;
+    std::vector<std::pair<ui32, ui32>> newGroups;
+    std::vector<std::pair<ui64, TTabletInfo>> reallocatedTablets;
 
     for (auto& p : record.GetTablets()) {
         auto it = TabletsInfo.find(p.GetTabletId());
@@ -550,7 +550,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             deletedPartitions.push_back(p.first);
         }
     }
-    PartitionsInfo = partitionsInfo;
+    PartitionsInfo = std::unordered_map<ui32, TPartitionInfo>(partitionsInfo.rbegin(), partitionsInfo.rend());
 
     for (auto& [_, clientInfo] : ClientsInfo) {
         auto mainGroup = clientInfo.ClientGroupsInfo.find(TClientInfo::MAIN_GROUP);
@@ -637,7 +637,7 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
     Y_VERIFY_DEBUG_S(ev->Get()->Generation, "Tablet generation should be greater than 0");
 
     auto it = TabletPipes.find(tabletId);
-    if (!it.IsEnd()) {
+    if (it != TabletPipes.end()) {
         it->second.Generation = ev->Get()->Generation;
         it->second.NodeId = ev->Get()->ServerId.NodeId();
 
@@ -798,13 +798,13 @@ void TPersQueueReadBalancer::TAggregatedStats::AggrStats(ui64 avgWriteSpeedPerSe
 }
 
 void TPersQueueReadBalancer::AnswerWaitingRequests(const TActorContext& ctx) {
-    TVector<TEvPersQueue::TEvCheckACL::TPtr> ww;
+    std::vector<TEvPersQueue::TEvCheckACL::TPtr> ww;
     ww.swap(WaitingACLRequests);
     for (auto& r : ww) {
         Handle(r, ctx);
     }
 
-    TVector<TEvPersQueue::TEvDescribe::TPtr> dr;
+    std::vector<TEvPersQueue::TEvDescribe::TPtr> dr;
     dr.swap(WaitingDescribeRequests);
     for (auto& r : dr) {
         Handle(r, ctx);
@@ -1064,7 +1064,7 @@ void TPersQueueReadBalancer::TClientGroupInfo::FreePartition(ui32 partitionId) {
     }
 }
 
-void TPersQueueReadBalancer::TClientInfo::FillEmptyGroup(const ui32 group, const THashMap<ui32, TPartitionInfo>& partitionsInfo) {
+void TPersQueueReadBalancer::TClientInfo::FillEmptyGroup(const ui32 group, const std::unordered_map<ui32, TPartitionInfo>& partitionsInfo) {
     auto& groupInfo = AddGroup(group);
 
     for (auto& [partitionId, partitionInfo] : partitionsInfo) {
@@ -1075,7 +1075,7 @@ void TPersQueueReadBalancer::TClientInfo::FillEmptyGroup(const ui32 group, const
     }
 }
 
-void TPersQueueReadBalancer::TClientInfo::AddSession(const ui32 groupId, const THashMap<ui32, TPartitionInfo>& partitionsInfo,
+void TPersQueueReadBalancer::TClientInfo::AddSession(const ui32 groupId, const std::unordered_map<ui32, TPartitionInfo>& partitionsInfo,
                                                     const TActorId& sender, const NKikimrPQ::TRegisterReadSession& record) {
 
     TActorId pipe = ActorIdFromProto(record.GetPipeClient());
@@ -1090,7 +1090,7 @@ void TPersQueueReadBalancer::TClientInfo::AddSession(const ui32 groupId, const T
     auto& group = it->second;
     group.SessionsInfo.insert({
         group.SessionKey(pipe),
-        TClientGroupInfo::TSessionInfo(
+        TSessionInfo(
             record.GetSession(),
             sender,
             record.HasClientNode() ? record.GetClientNode() : "none",
@@ -1231,7 +1231,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
         return;
     }
 
-    TVector<ui32> groups;
+    std::vector<ui32> groups;
     groups.reserve(record.GroupsSize());
     for (auto& group : record.GetGroups()) {
         groups.push_back(group);
@@ -1303,7 +1303,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
     auto it = ClientsInfo.find(record.GetClientId());
     THolder<TEvPersQueue::TEvReadSessionsInfoResponse> response(new TEvPersQueue::TEvReadSessionsInfoResponse());
 
-    THashSet<ui32> partitionsRequested;
+    std::unordered_set<ui32> partitionsRequested;
     for (auto p : record.GetPartitions()) {
         partitionsRequested.insert(p);
     }
@@ -1312,8 +1312,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
     if (it != ClientsInfo.end()) {
         for (auto& c : it->second.ClientGroupsInfo) {
             for (auto& p : c.second.PartitionsInfo) {
-                if (partitionsRequested && !partitionsRequested.contains(p.first))
+                if (!partitionsRequested.empty() && !partitionsRequested.contains(p.first)) {
                     continue;
+                }
                 auto pi = response->Record.AddPartitionInfo();
                 pi->SetPartition(p.first);
                 if (p.second.State == EPS_ACTIVE) {
@@ -1510,7 +1511,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr
             return false;
         }
         auto iter = TabletPipes.find(tabletId);
-        if (iter.IsEnd()) {
+        if (iter == TabletPipes.end()) {
             GetPipeClient(tabletId, ctx);
             return false;
         }
@@ -1538,7 +1539,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr
     } else {
         for (const auto& partitionInRequest : request.GetPartitions()) {
             auto partitionInfoIter = PartitionsInfo.find(partitionInRequest);
-            if (partitionInfoIter.IsEnd()) {
+            if (partitionInfoIter == PartitionsInfo.end()) {
                 return sendResponse(false);
             }
             ok = addPartitionToResponse(partitionInRequest, partitionInfoIter->second.TabletId) && ok;
@@ -1602,7 +1603,7 @@ bool TPersQueueReadBalancer::TClientGroupInfo::EraseSession(const TActorId pipe)
     return SessionsInfo.erase(SessionKey(pipe));
 }
 
-TPersQueueReadBalancer::TClientGroupInfo::TSessionInfo* TPersQueueReadBalancer::TClientGroupInfo::FindSession(const TActorId pipe) {
+TPersQueueReadBalancer::TSessionInfo* TPersQueueReadBalancer::TClientGroupInfo::FindSession(const TActorId pipe) {
     auto it = SessionsInfo.find(SessionKey(pipe));
     if (it == SessionsInfo.end()) {
         return nullptr;

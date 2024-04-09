@@ -650,6 +650,11 @@
             },
             {
                 "ColumnId": 10,
+                "ColumnName": "Name",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 11,
                 "ColumnName": "BecomeUpOnRestart",
                 "ColumnType": "Bool"
             }
@@ -667,7 +672,8 @@
                     6,
                     8,
                     9,
-                    10
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -300,9 +300,9 @@ TBytesStatistics WriteColumnValuesFromArrowSpecImpl(TAccessor editAccessor,
     const auto applyToIndex = [&](const ui32 rowIndexFrom, const ui32 rowIndexTo) {
         if (!currentIdxFrom) {
             address = reader.GetReadChunk(rowIndexFrom);
-            AFL_VERIFY(rowIndexFrom == 0)("real", rowIndexFrom);
+            AFL_ENSURE(rowIndexFrom == 0)("real", rowIndexFrom);
         } else {
-            AFL_VERIFY(rowIndexFrom == *currentIdxFrom + 1)("next", rowIndexFrom)("current", *currentIdxFrom);
+            AFL_ENSURE(rowIndexFrom == *currentIdxFrom + 1)("next", rowIndexFrom)("current", *currentIdxFrom);
             if (!address->NextPosition()) {
                 address = reader.GetReadChunk(rowIndexFrom);
             }

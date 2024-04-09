@@ -10,8 +10,7 @@ namespace NKikimr::NExternalSource {
 
 IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns);
 
-NYql::TIssues ValidateObjectStorage(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit);
+NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit);
 
-NYql::TIssues ValidateDataStreams(const FederatedQuery::DataStreamsBinding& binding);
-
+NYql::TIssues ValidateDateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting, bool matchAllSettings = false);
 }

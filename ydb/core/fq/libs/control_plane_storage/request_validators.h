@@ -18,6 +18,37 @@
 
 namespace NFq {
 
+bool ValidateStringType(const NYdb::TType& columnType);
+
+template<typename TScheme, typename TPartitionedBy>
+NYql::TIssues ValidateFormatForInput(const TString& format, const TScheme& schema, const TPartitionedBy& partitionedBy) {
+    NYql::TIssues issues;
+    if (format == "raw"sv) {
+        ui64 realSchemaRowCount = 0;
+        Ydb::Column lastColumn;
+        TSet<TString> partitionedBySet{partitionedBy.begin(), partitionedBy.end()};
+
+        for (const auto& column: schema.column()) {
+            if (partitionedBySet.contains(column.name())) {
+                continue;
+            }
+            if (!ValidateStringType(column.type())) {
+                issues.AddIssue(MakeErrorIssue(
+                    TIssuesIds::BAD_REQUEST,
+                    TStringBuilder{} << TStringBuilder() << "Only string type field in schema supported in raw format (you have " 
+                        << NYdb::TType(column.type()).ToString() <<" type)"));
+            }
+            ++realSchemaRowCount;
+        }
+
+        if (realSchemaRowCount > 1) {
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, TStringBuilder{} << TStringBuilder() << "Only one field in schema supported in raw format (you have " 
+                << realSchemaRowCount << " fields)"));
+        }
+    }
+    return issues;
+}
+
 template<class P>
 NYql::TIssues ValidateEvent(const P& ev, size_t maxSize)
 {
@@ -109,7 +140,8 @@ NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<FederatedQ
             if (!dataStreams.has_schema()) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "data streams with empty schema is forbidden"));
             }
-            issues.AddIssues(NKikimr::NExternalSource::ValidateDataStreams(dataStreams));
+            issues.AddIssues(NKikimr::NExternalSource::ValidateDateFormatSetting(dataStreams.format_setting(), true));
+            issues.AddIssues(ValidateFormatForInput(dataStreams.format(), dataStreams.schema(), TVector<TString>{}));
             break;
         }
         case FederatedQuery::BindingSetting::BINDING_NOT_SET: {
@@ -120,7 +152,8 @@ NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<FederatedQ
         case FederatedQuery::BindingSetting::kObjectStorage:
             const FederatedQuery::ObjectStorageBinding objectStorage = setting.object_storage();
             for (const auto& subset: objectStorage.subset()) {
-                issues.AddIssues(NKikimr::NExternalSource::ValidateObjectStorage(subset.schema(), subset, pathsLimit));
+                issues.AddIssues(NKikimr::NExternalSource::Validate(subset.schema(), subset, pathsLimit));
+                issues.AddIssues(ValidateFormatForInput(subset.format(), subset.schema(), subset.partitioned_by()));
             }
             break;
         }

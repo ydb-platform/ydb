@@ -238,7 +238,7 @@ public:
         const TBuildMasterSnapshotsOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TCellIdToSequenceNumberMap>, GetMasterConsistentState, (
+    MOCK_METHOD(TFuture<TCellIdToConsistentStateMap>, GetMasterConsistentState, (
         const TGetMasterConsistentStateOptions& options),
         (override));
 

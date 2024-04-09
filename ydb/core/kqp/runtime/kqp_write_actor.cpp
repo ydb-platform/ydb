@@ -370,10 +370,12 @@ private:
         entry.TableId = TableId;
         entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-        entry.SyncVersion = true;
+        entry.SyncVersion = false;
         request->ResultSet.emplace_back(entry);
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
     }
+
+    // TODO: void ResolveShards() {} line upload_rows_common_impl.h  ResolveShards()
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         if (SchemeEntry) {

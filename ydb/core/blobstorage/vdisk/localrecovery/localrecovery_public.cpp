@@ -447,7 +447,7 @@ namespace NKikimr {
                             Config->HugeBlobOldMapCompatible,
                             lsn, entryPoint, logFunc);
             }
-            const ui32 minHugeBlobInBlocks = (Config->HugeBlobOldMapCompatible ? Config->MilestoneHugeBlobInBytes : Config -> MilestoneHugeBlobInBytes) / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
+            const ui32 minHugeBlobInBlocks = (Config->HugeBlobOldMapCompatible ? Config->MilestoneHugeBlobInBytes : Config->MinHugeBlobInBytes) / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
             Y_ABORT_UNLESS(minHugeBlobInBlocks >= 1);
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(
                     minHugeBlobInBlocks * LocRecCtx->PDiskCtx->Dsk->AppendBlockSize + 1,
@@ -715,4 +715,3 @@ namespace NKikimr {
     }
 
 } // NKikimr
-

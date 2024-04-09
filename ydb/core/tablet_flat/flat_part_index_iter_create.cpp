@@ -6,7 +6,7 @@ namespace NKikimr::NTable {
 THolder<IPartGroupIndexIter> CreateIndexIter(const TPart* part, IPages* env, NPage::TGroupId groupId)
 {
     if (part->IndexPages.HasBTree()) {
-        return MakeHolder<TPartGroupBtreeIndexIterer>(part, env, groupId);
+        return MakeHolder<TPartGroupBtreeIndexIter>(part, env, groupId);
     } else {
         return MakeHolder<TPartGroupFlatIndexIter>(part, env, groupId);
     }

@@ -50,11 +50,6 @@ void SetBackgroundCleaning(TTestActorRuntime &runtime, TTestEnv& env, ui64 schem
 
 void AsyncCreateTempTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx) {
     auto ev = CreateIndexedTableRequest(txId, workingDir, scheme);
-    auto* tx = ev->Record.MutableTransaction(0);
-    auto* desc = tx->MutableCreateIndexedTable()->MutableTableDescription();
-    desc->SetTemporary(true);
-    ActorIdToProto(ownerActorId, tx->MutableTempTableOwnerActorId());
-
     AsyncSend(runtime, schemeShardId, ev, nodeIdx, ownerActorId);
 }
 

@@ -114,5 +114,15 @@ def exception(msg, *args, **kwargs):
     LOGGER.exception(msg, *args, **kwargs)
 
 
+if hasattr(functools, 'lru_cache') and not os.environ.get("YT_LOG_NO_TIP"):
+    @functools.lru_cache(maxsize=128)
+    def tip(msg):
+        LOGGER.debug("[TIP] " + msg)
+else:
+    # py2
+    def tip(msg):
+        pass
+
+
 def log(level, msg, *args, **kwargs):
     LOGGER.log(level, msg, *args, **kwargs)

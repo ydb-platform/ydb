@@ -119,7 +119,6 @@ struct TObjectStorageExternalSource : public IExternalSource {
     static NYql::TIssues Validate(const TScheme& schema, const TObjectStorage& objectStorage, size_t pathsLimit = 50000) {
         NYql::TIssues issues;
         issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting()));
-
         if (objectStorage.projection_size() || objectStorage.partitioned_by_size()) {
             try {
                 TVector<TString> partitionedBy{objectStorage.partitioned_by().begin(), objectStorage.partitioned_by().end()};

@@ -442,6 +442,7 @@ public:
                 AddError("Unsupported statement in LIMITED_VIEW mode");
                 return false;
             }
+        }
         if (StmtParseInfo) {
             (*StmtParseInfo)[StatementId].CommandTagName = GetCommandName(node);
         }

@@ -582,6 +582,14 @@ inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper,
         type = typeOpt.GetItemType();
     }
 
+    TStructTypeInspector typeStruct(typeInfoHelper, type);
+    if (typeStruct) {
+        for (ui32 i = 0; i < typeStruct.GetMembersCount(); ++i) {
+            UpdateBlockItemSerializeProps(typeInfoHelper, typeStruct.GetMemberType(i), props);
+        }
+        return;
+    }
+
     TTupleTypeInspector typeTuple(typeInfoHelper, type);
     if (typeTuple) {
         for (ui32 i = 0; i < typeTuple.GetElementsCount(); ++i) {

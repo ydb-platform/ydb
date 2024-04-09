@@ -248,7 +248,7 @@ def _start_all_slots(nodes):
 
 
 def _start_static(nodes):
-    nodes.execute_async("sudo service kikimr start", check_retcode=False)
+    nodes.execute_async("sudo service kikimr start", check_retcode=True)
 
 
 def _start_dynamic(components, nodes, cluster_details, walle_provider):

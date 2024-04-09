@@ -64,8 +64,8 @@ namespace NTest {
         TIntrusiveConstPtr<TSlices> Cut(const TPartStore &partStore, const TScreen &screen) noexcept
         {
             TTestEnv env;
-            TPartSimpleIt first(&partStore, { }, Scheme.Keys, &env);
-            TPartSimpleIt last(&partStore, { }, Scheme.Keys, &env);
+            TPartIter first(&partStore, { }, Scheme.Keys, &env);
+            TPartIter last(&partStore, { }, Scheme.Keys, &env);
             TVector<TSlice> slices;
 
             TRowId lastEnd = 0;

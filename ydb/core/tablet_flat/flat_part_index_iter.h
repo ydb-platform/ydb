@@ -10,7 +10,7 @@
 
 namespace NKikimr::NTable {
 
-class TPartIndexIt : public IIndexIter, public IStatsPartGroupIterator {
+class TPartGroupFlatIndexIter : public IPartGroupIndexIter, public IStatsPartGroupIter {
 public:
     using TCells = NPage::TCells;
     using TRecord = NPage::TIndex::TRecord;
@@ -18,7 +18,7 @@ public:
     using TIter = NPage::TIndex::TIter;
     using TGroupId = NPage::TGroupId;
 
-    TPartIndexIt(const TPart* part, IPages* env, TGroupId groupId)
+    TPartGroupFlatIndexIter(const TPart* part, IPages* env, TGroupId groupId)
         : Part(part)
         , Env(env)
         , GroupId(groupId)

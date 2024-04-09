@@ -29,7 +29,7 @@ struct TTableItOps {
         it.Next();
     }
 
-    static inline EReady MoveNext(TRunIt& it) {
+    static inline EReady MoveNext(TPartsIter& it) {
         return it.Next();
     }
 
@@ -37,7 +37,7 @@ struct TTableItOps {
         it.Seek(key, seek);
     }
 
-    static inline EReady Seek(TRunIt& it, TArrayRef<const TCell> key, ESeek seek) {
+    static inline EReady Seek(TPartsIter& it, TArrayRef<const TCell> key, ESeek seek) {
         return it.Seek(key, seek);
     }
 
@@ -169,7 +169,7 @@ struct TTableItReverseOps {
         it.Prev();
     }
 
-    static EReady MoveNext(TRunIt& it) {
+    static EReady MoveNext(TPartsIter& it) {
         return it.Prev();
     }
 
@@ -177,7 +177,7 @@ struct TTableItReverseOps {
         it.SeekReverse(key, seek);
     }
 
-    static EReady Seek(TRunIt& it, TArrayRef<const TCell> key, ESeek seek) {
+    static EReady Seek(TPartsIter& it, TArrayRef<const TCell> key, ESeek seek) {
         return it.SeekReverse(key, seek);
     }
 

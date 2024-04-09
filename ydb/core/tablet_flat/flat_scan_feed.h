@@ -389,7 +389,7 @@ namespace NTable {
                 Boots.reserve(Levels->size());
                 for (auto &run: *Levels) {
                     Boots.push_back(
-                        MakeHolder<TRunIt>(run, Lead.Tags, keyDefaults, CurrentEnv));
+                        MakeHolder<TPartsIter>(run, Lead.Tags, keyDefaults, CurrentEnv));
                 }
             }
         }
@@ -497,7 +497,7 @@ namespace NTable {
         TRowVersion NextRowVersion;
 
     private:
-        using TBoots = TVector<THolder<TRunIt>>;
+        using TBoots = TVector<THolder<TPartsIter>>;
 
         IPages* CurrentEnv = nullptr;
 

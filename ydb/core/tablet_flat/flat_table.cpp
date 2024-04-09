@@ -1002,7 +1002,7 @@ TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ES
 
     if (Flatten) {
         for (const auto& run : GetLevels()) {
-            auto iter = MakeHolder<TRunIt>(run, dbIter->Remap.Tags, Scheme->Keys, env);
+            auto iter = MakeHolder<TPartsIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
 
             if (iter->Seek(key, seek) != EReady::Gone)
                 dbIter->Push(std::move(iter));
@@ -1049,7 +1049,7 @@ TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, I
 
     if (Flatten) {
         for (const auto& run : GetLevels()) {
-            auto iter = MakeHolder<TRunIt>(run, dbIter->Remap.Tags, Scheme->Keys, env);
+            auto iter = MakeHolder<TPartsIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
 
             if (iter->SeekReverse(key, seek) != EReady::Gone)
                 dbIter->Push(std::move(iter));
@@ -1068,7 +1068,7 @@ TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, I
 
 EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
                       ui64 flg, TRowVersion snapshot,
-                      TDeque<TPartSimpleIt>& tempIterators,
+                      TDeque<TPartIter>& tempIterators,
                       TSelectStats& stats,
                       const ITransactionMapPtr& visible,
                       const ITransactionObserverPtr& observer) const noexcept
@@ -1143,7 +1143,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
                     part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
                 {
                     ++stats.Sieved;
-                    TPartSimpleIt& it = tempIterators.emplace_back(part, tags, Scheme->Keys, env);
+                    TPartIter& it = tempIterators.emplace_back(part, tags, Scheme->Keys, env);
                     it.SetBounds(pos->Slice);
                     auto res = it.Seek(key, ESeek::Exact);
                     if (res == EReady::Data) {
@@ -1267,7 +1267,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
             if ((readFlags & EHint::NoByKey) ||
                 part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
             {
-                TPartSimpleIt it(part, { }, Scheme->Keys, env);
+                TPartIter it(part, { }, Scheme->Keys, env);
                 it.SetBounds(pos->Slice);
                 auto res = it.Seek(key, ESeek::Exact);
                 if (res == EReady::Data && ready) {

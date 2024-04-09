@@ -31,10 +31,10 @@ namespace NTable {
                 if (const auto* col = Scheme.FindColumnByTag(tag)) {
                     if (col->Group != 0 && !seen.Get(col->Group)) {
                         NPage::TGroupId groupId(col->Group);
-                        Groups.emplace_back(TPartIndexIt(Part, Env, groupId), groupId);
+                        Groups.emplace_back(TPartGroupFlatIndexIter(Part, Env, groupId), groupId);
                         if (HistoryIndex) {
                             NPage::TGroupId historyGroupId(col->Group, true);
-                            HistoryGroups.emplace_back(TPartIndexIt(Part, Env, historyGroupId), historyGroupId);
+                            HistoryGroups.emplace_back(TPartGroupFlatIndexIter(Part, Env, historyGroupId), historyGroupId);
                         }
                         seen.Set(col->Group);
                     }
@@ -491,12 +491,12 @@ namespace NTable {
 
     private:
         struct TGroupState {
-            TPartIndexIt GroupIndex;
+            TPartGroupFlatIndexIter GroupIndex;
             TIter Index;
             TRowId LastRowId = Max<TRowId>();
             const NPage::TGroupId GroupId;
 
-            TGroupState(TPartIndexIt&& groupIndex, NPage::TGroupId groupId)
+            TGroupState(TPartGroupFlatIndexIter&& groupIndex, NPage::TGroupId groupId)
                 : GroupIndex(groupIndex)
                 , GroupId(groupId)
             { }
@@ -618,8 +618,8 @@ namespace NTable {
         IPages * const Env = nullptr;
         const TPart * const Part = nullptr;
         const TPartScheme &Scheme;
-        mutable TPartIndexIt Index;
-        mutable std::optional<TPartIndexIt> HistoryIndex;
+        mutable TPartGroupFlatIndexIter Index;
+        mutable std::optional<TPartGroupFlatIndexIter> HistoryIndex;
         mutable TSmallVec<TGroupState> Groups;
         mutable TSmallVec<TGroupState> HistoryGroups;
     };

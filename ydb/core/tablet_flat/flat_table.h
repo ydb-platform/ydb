@@ -145,7 +145,7 @@ public:
             const ITransactionMapPtr& visible = nullptr,
             const ITransactionObserverPtr& observer = nullptr) const noexcept;
     EReady Select(TRawVals key, TTagsRef tags, IPages* env, TRowState& row,
-                  ui64 flg, TRowVersion snapshot, TDeque<TPartSimpleIt>& tempIterators,
+                  ui64 flg, TRowVersion snapshot, TDeque<TPartIter>& tempIterators,
                   TSelectStats& stats,
                   const ITransactionMapPtr& visible = nullptr,
                   const ITransactionObserverPtr& observer = nullptr) const noexcept;

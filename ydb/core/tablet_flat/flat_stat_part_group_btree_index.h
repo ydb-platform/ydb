@@ -6,7 +6,7 @@
 
 namespace NKikimr::NTable {
 
-class TStatsPartGroupBtreeIndexIterator : public IStatsPartGroupIterator {
+class TStatsPartGroupBtreeIndexIter : public IStatsPartGroupIter {
     using TCells = NPage::TCells;
     using TBtreeIndexNode = NPage::TBtreeIndexNode;
     using TGroupId = NPage::TGroupId;
@@ -37,7 +37,7 @@ class TStatsPartGroupBtreeIndexIterator : public IStatsPartGroupIterator {
     };
 
 public:
-    TStatsPartGroupBtreeIndexIterator(const TPart* part, IPages* env, TGroupId groupId,
+    TStatsPartGroupBtreeIndexIter(const TPart* part, IPages* env, TGroupId groupId,
             ui64 rowCountResolution, ui64 dataSizeResolution, const TVector<TRowId>& splitPoints)
         : Part(part)
         , Env(env)

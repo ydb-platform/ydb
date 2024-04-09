@@ -73,7 +73,7 @@ namespace NTest {
                         TIter::Direction));
 
             for (auto &run: Levels) {
-                auto one = MakeHolder<TRunIt>(run, Remap().Tags, KeyCellDefaults, Env);
+                auto one = MakeHolder<TPartsIter>(run, Remap().Tags, KeyCellDefaults, Env);
 
                 EReady status;
                 if constexpr (TIter::Direction == EDirection::Reverse) {

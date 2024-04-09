@@ -99,7 +99,7 @@ BENCHMARK_DEFINE_F(TPartFixture, SeekRowId)(benchmark::State& state) {
         if (useBTree) {
             iter = MakeHolder<TPartBtreeIndexIt>(Part, &Env, GroupId);
         } else {
-            iter = MakeHolder<TPartIndexIt>(Part, &Env, GroupId);
+            iter = MakeHolder<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
         }
 
         iter->Seek(RandomNumber<ui32>(Part->Stat.Rows));    
@@ -114,7 +114,7 @@ BENCHMARK_DEFINE_F(TPartFixture, Next)(benchmark::State& state) {
     if (useBTree) {
         iter = MakeHolder<TPartBtreeIndexIt>(Part, &Env, GroupId);
     } else {
-        iter = MakeHolder<TPartIndexIt>(Part, &Env, GroupId);
+        iter = MakeHolder<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
     }
 
     iter->Seek(RandomNumber<ui32>(Part->Stat.Rows));
@@ -135,7 +135,7 @@ BENCHMARK_DEFINE_F(TPartFixture, Prev)(benchmark::State& state) {
     if (useBTree) {
         iter = MakeHolder<TPartBtreeIndexIt>(Part, &Env, GroupId);
     } else {
-        iter = MakeHolder<TPartIndexIt>(Part, &Env, GroupId);
+        iter = MakeHolder<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
     }
 
     iter->Seek(RandomNumber<ui32>(Part->Stat.Rows));
@@ -164,7 +164,7 @@ BENCHMARK_DEFINE_F(TPartFixture, SeekKey)(benchmark::State& state) {
         if (useBTree) {
             iter = MakeHolder<TPartBtreeIndexIt>(Part, &Env, GroupId);
         } else {
-            iter = MakeHolder<TPartIndexIt>(Part, &Env, GroupId);
+            iter = MakeHolder<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
         }
 
         state.PauseTiming();

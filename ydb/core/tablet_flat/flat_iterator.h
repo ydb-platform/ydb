@@ -253,7 +253,7 @@ public:
     ~TTableItBase();
 
     void Push(TAutoPtr<TMemIt>);
-    void Push(TAutoPtr<TRunIt>);
+    void Push(TAutoPtr<TPartsIter>);
 
     void StopBefore(TArrayRef<const TCell> key);
     void StopAfter(TArrayRef<const TCell> key);
@@ -365,7 +365,7 @@ private:
     EStage Stage = EStage::Seek;
     EReady Ready = EReady::Gone;
     THolderVector<TMemIt> MemIters;
-    THolderVector<TRunIt> RunIters;
+    THolderVector<TPartsIter> RunIters;
     TOwnedCellVec StopKey;
     bool StopKeyInclusive = true;
 
@@ -528,7 +528,7 @@ inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TMemIt> it)
 }
 
 template<class TIteratorOps>
-inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TRunIt> it)
+inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TPartsIter> it)
 {
     TIteratorId itId = { EType::Run, IteratorIndexFromSize(RunIters.size()), it->Epoch() };
 

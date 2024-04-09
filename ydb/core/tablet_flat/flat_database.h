@@ -278,7 +278,7 @@ private:
     TVector<ui32> ModifiedRefs;
     TVector<TUpdateOp> ModifiedOps;
 
-    mutable TDeque<TPartSimpleIt> TempIterators; // Keeps the last result of Select() valid
+    mutable TDeque<TPartIter> TempIterators; // Keeps the last result of Select() valid
     mutable THashSet<ui32> IteratedTables;
 
     TVector<std::function<void()>> OnCommit_;

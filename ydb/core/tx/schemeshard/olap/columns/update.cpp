@@ -71,7 +71,8 @@ namespace NKikimr::NSchemeShard {
                 return false;
             }
         }
-        if (auto arrowTypeStatus = NArrow::GetArrowType(Type).status();!arrowTypeStatus.ok()) {
+        const auto arrowTypeStatus = NArrow::GetArrowType(Type).status();
+        if (!arrowTypeStatus.ok()) {
             errors.AddError(TStringBuilder() << "Column '" << Name << "': " << arrowTypeStatus.ToString());
             return false;
         }

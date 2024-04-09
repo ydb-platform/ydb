@@ -334,7 +334,8 @@ Pear;15;33'''
     @pytest.mark.parametrize("filename, type_format", [
         ("timestamp/simple_iso/test.csv", "csv_with_names"),
         ("timestamp/simple_iso/test.tsv", "tsv_with_names"),
-        ("timestamp/simple_iso/test.json", "json_each_row")
+        ("timestamp/simple_iso/test.json", "json_each_row"),
+        ("timestamp/simple_iso/test.parquet", "parquet")
     ])
     def test_timestamp_simple_iso_insert(self, kikimr, s3, client, filename, type_format):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
@@ -383,7 +384,8 @@ Pear;15;33'''
     @pytest.mark.parametrize("filename, type_format", [
         ("common/simple_posix/test.csv", "csv_with_names"),
         ("common/simple_posix/test.tsv", "tsv_with_names"),
-        ("common/simple_posix/test.json", "json_each_row")
+        ("common/simple_posix/test.json", "json_each_row"),
+        ("common/simple_posix/test.parquet", "parquet")
     ])
     def test_timestamp_simple_posix_insert(self, kikimr, s3, client, filename, type_format):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
@@ -432,7 +434,8 @@ Pear;15;33'''
     @pytest.mark.parametrize("filename, type_format", [
         ("date_time/simple_iso/test.csv", "csv_with_names"),
         ("date_time/simple_iso/test.tsv", "tsv_with_names"),
-        ("date_time/simple_iso/test.json", "json_each_row")
+        ("date_time/simple_iso/test.json", "json_each_row"),
+        ("date_time/simple_iso/test.parquet", "parquet")
     ])
     def test_date_time_simple_iso_insert(self, kikimr, s3, client, filename, type_format):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
@@ -507,7 +510,8 @@ Pear;15;33'''
     @pytest.mark.parametrize("filename, type_format", [
         ("timestamp/unix_time/test.csv", "csv_with_names"),
         ("timestamp/unix_time/test.tsv", "tsv_with_names"),
-        ("timestamp/unix_time/test.json", "json_each_row")
+        ("timestamp/unix_time/test.json", "json_each_row"),
+        ("timestamp/unix_time/test.parquet", "parquet")
     ])
     def test_timestamp_unix_time_insert(self, kikimr, s3, client, filename, type_format, timestamp_format):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
@@ -531,7 +535,8 @@ Pear;15;33'''
     @pytest.mark.parametrize("filename, type_format", [
         ("common/simple_format/test.csv", "csv_with_names"),
         ("common/simple_format/test.tsv", "tsv_with_names"),
-        ("common/simple_format/test.json", "json_each_row")
+        ("common/simple_format/test.json", "json_each_row"),
+        ("common/simple_format/test.parquet", "parquet")
     ])
     def test_timestamp_simple_format_insert(self, kikimr, s3, client, filename, type_format):
         self.create_bucket_and_upload_file(filename, s3, kikimr)

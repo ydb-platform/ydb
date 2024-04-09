@@ -1,4 +1,5 @@
 #include "yql_generic_read_actor.h"
+#include "yql_generic_token_provider.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -12,10 +13,10 @@
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
-#include <ydb/library/yql/providers/generic/proto/range.pb.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 
 namespace NYql::NDq {
 
@@ -102,16 +103,16 @@ namespace NYql::NDq {
             ui64 inputIndex,
             TCollectStatsLevel statsLevel,
             NConnector::IClient::TPtr client,
-            const NConnector::NApi::TSelect& select,
-            const NConnector::NApi::TDataSourceInstance& dataSourceInstance,
+            TGenericTokenProvider::TPtr tokenProvider,
+            Generic::TSource&& source,
             const NActors::TActorId& computeActorId,
             const NKikimr::NMiniKQL::THolderFactory& holderFactory)
             : InputIndex_(inputIndex)
             , ComputeActorId_(computeActorId)
             , Client_(std::move(client))
+            , TokenProvider_(std::move(tokenProvider))
             , HolderFactory_(holderFactory)
-            , Select_(select)
-            , DataSourceInstance_(dataSourceInstance)
+            , Source_(source)
         {
             IngressStats_.Level = statsLevel;
         }
@@ -143,7 +144,9 @@ namespace NYql::NDq {
 
             // Prepare request
             NConnector::NApi::TListSplitsRequest request;
-            *request.mutable_selects()->Add() = Select_;
+            NConnector::NApi::TSelect select = Source_.select(); // copy TSelect from source
+            TokenProvider_->MaybeFillToken(*select.mutable_data_source_instance());
+            *request.mutable_selects()->Add() = std::move(select);
 
             // Initialize stream
             Client_->ListSplits(request).Subscribe(
@@ -236,8 +239,11 @@ namespace NYql::NDq {
 
             std::for_each(
                 Splits_.cbegin(), Splits_.cend(),
-                [&](const NConnector::NApi::TSplit& split) { request.mutable_splits()->Add()->CopyFrom(split); });
-            request.mutable_data_source_instance()->CopyFrom(DataSourceInstance_);
+                [&](const NConnector::NApi::TSplit& split) {
+                    NConnector::NApi::TSplit splitCopy = split;
+                    TokenProvider_->MaybeFillToken(*splitCopy.mutable_select()->mutable_data_source_instance());
+                    *request.mutable_splits()->Add() = std::move(split);
+                });
 
             // Start streaming
             Client_->ReadSplits(request).Subscribe(
@@ -403,8 +409,8 @@ namespace NYql::NDq {
             // It's very important to fill UV columns in the alphabet order,
             // paying attention to the scalar field containing block length.
             TVector<TString> fieldNames;
-            std::transform(Select_.what().items().cbegin(),
-                           Select_.what().items().cend(),
+            std::transform(Source_.select().what().items().cbegin(),
+                           Source_.select().what().items().cend(),
                            std::back_inserter(fieldNames),
                            [](const auto& item) { return item.column().name(); });
 
@@ -484,6 +490,7 @@ namespace NYql::NDq {
         const NActors::TActorId ComputeActorId_;
 
         NConnector::IClient::TPtr Client_;
+        TGenericTokenProvider::TPtr TokenProvider_;
         NConnector::IListSplitsStreamIterator::TPtr ListSplitsIterator_;
         TVector<NConnector::NApi::TSplit> Splits_; // accumulated list of table splits
         NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator_;
@@ -492,22 +499,21 @@ namespace NYql::NDq {
 
         NKikimr::NMiniKQL::TPlainContainerCache ArrowRowContainerCache_;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory_;
-        const NYql::NConnector::NApi::TSelect Select_;
-        const NYql::NConnector::NApi::TDataSourceInstance DataSourceInstance_;
+        Generic::TSource Source_;
     };
 
     std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>
     CreateGenericReadActor(NConnector::IClient::TPtr genericClient,
-                           Generic::TSource&& params,
+                           Generic::TSource&& source,
                            ui64 inputIndex,
                            TCollectStatsLevel statsLevel,
                            const THashMap<TString, TString>& /*secureParams*/,
                            const THashMap<TString, TString>& /*taskParams*/,
                            const NActors::TActorId& computeActorId,
-                           ISecuredServiceAccountCredentialsFactory::TPtr /*credentialsFactory*/,
+                           ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
                            const NKikimr::NMiniKQL::THolderFactory& holderFactory)
     {
-        const auto dsi = params.select().data_source_instance();
+        const auto dsi = source.select().data_source_instance();
         YQL_CLOG(INFO, ProviderGeneric) << "Creating read actor with params:"
                                         << " kind=" << NYql::NConnector::NApi::EDataSourceKind_Name(dsi.kind())
                                         << ", endpoint=" << dsi.endpoint().ShortDebugString()
@@ -526,6 +532,7 @@ namespace NYql::NDq {
         YQL_ENSURE(one != TString::npos && two != TString::npos && one < two, "Bad token format:" << token);
         */
 
+        // Obtain token to access remote data source if necessary
         // TODO: partitioning is not implemented now, but this code will be useful for the further research:
         /*
         TStringBuilder part;
@@ -539,12 +546,14 @@ namespace NYql::NDq {
         part << ';';
         */
 
+        auto tokenProvider = CreateGenericTokenProvider(source, credentialsFactory);
+
         const auto actor = new TGenericReadActor(
             inputIndex,
             statsLevel,
             genericClient,
-            params.select(),
-            dsi,
+            std::move(tokenProvider),
+            std::move(source),
             computeActorId,
             holderFactory);
 

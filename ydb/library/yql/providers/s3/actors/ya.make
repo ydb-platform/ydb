@@ -20,9 +20,11 @@ PEERDIR(
     contrib/libs/fmt
     contrib/libs/poco/Util
     ydb/library/actors/http
+    library/cpp/protobuf/util
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
     library/cpp/xml/document
+    ydb/core/base
     ydb/core/fq/libs/events
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/minikql/computation
@@ -36,6 +38,8 @@ PEERDIR(
     ydb/library/yql/providers/s3/credentials
     ydb/library/yql/providers/s3/object_listers
     ydb/library/yql/providers/s3/proto
+    ydb/library/yql/providers/s3/range_helpers
+    ydb/library/yql/public/issue
     ydb/library/yql/public/types
     ydb/library/yql/udfs/common/clickhouse/client
 )

@@ -4,9 +4,8 @@
 #include <ydb/core/grpc_services/service_fq.h>
 #include <ydb/core/fq/libs/audit/events/events.h>
 #include <ydb/core/fq/libs/audit/yq_audit_service.h>
-#include <ydb/core/fq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
-#include <ydb/core/fq/libs/control_plane_proxy/utils.h>
+#include <ydb/core/fq/libs/control_plane_proxy/utils/utils.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 #include <ydb/public/lib/fq/scope.h>
 

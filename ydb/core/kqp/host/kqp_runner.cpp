@@ -137,14 +137,14 @@ class TKqpRunner : public IKqpRunner {
 public:
     TKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
         const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
-        const NMiniKQL::IFunctionRegistry& funcRegistry)
+        const TIntrusivePtr<TKqlTransformContext>& transformCtx, const NMiniKQL::IFunctionRegistry& funcRegistry)
         : Gateway(gateway)
         , Cluster(cluster)
         , TypesCtx(*typesCtx)
         , SessionCtx(sessionCtx)
         , FunctionRegistry(funcRegistry)
         , Config(sessionCtx->ConfigPtr())
-        , TransformCtx(MakeIntrusive<TKqlTransformContext>(Config, sessionCtx->QueryPtr(), sessionCtx->TablesPtr()))
+        , TransformCtx(transformCtx)
         , OptimizeCtx(MakeIntrusive<TKqpOptimizeContext>(cluster, Config, sessionCtx->QueryPtr(),
             sessionCtx->TablesPtr()))
         , BuildQueryCtx(MakeIntrusive<TKqpBuildQueryContext>())
@@ -377,9 +377,9 @@ private:
 
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
-    const NMiniKQL::IFunctionRegistry& funcRegistry)
+    const TIntrusivePtr<TKqlTransformContext>& transformCtx, const NMiniKQL::IFunctionRegistry& funcRegistry)
 {
-    return new TKqpRunner(gateway, cluster, typesCtx, sessionCtx, funcRegistry);
+    return new TKqpRunner(gateway, cluster, typesCtx, sessionCtx, transformCtx, funcRegistry);
 }
 
 } // namespace NKqp

@@ -7,6 +7,7 @@
 #include <library/cpp/logger/stream.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NYdb::NTopic::NTests {
 
@@ -14,16 +15,25 @@ Y_UNIT_TEST_SUITE(TxUsage) {
 
 class TFixture : public NUnitTest::TBaseFixture {
 protected:
+    using TTopicReadSession = NTopic::IReadSession;
+    using TTopicReadSessionPtr = std::shared_ptr<TTopicReadSession>;
+    using TTopicWriteSession = NTopic::IWriteSession;
+    using TTopicWriteSessionPtr = std::shared_ptr<TTopicWriteSession>;
+
+    struct TTopicWriteSessionContext {
+        TTopicWriteSessionPtr Session;
+        TMaybe<NTopic::TContinuationToken> ContinuationToken;
+
+        void WaitForContinuationToken();
+        void Write(const TString& message);
+        void WaitForAck();
+    };
+
     void SetUp(NUnitTest::TTestContext&) override;
 
     NTable::TSession CreateTableSession();
     NTable::TTransaction BeginTx(NTable::TSession& session);
     void CommitTx(NTable::TTransaction& tx, EStatus status = EStatus::SUCCESS);
-
-    using TTopicReadSession = NTopic::IReadSession;
-    using TTopicReadSessionPtr = std::shared_ptr<TTopicReadSession>;
-    using TTopicWriteSession = NTopic::ISimpleBlockingWriteSession;
-    using TTopicWriteSessionPtr = std::shared_ptr<TTopicWriteSession>;
 
     TTopicReadSessionPtr CreateReader();
 
@@ -46,8 +56,8 @@ protected:
 
     TTopicWriteSessionPtr CreateTopicWriteSession(const TString& topicPath,
                                                   const TString& messageGroupId);
-    TTopicWriteSessionPtr GetTopicWriteSession(const TString& topicPath,
-                                               const TString& messageGroupId);
+    TTopicWriteSessionContext& GetTopicWriteSession(const TString& topicPath,
+                                                    const TString& messageGroupId);
 
     TTopicReadSessionPtr CreateTopicReadSession(const TString& topicPath,
                                                 const TString& consumerName);
@@ -56,10 +66,20 @@ protected:
 
     void WriteToTopic(const TString& topicPath,
                       const TString& messageGroupId,
+                      const TString& message);
+    void WriteToTopic(const TString& topicPath,
+                      const TString& messageGroupId,
                       const TString& message,
                       NTable::TTransaction& tx);
     TVector<TString> ReadFromTopic(const TString& topicPath,
-                                   const TString& consumerName);
+                                   const TString& consumerName,
+                                   size_t count);
+
+//    TMaybe<NTopic::TContinuationToken> WaitForContinuationToken(TTopicWriteSessionPtr session);
+//    void Write(TTopicWriteSessionPtr session,
+//               NTopic::TContinuationToken&& continuationToken,
+//               const TString& message);
+//    void WaitForAck(TTopicWriteSessionPtr session);
 
 protected:
     const TDriver& GetDriver() const;
@@ -73,7 +93,7 @@ private:
     std::unique_ptr<TTopicSdkTestSetup> Setup;
     std::unique_ptr<TDriver> Driver;
 
-    THashMap<TString, TTopicWriteSessionPtr> TopicWriteSessions;
+    THashMap<TString, TTopicWriteSessionContext> TopicWriteSessions;
     THashMap<TString, TTopicReadSessionPtr> TopicReadSessions;
 };
 
@@ -414,22 +434,24 @@ auto TFixture::CreateTopicWriteSession(const TString& topicPath,
     NTopic::TWriteSessionSettings options;
     options.Path(topicPath);
     options.MessageGroupId(messageGroupId);
-    return client.CreateSimpleBlockingWriteSession(options);
+    return client.CreateWriteSession(options);
 }
 
 auto TFixture::GetTopicWriteSession(const TString& topicPath,
-                                    const TString& messageGroupId) -> TTopicWriteSessionPtr
+                                    const TString& messageGroupId) -> TTopicWriteSessionContext&
 {
-    TTopicWriteSessionPtr session;
+    auto i = TopicWriteSessions.find(topicPath);
 
-    if (auto i = TopicWriteSessions.find(topicPath); i == TopicWriteSessions.end()) {
-        session = CreateTopicWriteSession(topicPath, messageGroupId);
-        TopicWriteSessions.emplace(topicPath, session);
-    } else {
-        session = i->second;
+    if (i == TopicWriteSessions.end()) {
+        TTopicWriteSessionContext context;
+        context.Session = CreateTopicWriteSession(topicPath, messageGroupId);
+
+        TopicWriteSessions.emplace(topicPath, std::move(context));
+
+        i = TopicWriteSessions.find(topicPath);
     }
 
-    return session;
+    return i->second;
 }
 
 auto TFixture::CreateTopicReadSession(const TString& topicPath,
@@ -459,36 +481,107 @@ auto TFixture::GetTopicReadSession(const TString& topicPath,
     return session;
 }
 
-void TFixture::WriteToTopic(const TString& topicPath,
-                            const TString& messageGroupId,
-                            const TString& message,
-                            NTable::TTransaction& tx)
+void TFixture::TTopicWriteSessionContext::WaitForContinuationToken()
 {
-    auto session = GetTopicWriteSession(topicPath, messageGroupId);
+    DBGTRACE("TFixture::TTopicWriteSessionContext::WaitForContinuationToken");
 
-    NTopic::TWriteMessage params(message);
-    params.Tx(tx);
-
-    UNIT_ASSERT(session->Write(std::move(params)));
+    while (!ContinuationToken.Defined()) {
+        Session->WaitEvent().Wait();
+        for (auto& event : Session->GetEvents()) {
+            if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
+                DBGTRACE_LOG("ReadyToAccept");
+                ContinuationToken = std::move(e->ContinuationToken);
+            } else if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
+                DBGTRACE_LOG("Acks");
+                for (auto& ack : e->Acks) {
+                    DBGTRACE_LOG("SeqNo: " << ack.SeqNo << ", State: " << (int)ack.State);
+                }
+            } else if (auto* e = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+                DBGTRACE_LOG("SessionClosed");
+                UNIT_FAIL("");
+            }
+        }
+    }
 }
 
-TVector<TString> TFixture::ReadFromTopic(const TString& topicPath, const TString& consumerName)
+void TFixture::TTopicWriteSessionContext::Write(const TString& message)
 {
-    auto session = GetTopicReadSession(topicPath, consumerName);
+    DBGTRACE("TFixture::TTopicWriteSessionContext::Write");
+    NTopic::TWriteMessage params(message);
 
-    NTopic::TReadSessionGetEventSettings options;
-    auto event = session->GetEvent(options);
-    if (!event) {
-        return {};
+    Session->Write(std::move(*ContinuationToken),
+                   std::move(params));
+    ContinuationToken = Nothing();
+}
+
+void TFixture::TTopicWriteSessionContext::WaitForAck()
+{
+    DBGTRACE("TFixture::TTopicWriteSessionContext::WaitForAck");
+    while (true) {
+        Session->WaitEvent().Wait();
+        for (auto& event : Session->GetEvents()) {
+            if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
+                DBGTRACE_LOG("ReadyToAccept");
+                ContinuationToken = std::move(e->ContinuationToken);
+            } else if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
+                DBGTRACE_LOG("Acks");
+                for (auto& ack : e->Acks) {
+                    DBGTRACE_LOG("SeqNo: " << ack.SeqNo << ", State: " << (int)ack.State);
+                }
+                return;
+            } else if (auto* e = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+                DBGTRACE_LOG("SessionClosed");
+                UNIT_FAIL("");
+            }
+        }
     }
+}
 
-    auto ev = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event);
-    UNIT_ASSERT(ev);
+void TFixture::WriteToTopic(const TString& topicPath,
+                            const TString& messageGroupId,
+                            const TString& message)
+{
+    DBGTRACE("TFixture::WriteToTopic");
+    TTopicWriteSessionContext& context = GetTopicWriteSession(topicPath, messageGroupId);
 
+    context.WaitForContinuationToken();
+    UNIT_ASSERT(context.ContinuationToken.Defined());
+    context.Write(message);
+    context.WaitForAck();
+}
+
+//void TFixture::WriteToTopic(const TString& topicPath,
+//                            const TString& messageGroupId,
+//                            const TString& message,
+//                            NTable::TTransaction& tx)
+//{
+//    auto session = GetTopicWriteSession(topicPath, messageGroupId);
+//
+//    NTopic::TWriteMessage params(message);
+//    params.Tx(tx);
+//
+//    session->Write(std::move(params));
+//}
+
+TVector<TString> TFixture::ReadFromTopic(const TString& topicPath, const TString& consumerName, size_t count)
+{
+    DBGTRACE("TFixture::ReadFromTopic");
     TVector<TString> messages;
 
-    for (auto& m : ev->GetMessages()) {
-        messages.push_back(m.GetData());
+    auto session = GetTopicReadSession(topicPath, consumerName);
+
+    while (count > 0) {
+        auto event = session->GetEvent(true, count);
+        UNIT_ASSERT(event);
+
+        auto ev = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event);
+        UNIT_ASSERT(ev);
+
+        for (auto& m : ev->GetMessages()) {
+            messages.push_back(m.GetData());
+        }
+
+        count -= ev->GetMessages().size();
     }
 
     return messages;
@@ -499,34 +592,23 @@ Y_UNIT_TEST_F(WriteToTopic_Demo, TFixture)
     CreateTopic("topic_A");
     CreateTopic("topic_B");
 
-    auto tableSession = CreateTableSession();
-    auto tx = BeginTx(tableSession);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "Лидер");
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "бодро");
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "гордо");
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "бредил");
 
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "Лидер", tx);
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "бодро", tx);
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "гордо", tx);
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "бредил", tx);
-
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "Тарту", tx);
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "дорог", tx);
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "как", tx);
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "город", tx);
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "утрат", tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "Тарту");
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "дорог");
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "как");
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "город");
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "утрат");
 
     TVector<TString> messages;
 
-    messages = ReadFromTopic("topic_A", TEST_CONSUMER);
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
-
-    messages = ReadFromTopic("topic_B", TEST_CONSUMER);
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
-
-    CommitTx(tx);
-
-    messages = ReadFromTopic("topic_A", TEST_CONSUMER);
+    messages = ReadFromTopic("topic_A", TEST_CONSUMER, 4);
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4);
 
-    messages = ReadFromTopic("topic_B", TEST_CONSUMER);
+    messages = ReadFromTopic("topic_B", TEST_CONSUMER, 5);
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 5);
 }
 

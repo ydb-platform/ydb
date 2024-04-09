@@ -172,27 +172,4 @@ NYql::TIssues ValidateEntityName(const TString& name) {
     return issues;
 }
 
-std::vector<NYdb::TType> GetStringTypes() {
-    NYdb::TType stringType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::String).Build();
-    NYdb::TType utf8Type = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Utf8).Build();
-    NYdb::TType ysonType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Yson).Build();
-    NYdb::TType jsonType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Json).Build();
-    const std::vector<NYdb::TType> result {
-        stringType,
-        utf8Type,
-        ysonType,
-        jsonType,
-        NYdb::TTypeBuilder{}.Optional(stringType).Build(),
-        NYdb::TTypeBuilder{}.Optional(utf8Type).Build(),
-        NYdb::TTypeBuilder{}.Optional(ysonType).Build(),
-        NYdb::TTypeBuilder{}.Optional(jsonType).Build()
-    };
-    return result;
-}
-
-bool ValidateStringType(const NYdb::TType& columnType) {
-    static const std::vector<NYdb::TType> availableTypes = GetStringTypes();
-    return FindIf(availableTypes, [&columnType](const auto& availableType) { return NYdb::TypesEqual(availableType, columnType); }) != availableTypes.end();
-}
-
 } // namespace NFq

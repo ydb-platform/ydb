@@ -1044,18 +1044,29 @@ TPersQueueReadBalancer::TClientGroupInfo& TPersQueueReadBalancer::TClientInfo::A
     return clientInfo;
 }
 
+void TPersQueueReadBalancer::TClientGroupInfo::ActivatePartition(ui32 partitionId) {
+    ChangePartitionStatus(partitionId, [](TSessionInfo* session) {
+        --session->NumInactive;
+    });
+}
+
 void TPersQueueReadBalancer::TClientGroupInfo::InactivatePartition(ui32 partitionId) {
+    ChangePartitionStatus(partitionId, [](TSessionInfo* session) {
+        ++session->NumInactive;
+    });
+}
+
+void TPersQueueReadBalancer::TClientGroupInfo::ChangePartitionStatus(ui32 partitionId, std::function<void (TSessionInfo*)> modifier) {
     auto partitionIt = PartitionsInfo.find(partitionId);
     if (partitionIt != PartitionsInfo.end()) {
         auto& partitionInfo = partitionIt->second;
         if (partitionInfo.Session) {
             auto* session = FindSession(partitionInfo.Session);
             if (session) {
-                session->NumInactive++;
+                modifier(session);
             }
         }
     }
-
 }
 
 void TPersQueueReadBalancer::TClientGroupInfo::FreePartition(ui32 partitionId) {
@@ -1639,7 +1650,7 @@ std::tuple<ui32, ui32, ui32> TPersQueueReadBalancer::TClientGroupInfo::TotalPart
 }
 
 void TPersQueueReadBalancer::TClientGroupInfo::ReleaseExtraPartitions(ui32 desired, ui32 allowPlusOne, const TActorContext& ctx) {
-    //request partitions from sessions if needed
+    // request partitions from sessions if needed
     for (auto& [sessionKey, sessionInfo] : SessionsInfo) {
         ui32 realDesired = (allowPlusOne > 0) ? desired + 1 : desired;
         if (allowPlusOne > 0) {
@@ -1673,7 +1684,6 @@ void TPersQueueReadBalancer::TClientGroupInfo::LockMissingPartitions(
             continue;
         }
 
-
         i64 req = ((i64)realDesired) - actual;
         while (req > 0 && !freePartitions.empty()) {
             auto partitionId = freePartitions.front();
@@ -1690,6 +1700,8 @@ void TPersQueueReadBalancer::TClientGroupInfo::LockMissingPartitions(
             Y_ABORT_UNLESS(actualExtractor(sessionInfo) >= desired && actualExtractor(sessionInfo) <= desired + 1);
         }
     }
+
+    FreePartitions.insert(FreePartitions.end(), freePartitions.begin(), freePartitions.end());
 }
 
 void TPersQueueReadBalancer::TClientGroupInfo::Balance(const TActorContext& ctx) {
@@ -1701,7 +1713,7 @@ void TPersQueueReadBalancer::TClientGroupInfo::Balance(const TActorContext& ctx)
 
     auto [totalActive, totalInactive, totalUnreadable] = TotalPartitions();
 
-    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "client " << ClientId << " balance: "
+    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "client " << ClientId << " balance group " << Group << ": "
                             << " TotalActive=" << totalActive << ", TotalInactive=" << totalInactive << ", TotalUnreadable=" << totalUnreadable);
 
 
@@ -1960,19 +1972,33 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequ
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                         "Reading of partition " << r.GetPartitionId() << " was started by " << r.GetConsumer() << ". Stop reading from children's partitions.");
 
+            auto* groupInfo = clientInfo.FindGroup(r.GetPartitionId());
+            if (groupInfo) {
+                groupInfo->ActivatePartition(r.GetPartitionId());
+            }
+
             // We releasing all children's partitions because we don't start reading the partition from EndOffset
             PartitionGraph.Travers(r.GetPartitionId(), [&](ui32 partitionId) {
                 auto& status = clientInfo.GetPartitionReadingStatus(partitionId);
-                status.Reset();
-
                 auto* group = clientInfo.FindGroup(partitionId);
+
+                if (status.Reset() && group) {
+                    group->ActivatePartition(partitionId);
+                }
                 if (group) {
                     group->ReleasePartition(partitionId, ctx);
                 }
 
                 return true;
             });
+        } else {
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                        "Reading of partition " << r.GetPartitionId() << " was started by " << r.GetConsumer() << ".");
+
         }
+    } else {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                    "Received TEvReadingPartitionStartedRequest from unknown consumer " << r.GetConsumer());
     }
 }
 

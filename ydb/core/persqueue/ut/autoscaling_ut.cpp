@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
             Session = client.CreateReadSession(readSettings);
         }
 
-        void WaitAndAssertPartitions(std::set<size_t> partitions, const TString& message) {
+        NThreading::TFuture<std::set<size_t>> Wait(std::set<size_t> partitions, const TString& message) {
             Cerr << ">>>>> " << Name << " Wait partitions " << partitions << " " << message << Endl;
 
             with_lock (Lock) {
@@ -305,17 +305,28 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
                 if (Partitions == ExpectedPartitions) {
                     Cerr << ">>>>> " << Name << " Partitions " << partitions << " received #1" << Endl;
                     Semaphore.Release();
-                    return;
+
+                    NThreading::TPromise<std::set<size_t>> p = NThreading::NewPromise<std::set<size_t>>();
+                    p.SetValue(ExpectedPartitions.value());
+                    return p;
                 }
 
                 Promise = NThreading::NewPromise<std::set<size_t>>();
             }
 
-            Promise.GetFuture().Wait(TDuration::Seconds(5));
+            return Promise.GetFuture();
+        }
 
+        void Assert(const std::set<size_t>& expected, NThreading::TFuture<std::set<size_t>> f, const TString& message) {
             Cerr << ">>>>> " << Name << " Partitions " << Partitions << " received #2" << Endl;
-            UNIT_ASSERT_VALUES_EQUAL_C(ExpectedPartitions, Partitions, message);
+            UNIT_ASSERT_VALUES_EQUAL_C(expected, f.HasValue() ? f.GetValueSync() : Partitions, message);
             Semaphore.Release();
+        }
+
+        void WaitAndAssertPartitions(std::set<size_t> partitions, const TString& message) {
+            auto f = Wait(partitions, message);
+            f.Wait(TDuration::Seconds(5));
+            Assert(partitions, f, message);
         }
 
         void Stop() {
@@ -406,10 +417,16 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         TTestPartitionReadSession readSession2("Session-1", client, false, 0);
         readSession2.Offsets[0] = 0;
 
-        //readSession2.WaitAndAssertPartitions({0}, "Must read partition 0 because it defined in the readSession");
+        auto p1 = readSession1.Wait({}, "Must release all partitions becase readSession2 read not from EndOffset");
+        auto p2 = readSession2.Wait({0}, "Must read partition 0 because it defined in the readSession");
+
+        p2.Wait(TDuration::Seconds(5));
+        readSession2.Assert({0}, p2, "");
         readSession2.Stop();
 
-        readSession1.WaitAndAssertPartitions({}, "Must release all partitions becase readSession2 read not from EndOffset");
+        p1.Wait(TDuration::Seconds(5));
+        readSession1.Assert({}, p1, "");
+
         readSession1.Stop();
     }
 }

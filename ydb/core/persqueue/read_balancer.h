@@ -220,7 +220,7 @@ private:
         bool SetFinishedState(bool scaleAwareSDK, bool startedReadingFromEndOffset);
 
         bool Unlock();
-        void Reset();
+        bool Reset();
     };
 
     struct TSessionInfo {
@@ -284,7 +284,9 @@ private:
         THolder<TEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(const TActorId pipe, const TSessionInfo& sessionInfo, const ui32 count, const std::set<ui32>& partitions);
 
         void FreePartition(ui32 partitionId);
+        void ActivatePartition(ui32 partitionId);
         void InactivatePartition(ui32 partitionId);
+        void ChangePartitionStatus(ui32 partitionId, std::function<void (TSessionInfo*)> modifier);
 
         TStringBuilder GetPrefix() const;
 

@@ -12,7 +12,7 @@ bool TPersQueueReadBalancer::TReadingPartitionStatus::IsFinished() const {
 }
 
 bool TPersQueueReadBalancer::TReadingPartitionStatus::NeedReleaseChildren() const {
-     return !Commited && !(ReadingFinished && ScaleAwareSDK);
+     return !(Commited || (ReadingFinished && !ScaleAwareSDK));
 }
 
 bool TPersQueueReadBalancer::TReadingPartitionStatus::StartReading() {
@@ -39,10 +39,10 @@ bool TPersQueueReadBalancer::TReadingPartitionStatus::Unlock() {
     return NeedReleaseChildren();
 }
 
-void TPersQueueReadBalancer::TReadingPartitionStatus::Reset() {
-    ReadingFinished = false;
+bool TPersQueueReadBalancer::TReadingPartitionStatus::Reset() {
     ScaleAwareSDK = false;
     ++Cookie;
+    return std::exchange(ReadingFinished, false);
 };
 
 

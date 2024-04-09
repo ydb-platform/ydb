@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/cms/console
     ydb/core/kqp/common
+    ydb/core/kqp/compute_actor
     ydb/core/kqp/counters
     ydb/core/mind
     ydb/core/protos

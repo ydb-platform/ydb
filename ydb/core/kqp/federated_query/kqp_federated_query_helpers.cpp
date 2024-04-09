@@ -105,11 +105,12 @@ namespace NKikimr::NKqp {
             GenericGatewaysConfig};
 
         // Init DatabaseAsyncResolver only if all requirements are met
-        if (DatabaseResolverActorId && GenericGatewaysConfig.HasMdbGateway() && MdbEndpointGenerator) {
+        if (DatabaseResolverActorId && MdbEndpointGenerator &&
+            (GenericGatewaysConfig.HasMdbGateway() || GenericGatewaysConfig.HasYdbMvpEndpoint())) {
             result.DatabaseAsyncResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
                 actorSystem,
                 DatabaseResolverActorId.value(),
-                "", // TODO: use YDB Gateway endpoint?
+                GenericGatewaysConfig.GetYdbMvpEndpoint(),
                 GenericGatewaysConfig.GetMdbGateway(),
                 MdbEndpointGenerator);
         }

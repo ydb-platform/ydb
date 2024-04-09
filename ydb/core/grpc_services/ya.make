@@ -95,8 +95,7 @@ PEERDIR(
     ydb/core/discovery
     ydb/core/engine
     ydb/core/formats
-    ydb/core/fq/libs/actors
-    ydb/core/fq/libs/control_plane_proxy
+    ydb/core/fq/libs/events
     ydb/core/fq/libs/control_plane_proxy/events
     ydb/core/grpc_services/base
     ydb/core/grpc_services/counters

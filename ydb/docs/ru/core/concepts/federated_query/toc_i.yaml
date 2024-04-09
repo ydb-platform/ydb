@@ -1,5 +1,6 @@
 items:
 - { name: Обзор,                                  href: index.md }
+- { name: Архитектура,                            href: architecture.md }
 - { name: Работа с базами данных PostgreSQL,      href: postgresql.md }
 - { name: Работа с базами данных ClickHouse,      href: clickhouse.md }
 - name: Работа с бакетами S3

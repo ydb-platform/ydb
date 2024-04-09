@@ -31,14 +31,14 @@ TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway
         if (gatewaysConfig) {
             state->Configuration->Init(gatewaysConfig->GetS3(), typeCtx);
         }
-
         state->Configuration->AllowLocalFiles = allowLocalFiles;
+        state->Gateway = gateway;
 
         TDataProviderInfo info;
 
         info.Names.insert({TString{S3ProviderName}});
-        info.Source = CreateS3DataSource(state, gateway);
-        info.Sink = CreateS3DataSink(state, gateway);
+        info.Source = CreateS3DataSource(state);
+        info.Sink = CreateS3DataSink(state);
 
         return info;
     };

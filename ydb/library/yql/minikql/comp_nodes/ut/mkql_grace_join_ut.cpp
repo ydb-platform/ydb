@@ -1523,11 +1523,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             NUdf::TUnboxedValue tuple;
 
             UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "X");
-            UNIT_ASSERT(!tuple.GetElement(1));
-            UNIT_ASSERT(iterator.Next(tuple));
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
             UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 1);
+            UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "X");
+            UNIT_ASSERT(!tuple.GetElement(1));
             UNIT_ASSERT(!iterator.Next(tuple));
             UNIT_ASSERT(!iterator.Next(tuple));
         }

@@ -25,26 +25,21 @@ namespace NYql {
         TGenericConfiguration();
         TGenericConfiguration(const TGenericConfiguration&) = delete;
 
-        void Init(const NYql::TGenericGatewayConfig& gatewayConfig,
-                  const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver,
-                  NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth,
-                  const TCredentials::TPtr& credentials);
+        void Init(const NYql::TGenericGatewayConfig& gatewayConfig, const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver,
+                  NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth, const TCredentials::TPtr& credentials);
 
-        void AddCluster(const TGenericClusterConfig& clusterConfig,
-                        const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver,
-                        NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth,
-                        const TCredentials::TPtr& credentials);
+        void AddCluster(const TGenericClusterConfig& clusterConfig, const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver,
+                        NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth, const TCredentials::TPtr& credentials);
 
         TGenericSettings::TConstPtr Snapshot() const;
         bool HasCluster(TStringBuf cluster) const;
 
     private:
         TString MakeStructuredToken(const TGenericClusterConfig& clusterConfig, const TCredentials::TPtr& credentials) const;
-        TString DumpGenericClusterConfig(const TGenericClusterConfig& clusterConfig) const;
 
     public:
         THashMap<TString, TString> Tokens;
         THashMap<TString, TGenericClusterConfig> ClusterNamesToClusterConfigs; // cluster name -> cluster config
         THashMap<TString, TVector<TString>> DatabaseIdsToClusterNames;         // database id -> cluster name
     };
-}
+} //namespace NYql

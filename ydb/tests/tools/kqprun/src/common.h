@@ -12,22 +12,27 @@ namespace NKqpRun {
 struct TYdbSetupSettings {
     TString DomainName = "Root";
 
-    bool TraceOpt = false;
+    bool TraceOptEnabled = false;
     TMaybe<TString> LogOutputFile;
 
     TString YqlToken;
-    NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
+    TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry = nullptr;
     NKikimrConfig::TAppConfig AppConfig;
 };
 
 
 struct TRunnerOptions {
+    enum class ETraceOptType {
+        Disabled,
+        Scheme,
+        Script,
+        All,
+    };
+
     enum class EResultOutputFormat {
         RowsJson,  // Rows in json format
         FullJson,  // Columns, rows and types in json format
     };
-
-    i64 ResultsRowsLimit = 1000;
 
     IOutputStream* ResultOutput = &Cout;
     IOutputStream* SchemeQueryAstOutput = nullptr;
@@ -36,6 +41,7 @@ struct TRunnerOptions {
 
     EResultOutputFormat ResultOutputFormat = EResultOutputFormat::RowsJson;
     NYdb::NConsoleClient::EOutputFormat PlanOutputFormat = NYdb::NConsoleClient::EOutputFormat::Default;
+    ETraceOptType TraceOptType = ETraceOptType::Disabled;
 
     TYdbSetupSettings YdbSettings;
 };

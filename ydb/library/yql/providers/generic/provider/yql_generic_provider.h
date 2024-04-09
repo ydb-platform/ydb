@@ -2,14 +2,14 @@
 
 #include "yql_generic_state.h"
 
-#include <sstream>
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 
 namespace NYql {
     TDataProviderInitializer GetGenericDataProviderInitializer(
-        NConnector::IClient::TPtr genericClient,                           // required
-        std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr // can be missing in on-prem installations
+        NConnector::IClient::TPtr genericClient,                                           // required
+        const IDatabaseAsyncResolver::TPtr& dbResolver = nullptr,                          // can be missing in on-prem installations
+        const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory = nullptr // can be missing in on-prem installations
     );
 
     TIntrusivePtr<IDataProvider> CreateGenericDataSource(TGenericState::TPtr state);

@@ -28,7 +28,8 @@ struct IActorFactory : public TThrRefBase {
     virtual std::unique_ptr<NActors::IActor> CreateResultWriter(const NActors::TActorId& parent,
                                                                 const NActors::TActorId& connector,
                                                                 const NActors::TActorId& pinger,
-                                                                const NKikimr::NOperationId::TOperationId& operationId) const = 0;
+                                                                const NKikimr::NOperationId::TOperationId& operationId,
+                                                                bool operationEntryExpected) const = 0;
     virtual std::unique_ptr<NActors::IActor> CreateResourcesCleaner(const NActors::TActorId& parent,
                                                                     const NActors::TActorId& connector,
                                                                     const NYdb::TOperation::TOperationId& operationId) const = 0;
@@ -39,6 +40,7 @@ struct IActorFactory : public TThrRefBase {
                                                              FederatedQuery::QueryMeta::ComputeStatus status) const = 0;
     virtual std::unique_ptr<NActors::IActor> CreateStopper(const NActors::TActorId& parent,
                                                            const NActors::TActorId& connector,
+                                                           const NActors::TActorId& pinger,
                                                            const NYdb::TOperation::TOperationId& operationId) const = 0;
 };
 

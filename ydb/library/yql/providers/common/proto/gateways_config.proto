@@ -563,12 +563,11 @@ message TGenericClusterConfig {
     // Credentials used to access data source instance
     optional NYql.NConnector.NApi.TCredentials Credentials = 10;
 
-    // Credentials used to access MDB API.
-    // When working with data source instances deployed in a cloud,
-    // you should either set (ServiceAccountId, ServiceAccountIdSignature) pair,
-    // or set IAM Token.
-    // The names of these fields must satisfy this template function:
-    // https://github.com/ydb-platform/ydb/arcadia/contrib/ydb/core/fq/libs/actors/clusters_from_connections.cpp?rev=r11823087#L19
+    // Credentials used to access managed databases APIs.
+    // When working with external data source instances deployed in clouds,
+    // one should either set (ServiceAccountId, ServiceAccountIdSignature) pair 
+    // that will be resolved into IAM Token via Token Accessor, 
+    // or provide IAM Token directly.
     optional string ServiceAccountId = 6;
     optional string ServiceAccountIdSignature = 7;
     optional string Token = 11;
@@ -592,9 +591,11 @@ message TGenericClusterConfig {
 message TGenericConnectorConfig {
     // Connector instance network endpoint
     optional NYql.NConnector.NApi.TEndpoint Endpoint = 3;
-    // If true, GRPC Client will use TLS encryption.
-    // Server cert will be verified with system CA cert pool.
+    // If true, Connector GRPC Client will use TLS encryption.
     optional bool UseSsl = 4;
+    // Path to the custom CA certificate to verify Connector's certs.
+    // If empty, the default system CA certificate pool will be used.
+    optional string SslCaCrt = 5;
 
     reserved 1, 2;
 }
@@ -607,8 +608,13 @@ message TGenericGatewayConfig {
     // Database clusters supported by this particular instance
     repeated TGenericClusterConfig ClusterMapping = 3;
 
-    // MDB API endpoint (do not fill in case of on-prem deployment)
+    // MDB API endpoint (no need to fill in case of on-prem deployment).
     optional string MdbGateway = 4;
+
+    // YDB MVP API endpoint (no need to fill in case of on-prem deployment).
+    // Expected format:
+    // [http|https]://host:port/ydbc/cloud-prod/
+    optional string YdbMvpEndpoint = 7;
 
     repeated TAttr DefaultSettings = 6;
 
@@ -618,7 +624,9 @@ message TGenericGatewayConfig {
 /////////////////////////////// Db Resolver ///////////////////////////////////
 
 message TDbResolverConfig {
-    // Ydb / Yds mvp endpoint
+    // Ydb / Yds MVP endpoint.
+    // Expected format: 
+    // [http|https]://host:port/ydbc/cloud-prod/
     optional string YdbMvpEndpoint = 2;
 }
 

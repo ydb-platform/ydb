@@ -202,13 +202,14 @@ public:
         }
     };
 
-    TResultWriterActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector, const TActorId& pinger, const NKikimr::NOperationId::TOperationId& operationId, const ::NYql::NCommon::TServiceCounters& queryCounters)
+    TResultWriterActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector, const TActorId& pinger, const NKikimr::NOperationId::TOperationId& operationId, bool operationEntryExpected, const ::NYql::NCommon::TServiceCounters& queryCounters)
         : TBaseComputeActor(queryCounters, "ResultWriter")
         , Params(params)
         , Parent(parent)
         , Connector(connector)
         , Pinger(pinger)
         , OperationId(operationId)
+        , OperationEntryExpected(operationEntryExpected)
         , Counters(GetStepCountersSubgroup())
     {}
 
@@ -246,6 +247,13 @@ public:
 
     void Handle(const TEvYdbCompute::TEvGetOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
+        if (!OperationEntryExpected && response.Status == NYdb::EStatus::NOT_FOUND) {
+            LOG_I("Operation has been already removed");
+            Send(Parent, new TEvYdbCompute::TEvResultWriterResponse({}, NYdb::EStatus::SUCCESS));
+            CompleteAndPassAway();
+            return;
+        }
+
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_E("Can't get operation: " << ev->Get()->Issues.ToOneLineString());
             Send(Parent, new TEvYdbCompute::TEvResultWriterResponse(ev->Get()->Issues, ev->Get()->Status));
@@ -314,6 +322,7 @@ private:
     TActorId Connector;
     TActorId Pinger;
     NKikimr::NOperationId::TOperationId OperationId;
+    const bool OperationEntryExpected;
     TCounters Counters;
     TInstant StartTime;
     TString FetchToken;
@@ -325,8 +334,9 @@ std::unique_ptr<NActors::IActor> CreateResultWriterActor(const TRunActorParams& 
                                                          const TActorId& connector,
                                                          const TActorId& pinger,
                                                          const NKikimr::NOperationId::TOperationId& operationId,
+                                                         bool operationEntryExpected,
                                                          const ::NYql::NCommon::TServiceCounters& queryCounters) {
-    return std::make_unique<TResultWriterActor>(params, parent, connector, pinger, operationId, queryCounters);
+    return std::make_unique<TResultWriterActor>(params, parent, connector, pinger, operationId, operationEntryExpected, queryCounters);
 }
 
 }

@@ -60,6 +60,7 @@ public:
     void Handle(NActors::TEvents::TEvPoison::TPtr&);
     void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev);
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void Handle(const TEvCheckpointCoordinator::TEvRunGraph::TPtr&);
     void HandleException(const std::exception& err);
 
@@ -89,13 +90,13 @@ public:
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle)
 
         hFunc(NActors::TEvents::TEvPoison, Handle)
-        hFunc(NActors::TEvents::TEvUndelivered, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnUndelivered)
         hFunc(NActors::TEvents::TEvWakeup, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnWakeup)
 
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle)
-        hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle),
+        hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle)
+        hFunc(NActors::TEvents::TEvUndelivered, Handle)
 
-        ExceptionFunc(std::exception, HandleException)
+        , ExceptionFunc(std::exception, HandleException)
     )
 
     static constexpr char ActorName[] = "YQ_CHECKPOINT_COORDINATOR";

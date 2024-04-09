@@ -1091,42 +1091,72 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
     ctx.Send(ev->Sender, response);
 }
 
-void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext&) {
-    auto& srcIdInfo = ev->Get()->SrcIdInfo;
+void TPartition::WriteInfoResponseHandler(const TActorId& sender, TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>&& ev, const TActorContext& ctx) {
+    auto txIter = WriteInfosToTx.find(sender);
+    Y_ABORT_UNLESS(txIter != WriteInfosToTx.end());
+    txIter->second->WriteInfoRequested = false;
+    auto headOfTheQueue = IsTxHeadOfQueue(txIter->second);
 
-    Y_ABORT_UNLESS(TxInProgress);
-    auto& knownSrcIds = SourceIdStorage.GetInMemorySourceIds();
-    auto& currTx = GetCurrentTransaction();
+    if (ev) {
+        txIter->second->WriteInfo = std::move(ev);
+    } else {
+        txIter->second->Predicate = false;
+        txIter->second->WriteInfoApplied = true;
+    }
 
+    WriteInfosToTx.erase(txIter);
+    if (headOfTheQueue) {
+        TxInProgress = false;
+        ProcessTxsAndUserActs(ctx);
+    }
+}
+
+bool TPartition::ApplyWriteInfoResponse(TTransaction& tx) {
+    auto& srcIdInfo = tx.WriteInfo->SrcIdInfo;
+
+    bool ret = true;
+    const auto& knownSourceIds = SourceIdStorage.GetInMemorySourceIds();
     for (auto& s : srcIdInfo) {
-        auto ins = currTx.AffectedSourcesIds.insert(s.first).second;
+        auto ins = TxAffectedSourcesIds.insert(s.first).second;
         if (!ins) {
-            return SetPredicateResultAndRespond(currTx, false);
+            ret = false;
+            break;
         }
-        auto existing = knownSrcIds.find(s.first);
+        if (WriteffectedSourcesIds.contains(s.first)) {
+            ret = false;
+            break;
+        }
+
+        auto existing = knownSourceIds.find(s.first);
         if (existing.IsEnd())
             continue;
         if (s.second.MinSeqNo <= existing->second.SeqNo) {
-            return SetPredicateResultAndRespond(currTx, false);
+            tx.WriteInfoApplied = true;
+            tx.Predicate = false;
+            break;
         }
-        //SourceIdStorage.
     }
-    currTx.WriteInfo = ev->Release();
-    return SetPredicateResultAndRespond(currTx, true);
+    if (ret) {
+        RespondCalcTxPredicate(&tx);
+    }
+    TxInProgress = false;
+    return ret;
 }
 
-void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr&, const TActorContext&) {
-    Y_ABORT_UNLESS(TxInProgress);
-    auto& currTx = GetUserActionAndTransactionEventsFront<TTransaction>();
-    return SetPredicateResultAndRespond(currTx, false);
+void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& ctx) {
+    WriteInfoResponseHandler(ev->Sender, ev->Release(), ctx);
 }
 
-void TPartition::SetPredicateResultAndRespond(TTransaction& tx, bool result) {
-    tx.Predicate = result;
-    Send(Tablet, MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(tx.Tx->Step,
-                                                             tx.Tx->TxId,
+
+void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& ctx) {
+    WriteInfoResponseHandler(ev->Sender, nullptr, ctx);
+}
+
+void TPartition::RespondCalcTxPredicate(TTransaction* tx) {
+    Send(Tablet, MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(tx->Tx->Step,
+                                                             tx->Tx->TxId,
                                                              Partition,
-                                                             *tx.Predicate).Release());
+                                                             *tx->Predicate).Release());
 }
 
 void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorContext& ctx) {
@@ -1604,6 +1634,9 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
 
 void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event)
 {
+    if (event->SupportivePartitionActor) {
+        Send(event->SupportivePartitionActor, new TEvPQ::TEvGetWriteInfoRequest());
+    }
     UserActionAndTransactionEvents.emplace_back(TTransaction(std::move(event)));
 }
 
@@ -1796,15 +1829,23 @@ TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TTransacti
             return EProcessResult::Break;
         }
 
-        t.Predicate = BeginTransaction(*t.Tx, ctx);
+        if (!t.Predicate.Defined()) {
+            t.Predicate = BeginTransaction(*t.Tx, ctx); //May enter this function twice. Not need to call BeginTx twice.
+        }
         if (t.Tx->SupportivePartitionActor && t.Predicate.GetOrElse(true)) {
-            Send(t.Tx->SupportivePartitionActor, new TEvPQ::TEvGetWriteInfoRequest());
+            if (t.WriteInfoRequested) { // Pending write info;
+                TxInProgress = true;
+                return true;
+            } else if (!t.WriteInfoApplied) { // Write info received, should apply;
+                return ApplyWriteInfoResponse(t);
+            }
+            if (t.WriteInfoApplied) {
+                RespondCalcTxPredicate(&t);
+                TxInProgress = false;
+                return true;
+            }
         } else {
-            Send(Tablet,
-                MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(t.Tx->Step,
-                                                            t.Tx->TxId,
-                                                            Partition,
-                                                            *t.Predicate).Release());
+            RespondCalcTxPredicate(&t);
         }
         TxInProgress = true;
 

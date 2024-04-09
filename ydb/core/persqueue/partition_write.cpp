@@ -468,10 +468,12 @@ void TPartition::UpdateAfterWriteCounters(bool writeComplete) {
 
 void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::HandleWriteResponse.");
-
     if (!HaveWriteMsg) {
         return;
     }
+
+    TxAffectedSourcesIds.clear();
+    WriteffectedSourcesIds.clear();
 
     ui64 prevEndOffset = EndOffset;
 
@@ -1326,6 +1328,61 @@ void TPartition::Handle(TEvPQ::TEvQuotaDeadlineCheck::TPtr&, const TActorContext
     PQ_LOG_T("TPartition::Handle TEvQuotaDeadlineCheck.");
 
     FilterDeadlinedWrites(ctx);
+}
+
+bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const TActorContext& ctx) {
+    PQ_LOG_T("TPartition::ProcessWrites.");
+    FilterDeadlinedWrites(ctx);
+
+    QuotaDeadline = TInstant::Zero();
+
+    if (Requests.empty()) {
+        return false;
+    }
+
+    Y_ABORT_UNLESS(request->Record.CmdWriteSize() == 0);
+    Y_ABORT_UNLESS(request->Record.CmdRenameSize() == 0);
+    Y_ABORT_UNLESS(request->Record.CmdDeleteRangeSize() == 0);
+
+    auto modificationBatch = SourceManager.CreateModificationBatch(ctx);
+
+    bool headCleared = AppendHeadWithNewWrites(request, ctx, modificationBatch);
+    if (headCleared) {
+        Y_ABORT_UNLESS(!CompactedKeys.empty() || Head.PackedSize == 0);
+        for (ui32 i = 0; i < TotalLevels; ++i) {
+            DataKeysHead[i].Clear();
+        }
+    }
+
+    if (NewHead.PackedSize == 0) { //nothing added to head - just compaction or tmp part blobs writed
+        if (!modificationBatch.HasModifications()) {
+            return request->Record.CmdWriteSize() > 0
+                || request->Record.CmdRenameSize() > 0
+                || request->Record.CmdDeleteRangeSize() > 0;
+        } else {
+            modificationBatch.FillRequest(request);
+            return true;
+        }
+    }
+
+    modificationBatch.FillRequest(request);
+
+    std::pair<TKey, ui32> res = GetNewWriteKey(headCleared);
+    const auto& key = res.first;
+
+    LOG_DEBUG_S(
+            ctx, NKikimrServices::PERSQUEUE,
+            "Add new write blob: topic '" << TopicName() << "' partition " << Partition
+                << " compactOffset " << key.GetOffset() << "," << key.GetCount()
+                << " HeadOffset " << Head.Offset << " endOffset " << EndOffset << " curOffset "
+                << NewHead.GetNextOffset() << " " << key.ToString()
+                << " size " << res.second << " WTime " << ctx.Now().MilliSeconds()
+    );
+    for (const auto& [srcId, _] : modificationBatch.GetModifiedSourceIds()) {
+        WriteffectedSourcesIds.insert(srcId);
+    }
+    AddNewWriteBlob(res, request, headCleared, ctx);
+    return true;
 }
 
 void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {

@@ -69,8 +69,9 @@ struct TTransaction {
     TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> ProposeConfig;
 
     //Data Tx
-    THashSet<TString> AffectedSourcesIds;
     THolder<TEvPQ::TEvGetWriteInfoResponse> WriteInfo;
+    bool WriteInfoRequested = false;
+    bool WriteInfoApplied = false;
 };
 
 class TPartition : public TActorBootstrapped<TPartition> {
@@ -285,7 +286,11 @@ private:
                                    TUserInfoBase& userInfo,
                                    const TActorContext& ctx);
 
-    void SetPredicateResultAndRespond(TTransaction& tx, bool result);
+    void RespondCalcTxPredicate(TTransaction* tx);
+
+    void WriteInfoResponseHandler(const TActorId& sender, TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>&& ev, const TActorContext& ctx);
+    bool ApplyWriteInfoResponse(TTransaction& tx);
+
 
     void ScheduleReplyOk(const ui64 dst);
     void ScheduleReplyGetClientOffsetOk(const ui64 dst,
@@ -577,6 +582,8 @@ private:
 
     TPartitionGraph PartitionGraph;
     TPartitionSourceManager SourceManager;
+    THashSet<TString> TxAffectedSourcesIds;
+    THashSet<TString> WriteffectedSourcesIds;
 
     ui32 MaxBlobSize;
     const ui32 TotalLevels = 4;
@@ -667,7 +674,19 @@ private:
                      TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>, // immediate transaction
                      TTransaction,                                          // distributed transaction or update config
                      TMessage>;
+
     std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
+    THashMap<TActorId, TTransaction*> WriteInfosToTx;
+
+    bool IsTxHeadOfQueue (const TTransaction* const rhs) const {
+        Y_ABORT_UNLESS(!UserActionAndTransactionEvents.empty());
+        auto& front = UserActionAndTransactionEvents.front();
+        if (front.index() != 2)
+            return false;
+        return &std::get<2>(front) == rhs;
+
+    }
+
     size_t ImmediateTxCount = 0;
     THashMap<TString, size_t> UserActCount;
     THashMap<TString, TUserInfoBase> PendingUsersInfo;

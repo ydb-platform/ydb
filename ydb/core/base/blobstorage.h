@@ -228,6 +228,10 @@ struct TTabletChannelInfo {
             bool operator()(ui32 gen, const THistoryEntry &x) const {
                 return gen < x.FromGeneration;
             }
+
+            bool operator()(const THistoryEntry &x, ui32 gen) const {
+                return x.FromGeneration < gen;
+            }
         };
 
         TString ToString() const {

@@ -6568,5 +6568,41 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorReboot) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TCutTabletHistory) {
+    Y_UNIT_TEST(TestCutTabletHistory) {
+        struct TTestStarter : NFake::TStarter {
+            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet) noexcept override {
+                auto *info = TStarter::MakeTabletInfo(tablet);
+                info->Channels[3].History.emplace_back(4, 5);
+                return info;
+            }
+        };
+
+        TMyEnvBase env;
+        bool wasCutHistory = false;
+        env.Env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTablet::EvCutTabletHistory) {
+                auto* event = ev->Get<TEvTablet::TEvCutTabletHistory>();
+                UNIT_ASSERT_VALUES_EQUAL(event->Record.GetChannel(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(event->Record.GetFromGeneration(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(event->Record.GetGroupID(), 3);
+                wasCutHistory = true;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TTestStarter starter;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        }, 0, &starter);
+
+        while (!wasCutHistory) {
+            env.Env.DispatchEvents({});
+        }
+
+    }
+}
+
 } // namespace NTabletFlatExecutor
 } // namespace NKikimr

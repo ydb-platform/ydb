@@ -508,6 +508,18 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     Owner->ActivateExecutor(OwnerCtx());
 
+    for (ui32 channel = 0; channel < Owner->Info()->Channels.size(); ++channel) {
+        for (const auto& historyEntry : loadedState->HistoryCutter->GetHistoryToCut(channel)) {
+            TAutoPtr<TEvTablet::TEvCutTabletHistory> ev(new TEvTablet::TEvCutTabletHistory);
+            auto &record = ev->Record;
+            record.SetTabletID(Owner->TabletID());
+            record.SetChannel(channel);
+            record.SetFromGeneration(historyEntry.FromGeneration);
+            record.SetGroupID(historyEntry.GroupID);
+            OwnerCtx().Send(Launcher, ev.Release());
+        }
+    }
+
     UpdateCounters(ctx);
 }
 

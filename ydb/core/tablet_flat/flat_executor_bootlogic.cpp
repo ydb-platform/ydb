@@ -34,6 +34,7 @@ TExecutorBootLogic::TExecutorBootLogic(IOps *ops, const TActorId &self, TTabletS
     : Ops(ops)
     , SelfId(self)
     , Info(info)
+    , HistoryCutter(Info)
     , GroupResolveCachedChannel(Max<ui32>())
     , GroupResolveCachedGeneration(Max<ui32>())
     , GroupResolveCachedGroup(Max<ui32>())
@@ -172,6 +173,7 @@ void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
     for (const auto &blobId : entry->Blobs()) {
         EntriesToLoad[blobId] = entry;
         LoadBlobQueue.Enqueue(blobId, group, this);
+        HistoryCutter.SeenBlob(blobId);
     }
 }
 
@@ -303,6 +305,7 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
 
 TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() noexcept {
     Y_ABORT_UNLESS(Result_->Database, "Looks like booting hasn't been done");
+    Result_->HistoryCutter = new NBoot::THistoryCutter(std::move(HistoryCutter));
     return Result_;
 }
 

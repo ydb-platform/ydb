@@ -35,6 +35,7 @@ namespace NBoot {
         TAutoPtr<TCompactionLogicState> Comp;
         TAutoPtr<TExecutorBorrowLogic> Loans;
         THashMap<ui32, NTable::TRowVersionRanges> RemovedRowVersions;
+        TAutoPtr<const THistoryCutter> HistoryCutter;
 
         TVector<TIntrusivePtr<TPrivatePageCache::TInfo>> PageCaches;
         bool ShouldSnapshotScheme = false;
@@ -85,6 +86,7 @@ private:
 
     THashMap<TLogoBlobID, TIntrusivePtr<NBoot::TLoadBlobs>> EntriesToLoad;
     THashMap<const NPageCollection::IPageCollection*, TIntrusivePtr<NBoot::IStep>> Loads;
+    NBoot::THistoryCutter HistoryCutter;
 
     ui32 GroupResolveCachedChannel;
     ui32 GroupResolveCachedGeneration;
@@ -102,8 +104,7 @@ private:
     void OnBlobLoaded(const TLogoBlobID& id, TString body, uintptr_t cookie) override;
 
     inline NBoot::TResult& Result() const noexcept { return *Result_; }
-    inline NBoot::TBack& State() const noexcept { return *State_; }
-
+    inline NBoot::TBack& State() const noexcept {return *State_; }
 public:
     TExecutorBootLogic(IOps*, const TActorId&, TTabletStorageInfo *info, ui64 maxBytesInFly);
     ~TExecutorBootLogic();

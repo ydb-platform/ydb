@@ -1528,7 +1528,7 @@ void TPartition::EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, co
 
             WriteInflightSize += heartbeat->Data.size();
             auto result = ProcessRequest(hbMsg, *Parameters, request, ctx);
-            Y_ABORT_UNLESS(result == EProcessResult::Continue);
+            Y_ABORT_UNLESS((result == EProcessResult::Continue) || (result == EProcessResult::Reply));
 
             LastEmittedHeartbeat = heartbeat->Version;
         }

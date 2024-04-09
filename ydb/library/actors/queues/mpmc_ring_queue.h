@@ -35,7 +35,7 @@ struct TMPMCRingQueue {
             }
             return {.Value=slotValue, .IsEmpty=false};
         }
-    } ;
+    };
 
     NThreading::TPadded<std::atomic<ui64>> Tail{0};
     NThreading::TPadded<std::atomic<ui64>> Head{0};
@@ -106,9 +106,18 @@ struct TMPMCRingQueue {
         } while (slot.Generation <= generation && slot.IsEmpty);
 
         if (!slot.IsEmpty) {
-            ui64 currentHead = Head.load(std::memory_order_acquire);
-            if (currentHead + MaxSize <= currentTail + std::min<ui64>(1024, MaxSize - 1)) {
-                return false;
+            ui64 nextTail = currentTail + 1;
+            for (;;) {
+                ui64 currentHead = Head.load(std::memory_order_acquire);
+                if (currentHead + MaxSize <= currentTail + std::min<ui64>(1024, MaxSize - 1)) {
+                    if (Tail.compare_exchange_weak(nextTail, currentTail, std::memory_order_acq_rel)) {
+                        return false;
+                    }
+                    if (nextTail > currentTail && nextTail - currentTail < 16) {
+                        continue;
+                    }
+                }
+                break;
             }
         }
         return TryPushSlow(val);
@@ -204,7 +213,7 @@ struct TMPMCRingQueue {
         return TryPopSlow(currentHead);
     }
 
-    std::optional<ui32> TryPopSlow(ui64 currentHead = 0) {
+    std::optional<ui32> TryPopSlow(ui64 currentHead) {
         if (!currentHead) {
             currentHead = Head.load(std::memory_order_acquire);
         }
@@ -223,7 +232,7 @@ struct TMPMCRingQueue {
             }
 
             while (generation > slot.Generation) {
-                if (currentSlot.compare_exchange_weak(expected, TSlot::MakeEmpty(generation))) {
+                if (currentSlot.compare_exchange_weak(expected, TSlot::MakeEmpty(generation + 1))) {
                     if (!slot.IsEmpty) {
                         Head.compare_exchange_strong(currentHead, currentHead + 1);
                         return slot.Value;
@@ -264,6 +273,10 @@ struct TMPMCRingQueue {
             currentHead = Head.load(std::memory_order_acquire);
         }
         return std::nullopt;
+    }
+
+    std::optional<ui32> TryPopSlow() {
+        return TryPopSlow(0);
     }
 
     std::optional<ui32> TryPopFast() {
@@ -346,7 +359,7 @@ struct TMPMCRingQueue {
             }
 
             ui64 currentTail = Tail.load(std::memory_order_acquire);
-            while (currentTail < currentHead) {
+            while (currentTail <= currentHead) {
                 if (Tail.compare_exchange_weak(currentTail, currentHead + 1)) {
                     return std::nullopt;
                 }

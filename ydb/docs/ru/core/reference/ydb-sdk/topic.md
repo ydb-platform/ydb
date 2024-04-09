@@ -25,6 +25,7 @@
 
   [Примеры на GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/topic)
 
+
 {% endlist %}
 
 ## Инициализация соединения с топиками

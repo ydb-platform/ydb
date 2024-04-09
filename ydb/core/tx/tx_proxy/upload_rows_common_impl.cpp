@@ -15,7 +15,7 @@ namespace NKikimr {
         const google::protobuf::EnumDescriptor* descriptor = ::Ydb::StatusIds::StatusCode_descriptor();
         for (ui32 i = 0; i < (ui32)descriptor->value_count(); ++i) {
             auto vDescription = descriptor->value(i);
-            CodesCount.emplace(vDescription->name(), TBase::GetDeriviative("Replies/" + vDescription->name() + "/Count"));
+            CodesCount.emplace(vDescription->name(), CreateSubGroup("reply_code", vDescription->name()).GetDeriviative("Replies/Count"));
         }
     }
 

@@ -26,6 +26,11 @@ def format_drivers(nodes):
     nodes.execute_async(cmd)
 
 
+def _ensure_berkanavt_exists(nodes):
+    cmd = r"sudo mkdir -p /Berkanavt"
+    nodes.execute_async(cmd)
+
+
 def _clear_registered_slots(nodes):
     nodes.execute_async(r"sudo find /Berkanavt/ -maxdepth 1 -type d  -name 'kikimr_*' -exec  rm -rf -- {} \;")
 
@@ -35,7 +40,7 @@ def _clear_slot(nodes, slot):
     nodes.execute_async(cmd)
 
 
-def clear_logs(nodes):
+def _clear_logs(nodes):
     cmd = "sudo service rsyslog stop; " \
         "find /Berkanavt/ -mindepth 2 -maxdepth 2 -name logs | egrep '^/Berkanavt/kikimr' | sudo xargs -I% find % -mindepth 1 -delete; " \
         "sudo service rsyslog start;"
@@ -96,6 +101,7 @@ def _dynamic_configure(configurations):
 
 
 def slice_install(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider):
+    _ensure_berkanavt_exists(nodes)
     slice_stop(components, nodes, cluster_details, walle_provider)
 
     if 'dynamic_slots' in components or 'kikimr' in components:
@@ -103,7 +109,7 @@ def slice_install(components, nodes, cluster_details, configurator, do_clear_log
         _clear_registered_slots(nodes)
 
     if do_clear_logs:
-        clear_logs(nodes)
+        _clear_logs(nodes)
 
     if 'kikimr' in components:
         format_drivers(nodes)
@@ -397,7 +403,7 @@ def _deploy_secrets(nodes, yav_version):
 
 def slice_update(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider):
     if do_clear_logs:
-        clear_logs(nodes)
+        _clear_logs(nodes)
 
     if 'kikimr' in components:
         if 'bin' in components.get('kikimr', []):

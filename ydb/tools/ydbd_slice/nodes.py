@@ -131,7 +131,7 @@ class Nodes(object):
             original_remote_path = remote_path
             remote_path += '.zstd'
 
-        self.execute_async("sudo mkdir -p {}".format(remote_path))
+        self.execute_async("sudo mkdir -p {}".format(os.path.dirname(remote_path)))
 
         hub = self._nodes[0]
         self._copy_on_node(local_path, hub, remote_path)

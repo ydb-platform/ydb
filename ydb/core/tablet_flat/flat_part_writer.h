@@ -339,7 +339,7 @@ namespace NTable {
             }
 
             if (erased) {
-                Current.BTreeIndexErased++;
+                Current.BTreeIndexErasedRowCount++;
             }
         }
 
@@ -488,13 +488,14 @@ namespace NTable {
             // The first group must write the last key
             Y_ABORT_UNLESS(std::exchange(Phase, 1) == 0, "Called twice");
 
-            for (auto& g : Groups) {
-                g.Data.Flush(*this);
+            for (size_t i : xrange<size_t>(1, Groups.size())) {
+                Groups[i].Data.Flush(*this);
             }
-
             for (auto& g : Histories) {
                 g.Data.Flush(*this);
             }
+            // Main index should have correct groups data size
+            Groups[0].Data.Flush(*this);
 
             if (Current.Rows > 0) {
                 Y_ABORT_UNLESS(Phase == 2, "Missed the last Save call");
@@ -673,6 +674,7 @@ namespace NTable {
                         m->SetLevelCount(meta.LevelCount);
                         m->SetIndexSize(meta.IndexSize);
                         m->SetDataSize(meta.DataSize);
+                        m->SetGroupDataSize(meta.GroupDataSize);
                         m->SetRowCount(meta.RowCount);
                         m->SetErasedRowCount(meta.ErasedRowCount);
                     }
@@ -802,10 +804,13 @@ namespace NTable {
                         g.BTreeIndex.AddKey(Key);
                     }
                     if (groupId.IsMain()) {
-                        g.BTreeIndex.AddChild({page, dataPage->Count, raw.size(), Current.BTreeIndexErased});
-                        Current.BTreeIndexErased = 0;
+                        g.BTreeIndex.AddChild({page, dataPage->Count, raw.size(), Current.BTreeGroupDataSize, Current.BTreeIndexErasedRowCount});
+                        Current.BTreeGroupDataSize = 0;
+                        Current.BTreeIndexErasedRowCount = 0;
                     } else {
                         g.BTreeIndex.AddShortChild({page, dataPage->Count, raw.size()});
+                        // Note: group data size is approximate, includes only finished pages
+                        Current.BTreeGroupDataSize += raw.size();
                     }
                     g.BTreeIndex.Flush(Pager);
                 }
@@ -848,6 +853,8 @@ namespace NTable {
                 auto blob = NPage::TLabelWrapper::WrapString(plain, EPage::Opaque, 0);
                 ui64 ref = Globs.Size(); /* is the current blob index */
 
+                Current.BTreeGroupDataSize += blob.size();
+
                 return Register(row, tag, Pager.WriteLarge(std::move(blob), ref));
 
             } else if (plain.size() >= SmallEdge) {
@@ -858,6 +865,7 @@ namespace NTable {
                 FrameS.Put(row, tag, blob.size());
 
                 Current.SmallWritten += blob.size();
+                Current.BTreeGroupDataSize += blob.size();
 
                 return { ELargeObj::Outer, Pager.WriteOuter(std::move(blob)) };
 
@@ -1114,7 +1122,8 @@ namespace NTable {
             ui64 Coded = 0;
             ui64 HiddenRows = 0;
             ui64 HiddenDrops = 0;
-            ui64 BTreeIndexErased = 0;
+            ui64 BTreeIndexErasedRowCount = 0;
+            ui64 BTreeGroupDataSize = 0;
 
             // doesn't include written B-Tree index bytes
             ui64 MainWritten = 0;

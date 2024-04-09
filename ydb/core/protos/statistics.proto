@@ -65,3 +65,10 @@ message TEvPropagateStatisticsResponse {
 // SA -> nodes
 message TEvStatisticsIsDisabled {
 }
+
+// for tests
+message TEvScanTable {
+    optional NKikimrProto.TPathID PathId = 1;
+}
+message TEvScanTableResponse {
+}

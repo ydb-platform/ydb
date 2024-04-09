@@ -107,8 +107,8 @@ class Nodes(object):
             if self._dry_run:
                 continue
             cmd = [
-                "ssh", dst, "-A", "sudo", "rsync", "-avqW", "--del", "--no-o", "--no-g",
-                "--rsh='ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -l %s'" % os.getenv("USER"),
+                "ssh", dst, '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null',  "-A", "sudo", "rsync", "-avqW", "--del", 
+                "--no-o", "--no-g", "--rsh='ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -l %s'" % os.getenv("USER"),
                 src, remote_path,
             ]
             process = subprocess.Popen(cmd)

@@ -22,13 +22,13 @@ public:
 
     }
 
-    const std::shared_ptr<IBlobsDeclareRemovingAction>& GetRemoving(const TString& consumerId) {
+    const std::shared_ptr<IBlobsDeclareRemovingAction>& GetRemoving(const NBlobOperations::EConsumer consumerId) {
         if (!Removing) {
             Removing = Storage->StartDeclareRemovingAction(consumerId);
         }
         return Removing;
     }
-    const std::shared_ptr<IBlobsWritingAction>& GetWriting(const TString& consumerId) {
+    const std::shared_ptr<IBlobsWritingAction>& GetWriting(const NBlobOperations::EConsumer consumerId) {
         if (!Writing) {
             Writing = Storage->StartWritingAction(consumerId);
         }
@@ -37,7 +37,7 @@ public:
     const std::shared_ptr<IBlobsWritingAction>& GetWritingOptional() const {
         return Writing;
     }
-    const std::shared_ptr<IBlobsReadingAction>& GetReading(const TString& consumerId) {
+    const std::shared_ptr<IBlobsReadingAction>& GetReading(const NBlobOperations::EConsumer consumerId) {
         if (!Reading) {
             Reading = Storage->StartReadingAction(consumerId);
         }
@@ -78,7 +78,7 @@ class TBlobsAction {
 private:
     std::shared_ptr<IStoragesManager> Storages;
     THashMap<TString, TStorageAction> StorageActions;
-    const TString ConsumerId;
+    const NBlobOperations::EConsumer ConsumerId;
 
     TStorageAction& GetStorageAction(const TString& storageId) {
         auto it = StorageActions.find(storageId);
@@ -88,7 +88,7 @@ private:
         return it->second;
     }
 public:
-    explicit TBlobsAction(std::shared_ptr<IStoragesManager> storages, const TString& consumerId)
+    explicit TBlobsAction(std::shared_ptr<IStoragesManager> storages, const NBlobOperations::EConsumer consumerId)
         : Storages(storages)
         , ConsumerId(consumerId)
     {

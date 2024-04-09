@@ -184,12 +184,10 @@ TYtConfiguration::TYtConfiguration()
         .Lower(Now())
         .ValueSetter([this] (const TString& cluster, TInstant value) {
             ExpirationDeadline[cluster] = value;
-            ExpirationInterval.Clear();
         });
     REGISTER_SETTING(*this, ExpirationInterval)
         .ValueSetter([this] (const TString& cluster, TDuration value) {
             ExpirationInterval[cluster] = value;
-            ExpirationDeadline.Clear();
         });
     REGISTER_SETTING(*this, ScriptCpu).Lower(1.0).GlobalOnly();
     REGISTER_SETTING(*this, PythonCpu).Lower(1.0).GlobalOnly();

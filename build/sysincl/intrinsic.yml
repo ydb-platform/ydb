@@ -5,6 +5,7 @@
   - arm_acle.h
   - arm_fp16.h
   - arm_neon.h
+  - arm_sve.h
   - arm64_neon.h
   - armintr.h
   - avx2intrin.h

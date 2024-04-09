@@ -13,7 +13,7 @@ bool TTxInsertTableCleanup::Execute(TTransactionContext& txc, const TActorContex
     NOlap::TBlobManagerDb blobManagerDb(txc.DB);
     auto allAborted = Self->InsertTable->GetAborted();
     auto storage = Self->StoragesManager->GetInsertOperator();
-    BlobsAction = storage->StartDeclareRemovingAction("TX_CLEANUP");
+    BlobsAction = storage->StartDeclareRemovingAction(NOlap::NBlobOperations::EConsumer::CLEANUP_INSERT_TABLE);
     for (auto& [abortedWriteId, abortedData] : allAborted) {
         Self->InsertTable->EraseAbortedOnExecute(dbTable, abortedData, BlobsAction);
     }

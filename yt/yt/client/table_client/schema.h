@@ -107,6 +107,9 @@ bool operator == (const TLockMask& lhs, const TLockMask& rhs);
 
 TLockMask MaxMask(TLockMask lhs, TLockMask rhs);
 
+void ToProto(NTabletClient::NProto::TLockMask* protoLockMask, const TLockMask& lockMask);
+void FromProto(TLockMask* lockMask, const NTabletClient::NProto::TLockMask& protoLockMask);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TColumnSchema

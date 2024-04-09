@@ -2119,9 +2119,10 @@ private:
             if (deadline || isTimestamp) {
                 yqlAttrs["expiration_time"] = isTimestamp ? stamp.ToStringUpToSeconds()
                                                           : deadline->ToStringUpToSeconds();
-            } else if (interval || isDuration) {
-                yqlAttrs["expiration_time"] = isDuration ? (Now() + duration).ToStringUpToSeconds()
-                                                         : (Now() + *interval).ToStringUpToSeconds();
+            }
+            if (interval || isDuration) {
+                yqlAttrs["expiration_timeout"] = isDuration ? duration.MilliSeconds()
+                                                         : (*interval).MilliSeconds();
             }
             if (execCtx->Options_.Config()->NightlyCompress.Get(cluster).GetOrElse(false)) {
                 yqlAttrs["force_nightly_compress"] = true;

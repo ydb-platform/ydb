@@ -647,6 +647,11 @@
                 "ColumnId": 9,
                 "ColumnName": "Location",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "Name",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -661,7 +666,8 @@
                     5,
                     6,
                     8,
-                    9
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,

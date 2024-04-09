@@ -81,7 +81,7 @@ bool TPortionDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSourc
     auto& columnIds = columns->GetColumnIds();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
 
-    TBlobsAction action(GetContext()->GetCommonContext()->GetStoragesManager(), "CS::READ::" + step.GetName());
+    TBlobsAction action(GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
     {
         THashMap<TChunkAddress, ui32> nullBlocks;
         NeedFetchColumns(columnIds, action, nullBlocks, StageData->GetAppliedFilter());
@@ -103,7 +103,7 @@ bool TPortionDataSource::DoStartFetchingIndexes(const std::shared_ptr<IDataSourc
     Y_ABORT_UNLESS(indexes->GetIndexesCount());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
 
-    TBlobsAction action(GetContext()->GetCommonContext()->GetStoragesManager(), "CS::READ::" + step.GetName());
+    TBlobsAction action(GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
     {
         std::set<ui32> indexIds;
         for (auto&& i : Portion->GetIndexes()) {
@@ -207,7 +207,7 @@ bool TCommittedDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSou
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
 
     std::shared_ptr<IBlobsStorageOperator> storageOperator = GetContext()->GetCommonContext()->GetStoragesManager()->GetInsertOperator();
-    auto readAction = storageOperator->StartReadingAction("CS::READ::" + step.GetName());
+    auto readAction = storageOperator->StartReadingAction(NBlobOperations::EConsumer::SCAN);
 
     readAction->SetIsBackgroundProcess(false);
     readAction->AddRange(CommittedBlob.GetBlobRange());

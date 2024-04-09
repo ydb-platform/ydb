@@ -37,7 +37,7 @@ public:
     THashMap<ui64, std::vector<NArrow::NMerger::TSortableBatchPosition>> PathToGranule; // pathId -> positions (sorted by pk)
 public:
     TInsertColumnEngineChanges(std::vector<NOlap::TInsertedData>&& dataToIndex, const TSaverContext& saverContext)
-        : TBase(saverContext, StaticTypeName())
+        : TBase(saverContext, NBlobOperations::EConsumer::INDEXATION)
         , DataToIndex(std::move(dataToIndex))
     {
     }

@@ -37,7 +37,7 @@ protected:
     }
 
 public:
-    TChangesWithAppend(const TSaverContext& saverContext, const TString& consumerId)
+    TChangesWithAppend(const TSaverContext& saverContext, const NBlobOperations::EConsumer consumerId)
         : TBase(saverContext.GetStoragesManager(), consumerId)
         , SaverContext(saverContext)
     {

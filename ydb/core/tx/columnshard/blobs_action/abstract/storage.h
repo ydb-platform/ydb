@@ -88,15 +88,15 @@ public:
         return DoOnTieringModified(tiers);
     }
 
-    std::shared_ptr<IBlobsDeclareRemovingAction> StartDeclareRemovingAction(const TString& consumerId) {
+    std::shared_ptr<IBlobsDeclareRemovingAction> StartDeclareRemovingAction(const NBlobOperations::EConsumer consumerId) {
         return DoStartDeclareRemovingAction(Counters->GetConsumerCounter(consumerId)->GetRemoveDeclareCounters());
     }
-    std::shared_ptr<IBlobsWritingAction> StartWritingAction(const TString& consumerId) {
+    std::shared_ptr<IBlobsWritingAction> StartWritingAction(const NBlobOperations::EConsumer consumerId) {
         auto result = DoStartWritingAction();
         result->SetCounters(Counters->GetConsumerCounter(consumerId)->GetWriteCounters());
         return result;
     }
-    std::shared_ptr<IBlobsReadingAction> StartReadingAction(const TString& consumerId) {
+    std::shared_ptr<IBlobsReadingAction> StartReadingAction(const NBlobOperations::EConsumer consumerId) {
         auto result = DoStartReadingAction();
         result->SetCounters(Counters->GetConsumerCounter(consumerId)->GetReadCounters());
         return result;
@@ -108,7 +108,7 @@ public:
         if (Stopped) {
             return false;
         }
-        auto task = StartGCAction(Counters->GetConsumerCounter("GC")->GetRemoveGCCounters());
+        auto task = StartGCAction(Counters->GetConsumerCounter(NBlobOperations::EConsumer::GC)->GetRemoveGCCounters());
         if (!task) {
             return false;
         }

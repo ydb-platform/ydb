@@ -157,6 +157,7 @@ public:
             us *= usInSec;
         }
 
+        // lower bound check is not needed as RoundDown(MinTimestamp64) is valid value for both date32 and datetime64
         if (To == EDataSlot::Date32) {
             i32 rounded = us / usInDay;
             i32 rem = us % usInDay;
@@ -165,7 +166,7 @@ public:
             } else if (rem < 0 && Down) {
                 rounded -= 1;
             }
-            if (MIN_DATE32 <= rounded && rounded <= MAX_DATE32) {
+            if (rounded <= MAX_DATE32) {
                 return TUnboxedValuePod(rounded);
             }
         } else {
@@ -177,7 +178,7 @@ public:
             } else if (rem < 0 && Down) {
                 rounded -= 1;
             }
-            if (MIN_DATETIME64 <= rounded && rounded <= MAX_DATETIME64) {
+            if (rounded <= MAX_DATETIME64) {
                 return TUnboxedValuePod(rounded);
             }
         }

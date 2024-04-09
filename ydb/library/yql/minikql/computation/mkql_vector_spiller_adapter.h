@@ -81,7 +81,11 @@ public:
             CurrentChunk = std::move(ReadOperation->ExtractValue().value());
             ReadOperation = std::nullopt;
 
+            auto sizeToBeCopiedToVector = CurrentChunk.size();
+
             LoadNextVector();
+
+            StoredChunksSizes.front() -= sizeToBeCopiedToVector;
             
         }
     }
@@ -96,7 +100,7 @@ public:
         MKQL_ENSURE(State == EState::AcceptingDataRequests, "Internal logic error");
         MKQL_ENSURE(!StoredChunksSizes.empty(), "Internal logic error");
 
-        CurrentVector.reserve(StoredChunks.front());
+        CurrentVector.reserve(StoredChunksSizes.front());
         State = EState::RestoringData;
         LoadNextVector();
 
@@ -119,20 +123,20 @@ private:
     void LoadNextVector() {
         if (ReadOperation.has_value()) return;
 
-        auto requestedVectorSize = StoredChunksSizes.front();
+        auto& requestedVectorSize = StoredChunksSizes.front();
 
         // if vector is fully loaded to memory now
         if (CurrentChunk.size() >= requestedVectorSize) {
             auto data = CurrentChunk.GetContiguousSpan();
             const char* from = data.SubSpan(0, requestedVectorSize).Data();
             const char* to = from + requestedVectorSize;
-            CurrentVector.insert(CurrentVector.end(), from, to);
+            CurrentVector.insert(CurrentVector.end(), (T*)from, (T*)to);
             CurrentChunk = TRope(TString(data.Data() + requestedVectorSize, data.size() - requestedVectorSize));
             State = EState::DataReady;
         } else {
             const char* from = CurrentChunk.GetContiguousSpan().Data();
             const char* to = from + CurrentChunk.GetContiguousSpan().Size();
-            CurrentVector.insert(CurrentVector.end(), from, to);
+            CurrentVector.insert(CurrentVector.end(), (T*)from, (T*)to);
             ReadOperation = Spiller->Extract(StoredChunks.front());
             StoredChunks.pop();
         }
@@ -141,7 +145,7 @@ private:
     void SaveCurrentChunk() {
         State = EState::SpillingData;
         WriteOperation = Spiller->Put(std::move(CurrentChunk));
-        CurrentChunk.clear();
+        CurrentChunk = TRope();
     }
 
     bool IsDataFittingInCurrentChunk() {
@@ -177,16 +181,6 @@ private:
         State = EState::AcceptingData;
 
         return;
-    }
-
-    void LoadNextChunk() {
-        MKQL_ENSURE(State == EState::RestoringData, "Internal logic error");
-        MKQL_ENSURE(!ReadOperation.has_value(), "Internal logic error");
-
-        auto nextId = StoredChunks.front();
-        StoredChunks.pop();
-
-        ReadOperation = Spiller->Extract(nextId);
     }
 
 private:

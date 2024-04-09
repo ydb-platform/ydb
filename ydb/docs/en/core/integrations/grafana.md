@@ -4,7 +4,7 @@ The [{{ ydb-short-name }} data source plugin](https://grafana.com/grafana/plugin
 
 ## Installation
 
-Prerequisites: the plugin requires `v9.2` and higher of Grafana.
+Prerequisites: the plugin requires Grafana `v9.2` and higher.
 
 Follow the Grafana's [plugin installation docs](https://grafana.com/docs/grafana/latest/plugins/installation/) to install a plugin named `ydb-grafana-datasource-plugin`.
 
@@ -22,7 +22,7 @@ Please note that Grafana does not validate that queries are safe. Queries can co
 
 ### Data transfer protocol support
 
-The plugin supports [gRPC and gRPCS](https://grpc.io/) transport protocols. If self-signed certificates are used on your {{ ydb-short-name }} cluster, specify the [Certificate Authority](https://en.wikipedia.org/wiki/Certificate_authority) certificate, through which they were released.
+The plugin supports [gRPC and gRPCS](https://grpc.io/) transport protocols.
 
 ### Configuration via UI
 
@@ -34,7 +34,7 @@ Alternatively, it is possible to configure data sources using configuration file
 
 ### Authentication
 
-The Grafana plugin supports various authentication [authentication methods](../reference/ydb-sdk/auth.md).
+The Grafana plugin supports next [authentication methods](../reference/ydb-sdk/auth.md): Anonymous, Access Token, Metadata, Service Account Key and Static Credentials.
 
 Below is an example config for authenticating a {{ ydb-short-name }} data source using username and password:
 
@@ -51,7 +51,7 @@ datasources:
     secureJsonData:
       password: '<userpassword>'
       certificate: |
-        <overall content of *.pem file>
+        <full content of *.pem file>
 ```
 
 Here are fields that are supported in connection configuration:
@@ -65,7 +65,7 @@ Here are fields that are supported in connection configuration:
 | serviceAccAuthAccessKey | Service account access key  | `string` (secured) |
 | accessToken | OAuth access token  | `string` (secured) |
 | password | User password  | `string` (secured) |
-| certificate | If self-signed certificates are used on your {{ ydb-short-name }} cluster, specify the [Certificate Authority](https://en.wikipedia.org/wiki/Certificate_authority) certificate, through which they were issued.  | `string` (secured) |
+| certificate | If self-signed certificates are used on your {{ ydb-short-name }} cluster, specify the [Certificate Authority](https://en.wikipedia.org/wiki/Certificate_authority) certificate, through which they were released  | `string` (secured) |
 
 ## Building queries
 
@@ -73,9 +73,9 @@ Here are fields that are supported in connection configuration:
 Queries can contain macros which simplify syntax and allow for dynamic parts. There are two kinds of macros - [Grafana-level](#macros) and {{ ydb-short-name }}-level. The plugin will parse query text and, before sending it to {{ ydb-short-name }}, substitute variables and Grafana-level macros with particular values. After that {{ ydb-short-name }}-level macroses will be treated by {{ ydb-short-name }} server-side. 
 The query editor allows to get data in different representations: time series, table or logs.
 
-### Time series { #time-series }
+### Time series
 
-Time series visualization options are selectable if the query returns at least one field with `Date`, `Datetime`, or `Timestamp` type (for now work with time supported only in UTC format) and at least one field with `Int64`, `Int32`, `Int16`, `Int8`, `Uint64`, `Uint32`, `Uint16`, `Uint8`, `Double` or `Float` type. Then you can select time series visualization options. Grafana interprets timestamp rows without an explicit time zone as UTC. Any other column is treated as a value column.
+Time series visualization options are selectable if the query returns at least one field with `Date`, `Datetime`, or `Timestamp` type (for now, working with time is supported only in UTC timezone) and at least one field with `Int64`, `Int32`, `Int16`, `Int8`, `Uint64`, `Uint32`, `Uint16`, `Uint8`, `Double` or `Float` type. Then you can select time series visualization options. Any other column is treated as a value column.
 
 ![Time-series](../_assets/grafana/time-series.png)
 
@@ -90,20 +90,23 @@ To create multi-line time series, the query must return at least 3 fields in the
 For example:
 
 ```sql
-SELECT `timestamp`, `requestTime`, AVG(`responseStatus`) AS `avgRespStatus`
+SELECT
+    `timestamp`,
+    `responseStatus`
+    AVG(`requestTime`) AS `avgReqTime`
 FROM `/database/endpoint/my-logs`
-GROUP BY `requestTime`, `timestamp`
+GROUP BY `responseStatus`, `timestamp`
 ORDER BY `timestamp`
 ```
 
 ### Tables { #tables }
 
-Table visualizations will always be available for any valid {{ ydb-short-name }} query with exactly one result set.
+Table visualizations will always be available for any valid {{ ydb-short-name }} query that returns exactly one result set.
 
 
 ![Table](../_assets/grafana/table.png)
 
-### Visualizing logs with the Logs Panel { #visual-logs }
+### Visualizing logs with the Logs Panel
 
 To use the Logs panel your query must return a `Date`, `Datetime` or `Timestamp` and `String` values. You can select logs visualizations using the visualization options.
 
@@ -129,11 +132,11 @@ FROM `/database/endpoint/my-logs`
 WHERE $__timeFilter(`timeCol` + INTERVAL("PT24H"))
 ```
 
-| Macro                                        | Description                                                                                                                      | Output example                                                                                  |
+Macro                                        | Description                                                                                                                      | Output example                                                                                  |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `$__timeFilter(columnName)`                | Replaced by a conditional that filters the data (using the provided column or expression) based on the time range of the panel in microseconds | `foo >= CAST(1636717526371000 AS TIMESTAMP) AND foo <=  CAST(1668253526371000 AS TIMESTAMP)' )` |
-| `$__fromTimestamp`                         | Replaced by the starting time of the range of the panel casted to Timestamp                                                      | `CAST(1636717526371000 AS TIMESTAMP)`                                                           |
-| `$__toTimestamp`                           | Replaced by the ending time of the range of the panel casted to Timestamp                                                        | `CAST(1636717526371000 AS TIMESTAMP)`                                                           |
+| `$__timeFilter(expr)`                | Replaced by a conditional that filters the data (using the provided column or expression) based on the time range of the panel in microseconds | `foo >= CAST(1636717526371000 AS TIMESTAMP) AND foo <=  CAST(1668253526371000 AS TIMESTAMP)' )` |
+| `$__fromTimestamp`                         | Replaced by the starting time of the range of the panel cast to Timestamp                                                      | `CAST(1636717526371000 AS TIMESTAMP)`                                                           |
+| `$__toTimestamp`                           | Replaced by the ending time of the range of the panel cast to Timestamp                                                        | `CAST(1636717526371000 AS TIMESTAMP)`                                                           |
 | `$__varFallback(condition, $templateVar)` | Replaced by the first parameter when the template variable in the second parameter is not provided.                              | `$__varFallback('foo', $bar)` `foo` if variable `bar` is not provided, or `$bar`'s value                                                               |
 
 ### Templates and variables

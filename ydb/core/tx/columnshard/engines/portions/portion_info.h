@@ -357,6 +357,14 @@ public:
 
     std::vector<const TColumnRecord*> GetColumnChunksPointers(const ui32 columnId) const;
 
+    std::set<ui32> GetColumnIds() const {
+        std::set<ui32> result;
+        for (auto&& i : Records) {
+            result.emplace(i.GetColumnId());
+        }
+        return result;
+    }
+
     TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
         TSerializationStats result;
         for (auto&& i : Records) {

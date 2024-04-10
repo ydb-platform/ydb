@@ -147,7 +147,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizer::Init(const 
         ISnapshotSchema::TPtr currentSchema;
         auto initPortionCB = [&](const TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
             if (!currentSchema || lastSnapshot != portion.GetMinSnapshot()) {
-                currentSchema = tablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetSchema(portion.GetMinSnapshot());
+                currentSchema = portion.GetSchema(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex());
                 lastSnapshot = portion.GetMinSnapshot();
             }
 
@@ -174,7 +174,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizer::Init(const 
 
             portion.SetPathId(rowset.GetValue<Schema::IndexColumns::PathId>());
 
-            portion.SetMinSnapshot(rowset.GetValue<Schema::IndexColumns::PlanStep>(), rowset.GetValue<Schema::IndexColumns::TxId>());
+            portion.SetMinSnapshot(NOlap::TSnapshot(rowset.GetValue<Schema::IndexColumns::PlanStep>(), rowset.GetValue<Schema::IndexColumns::TxId>()));
             portion.SetPortion(rowset.GetValue<Schema::IndexColumns::Portion>());
             portion.SetDeprecatedGranuleId(rowset.GetValue<Schema::IndexColumns::Granule>());
             portion.SetRemoveSnapshot(rowset.GetValue<Schema::IndexColumns::XPlanStep>(), rowset.GetValue<Schema::IndexColumns::XTxId>());

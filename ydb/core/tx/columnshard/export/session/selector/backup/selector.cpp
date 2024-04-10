@@ -20,7 +20,7 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TBackupSelector::DoBuildReque
     ev->Record.SetScanId(TablePathId);
     ev->Record.SetTxId(TablePathId);
     ev->Record.SetTablePath(TableName);
-    ev->Record.SetSchemaVersion(0);
+    ev->Record.SetSchemaVersion(1);
 
     ev->Record.SetReverse(false);
     ev->Record.SetDataFormat(NKikimrDataEvents::EDataFormat::FORMAT_ARROW);

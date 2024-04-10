@@ -103,7 +103,8 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
     TStringBuilder sb;
     sb << "(portion_id:" << Portion << ";" <<
         "path_id:" << PathId << ";records_count:" << NumRows() << ";"
-        "min_schema_snapshot:(" << MinSnapshot.DebugString() << ");";
+        "min_schema_snapshot:(" << MinSnapshotDeprecated.DebugString() << ");"
+        "schema_version:" << SchemaVersion.value_or(0) << ";";
     if (withDetails) {
         sb <<
             "records_snapshot_min:(" << RecordSnapshotMin().DebugString() << ");" <<
@@ -152,7 +153,7 @@ std::vector<const NKikimr::NOlap::TColumnRecord*> TPortionInfo::GetColumnChunksP
 }
 
 bool TPortionInfo::IsEqualWithSnapshots(const TPortionInfo& item) const {
-    return PathId == item.PathId && MinSnapshot == item.MinSnapshot
+    return PathId == item.PathId && MinSnapshotDeprecated == item.MinSnapshotDeprecated
         && Portion == item.Portion && RemoveSnapshot == item.RemoveSnapshot;
 }
 
@@ -258,7 +259,7 @@ ui64 TPortionInfo::GetTxVolume() const {
 void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
     proto.SetPathId(PathId);
     proto.SetPortionId(Portion);
-    *proto.MutableMinSnapshot() = MinSnapshot.SerializeToProto();
+    *proto.MutableMinSnapshot() = MinSnapshotDeprecated.SerializeToProto();
     if (!RemoveSnapshot.IsZero()) {
         *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
     }
@@ -288,7 +289,7 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
         BlobIds.emplace_back(blobId.DetachResult());
     }
     {
-        auto parse = MinSnapshot.DeserializeFromProto(proto.GetMinSnapshot());
+        auto parse = MinSnapshotDeprecated.DeserializeFromProto(proto.GetMinSnapshot());
         if (!parse) {
             return parse;
         }
@@ -378,6 +379,15 @@ const TString& TPortionInfo::GetEntityStorageId(const ui32 columnId, const TInde
     return indexInfo.GetEntityStorageId(columnId, GetMeta().GetTierName());
 }
 
+ISnapshotSchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) const {
+    if (SchemaVersion) {
+        auto schema = index.GetSchema(SchemaVersion.value());
+        AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion.value());
+        return schema;
+    }
+    return index.GetSchema(MinSnapshotDeprecated);
+}
+
 void TPortionInfo::FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TIndexInfo& indexInfo) const {
     for (auto&& i : Records) {
         const TString& storageId = GetColumnStorageId(i.GetColumnId(), indexInfo);
@@ -390,7 +400,7 @@ void TPortionInfo::FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange
 }
 
 void TPortionInfo::FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TVersionedIndex& index) const {
-    auto schema = index.GetSchema(GetMinSnapshot());
+    auto schema = GetSchema(index);
     return FillBlobRangesByStorage(result, schema->GetIndexInfo());
 }
 
@@ -413,7 +423,7 @@ void TPortionInfo::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobI
 }
 
 void TPortionInfo::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TVersionedIndex& index) const {
-    auto schema = index.GetSchema(GetMinSnapshot());
+    auto schema = GetSchema(index);
     return FillBlobIdsByStorage(result, schema->GetIndexInfo());
 }
 
@@ -504,7 +514,9 @@ void TPortionInfo::ReorderChunks() {
 void TPortionInfo::FullValidation() const {
     AFL_VERIFY(PathId);
     AFL_VERIFY(Portion);
-    AFL_VERIFY(MinSnapshot.Valid());
+    if (!SchemaVersion) {
+        AFL_VERIFY(MinSnapshotDeprecated.Valid());
+    }
     std::set<ui32> blobIdxs;
     for (auto&& i : Records) {
         blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());

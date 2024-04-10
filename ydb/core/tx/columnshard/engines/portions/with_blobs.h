@@ -117,7 +117,7 @@ public:
     void FillStatistics(const TIndexInfo& index);
 
     static TPortionInfoWithBlobs BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
-        std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators);
+        std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const ui64 schemaVersion, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators);
 
     static TPortionInfoWithBlobs BuildByBlobs(std::vector<TSplittedBlob>&& chunks, const TPortionInfo& basePortion,
         const std::shared_ptr<IStoragesManager>& operators);

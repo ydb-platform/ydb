@@ -168,7 +168,7 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     Y_ABORT_UNLESS(ReadMetadata);
     Y_ABORT_UNLESS(ReadMetadata->SelectInfo);
 
-    auto readSchema = ReadMetadata->GetLoadSchema(ReadMetadata->GetRequestSnapshot());
+    auto readSchema = ReadMetadata->GetSnapshotSchema(ReadMetadata->GetRequestSnapshot());
     SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSpecialColumnIdsSet(), ReadMetadata->GetIndexInfo(), readSchema);
     IndexChecker = ReadMetadata->GetProgram().GetIndexChecker();
     {

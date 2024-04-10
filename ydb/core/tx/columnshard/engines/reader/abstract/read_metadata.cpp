@@ -1,4 +1,5 @@
 #include "read_metadata.h"
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
 namespace NKikimr::NOlap::NReader {
 
@@ -15,6 +16,10 @@ std::shared_ptr<TSelectInfo> TDataStorageAccessor::Select(const TReadDescription
     return Index->Select(readDescription.PathId,
                             readDescription.GetSnapshot(),
                             readDescription.PKRangesFilter);
+}
+
+ISnapshotSchema::TPtr TReadMetadataBase::GetLoadSchema(const TPortionInfo& portion) const {
+    return portion.GetSchema(GetIndexVersions());
 }
 
 std::vector<TCommittedBlob> TDataStorageAccessor::GetCommitedBlobs(const TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema) const {

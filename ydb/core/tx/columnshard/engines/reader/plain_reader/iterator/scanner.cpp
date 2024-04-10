@@ -54,6 +54,44 @@ void TScanHead::OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch
     }
 }
 
+TConclusionStatus TScanHead::Start() {
+    TScanContext context;
+    for (auto itPoint = BorderPoints.begin(); itPoint != BorderPoints.end(); ++itPoint) {
+        auto& point = itPoint->second;
+        context.OnStartPoint(point);
+        if (context.GetIsSpecialPoint()) {
+            auto detectorResult = DetectSourcesFeatureInContextIntervalScan(context.GetCurrentSources(), false);
+            for (auto&& i : context.GetCurrentSources()) {
+                i.second->IncIntervalsCount();
+            }
+            if (!detectorResult) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scanner_initializer_aborted")("reason", detectorResult.GetErrorMessage());
+                Abort();
+                return detectorResult;
+            }
+        }
+        for (auto&& i : point.GetFinishSources()) {
+            i->InitFetchingPlan(Context->GetColumnsFetchingPlan(i));
+        }
+        context.OnFinishPoint(point);
+        if (context.GetCurrentSources().size()) {
+            auto itPointNext = itPoint;
+            Y_ABORT_UNLESS(++itPointNext != BorderPoints.end());
+            context.OnNextPointInfo(itPointNext->second);
+            for (auto&& i : context.GetCurrentSources()) {
+                i.second->IncIntervalsCount();
+            }
+            auto detectorResult = DetectSourcesFeatureInContextIntervalScan(context.GetCurrentSources(), context.GetIsExclusiveInterval());
+            if (!detectorResult) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scanner_initializer_aborted")("reason", detectorResult.GetErrorMessage());
+                Abort();
+                return detectorResult;
+            }
+        }
+    }
+    return TConclusionStatus::Success();
+}
+
 TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context)
 {
@@ -63,19 +101,6 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
         BorderPoints[source->GetStart()].AddStart(source);
         BorderPoints[source->GetFinish()].AddFinish(source);
         sources.pop_front();
-    }
-
-    THashMap<ui32, std::shared_ptr<IDataSource>> currentSources;
-    for (auto&& i : BorderPoints) {
-        for (auto&& s : i.second.GetStartSources()) {
-            AFL_VERIFY(currentSources.emplace(s->GetSourceIdx(), s).second);
-        }
-        for (auto&& [_, source] : currentSources) {
-            source->IncIntervalsCount();
-        }
-        for (auto&& s : i.second.GetFinishSources()) {
-            AFL_VERIFY(currentSources.erase(s->GetSourceIdx()));
-        }
     }
 }
 
@@ -142,7 +167,7 @@ public:
     }
 };
 
-TConclusionStatus TScanHead::DetectSourcesFeatureInContextIntervalScan(const std::map<ui32, std::shared_ptr<IDataSource>>& intervalSources, const bool isExclusiveInterval) const {
+TConclusionStatus TScanHead::DetectSourcesFeatureInContextIntervalScan(const THashMap<ui32, std::shared_ptr<IDataSource>>& intervalSources, const bool isExclusiveInterval) const {
     TSourcesStorageForMemoryOptimization optimizer;
     for (auto&& i : intervalSources) {
         if (!isExclusiveInterval) {
@@ -173,57 +198,41 @@ TConclusionStatus TScanHead::DetectSourcesFeatureInContextIntervalScan(const std
 }
 
 TConclusion<bool> TScanHead::BuildNextInterval() {
+    if (AbortFlag) {
+        return false;
+    }
     while (BorderPoints.size() && (FetchingIntervals.size() < InFlightLimit || BorderPoints.begin()->second.GetStartSources().empty())) {
         auto firstBorderPointInfo = std::move(BorderPoints.begin()->second);
-        bool includeStart = firstBorderPointInfo.GetStartSources().size();
-        for (auto&& i : firstBorderPointInfo.GetStartSources()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("add_source", i->GetSourceIdx());
-            AFL_VERIFY(CurrentSegments.emplace(i->GetSourceIdx(), i).second)("idx", i->GetSourceIdx());
-        }
+        CurrentState.OnStartPoint(firstBorderPointInfo);
 
-        if (firstBorderPointInfo.GetStartSources().size() && firstBorderPointInfo.GetFinishSources().size()) {
-            includeStart = false;
+        if (CurrentState.GetIsSpecialPoint()) {
             const ui32 intervalIdx = SegmentIdxCounter++;
-            auto detectorResult = DetectSourcesFeatureInContextIntervalScan(CurrentSegments, false);
-            if (!detectorResult) {
-                Abort();
-                return detectorResult;
-            }
             auto interval = std::make_shared<TFetchingInterval>(
-                BorderPoints.begin()->first, BorderPoints.begin()->first, intervalIdx, CurrentSegments,
+                BorderPoints.begin()->first, BorderPoints.begin()->first, intervalIdx, CurrentState.GetCurrentSources(),
                 Context, true, true, false);
             FetchingIntervals.emplace(intervalIdx, interval);
-            IntervalStats.emplace_back(CurrentSegments.size(), true);
+            IntervalStats.emplace_back(CurrentState.GetCurrentSources().size(), true);
             NResourceBroker::NSubscribe::ITask::StartResourceSubscription(Context->GetCommonContext()->GetResourceSubscribeActorId(), interval);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_interval")("interval_idx", intervalIdx)("interval", interval->DebugJson());
         }
 
-        for (auto&& i : firstBorderPointInfo.GetFinishSources()) {
-            i->InitFetchingPlan(Context->GetColumnsFetchingPlan(i), i);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("remove_source", i->GetSourceIdx());
-            AFL_VERIFY(CurrentSegments.erase(i->GetSourceIdx()))("idx", i->GetSourceIdx());
-        }
+        CurrentState.OnFinishPoint(firstBorderPointInfo);
 
         CurrentStart = BorderPoints.begin()->first;
         BorderPoints.erase(BorderPoints.begin());
-        if (CurrentSegments.size()) {
+        if (CurrentState.GetCurrentSources().size()) {
             Y_ABORT_UNLESS(BorderPoints.size());
-            const bool includeFinish = BorderPoints.begin()->second.GetStartSources().empty();
+            CurrentState.OnNextPointInfo(BorderPoints.begin()->second);
             const ui32 intervalIdx = SegmentIdxCounter++;
-            const bool isExclusiveInterval = (CurrentSegments.size() == 1) && includeStart && includeFinish;
-            auto detectorResult = DetectSourcesFeatureInContextIntervalScan(CurrentSegments, isExclusiveInterval);
-            if (!detectorResult) {
-                Abort();
-                return detectorResult;
-            }
-            auto interval = std::make_shared<TFetchingInterval>(*CurrentStart, BorderPoints.begin()->first, intervalIdx, CurrentSegments, Context, includeFinish, includeStart, isExclusiveInterval);
+            auto interval = std::make_shared<TFetchingInterval>(*CurrentStart, BorderPoints.begin()->first, intervalIdx, CurrentState.GetCurrentSources(), Context,
+                CurrentState.GetIncludeFinish(), CurrentState.GetIncludeStart(), CurrentState.GetIsExclusiveInterval());
             FetchingIntervals.emplace(intervalIdx, interval);
-            IntervalStats.emplace_back(CurrentSegments.size(), false);
+            IntervalStats.emplace_back(CurrentState.GetCurrentSources().size(), false);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_interval")("interval_idx", intervalIdx)("interval", interval->DebugJson());
             NResourceBroker::NSubscribe::ITask::StartResourceSubscription(Context->GetCommonContext()->GetResourceSubscribeActorId(), interval);
             return true;
         } else {
-            IntervalStats.emplace_back(CurrentSegments.size(), false);
+            IntervalStats.emplace_back(CurrentState.GetCurrentSources().size(), false);
         }
     }
     return false;

@@ -4494,7 +4494,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         const ui32 numIterations = 10;
         TLocalHelper(*server).CreateTestOlapTable("selectTable", "selectStore", numShards, numShards);
         for(ui64 i = 0; i < numIterations; ++i) {
-            TLocalHelper(*server).SendDataViaActorSystem("/Root/selectStore/selectTable", 0, 1000000 + i*1000000, 2000);
+            TLocalHelper(*server).SendDataViaActorSystem("/Root/selectStore/selectTable", 0, 1000000 + i * 1000000, 2000);
         }
 
         ui64 result = 0;

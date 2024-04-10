@@ -7,13 +7,13 @@ std::unique_ptr<NArrow::NMerger::TMergePartialStream> TSpecialReadContext::Build
     return std::make_unique<NArrow::NMerger::TMergePartialStream>(ReadMetadata->GetReplaceKey(), ProgramInputColumns->GetSchema(), CommonContext->IsReverse(), IIndexInfo::GetSpecialColumnNames());
 }
 
-ui64 TSpecialReadContext::GetMemoryForSources(const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const bool isExclusive) {
+ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_ptr<IDataSource>>& sources, const bool isExclusive) {
     ui64 result = 0;
     bool hasSequentialReadSources = false;
     for (auto&& i : sources) {
         auto fetchingPlan = GetColumnsFetchingPlan(i.second);
         AFL_VERIFY(i.second->GetIntervalsCount());
-        const ui64 sourceMemory = fetchingPlan->PredictRawBytes(i.second);
+        const ui64 sourceMemory = fetchingPlan->PredictRawBytes(i.second) / i.second->GetIntervalsCount();
         if (!i.second->IsSourceInMemory()) {
             hasSequentialReadSources = true;
         }

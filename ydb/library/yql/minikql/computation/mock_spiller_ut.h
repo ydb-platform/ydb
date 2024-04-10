@@ -1,7 +1,9 @@
-#include "mkql_spiller.h"
-#include <library/cpp/threading/future/core/future.h>
-#include <util/system/thread.h>
+#pragma once
+
 #include <unordered_map>
+
+#include <library/cpp/threading/future/core/future.h>
+#include <ydb/library/yql/minikql/computation/mkql_spiller.h>
 
 namespace NKikimr::NMiniKQL {
 

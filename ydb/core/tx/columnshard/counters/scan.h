@@ -1,5 +1,6 @@
 #pragma once
 #include "common/owner.h"
+#include "common/histogram.h"
 #include <ydb/core/tx/columnshard/resources/memory.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/counters.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -134,6 +135,10 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr LogScanRecords;
     NMonitoring::TDynamicCounters::TCounterPtr LogScanIntervals;
     std::shared_ptr<TScanIntervalState> ScanIntervalState;
+
+    NMonitoring::THistogramPtr HistogramIntervalMemoryRequiredOnFail;
+    NMonitoring::THistogramPtr HistogramIntervalMemoryReduceSize;
+    NMonitoring::THistogramPtr HistogramIntervalMemoryRequiredAfterReduce;
 public:
 
     TScanIntervalStateGuard CreateIntervalStateGuard() const {
@@ -179,6 +184,18 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr BlobsReceivedBytes;
 
     TScanCounters(const TString& module = "Scan");
+
+    void OnOptimizedIntervalMemoryFailed(const ui64 memoryRequired) const {
+        HistogramIntervalMemoryRequiredOnFail->Collect(memoryRequired / (1024.0 * 1024.0 * 1024.0));
+    }
+
+    void OnOptimizedIntervalMemoryReduced(const ui64 memoryReduceVolume) const {
+        HistogramIntervalMemoryReduceSize->Collect(memoryReduceVolume / (1024.0 * 1024.0 * 1024.0));
+    }
+
+    void OnOptimizedIntervalMemoryRequired(const ui64 memoryRequired) const {
+        HistogramIntervalMemoryRequiredAfterReduce->Collect(memoryRequired / (1024.0 * 1024.0));
+    }
 
     void OnNoScanInterval(const ui32 recordsCount) const {
         NoScanRecords->Add(recordsCount);

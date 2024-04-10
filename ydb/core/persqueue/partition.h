@@ -153,6 +153,8 @@ private:
     void Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx);
@@ -442,6 +444,8 @@ private:
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
             HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, Handle);
+            HFuncTraced(TEvPQ::TEvGetWriteInfoResponse, Handle);
+            HFuncTraced(TEvPQ::TEvGetWriteInfoError, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -493,6 +497,8 @@ private:
             HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, Handle);
             HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, Handle);
+            HFuncTraced(TEvPQ::TEvGetWriteInfoResponse, Handle);
+            HFuncTraced(TEvPQ::TEvGetWriteInfoError, Handle);
             HFuncTraced(TEvPQ::TEvProposePartitionConfig, Handle);
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
@@ -656,6 +662,7 @@ private:
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
     bool SendChangeConfigReply = true;
     TMessageQueue Responses;
+    THolder<TEvPQ::TEvGetWriteInfoResponse> WriteInfoResponse;
     //
     //
     //

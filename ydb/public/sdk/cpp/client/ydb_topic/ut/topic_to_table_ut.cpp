@@ -663,11 +663,15 @@ Y_UNIT_TEST_F(WriteToTopic_Demo, TFixture)
     {
         auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "Лидер");
+        UNIT_ASSERT_VALUES_EQUAL(messages[3], "бредил");
     }
 
     {
         auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "Тарту");
+        UNIT_ASSERT_VALUES_EQUAL(messages[4], "утрат");
     }
 }
 

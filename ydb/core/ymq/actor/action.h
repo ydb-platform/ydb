@@ -630,22 +630,23 @@ private:
             }
         }
 
-        if (ev->Get()->Throttled) {
-            MakeError(MutableErrorDesc(), NErrors::THROTTLING_EXCEPTION, "Too many requests for nonexistent queue.");
-            SendReplyAndDie();
-            return;
-        }
-
         if (ev->Get()->Fail) {
             MakeError(MutableErrorDesc(), NErrors::INTERNAL_FAILURE, "Failed to get configuration.");
             SendReplyAndDie();
             return;
         }
 
-        if (TDerived::NeedExistingQueue() && !ev->Get()->QueueExists) {
-            MakeError(MutableErrorDesc(), NErrors::NON_EXISTENT_QUEUE);
-            SendReplyAndDie();
-            return;
+        if (TDerived::NeedExistingQueue()) {
+            if (ev->Get()->Throttled) {
+                MakeError(MutableErrorDesc(), NErrors::THROTTLING_EXCEPTION, "Too many requests for nonexistent queue.");
+                SendReplyAndDie();
+                return;
+            }
+            if (!ev->Get()->QueueExists) {
+                MakeError(MutableErrorDesc(), NErrors::NON_EXISTENT_QUEUE);
+                SendReplyAndDie();
+                return;
+            }
         }
 
         bool isACLProtectedAccount = Cfg().GetForceAccessControl();

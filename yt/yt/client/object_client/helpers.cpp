@@ -124,7 +124,7 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::SequoiaMapNode ||
         type == EObjectType::Pipeline ||
         type == EObjectType::QueueConsumer ||
-        type == EObjectType::Producer;
+        type == EObjectType::QueueProducer;
 }
 
 bool IsUserType(EObjectType type)

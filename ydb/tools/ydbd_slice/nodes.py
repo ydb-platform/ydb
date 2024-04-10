@@ -37,7 +37,7 @@ class Nodes(object):
                 out = "<None>"
             else:
                 out = out.decode("utf-8", errors='replace')
-            
+
             if err is None:
                 err = "<None>"
             else:

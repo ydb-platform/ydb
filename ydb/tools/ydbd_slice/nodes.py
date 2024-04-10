@@ -32,8 +32,17 @@ class Nodes(object):
 
         for cmd, process, host in running_jobs:
             out, err = process.communicate()
-            out = out.decode("utf-8", errors='replace')
-            err = err.decode("utf-8", errors='replace')
+
+            if out is None:
+                out = "<None>"
+            else:
+                out = out.decode("utf-8", errors='replace')
+
+            if err is None:
+                err = "<None>"
+            else:
+                err = err.decode("utf-8", errors='replace')
+
             retcode = process.poll()
             if retcode != 0:
                 status_line = "execution '{cmd}' finished with '{retcode}' retcode".format(

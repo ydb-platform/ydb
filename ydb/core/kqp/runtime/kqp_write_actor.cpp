@@ -586,22 +586,24 @@ private:
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
             std::get<ui64>(TxId),
             NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-
         YQL_ENSURE(!inFlightBatch.Data.empty());
+
         const ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
-            .AddDataToPayload(TString(inFlightBatch.Data));
+                .AddDataToPayload(TString(inFlightBatch.Data));
+        evWrite->SetLockId(Settings.GetLockTxId(), Settings.GetLockNodeId());
+
         evWrite->AddOperation(
             NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE,
             {
                 Settings.GetTable().GetOwnerId(),
                 Settings.GetTable().GetTableId(),
-                Settings.GetTable().GetVersion() + 1 // TODO: SchemeShard returns wrong version.
+                SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable
+                    ? Settings.GetTable().GetVersion() + 1 // TODO: SchemeShard returns wrong version for columnshard.
+                    : Settings.GetTable().GetVersion()
             },
             Serializer->GetWriteColumnIds(),
             payloadIndex,
             Serializer->GetDataFormat());
-
-        evWrite->SetLockId(Settings.GetLockTxId(), Settings.GetLockNodeId());
 
         CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << std::get<ui64>(TxId)
             << ", LockTxId=" << Settings.GetLockTxId() << ", LockNodeId=" << Settings.GetLockNodeId()
@@ -660,14 +662,6 @@ private:
 
     void Prepare() {
         YQL_ENSURE(SchemeEntry);
-        if (!SchemeEntry->ColumnTableInfo) {
-            RuntimeError("Expected column table.", NYql::NDqProto::StatusIds::SCHEME_ERROR);
-            return;
-        }
-        if (!SchemeEntry->ColumnTableInfo->Description.HasSchema()) {
-            RuntimeError("Unknown schema for column table.", NYql::NDqProto::StatusIds::SCHEME_ERROR);
-            return;
-        }
 
         TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata;
         columnsMetadata.reserve(Settings.GetColumns().size());
@@ -676,10 +670,18 @@ private:
         }
 
         try {
-            Serializer = CreateColumnShardPayloadSerializer(
-                *SchemeEntry,
-                columnsMetadata,
-                TypeEnv);
+            if (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+                Serializer = CreateColumnShardPayloadSerializer(
+                    *SchemeEntry,
+                    columnsMetadata,
+                    TypeEnv);
+            } else {
+                Serializer = CreateDataShardPayloadSerializer(
+                    *SchemeEntry,
+                    *SchemeRequest,
+                    columnsMetadata,
+                    TypeEnv);
+            }
             ResumeExecution();
         } catch (...) {
             RuntimeError(

@@ -913,8 +913,7 @@ public:
 
             TMaybe<i64> maxAccumulatedSize = result.ColumnParser("max_accumulated_size").GetOptionalInt64();
             if (!maxAccumulatedSize) {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set accumulated size is not specified");
-                return;
+                maxAccumulatedSize = 0;
             }
 
             ResultSetsDescription.emplace_back(TResultSetDescription{*maxRowId, *maxAccumulatedSize, *resultSetId});
@@ -949,7 +948,7 @@ public:
               AND execution_id = $execution_id
               AND result_set_id = $result_set_id
               AND row_id > $max_row_id
-              AND accumulated_size > $max_accumulated_size;
+              AND (accumulated_size > $max_accumulated_size OR accumulated_size IS NULL);
 
             SELECT MAX(row_id) AS max_row_id, MAX(accumulated_size) AS max_accumulated_size
             FROM `.metadata/result_sets`
@@ -996,9 +995,9 @@ public:
         TMaybe<i64> maxRowId = result.ColumnParser("max_row_id").GetOptionalInt64();
         TMaybe<i64> maxAccumulatedSize = result.ColumnParser("max_accumulated_size").GetOptionalInt64();
 
-        if (maxRowId && maxAccumulatedSize) {
+        if (maxRowId) {
             ResultSetsDescription.back().MaxRowId = *maxRowId;
-            ResultSetsDescription.back().MaxAccumulatedSize = *maxAccumulatedSize;
+            ResultSetsDescription.back().MaxAccumulatedSize = maxAccumulatedSize ? *maxAccumulatedSize : 0;
         } else {
             ResultSetsDescription.pop_back();
         }

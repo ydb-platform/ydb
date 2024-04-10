@@ -99,6 +99,18 @@ std::vector<std::pair<TString, NScheme::TTypeInfo>> BuildBatchBuilderColumns(
     return result;
 }
 
+TVector<NScheme::TTypeInfo> BuildKeyColumnTypes(
+    const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) {
+    TVector<NScheme::TTypeInfo> keyColumnTypes;
+    for (const auto& [_, column] : schemeEntry.Columns) {
+        if (column.KeyOrder >= 0) {
+            keyColumnTypes.resize(Max<size_t>(keyColumnTypes.size(), column.KeyOrder + 1));
+            keyColumnTypes[column.KeyOrder] = column.PType;
+        }
+    }
+    return keyColumnTypes;
+}
+
 class TColumnShardPayloadSerializer : public IPayloadSerializer {
     using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
 
@@ -245,7 +257,8 @@ public:
         , PartitionsResult(partitionsResult)
         , Columns(BuildColumns(inputColumns))
         , WriteIndex(BuildWriteIndex(SchemeEntry, inputColumns))
-        , WriteColumnIds(BuildWriteColumnIds(SchemeEntry)) {
+        , WriteColumnIds(BuildWriteColumnIds(SchemeEntry))
+        , KeyColumnTypes(BuildKeyColumnTypes(SchemeEntry)) {
     }
 
     void AddData(NMiniKQL::TUnboxedValueBatch&& data, bool close) override {
@@ -309,8 +322,9 @@ public:
     TBatches FlushBatches(const bool force) override {
         Y_UNUSED(force);
         TBatches result;
-        for (auto& batch : Batches) {
-
+        for (auto& [shardId, batch] : Batches) {
+            TSerializedCellMatrix matrix(batch, batch.size() / Columns.size(), Columns.size());
+            result[shardId].push_back(matrix.ReleaseBuffer());
         }
         return result;
     }
@@ -328,6 +342,7 @@ private:
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteIndex;
     const std::vector<ui32> WriteColumnIds;
+    const TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
     THashMap<ui64, TVector<TCell>> Batches;
 

@@ -406,7 +406,7 @@ private:
     }
 
     void ResolveShards() {
-        YQL_ENSURE(!PartitionsResult);
+        YQL_ENSURE(!SchemeRequest);
         YQL_ENSURE(SchemeEntry);
 
         TVector<TKeyDesc::TColumnOp> columns;
@@ -415,7 +415,7 @@ private:
             TKeyDesc::TColumnOp op = { column.Id, TKeyDesc::EColumnOperation::Set, column.PType, 0, 0 };
             columns.push_back(op);
 
-            if (column.KeyOrder) {
+            if (column.KeyOrder >= 0) {
                 keyColumnTypes.resize(Max<size_t>(keyColumnTypes.size(), column.KeyOrder + 1));
                 keyColumnTypes[column.KeyOrder] = column.PType;
             }
@@ -423,19 +423,30 @@ private:
 
         const TVector<TCell> minKey(keyColumnTypes.size());
         const TTableRange range(minKey, true, {}, false, false);
-        YQL_ENSURE(range.IsFullRange());
-        const auto keyRange = MakeHolder<TKeyDesc>(SchemeEntry->TableId, range, TKeyDesc::ERowOperation::Update, keyColumnTypes, columns);
+        YQL_ENSURE(range.IsFullRange(keyColumnTypes.size()));
+        auto keyRange = MakeHolder<TKeyDesc>(SchemeEntry->TableId, range, TKeyDesc::ERowOperation::Update, keyColumnTypes, columns);
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
         request->ResultSet.emplace_back(std::move(keyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
-        ctx.Send(SchemeCache, resolveReq.Release(), 0, 0, Span.GetTraceId());   
+        Send(MakeSchemeCacheID(), resolveReq.Release(), 0, 0);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        Y_ABORT_UNLESS(ev->ResultSet.size() == 1);
-        KeyDesc = *ev->ResultSet[0].KeyDescription.Get();
+        YQL_ENSURE(!SchemeRequest);
+        auto* request = ev->Get()->Request.Get();
+
+        if (request->ErrorCount > 0) {
+            RuntimeError(TStringBuilder() << "Failed to get table: "
+                << TableId << "'", NYql::NDqProto::StatusIds::SCHEME_ERROR);
+            return;
+        }
+
+        YQL_ENSURE(request->ResultSet.size() == 1);
+        SchemeRequest = std::move(request->ResultSet[0]);
+
+        Prepare();
     }
 
     void Handle(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -697,7 +708,7 @@ private:
     const TTableId TableId;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
-    TKeyDesc KeyDesc;
+    std::optional<NSchemeCache::TSchemeCacheRequest::TEntry> SchemeRequest;
     IPayloadSerializerPtr Serializer = nullptr;
 
     TShardsInfo ShardsInfo;

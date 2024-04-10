@@ -51,6 +51,7 @@ struct TYtTableStatInfo: public TThrRefBase {
 
     NNodes::TMaybeNode<NNodes::TExprBase> FromNode;
     TString Id;
+    TMaybe<TVector<TString>> PrimaryKey;
     ui64 RecordsCount = 0;
     ui64 DataSize = 0;
     ui64 ChunkCount = 0;

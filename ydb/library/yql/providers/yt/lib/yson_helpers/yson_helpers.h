@@ -74,6 +74,7 @@ bool HasYqlRowSpec(const TString& inputAttrs);
 
 bool HasStrictSchema(const NYT::TNode& attrs);
 
+TMaybe<TVector<TString>> GetPrimaryKey(const NYT::TNode& tableAttrs);
 TMaybe<ui64> GetDataWeight(const NYT::TNode& inAttrs);
 ui64 GetTableRowCount(const NYT::TNode& tableAttrs);
 ui64 GetContentRevision(const NYT::TNode& tableAttrs);

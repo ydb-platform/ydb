@@ -50,6 +50,7 @@ class TYtProviderContext: public TDummyProviderContext {
 public:
     TYtProviderContext() { }
 
+    TVector<std::unique_ptr<TVector<TString>>> PrimaryKeyHolder;
     bool HasForceSortedMerge = false;
     bool HasHints = false;
 };
@@ -231,8 +232,9 @@ private:
         }
 
         TYtSection section{leaf->Section};
-        auto stat = std::make_shared<TOptimizerStatistics>();
+        std::shared_ptr<TOptimizerStatistics> stat;
         if (Y_UNLIKELY(!section.Settings().Empty()) && Y_UNLIKELY(section.Settings().Item(0).Name() == "Test")) {
+            stat = std::make_shared<TOptimizerStatistics>();
             for (const auto& setting : section.Settings()) {
                 if (setting.Name() == "Rows") {
                     stat->Nrows += FromString<ui64>(setting.Value().Ref().Content());
@@ -241,6 +243,15 @@ private:
                 }
             }
         } else {
+            if (section.Paths().Size() == 1) {
+                auto tableStat = TYtTableBaseInfo::GetStat(section.Paths().Item(0).Table());
+                if (tableStat->PrimaryKey) {
+                    Ctx->PrimaryKeyHolder.push_back(std::make_unique<TVector<TString>>(*tableStat->PrimaryKey));
+                    stat = std::make_shared<TOptimizerStatistics>(BaseTable, 0.0, 0, 0.0, 0.0, *Ctx->PrimaryKeyHolder.back());
+                } else {
+                    stat = std::make_shared<TOptimizerStatistics>();
+                }
+            }
             for (auto path: section.Paths()) {
                 auto tableStat = TYtTableBaseInfo::GetStat(path.Table());
                 stat->Cost += tableStat->DataSize;

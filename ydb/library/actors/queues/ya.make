@@ -2,7 +2,7 @@ LIBRARY()
 
 SRCS(
     activation_queue.h
-    mpmc_ring_queue.h
+    mpmc_ring_queue.cpp
 )
 
 END()

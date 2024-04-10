@@ -6,7 +6,8 @@ IF (WITH_VALGRIND)
 ENDIF()
 
 SRCS(
-    mpmc_ring_queue_ut.cpp
+    mpmc_ring_queue_ut_single_thread.cpp
+    mpmc_ring_queue_ut_multi_threads.cpp
 )
 
 END()

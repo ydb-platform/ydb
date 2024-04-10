@@ -1,66 +1,17 @@
+#define MPMC_RING_QUEUE_COLLECT_STATISTICS
+
 #include "mpmc_ring_queue.h"
+#include "mpmc_ring_queue_ut_base.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/random/random.h>
-#include <util/system/thread.h>
 
 #include <queue>
 
 
-namespace {
-    using namespace NActors;
-
-    class TThread : public ISimpleThread {
-
-       TThread() = default; 
-
-    private:
-        void* ThreadProc() override;
-    };
-
-    struct IQueue {
-        virtual bool TryPush(ui32 value) = 0;
-        virtual std::optional<ui32> TryPop() = 0;
-    };
-
-    template <ui32 SizeBits>
-    using TTryPush = bool (TMPMCRingQueue<SizeBits>::*)(ui32 value);
-    template <ui32 SizeBits>
-    using TTryPop = std::optional<ui32> (TMPMCRingQueue<SizeBits>::*)();
-
-    template <ui32 SizeBits, TTryPush<SizeBits> TryPushMethod, TTryPop<SizeBits> TryPopMethod>
-    struct TMPMCQueueBase : IQueue {
-        TMPMCRingQueue<SizeBits> &Queue;
-
-        TMPMCQueueBase(TMPMCRingQueue<SizeBits> &queue)
-            : Queue(queue)
-        {}
-
-        bool TryPush(ui32 value) override {
-            return (Queue.*TryPushMethod)(value);
-        }
-        std::optional<ui32> TryPop() override {
-            return (Queue.*TryPopMethod)();
-        }
-    };
-
-    template <ui32 SizeBits>
-    using TVerySlowQueue = TMPMCQueueBase<SizeBits, &TMPMCRingQueue<SizeBits>::TryPushSlow, &TMPMCRingQueue<SizeBits>::TryPopReallySlow>;
-
-    template <ui32 SizeBits>
-    using TSlowQueue = TMPMCQueueBase<SizeBits, &TMPMCRingQueue<SizeBits>::TryPushSlow, &TMPMCRingQueue<SizeBits>::TryPopSlow>;
-
-    template <ui32 SizeBits>
-    using TFastQueue = TMPMCQueueBase<SizeBits, &TMPMCRingQueue<SizeBits>::TryPush, &TMPMCRingQueue<SizeBits>::TryPopFast>;
-
-    template <ui32 SizeBits>
-    using TVeryFastQueue = TMPMCQueueBase<SizeBits, &TMPMCRingQueue<SizeBits>::TryPush, &TMPMCRingQueue<SizeBits>::TryPopReallyFast>;
-
-    template <ui32 SizeBits>
-    using TSingleQueue = TMPMCQueueBase<SizeBits, &TMPMCRingQueue<SizeBits>::TryPush, &TMPMCRingQueue<SizeBits>::TryPopSingleConsumer>;
-
-}
+using namespace NActors;
+using namespace NActors::NTests;
 
 namespace { // Tests
 
@@ -94,7 +45,7 @@ namespace { // Tests
 
         static void PushesPopsWithShift() {
             TMPMCRingQueue<SizeBits> realQueue;
-            TQueueAdaptor<SizeBits> adaptor(realQueue);
+            TQueueAdaptor<SizeBits> adaptor(&realQueue);
             
             for (ui32 it = 0; it < MaxSize; ++it) {
                 for (ui32 idx = 0; idx < MaxSize - 1; ++idx) {
@@ -133,7 +84,7 @@ namespace { // Tests
 
         static void PushesOverloadPops() {
             TMPMCRingQueue<SizeBits> realQueue;
-            TQueueAdaptor<SizeBits> adaptor(realQueue);
+            TQueueAdaptor<SizeBits> adaptor(&realQueue);
             
             for (ui32 it = 0; it < MaxSize; ++it) {
                 for (ui32 idx = 0; idx < MaxSize; ++idx) {
@@ -172,7 +123,7 @@ namespace { // Tests
                 return;
             }
             TMPMCRingQueue<SizeBits> realQueue;
-            TQueueAdaptor<SizeBits> adaptor(realQueue);
+            TQueueAdaptor<SizeBits> adaptor(&realQueue);
 
             ui64 emptyZeroGeneration = (ui64(1) << 63);
 
@@ -206,7 +157,7 @@ namespace { // Tests
 
         static void CheckSlowPops() {
             TMPMCRingQueue<SizeBits> realQueue;
-            TQueueAdaptor<SizeBits> adaptor(realQueue);
+            TQueueAdaptor<SizeBits> adaptor(&realQueue);
             ui64 emptyZeroGeneration = (ui64(1) << 63);
             for (ui32 it = 0; it < MaxSize; ++it) {
                 for (ui32 idx = 0; idx < MaxSize; ++idx) {
@@ -224,7 +175,7 @@ namespace { // Tests
 
         static void CheckFastPops() {
             TMPMCRingQueue<SizeBits> realQueue;
-            TQueueAdaptor<SizeBits> adaptor(realQueue);
+            TQueueAdaptor<SizeBits> adaptor(&realQueue);
             for (ui32 it = 0; it < MaxSize; ++it) {
                 for (ui32 idx = 0; idx < MaxSize; ++idx) {
                     ui64 emptyCurrentGeneration = (ui64(1) << 63) + (ui64)it;
@@ -304,7 +255,7 @@ namespace { // Tests
 
 constexpr ui32 SizeBits = 3;
 
-Y_UNIT_TEST_SUITE(MPMCRingQueueTests) {
+Y_UNIT_TEST_SUITE(MPMCRingQueueSingleThreadTests) {
     BASIC_QUEUE_TEST_CASES(SizeBits, TSingleQueue);
     BASIC_QUEUE_TEST_CASES(SizeBits, TVerySlowQueue);
     BASIC_QUEUE_TEST_CASES(SizeBits, TSlowQueue);
@@ -322,8 +273,8 @@ Y_UNIT_TEST_SUITE(MPMCRingQueueTests) {
         TestRandomUsage(
             10'000,
             (ui64(1) << SizeBits),
-            TVeryFastQueue<SizeBits>(realQueue),
-            TFastQueue<SizeBits>(realQueue)
+            TVeryFastQueue<SizeBits>(&realQueue),
+            TFastQueue<SizeBits>(&realQueue)
         );
     }
 
@@ -332,8 +283,8 @@ Y_UNIT_TEST_SUITE(MPMCRingQueueTests) {
         TestRandomUsage(
             10'000,
             (ui64(1) << SizeBits),
-            TVerySlowQueue<SizeBits>(realQueue),
-            TSlowQueue<SizeBits>(realQueue)
+            TVerySlowQueue<SizeBits>(&realQueue),
+            TSlowQueue<SizeBits>(&realQueue)
         );
     }
 
@@ -342,10 +293,10 @@ Y_UNIT_TEST_SUITE(MPMCRingQueueTests) {
         TestRandomUsage(
             100'000,
             (ui64(1) << SizeBits),
-            TVerySlowQueue<SizeBits>(realQueue),
-            TSlowQueue<SizeBits>(realQueue),
-            TFastQueue<SizeBits>(realQueue),
-            TVeryFastQueue<SizeBits>(realQueue)
+            TVerySlowQueue<SizeBits>(&realQueue),
+            TSlowQueue<SizeBits>(&realQueue),
+            TFastQueue<SizeBits>(&realQueue),
+            TVeryFastQueue<SizeBits>(&realQueue)
         );
     }
 }

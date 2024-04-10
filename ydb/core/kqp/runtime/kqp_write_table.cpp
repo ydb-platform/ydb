@@ -356,7 +356,17 @@ IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         const NMiniKQL::TTypeEnvironment& typeEnv) {
-    return MakeIntrusive<TColumnShardPayloadSerializer>(schemeEntry, inputColumns, typeEnv);
+    return MakeIntrusive<TColumnShardPayloadSerializer>(
+        schemeEntry, inputColumns, typeEnv);
+}
+
+IPayloadSerializerPtr CreateDataShardPayloadSerializer(
+        const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
+        const NSchemeCache::TSchemeCacheRequest::TEntry& partitionsEntry,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        const NMiniKQL::TTypeEnvironment& typeEnv) {
+    return MakeIntrusive<TDataShardPayloadSerializer>(
+        schemeEntry, partitionsEntry, inputColumns, typeEnv);
 }
 
 }

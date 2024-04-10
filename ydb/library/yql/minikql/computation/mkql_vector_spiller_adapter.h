@@ -56,7 +56,7 @@ public:
 
         CurrentVector = vec;
         StoredChunksElementsCount.push(vec.size());
-        NextPositionToSave = 0;
+        NextVectorPositionToSave = 0;
 
         SaveNextPartOfVector();
     }
@@ -85,7 +85,7 @@ public:
             case EState::RestoringData:
                 if (!ReadOperation.HasValue()) return;
                 // TODO: check spilling error here: YQL-17970
-                CurrentChunk = std::move(ReadOperation.ExtractValue().value());
+                Buffer = std::move(ReadOperation.ExtractValue().value());
 
                 LoadNextVector();
                 return;
@@ -120,12 +120,12 @@ public:
     ///Is case if buffer is not ready async write operation will be started.
     void Finalize() {
         MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
-        if (CurrentChunk.empty()) {
+        if (Buffer.empty()) {
             State = EState::AcceptingDataRequests;
             return;
         }
 
-        SaveCurrentChunk();
+        SaveBuffer();
         IsFinalizing = true;
     }
 
@@ -137,49 +137,50 @@ private:
         size_t sizeToLoad = (requestedVectorSize - CurrentVector.size()) * sizeof(T);
 
         // if vector is fully loaded to memory now
-        if (CurrentChunk.size() >= sizeToLoad) {
-            auto data = CurrentChunk.GetContiguousSpan();
+        if (Buffer.size() >= sizeToLoad) {
+            auto data = Buffer.GetContiguousSpan();
             const char* from = data.SubSpan(0, sizeToLoad).Data();
             const char* to = from + sizeToLoad;
             CurrentVector.insert(CurrentVector.end(), (T*)from, (T*)to);
-            CurrentChunk = TRope(TString(data.Data() + sizeToLoad, data.size() - sizeToLoad));
+            Buffer = TRope(TString(data.Data() + sizeToLoad, data.size() - sizeToLoad));
             State = EState::DataReady;
         } else {
-            const char* from = CurrentChunk.GetContiguousSpan().Data();
-            const char* to = from + CurrentChunk.GetContiguousSpan().Size();
+            const char* from = Buffer.GetContiguousSpan().Data();
+            const char* to = from + Buffer.GetContiguousSpan().Size();
             CurrentVector.insert(CurrentVector.end(), (T*)from, (T*)to);
             ReadOperation = Spiller->Extract(StoredChunks.front());
             StoredChunks.pop();
         }
     }
 
-    void SaveCurrentChunk() {
+    void SaveBuffer() {
         State = EState::SpillingData;
-        WriteOperation = Spiller->Put(std::move(CurrentChunk));
-        CurrentChunk = TRope();
+        WriteOperation = Spiller->Put(std::move(Buffer));
+        Buffer = TRope();
     }
 
     bool IsDataFittingInCurrentChunk() {
-        return (SizeLimit - CurrentChunk.size()) >= (CurrentVector.size() - NextPositionToSave) * sizeof(T);
+        return (SizeLimit - Buffer.size()) >= (CurrentVector.size() - NextVectorPositionToSave) * sizeof(T);
     }
 
     void AddDataToRope(T* data, size_t count) {
-        CurrentChunk.Insert(CurrentChunk.End(), TRope(TString(reinterpret_cast<const char*>(data), count * sizeof(T))));
+        Buffer.Insert(Buffer.End(), TRope(TString(reinterpret_cast<const char*>(data), count * sizeof(T))));
     }
 
     void SaveNextPartOfVector() {
+
         if (IsDataFittingInCurrentChunk()) {
-            AddDataToRope(CurrentVector.data() + NextPositionToSave,  CurrentVector.size() - NextPositionToSave);
+            AddDataToRope(CurrentVector.data() + NextVectorPositionToSave,  CurrentVector.size() - NextVectorPositionToSave);
             CurrentVector.clear();
-            NextPositionToSave = 0;
+            NextVectorPositionToSave = 0;
         } else {
-            size_t elementsToAdd = (SizeLimit - CurrentChunk.size()) / sizeof(T);
-            AddDataToRope(CurrentVector.data() + NextPositionToSave, elementsToAdd);
-            NextPositionToSave += elementsToAdd;
+            size_t elementsToAdd = (SizeLimit - Buffer.size()) / sizeof(T);
+            AddDataToRope(CurrentVector.data() + NextVectorPositionToSave, elementsToAdd);
+            NextVectorPositionToSave += elementsToAdd;
         }
 
-        if (SizeLimit - CurrentChunk.size() < sizeof(T)) {
-            SaveCurrentChunk();
+        if (SizeLimit - Buffer.size() < sizeof(T)) {
+            SaveBuffer();
             return;
         }
 
@@ -193,11 +194,11 @@ private:
     EState State = EState::AcceptingData;
     ISpiller::TPtr Spiller;
     const size_t SizeLimit;
-    TRope CurrentChunk;
+    TRope Buffer;
 
     // Used to store vector while spilling and also used while restoring the data
     std::vector<T> CurrentVector;
-    size_t NextPositionToSave = 0;
+    size_t NextVectorPositionToSave = 0;
 
     std::queue<ISpiller::TKey> StoredChunks; 
     std::queue<size_t> StoredChunksElementsCount;

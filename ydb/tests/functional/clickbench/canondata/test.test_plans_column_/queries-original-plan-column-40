@@ -155,7 +155,8 @@
                                                                                                                 }
                                                                                                             ],
                                                                                                             "FunctionType": 2,
-                                                                                                            "KernelIdx": 0
+                                                                                                            "KernelIdx": 0,
+                                                                                                            "YqlOperationId": 11
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -184,7 +185,8 @@
                                                                                                                 }
                                                                                                             ],
                                                                                                             "FunctionType": 2,
-                                                                                                            "KernelIdx": 1
+                                                                                                            "KernelIdx": 1,
+                                                                                                            "YqlOperationId": 11
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -213,7 +215,8 @@
                                                                                                                 }
                                                                                                             ],
                                                                                                             "FunctionType": 2,
-                                                                                                            "KernelIdx": 2
+                                                                                                            "KernelIdx": 2,
+                                                                                                            "YqlOperationId": 11
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -232,7 +235,8 @@
                                                                                                                 }
                                                                                                             ],
                                                                                                             "FunctionType": 2,
-                                                                                                            "KernelIdx": 3
+                                                                                                            "KernelIdx": 3,
+                                                                                                            "YqlOperationId": 0
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -251,7 +255,8 @@
                                                                                                                 }
                                                                                                             ],
                                                                                                             "FunctionType": 2,
-                                                                                                            "KernelIdx": 4
+                                                                                                            "KernelIdx": 4,
+                                                                                                            "YqlOperationId": 0
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -295,6 +300,276 @@
                                                         ],
                                                         "SortColumns": [
                                                             "Count0 (Desc)"
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "SimplifiedPlan": {
+                "Node Type": "Query",
+                "PlanNodeId": 0,
+                "PlanNodeType": "Query",
+                "Plans": [
+                    {
+                        "Node Type": "ResultSet",
+                        "PlanNodeId": 1,
+                        "PlanNodeType": "ResultSet",
+                        "Plans": [
+                            {
+                                "Node Type": "Limit",
+                                "Operators": [
+                                    {
+                                        "Limit": "10",
+                                        "Name": "Limit"
+                                    }
+                                ],
+                                "PlanNodeId": 2,
+                                "Plans": [
+                                    {
+                                        "Node Type": "Offset",
+                                        "Operators": [
+                                            {
+                                                "Name": "Offset",
+                                                "Offset": "100"
+                                            }
+                                        ],
+                                        "PlanNodeId": 3,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Limit",
+                                                "Operators": [
+                                                    {
+                                                        "Limit": "SUM(10,100)",
+                                                        "Name": "Limit"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 5,
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TopSort",
+                                                        "Operators": [
+                                                            {
+                                                                "Limit": "SUM(10,100)",
+                                                                "Name": "TopSort",
+                                                                "TopSortBy": "argument.Count0"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 7,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "Aggregate",
+                                                                "Operators": [
+                                                                    {
+                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
+                                                                        "GroupBy": "",
+                                                                        "Name": "Aggregate"
+                                                                    }
+                                                                ],
+                                                                "PlanNodeId": 9,
+                                                                "Plans": [
+                                                                    {
+                                                                        "Node Type": "Filter",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Name": "Filter",
+                                                                                "Predicate": "item.EventDate >= \"15887\" And item.EventDate <= \"15917\" And item.TraficSourceID == -1 Or item.TraficSourceID == 6"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 10,
+                                                                        "Plans": [
+                                                                            {
+                                                                                "Node Type": "TableFullScan",
+                                                                                "Operators": [
+                                                                                    {
+                                                                                        "Name": "TableFullScan",
+                                                                                        "ReadColumns": [
+                                                                                            "CounterID",
+                                                                                            "EventDate",
+                                                                                            "IsRefresh",
+                                                                                            "RefererHash",
+                                                                                            "TraficSourceID",
+                                                                                            "URLHash"
+                                                                                        ],
+                                                                                        "ReadRanges": [
+                                                                                            "EventTime (-\u221e, +\u221e)",
+                                                                                            "CounterID (-\u221e, +\u221e)",
+                                                                                            "EventDate (-\u221e, +\u221e)",
+                                                                                            "UserID (-\u221e, +\u221e)",
+                                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                                        ],
+                                                                                        "SsaProgram": {
+                                                                                            "Command": [
+                                                                                                {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 106
+                                                                                                        },
+                                                                                                        "Constant": {
+                                                                                                            "Int32": 62
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 107
+                                                                                                        },
+                                                                                                        "Function": {
+                                                                                                            "Arguments": [
+                                                                                                                {
+                                                                                                                    "Id": 7
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "Id": 106
+                                                                                                                }
+                                                                                                            ],
+                                                                                                            "FunctionType": 2,
+                                                                                                            "KernelIdx": 0,
+                                                                                                            "YqlOperationId": 11
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 108
+                                                                                                        },
+                                                                                                        "Constant": {
+                                                                                                            "Int32": 0
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 109
+                                                                                                        },
+                                                                                                        "Function": {
+                                                                                                            "Arguments": [
+                                                                                                                {
+                                                                                                                    "Id": 16
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "Id": 108
+                                                                                                                }
+                                                                                                            ],
+                                                                                                            "FunctionType": 2,
+                                                                                                            "KernelIdx": 1,
+                                                                                                            "YqlOperationId": 11
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 110
+                                                                                                        },
+                                                                                                        "Constant": {
+                                                                                                            "Int64": 3594120000172545465
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 111
+                                                                                                        },
+                                                                                                        "Function": {
+                                                                                                            "Arguments": [
+                                                                                                                {
+                                                                                                                    "Id": 103
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "Id": 110
+                                                                                                                }
+                                                                                                            ],
+                                                                                                            "FunctionType": 2,
+                                                                                                            "KernelIdx": 2,
+                                                                                                            "YqlOperationId": 11
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 112
+                                                                                                        },
+                                                                                                        "Function": {
+                                                                                                            "Arguments": [
+                                                                                                                {
+                                                                                                                    "Id": 109
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "Id": 111
+                                                                                                                }
+                                                                                                            ],
+                                                                                                            "FunctionType": 2,
+                                                                                                            "KernelIdx": 3,
+                                                                                                            "YqlOperationId": 0
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 113
+                                                                                                        },
+                                                                                                        "Function": {
+                                                                                                            "Arguments": [
+                                                                                                                {
+                                                                                                                    "Id": 107
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "Id": 112
+                                                                                                                }
+                                                                                                            ],
+                                                                                                            "FunctionType": 2,
+                                                                                                            "KernelIdx": 4,
+                                                                                                            "YqlOperationId": 0
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Filter": {
+                                                                                                        "Predicate": {
+                                                                                                            "Id": 113
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Projection": {
+                                                                                                        "Columns": [
+                                                                                                            {
+                                                                                                                "Id": 6
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "Id": 38
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "Id": 104
+                                                                                                            }
+                                                                                                        ]
+                                                                                                    }
+                                                                                                }
+                                                                                            ],
+                                                                                            "Version": 4
+                                                                                        },
+                                                                                        "Table": "clickbench/plans/column/hits"
+                                                                                    }
+                                                                                ],
+                                                                                "PlanNodeId": 11
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
                                                         ]
                                                     }
                                                 ]

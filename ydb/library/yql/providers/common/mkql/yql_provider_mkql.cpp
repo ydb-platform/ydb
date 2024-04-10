@@ -2731,6 +2731,13 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockMember(structObj, name);
     });
 
+    AddCallable("BlockAddMember", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto structObj = MkqlBuildExpr(node.Head(), ctx);
+        const auto memberName = node.Child(1)->Content();
+        const auto value = MkqlBuildExpr(node.Tail(), ctx);
+        return ctx.ProgramBuilder.BlockAddMember(structObj, memberName, value);
+    });
+
     AddCallable("BlockNth", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto tupleObj = MkqlBuildExpr(node.Head(), ctx);
         const auto index = FromString<ui32>(node.Tail().Content());

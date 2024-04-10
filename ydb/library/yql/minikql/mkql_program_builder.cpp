@@ -1638,6 +1638,38 @@ TRuntimeNode TProgramBuilder::BlockMember(TRuntimeNode structObj, const std::str
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::BlockAddMember(TRuntimeNode structObj, const std::string_view& memberName, TRuntimeNode memberValue) {
+    auto oldBlockType = AS_TYPE(TBlockType, structObj.GetStaticType());
+    const auto& oldStructType = static_cast<const TStructType&>(*oldBlockType->GetItemType());
+    MKQL_ENSURE(oldStructType.IsStruct(), "Expected struct");
+
+    auto valueBlockType = AS_TYPE(TBlockType, memberValue.GetStaticType());
+
+    TStructTypeBuilder newStructBuilder(Env);
+    newStructBuilder.Reserve(oldStructType.GetMembersCount() + 1);
+    for (ui32 i = 0; i < oldStructType.GetMembersCount(); i++) {
+        newStructBuilder.Add(oldStructType.GetMemberName(i), oldStructType.GetMemberType(i));
+    }
+    newStructBuilder.Add(memberName, valueBlockType->GetItemType());
+    auto newStructType = newStructBuilder.Build();
+
+    const TBlockType::EShape returnShape = oldBlockType->GetShape() == TBlockType::EShape::Many
+                                        || valueBlockType->GetShape() == TBlockType::EShape::Many
+                                        ? TBlockType::EShape::Many : TBlockType::EShape::Scalar;
+    auto returnType = NewBlockType(newStructType, returnShape);
+    for (ui32 i = 0; i < newStructType->GetMembersCount(); i++) {
+        if (newStructType->GetMemberName(i) == memberName) {
+            TCallableBuilder callableBuilder(Env, __func__, returnType);
+            callableBuilder.Add(structObj);
+            callableBuilder.Add(memberValue);
+            callableBuilder.Add(NewDataLiteral<ui32>(i));
+            return TRuntimeNode(callableBuilder.Build(), false);
+        }
+    }
+
+    Y_ABORT();
+}
+
 TRuntimeNode TProgramBuilder::BlockNth(TRuntimeNode tuple, ui32 index) {
     auto blockType = AS_TYPE(TBlockType, tuple.GetStaticType());
     bool isOptional;

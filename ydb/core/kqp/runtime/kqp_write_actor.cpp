@@ -408,19 +408,25 @@ private:
     void ResolveShards() {
         YQL_ENSURE(!PartitionsResult);
         YQL_ENSURE(SchemeEntry);
-        auto& entry = ResolveNamesResult->ResultSet.front();
 
         TVector<TKeyDesc::TColumnOp> columns;
-        for (const auto& ci : entry.Columns) {
-            TKeyDesc::TColumnOp op = { ci.second.Id, TKeyDesc::EColumnOperation::Set, ci.second.PType, 0, 0 };
+        TVector<NScheme::TTypeInfo> keyColumnTypes;
+        for (const auto& [_, column] : SchemeEntry->Columns) {
+            TKeyDesc::TColumnOp op = { column.Id, TKeyDesc::EColumnOperation::Set, column.PType, 0, 0 };
             columns.push_back(op);
+
+            if (column.KeyOrder) {
+                keyColumnTypes.resize(Max<size_t>(keyColumnTypes.size(), column.KeyOrder + 1));
+                keyColumnTypes[column.KeyOrder] = column.PType;
+            }
         }
 
-        //TTableRange range(MinKey.GetCells(), true, MaxKey.GetCells(), true, false);
-        auto keyRange = MakeHolder<TKeyDesc>(entry.TableId, range, TKeyDesc::ERowOperation::Update, KeyColumnTypes, columns);
+        const TVector<TCell> minKey(keyColumnTypes.size());
+        const TTableRange range(minKey, true, {}, false, false);
+        YQL_ENSURE(range.IsFullRange());
+        const auto keyRange = MakeHolder<TKeyDesc>(SchemeEntry->TableId, range, TKeyDesc::ERowOperation::Update, keyColumnTypes, columns);
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
-
         request->ResultSet.emplace_back(std::move(keyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));

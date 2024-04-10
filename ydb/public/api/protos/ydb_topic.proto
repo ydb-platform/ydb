@@ -306,7 +306,7 @@ message StreamReadMessage {
             StopPartitionSessionRequest stop_partition_session_request = 9;
 
             UpdatePartitionSession update_partition_session = 10;
-            PartitionCompleted partition_completed = 11;
+            PartitionFinished partition_finished = 11;
         }
     }
 
@@ -559,10 +559,10 @@ message StreamReadMessage {
         int64 direct_read_id = 2;
     }
 
-    // Signal from server that client has completed reading the partition and all messages has been read.
-    // Once a partition has been completed no further records will ever arrive on that partition.
+    // Signal from server that client has finished reading the partition and all messages has been read.
+    // Once a partition has been finished no further records will ever arrive on that partition.
     // Client should not send a response to the command.
-    message PartitionCompleted {
+    message PartitionFinished {
         // Partition session identifier.
         int64 partition_session_id = 1;
     }

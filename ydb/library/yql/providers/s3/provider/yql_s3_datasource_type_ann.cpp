@@ -357,7 +357,7 @@ public:
         }
 
         if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_Format), ctx) ||
-            !NCommon::ValidateFormatForInput(input->Child(TS3ParseSettings::idx_Format)->Content(), ctx))
+            !NCommon::ValidateFormatForInput(input->Child(TS3ParseSettings::idx_Format)->Content(), nullptr, nullptr, ctx))
         {
             return TStatus::Error;
         }
@@ -438,13 +438,15 @@ public:
         std::vector<TString> partitionedBy;
         TString projection;
         {
-            THashSet<TStringBuf> columns;
+            TS3Object s3Object(input->Child(TS3ReadObject::idx_Object));
+            auto format = s3Object.Format().Ref().Content();
             const TStructExprType* structRowType = rowType->Cast<TStructExprType>();
+
+            THashSet<TStringBuf> columns;
             for (const TItemExprType* item : structRowType->GetItems()) {
                 columns.emplace(item->GetName());
             }
-
-            TS3Object s3Object(input->Child(TS3ReadObject::idx_Object));
+            
             if (TMaybeNode<TExprBase> settings = s3Object.Settings()) {
                 for (auto& settingNode : settings.Raw()->ChildrenList()) {
                     const TStringBuf name = settingNode->Head().Content();
@@ -461,12 +463,20 @@ public:
                             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Table contains no columns except partitioning columns"));
                             return TStatus::Error;
                         }
-
                     }
                     if (name == "projection"sv) {
                         projection = settingNode->Tail().Content();
                     }
                 }
+            }
+
+            TSet<TString> partitionedBySet{partitionedBy.begin(), partitionedBy.end()};
+            if (!NCommon::ValidateFormatForInput(
+                format,
+                structRowType,
+                [partitionedBySet](TStringBuf fieldName) {return partitionedBySet.contains(fieldName); },
+                ctx)) {
+                return TStatus::Error;
             }
         }
 
@@ -550,7 +560,7 @@ public:
         }
 
         const auto format = input->Child(TS3Object::idx_Format)->Content();
-        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) || !NCommon::ValidateFormatForInput(format, ctx)) {
+        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) || !NCommon::ValidateFormatForInput(format, nullptr, nullptr, ctx)) {
             return TStatus::Error;
         }
 

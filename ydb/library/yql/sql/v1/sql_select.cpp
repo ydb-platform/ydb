@@ -124,6 +124,7 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
             Ctx.IncrementMonCounter("sql_join_operations", joinOp);
             if (linkSettings.Strategy != TJoinLinkSettings::EStrategy::Default && joinOp == "Cross") {
                 Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_UNUSED_HINT) << "Non-default join strategy will not be used for CROSS JOIN";
+                linkSettings.Strategy = TJoinLinkSettings::EStrategy::Default;
             }
 
             TNodePtr joinKeyExpr;

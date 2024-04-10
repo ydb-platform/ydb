@@ -1499,6 +1499,12 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         return TStatus::Ok;
     }
 
+    virtual TStatus HandleCreateSequence(TKiCreateSequence node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
     virtual TStatus HandleAlterTopic(TKiAlterTopic node, TExprContext& ctx) override {
         if (!CheckTopicSettings(node.Settings(), ctx)) {
             return TStatus::Error;

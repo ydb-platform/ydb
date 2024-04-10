@@ -285,6 +285,13 @@ namespace {
         };
     }
 
+    TCreateSequenceSettings ParseCreateSequenceSettings(TKiCreateSequence createSequence) {
+        TCreateSequenceSettings createSequenceSettings;
+        createSequenceSettings.Name = TString(createSequence.Sequence());
+
+        return createSequenceSettings;
+    }
+
     [[nodiscard]] TString AddConsumerToTopicRequest(
             Ydb::Topic::Consumer* protoConsumer, const TCoTopicConsumer& consumer
     ) {
@@ -1641,6 +1648,27 @@ public:
                                   return resultNode;
                               }, "Executing CREATE TOPIC");
         }
+
+        if (auto maybeCreateSequence = TMaybeNode<TKiCreateSequence>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeCreateSequence.Cast().DataSink().Cluster());
+            TCreateSequenceSettings createSequenceSettings = ParseCreateSequenceSettings(maybeCreateSequence.Cast());
+            bool existingOk = (maybeCreateSequence.ExistingOk().Cast().Value() == "1");
+
+            auto future = Gateway->CreateSequence(cluster, createSequenceSettings, existingOk);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing CREATE SEQUENCE");
+        }
+
         if (auto maybeAlter = TMaybeNode<TKiAlterTopic>(input)) {
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {

@@ -56,6 +56,18 @@ struct TWriteTableSettings {
         : Other(other) {}
 };
 
+struct TWriteSequenceSettings {
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TMaybeNode<NNodes::TCoAtom> ValueType;
+    NNodes::TMaybeNode<NNodes::TCoAtom> Temporary;
+    NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> SequenceSettings;
+
+    NNodes::TCoNameValueTupleList Other;
+
+    TWriteSequenceSettings(const NNodes::TCoNameValueTupleList& other)
+        : Other(other) {}
+};
+
 struct TWriteTopicSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> TopicSettings;
@@ -150,6 +162,8 @@ TWritePermissionSettings ParseWritePermissionsSettings(NNodes::TExprList node, T
 TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx);
 
 TPgObjectSettings ParsePgObjectSettings(NNodes::TExprList node, TExprContext& ctx);
+
+TWriteSequenceSettings ParseSequenceSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TString FullTableName(const TStringBuf& cluster, const TStringBuf& table);
 

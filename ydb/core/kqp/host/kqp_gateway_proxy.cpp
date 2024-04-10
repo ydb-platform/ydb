@@ -1390,6 +1390,52 @@ public:
         }
     }
 
+    TFuture<TGenericResult> CreateSequence(const TString& cluster,
+            const TCreateSequenceSettings& settings, bool existingOk) override {
+        CHECK_PREPARED_DDL(CreateSequence);
+
+        try {
+
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
+
+            std::pair<TString, TString> pathPair;
+            {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, false)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            }
+
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetWorkingDir(pathPair.first);
+
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateSequence);
+            schemeTx.SetFailedOnAlreadyExists(!existingOk);
+
+            NKikimrSchemeOp::TSequenceDescription* seqDesc = schemeTx.MutableSequence();
+
+            seqDesc->SetName(pathPair.second);
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableCreateSequence()->Swap(&schemeTx);
+
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(schemeTx));
+            }
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
     TFuture<TGenericResult> CreateTableStore(const TString& cluster,
         const TCreateTableStoreSettings& settings, bool existingOk) override
     {

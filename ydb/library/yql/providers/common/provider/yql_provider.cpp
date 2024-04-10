@@ -386,6 +386,56 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     return ret;
 }
 
+TWriteSequenceSettings ParseSequenceSettings(NNodes::TExprList node, TExprContext& ctx) {
+    TMaybeNode<TCoAtom> mode;
+    TMaybeNode<TCoAtom> valueType;
+    TMaybeNode<TCoAtom> temporary;
+    TMaybeNode<TCoAtom> ownedBy;
+
+    TVector<TCoNameValueTuple> sequenceSettings;
+
+    TVector<TCoNameValueTuple> other;
+
+    const static std::unordered_set<TString> sequenceSettingNames =
+        {"start", "increment", "cache", "minvalue", "maxvalue", "cycle", "owned_by"};
+
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "as") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                valueType = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "temporary")  {
+                temporary = Build<TCoAtom>(ctx, node.Pos()).Value("true").Done();
+            } else if (sequenceSettingNames.contains(TString(name))) {
+                sequenceSettings.push_back(tuple);
+            } else {
+                other.push_back(tuple);
+            }
+        }
+    }
+
+    const auto& sequenceSettingsList = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(sequenceSettings)
+        .Done();
+
+    const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(other)
+        .Done();
+
+    TWriteSequenceSettings ret(otherSettings);
+    ret.Mode = mode;
+    ret.ValueType = valueType;
+    ret.Temporary = temporary;
+    ret.SequenceSettings = sequenceSettingsList;
+    return ret;
+}
+
 TWriteTopicSettings ParseWriteTopicSettings(TExprList node, TExprContext& ctx) {
     Y_UNUSED(ctx);
     TMaybeNode<TCoAtom> mode;

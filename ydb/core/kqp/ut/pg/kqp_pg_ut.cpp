@@ -2274,7 +2274,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(CreateTempTableSerial) {
+     Y_UNIT_TEST(CreateTempTableSerial) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
         auto setting = NKikimrKqp::TKqpSetting();
@@ -2322,6 +2322,31 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto resultSelect = client.ExecuteQuery(
                 querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(!resultSelect.IsSuccess());
+        }
+    }
+
+    Y_UNIT_TEST(CreateSequence) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(
+            serverSettings.SetWithSampleTables(false));
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto client = kikimr.GetQueryClient();
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryCreate = R"(
+                --!syntax_pg
+                CREATE SEQUENCE seq;
+            )";
+
+            auto resultCreate = session.ExecuteQuery(queryCreate, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
         }
     }
 

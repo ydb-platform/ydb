@@ -950,6 +950,14 @@ public:
         }
     }
 
+    TFuture<TGenericResult> CreateSequence(const TString& cluster,
+            const NYql::TCreateSequenceSettings& settings, bool existingOk) override {
+        Y_UNUSED(cluster);
+        Y_UNUSED(settings);
+        Y_UNUSED(existingOk);
+        return NotImplemented<TGenericResult>();
+    }
+
     TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request) override {
         try {
             if (!CheckCluster(cluster)) {

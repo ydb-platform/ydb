@@ -120,6 +120,72 @@ namespace { // Tests
         ui32 RepeatCount = 0;
     };
 
+    template <typename TQueue>
+    class TProducerWorker {
+    public:
+        TProducerWorker(TQueue *queue, std::optional<ui32> writes)
+            : Queue(queue)
+            , Writes(writes)
+        {}
+
+        TThreadAction Do() {
+            if (Writes) {
+                if (Written == *Writes) {
+                    return {.Action=EThreadAction::Kill};
+                }
+                auto value = Queue->TryPush(Written);
+                if (value) {
+                    Written++;
+                }
+            } else {
+                auto success = Queue->TryPush(Written);
+                if (!success) {
+                    return {.Action=EThreadAction::Kill};
+                }
+                Written++;
+            }
+            return {.Action=EThreadAction::Continue};
+        }
+
+        TQueue *Queue;
+        std::optional<ui32> Writes;
+        ui64 Written = 0;
+    };
+
+    template <typename TQueue>
+    class TConsumerWorker {
+    public:
+        TConsumerWorker(TQueue *queue, std::optional<ui32> reads, bool countFailsAsReads=false)
+            : Queue(queue)
+            , Reads(reads)
+            , CountFailsAsReads(countFailsAsReads)
+        {}
+
+        TThreadAction Do() {
+            if (Reads) {
+                if (Readed == *Reads) {
+                    return {.Action=EThreadAction::Kill};
+                }
+                auto value = Queue->TryPop();
+                if (value || CountFailsAsReads) {
+                    Readed++;
+                }
+            } else {
+                auto value = Queue->TryPop();
+                if (!value) {
+                    return {.Action=EThreadAction::Kill};
+                }
+                Readed++;
+            }
+            return {.Action=EThreadAction::Continue};
+        }
+
+        TQueue *Queue;
+        std::optional<ui32> Reads;
+        ui64 Readed = 0;
+        bool CountFailsAsReads;
+    };
+
     struct TStatsCollector {
         TMutex Mutex;
         NActors::TMPMCRingQueueStats::TStats Stats;
@@ -241,6 +307,39 @@ namespace { // Tests
             RunThreads(threads);
             return std::move(collector);
         }
+
+        template <template <ui32> typename TQueueAdaptor, ui32 ThreadCount>
+        static TStatsCollector BasicProducing() {
+            TMPMCRingQueue<SizeBits> realQueue;
+            TVector<std::unique_ptr<IQueue>> adapters;
+            TVector<std::unique_ptr<ISimpleThread>> threads;
+            TStatsCollector collector;
+            for (ui32 threadIdx = 0; threadIdx < ThreadCount; ++threadIdx) {
+                TQueueAdaptor<SizeBits> *adapter = new TQueueAdaptor<SizeBits>(&realQueue);
+                adapters.emplace_back(adapter);
+                TProducerWorker<std::decay_t<decltype(*adapter)>> worker(adapter, {});
+                threads.emplace_back(new TTestThread<decltype(worker)>(worker, &collector));
+            }
+            RunThreads(threads);
+            return std::move(collector);
+        }
+
+        template <template <ui32> typename TQueueAdaptor, ui32 ThreadCount, ui32 Reads>
+        static TStatsCollector ConsumingEmptyQueue() {
+            TMPMCRingQueue<SizeBits> realQueue;
+            TVector<std::unique_ptr<IQueue>> adapters;
+            TVector<std::unique_ptr<ISimpleThread>> threads;
+            TStatsCollector collector;
+            for (ui32 threadIdx = 0; threadIdx < ThreadCount; ++threadIdx) {
+                TQueueAdaptor<SizeBits> *adapter = new TQueueAdaptor<SizeBits>(&realQueue);
+                adapters.emplace_back(adapter);
+                TConsumerWorker<std::decay_t<decltype(*adapter)>> worker(adapter, Reads, true);
+                threads.emplace_back(new TTestThread<decltype(worker)>(worker, &collector));
+            }
+            RunThreads(threads);
+            return std::move(collector);
+        }
+
     };
 
 }
@@ -302,6 +401,47 @@ namespace { // Tests
 // end BASIC_PUSH_POP_MUTLI_THREADS_SLOW
 
 
+#define BASIC_PRODUCING_FAST(QUEUE)                                                                             \
+    Y_UNIT_TEST(BasicProducing_ ## QUEUE) {                                                                     \
+        constexpr ui32 SizeBits = 10;                                                                           \
+        constexpr ui32 MaxSize = 1 << SizeBits;                                                                 \
+        constexpr ui32 ThreadCount = 10;                                                                        \
+        TStatsCollector collector = TTestCases<10>::BasicProducing<QUEUE, ThreadCount>();                       \
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPushes, MaxSize);                                       \
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessFastPushes, MaxSize);                                   \
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.ChangesFastPushToSlowPush, ThreadCount);                       \
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessSlowPushes, 0);                                         \
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedPushes, ThreadCount);                                    \
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedSlowPushAttempts, 0);                                    \
+    }                                                                                                           \
+// end BASIC_PUSH_POP_MUTLI_THREADS_FAST
+
+
+#define BASIC_PRODUCING_SLOW(QUEUE)                                                                             \
+    Y_UNIT_TEST(BasicProducing_ ## QUEUE) {                                                                     \
+        constexpr ui32 SizeBits = 10;                                                                           \
+        constexpr ui32 MaxSize = 1 << SizeBits;                                                                 \
+        constexpr ui32 ThreadCount = 10;                                                                        \
+        TStatsCollector collector = TTestCases<10>::BasicProducing<QUEUE, ThreadCount>();                       \
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPushes, MaxSize);                                       \
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.ChangesFastPushToSlowPush, 0);                                 \
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessFastPushes, 0);                                         \
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessSlowPushes, collector.Stats.SuccessPushes);             \
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedPushes, ThreadCount);                                    \
+    }                                                                                                           \
+// end BASIC_PUSH_POP_MUTLI_THREADS_SLOW
+
+
+#define CONSUMING_EMPTY_QUEUE(QUEUE)                                                                            \
+    Y_UNIT_TEST(ConsumingEmptyQueue_ ## QUEUE) {                                                                \
+        constexpr ui32 SizeBits = 10;                                                                           \
+        constexpr ui32 MaxSize = 1 << SizeBits;                                                                 \
+        constexpr ui32 ThreadCount = 10;                                                                        \
+        TStatsCollector collector = TTestCases<10>::ConsumingEmptyQueue<QUEUE, ThreadCount, MaxSize>();         \
+    }                                                                                                           \
+// end BASIC_PUSH_POP_MUTLI_THREADS_SLOW
+
+
 Y_UNIT_TEST_SUITE(MPMCRingQueueMultiThreadsTests) {
 
     BASIC_PUSH_POP_SINGLE_THREAD_FAST(TVeryFastQueue)
@@ -313,5 +453,15 @@ Y_UNIT_TEST_SUITE(MPMCRingQueueMultiThreadsTests) {
     BASIC_PUSH_POP_MUTLI_THREADS_FAST(TFastQueue)
     BASIC_PUSH_POP_MUTLI_THREADS_SLOW(TSlowQueue)
     BASIC_PUSH_POP_MUTLI_THREADS_SLOW(TVerySlowQueue)
+
+    BASIC_PRODUCING_FAST(TVeryFastQueue)
+    BASIC_PRODUCING_FAST(TFastQueue)
+    BASIC_PRODUCING_SLOW(TSlowQueue)
+    BASIC_PRODUCING_SLOW(TVerySlowQueue)
+
+    CONSUMING_EMPTY_QUEUE(TVeryFastQueue)
+    CONSUMING_EMPTY_QUEUE(TFastQueue)
+    CONSUMING_EMPTY_QUEUE(TSlowQueue)
+    CONSUMING_EMPTY_QUEUE(TVerySlowQueue)
 
 }

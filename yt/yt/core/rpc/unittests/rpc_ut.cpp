@@ -770,7 +770,7 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
 TYPED_TEST(TNotGrpcTest, MemoryTracking)
 {
     TTestProxy proxy(this->CreateChannel());
-    auto memoryUsageTracker = this->GetMemoryUsageTracker();
+    auto memoryUsageTracker = this->GetNodeMemoryUsageTracker();
     memoryUsageTracker->ClearTotalUsage();
     proxy.SetDefaultTimeout(TDuration::Seconds(10.0));
     for (int i = 0; i < 300; ++i) {
@@ -787,7 +787,7 @@ TYPED_TEST(TNotGrpcTest, MemoryTracking)
 
 TYPED_TEST(TNotGrpcTest, MemoryTrackingMultipleConnections)
 {
-    auto memoryUsageTracker = this->GetMemoryUsageTracker();
+    auto memoryUsageTracker = this->GetNodeMemoryUsageTracker();
     memoryUsageTracker->ClearTotalUsage();
     for (int i = 0; i < 300; ++i) {
         TTestProxy proxy(this->CreateChannel());
@@ -805,7 +805,7 @@ TYPED_TEST(TNotGrpcTest, MemoryTrackingMultipleConnections)
 
 TYPED_TEST(TNotGrpcTest, MemoryTrackingMultipleConcurrent)
 {
-    auto memoryUsageTracker = this->GetMemoryUsageTracker();
+    auto memoryUsageTracker = this->GetNodeMemoryUsageTracker();
     memoryUsageTracker->ClearTotalUsage();
     std::vector<TFuture<void>> futures;
     std::vector<TTestProxy> proxies;

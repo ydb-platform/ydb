@@ -129,6 +129,9 @@ public:
     void ClearTotalUsage();
     i64 GetTotalUsage() const;
 
+    TSharedRef Track(
+        TSharedRef reference,
+        bool keepHolder = false) override;
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
     i64 Usage_;
@@ -170,7 +173,7 @@ public:
         TTestServerHost::TearDown();
     }
 
-    TTestNodeMemoryTrackerPtr GetMemoryUsageTracker()
+    TTestNodeMemoryTrackerPtr GetNodeMemoryUsageTracker()
     {
         return MemoryUsageTracker_;
     }

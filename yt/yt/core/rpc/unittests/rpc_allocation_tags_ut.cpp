@@ -29,7 +29,7 @@ TYPED_TEST_SUITE(TRpcTest, TAllTransports);
 
 TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
 {
-    auto memoryUsageTracker = this->GetMemoryUsageTracker();
+    auto memoryUsageTracker = this->GetNodeMemoryUsageTracker();
     auto previousLimit = memoryUsageTracker->GetLimit();
     memoryUsageTracker->SetLimit(2_GB);
     static TMemoryTag testMemoryTag = 1 << 20;

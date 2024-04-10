@@ -108,6 +108,13 @@ i64 TTestNodeMemoryTracker::GetTotalUsage() const
     return TotalUsage_;
 }
 
+TSharedRef TTestNodeMemoryTracker::Track(
+    TSharedRef reference,
+    bool /*keepHolder*/)
+{
+    return reference;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NRpc

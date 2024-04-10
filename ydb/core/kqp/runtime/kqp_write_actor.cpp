@@ -352,6 +352,7 @@ private:
             switch (ev->GetTypeRewrite()) {
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+                hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
                 IgnoreFunc(TEvTxUserProxy::TEvAllocateTxIdResult);
                 hFunc(TEvPrivate::TEvShardRequestTimeout, Handle);
@@ -375,8 +376,6 @@ private:
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
     }
 
-    // TODO: void ResolveShards() {} line upload_rows_common_impl.h  ResolveShards()
-
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         if (SchemeEntry) {
             return;
@@ -390,8 +389,6 @@ private:
         YQL_ENSURE(resultSet.size() == 1);
         SchemeEntry = resultSet[0];
 
-        YQL_ENSURE(SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
-
         CA_LOG_D("Resolved TableId=" << TableId << " ("
             << SchemeEntry->TableId.PathId.ToString() << " "
             << SchemeEntry->TableId.SchemaVersion << ")");
@@ -401,7 +398,38 @@ private:
             return;
         }
 
-        Prepare();
+        if (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+            Prepare();
+        } else {
+            ResolveShards();
+        }
+    }
+
+    void ResolveShards() {
+        YQL_ENSURE(!PartitionsResult);
+        YQL_ENSURE(SchemeEntry);
+        auto& entry = ResolveNamesResult->ResultSet.front();
+
+        TVector<TKeyDesc::TColumnOp> columns;
+        for (const auto& ci : entry.Columns) {
+            TKeyDesc::TColumnOp op = { ci.second.Id, TKeyDesc::EColumnOperation::Set, ci.second.PType, 0, 0 };
+            columns.push_back(op);
+        }
+
+        //TTableRange range(MinKey.GetCells(), true, MaxKey.GetCells(), true, false);
+        auto keyRange = MakeHolder<TKeyDesc>(entry.TableId, range, TKeyDesc::ERowOperation::Update, KeyColumnTypes, columns);
+
+        TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
+
+        request->ResultSet.emplace_back(std::move(keyRange));
+
+        TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+        ctx.Send(SchemeCache, resolveReq.Release(), 0, 0, Span.GetTraceId());   
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
+        Y_ABORT_UNLESS(ev->ResultSet.size() == 1);
+        KeyDesc = *ev->ResultSet[0].KeyDescription.Get();
     }
 
     void Handle(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -663,6 +691,7 @@ private:
     const TTableId TableId;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
+    TKeyDesc KeyDesc;
     IPayloadSerializerPtr Serializer = nullptr;
 
     TShardsInfo ShardsInfo;

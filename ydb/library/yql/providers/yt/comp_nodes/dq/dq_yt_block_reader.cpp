@@ -44,6 +44,8 @@
 #include <util/generic/size_literals.h>
 #include <util/stream/output.h>
 
+#include <thread>
+
 namespace NYql::NDqs {
 
 using namespace NKikimr::NMiniKQL;
@@ -94,25 +96,25 @@ public:
 private:
     template<typename X>
     void PushInternal(X&& val, bool imm) {
-        NYT::TPromise<void> promise;
-        {
-            std::lock_guard _(Mtx_);
-            if (!Awaiting_.empty()) {
-                Awaiting_.front().Set(std::move(val));
-                Awaiting_.pop();
-                return;
+        for (;;) {
+            NYT::TPromise<void> promise;
+            {
+                std::lock_guard _(Mtx_);
+                if (!Awaiting_.empty()) {
+                    Awaiting_.front().Set(std::move(val));
+                    Awaiting_.pop();
+                    return;
+                }
+                if (!imm && Ready_.size() >= Limit_) {
+                    promise = NYT::NewPromise<void>();
+                    BlockedPushes_.push(promise);
+                } else {
+                    Ready_.emplace(std::move(val));
+                    return;
+                }
             }
-            if (!imm && Ready_.size() >= Limit_) {
-                promise = NYT::NewPromise<void>();
-                BlockedPushes_.push(promise);
-            } else {
-                Ready_.emplace(std::move(val));
-                return;
-            }
+            YQL_ENSURE(NYT::NConcurrency::WaitFor(promise.ToFuture()).IsOK());
         }
-        YQL_ENSURE(NYT::NConcurrency::WaitFor(promise.ToFuture()).IsOK());
-        std::lock_guard _(Mtx_);
-        Ready_.emplace(std::move(val));
     }
 
     TPoisonOr GetInternal() {
@@ -384,7 +386,6 @@ public:
             inputIdx = InputsQueue_.front();
             InputsQueue_.pop();
         }
-
         Inputs_[inputIdx]->Read().SubscribeUnique(BIND([inputIdx = inputIdx, self = Self_](NYT::TErrorOr<NYT::TSharedRef>&& res) {
             self->Pool_->GetInvoker()->Invoke(BIND([inputIdx, self, res = std::move(res)]() mutable {
                 try {

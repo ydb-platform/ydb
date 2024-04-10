@@ -14,6 +14,7 @@ static inline IOutputStream& operator<<(IOutputStream& o, const std::set<size_t>
     return o;
 }
 
+/*
 static inline IOutputStream& operator<<(IOutputStream& o, const std::optional<std::set<size_t>> t) {
     if (t) {
         o << t.value();
@@ -23,6 +24,7 @@ static inline IOutputStream& operator<<(IOutputStream& o, const std::optional<st
 
     return o;
 }
+*/
 
 namespace NKikimr {
 
@@ -217,11 +219,12 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
     using TOffsets = std::unordered_map<ui32, ui64>;
 
     struct TTestPartitionReadSession {
-
         TOffsets Offsets;
         TString Name;
 
         std::shared_ptr<IReadSession> Session;
+
+
         std::set<size_t> Partitions;
 
         std::optional<std::set<size_t>> ExpectedPartitions;
@@ -232,15 +235,23 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
 
         static constexpr size_t SemCount = 1;
 
+        void Acquire() {
+            Cerr << ">>>>> " << Name << " Acquire()" << Endl;
+            Semaphore.Acquire();
+        }
+
+        void Release() {
+            Cerr << ">>>>> " << Name << " Release()" << Endl;
+            Semaphore.Release();
+        }
+
         TTestPartitionReadSession(const TString& name, TTopicClient& client, bool commitMessages = false, std::optional<ui32> partition = std::nullopt)
             : Name(name)
             , Semaphore(name.c_str(), SemCount) {
 
             Y_UNUSED(commitMessages);
 
-            for (size_t i = 0; i < SemCount; ++i) {
-                Semaphore.Acquire();
-            }
+            Acquire();
 
             auto readSettings = TReadSessionSettings()
                 .ConsumerName(TEST_CONSUMER)
@@ -270,8 +281,26 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
                         Cerr << ">>>>> " << Name << " Received TStopPartitionSessionEvent message " << ev.DebugString() << Endl;
                         auto partitionId = ev.GetPartitionSession()->GetPartitionId();
                         Modify([&](std::set<size_t>& s) { s.erase(partitionId); });
-                        Cerr << ">>>>> " << Name << " Stop reading partition " << partitionId << " without offset" << Endl;
+                        Cerr << ">>>>> " << Name << " Stop reading partition " << partitionId << Endl;
                         ev.Confirm();
+            });
+
+            readSettings.EventHandlers_.PartitionSessionClosedHandler(
+                    [&]
+                    (TReadSessionEvent::TPartitionSessionClosedEvent& ev) mutable {
+                        Cerr << ">>>>> " << Name << " Received TPartitionSessionClosedEvent message " << ev.DebugString() << Endl;
+                        auto partitionId = ev.GetPartitionSession()->GetPartitionId();
+                        Modify([&](std::set<size_t>& s) { s.erase(partitionId); });
+                        Cerr << ">>>>> " << Name << " Stop (closed) reading partition " << partitionId << Endl;
+            });
+
+            readSettings.EventHandlers_.SessionClosedHandler(
+                    [&]
+                    (const TSessionClosedEvent& ev) mutable {
+                        Cerr << ">>>>> " << Name << " Received TSessionClosedEvent message " << ev.DebugString() << Endl;
+                        //auto partitionId = ev.GetPartitionSession()->GetPartitionId();
+                        //Modify([&](std::set<size_t>& s) { s.erase(partitionId); });
+                        //Cerr << ">>>>> " << Name << " Stop reading partition " << partitionId << Endl;
             });
 
 
@@ -302,16 +331,11 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
 
             with_lock (Lock) {
                 ExpectedPartitions = partitions;
-                if (Partitions == ExpectedPartitions) {
-                    Cerr << ">>>>> " << Name << " Partitions " << partitions << " received #1" << Endl;
-                    Semaphore.Release();
-
-                    NThreading::TPromise<std::set<size_t>> p = NThreading::NewPromise<std::set<size_t>>();
-                    p.SetValue(ExpectedPartitions.value());
-                    return p;
-                }
-
                 Promise = NThreading::NewPromise<std::set<size_t>>();
+
+                if (Partitions == ExpectedPartitions.value()) {
+                    Promise.SetValue(ExpectedPartitions.value());
+                }
             }
 
             return Promise.GetFuture();
@@ -320,7 +344,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         void Assert(const std::set<size_t>& expected, NThreading::TFuture<std::set<size_t>> f, const TString& message) {
             Cerr << ">>>>> " << Name << " Partitions " << Partitions << " received #2" << Endl;
             UNIT_ASSERT_VALUES_EQUAL_C(expected, f.HasValue() ? f.GetValueSync() : Partitions, message);
-            Semaphore.Release();
+            Release();
         }
 
         void WaitAndAssertPartitions(std::set<size_t> partitions, const TString& message) {
@@ -329,26 +353,33 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
             Assert(partitions, f, message);
         }
 
-        void Stop() {
+        void Run() {
             ExpectedPartitions = std::nullopt;
-            for (size_t i = 0; i < SemCount; ++i) {
-                Semaphore.Release();
-            }
+            Semaphore.TryAcquire();
+            Release();
+        }
+
+        void Close() {
+            Run();
+            Session->Close();
         }
 
     private:
         void Modify(std::function<void (std::set<size_t>&)> modifier) {
+            bool found = false;
+
             with_lock (Lock) {
                 modifier(Partitions);
 
-                if (ExpectedPartitions && Partitions == ExpectedPartitions) {
-                    if (Promise.HasValue()) {
-                        Cerr << ">>>>> " << Name << " HAS VALUE: " << ExpectedPartitions << Endl;
-                        return;
-                    }
+                if (ExpectedPartitions && Partitions == ExpectedPartitions.value()) {
+                    ExpectedPartitions = std::nullopt;
                     Promise.SetValue(Partitions);
-                    Semaphore.Acquire();
+                    found = true;
                 }
+            }
+
+            if (found) {
+                Acquire();
             }
         }
     };
@@ -367,7 +398,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
 
         readSession.WaitAndAssertPartitions({0, 1, 2}, "After split must read all partitions because parent partition is empty");
 
-        readSession.Stop();
+        readSession.Close();
     }
 
     Y_UNIT_TEST(PartitionSplit_ReadNotEmptyPartitions) {
@@ -394,7 +425,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         readSession.Offsets[0] = 1;
         readSession.WaitAndAssertPartitions({0, 1, 2}, "Must read from all partitions because had been read from the end of partition");
 
-        readSession.Stop();
+        readSession.Close();
     }
 
     Y_UNIT_TEST(PartitionSplit_ManySession) {
@@ -413,21 +444,24 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         readSession1.Offsets[0] = 1;
         readSession1.WaitAndAssertPartitions({0, 1, 2}, "Must read all exists partitions because read the partition 0 from offset 1");
 
-
         TTestPartitionReadSession readSession2("Session-1", client, false, 0);
         readSession2.Offsets[0] = 0;
 
         auto p1 = readSession1.Wait({}, "Must release all partitions becase readSession2 read not from EndOffset");
         auto p2 = readSession2.Wait({0}, "Must read partition 0 because it defined in the readSession");
 
-        p2.Wait(TDuration::Seconds(5));
-        readSession2.Assert({0}, p2, "");
-        readSession2.Stop();
-
         p1.Wait(TDuration::Seconds(5));
         readSession1.Assert({}, p1, "");
+        readSession1.Run();
 
-        readSession1.Stop();
+        p2.Wait(TDuration::Seconds(5));
+        readSession2.Assert({0}, p2, "");
+
+        readSession2.WaitAndAssertPartitions({}, "Partition must be released because reding finished");
+        readSession1.WaitAndAssertPartitions({}, "Partitions must be read only from Session-1");
+
+        readSession1.Close();
+        readSession2.Close();
     }
 }
 

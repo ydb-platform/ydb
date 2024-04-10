@@ -1615,8 +1615,9 @@ TPersQueueReadBalancer::TSessionInfo* TPersQueueReadBalancer::TClientGroupInfo::
 }
 
 void TPersQueueReadBalancer::TClientGroupInfo::ScheduleBalance(const TActorContext& ctx) {
-    if (WakeupScheduled)
+    if (WakeupScheduled) {
         return;
+    }
     WakeupScheduled = true;
     ctx.Send(ctx.SelfID, new TEvPersQueue::TEvWakeupClient(ClientId, Group));
 }
@@ -1982,11 +1983,12 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequ
                 auto& status = clientInfo.GetPartitionReadingStatus(partitionId);
                 auto* group = clientInfo.FindGroup(partitionId);
 
-                if (status.Reset() && group) {
-                    group->ActivatePartition(partitionId);
-                }
                 if (group) {
+                    if (status.Reset()) {
+                        group->ActivatePartition(partitionId);
+                    }
                     group->ReleasePartition(partitionId, ctx);
+                    group->ScheduleBalance(ctx);
                 }
 
                 return true;

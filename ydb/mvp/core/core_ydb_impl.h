@@ -871,6 +871,14 @@ struct THandlerActorYdb {
                 return TStringBuilder() << valueParser.GetTimestamp().ToString();
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
+            case NYdb::EPrimitiveType::Date32:
+                return TStringBuilder() << valueParser.GetDate32();
+            case NYdb::EPrimitiveType::Datetime64:
+                return TStringBuilder() << valueParser.GetDatetime64();
+            case NYdb::EPrimitiveType::Timestamp64:
+                return TStringBuilder() << valueParser.GetTimestamp64();
+            case NYdb::EPrimitiveType::Interval64:
+                return TStringBuilder() << valueParser.GetInterval64();
             case NYdb::EPrimitiveType::TzDate:
                 return TStringBuilder() << valueParser.GetTzDate();
             case NYdb::EPrimitiveType::TzDatetime:
@@ -954,6 +962,14 @@ struct THandlerActorYdb {
                 return valueParser.GetTimestamp().ToString();
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
+            case NYdb::EPrimitiveType::Date32:
+                return valueParser.GetDate32();
+            case NYdb::EPrimitiveType::Datetime64:
+                return valueParser.GetDatetime64();
+            case NYdb::EPrimitiveType::Timestamp64:
+                return valueParser.GetTimestamp64();
+            case NYdb::EPrimitiveType::Interval64:
+                return valueParser.GetInterval64();
             case NYdb::EPrimitiveType::TzDate:
                 return valueParser.GetTzDate();
             case NYdb::EPrimitiveType::TzDatetime:

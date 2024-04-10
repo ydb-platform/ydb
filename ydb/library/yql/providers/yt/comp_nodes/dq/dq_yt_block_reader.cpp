@@ -44,8 +44,6 @@
 #include <util/generic/size_literals.h>
 #include <util/stream/output.h>
 
-#include <thread>
-
 namespace NYql::NDqs {
 
 using namespace NKikimr::NMiniKQL;

@@ -1638,6 +1638,31 @@ TRuntimeNode TProgramBuilder::BlockMember(TRuntimeNode structObj, const std::str
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::BlockRemoveMember(TRuntimeNode structObj, const std::string_view& memberName) {
+    auto oldBlockType = AS_TYPE(TBlockType, structObj.GetStaticType());
+    const auto& oldStructType = static_cast<const TStructType&>(*oldBlockType->GetItemType());
+    MKQL_ENSURE(oldStructType.IsStruct(), "Expected struct");
+
+    TStructTypeBuilder newStructBuilder(Env);
+    newStructBuilder.Reserve(oldStructType.GetMembersCount() - 1);
+    i32 memberIndex = -1;
+    for (ui32 i = 0; i < oldStructType.GetMembersCount(); i++) {
+        if (oldStructType.GetMemberName(i) == memberName) {
+            memberIndex = i;
+        } else {
+            newStructBuilder.Add(oldStructType.GetMemberName(i), oldStructType.GetMemberType(i));
+        }
+    }
+    MKQL_ENSURE(memberIndex != -1, "Member " << memberName << " is missing");
+    auto newStructType = newStructBuilder.Build();
+
+    auto returnType = NewBlockType(newStructType, oldBlockType->GetShape());
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(structObj);
+    callableBuilder.Add(NewDataLiteral<ui32>(memberIndex));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::BlockNth(TRuntimeNode tuple, ui32 index) {
     auto blockType = AS_TYPE(TBlockType, tuple.GetStaticType());
     bool isOptional;

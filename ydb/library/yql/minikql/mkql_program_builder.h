@@ -238,6 +238,7 @@ public:
     TRuntimeNode BlockCoalesce(TRuntimeNode first, TRuntimeNode second);
     TRuntimeNode BlockExists(TRuntimeNode data);
     TRuntimeNode BlockMember(TRuntimeNode structure, const std::string_view& memberName);
+    TRuntimeNode BlockRemoveMember(TRuntimeNode structObj, const std::string_view& memberName);
     TRuntimeNode BlockNth(TRuntimeNode tuple, ui32 index);
     TRuntimeNode BlockAsTuple(const TArrayRef<const TRuntimeNode>& args);
     TRuntimeNode BlockToPg(TRuntimeNode input, TType* returnType);

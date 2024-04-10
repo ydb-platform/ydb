@@ -12,6 +12,8 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
+#include <ydb/library/protobuf_printer/security_printer.h>
+
 #include <util/generic/algorithm.h>
 
 namespace NKikimr::NSchemeShard {

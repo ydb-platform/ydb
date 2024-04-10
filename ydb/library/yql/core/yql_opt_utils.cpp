@@ -1048,8 +1048,13 @@ TExprNode::TPtr ExpandDivePrefixMembers(const TExprNode::TPtr& node, TExprContex
     return ret;
 }
 
+// Expand AddMember over AsStruct.
+// (AddMember (AsStruct '('...)) <member> <value>) ==> (AsStruct '('...) '('<member> <value>))
 TExprNode::TPtr ExpandAddMember(const TExprNode::TPtr& node, TExprContext& ctx) {
     TExprNode::TListType members;
+    if (node->Child(0)->IsCallable("AsStruct")) {
+        return node;
+    }
     UpdateStructMembers(ctx, node->ChildPtr(0), "AddMember", members);
     members.push_back(ctx.NewList(node->Pos(), { node->ChildPtr(1), node->ChildPtr(2) }));
     return ctx.NewCallable(node->Pos(), "AsStruct", std::move(members));

@@ -249,12 +249,12 @@ class TDataShardPayloadSerializer : public IPayloadSerializer {
 public:
     TDataShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
-        const NSchemeCache::TSchemeCacheRequest& partitionsResult,
+        const NSchemeCache::TSchemeCacheRequest::TEntry& partitionsEntry,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         const NMiniKQL::TTypeEnvironment& typeEnv)
         : TypeEnv(typeEnv)
         , SchemeEntry(schemeEntry)
-        , PartitionsResult(partitionsResult)
+        , PartitionsEntry(partitionsEntry)
         , Columns(BuildColumns(inputColumns))
         , WriteIndex(BuildWriteIndex(SchemeEntry, inputColumns))
         , WriteColumnIds(BuildWriteColumnIds(SchemeEntry))
@@ -331,13 +331,12 @@ public:
 
 private:
     const TKeyDesc& GetKeyRange() const {
-        Y_ABORT_UNLESS(PartitionsResult.ResultSet.size() == 1);
-        return *PartitionsResult.ResultSet[0].KeyDescription.Get();
+        return *PartitionsEntry.KeyDescription.Get();
     }
 
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NSchemeCache::TSchemeCacheNavigate::TEntry& SchemeEntry;
-    const NSchemeCache::TSchemeCacheRequest& PartitionsResult;
+    const NSchemeCache::TSchemeCacheRequest::TEntry& PartitionsEntry;
 
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteIndex;

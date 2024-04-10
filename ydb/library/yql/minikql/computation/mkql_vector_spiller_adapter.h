@@ -1,17 +1,15 @@
 #pragma once
-#include "mkql_spiller.h"
-#include <queue>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 
+#include <queue>
+
+#include <ydb/library/yql/minikql/defs.h>
+#include <ydb/library/yql/minikql/computation/mkql_spiller.h>
 
 namespace NKikimr::NMiniKQL {
 
-///Stores and loads very long sequences of TMultiType UVs
-///Can split sequences into chunks
-///Sends chunks to ISplitter and keeps assigned keys
-///When all data is written switches to read mode. Switching back to writing mode is not supported
-///Provides an interface for sequential read (like forward iterator)
-///When interaction with ISpiller is required, Write and Read operations return a Future
+///Stores long vectors of any type (excepting pointers). Tested on int and chars.
+///The adapter places moved vectors into buffer and flushes buffer on disk when sizeLimit is reached.
+///Returns vectors in FIFO order.
 template<class T>
 class TVectorSpillerAdapter {
 public:
@@ -48,65 +46,65 @@ public:
     
     void AddData(std::vector<T>&& vec) {
         MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
-        MKQL_ENSURE(!WriteOperation.has_value(), "Internal logic error");
-
         MKQL_ENSURE(State == EState::AcceptingData, "Internal logic error");
 
         CurrentVector = vec;
-        StoredChunksSizes.push(vec.size() * sizeof(T));
+        StoredChunksElementsCount.push(vec.size());
         NextPositionToSave = 0;
 
-        SaveNextChunk();
+        SaveNextPartOfVector();
     }
 
     void Update() {
-        if (State == EState::SpillingData) {
-            if (CurrentVector.empty() && !WriteOperation.has_value()) return;
-            if (!WriteOperation->HasValue()) return;
+        switch (State) {
+            case EState::SpillingData:
+                if (!WriteOperation.HasValue()) return;
 
-            StoredChunks.push(WriteOperation->ExtractValue());
-            WriteOperation = std::nullopt;
-            if (IsFinalizing) {
-                State = EState::AcceptingDataRequests;
+                StoredChunks.push(WriteOperation.ExtractValue());
+                if (IsFinalizing) {
+                    State = EState::AcceptingDataRequests;
+                    return;
+                }
+
+                if (CurrentVector.empty()) {
+                    State = EState::AcceptingData;
+                    return;
+                }
+
+                SaveNextPartOfVector();
                 return;
-            }
+            case EState::RestoringData:
+                if (!ReadOperation.HasValue()) return;
+                // TODO: check spilling error here: YQL-17970
+                CurrentChunk = std::move(ReadOperation.ExtractValue().value());
 
-            SaveNextChunk();
-            return;
+                LoadNextVector();
+                return;
+            default:
+                return;
         }
 
-        if (State == EState::RestoringData) {
-            if (!ReadOperation.has_value() || !ReadOperation->HasValue()) return;
-
-            CurrentChunk = std::move(ReadOperation->ExtractValue().value());
-            ReadOperation = std::nullopt;
-
-            LoadNextVector();
-        }
     }
 
     std::vector<T> ExtractVector() {
-        StoredChunksSizes.pop();
+        StoredChunksElementsCount.pop();
         State = EState::AcceptingDataRequests;
-        return std::move(CurrentVector);
+        return CurrentVector;
     }
 
     void RequestNextVector() {
-        MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
         MKQL_ENSURE(State == EState::AcceptingDataRequests, "Internal logic error");
-        MKQL_ENSURE(!StoredChunksSizes.empty(), "Internal logic error");
+        MKQL_ENSURE(!StoredChunksElementsCount.empty(), "Internal logic error");
 
-        // TODO size here in bytes
-        CurrentVector.reserve(StoredChunksSizes.front());
+        CurrentVector.resize(0);
+        CurrentVector.reserve(StoredChunksElementsCount.front());
         State = EState::RestoringData;
 
         LoadNextVector();
-
     }
 
     void Finalize() {
         MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
-        MKQL_ENSURE(!WriteOperation.has_value(), "Internal logic error");
         if (CurrentChunk.empty()) {
             State = EState::AcceptingDataRequests;
             return;
@@ -119,10 +117,9 @@ public:
 private:
 
     void LoadNextVector() {
-        if (ReadOperation.has_value()) return;
-
-        auto requestedShunkSize= StoredChunksSizes.front();
-        size_t sizeToLoad = requestedShunkSize - CurrentVector.size() * sizeof(T);
+        auto requestedVectorSize= StoredChunksElementsCount.front();
+        MKQL_ENSURE(requestedVectorSize >= CurrentVector.size(), "Internal logic error");
+        size_t sizeToLoad = (requestedVectorSize - CurrentVector.size()) * sizeof(T);
 
         // if vector is fully loaded to memory now
         if (CurrentChunk.size() >= sizeToLoad) {
@@ -155,13 +152,7 @@ private:
         CurrentChunk.Insert(CurrentChunk.End(), TRope(TString(reinterpret_cast<const char*>(data), count * sizeof(T))));
     }
 
-    // TODO check empty vector in the middle
-    void SaveNextChunk() {
-        if (CurrentVector.empty()) {
-            State = EState::AcceptingData;
-            return;
-        }
-
+    void SaveNextPartOfVector() {
         if (IsDataFittingInCurrentChunk()) {
             AddDataToRope(CurrentVector.data() + NextPositionToSave,  CurrentVector.size() - NextPositionToSave);
             CurrentVector.clear();
@@ -177,6 +168,7 @@ private:
             return;
         }
 
+        CurrentVector.resize(0);
         State = EState::AcceptingData;
 
         return;
@@ -186,18 +178,17 @@ private:
     EState State = EState::AcceptingData;
     ISpiller::TPtr Spiller;
     const size_t SizeLimit;
-    size_t RemainingSize = 0;
-    char* SavingDataPtr = nullptr;
     TRope CurrentChunk;
 
+    // Used to store vector while spilling and also used while restoring the data
     std::vector<T> CurrentVector;
     size_t NextPositionToSave = 0;
 
     std::queue<ISpiller::TKey> StoredChunks; 
-    std::queue<size_t> StoredChunksSizes;
+    std::queue<size_t> StoredChunksElementsCount;
 
-    std::optional<NThreading::TFuture<ISpiller::TKey>> WriteOperation;
-    std::optional<NThreading::TFuture<std::optional<TRope>>> ReadOperation;
+    NThreading::TFuture<ISpiller::TKey> WriteOperation;
+    NThreading::TFuture<std::optional<TRope>> ReadOperation;
 
     bool IsFinalizing = false;
 };

@@ -145,6 +145,11 @@ protected:
         TMaybe<ui64> TxId;
         TMaybe<TPartitionId> Partition;
         TMaybe<bool> Predicate;
+        bool Ok = true;
+        static TCalcPredicateMatcher EmptyMatcher() {
+            TCalcPredicateMatcher ret;
+            return ret;
+        }
     };
 
     struct TCommitTxDoneMatcher {
@@ -241,7 +246,7 @@ protected:
                            ui64 begin,
                            ui64 end,
                            const TActorId& suppPartitionId = {});
-    void WaitCalcPredicateResult(const TCalcPredicateMatcher& matcher = {});
+    void WaitCalcPredicateResult(const TCalcPredicateMatcher& matcher = TCalcPredicateMatcher::EmptyMatcher());
 
     void SendCommitTx(ui64 step, ui64 txId);
     void SendRollbackTx(ui64 step, ui64 txId);
@@ -268,8 +273,7 @@ protected:
 
     void CmdChangeOwner(ui64 cookie, const TString& sourceId, TDuration duration, TString& ownerCookie);
 
-    void EmulateKVTablet();
-    void SetWriteInfoObserver(bool success, const NPQ::TSourceIdMap& srcIdInfo = {});
+    void SetWriteInfoObserver(bool success, const NPQ::TSourceIdMap& srcIdInfo = {}, const TActorId& sender = {});
     void EmulateKVTablet();
 
     TMaybe<TTestContext> Ctx;
@@ -622,20 +626,21 @@ void TPartitionFixture::SendGetWriteInfo() {
     auto event = MakeHolder<TEvPQ::TEvGetWriteInfoRequest>();
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
-void TPartitionFixture::SetWriteInfoObserver(bool success, const NPQ::TSourceIdMap& srcIdInfo) {
+
+void TPartitionFixture::SetWriteInfoObserver(bool success, const NPQ::TSourceIdMap& srcIdInfo, const TActorId& sender) {
     Ctx->Runtime->SetObserverFunc(
-        [&, ok = success, srcIds = srcIdInfo](TAutoPtr<IEventHandle>& ev) {
+        [=, this](TAutoPtr<IEventHandle>& ev) {
             if (auto* msg = ev->CastAsLocal<TEvPQ::TEvGetWriteInfoRequest>()) {
                 Cerr << "Captured getWriteInfo event from " << ev->Sender.ToString() << Endl;
-                if (!ok) {
+                if (!success) {
                     Ctx->Runtime->Send(new IEventHandle(
-                        ev->Sender, TActorId{},
+                        ev->Sender, sender,
                         new TEvPQ::TEvGetWriteInfoError(0, "")
                     ));
                 } else {
                     auto* reply = new TEvPQ::TEvGetWriteInfoResponse();
-                    reply->SrcIdInfo = srcIds;
-                    Ctx->Runtime->Send(new IEventHandle(ev->Sender, TActorId{}, reply));
+                    reply->SrcIdInfo = srcIdInfo;
+                    Ctx->Runtime->Send(new IEventHandle(ev->Sender, sender, reply));
                 }
                 return TTestActorRuntimeBase::EEventAction::DROP;
             }
@@ -914,8 +919,13 @@ void TPartitionFixture::SendCalcPredicate(ui64 step,
 
 void TPartitionFixture::WaitCalcPredicateResult(const TCalcPredicateMatcher& matcher)
 {
-    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxCalcPredicateResult>();
-    UNIT_ASSERT(event != nullptr);
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxCalcPredicateResult>(TDuration::Seconds(1));
+    if (matcher.Ok) {
+        UNIT_ASSERT(event != nullptr);
+    } else {
+        UNIT_ASSERT(event == nullptr);
+        return;
+    }
 
     if (matcher.Step) {
         UNIT_ASSERT_VALUES_EQUAL(*matcher.Step, event->Step);
@@ -1725,12 +1735,6 @@ void TPartitionFixture::CmdChangeOwner(ui64 cookie, const TString& sourceId, TDu
     ownerCookie = event->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
 }
 
-void TPartitionFixture::EmulateKVTablet()
-{
-    TMaybe<ui64> cookie;
-    WaitKeyValueRequest(cookie);
-    SendDiskStatusResponse(&cookie);
-}
 
 Y_UNIT_TEST_F(ReserveSubDomainOutOfSpace, TPartitionFixture)
 {
@@ -2015,16 +2019,18 @@ Y_UNIT_TEST_F(DataTxCalcPredicateOk, TPartitionFixture)
     ui64 txId_3 = txId_2 + 1;
 
     Cerr << "Wait first predicate result " << Endl;
-    SetWriteInfoObserver(true, {});
-    SendCalcPredicate(step, txId_1, {}, 0, 0, Ctx->Edge);
+    TActorId support1 = TActorId{2, 3};
+    TActorId support2 = TActorId{3, 3};
+    SetWriteInfoObserver(true, {}, support1);
+    SendCalcPredicate(step, txId_1, {}, 0, 0, support1);
     WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=partition, .Predicate=true});
 
     TSourceIdInfo info {10, 10, TInstant::Zero()};
     info.MinSeqNo = 1;
     TSourceIdMap srcIds = {{"src1", info}};
 
-    SetWriteInfoObserver(true, srcIds);
-    SendCalcPredicate(step, txId_2, {}, 0, 0, Ctx->Edge);
+    SetWriteInfoObserver(true, srcIds, support1);
+    SendCalcPredicate(step, txId_2, {}, 0, 0, support1);
     SendCommitTx(step, txId_1);
     Cerr << "Wait second predicate result " << Endl;
     WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=true});
@@ -2049,8 +2055,8 @@ Y_UNIT_TEST_F(DataTxCalcPredicateOk, TPartitionFixture)
     srcIds.insert(std::make_pair("SourceId", info));
 
     Cerr << "Wait third predicate result " << Endl;
-    SetWriteInfoObserver(true, srcIds);
-    SendCalcPredicate(step, txId_3, {}, 0, 0, Ctx->Edge);
+    SetWriteInfoObserver(true, srcIds, support1);
+    SendCalcPredicate(step, txId_3, {}, 0, 0, support1);
     WaitCalcPredicateResult({.Step=step, .TxId=txId_3, .Partition=partition, .Predicate=true});
     SendCommitTx(step, txId_3);
 }
@@ -2071,10 +2077,11 @@ Y_UNIT_TEST_F(DataTxCalcPredicateError, TPartitionFixture)
     const ui64 step = 12345;
     ui64 txId_1 = 67890;
     ui64 txId_2 = txId_1 + 1;
+    TActorId support1 = TActorId{1, "123"};
 
     Cerr << "Wait first predicate result " << Endl;
-    SetWriteInfoObserver(false, {});
-    SendCalcPredicate(step, txId_1, {}, 0, 0, Ctx->Edge);
+    SetWriteInfoObserver(false, {}, support1);
+    SendCalcPredicate(step, txId_1, {}, 0, 0, support1);
     WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=partition, .Predicate=false});
     SendRollbackTx(step, txId_1);
     Cerr << "Wait tx write request\n";
@@ -2095,9 +2102,42 @@ Y_UNIT_TEST_F(DataTxCalcPredicateError, TPartitionFixture)
     srcIds.insert(std::make_pair("SourceId", info));
 
     Cerr << "Wait second predicate result " << Endl;
-    SetWriteInfoObserver(true, srcIds);
-    SendCalcPredicate(step, txId_2, {}, 0, 0, Ctx->Edge);
+    SetWriteInfoObserver(true, srcIds, support1);
+    SendCalcPredicate(step, txId_2, {}, 0, 0, support1);
     WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=false});
+}
+
+
+Y_UNIT_TEST_F(DataTxCalcPredicateOrder, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    CreatePartition({.Partition=partition, .Begin=0, .End=10});
+
+    CreateSession("client", "session");
+    TMaybe<ui64> cookie;
+
+    const ui64 step = 12345;
+    ui64 txId_1 = 67890;
+    //ui64 txId_2 = txId_1 + 1;
+    //ui64 txId_3 = txId_2 + 1;
+
+    Cerr << "Wait first predicate result " << Endl;
+
+    TSourceIdInfo info {10, 10, TInstant::Zero()};
+    info.MinSeqNo = 1;
+    info.SeqNo = 10;
+    TSourceIdMap srcIds = {{"src1", info}};
+
+    SetWriteInfoObserver(true, srcIds);
+    SendCalcPredicate(step, txId_1, {}, 0, 0, Ctx->Edge);
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=partition, .Predicate=true});
+    info.MinSeqNo = 11;
+    info.SeqNo = 20;
+    srcIds = {{"src1", info}};
+    SetWriteInfoObserver(true, srcIds);
+    SendCalcPredicate(step, txId_1, {}, 0, 0, Ctx->Edge);
+    WaitKeyValueRequest(cookie);
+    WaitCalcPredicateResult({.Ok = false});
 }
 
 } // End of suite

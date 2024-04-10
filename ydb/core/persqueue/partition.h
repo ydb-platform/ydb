@@ -70,7 +70,6 @@ struct TTransaction {
 
     //Data Tx
     THolder<TEvPQ::TEvGetWriteInfoResponse> WriteInfo;
-    bool WriteInfoRequested = false;
     bool WriteInfoApplied = false;
 };
 
@@ -288,8 +287,8 @@ private:
 
     void RespondCalcTxPredicate(TTransaction* tx);
 
+    void SendWriteInfoRequest(const TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate>& event);
     void WriteInfoResponseHandler(const TActorId& sender, TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>&& ev, const TActorContext& ctx);
-    bool ApplyWriteInfoResponse(TTransaction& tx);
 
 
     void ScheduleReplyOk(const ui64 dst);
@@ -562,6 +561,8 @@ private:
     EProcessResult ProcessRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters);
     EProcessResult ProcessRequest(TWriteMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
 
+    EProcessResult ApplyWriteInfoResponse(TTransaction& tx);
+
     static void RemoveMessages(TMessageQueue& src, TMessageQueue& dst);
     void RemovePendingRequests(TMessageQueue& requests);
     void RemoveMessagesToQueue(TMessageQueue& requests);
@@ -676,14 +677,14 @@ private:
                      TMessage>;
 
     std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
-    THashMap<TActorId, TTransaction*> WriteInfosToTx;
+    THashMap<TActorId, TUserActionAndTransactionEvent*> WriteInfosToTx;
 
-    bool IsTxHeadOfQueue (const TTransaction* const rhs) const {
+    bool IsTxHeadOfQueue (const TTransaction& rhs) const {
         Y_ABORT_UNLESS(!UserActionAndTransactionEvents.empty());
         auto& front = UserActionAndTransactionEvents.front();
         if (front.index() != 2)
             return false;
-        return &std::get<2>(front) == rhs;
+        return &std::get<2>(front) == &rhs;
 
     }
 

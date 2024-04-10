@@ -1093,15 +1093,15 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
 
 void TPartition::WriteInfoResponseHandler(const TActorId& sender, TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>&& ev, const TActorContext& ctx) {
     auto txIter = WriteInfosToTx.find(sender);
-    Y_ABORT_UNLESS(txIter != WriteInfosToTx.end());
-    txIter->second->WriteInfoRequested = false;
-    auto headOfTheQueue = IsTxHeadOfQueue(txIter->second);
+    Y_ABORT_UNLESS(!txIter.IsEnd());
+    auto headOfTheQueue = IsTxHeadOfQueue(std::get<2>(*txIter->second));
 
+    auto& tx = std::get<2>(*txIter->second);
     if (ev) {
-        txIter->second->WriteInfo = std::move(ev);
+        tx.WriteInfo = std::move(ev);
     } else {
-        txIter->second->Predicate = false;
-        txIter->second->WriteInfoApplied = true;
+        tx.Predicate = false;
+        tx.WriteInfoApplied = true;
     }
 
     WriteInfosToTx.erase(txIter);
@@ -1111,19 +1111,20 @@ void TPartition::WriteInfoResponseHandler(const TActorId& sender, TAutoPtr<TEvPQ
     }
 }
 
-bool TPartition::ApplyWriteInfoResponse(TTransaction& tx) {
+TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) {
+    Y_ABORT_UNLESS(tx.WriteInfo);
     auto& srcIdInfo = tx.WriteInfo->SrcIdInfo;
 
-    bool ret = true;
+    EProcessResult ret = EProcessResult::Continue;
     const auto& knownSourceIds = SourceIdStorage.GetInMemorySourceIds();
     for (auto& s : srcIdInfo) {
         auto ins = TxAffectedSourcesIds.insert(s.first).second;
         if (!ins) {
-            ret = false;
+            ret = EProcessResult::Break;
             break;
         }
         if (WriteffectedSourcesIds.contains(s.first)) {
-            ret = false;
+            ret = EProcessResult::Break;
             break;
         }
 
@@ -1131,13 +1132,12 @@ bool TPartition::ApplyWriteInfoResponse(TTransaction& tx) {
         if (existing.IsEnd())
             continue;
         if (s.second.MinSeqNo <= existing->second.SeqNo) {
-            tx.WriteInfoApplied = true;
             tx.Predicate = false;
             break;
         }
     }
-    if (ret) {
-        RespondCalcTxPredicate(&tx);
+    if (ret == EProcessResult::Continue) {
+        tx.WriteInfoApplied = true;
     }
     TxInProgress = false;
     return ret;
@@ -1634,10 +1634,15 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
 
 void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event)
 {
-    if (event->SupportivePartitionActor) {
-        Send(event->SupportivePartitionActor, new TEvPQ::TEvGetWriteInfoRequest());
+    auto supportId = event->SupportivePartitionActor;
+    if (supportId) {
+        Send(supportId, new TEvPQ::TEvGetWriteInfoRequest());
     }
     UserActionAndTransactionEvents.emplace_back(TTransaction(std::move(event)));
+
+    if(supportId) {
+        WriteInfosToTx.insert(std::make_pair(supportId, &UserActionAndTransactionEvents.back()));
+    }
 }
 
 void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event)
@@ -1833,22 +1838,18 @@ TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TTransacti
             t.Predicate = BeginTransaction(*t.Tx, ctx); //May enter this function twice. Not need to call BeginTx twice.
         }
         if (t.Tx->SupportivePartitionActor && t.Predicate.GetOrElse(true)) {
-            if (t.WriteInfoRequested) { // Pending write info;
-                TxInProgress = true;
-                return true;
-            } else if (!t.WriteInfoApplied) { // Write info received, should apply;
-                return ApplyWriteInfoResponse(t);
+            if (t.WriteInfo && !t.WriteInfoApplied) { // Received but not applied;
+                result = ApplyWriteInfoResponse(t);
             }
             if (t.WriteInfoApplied) {
-                RespondCalcTxPredicate(&t);
                 TxInProgress = false;
-                return true;
+                RespondCalcTxPredicate(&t);
+                return result;
             }
         } else {
             RespondCalcTxPredicate(&t);
         }
         TxInProgress = true;
-
         result = EProcessResult::Abort;
     } else if (t.ProposeConfig) {
         if (!FirstEvent) {

@@ -143,7 +143,6 @@ private:
         MKQL_ENSURE(requestedVectorSize >= CurrentVector.size(), "Internal logic error");
         size_t sizeToLoad = (requestedVectorSize - CurrentVector.size()) * sizeof(T);
 
-        // if vector is fully loaded to memory now
         if (Buffer.size() >= sizeToLoad) {
             TRope remainingPartOfVector = Buffer.Extract(Buffer.Position(0), Buffer.Position(sizeToLoad));
             CopyRopeToTheEndOfVector(CurrentVector, remainingPartOfVector);
@@ -159,23 +158,21 @@ private:
         WriteOperation = Spiller->Put(std::move(Buffer));
     }
 
-    bool IsRestOfVectorFittingIntoBuffer() {
-        return (SizeLimit - Buffer.size()) >= (CurrentVector.size() - NextVectorPositionToSave) * sizeof(T);
-    }
-
     void AddDataToRope(T* data, size_t count) {
         Buffer.Insert(Buffer.End(), TRope(TString(reinterpret_cast<const char*>(data), count * sizeof(T))));
     }
 
     void SaveNextPartOfVector() {
-        if (IsRestOfVectorFittingIntoBuffer()) {
-            AddDataToRope(CurrentVector.data() + NextVectorPositionToSave,  CurrentVector.size() - NextVectorPositionToSave);
-            CurrentVector.clear();
+        size_t maxFittingElemets = (SizeLimit - Buffer.size()) / sizeof(T);
+        size_t remainingElementsInVector = CurrentVector.size() - NextVectorPositionToSave;
+        size_t elementsToCopyFromVector = std::min(maxFittingElemets, remainingElementsInVector);
+
+        AddDataToRope(CurrentVector.data() + NextVectorPositionToSave, elementsToCopyFromVector);
+
+        NextVectorPositionToSave += elementsToCopyFromVector;
+        if (NextVectorPositionToSave >= CurrentVector.size()) {
+            CurrentVector.resize(0);
             NextVectorPositionToSave = 0;
-        } else {
-            size_t elementsToAdd = (SizeLimit - Buffer.size()) / sizeof(T);
-            AddDataToRope(CurrentVector.data() + NextVectorPositionToSave, elementsToAdd);
-            NextVectorPositionToSave += elementsToAdd;
         }
 
         if (SizeLimit - Buffer.size() < sizeof(T)) {
@@ -183,14 +180,12 @@ private:
             return;
         }
 
-        CurrentVector.resize(0);
         State = EState::AcceptingData;
-
-        return;
     }
 
 private:
     EState State = EState::AcceptingData;
+     
     ISpiller::TPtr Spiller;
     const size_t SizeLimit;
     TRope Buffer;

@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NOlap {
 class IDataReader;
@@ -55,6 +56,9 @@ protected:
     virtual void DoAbort() = 0;
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) = 0;
     virtual bool DoAddSequentialEntityIds(const ui32 entityId) = 0;
+    virtual NJson::TJsonValue DoDebugJsonForMemory() const {
+        return NJson::JSON_MAP;
+    }
 public:
     void OnInitResourcesGuard(const std::shared_ptr<IDataSource>& sourcePtr);
 
@@ -143,8 +147,9 @@ public:
         DoAbort();
     }
 
-    virtual NJson::TJsonValue DebugJsonForMemory() const {
+    NJson::TJsonValue DebugJsonForMemory() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("details", DoDebugJsonForMemory());
         result.InsertValue("count", RecordsCount);
         return result;
     }
@@ -222,10 +227,23 @@ private:
         return result;
     }
 
-    virtual NJson::TJsonValue DebugJsonForMemory() const override {
-        NJson::TJsonValue result = TBase::DebugJsonForMemory();
+    virtual NJson::TJsonValue DoDebugJsonForMemory() const override {
+        NJson::TJsonValue result = TBase::DoDebugJsonForMemory();
+        auto columns = Portion->GetColumnIds();
+        for (auto&& i : SequentialEntityIds) {
+            AFL_VERIFY(columns.erase(i));
+        }
+//        result.InsertValue("sequential_columns", JoinSeq(",", SequentialEntityIds));
+        if (SequentialEntityIds.size()) {
+            result.InsertValue("min_memory_seq", Portion->GetMinMemoryForReadColumns(SequentialEntityIds));
+            result.InsertValue("min_memory_seq_blobs", Portion->GetColumnBlobBytes(SequentialEntityIds));
+            result.InsertValue("in_mem", Portion->GetColumnRawBytes(columns, false));
+        }
+        result.InsertValue("columns_in_mem", JoinSeq(",", columns));
+        result.InsertValue("portion_id", Portion->GetPortionId());
         result.InsertValue("raw", Portion->GetTotalRawBytes());
         result.InsertValue("blob", Portion->GetTotalBlobBytes());
+        result.InsertValue("read_memory", GetColumnRawBytes(Portion->GetColumnIds()));
         return result;
     }
     virtual void DoAbort() override;
@@ -325,7 +343,6 @@ private:
     virtual bool DoAddSequentialEntityIds(const ui32 /*entityId*/) override {
         return false;
     }
-
 public:
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
         THashMap<TChunkAddress, TString> result;

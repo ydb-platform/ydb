@@ -570,6 +570,7 @@ message StreamReadMessage {
         repeated int64 adjacent_partition_ids = 2;
         // Ids of partitions which was formed when the ended partition was split or merged.
         repeated int64 child_partition_ids = 3;
+    }
 }
 
 // Messages for bidirectional streaming rpc StreamDirectRead

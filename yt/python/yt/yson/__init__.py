@@ -32,6 +32,7 @@ Examples:
 """
 
 from __future__ import print_function
+import os
 
 from . import writer  # noqa
 from . import parser  # noqa
@@ -41,7 +42,7 @@ TYPE = None
 HAS_PARQUET = False
 
 try:
-    from yt_yson_bindings import load, loads, dump, dumps  # noqa
+    from yt_yson_bindings import load, loads, dump, dumps # noqa
     TYPE = "BINARY"
 except ImportError as error:
     # XXX(asaitgalin): Sometimes module can't be imported because
@@ -53,16 +54,13 @@ except ImportError as error:
         print("Warning! Failed to import YSON bindings: " + message, file=_sys.stderr)
 
 try:
-    from yt_yson_bindings import dump_parquet  # noqa
+    from yt_yson_bindings import upload_parquet, dump_parquet # noqa
     HAS_PARQUET = True
-except ImportError:
-    try:
-        from yt_yson_bindings import dump_parquete as dump_parquet # noqa
-        HAS_PARQUET = True
-    except ImportError as error:
-        message = str(error)
-        if "No module named" not in message:
-            import sys as _sys
+except ImportError as error:
+    message = str(error)
+    if "No module named" not in message:
+        import sys as _sys
+        if os.environ.get("YT_LOG_LEVEL", "").lower() == "debug":
             print("Warning! Failed to import dump_parquet binding: " + message, file=_sys.stderr)
 
 if TYPE is None:

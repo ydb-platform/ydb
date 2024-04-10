@@ -309,16 +309,16 @@ private:
     size_t CurrLen = 0;
 };
 
-template<typename T, bool Nullable>
-class TFixedSizeArrayBuilder final : public TArrayBuilderBase {
+template<typename TLayout, bool Nullable, typename TDerived>
+class TFixedSizeArrayBuilderBase : public TArrayBuilderBase {
 public:
-    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
+    TFixedSizeArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
         : TArrayBuilderBase(typeInfoHelper, std::move(arrowType), pool, maxLen)
     {
         Reserve();
     }
 
-    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
+    TFixedSizeArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
         : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen)
     {
         Reserve();
@@ -328,7 +328,7 @@ public:
         SetCurrLen(length);
     }
 
-    T* MutableData() {
+    TLayout* MutableData() {
         return DataPtr;
     }
 
@@ -339,52 +339,60 @@ public:
     void DoAdd(NUdf::TUnboxedValuePod value) final {
         if constexpr (Nullable) {
             if (!value) {
-                return DoAdd(TBlockItem{});
+                DoAddNull();
+                return;
             }
+            NullPtr[GetCurrLen()] = 1;
         }
-        DoAdd(TBlockItem(value.Get<T>()));
+        static_cast<TDerived*>(this)->DoAddNotNull(value);
     }
 
     void DoAdd(TBlockItem value) final {
         if constexpr (Nullable) {
             if (!value) {
-                NullPtr[GetCurrLen()] = 0;
-                DataPtr[GetCurrLen()] = T{};
+                DoAddNull();
                 return;
             }
             NullPtr[GetCurrLen()] = 1;
         }
-
-        DataPtr[GetCurrLen()] = value.As<T>();
+        static_cast<TDerived*>(this)->DoAddNotNull(value);
+    }
+    
+    void DoAddNull() {
+        if constexpr (Nullable) {
+            NullPtr[GetCurrLen()] = 0;
+            PlaceItem(TLayout{});
+        }
     }
 
     void DoAdd(TBlockItem value, size_t count) final {
         if constexpr (Nullable) {
             if (!value) {
                 std::fill(NullPtr + GetCurrLen(), NullPtr + GetCurrLen() + count, 0);
-                std::fill(DataPtr + GetCurrLen(), DataPtr + GetCurrLen() + count, T{});
+                std::fill(DataPtr + GetCurrLen(), DataPtr + GetCurrLen() + count, TLayout{});
                 return;
             }
             std::fill(NullPtr + GetCurrLen(), NullPtr + GetCurrLen() + count, 1);
         }
 
-        std::fill(DataPtr + GetCurrLen(), DataPtr + GetCurrLen() + count, value.As<T>());
+        static_cast<TDerived*>(this)->DoAddNotNull(value, count);
     }
 
     void DoAdd(TInputBuffer &input) final {
         if constexpr (Nullable) {
             if (!input.PopChar()) {
-                return DoAdd(TBlockItem{});
+                DoAddNull();
+                return;
             }
         }
-        DoAdd(TBlockItem(input.PopNumber<T>()));
+        static_cast<TDerived*>(this)->DoAddNotNull(input);
     }
 
     void DoAddDefault() final {
         if constexpr (Nullable) {
             NullPtr[GetCurrLen()] = 1;
         }
-        DataPtr[GetCurrLen()] = T{};
+        PlaceItem(TLayout{});
     }
 
     void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
@@ -399,8 +407,8 @@ public:
             }
         }
 
-        const T* src = array.GetValues<T>(1);
-        T* dst = DataPtr + GetCurrLen();
+        const TLayout* src = array.GetValues<TLayout>(1);
+        TLayout* dst = DataPtr + GetCurrLen();
         CompressArray(src, sparseBitmap, dst, array.length);
     }
 
@@ -412,9 +420,9 @@ public:
             }
         }
 
-        const T* values = array.GetValues<T>(1);
+        const TLayout* values = array.GetValues<TLayout>(1);
         for (size_t i = beginIndex; i < beginIndex + count; ++i) {
-            DataPtr[GetCurrLen() + i - beginIndex] = T(values[i]);
+            ::new(DataPtr + GetCurrLen() + i - beginIndex) TLayout(values[i]);
         }
     }
 
@@ -426,9 +434,9 @@ public:
             }
         }
 
-        const T* values = array.GetValues<T>(1);
+        const TLayout* values = array.GetValues<TLayout>(1);
         for (size_t i = 0; i < count; ++i) {
-            DataPtr[GetCurrLen() + i] = T(values[indexes[i]]);
+            ::new(DataPtr + GetCurrLen() + i) TLayout(values[indexes[i]]);
         }
     }
 
@@ -453,10 +461,16 @@ public:
         }
         return result;
     }
+protected:
+    void PlaceItem(TLayout&& value)  {
+        ::new(DataPtr + GetCurrLen()) TLayout(std::move(value));
+    }
+
+    TLayout* DataPtr = nullptr;
 
 private:
     void Reserve() {
-        DataBuilder = std::make_unique<TTypedBufferBuilder<T>>(Pool);
+        DataBuilder = std::make_unique<TTypedBufferBuilder<TLayout>>(Pool);
         DataBuilder->Reserve(MaxLen + 1);
         DataPtr = DataBuilder->MutableData();
         if constexpr (Nullable) {
@@ -467,9 +481,75 @@ private:
     }
 
     std::unique_ptr<TTypedBufferBuilder<ui8>> NullBuilder;
-    std::unique_ptr<TTypedBufferBuilder<T>> DataBuilder;
+    std::unique_ptr<TTypedBufferBuilder<TLayout>> DataBuilder;
     ui8* NullPtr = nullptr;
-    T* DataPtr = nullptr;
+};
+
+template<typename TLayout, bool Nullable>
+class TFixedSizeArrayBuilder final: public TFixedSizeArrayBuilderBase<TLayout, Nullable, TFixedSizeArrayBuilder<TLayout, Nullable>> {
+    using TDerived = TFixedSizeArrayBuilder<TLayout, Nullable>;
+
+public:
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
+        : TFixedSizeArrayBuilderBase<TLayout, Nullable, TDerived>(typeInfoHelper, std::move(arrowType), pool, maxLen)
+    {}
+
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
+        : TFixedSizeArrayBuilderBase<TLayout, Nullable, TDerived>(typeInfoHelper, type, pool, maxLen)
+    {}
+
+    void DoAddNotNull(TUnboxedValuePod value) {
+        this->PlaceItem(value.Get<TLayout>());
+    }
+
+    void DoAddNotNull(TBlockItem value) {
+        this->PlaceItem(value.Get<TLayout>());
+    }
+    
+    void DoAddNotNull(TInputBuffer& input) {
+        this->DoAdd(TBlockItem(input.PopNumber<TLayout>()));
+    }
+
+    void DoAddNotNull(TBlockItem value, size_t count) {
+        std::fill(this->DataPtr + this->GetCurrLen(), this->DataPtr + this->GetCurrLen() + count, value.Get<TLayout>());
+    }
+};
+
+template<bool Nullable>
+class TResourceArrayBuilder final: public TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>> {
+public:
+    TResourceArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
+        : TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>>(typeInfoHelper, std::move(arrowType), pool, maxLen)
+    {}
+
+    TResourceArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
+        : TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>>(typeInfoHelper, type, pool, maxLen)
+    {}
+
+    void DoAddNotNull(TUnboxedValuePod value) {
+        this->PlaceItem(TUnboxedValue(value));
+    }
+    
+    TUnboxedValue FromBlockItem(TBlockItem item) {
+        TUnboxedValue val;
+        std::memcpy(val.GetRawPtr(), item.GetRawPtr(), sizeof(val));
+        val.Ref();
+        return val;
+    }
+
+    void DoAddNotNull(TBlockItem item) {
+        this->PlaceItem(FromBlockItem(item));
+    }
+
+    void DoAddNotNull(TInputBuffer& input) {
+        this->DoAdd(input.PopNumber<TUnboxedValuePod>());
+    }
+
+    void DoAddNotNull(TBlockItem item, size_t count) {
+        for (size_t i = 0; i < count; ++i) {
+            ::new(this->DataPtr + this->GetCurrLen() + i) TUnboxedValue(FromBlockItem(item));
+        }
+    }
 };
 
 template<typename TStringType, bool Nullable, EPgStringType PgString = EPgStringType::None>
@@ -504,27 +584,58 @@ public:
         if constexpr (PgString == EPgStringType::CString) {
             static_assert(Nullable);
             auto buf = PgBuilder->AsCStringBuffer(value);
-            auto prevCtx = GetMemoryContext(buf.Data());
-            ZeroMemoryContext((char*)buf.Data());
-            DoAdd(TBlockItem(TStringRef(buf.Data() - sizeof(void*), buf.Size() + sizeof(void*))));
-            SetMemoryContext((char*)buf.Data(), prevCtx);
+            AddPgItem(buf);
         } else if constexpr (PgString == EPgStringType::Text) {
             static_assert(Nullable);
             auto buf = PgBuilder->AsTextBuffer(value);
-            auto prevCtx = GetMemoryContext(buf.Data());
-            ZeroMemoryContext((char*)buf.Data());
-            DoAdd(TBlockItem(TStringRef(buf.Data() - sizeof(void*), buf.Size() + sizeof(void*))));
-            SetMemoryContext((char*)buf.Data(), prevCtx);
+            AddPgItem(buf);
         } else if constexpr (PgString == EPgStringType::Fixed) {
             static_assert(Nullable);
             auto buf = PgBuilder->AsFixedStringBuffer(value, TypeLen);
-            auto prevCtx = GetMemoryContext(buf.Data());
-            ZeroMemoryContext((char*)buf.Data());
-            DoAdd(TBlockItem(TStringRef(buf.Data() - sizeof(void*), buf.Size() + sizeof(void*))));
-            SetMemoryContext((char*)buf.Data(), prevCtx);
+            AddPgItem(buf);
         } else {
             DoAdd(TBlockItem(value.AsStringRef()));
         }
+    }
+
+    template <bool AddCStringZero = false, ui32 AddVarHdr = 0> 
+    ui8* AddPgItem(TStringRef buf) {
+        auto alignedSize = AlignUp(buf.Size() + sizeof(void*) + AddVarHdr + (AddCStringZero ? 1 : 0), sizeof(void*));
+        auto ptr = AddNoFill(alignedSize);
+        *(void**)ptr = nullptr;
+        if (alignedSize > sizeof(void*)) {
+            // clear padding too
+            *(void**)(ptr + alignedSize - sizeof(void*)) = nullptr;
+        }
+
+        std::memcpy(ptr + sizeof(void*) + AddVarHdr, buf.Data(), buf.Size());
+        if constexpr (AddCStringZero) {
+            ptr[sizeof(void*) + buf.Size()] = 0;
+        }
+
+        return ptr;
+    }
+
+    ui8* AddNoFill(size_t size) {
+        size_t currentLen = DataBuilder->Length();
+        // empty string can always be appended
+        if (size > 0 && currentLen + size > MaxBlockSizeInBytes) {
+            if (currentLen) {
+                FlushChunk(false);
+            }
+            if (size > MaxBlockSizeInBytes) {
+                DataBuilder->Reserve(size);
+            }
+        }
+
+        AppendCurrentOffset();
+        auto ret = DataBuilder->End();
+        DataBuilder->UnsafeAdvance(size);
+        if constexpr (Nullable) {
+            NullBuilder->UnsafeAppend(1);
+        }
+
+        return ret;
     }
 
     void DoAdd(TBlockItem value) final {
@@ -537,23 +648,8 @@ public:
         }
 
         const std::string_view str = value.AsStringRef();
-
-        size_t currentLen = DataBuilder->Length();
-        // empty string can always be appended
-        if (!str.empty() && currentLen + str.size() > MaxBlockSizeInBytes) {
-            if (currentLen) {
-                FlushChunk(false);
-            }
-            if (str.size() > MaxBlockSizeInBytes) {
-                DataBuilder->Reserve(str.size());
-            }
-        }
-
-        AppendCurrentOffset();
-        DataBuilder->UnsafeAppend((const ui8*)str.data(), str.size());
-        if constexpr (Nullable) {
-            NullBuilder->UnsafeAppend(1);
-        }
+        auto ptr = AddNoFill(str.size());
+        std::memcpy(ptr, str.data(), str.size());
     }
 
     void DoAdd(TInputBuffer& input) final {
@@ -1111,12 +1207,16 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
         case NUdf::EDataSlot::Date:
             return std::make_unique<TFixedSizeArrayBuilder<ui16, Nullable>>(typeInfoHelper, type, pool, maxLen);
         case NUdf::EDataSlot::Int32:
+        case NUdf::EDataSlot::Date32:
             return std::make_unique<TFixedSizeArrayBuilder<i32, Nullable>>(typeInfoHelper, type, pool, maxLen);
         case NUdf::EDataSlot::Uint32:
         case NUdf::EDataSlot::Datetime:
             return std::make_unique<TFixedSizeArrayBuilder<ui32, Nullable>>(typeInfoHelper, type, pool, maxLen);
         case NUdf::EDataSlot::Int64:
         case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Interval64:
+        case NUdf::EDataSlot::Datetime64:
+        case NUdf::EDataSlot::Timestamp64:
             return std::make_unique<TFixedSizeArrayBuilder<i64, Nullable>>(typeInfoHelper, type, pool, maxLen);
         case NUdf::EDataSlot::Uint64:
         case NUdf::EDataSlot::Timestamp:
@@ -1135,6 +1235,11 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
         default:
             Y_ENSURE(false, "Unsupported data slot");
         }
+    }
+    
+    TResourceTypeInspector resource(typeInfoHelper, type);
+    if (resource) {
+        return std::make_unique<TResourceArrayBuilder<Nullable>>(typeInfoHelper, type, pool, maxLen);
     }
 
     TPgTypeInspector typePg(typeInfoHelper, type);

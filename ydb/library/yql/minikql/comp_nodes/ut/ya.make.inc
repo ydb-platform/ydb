@@ -24,6 +24,7 @@ SET(ORIG_SOURCES
     mkql_test_factory.cpp
     mkql_bit_utils_ut.cpp
     mkql_block_compress_ut.cpp
+    mkql_block_exists_ut.cpp
     mkql_block_skiptake_ut.cpp
     mkql_block_top_sort_ut.cpp
     mkql_blocks_ut.cpp
@@ -52,6 +53,7 @@ SET(ORIG_SOURCES
     mkql_match_recognize_matched_vars_ut.cpp
     mkql_match_recognize_list_ut.cpp
     mkql_match_recognize_nfa_ut.cpp
+    mkql_match_recognize_ut.cpp
     mkql_safe_circular_buffer_ut.cpp
     mkql_sort_ut.cpp
     mkql_switch_ut.cpp

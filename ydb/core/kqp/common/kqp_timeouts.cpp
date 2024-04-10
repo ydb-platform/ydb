@@ -1,5 +1,7 @@
 #include "kqp_timeouts.h"
 
+#include <ydb/core/protos/table_service_config.pb.h>
+
 namespace NKikimr::NKqp {
 
 

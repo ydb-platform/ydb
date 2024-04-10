@@ -13,51 +13,26 @@ using NCache::TConfig;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Creates clients cache which explicitly given federation and clusters config.
-//! Server name is always overwritten with requested.
-//! Creates FederatedClient when clusters are enumerated with separator(default is '+').
-//! For example: seneca-sas+seneca-vla.
+//! Creates clients cache for generic and federated clients.
+//! Federated clients created with federatedConfig, and generic clients created with clustersConfig.
+//! Which client to create decided by cluster url: if several clusters concatenated by clusterSeparator requested then
+//! federated client it is, generic client otherwise.
+//! For example, for "markov" generic client will be created, and for "seneca-sas+seneca-vla" federated one.
 IClientsCachePtr CreateFederatedClientsCache(
-    TFederationConfigPtr federationConfig,
-    const TClustersConfig& config,
+    TConnectionConfigPtr federatedConfig,
+    const TClustersConfig& clustersConfig,
     const NYT::NApi::TClientOptions& options,
     TString clusterSeparator = "+");
 
-//! Shortcut to create cache with default federation config.
+//! Creates clients cache for generic and federated clients.
+//! Federated clients created with federatedConfig, and generic clients created with config.
+//! Which client to create decided by cluster url: if several clusters concatenated by clusterSeparator requested then
+//! federated client it is, generic client otherwise.
+//! For example, for "markov" generic client will be created, and for "seneca-sas+seneca-vla" federated one.
 IClientsCachePtr CreateFederatedClientsCache(
-    TFederationConfigPtr federationConfig,
+    TConnectionConfigPtr federatedConfig,
     const TConfig& config,
     const NYT::NApi::TClientOptions& options,
-    TString clusterSeparator = "+");
-
-//! Shortcut to create cache with default federation config.
-IClientsCachePtr CreateFederatedClientsCache(
-    TString chaosBundleName,
-    const TClustersConfig& config,
-    const NYT::NApi::TClientOptions& options,
-    TString clusterSeparator = "+");
-
-//! Creates clients cache which shares same config (except server name).
-//! Shortcut to create cache with default federation config.
-IClientsCachePtr CreateFederatedClientsCache(
-    TString chaosBundleName,
-    const TConfig& config,
-    const NYT::NApi::TClientOptions& options,
-    TString clusterSeparator = "+");
-
-//! Creates clients cache which shares same config (except server name).
-//! Shortcut to create cache with default federation config.
-//! Shortcut to use client options from env.
-IClientsCachePtr CreateFederatedClientsCache(
-    TString chaosBundleName,
-    const TConfig& config,
-    TString clusterSeparator = "+");
-
-//! Shortcut to create cache with default federation config.
-//! Shortcut to use client options from env.
-//! Shortcut to create cache with default clusters config.
-IClientsCachePtr CreateFederatedClientsCache(
-    TString chaosBundleName,
     TString clusterSeparator = "+");
 
 ////////////////////////////////////////////////////////////////////////////////

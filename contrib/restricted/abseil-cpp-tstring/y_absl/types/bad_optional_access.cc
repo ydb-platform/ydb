@@ -45,4 +45,22 @@ void throw_bad_optional_access() {
 Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
+#else
+
+// https://github.com/abseil/abseil-cpp/issues/1465
+// CMake builds on Apple platforms error when libraries are empty.
+// Our CMake configuration can avoid this error on header-only libraries,
+// but since this library is conditionally empty, including a single
+// variable is an easy workaround.
+#ifdef __APPLE__
+namespace y_absl {
+Y_ABSL_NAMESPACE_BEGIN
+namespace types_internal {
+extern const char kAvoidEmptyBadOptionalAccessLibraryWarning;
+const char kAvoidEmptyBadOptionalAccessLibraryWarning = 0;
+}  // namespace types_internal
+Y_ABSL_NAMESPACE_END
+}  // namespace y_absl
+#endif  // __APPLE__
+
 #endif  // Y_ABSL_USES_STD_OPTIONAL

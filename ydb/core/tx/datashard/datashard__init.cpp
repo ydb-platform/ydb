@@ -605,12 +605,8 @@ public:
             LOAD_SYS_BYTES(db, Schema::Sys_SubDomainInfo, rawProcessingParams)
 
             if (rawProcessingParams.empty()) {
-                auto appdata = AppData(ctx);
-                const ui32 selfDomain = appdata->DomainsInfo->GetDomainUidByTabletId(Self->TabletID());
-                Y_ABORT_UNLESS(selfDomain != appdata->DomainsInfo->BadDomainId);
-                const auto& domain = appdata->DomainsInfo->GetDomain(selfDomain);
-
-                NKikimrSubDomains::TProcessingParams params = ExtractProcessingParams(domain);
+                auto *domain = AppData(ctx)->DomainsInfo->GetDomain();
+                NKikimrSubDomains::TProcessingParams params = ExtractProcessingParams(*domain);
                 LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Execute Persist Sys_SubDomainInfo");
                 Self->PersistSys(db, Schema::Sys_SubDomainInfo, params.SerializeAsString());
             }

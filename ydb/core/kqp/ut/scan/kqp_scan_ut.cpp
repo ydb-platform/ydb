@@ -738,7 +738,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             SELECT t1.Name, t1.Amount, t2.Id
             FROM Test AS t1
             LEFT JOIN Tmp AS t2
-            ON t1.Amount = t2.Value;
+            ON t1.Amount = t2.Value
+            ORDER BY t1.Name, t1.Amount, t2.Id;
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -1212,9 +1213,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 #endif
 
-    Y_UNIT_TEST_TWIN(PrunePartitionsByLiteral, WithPredicatesExtract) {
+    Y_UNIT_TEST(PrunePartitionsByLiteral) {
         auto cfg = AppCfg();
-        cfg.MutableTableServiceConfig()->SetEnablePredicateExtractForScanQueries(WithPredicatesExtract);
         auto kikimr = DefaultKikimrRunner({}, cfg);
         auto db = kikimr.GetTableClient();
 
@@ -1223,10 +1223,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         // simple key
         {
-            auto it = db.StreamExecuteScanQuery(Sprintf(R"(
-                PRAGMA Kikimr.OptEnablePredicateExtract = '%s';
+            auto it = db.StreamExecuteScanQuery(R"(
                 SELECT * FROM `/Root/EightShard` WHERE Key = 301;
-            )", WithPredicatesExtract ? "true" : "false"), settings).GetValueSync();
+            )", settings).GetValueSync();
 
             UNIT_ASSERT(it.IsSuccess());
 
@@ -1245,11 +1244,10 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 .AddParam("$ts").Int64(2).Build()
                 .Build();
 
-            auto it = db.StreamExecuteScanQuery(Sprintf(R"(
-                PRAGMA Kikimr.OptEnablePredicateExtract = '%s';
+            auto it = db.StreamExecuteScanQuery(R"(
                 DECLARE $ts AS Int64;
                 SELECT * FROM `/Root/Logs` WHERE App = "nginx" AND Ts > $ts
-            )", WithPredicatesExtract ? "true" : "false"), params, settings).GetValueSync();
+            )", params, settings).GetValueSync();
 
             UNIT_ASSERT(it.IsSuccess());
 
@@ -2153,7 +2151,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForScanQueries(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
         settings.SetAppConfig(appConfig);
 
@@ -2173,7 +2170,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForScanQueries(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
         settings.SetAppConfig(appConfig);
 
@@ -2194,7 +2190,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
         settings.SetAppConfig(appConfig);
 
@@ -2242,7 +2237,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         {
             auto result = db.StreamExecuteScanQuery(R"(
-                PRAGMA kikimr.OptEnablePredicateExtract = "false";
                 $keys = SELECT Key FROM `/Root/EightShard`;
                 SELECT * FROM `/Root/KeyValue` WHERE Key IN $keys ORDER BY Key;
             )").GetValueSync();
@@ -2285,7 +2279,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         {
             auto result = db.StreamExecuteScanQuery(R"(
-                PRAGMA kikimr.OptEnablePredicateExtract = "false";
                 $keys = SELECT Key FROM `/Root/KeyValue`;
                 SELECT * FROM `/Root/TestTable` WHERE Key1 IN $keys ORDER BY Key1, Key2;
             )").GetValueSync();
@@ -2441,7 +2434,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         server->GetRuntime()->SetEventFilter(captureEvents);
 
         sendQuery(R"(
-            PRAGMA kikimr.OptEnablePredicateExtract = "false";
             SELECT Value FROM `/Root/Table` WHERE Key IN AsList(1, 2, 3);
         )");
     }

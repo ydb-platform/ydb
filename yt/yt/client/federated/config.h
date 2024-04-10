@@ -25,6 +25,9 @@ public:
     //! Maximum number of retry attempts to make.
     int ClusterRetryAttempts;
 
+    //! For testing purposes only. Retry any error through a different cluster.
+    bool RetryAnyError;
+
     REGISTER_YSON_STRUCT(TFederationConfig);
 
     static void Register(TRegistrar registrar);

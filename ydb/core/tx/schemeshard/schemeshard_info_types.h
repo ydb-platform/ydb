@@ -27,6 +27,14 @@
 #include <ydb/library/login/protos/login.pb.h>
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/protos/filestore_config.pb.h>
+#include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
+
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <google/protobuf/util/message_differencer.h>
@@ -218,6 +226,12 @@ struct TPartitionStats {
     ui64 DataSize = 0;
     ui64 IndexSize = 0;
 
+    struct TStoragePoolStats {
+        ui64 DataSize = 0;
+        ui64 IndexSize = 0;
+    };
+    THashMap<TString, TStoragePoolStats> StoragePoolsStats;
+
     TInstant LastAccessTime;
     TInstant LastUpdateTime;
     TDuration TxCompleteLag;
@@ -321,6 +335,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         ui64 DeleteVersion;
         ETableColumnDefaultKind DefaultKind = ETableColumnDefaultKind::None;
         TString DefaultValue;
+        bool IsBuildInProgress = false;
 
         TColumn(const TString& name, ui32 id, NScheme::TTypeInfo type, const TString& typeMod, bool notNull)
             : NTable::TScheme::TColumn(name, id, type, typeMod, notNull)
@@ -1443,14 +1458,29 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
             ui64 DataSize = 0;
             ui64 UsedReserveSize = 0;
         } Topics;
+
+        struct TStoragePoolUsage {
+            ui64 DataSize = 0;
+            ui64 IndexSize = 0;
+        };
+        THashMap<TString, TStoragePoolUsage> StoragePoolsUsage;
     };
 
     struct TDiskSpaceQuotas {
         ui64 HardQuota;
         ui64 SoftQuota;
 
+        struct TQuotasPair {
+            ui64 HardQuota;
+            ui64 SoftQuota;
+        };
+        THashMap<TString, TQuotasPair> StoragePoolsQuotas;
+
         explicit operator bool() const {
-            return HardQuota || SoftQuota;
+            return HardQuota || SoftQuota || AnyOf(StoragePoolsQuotas, [](const auto& storagePoolQuota) {
+                    return storagePoolQuota.second.HardQuota || storagePoolQuota.second.SoftQuota;
+                }
+            );
         }
     };
 
@@ -1735,21 +1765,6 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TDuration::Seconds(DatabaseQuotas->ttl_min_run_internal_seconds());
     }
 
-    TDiskSpaceQuotas GetDiskSpaceQuotas() const {
-        ui64 hardQuota = DatabaseQuotas ? DatabaseQuotas->data_size_hard_quota() : 0;
-        ui64 softQuota = DatabaseQuotas ? DatabaseQuotas->data_size_soft_quota() : 0;
-
-        if (hardQuota || softQuota) {
-            if (!softQuota) {
-                softQuota = hardQuota;
-            } else if (!hardQuota) {
-                hardQuota = softQuota;
-            }
-        }
-
-        return TDiskSpaceQuotas{ hardQuota, softQuota };
-    }
-
     static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& quotas) {
         if (quotas.HardQuota != 0) {
             counters->ChangeDiskSpaceHardQuotaBytes(quotas.HardQuota);
@@ -1786,48 +1801,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         counters->ChangeStreamReservedStorageQuota(next - prev);
     }
 
+    TDiskSpaceQuotas GetDiskSpaceQuotas() const;
 
-    /**
-     * Checks current disk usage against disk quotas
-     *
-     * Returns true when DiskQuotaExceeded value has changed and needs to be
-     * persisted and pushed to scheme board.
-     */
-    bool CheckDiskSpaceQuotas(IQuotaCounters* counters) {
-        auto quotas = GetDiskSpaceQuotas();
-        if (!quotas) {
-            if (DiskQuotaExceeded) {
-                counters->ChangeDiskSpaceQuotaExceeded(-1);
-                DiskQuotaExceeded = false;
-                ++DomainStateVersion;
-                return true;
-            }
-            return false;
-        }
-
-        ui64 totalUsage = TotalDiskSpaceUsage();
-        if (totalUsage > quotas.HardQuota) {
-            if (!DiskQuotaExceeded) {
-                counters->ChangeDiskSpaceQuotaExceeded(+1);
-                DiskQuotaExceeded = true;
-                ++DomainStateVersion;
-                return true;
-            }
-            return false;
-        }
-
-        if (totalUsage < quotas.SoftQuota) {
-            if (DiskQuotaExceeded) {
-                counters->ChangeDiskSpaceQuotaExceeded(-1);
-                DiskQuotaExceeded = false;
-                ++DomainStateVersion;
-                return true;
-            }
-            return false;
-        }
-
-        return false;
-    }
+    /*
+    Checks current disk usage against disk quotas.
+    Returns true when DiskQuotaExceeded value has changed and needs to be persisted and pushed to scheme board.
+    */
+    bool CheckDiskSpaceQuotas(IQuotaCounters* counters);
 
     ui64 TotalDiskSpaceUsage() {
         return DiskSpaceUsage.Tables.TotalSize + (AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota() ? GetPQAccountStorage() : 0);
@@ -1991,24 +1971,9 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         CoordinatorSelector = new TCoordinators(ProcessingParams);
     }
 
-    void AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr = {}) {
-        DiskSpaceUsage.Tables.DataSize += (newAggr.DataSize - oldAggr.DataSize);
-        counters->ChangeDiskSpaceTablesDataBytes(newAggr.DataSize - oldAggr.DataSize);
+    void AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr = {});
 
-        DiskSpaceUsage.Tables.IndexSize += (newAggr.IndexSize - oldAggr.IndexSize);
-        counters->ChangeDiskSpaceTablesIndexBytes(newAggr.IndexSize - oldAggr.IndexSize);
-
-        i64 oldTotalBytes = DiskSpaceUsage.Tables.TotalSize;
-        DiskSpaceUsage.Tables.TotalSize = DiskSpaceUsage.Tables.DataSize + DiskSpaceUsage.Tables.IndexSize;
-        i64 newTotalBytes = DiskSpaceUsage.Tables.TotalSize;
-        counters->ChangeDiskSpaceTablesTotalBytes(newTotalBytes - oldTotalBytes);
-    }
-
-    void AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr = {}) {
-        auto& topics = DiskSpaceUsage.Topics;
-        topics.DataSize += (newAggr.DataSize - oldAggr.DataSize);
-        topics.UsedReserveSize += (newAggr.UsedReserveSize - oldAggr.UsedReserveSize);
-    }
+    void AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr = {});
 
     const TDiskSpaceUsage& GetDiskSpaceUsage() const {
         return DiskSpaceUsage;

@@ -68,16 +68,14 @@ public:
     }
 
     TActorId MakeServiceID(const TActorContext &ctx) {
-        auto &domainsInfo = *AppData(ctx)->DomainsInfo;
-        auto domainIt = domainsInfo.Domains.find(DomainUid);
-        if (domainIt == domainsInfo.Domains.end()) {
+        auto &domainsInfo = AppData(ctx)->DomainsInfo;
+        if (!domainsInfo->Domain || domainsInfo->GetDomain()->DomainUid != DomainUid) {
             // Report details in CreateErrorReply
             TActorId invalidId;
             return invalidId;
         }
         ui32 nodeId = IsNodeIdPresent ? NodeId : ctx.SelfID.NodeId();
-        ui32 hiveUid = domainsInfo.GetDefaultHiveUid(DomainUid);
-        ui64 hiveId = domainsInfo.GetHive(hiveUid);
+        ui64 hiveId = domainsInfo->GetHive();
         return MakeLocalRegistrarID(nodeId, hiveId);
     }
 

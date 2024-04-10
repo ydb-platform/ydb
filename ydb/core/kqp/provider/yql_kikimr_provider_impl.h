@@ -209,10 +209,13 @@ TAutoPtr<IGraphTransformer> CreateKiSinkCallableExecutionTransformer(
 TAutoPtr<IGraphTransformer> CreateKiSinkPlanInfoTransformer(TIntrusivePtr<IKikimrQueryExecutor> queryExecutor);
 
 NNodes::TCoAtomList BuildColumnsList(const TKikimrTableDescription& table, TPositionHandle pos,
-    TExprContext& ctx, bool withSystemColumns);
+    TExprContext& ctx, bool withSystemColumns, bool ignoreWriteOnlyColumns);
 
 const TTypeAnnotationNode* GetReadTableRowType(TExprContext& ctx, const TKikimrTablesData& tablesData,
     const TString& cluster, const TString& table, NNodes::TCoAtomList select, bool withSystemColumns = false);
+
+const TTypeAnnotationNode* GetReadTableRowType(TExprContext& ctx, const TKikimrTablesData& tablesData,
+    const TString& cluster, const TString& table, TPositionHandle pos, bool withSystemColumns);
 
 TYdbOperation GetTableOp(const NNodes::TKiWriteTable& write);
 TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const NNodes::TCoNameValueTupleList& operations,

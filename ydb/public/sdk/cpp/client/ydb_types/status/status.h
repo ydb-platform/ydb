@@ -27,6 +27,7 @@ public:
     const std::multimap<TStringType, TStringType>& GetResponseMetadata() const;
     float GetConsumedRu() const;
 
+    void Out(IOutputStream& out) const;
     friend IOutputStream& operator<<(IOutputStream& out, const TStatus& st);
 
 protected:

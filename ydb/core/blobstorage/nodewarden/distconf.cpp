@@ -30,6 +30,18 @@ namespace NKikimr::NStorage {
         Become(&TThis::StateWaitForInit);
     }
 
+    void TDistributedConfigKeeper::PassAway() {
+        for (const TActorId& actorId : ChildActors) {
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
+        }
+        TActorBootstrapped::PassAway();
+    }
+
+    void TDistributedConfigKeeper::HandleGone(STATEFN_SIG) {
+        const size_t numErased = ChildActors.erase(ev->Sender);
+        Y_DEBUG_ABORT_UNLESS(numErased == 1);
+    }
+
     void TDistributedConfigKeeper::Halt() {
         // TODO: implement
     }
@@ -37,10 +49,11 @@ namespace NKikimr::NStorage {
     bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
         if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration()) {
             StorageConfig.emplace(config);
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenStorageConfig(*StorageConfig));
             if (ProposedStorageConfig && ProposedStorageConfig->GetGeneration() <= StorageConfig->GetGeneration()) {
                 ProposedStorageConfig.reset();
             }
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenStorageConfig(*StorageConfig,
+                ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr));
             PersistConfig({});
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
@@ -48,6 +61,12 @@ namespace NKikimr::NStorage {
             // TODO: fingerprint mismatch, abort operation
         }
         return false;
+    }
+
+    void TDistributedConfigKeeper::HandleConfigConfirm(STATEFN_SIG) {
+        if (ev->Cookie) {
+            FinishAsyncOperation(ev->Cookie);
+        }
     }
 
     void TDistributedConfigKeeper::SendEvent(ui32 nodeId, ui64 cookie, TActorId sessionId, std::unique_ptr<IEventBase> ev) {
@@ -102,9 +121,6 @@ namespace NKikimr::NStorage {
             if (task.Origin) {
                 Y_ABORT_UNLESS(Binding);
                 Y_ABORT_UNLESS(task.Origin == Binding);
-            } else { // locally-generated task
-                Y_ABORT_UNLESS(RootState != ERootState::INITIAL);
-                Y_ABORT_UNLESS(!Binding);
             }
         }
 
@@ -187,6 +203,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeConfigUnbind, Handle);
             hFunc(TEvNodeConfigScatter, Handle);
             hFunc(TEvNodeConfigGather, Handle);
+            hFunc(TEvNodeConfigInvokeOnRoot, Handle);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -194,7 +211,9 @@ namespace NKikimr::NStorage {
             cFunc(TEvPrivate::EvErrorTimeout, HandleErrorTimeout);
             hFunc(TEvPrivate::TEvStorageConfigLoaded, Handle);
             hFunc(TEvPrivate::TEvStorageConfigStored, Handle);
+            fFunc(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, HandleConfigConfirm);
             hFunc(NMon::TEvHttpInfo, Handle);
+            fFunc(TEvents::TSystem::Gone, HandleGone);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway);
         )
@@ -224,6 +243,7 @@ void Out<NKikimr::NStorage::TDistributedConfigKeeper::ERootState>(IOutputStream&
         case E::COLLECT_CONFIG:             s << "COLLECT_CONFIG";             return;
         case E::PROPOSE_NEW_STORAGE_CONFIG: s << "PROPOSE_NEW_STORAGE_CONFIG"; return;
         case E::ERROR_TIMEOUT:              s << "ERROR_TIMEOUT";              return;
+        case E::RELAX:                      s << "RELAX";                      return;
     }
     Y_ABORT();
 }

@@ -1072,7 +1072,7 @@ private:
                 reason,
                 requestControl->GetRequestId());
 
-            responseHandler->HandleError(detailedError);
+            responseHandler->HandleError(std::move(detailedError));
         }
 
         void NotifyAcknowledgement(
@@ -1248,25 +1248,36 @@ class TTcpBusChannelFactory
     : public IChannelFactory
 {
 public:
-    explicit TTcpBusChannelFactory(TBusConfigPtr config)
+    TTcpBusChannelFactory(
+        TBusConfigPtr config,
+        IMemoryUsageTrackerPtr memoryUsageTracker)
         : Config_(ConvertToNode(std::move(config)))
+        , MemoryUsageTracker_(std::move(memoryUsageTracker))
     { }
 
     IChannelPtr CreateChannel(const TString& address) override
     {
         auto config = TBusClientConfig::CreateTcp(address);
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);
-        auto client = CreateBusClient(std::move(config));
+        auto client = CreateBusClient(
+            std::move(config),
+            GetYTPacketTranscoderFactory(MemoryUsageTracker_),
+            MemoryUsageTracker_);
         return CreateBusChannel(std::move(client));
     }
 
 private:
     const INodePtr Config_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 };
 
-IChannelFactoryPtr CreateTcpBusChannelFactory(TBusConfigPtr config)
+IChannelFactoryPtr CreateTcpBusChannelFactory(
+    TBusConfigPtr config,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
 {
-    return New<TTcpBusChannelFactory>(std::move(config));
+    return New<TTcpBusChannelFactory>(
+        std::move(config),
+        std::move(memoryUsageTracker));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1275,25 +1286,38 @@ class TUdsBusChannelFactory
     : public IChannelFactory
 {
 public:
-    explicit TUdsBusChannelFactory(TBusConfigPtr config)
+    TUdsBusChannelFactory(
+        TBusConfigPtr config,
+        IMemoryUsageTrackerPtr memoryUsageTracker)
         : Config_(ConvertToNode(std::move(config)))
-    { }
+        , MemoryUsageTracker_(std::move(memoryUsageTracker))
+    {
+        YT_VERIFY(MemoryUsageTracker_);
+    }
 
     IChannelPtr CreateChannel(const TString& address) override
     {
         auto config = TBusClientConfig::CreateUds(address);
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);
-        auto client = CreateBusClient(std::move(config));
+        auto client = CreateBusClient(
+            std::move(config),
+            GetYTPacketTranscoderFactory(MemoryUsageTracker_),
+            MemoryUsageTracker_);
         return CreateBusChannel(std::move(client));
     }
 
 private:
     const INodePtr Config_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 };
 
-IChannelFactoryPtr CreateUdsBusChannelFactory(TBusConfigPtr config)
+IChannelFactoryPtr CreateUdsBusChannelFactory(
+    TBusConfigPtr config,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
 {
-    return New<TUdsBusChannelFactory>(std::move(config));
+    return New<TUdsBusChannelFactory>(
+        std::move(config),
+        std::move(memoryUsageTracker));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

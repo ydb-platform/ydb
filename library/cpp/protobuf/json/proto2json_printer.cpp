@@ -2,6 +2,8 @@
 #include "config.h"
 #include "util.h"
 
+#include <google/protobuf/any.pb.h>
+#include <google/protobuf/dynamic_message.h>
 #include <google/protobuf/util/time_util.h>
 
 #include <library/cpp/protobuf/json/proto/enum_options.pb.h>
@@ -210,6 +212,39 @@ namespace NProtobufJson {
         return false;
     }
 
+    bool TProto2JsonPrinter::TryPrintAny(const Message& proto, IJsonOutput& json) {
+        using namespace google::protobuf;
+
+        const FieldDescriptor* typeUrlField;
+        const FieldDescriptor* valueField;
+        if (!Any::GetAnyFieldDescriptors(proto, &typeUrlField, &valueField)) {
+            return false;
+        }
+        const Reflection* const reflection = proto.GetReflection();
+        const TString& typeUrl = reflection->GetString(proto, typeUrlField);
+        TString fullTypeName;
+        if (!Any::ParseAnyTypeUrl(typeUrl, &fullTypeName)) {
+            return false;
+        }
+        const Descriptor* const valueDesc = proto.GetDescriptor()->file()->pool()->FindMessageTypeByName(fullTypeName);
+        if (!valueDesc) {
+            return false;
+        }
+        DynamicMessageFactory factory;
+        const THolder<Message> valueMessage{factory.GetPrototype(valueDesc)->New()};
+        const TString& serializedValue = reflection->GetString(proto, valueField);
+        if (!valueMessage->ParseFromString(serializedValue)) {
+            return false;
+        }
+
+        json.BeginObject();
+        json.WriteKey("@type").Write(typeUrl);
+        PrintFields(*valueMessage, json);
+        json.EndObject();
+
+        return true;
+    }
+
     void TProto2JsonPrinter::PrintSingleField(const Message& proto,
                                               const FieldDescriptor& field,
                                               IJsonOutput& json,
@@ -267,7 +302,11 @@ namespace NProtobufJson {
                     if (Config.ConvertTimeAsString && HandleTimeConversion(reflection->GetMessage(proto, &field), json)) {
                         break;
                     }
-                    Print(reflection->GetMessage(proto, &field), json);
+                    const Message& msg = reflection->GetMessage(proto, &field);
+                    if (Config.ConvertAny && TryPrintAny(msg, json)) {
+                        break;
+                    }
+                    Print(msg, json);
                     break;
                 }
 
@@ -487,11 +526,9 @@ namespace NProtobufJson {
             PrintSingleField(proto, field, json, key);
     }
 
-    void TProto2JsonPrinter::Print(const Message& proto, IJsonOutput& json, bool closeMap) {
+    void TProto2JsonPrinter::PrintFields(const Message& proto, IJsonOutput& json) {
         const Descriptor* descriptor = proto.GetDescriptor();
         Y_ASSERT(descriptor);
-
-        json.BeginObject();
 
         // Iterate over all non-extension fields
         for (int f = 0, endF = descriptor->field_count(); f < endF; ++f) {
@@ -518,6 +555,12 @@ namespace NProtobufJson {
                 }
             }
         }
+    }
+
+    void TProto2JsonPrinter::Print(const Message& proto, IJsonOutput& json, bool closeMap) {
+        json.BeginObject();
+
+        PrintFields(proto, json);
 
         if (closeMap) {
             json.EndObject();

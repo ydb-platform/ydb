@@ -1,0 +1,192 @@
+actor_system_config:
+    batch_executor: 2
+    executor:
+        - name: System
+          spin_threshold: 0
+          threads: 8
+          type: BASIC
+        - name: User
+          spin_threshold: 0
+          threads: 14
+          type: BASIC
+        - name: Batch
+          spin_threshold: 0
+          threads: 4
+          type: BASIC
+        - name: IO
+          threads: 2
+          time_per_mailbox_micro_secs: 100
+          type: IO
+        - name: IC
+          spin_threshold: 10
+          threads: 4
+          time_per_mailbox_micro_secs: 100
+          type: BASIC
+    io_executor: 3
+    scheduler:
+        progress_threshold: 10000
+        resolution: 64
+        spin_threshold: 0
+    service_executor:
+        - executor_id: 4
+          service_name: Interconnect
+    sys_executor: 0
+    user_executor: 1
+auth_config:
+    path_to_root_ca: /etc/ssl/certs/ca-certificates.crt
+blob_storage_config:
+    service_set:
+        availability_domains: 1
+        groups:
+            - erasure_species: block-4-2
+              group_generation: 1
+              group_id: 0
+              rings:
+                - fail_domains:
+                    - vdisk_locations:
+                        - node_id: 1
+                          path: /dev/disk/by-partlabel/kikimr_nvme_01
+                          pdisk_category: SSD
+                    - vdisk_locations:
+                        - node_id: 2
+                          path: /dev/disk/by-partlabel/kikimr_nvme_01
+                          pdisk_category: SSD
+                    - vdisk_locations:
+                        - node_id: 3
+                          path: /dev/disk/by-partlabel/kikimr_nvme_01
+                          pdisk_category: SSD
+                    - vdisk_locations:
+                        - node_id: 4
+                          path: /dev/disk/by-partlabel/kikimr_nvme_01
+                          pdisk_category: SSD
+                    - vdisk_locations:
+                        - node_id: 5
+                          path: /dev/disk/by-partlabel/kikimr_nvme_01
+                          pdisk_category: SSD
+                    - vdisk_locations:
+                        - node_id: 6
+                          path: /dev/disk/by-partlabel/kikimr_nvme_01
+                          pdisk_category: SSD
+                    - vdisk_locations:
+                        - node_id: 7
+                          path: /dev/disk/by-partlabel/kikimr_nvme_01
+                          pdisk_category: SSD
+                    - vdisk_locations:
+                        - node_id: 8
+                          path: /dev/disk/by-partlabel/kikimr_nvme_01
+                          pdisk_category: SSD
+channel_profile_config:
+    profile:
+        - channel:
+            - erasure_species: block-4-2
+              pdisk_category: 1
+              storage_pool_kind: ssd
+            - erasure_species: block-4-2
+              pdisk_category: 1
+              storage_pool_kind: ssd
+            - erasure_species: block-4-2
+              pdisk_category: 1
+              storage_pool_kind: ssd
+          profile_id: 0
+domains_config:
+    domain:
+        - name: Root
+          storage_pool_types:
+            - kind: ssd
+              pool_config:
+                box_id: "1"
+                erasure_species: block-4-2
+                kind: ssd
+                pdisk_filter:
+                    - property:
+                        - type: SSD
+                vdisk_kind: Default
+    state_storage:
+        - ring:
+            node:
+                - 1
+                - 2
+                - 3
+                - 4
+                - 5
+                - 6
+                - 7
+                - 8
+            nto_select: 5
+          ssid: 1
+grpc_config:
+    port: 2135
+host_configs:
+    - drive:
+        - path: /dev/disk/by-partlabel/kikimr_nvme_01
+          type: SSD
+        - path: /dev/disk/by-partlabel/kikimr_nvme_02
+          type: SSD
+        - path: /dev/disk/by-partlabel/kikimr_nvme_03
+          type: SSD
+        - path: /dev/disk/by-partlabel/kikimr_nvme_04
+          type: SSD
+      host_config_id: 0
+hosts:
+    - host: sas8-2673.search.yandex.net
+      host_config_id: 0
+      location:
+        body: 1
+        data_center: SAS
+        rack: "1"
+      node_id: 1
+    - host: sas8-2674.search.yandex.net
+      host_config_id: 0
+      location:
+        body: 2
+        data_center: SAS
+        rack: "2"
+      node_id: 2
+    - host: sas8-2675.search.yandex.net
+      host_config_id: 0
+      location:
+        body: 3
+        data_center: SAS
+        rack: "3"
+      node_id: 3
+    - host: sas8-2676.search.yandex.net
+      host_config_id: 0
+      location:
+        body: 4
+        data_center: SAS
+        rack: "4"
+      node_id: 4
+    - host: sas8-2677.search.yandex.net
+      host_config_id: 0
+      location:
+        body: 5
+        data_center: SAS
+        rack: "5"
+      node_id: 5
+    - host: sas8-2678.search.yandex.net
+      host_config_id: 0
+      location:
+        body: 6
+        data_center: SAS
+        rack: "6"
+      node_id: 6
+    - host: sas8-2679.search.yandex.net
+      host_config_id: 0
+      location:
+        body: 7
+        data_center: SAS
+        rack: "7"
+      node_id: 7
+    - host: sas8-2682.search.yandex.net
+      host_config_id: 0
+      location:
+        body: 8
+        data_center: SAS
+        rack: "8"
+      node_id: 8
+log_config:
+    sys_log: false
+    uaclient_config:
+        grpc_max_message_size: 4194304
+        uri: '[fd53::1]:16400'
+static_erasure: block-4-2

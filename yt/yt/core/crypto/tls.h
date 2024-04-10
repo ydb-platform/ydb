@@ -20,6 +20,10 @@ class TSslContext
 public:
     TSslContext();
 
+    void Reset();
+    void Commit(TInstant time = TInstant::Zero());
+    TInstant GetCommitTime();
+
     void UseBuiltinOpenSslX509Store();
 
     void SetCipherList(const TString& list);
@@ -48,6 +52,7 @@ public:
 
 private:
     const TIntrusivePtr<TSslContextImpl> Impl_;
+    TInstant CommitTime_;
 };
 
 DEFINE_REFCOUNTED_TYPE(TSslContext)

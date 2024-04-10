@@ -44,6 +44,8 @@
 #include <yt/cpp/mapreduce/raw_client/raw_requests.h>
 #include <yt/cpp/mapreduce/raw_client/rpc_parameters_serialization.h>
 
+#include <yt/yt/core/ytree/fluent.h>
+
 #include <library/cpp/json/json_reader.h>
 
 #include <util/generic/algorithm.h>
@@ -59,6 +61,32 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+THashMap<TString, TString> ParseProxyUrlAliasingRules(TString envConfig)
+{
+    if (envConfig.empty()) {
+        return {};
+    }
+    return NYTree::ConvertTo<THashMap<TString, TString>>(NYson::TYsonString(envConfig));
+}
+
+void ApplyProxyUrlAliasingRules(TString& url)
+{
+    static auto rules = ParseProxyUrlAliasingRules(GetEnv("YT_PROXY_URL_ALIASING_CONFIG"));
+    if (auto ruleIt = rules.find(url); ruleIt != rules.end()) {
+        url = ruleIt->second;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1333,8 +1361,11 @@ TClientPtr CreateClientImpl(
     context.ProxyAddress = options.ProxyAddress_;
 
     context.ServerName = serverName;
+    ApplyProxyUrlAliasingRules(context.ServerName);
+
     if (context.ServerName.find('.') == TString::npos &&
-        context.ServerName.find(':') == TString::npos)
+        context.ServerName.find(':') == TString::npos &&
+        context.ServerName.find("localhost") == TString::npos)
     {
         context.ServerName += ".yt.yandex.net";
     }
@@ -1418,7 +1449,6 @@ IClientPtr CreateClientFromEnv(const TCreateClientOptions& options)
     if (!serverName) {
         ythrow yexception() << "YT_PROXY is not set";
     }
-
     return NDetail::CreateClientImpl(serverName, options);
 }
 

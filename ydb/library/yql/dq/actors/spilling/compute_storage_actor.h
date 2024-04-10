@@ -6,7 +6,6 @@
 
 namespace NYql::NDq {
 
-// This class will be refactored to be the Actor part of the spiller
 class IDqComputeStorageActor
 {
 public:
@@ -16,16 +15,52 @@ public:
     virtual ~IDqComputeStorageActor() = default;
 
     virtual NActors::IActor* GetActor() = 0;
-
-    virtual NThreading::TFuture<TKey> Put(TRope&& blob) = 0;
-
-    virtual std::optional<NThreading::TFuture<TRope>> Get(TKey key) = 0;
-
-    virtual std::optional<NThreading::TFuture<TRope>> Extract(TKey key) = 0;
-
-    virtual NThreading::TFuture<void> Delete(TKey key) = 0;
 };
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, NActors::TActorSystem* actorSystem);
+struct TDqComputeStorageActorEvents {
+    enum {
+        EvPut = EventSpaceBegin(NActors::TEvents::EEventSpace::ES_USERSPACE) + 30000,
+        EvGet,
+        EvExtract,
+        EvDelete
+    };
+};
+
+struct TEvPut : NActors::TEventLocal<TEvPut, TDqComputeStorageActorEvents::EvPut> {
+    TEvPut(TRope&& blob, NThreading::TPromise<IDqComputeStorageActor::TKey>&& promise)
+        : Blob_(std::move(blob))
+        , Promise_(std::move(promise))
+    {
+    }
+
+    TRope Blob_;
+    NThreading::TPromise<IDqComputeStorageActor::TKey> Promise_;
+};
+
+struct TEvGet : NActors::TEventLocal<TEvGet, TDqComputeStorageActorEvents::EvGet> {
+    TEvGet(IDqComputeStorageActor::TKey key, NThreading::TPromise<std::optional<TRope>>&& promise, bool removeBlobAfterRead)
+        : Key_(key)
+        , Promise_(std::move(promise))
+        , RemoveBlobAfterRead_(removeBlobAfterRead)
+    {
+    }
+
+    IDqComputeStorageActor::TKey Key_;
+    NThreading::TPromise<std::optional<TRope>> Promise_;
+    bool RemoveBlobAfterRead_;
+};
+
+struct TEvDelete : NActors::TEventLocal<TEvDelete, TDqComputeStorageActorEvents::EvDelete> {
+    TEvDelete(IDqComputeStorageActor::TKey key, NThreading::TPromise<void>&& promise)
+        : Key_(key)
+        , Promise_(std::move(promise))
+    {
+    }
+
+    IDqComputeStorageActor::TKey Key_;
+    NThreading::TPromise<void> Promise_;
+};
+
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback);
 
 } // namespace NYql::NDq

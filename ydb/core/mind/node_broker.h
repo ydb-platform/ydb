@@ -186,20 +186,6 @@ constexpr ui32 DOMAIN_BITS = TDomainsInfo::DomainBits;
 constexpr ui32 DOMAINS_COUNT = 1 << DOMAIN_BITS;
 constexpr ui32 DOMAIN_MASK = (1 << DOMAIN_BITS) - 1;
 
-inline ui32 NodeIdToDomain(ui32 nodeId)
-{
-    return nodeId & DOMAIN_MASK;
-}
-
-inline ui32 NodeIdToDomain(ui32 nodeId, const TDomainsInfo& domains) {
-    // All nodes belong to the same domain when it's the only one defined
-    if (Y_LIKELY(domains.Domains.size() == 1)) {
-        return domains.Domains.begin()->first;
-    }
-
-    return NodeIdToDomain(nodeId);
-}
-
 IActor *CreateNodeBroker(const TActorId &tablet, TTabletStorageInfo *info);
 
 } // NNodeBroker

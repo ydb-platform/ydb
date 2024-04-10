@@ -105,11 +105,7 @@ private:
 };
 
 bool TTxCoordinator::IsTabletInStaticDomain(TAppData* appData) {
-    const ui32 selfDomain = appData->DomainsInfo->GetDomainUidByTabletId(TabletID());
-    Y_ABORT_UNLESS(selfDomain != appData->DomainsInfo->BadDomainId);
-    const auto& domain = appData->DomainsInfo->GetDomain(selfDomain);
-
-    for (auto domainCoordinatorId: domain.Coordinators) {
+    for (auto domainCoordinatorId: appData->DomainsInfo->GetDomain()->Coordinators) {
         if (TabletID() == domainCoordinatorId) {
             return true;
         }
@@ -124,7 +120,7 @@ void TTxCoordinator::RestoreProcessingParams(const TActorContext& ctx) {
         LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR,
                 "Coordinator# " << TabletID()
                 << " restoring static processing params");
-        DoConfiguration(*CreateDomainConfigurationFromStatic(appData, TabletID()), ctx);
+        DoConfiguration(*CreateDomainConfigurationFromStatic(appData), ctx);
         return;
     }
 

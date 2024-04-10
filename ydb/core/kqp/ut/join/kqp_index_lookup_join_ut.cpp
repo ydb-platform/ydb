@@ -234,6 +234,7 @@ Y_UNIT_TEST(LeftSemi) {
             LEFT SEMI JOIN `/Root/Right` AS r
                ON l.Fk = r.Key
             WHERE l.Value != 'Value1'   -- left table payload filter
+            ORDER BY l.Key
         )",
         R"([
             [[3];[103];["Value2"]];
@@ -507,26 +508,32 @@ TString GetQuery(const TString& joinType, const TString& leftTable, const TStrin
     using namespace fmt::literals;
 
     TString selectColumns;
+    TString sortColumns;
     if (joinType == "RIGHT SEMI") {
         selectColumns = "r.Key, r.Value";
+        sortColumns = "r.Key";
     } else if (joinType == "LEFT SEMI") {
         selectColumns = "l.Key, l.Value";
+        sortColumns = "l.Key";
     } else if (joinType == "LEFT ONLY") {
         selectColumns = "l.Key, l.Value";
+        sortColumns = "l.Key";
     } else {
         selectColumns = "l.Key, l.Value, r.Key, r.Value";
+        sortColumns = "l.Key";
     }
 
     return fmt::format(R"(
             SELECT {selectColumns}
             FROM `/Root/Table{leftTable}` AS l
             {joinType} JOIN `/Root/Table{rightTable}` AS r
-                ON l.Key = r.Key
+                ON l.Key = r.Key ORDER BY {sortColumns}
         )",
         "selectColumns"_a = selectColumns,
         "leftTable"_a = leftTable,
         "rightTable"_a = rightTable,
-        "joinType"_a = joinType
+        "joinType"_a = joinType,
+        "sortColumns"_a = sortColumns
     );
 }
 

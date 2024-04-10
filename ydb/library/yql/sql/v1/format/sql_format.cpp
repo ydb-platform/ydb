@@ -925,6 +925,10 @@ private:
             NewLine();
             Visit(msg.GetBlock14());
         }
+        if (msg.HasBlock15()) {
+            NewLine();
+            Visit(msg.GetBlock15());
+        }
     }
 
     void VisitDropTable(const TRule_drop_table_stmt& msg) {

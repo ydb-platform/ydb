@@ -658,27 +658,37 @@ public:
 
                 auto returningColumns = Build<TCoAtomList>(ctx, node->Pos()).Done();
 
+                auto fillStar = [&]() {
+                    bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
+
+                    auto dataSinkNode = node->Child(1);
+                    TKiDataSink dataSink(dataSinkNode);
+                    auto table = SessionCtx->Tables().EnsureTableExists(
+                        TString(dataSink.Cluster()),
+                        key.GetTablePath(), node->Pos(), ctx);
+
+                    returningColumns = BuildColumnsList(*table, node->Pos(), ctx, sysColumnsEnabled, true /*ignoreWriteOnlyColumns*/);
+                };
+
                 TVector<TExprBase> columnsToReturn;
                 for (const auto item : settings.ReturningList.Cast()) {
-                    auto pgResultNode = item.Cast<TCoPgResultItem>();
-                    const auto value = pgResultNode.ExpandedColumns().Cast<TCoAtom>().Value();
-                    if (value.empty()) {
-                        bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
-
-                        auto dataSinkNode = node->Child(1);
-                        TKiDataSink dataSink(dataSinkNode);
-                        auto table = SessionCtx->Tables().EnsureTableExists(
-                            TString(dataSink.Cluster()),
-                            key.GetTablePath(), node->Pos(), ctx);
-
-                        returningColumns = BuildColumnsList(*table, node->Pos(), ctx, sysColumnsEnabled);
-
+                    if (item.Maybe<TCoPgResultItem>()) {
+                        auto pgResultNode = item.Cast<TCoPgResultItem>();
+                        const auto value = pgResultNode.ExpandedColumns().Cast<TCoAtom>().Value();
+                        if (value.empty()) {
+                            fillStar();
+                            break;
+                        } else {
+                            auto atom = Build<TCoAtom>(ctx, node->Pos())
+                                .Value(value)
+                                .Done();
+                            columnsToReturn.emplace_back(std::move(atom));
+                        }
+                    } else if (auto returningItem = item.Maybe<TCoReturningListItem>()) {
+                        columnsToReturn.push_back(returningItem.Cast().ColumnRef());
+                    } else if (auto returningStar = item.Maybe<TCoReturningStar>()) {
+                        fillStar();
                         break;
-                    } else {
-                        auto atom = Build<TCoAtom>(ctx, node->Pos())
-                            .Value(value)
-                            .Done();
-                        columnsToReturn.emplace_back(std::move(atom));
                     }
                 }
 
@@ -725,6 +735,7 @@ public:
                             .DataSink(node->Child(1))
                             .Table().Build(key.GetTablePath())
                             .Filter(settings.Filter.Cast())
+                            .ReturningColumns(returningColumns)
                             .Done()
                             .Ptr();
                     } else {
@@ -763,8 +774,21 @@ public:
                     : Build<TCoAtom>(ctx, node->Pos()).Value("table").Done(); // v0 support
                 auto mode = settings.Mode.Cast();
                 if (mode == "create" || mode == "create_if_not_exists" || mode == "create_or_replace") {
+                    if (node->Child(3)->Content() != "Void") {
+                        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating table with data is not supported."));
+                        return nullptr;
+                    }
                     YQL_ENSURE(settings.Columns);
-                    YQL_ENSURE(!settings.Columns.Cast().Empty());
+                    if (settings.Columns.Cast().Empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating table without columns is not supported."));
+                        return nullptr;
+                    }
+                    for (const auto& column : settings.Columns.Cast()) {
+                        if (column.Ptr()->ChildrenSize() < 2) {
+                            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating table with columns without type is not supported."));
+                            return nullptr;
+                        }
+                    }
 
                     const bool isExternalTable = settings.TableType && settings.TableType.Cast() == "externalTable";
                     if (!isExternalTable && !settings.PrimaryKey) {

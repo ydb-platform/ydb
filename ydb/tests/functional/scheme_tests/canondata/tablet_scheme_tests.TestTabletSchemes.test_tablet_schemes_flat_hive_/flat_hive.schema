@@ -550,6 +550,53 @@
         }
     },
     {
+        "TableId": 21,
+        "TableName": "OperationsLog",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Timestamp",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "User",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "Operation",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1
+            }
+        }
+    },
+    {
         "TableId": 4,
         "TableName": "Node",
         "TableKey": [
@@ -600,6 +647,11 @@
                 "ColumnId": 9,
                 "ColumnName": "Location",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "Name",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -614,7 +666,8 @@
                     5,
                     6,
                     8,
-                    9
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,

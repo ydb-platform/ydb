@@ -43,13 +43,6 @@ void TCms::DefaultSignalTabletActive(const TActorContext &)
 
 void TCms::OnActivateExecutor(const TActorContext &ctx)
 {
-    if (AppData(ctx)->DomainsInfo->Domains.size() > 1) {
-        NotSupportedReason = "Multiple domains are not supported.";
-        Become(&TThis::StateNotSupported);
-        SignalTabletActive(ctx);
-        return;
-    }
-
     EnableCMSRequestPriorities = AppData(ctx)->FeatureFlags.GetEnableCMSRequestPriorities();
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.Release());
@@ -246,7 +239,7 @@ void TCms::ProcessInitQueue(const TActorContext &ctx)
 
 void TCms::SubscribeForConfig(const TActorContext &ctx)
 {
-    NConsole::SubscribeViaConfigDispatcher(ctx, {(ui32)NKikimrConsole::TConfigItem::CmsConfigItem, 
+    NConsole::SubscribeViaConfigDispatcher(ctx, {(ui32)NKikimrConsole::TConfigItem::CmsConfigItem,
         (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem}, ctx.SelfID);
 }
 
@@ -1166,6 +1159,7 @@ void TCms::AddHostState(const TClusterInfoPtr &clusterInfo, const TNodeInfo &nod
     host->SetNodeId(node.NodeId);
     host->SetInterconnectPort(node.IcPort);
     host->SetTimestamp(timestamp.GetValue());
+    host->SetStartTimeSeconds(node.StartTime.Seconds());
     node.Location.Serialize(host->MutableLocation(), false);
     for (auto marker : node.Markers) {
         host->AddMarkers(marker);
@@ -1989,7 +1983,7 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
             resp->Record.SetRequestId(scheduled.RequestId);
 
             ClusterInfo->ScheduleActions(scheduled, &ctx);
-            
+
             copy = new TRequestInfo(scheduled);
             State->ScheduledRequests.emplace(rec.GetRequestId(), std::move(scheduled));
         } else {
@@ -2272,7 +2266,7 @@ void TCms::Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorCont
 
 void TCms::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                   const TActorContext &ctx)
-{   
+{
     const auto& appConfig = ev->Get()->Record.GetConfig();
     if (appConfig.HasFeatureFlags()) {
         EnableCMSRequestPriorities = appConfig.GetFeatureFlags().GetEnableCMSRequestPriorities();

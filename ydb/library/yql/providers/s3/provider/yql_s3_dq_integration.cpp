@@ -6,8 +6,8 @@
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-// #include <ydb/library/yql/providers/s3/actors/yql_s3_read_actor.h>     // temporary off until refactoring in next PR
-// #include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h> // temporary off until refactoring in next PR
+#include <ydb/library/yql/providers/s3/actors/yql_s3_read_actor.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
@@ -104,10 +104,11 @@ public:
             YQL_CLOG(TRACE, ProviderS3) << "limited max partitions to " << maxPartitions;
         }
 
-#if 0 // temporary off until refactoring in next PR
         auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
+
+        YQL_CLOG(DEBUG, ProviderS3) << " useRuntimeListing=" << useRuntimeListing;
         if (useRuntimeListing) {
-            size_t partitionCount = v ? maxPartitions : Min(parts.size(), maxPartitions);
+            size_t partitionCount = hasDirectories ? maxPartitions : Min(parts.size(), maxPartitions);
             partitions.reserve(partitionCount);
             for (size_t i = 0; i < partitionCount; ++i) {
                 NS3::TRange range;
@@ -118,11 +119,10 @@ public:
                 TStringOutput out(partitions.back());
                 range.Save(&out);
             }
+            YQL_CLOG(DEBUG, ProviderS3) << " hasDirectories=" << hasDirectories << ", partitionCount=" << partitionCount << ", maxPartitions=" << maxPartitions;
             return 0;
         }
-#else
-    Y_UNUSED(hasDirectories);
-#endif
+
         if (maxPartitions && parts.size() > maxPartitions) {
             if (const auto extraParts = parts.size() - maxPartitions; extraParts > maxPartitions) {
                 const auto partsPerTask = (parts.size() - 1ULL) / maxPartitions + 1ULL;
@@ -161,6 +161,7 @@ public:
             range.Save(&out);
         }
 
+        YQL_CLOG(DEBUG, ProviderS3) << " hasDirectories=" << hasDirectories << ", partitionCount=" << partitions.size() << ", maxPartitions=" << maxPartitions;;
         return 0;
     }
 
@@ -258,15 +259,6 @@ public:
 
             auto format = s3ReadObject.Object().Format().Ref().Content();
             if (const auto useCoro = State_->Configuration->SourceCoroActor.Get(); (!useCoro || *useCoro) && format != "raw" && format != "json_list") {
-                if (format == "parquet") {
-                    YQL_ENSURE(State_->Types->ArrowResolver);
-                    TVector<const TTypeAnnotationNode*> allTypes;
-                    for (const auto& x : rowType->Cast<TStructExprType>()->GetItems()) {
-                        allTypes.push_back(x->GetItemType());
-                    }
-                    auto resolveStatus = State_->Types->ArrowResolver->AreTypesSupported(ctx.GetPosition(read->Pos()), allTypes, ctx);
-                    YQL_ENSURE(resolveStatus == IArrowResolver::OK);
-                }
                 return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3ParseSettings>()
                         .Paths(s3ReadObject.Object().Paths())
@@ -337,7 +329,7 @@ public:
         return read;
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType) override {
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t maxPartitions) override {
         const TDqSource source(&node);
         if (const auto maySettings = source.Settings().Maybe<TS3SourceSettingsBase>()) {
             const auto settings = maySettings.Cast();
@@ -408,7 +400,7 @@ public:
                 srcDesc.MutableSettings()->insert({"addPathIndex", "true"});
             }
 
-#if 0 // defined(_linux_) || defined(_darwin_) // temporary off until refactoring in next PR
+#if defined(_linux_) || defined(_darwin_)
 
             auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
             srcDesc.SetUseRuntimeListing(useRuntimeListing);
@@ -419,6 +411,8 @@ public:
             auto fileQueueBatchObjectCountLimit = State_->Configuration->FileQueueBatchObjectCountLimit.Get().GetOrElse(1000);
             srcDesc.MutableSettings()->insert({"fileQueueBatchObjectCountLimit", ToString(fileQueueBatchObjectCountLimit)});
             
+            YQL_CLOG(DEBUG, ProviderS3) << " useRuntimeListing=" << useRuntimeListing;
+
             if (useRuntimeListing) {
                 TPathList paths;
                 for (auto i = 0u; i < settings.Paths().Size(); ++i) {
@@ -484,31 +478,40 @@ public:
                             << "Unknown 'pathpatternvariant': " << pathPatternVariantValue->second;
                     }
                 }
-
-                size_t maxTasksPerStage = State_->MaxTasksPerStage.GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
-
-                auto consumersCount = hasDirectories ? maxTasksPerStage : Min(paths.size(), maxTasksPerStage);
+                auto consumersCount = hasDirectories ? maxPartitions : paths.size();
 
                 auto fileQueuePrefetchSize = State_->Configuration->FileQueuePrefetchSize.Get()
                     .GetOrElse(consumersCount * srcDesc.GetParallelDownloadCount() * 3);
 
-                auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(NDq::CreateS3FileQueueActor(
-                    0ul,
-                    std::move(paths),
-                    fileQueuePrefetchSize,
-                    fileSizeLimit,
-                    useRuntimeListing,
-                    consumersCount,
-                    fileQueueBatchSizeLimit,
-                    fileQueueBatchObjectCountLimit,
-                    State_->Gateway,
-                    connect.Url,
-                    GetAuthInfo(State_->CredentialsFactory, connect.Token),
-                    pathPattern,
-                    pathPatternVariant,
-                    NS3Lister::ES3PatternType::Wildcard
-                ));
-                srcDesc.MutableSettings()->insert({"fileQueueActor", fileQueueActor.ToString()});
+                YQL_CLOG(DEBUG, ProviderS3) << " hasDirectories=" << hasDirectories << ", consumersCount=" << consumersCount;
+
+                auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(
+                    NDq::CreateS3FileQueueActor(
+                        0ul,
+                        std::move(paths),
+                        fileQueuePrefetchSize,
+                        fileSizeLimit,
+                        useRuntimeListing,
+                        consumersCount,
+                        fileQueueBatchSizeLimit,
+                        fileQueueBatchObjectCountLimit,
+                        State_->Gateway,
+                        connect.Url,
+                        GetAuthInfo(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
+                        pathPattern,
+                        pathPatternVariant,
+                        NS3Lister::ES3PatternType::Wildcard
+                    ),
+                    NActors::TMailboxType::HTSwap,
+                    State_->ExecutorPoolId
+                );
+
+                NActorsProto::TActorId protoId;
+                ActorIdToProto(fileQueueActor, &protoId);
+                TString stringId;
+                google::protobuf::TextFormat::PrintToString(protoId, &stringId);
+
+                srcDesc.MutableSettings()->insert({"fileQueueActor", stringId});
             }
 #endif
             protoSettings.PackFrom(srcDesc);

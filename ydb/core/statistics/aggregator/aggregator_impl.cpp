@@ -1,7 +1,11 @@
 #include "aggregator_impl.h"
 
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/statistics/save_load_stats.h>
 #include <ydb/core/statistics/stat_service.h>
+#include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -12,6 +16,7 @@ TStatisticsAggregator::TStatisticsAggregator(const NActors::TActorId& tablet, TT
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
 {
     PropagateInterval = forTests ? TDuration::Seconds(5) : TDuration::Minutes(3);
+    PropagateTimeout = forTests ? TDuration::Seconds(3) : TDuration::Minutes(2);
 
     auto seed = std::random_device{}();
     RandomGenerator.seed(seed);
@@ -124,11 +129,6 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvConnectNode::TPtr& ev) {
         return;
     }
 
-    if (!IsPropagateInFlight) {
-        Schedule(PropagateInterval, new TEvPrivate::TEvPropagate());
-        IsPropagateInFlight = true;
-    }
-
     if (!record.NeedSchemeShardsSize()) {
         return;
     }
@@ -149,11 +149,25 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvRequestStats::TPtr& ev) {
 
     SA_LOG_D("[" << TabletID() << "] EvRequestStats"
         << ", node id = " << nodeId
-        << ", schemeshard count = " << record.NeedSchemeShardsSize());
+        << ", schemeshard count = " << record.NeedSchemeShardsSize()
+        << ", urgent = " << record.GetUrgent());
 
     if (!EnableStatistics) {
         auto disabled = std::make_unique<TEvStatistics::TEvStatisticsIsDisabled>();
         Send(NStat::MakeStatServiceID(nodeId), disabled.release());
+        return;
+    }
+
+    for (const auto& ssId : record.GetNeedSchemeShards()) {
+        RequestedSchemeShards.insert(ssId);
+    }
+
+    if (record.GetUrgent()) {
+        PendingRequests.push(std::move(ev));
+        if (!ProcessUrgentInFlight) {
+            Send(SelfId(), new TEvPrivate::TEvProcessUrgent());
+            ProcessUrgentInFlight = true;
+        }
         return;
     }
 
@@ -206,6 +220,60 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvPropagate::TPtr&) {
     Schedule(PropagateInterval, new TEvPrivate::TEvPropagate());
 }
 
+void TStatisticsAggregator::Handle(TEvStatistics::TEvPropagateStatisticsResponse::TPtr&) {
+    if (!PropagationInFlight) {
+        return;
+    }
+    if (LastSSIndex < PropagationSchemeShards.size()) {
+        LastSSIndex = PropagatePart(PropagationNodes, PropagationSchemeShards, LastSSIndex, true);
+    } else {
+        PropagationInFlight = false;
+        PropagationNodes.clear();
+        PropagationSchemeShards.clear();
+        LastSSIndex = 0;
+    }
+}
+
+void TStatisticsAggregator::Handle(TEvPrivate::TEvProcessUrgent::TPtr&) {
+    SA_LOG_D("[" << TabletID() << "] EvProcessUrgent");
+
+    ProcessUrgentInFlight = false;
+
+    if (PendingRequests.empty()) {
+        return;
+    }
+
+    TEvStatistics::TEvRequestStats::TPtr ev = std::move(PendingRequests.front());
+    PendingRequests.pop();
+
+    if (!PendingRequests.empty()) {
+        Send(SelfId(), new TEvPrivate::TEvProcessUrgent());
+        ProcessUrgentInFlight = true;
+    }
+
+    auto record = ev->Get()->Record;
+    const auto nodeId = record.GetNodeId();
+
+    std::vector<TSSId> ssIds;
+    ssIds.reserve(record.NeedSchemeShardsSize());
+    for (const auto& ssId : record.GetNeedSchemeShards()) {
+        ssIds.push_back(ssId);
+    }
+
+    SendStatisticsToNode(nodeId, ssIds);
+}
+
+void TStatisticsAggregator::Handle(TEvPrivate::TEvPropagateTimeout::TPtr&) {
+    SA_LOG_D("[" << TabletID() << "] EvPropagateTimeout");
+
+    if (PropagationInFlight) {
+        PropagationInFlight = false;
+        PropagationNodes.clear();
+        PropagationSchemeShards.clear();
+        LastSSIndex = 0;
+    }
+}
+
 void TStatisticsAggregator::ProcessRequests(TNodeId nodeId, const std::vector<TSSId>& ssIds) {
     if (FastCounter > 0) {
         --FastCounter;
@@ -217,7 +285,7 @@ void TStatisticsAggregator::ProcessRequests(TNodeId nodeId, const std::vector<TS
         }
     }
     if (!FastCheckInFlight) {
-        Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvFastPropagateCheck());
+        Schedule(FastCheckInterval, new TEvPrivate::TEvFastPropagateCheck());
         FastCheckInFlight = true;
     }
 }
@@ -230,7 +298,7 @@ void TStatisticsAggregator::SendStatisticsToNode(TNodeId nodeId, const std::vect
     std::vector<TNodeId> nodeIds;
     nodeIds.push_back(nodeId);
 
-    PropagateStatisticsImpl(nodeIds, ssIds);
+    PropagatePart(nodeIds, ssIds, 0, false);
 }
 
 void TStatisticsAggregator::PropagateStatistics() {
@@ -255,7 +323,13 @@ void TStatisticsAggregator::PropagateStatistics() {
         ssIds.push_back(ssId);
     }
 
-    PropagateStatisticsImpl(nodeIds, ssIds);
+    Schedule(PropagateTimeout, new TEvPrivate::TEvPropagateTimeout);
+
+    PropagationInFlight = true;
+    PropagationNodes = std::move(nodeIds);
+    PropagationSchemeShards = std::move(ssIds);
+
+    LastSSIndex = PropagatePart(PropagationNodes, PropagationSchemeShards, 0, true);
 }
 
 void TStatisticsAggregator::PropagateFastStatistics() {
@@ -280,48 +354,144 @@ void TStatisticsAggregator::PropagateFastStatistics() {
         ssIds.push_back(ssId);
     }
 
-    PropagateStatisticsImpl(nodeIds, ssIds);
+    PropagatePart(nodeIds, ssIds, 0, false);
 }
 
-void TStatisticsAggregator::PropagateStatisticsImpl(
-    const std::vector<TNodeId>& nodeIds, const std::vector<TSSId>& ssIds)
+size_t TStatisticsAggregator::PropagatePart(const std::vector<TNodeId>& nodeIds, const std::vector<TSSId>& ssIds,
+    size_t lastSSIndex, bool useSizeLimit)
 {
-    if (nodeIds.empty() || ssIds.empty()) {
+    auto propagate = std::make_unique<TEvStatistics::TEvPropagateStatistics>();
+    auto* record = propagate->MutableRecord();
+
+    TNodeId leadingNodeId = nodeIds[0];
+    record->MutableNodeIds()->Reserve(nodeIds.size() - 1);
+    for (size_t i = 1; i < nodeIds.size(); ++i) {
+        record->AddNodeIds(nodeIds[i]);
+    }
+
+    size_t sizeLimit = useSizeLimit ? StatsSizeLimitBytes : std::numeric_limits<size_t>::max();
+    size_t index = lastSSIndex;
+    for (size_t size = 0; index < ssIds.size() && size < sizeLimit; ++index) {
+        auto ssId = ssIds[index];
+        auto* entry = record->AddEntries();
+        entry->SetSchemeShardId(ssId);
+        auto itStats = BaseStats.find(ssId);
+        if (itStats != BaseStats.end()) {
+            entry->SetStats(itStats->second);
+            size += itStats->second.size();
+        } else {
+            entry->SetStats(TString()); // stats are not sent from SS yet
+        }
+    }
+
+    Send(NStat::MakeStatServiceID(leadingNodeId), propagate.release());
+
+    return index;
+}
+
+void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+    auto tabletId = ev->Get()->TabletId;
+    if (ShardRanges.empty()) {
+        return;
+    }
+    auto& range = ShardRanges.front();
+    if (tabletId != range.DataShardId) {
+        return;
+    }
+    Resolve();
+}
+
+void TStatisticsAggregator::Handle(TEvStatistics::TEvStatTableCreationResponse::TPtr&) {
+    IsStatisticsTableCreated = true;
+    if (PendingSaveStatistics) {
+        PendingSaveStatistics = false;
+        SaveStatisticsToTable();
+    }
+}
+
+void TStatisticsAggregator::Initialize() {
+    Register(CreateStatisticsTableCreator(std::make_unique<TEvStatistics::TEvStatTableCreationResponse>()));
+}
+
+void TStatisticsAggregator::Navigate() {
+    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+    TNavigate::TEntry entry;
+    entry.TableId = ScanTableId;
+    entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+    entry.Operation = TNavigate::OpTable;
+
+    auto request = std::make_unique<TNavigate>();
+    request->ResultSet.emplace_back(entry);
+
+    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
+}
+
+void TStatisticsAggregator::Resolve() {
+    TVector<TCell> plusInf;
+    TTableRange range(StartKey.GetCells(), true, plusInf, true, false);
+    auto keyDesc = MakeHolder<TKeyDesc>(
+        ScanTableId, range, TKeyDesc::ERowOperation::Read, KeyColumnTypes, Columns);
+
+    auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
+    request->ResultSet.emplace_back(std::move(keyDesc));
+
+    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request.release()));
+}
+
+void TStatisticsAggregator::NextRange() {
+    if (ShardRanges.empty()) {
+        SaveStatisticsToTable();
         return;
     }
 
-    TNodeId leadingNodeId = nodeIds[0];
+    auto& range = ShardRanges.front();
+    auto request = std::make_unique<TEvDataShard::TEvStatisticsScanRequest>();
+    auto& record = request->Record;
+    record.MutableTableId()->SetOwnerId(ScanTableId.PathId.OwnerId);
+    record.MutableTableId()->SetTableId(ScanTableId.PathId.LocalPathId);
+    record.SetStartKey(StartKey.GetBuffer());
 
-    for (size_t index = 0; index < ssIds.size(); ) {
-        auto propagate = std::make_unique<TEvStatistics::TEvPropagateStatistics>();
-        auto* record = propagate->MutableRecord();
-        record->MutableNodeIds()->Reserve(nodeIds.size() - 1);
-        for (size_t i = 1; i < nodeIds.size(); ++i) {
-            record->AddNodeIds(nodeIds[i]);
-        }
-        for (size_t size = 0; index < ssIds.size(); ++index) {
-            auto ssId = ssIds[index];
-            auto* entry = record->AddEntries();
-            entry->SetSchemeShardId(ssId);
-            auto itStats = BaseStats.find(ssId);
-            if (itStats != BaseStats.end()) {
-                entry->SetStats(itStats->second);
-                size += itStats->second.size();
-            } else {
-                entry->SetStats(TString()); // stats are not sent from SA yet
-            }
-            if (size >= StatsSizeLimitBytes) {
-                ++index;
-                break;
-            }
-        }
-        Send(NStat::MakeStatServiceID(leadingNodeId), propagate.release());
+    Send(MakePipePeNodeCacheID(false),
+        new TEvPipeCache::TEvForward(request.release(), range.DataShardId, true),
+        IEventHandle::FlagTrackDelivery);
+}
+
+void TStatisticsAggregator::SaveStatisticsToTable() {
+    if (!IsStatisticsTableCreated) {
+        PendingSaveStatistics = true;
+        return;
     }
+
+    PendingSaveStatistics = false;
+
+    std::vector<TString> columnNames;
+    std::vector<TString> data;
+    auto count = CountMinSketches.size();
+    columnNames.reserve(count);
+    data.reserve(count);
+
+    for (auto& [tag, sketch] : CountMinSketches) {
+        auto itColumnName = ColumnNames.find(tag);
+        if (itColumnName == ColumnNames.end()) {
+            continue;
+        }
+        columnNames.push_back(itColumnName->second);
+        TString strSketch(sketch->AsStringBuf());
+        data.push_back(strSketch);
+    }
+
+    Register(CreateSaveStatisticsQuery(ScanTableId.PathId, EStatType::COUNT_MIN_SKETCH,
+        std::move(columnNames), std::move(data)));
 }
 
 void TStatisticsAggregator::PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value) {
     db.Table<Schema::SysParams>().Key(id).Update(
         NIceDb::TUpdate<Schema::SysParams::Value>(value));
+}
+
+void TStatisticsAggregator::PersistScanTableId(NIceDb::TNiceDb& db) {
+    PersistSysParam(db, Schema::SysParam_ScanTableOwnerId, ToString(ScanTableId.PathId.OwnerId));
+    PersistSysParam(db, Schema::SysParam_ScanTableLocalPathId, ToString(ScanTableId.PathId.LocalPathId));
 }
 
 bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,

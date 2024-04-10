@@ -35,6 +35,8 @@ from hypothesis.errors import HypothesisWarning
 
 ARRAY_CODES = ["B", "H", "I", "L", "Q", "O"]
 
+T = TypeVar("T")
+
 
 def array_or_list(
     code: str, contents: Iterable[int]
@@ -45,25 +47,25 @@ def array_or_list(
 
 
 def replace_all(
-    buffer: Sequence[int],
-    replacements: Iterable[Tuple[int, int, Sequence[int]]],
-) -> bytes:
-    """Substitute multiple replacement values into a buffer.
+    ls: Sequence[T],
+    replacements: Iterable[Tuple[int, int, Sequence[T]]],
+) -> List[T]:
+    """Substitute multiple replacement values into a list.
 
     Replacements is a list of (start, end, value) triples.
     """
 
-    result = bytearray()
+    result: List[T] = []
     prev = 0
     offset = 0
     for u, v, r in replacements:
-        result.extend(buffer[prev:u])
+        result.extend(ls[prev:u])
         result.extend(r)
         prev = v
         offset += len(r) - (v - u)
-    result.extend(buffer[prev:])
-    assert len(result) == len(buffer) + offset
-    return bytes(result)
+    result.extend(ls[prev:])
+    assert len(result) == len(ls) + offset
+    return result
 
 
 NEXT_ARRAY_CODE = dict(zip(ARRAY_CODES, ARRAY_CODES[1:]))
@@ -110,12 +112,10 @@ class IntList(Sequence[int]):
         return len(self.__underlying)
 
     @overload
-    def __getitem__(self, i: int) -> int:
-        ...  # pragma: no cover
+    def __getitem__(self, i: int) -> int: ...  # pragma: no cover
 
     @overload
-    def __getitem__(self, i: slice) -> "IntList":
-        ...  # pragma: no cover
+    def __getitem__(self, i: slice) -> "IntList": ...  # pragma: no cover
 
     def __getitem__(self, i: Union[int, slice]) -> "Union[int, IntList]":
         if isinstance(i, slice):
@@ -192,9 +192,6 @@ def uniform(random: Random, n: int) -> bytes:
     return random.getrandbits(n * 8).to_bytes(n, "big")
 
 
-T = TypeVar("T")
-
-
 class LazySequenceCopy:
     """A "copy" of a sequence that works by inserting a mask in front
     of the underlying sequence, so that you can mutate it without changing
@@ -245,7 +242,7 @@ class LazySequenceCopy:
         return i
 
 
-def clamp(lower: int, value: int, upper: int) -> int:
+def clamp(lower: float, value: float, upper: float) -> float:
     """Given a value and lower/upper bounds, 'clamp' the value so that
     it satisfies lower <= value <= upper."""
     return max(lower, min(value, upper))

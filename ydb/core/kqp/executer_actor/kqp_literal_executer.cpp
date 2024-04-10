@@ -79,7 +79,9 @@ public:
         , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "LiteralExecuter")
         , UserRequestContext(userRequestContext)
     {
-        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc);
+        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(
+            Request.TxAlloc, TEvKqpExecuter::TEvTxResponse::EExecutionType::Literal);
+
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
@@ -145,24 +147,6 @@ public:
         if (TerminateIfTimeout()) {
             return;
         }
-
-        ui64 mkqlMemoryLimit = Request.MkqlMemoryLimit > 0
-            ? Request.MkqlMemoryLimit
-            : 1_GB;
-
-        auto& alloc = Request.TxAlloc->Alloc;
-        auto rmConfig = GetKqpResourceManager()->GetConfig();
-        ui64 mkqlInitialLimit = std::min(mkqlMemoryLimit, rmConfig.GetMkqlLightProgramMemoryLimit());
-        ui64 mkqlMaxLimit = std::max(mkqlMemoryLimit, rmConfig.GetMkqlLightProgramMemoryLimit());
-        alloc.SetLimit(mkqlInitialLimit);
-
-        // TODO: KIKIMR-15350
-        alloc.Ref().SetIncreaseMemoryLimitCallback([this, &alloc, mkqlMaxLimit](ui64 currentLimit, ui64 required) {
-            if (required < mkqlMaxLimit) {
-                LOG_D("Increase memory limit from " << currentLimit << " to " << required);
-                alloc.SetLimit(required);
-            }
-        });
 
         // task runner settings
         ComputeCtx = std::make_unique<NMiniKQL::TKqpComputeContextBase>();

@@ -79,9 +79,9 @@ namespace NKikimr {
         Domains->AddDomain(domain);
     }
 
-    void TAppPrepare::AddHive(ui32 hiveUid, ui64 hive)
+    void TAppPrepare::AddHive(ui64 hive)
     {
-        Domains->AddHive(hiveUid, hive);
+        Domains->AddHive(hive);
     }
 
     void TAppPrepare::ClearDomainsAndHive()

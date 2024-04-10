@@ -14,9 +14,27 @@ INSERT INTO TIME_TBL VALUES ('01:00');
 -- as of 7.4, timezone spec should be accepted and ignored
 INSERT INTO TIME_TBL VALUES ('02:03 PST');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- as of 7.4, timezone spec should be accepted and ignored
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time: "02:03 PST"
+
+        	-- as of 7.4, timezone spec should be accepted and ignored
+	^
 <sql-statement>
 INSERT INTO TIME_TBL VALUES ('11:59 EDT');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIME_TBL VALUES ('11:59 EDT');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time: "11:59 EDT"
+
+        	INSERT INTO TIME_TBL VALUES ('11:59 EDT');
+	^
 <sql-statement>
 INSERT INTO TIME_TBL VALUES ('12:00');
 </sql-statement>
@@ -32,13 +50,40 @@ INSERT INTO TIME_TBL VALUES ('11:59:59.99 PM');
 <sql-statement>
 INSERT INTO TIME_TBL VALUES ('2003-03-07 15:36:39 America/New_York');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIME_TBL VALUES ('2003-03-07 15:36:39 America/New_York');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "america/new_york" not recognized
+
+        	INSERT INTO TIME_TBL VALUES ('2003-03-07 15:36:39 America/New_York');
+	^
 <sql-statement>
 INSERT INTO TIME_TBL VALUES ('2003-07-07 15:36:39 America/New_York');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIME_TBL VALUES ('2003-07-07 15:36:39 America/New_York');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "america/new_york" not recognized
+
+        	INSERT INTO TIME_TBL VALUES ('2003-07-07 15:36:39 America/New_York');
+	^
 <sql-statement>
 -- this should fail (the timezone offset is not known)
 INSERT INTO TIME_TBL VALUES ('15:36:39 America/New_York');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- this should fail (the timezone offset is not known)
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "america/new_york" not recognized
+
+        	-- this should fail (the timezone offset is not known)
+	^
 <sql-statement>
 SELECT f1 AS "Time" FROM TIME_TBL;
 </sql-statement>

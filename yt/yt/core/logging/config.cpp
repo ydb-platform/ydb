@@ -92,7 +92,8 @@ void TLogWriterConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("enable_source_location", &TThis::EnableSourceLocation)
         .Default(false);
-    registrar.Parameter("enable_instant", &TThis::EnableInstant)
+    registrar.Parameter("enable_system_fields", &TThis::EnableSystemFields)
+        .Alias("enable_instant")
         .Default(true);
     registrar.Parameter("json_format", &TThis::JsonFormat)
         .Default();

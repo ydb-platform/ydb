@@ -608,6 +608,7 @@ TAstParseResult::TAstParseResult(TAstParseResult&& other)
     , Root(other.Root)
     , Issues(std::move(other.Issues))
     , PgAutoParamValues(std::move(other.PgAutoParamValues))
+    , ActualSyntaxType(other.ActualSyntaxType)
 {
     other.Root = nullptr;
 }
@@ -619,6 +620,7 @@ TAstParseResult& TAstParseResult::operator=(TAstParseResult&& other) {
     other.Root = nullptr;
     Issues = std::move(other.Issues);
     PgAutoParamValues = std::move(other.PgAutoParamValues);
+    ActualSyntaxType = other.ActualSyntaxType;
     return *this;
 }
 

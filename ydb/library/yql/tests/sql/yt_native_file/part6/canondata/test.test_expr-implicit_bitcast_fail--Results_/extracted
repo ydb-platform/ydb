@@ -6,11 +6,11 @@
         <tmp_path>/program.sql:<main>:3:8: Error: At function: AsList
         	select AsList(
 	       ^
-            <tmp_path>/program.sql:<main>:6:1: Error: Failed to convert type: Uint64 to Int64
-            	11580367904009864964);
-	^
-                <tmp_path>/program.sql:<main>: Error: Treat warning as error mode enabled. To disable it use "pragma warning("default", <code>);"
-                
-                    <tmp_path>/program.sql:<main>:6:1: Error: Consider using explicit CAST or BITCAST to convert from Uint64 to Int64
-                    	11580367904009864964);
-	^
+            <tmp_path>/program.sql:<main>: Error: Treat warning as error mode enabled. To disable it use "pragma warning("default", <code>);"
+            
+                <tmp_path>/program.sql:<main>:3:8: Error: Consider using explicit CAST or BITCAST to convert from Int64 to Uint64
+                	select AsList(
+	       ^
+            <tmp_path>/program.sql:<main>:3:8: Error: Cannot infer common type for Int64 and Uint64
+            	select AsList(
+	       ^

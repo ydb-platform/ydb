@@ -85,6 +85,7 @@ public:
     explicit TReadRowsRPC(std::unique_ptr<IRequestNoOpCtx> request)
         : Request(std::move(request))
         , PipeCache(MakePipePeNodeCacheID(true))
+        , Span(TWilsonGrpc::RequestActor, Request->GetWilsonTraceId(), "ReadRowsRpc")
     {}
 
     bool BuildSchema(NSchemeCache::TSchemeCacheNavigate* resolveNamesResult, TString& errorMessage) {
@@ -355,7 +356,7 @@ public:
         entry.ShowPrivatePath = false;
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->ResultSet.emplace_back(entry);
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()), 0, 0, Span.GetTraceId());
         return true;
     }
 
@@ -439,7 +440,7 @@ public:
 
         auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
         request->ResultSet.emplace_back(std::move(keyRange));
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request.release()));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request.release()), 0, 0, Span.GetTraceId());
     }
 
     void CreateShardToKeysMapping(TKeyDesc* keyRange) {
@@ -495,7 +496,7 @@ public:
         }
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC send TEvRead shardId : " << shardId << " keys.size(): " << keys.size());
-        Send(PipeCache, new TEvPipeCache::TEvForward(request.release(), shardId, true), IEventHandle::FlagTrackDelivery);
+        Send(PipeCache, new TEvPipeCache::TEvForward(request.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
         ++ReadsInFlight;
     }
 
@@ -672,6 +673,7 @@ public:
         if (TimeoutTimerActorId) {
             Send(TimeoutTimerActorId, new TEvents::TEvPoisonPill());
         }
+        Span.EndOk();
         TBase::PassAway();
     }
 
@@ -724,6 +726,8 @@ private:
 
     ui64 Retries = 0;
     const ui64 MaxTotalRetries = 5;
+
+    NWilson::TSpan Span;
 };
 
 void DoReadRowsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {

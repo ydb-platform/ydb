@@ -228,6 +228,29 @@ Y_UNIT_TEST(TestKeyRange) {
     UNIT_ASSERT_STRINGS_EQUAL(ToHex(result), ToHex(expected));
 } // Y_UNIT_TEST(TestKeyRange)
 
+Y_UNIT_TEST(StoreKeys) {
+    TKey keyOld(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5, false);
+    UNIT_ASSERT_VALUES_EQUAL(keyOld.ToString(), "d0000000009_00000000000000000008_00007_0000000006_00005");
+
+    TKey keyNew(TKeyPrefix::TypeData, TPartitionId{5, 1, 9}, 8, 7, 6, 5, false);
+    UNIT_ASSERT_VALUES_EQUAL(keyNew.ToString(), "D0000000009_00000000000000000008_00007_0000000006_00005");
+
+    keyNew.SetType(TKeyPrefix::TypeInfo);
+    UNIT_ASSERT_VALUES_EQUAL(keyNew.ToString(), "M0000000009_00000000000000000008_00007_0000000006_00005");
+}
+
+Y_UNIT_TEST(RestoreKeys) {
+    {
+        TKey key("X0000000001_00000000000000000002_00003_0000000004_00005");
+        UNIT_ASSERT(key.GetType() == TKeyPrefix::TypeTmpData);
+        UNIT_ASSERT_VALUES_EQUAL(key.GetPartition().InternalPartitionId, 1);
+    }
+    {
+        TKey key("i0000000001_00000000000000000002_00003_0000000004_00005");
+        UNIT_ASSERT(key.GetType() == TKeyPrefix::TypeMeta);
+        UNIT_ASSERT_VALUES_EQUAL(key.GetPartition().InternalPartitionId, 1);
+    }
+}
 
 } //Y_UNIT_TEST_SUITE
 

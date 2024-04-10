@@ -77,7 +77,7 @@ bool FutexWaiter::Wait(KernelTimeout t) {
     if (!first_pass) MaybeBecomeIdle();
     const int err = WaitUntil(&futex_, 0, t);
     if (err != 0) {
-      if (err == -EINTR || err == -EWOULDBLOCK) {
+      if (err == -EINTR || err == -EWOULDBLOCK || err == -512 /* ERESTARTSYS */ || err == -516 /* ERESTART_RESTARTBLOCK */) {
         // Do nothing, the loop will retry.
       } else if (err == -ETIMEDOUT) {
         return false;

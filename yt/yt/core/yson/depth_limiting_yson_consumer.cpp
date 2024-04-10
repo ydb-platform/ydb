@@ -2,11 +2,7 @@
 #include "forwarding_consumer.h"
 #include "null_consumer.h"
 
-#include <yt/yt/core/logging/log.h>
-
 #include <yt/yt/core/misc/error.h>
-
-#include <yt/yt/core/ytree/public.h>
 
 namespace NYT::NYson {
 

@@ -3451,8 +3451,8 @@ public:
         HTML(os) {
             TABLE() {
                 TTimeline timeline = MakeTimeline(node);
+                TABLED() {};
                 TABLEHEAD() TABLER() {
-                    TABLED();
                     for (auto& e : timeline) TABLED() {
                         TPatternNode* subnode = e.first;
                         os << subnode->Name;

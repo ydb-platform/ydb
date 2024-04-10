@@ -16,7 +16,7 @@
 #ifndef Y_ABSL_SYNCHRONIZATION_INTERNAL_PTHREAD_WAITER_H_
 #define Y_ABSL_SYNCHRONIZATION_INTERNAL_PTHREAD_WAITER_H_
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__MINGW32__)
 #include <pthread.h>
 
 #include "y_absl/base/config.h"
@@ -55,6 +55,6 @@ class PthreadWaiter : public WaiterCrtp<PthreadWaiter> {
 Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ndef _WIN32
+#endif  // !defined(_WIN32) && !defined(__MINGW32__)
 
 #endif  // Y_ABSL_SYNCHRONIZATION_INTERNAL_PTHREAD_WAITER_H_

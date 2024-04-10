@@ -9,8 +9,6 @@
 #include <util/stream/output.h>
 #include <util/stream/zerocopy.h>
 
-#include <stack>
-
 namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -38,6 +36,7 @@ public:
     template <typename T>
     Y_FORCE_INLINE T UncheckedAs() const;
     Y_FORCE_INLINE bool IsEndOfStream() const;
+    Y_FORCE_INLINE i64 GetBinarySize() const;
 
 private:
     TYsonItem() = default;

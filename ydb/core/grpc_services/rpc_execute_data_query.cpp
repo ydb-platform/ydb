@@ -10,6 +10,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
@@ -146,7 +147,7 @@ public:
 
         ReportCostInfo_ = req->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
 
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Span_.GetTraceId());
     }
 
     static void ConvertReadStats(const NKikimrQueryStats::TReadOpStats& from, Ydb::TableStats::OperationStats* to) {

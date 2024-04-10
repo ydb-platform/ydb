@@ -70,6 +70,10 @@ namespace NKikimr {
         std::unique_ptr<TCostModel> CostModel;
         std::shared_ptr<TBsCostTracker> CostTracker;
 
+        // oos logging
+        std::atomic<ui32> CurrentOOSStatusFlag = NKikimrBlobStorage::StatusIsValid;
+        std::shared_ptr<NMonGroup::TOutOfSpaceGroup> OOSMonGroup;
+
     private:
         // Managing disk space
         TOutOfSpaceState OutOfSpaceState;
@@ -100,7 +104,9 @@ namespace NKikimr {
                 TReplQuoter::TPtr replPDiskReadQuoter = nullptr,
                 TReplQuoter::TPtr replPDiskWriteQuoter = nullptr,
                 TReplQuoter::TPtr replNodeRequestQuoter = nullptr,
-                TReplQuoter::TPtr replNodeResponseQuoter = nullptr);
+                TReplQuoter::TPtr replNodeResponseQuoter = nullptr,
+                ui64 burstThresholdNs = 1'000'000'000,
+                float diskTimeAvailableScale = 1);
 
         // The function checks response from PDisk. Normally, it's OK.
         // Other alternatives are: 1) shutdown; 2) FAIL

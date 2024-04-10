@@ -15,8 +15,8 @@ NPq::NConfigurationManager::TClientOptions GetCmClientOptions(const NYql::TPqClu
     return opts;
 }
 
-NYdb::NPersQueue::TPersQueueClientSettings GetYdbPqClientOptions(const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
-    NYdb::NPersQueue::TPersQueueClientSettings opts;
+NYdb::NTopic::TTopicClientSettings GetYdbPqClientOptions(const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
+    NYdb::NTopic::TTopicClientSettings opts;
     opts
         .DiscoveryEndpoint(cfg.GetEndpoint())
         .Database(database)
@@ -46,12 +46,12 @@ const NPq::NConfigurationManager::IClient::TPtr& TPqSession::GetConfigManagerCli
     return client;
 }
 
-NYdb::NPersQueue::TPersQueueClient& TPqSession::GetYdbPqClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
+NYdb::NTopic::TTopicClient& TPqSession::GetYdbPqClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
     const auto clientIt = ClusterYdbPqClients.find(cluster);
     if (clientIt != ClusterYdbPqClients.end()) {
         return clientIt->second;
     }
-    return ClusterYdbPqClients.emplace(cluster, NYdb::NPersQueue::TPersQueueClient(YdbDriver, GetYdbPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
+    return ClusterYdbPqClients.emplace(cluster, NYdb::NTopic::TTopicClient(YdbDriver, GetYdbPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
 }
 
 NYdb::NDataStreams::V1::TDataStreamsClient& TPqSession::GetDsClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
@@ -85,13 +85,13 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
             return client->DescribePath(path);
         }
 
-        return GetYdbPqClient(cluster, database, *config, credentialsProviderFactory).DescribeTopic(path).Apply([cluster, path](const NYdb::NPersQueue::TAsyncDescribeTopicResult& describeTopicResultFuture) {
-            const NYdb::NPersQueue::TDescribeTopicResult& describeTopicResult = describeTopicResultFuture.GetValue();
+        return GetYdbPqClient(cluster, database, *config, credentialsProviderFactory).DescribeTopic(path).Apply([cluster, path](const NYdb::NTopic::TAsyncDescribeTopicResult& describeTopicResultFuture) {
+            const NYdb::NTopic::TDescribeTopicResult& describeTopicResult = describeTopicResultFuture.GetValue();
             if (!describeTopicResult.IsSuccess()) {
                 throw yexception() << "Failed to describe topic `" << cluster << "`.`" << path << "`: " << describeTopicResult.GetIssues().ToString();
             }
             NPq::NConfigurationManager::TTopicDescription desc(path);
-            desc.PartitionsCount = describeTopicResult.TopicSettings().PartitionsCount();
+            desc.PartitionsCount = describeTopicResult.GetTopicDescription().GetTotalPartitionsCount();
             return NPq::NConfigurationManager::TDescribePathResult::Make<NPq::NConfigurationManager::TTopicDescription>(std::move(desc));
         });
     }
@@ -137,7 +137,6 @@ NThreading::TFuture<IPqGateway::TListStreams> TPqSession::ListStreams(const TStr
                     IPqGateway::TListStreams listStrems;
                     listStrems.Names.insert(listStrems.Names.end(), result.stream_names().begin(), result.stream_names().end());
                     return listStrems;
-
                 });
     }
 }

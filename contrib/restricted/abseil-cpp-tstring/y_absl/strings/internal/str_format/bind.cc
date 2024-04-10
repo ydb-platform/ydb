@@ -14,10 +14,24 @@
 
 #include "y_absl/strings/internal/str_format/bind.h"
 
+#include <algorithm>
+#include <cassert>
 #include <cerrno>
+#include <cstddef>
+#include <cstdio>
+#include <ios>
 #include <limits>
+#include <ostream>
 #include <sstream>
 #include <util/generic/string.h>
+#include "y_absl/base/config.h"
+#include "y_absl/base/optimization.h"
+#include "y_absl/strings/internal/str_format/arg.h"
+#include "y_absl/strings/internal/str_format/constexpr_parser.h"
+#include "y_absl/strings/internal/str_format/extension.h"
+#include "y_absl/strings/internal/str_format/output.h"
+#include "y_absl/strings/string_view.h"
+#include "y_absl/types/span.h"
 
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
@@ -90,6 +104,8 @@ inline bool ArgContext::Bind(const UnboundConversion* unbound,
     } else {
       FormatConversionSpecImplFriend::SetFlags(unbound->flags, bound);
     }
+
+    FormatConversionSpecImplFriend::SetLengthMod(unbound->length_mod, bound);
   } else {
     FormatConversionSpecImplFriend::SetFlags(unbound->flags, bound);
     FormatConversionSpecImplFriend::SetWidth(-1, bound);
@@ -215,7 +231,7 @@ TString& AppendPack(TString* out, const UntypedFormatSpecImpl format,
   return *out;
 }
 
-TString FormatPack(const UntypedFormatSpecImpl format,
+TString FormatPack(UntypedFormatSpecImpl format,
                        y_absl::Span<const FormatArgImpl> args) {
   TString out;
   if (Y_ABSL_PREDICT_FALSE(!FormatUntyped(&out, format, args))) {

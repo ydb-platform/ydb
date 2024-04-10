@@ -15,6 +15,13 @@
                                 ]
                             ];
                             [
+                                "contains";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
                                 "levenstein";
                                 [
                                     "DataType";
@@ -27,22 +34,27 @@
                 "Data" = [
                     [
                         "fdsa";
+                        %false;
                         "3"
                     ];
                     [
                         "aswedfg";
+                        %true;
                         "5"
                     ];
                     [
                         "asdadsaasd";
+                        %true;
                         "8"
                     ];
                     [
                         "gdsfsassas";
+                        %true;
                         "8"
                     ];
                     [
                         "";
+                        %false;
                         "2"
                     ]
                 ]

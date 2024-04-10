@@ -160,14 +160,20 @@ class TPacketDecoder
     , public TPacketTranscoderBase<TPacketDecoder>
 {
 public:
-    TPacketDecoder(const NLogging::TLogger& logger, bool verifyChecksum)
+    TPacketDecoder(
+        const NLogging::TLogger& logger,
+        bool verifyChecksum,
+        IMemoryUsageTrackerPtr memoryUsageTracker)
         : TPacketTranscoderBase(logger)
         , Allocator_(
             PacketDecoderChunkSize,
             TChunkedMemoryAllocator::DefaultMaxSmallBlockSizeRatio,
             GetRefCountedTypeCookie<TPacketDecoderTag>())
         , VerifyChecksum_(verifyChecksum)
+        , MemoryUsageTracker_(std::move(memoryUsageTracker))
     {
+        YT_VERIFY(MemoryUsageTracker_);
+
         Restart();
     }
 
@@ -201,6 +207,7 @@ public:
         Phase_ = EPacketPhase::FixedHeader;
         PacketSize_ = 0;
         Parts_.clear();
+        MemoryGuard_ = TMemoryUsageTrackerGuard::Acquire(MemoryUsageTracker_, 0);
         PartIndex_ = -1;
         Message_.Reset();
 
@@ -243,10 +250,13 @@ private:
     TChunkedMemoryAllocator Allocator_;
 
     std::vector<TSharedRef> Parts_;
+    TMemoryUsageTrackerGuard MemoryGuard_;
 
     size_t PacketSize_ = 0;
 
     const bool VerifyChecksum_;
+
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
     bool EndFixedHeaderPhase()
     {
@@ -351,6 +361,8 @@ private:
                 Parts_.push_back(TSharedRef::MakeEmpty());
             } else {
                 auto part = Allocator_.AllocateAligned(partSize);
+                MemoryGuard_.IncrementSize(part.Size());
+
                 BeginPhase(EPacketPhase::MessagePart, part.Begin(), part.Size());
                 Parts_.push_back(std::move(part));
                 break;
@@ -494,14 +506,21 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TPacketTranscoderFactory
+class TPacketTranscoderFactory
     : public IPacketTranscoderFactory
 {
+public:
+    TPacketTranscoderFactory(IMemoryUsageTrackerPtr memoryUsageTracker)
+        : MemoryUsageTracker_(std::move(memoryUsageTracker))
+    {
+        YT_VERIFY(MemoryUsageTracker_);
+    }
+
     std::unique_ptr<IPacketDecoder> CreateDecoder(
         const NLogging::TLogger& logger,
         bool verifyChecksum) const override
     {
-        return std::make_unique<TPacketDecoder>(logger, verifyChecksum);
+        return std::make_unique<TPacketDecoder>(logger, verifyChecksum, MemoryUsageTracker_);
     }
 
     std::unique_ptr<IPacketEncoder> CreateEncoder(
@@ -509,13 +528,16 @@ struct TPacketTranscoderFactory
     {
         return std::make_unique<TPacketEncoder>(logger);
     }
+
+private:
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IPacketTranscoderFactory* GetYTPacketTranscoderFactory()
+IPacketTranscoderFactory* GetYTPacketTranscoderFactory(IMemoryUsageTrackerPtr memoryUsageTracker)
 {
-    return LeakySingleton<TPacketTranscoderFactory>();
+    return LeakySingleton<TPacketTranscoderFactory>(std::move(memoryUsageTracker));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

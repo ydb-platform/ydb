@@ -5,7 +5,7 @@
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/ycloud/api/events.h>
-#include <ydb/library/ycloud/impl/grpc_service_client.h>
+#include <ydb/library/grpc/actor_client/grpc_service_client.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event.h>
@@ -44,7 +44,7 @@ struct TEvPrivate {
 
 }
 
-class TCmsGrpcServiceActor : public NActors::TActor<TCmsGrpcServiceActor>, TGrpcServiceClient<Ydb::Cms::V1::CmsService> {
+class TCmsGrpcServiceActor : public NActors::TActor<TCmsGrpcServiceActor>, NGrpcActorClient::TGrpcServiceClient<Ydb::Cms::V1::CmsService> {
 public:
     using TBase = NActors::TActor<TCmsGrpcServiceActor>;
     struct TCreateDatabaseGrpcRequest : TGrpcRequest {
@@ -59,7 +59,7 @@ public:
         using TResponseEventType = TEvPrivate::TEvListDatabasesResponse;
     };
 
-    TCmsGrpcServiceActor(const NCloud::TGrpcClientSettings& settings, const NYdb::TCredentialsProviderPtr& credentialsProvider)
+    TCmsGrpcServiceActor(const NGrpcActorClient::TGrpcClientSettings& settings, const NYdb::TCredentialsProviderPtr& credentialsProvider)
         : TBase(&TCmsGrpcServiceActor::StateFunc)
         , TGrpcServiceClient(settings)
         , Settings(settings)
@@ -159,13 +159,13 @@ public:
     }
 
 private:
-    NCloud::TGrpcClientSettings Settings;
+    NGrpcActorClient::TGrpcClientSettings Settings;
     TMap<uint64_t, std::variant<TEvYdbCompute::TEvCreateDatabaseRequest::TPtr, TEvYdbCompute::TEvListDatabasesRequest::TPtr>> Requests;
     NYdb::TCredentialsProviderPtr CredentialsProvider;
     int64_t Cookie = 0;
 };
 
-std::unique_ptr<NActors::IActor> CreateCmsGrpcClientActor(const NCloud::TGrpcClientSettings& settings, const NYdb::TCredentialsProviderPtr& credentialsProvider) {
+std::unique_ptr<NActors::IActor> CreateCmsGrpcClientActor(const NGrpcActorClient::TGrpcClientSettings& settings, const NYdb::TCredentialsProviderPtr& credentialsProvider) {
     return std::make_unique<TCmsGrpcServiceActor>(settings, credentialsProvider);
 }
 

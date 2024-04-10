@@ -152,7 +152,7 @@ namespace NSQLTranslationV0 {
         bool EnableSystemColumns = true;
         ui32 ResultRowsLimit = 0;
         ui64 ResultSizeLimit = 0;
-        ui32 PragmaGroupByLimit = 1 << 5;
+        ui32 PragmaGroupByLimit = 1 << 6;
         ui32 PragmaGroupByCubeLimit = 5;
         THashSet<TString> Libraries;
         NYql::TWarningPolicy WarningPolicy;

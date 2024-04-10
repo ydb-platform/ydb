@@ -3,11 +3,11 @@
 -- Test int8 64-bit integers.
 --
 CREATE TABLE INT8_TBL(q1 int8, q2 int8);
-INSERT INTO INT8_TBL (q1, q2) VALUES('  123   ','  456');
-INSERT INTO INT8_TBL (q1, q2) VALUES('123   ','4567890123456789');
-INSERT INTO INT8_TBL (q1, q2) VALUES('4567890123456789','123');
-INSERT INTO INT8_TBL (q1, q2) VALUES(+4567890123456789,'4567890123456789');
-INSERT INTO INT8_TBL (q1, q2) VALUES('+4567890123456789','-4567890123456789');
+INSERT INTO INT8_TBL VALUES('  123   ','  456');
+INSERT INTO INT8_TBL VALUES('123   ','4567890123456789');
+INSERT INTO INT8_TBL VALUES('4567890123456789','123');
+INSERT INTO INT8_TBL VALUES(+4567890123456789,'4567890123456789');
+INSERT INTO INT8_TBL VALUES('+4567890123456789','-4567890123456789');
 -- bad inputs
 INSERT INTO INT8_TBL(q1) VALUES ('      ');
 INSERT INTO INT8_TBL(q1) VALUES ('xxx');
@@ -72,18 +72,6 @@ SELECT q1 + 42::int2 AS "8plus2", q1 - 42::int2 AS "8minus2", q1 * 42::int2 AS "
 -- int2 op int8
 SELECT 246::int2 + q1 AS "2plus8", 246::int2 - q1 AS "2minus8", 246::int2 * q1 AS "2mul8", 246::int2 / q1 AS "2div8" FROM INT8_TBL;
 SELECT q2, abs(q2) FROM INT8_TBL;
-SELECT min(q1), min(q2) FROM INT8_TBL;
-SELECT max(q1), max(q2) FROM INT8_TBL;
--- TO_CHAR()
---
-SELECT to_char(q1, '9G999G999G999G999G999'), to_char(q2, '9,999,999,999,999,999')
-	FROM INT8_TBL;
-SELECT to_char(q1, '9G999G999G999G999G999D999G999'), to_char(q2, '9,999,999,999,999,999.999,999')
-	FROM INT8_TBL;
-SELECT to_char( (q1 * -1), '9999999999999999PR'), to_char( (q2 * -1), '9999999999999999.999PR')
-	FROM INT8_TBL;
-SELECT to_char( (q1 * -1), '9999999999999999S'), to_char( (q2 * -1), 'S9999999999999999')
-	FROM INT8_TBL;
 SELECT to_char(q2, 'MI9999999999999999')     FROM INT8_TBL;
 SELECT to_char(q2, 'FMS9999999999999999')    FROM INT8_TBL;
 SELECT to_char(q2, 'FM9999999999999999THPR') FROM INT8_TBL;
@@ -130,6 +118,7 @@ SELECT CAST('42'::int2 AS int8), CAST('-37'::int2 AS int8);
 SELECT CAST('36854775807.0'::float4 AS int8);
 SELECT CAST('922337203685477580700.0'::float8 AS int8);
 SELECT CAST(q1 AS oid) FROM INT8_TBL;
+SELECT oid::int8 FROM pg_class WHERE relname = 'pg_class';
 -- bit operations
 SELECT q1, q2, q1 & q2 AS "and", q1 | q2 AS "or", q1 # q2 AS "xor", ~q1 AS "not" FROM INT8_TBL;
 SELECT q1, q1 << 2 AS "shl", q1 >> 3 AS "shr" FROM INT8_TBL;
@@ -168,24 +157,7 @@ FROM (VALUES (-2.5::numeric),
              (0.5::numeric),
              (1.5::numeric),
              (2.5::numeric)) t(x);
--- test gcd()
-SELECT a, b, gcd(a, b), gcd(a, -b), gcd(b, a), gcd(-b, a)
-FROM (VALUES (0::int8, 0::int8),
-             (0::int8, 29893644334::int8),
-             (288484263558::int8, 29893644334::int8),
-             (-288484263558::int8, 29893644334::int8),
-             ((-9223372036854775808)::int8, 1::int8),
-             ((-9223372036854775808)::int8, 9223372036854775807::int8),
-             ((-9223372036854775808)::int8, 4611686018427387904::int8)) AS v(a, b);
 SELECT gcd((-9223372036854775808)::int8, 0::int8); -- overflow
 SELECT gcd((-9223372036854775808)::int8, (-9223372036854775808)::int8); -- overflow
--- test lcm()
-SELECT a, b, lcm(a, b), lcm(a, -b), lcm(b, a), lcm(-b, a)
-FROM (VALUES (0::int8, 0::int8),
-             (0::int8, 29893644334::int8),
-             (29893644334::int8, 29893644334::int8),
-             (288484263558::int8, 29893644334::int8),
-             (-288484263558::int8, 29893644334::int8),
-             ((-9223372036854775808)::int8, 0::int8)) AS v(a, b);
 SELECT lcm((-9223372036854775808)::int8, 1::int8); -- overflow
 SELECT lcm(9223372036854775807::int8, 9223372036854775806::int8); -- overflow

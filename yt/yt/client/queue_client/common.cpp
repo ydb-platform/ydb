@@ -94,6 +94,7 @@ size_t THash<NYT::NQueueClient::TProfilingTags>::operator()(const NYT::NQueueCli
     HashCombine(result, tag.Cluster);
     HashCombine(result, tag.LeadingStatus);
     HashCombine(result, tag.QueueAgentStage);
+    HashCombine(result, tag.ObjectType);
     return result;
 }
 

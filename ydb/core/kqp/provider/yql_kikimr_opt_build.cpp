@@ -507,6 +507,20 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         const auto& tableData = tablesData->ExistingTable(cluster, table);
         YQL_ENSURE(tableData.Metadata);
         txRes.AddWriteOpToQueryBlock(node, tableData.Metadata, tableOp & KikimrReadOps());
+        if (!del.ReturningColumns().Empty()) {
+            txRes.AddResult(
+                Build<TResWrite>(ctx, del.Pos())
+                .World(del.World())
+                .DataSink<TResultDataSink>().Build()
+                .Key<TCoKey>().Build()
+                .Data<TKiReturningList>()
+                    .Update(node)
+                    .Columns(del.ReturningColumns())
+                    .Build()
+                .Settings().Build()
+                .Done());
+        }
+
         txRes.AddTableOperation(BuildTableOpNode(cluster, table, tableOp, del.Pos(), ctx));
         return result;
     }
@@ -661,9 +675,8 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
             if (!ExploreTx(child, ctx, dataSink, txRes, tablesData, types)) {
                 return false;
             }
-
-            return true;
         }
+        return true;
     }
 
     if (node.Maybe<TResWrite>() ||

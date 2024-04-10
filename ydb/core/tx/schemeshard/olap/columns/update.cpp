@@ -4,6 +4,10 @@
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
+extern "C" {
+#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
+}
+
 namespace NKikimr::NSchemeShard {
 
     bool TOlapColumnAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors) {
@@ -14,6 +18,7 @@ namespace NKikimr::NSchemeShard {
         Name = columnSchema.GetName();
         NotNullFlag = columnSchema.GetNotNull();
         TypeName = columnSchema.GetType();
+        StorageId = columnSchema.GetStorageId();
         if (columnSchema.HasSerializer()) {
             NArrow::NSerialization::TSerializerContainer serializer;
             if (!serializer.DeserializeFromProto(columnSchema.GetSerializer())) {
@@ -41,21 +46,29 @@ namespace NKikimr::NSchemeShard {
             return false;
         }
 
-        auto typeName = NMiniKQL::AdaptLegacyYqlType(TypeName);
-        Y_ABORT_UNLESS(AppData()->TypeRegistry);
-        const NScheme::IType* type = AppData()->TypeRegistry->GetType(typeName);
-        if (!type) {
-            errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
-            return false;
-        }
-        if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-            errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
-            return false;;
-        }
-        Type = NScheme::TTypeInfo(type->GetTypeId());
-        if (!IsAllowedType(type->GetTypeId())){
-            errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
-            return false;
+        if (const auto& typeName = NMiniKQL::AdaptLegacyYqlType(TypeName); typeName.StartsWith("pg")) {
+            const auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+            if (!(typeDesc && TOlapColumnAdd::IsAllowedPgType(NPg::PgTypeIdFromTypeDesc(typeDesc)))) {
+                errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
+                return false;
+            }
+            Type = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+        } else {
+            Y_ABORT_UNLESS(AppData()->TypeRegistry);
+            const NScheme::IType* type = AppData()->TypeRegistry->GetType(typeName);
+            if (!type) {
+                errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
+                return false;
+            }
+            if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
+                errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
+                return false;;
+            }
+            Type = NScheme::TTypeInfo(type->GetTypeId());
+            if (!IsAllowedType(type->GetTypeId())){
+                errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
+                return false;
+            }
         }
         return true;
     }
@@ -63,6 +76,7 @@ namespace NKikimr::NSchemeShard {
     void TOlapColumnAdd::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema) {
         Name = columnSchema.GetName();
         TypeName = columnSchema.GetType();
+        StorageId = columnSchema.GetStorageId();
 
         if (columnSchema.HasTypeInfo()) {
             Type = NScheme::TypeInfoModFromProtoColumnType(
@@ -94,6 +108,7 @@ namespace NKikimr::NSchemeShard {
         columnSchema.SetName(Name);
         columnSchema.SetType(TypeName);
         columnSchema.SetNotNull(NotNullFlag);
+        columnSchema.SetStorageId(StorageId);
         if (Serializer) {
             Serializer->SerializeToProto(*columnSchema.MutableSerializer());
         }
@@ -110,6 +125,9 @@ namespace NKikimr::NSchemeShard {
 
     bool TOlapColumnAdd::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors) {
         Y_ABORT_UNLESS(GetName() == diffColumn.GetName());
+        if (diffColumn.GetStorageId()) {
+            StorageId = *diffColumn.GetStorageId();
+        }
         if (diffColumn.GetSerializer()) {
             Serializer = diffColumn.GetSerializer();
         }
@@ -140,6 +158,20 @@ namespace NKikimr::NSchemeShard {
         return true;
     }
 
+    bool TOlapColumnAdd::IsAllowedPgType(ui32 pgTypeId) {
+        switch (pgTypeId) {
+            case INT2OID:
+            case INT4OID:
+            case INT8OID:
+            case FLOAT4OID:
+            case FLOAT8OID:
+                return true;
+            default:
+                break;
+        }
+        return false;
+    }
+
     bool TOlapColumnAdd::IsAllowedFirstPkType(ui32 typeId) {
         switch (typeId) {
             case NYql::NProto::Uint8: // Byte
@@ -152,6 +184,8 @@ namespace NKikimr::NSchemeShard {
             case NYql::NProto::Date:
             case NYql::NProto::Datetime:
             case NYql::NProto::Timestamp:
+            case NYql::NProto::Timestamp64:
+            case NYql::NProto::Interval64:
                 return true;
             case NYql::NProto::Interval:
             case NYql::NProto::Decimal:

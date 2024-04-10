@@ -107,8 +107,8 @@ namespace NYql::NDqs {
         });
     }
 
-    THolder<IGraphTransformer> CreateDqsReplacePrecomputesTransformer(TTypeAnnotationContext& typesCtx, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry) {
-        return CreateFunctorTransformer([&typesCtx, funcRegistry](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
+    THolder<IGraphTransformer> CreateDqsReplacePrecomputesTransformer(TTypeAnnotationContext& typesCtx) {
+        return CreateFunctorTransformer([&typesCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
             TOptimizeExprSettings settings(&typesCtx);
             settings.VisitChecker = [&](const TExprNode& node) {
                 return input.Get() == &node || (!TDqReadWrapBase::Match(&node) && !TDqPhyPrecompute::Match(&node));
@@ -117,7 +117,7 @@ namespace NYql::NDqs {
 
             NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
             NKikimr::NMiniKQL::TTypeEnvironment env(alloc);
-            NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(env, *funcRegistry);
+            NKikimr::NMiniKQL::TTypeBuilder typeBuilder(env);
             NKikimr::NMiniKQL::TMemoryUsageInfo memInfo("Precompute");
             NKikimr::NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo);
 
@@ -135,7 +135,7 @@ namespace NYql::NDqs {
                             YQL_ENSURE(dataNode.IsList() && !dataNode.AsList().empty());
                             dataNode = dataNode[0];
                             TStringStream err;
-                            NKikimr::NMiniKQL::TType* mkqlType = NCommon::BuildType(*input.Ref().GetTypeAnn(), pgmBuilder, err);
+                            NKikimr::NMiniKQL::TType* mkqlType = NCommon::BuildType(*input.Ref().GetTypeAnn(), typeBuilder, err);
                             if (!mkqlType) {
                                 ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Failed to process " << TDqPhyPrecompute::CallableName() << " type: " << err.Str()));
                                 return nullptr;
@@ -189,7 +189,7 @@ namespace NYql::NDqs {
                     YQL_ENSURE(dataNode.IsList() && !dataNode.AsList().empty());
                     dataNode = dataNode[0];
                     TStringStream err;
-                    NKikimr::NMiniKQL::TType* mkqlType = NCommon::BuildType(*node->GetTypeAnn(), pgmBuilder, err);
+                    NKikimr::NMiniKQL::TType* mkqlType = NCommon::BuildType(*node->GetTypeAnn(), typeBuilder, err);
                     if (!mkqlType) {
                         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to process " << TDqPhyPrecompute::CallableName() << " type: " << err.Str()));
                         return TStatus::Error;

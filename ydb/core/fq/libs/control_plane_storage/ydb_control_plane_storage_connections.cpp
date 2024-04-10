@@ -216,7 +216,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
     queryBuilder.AddUint64("limit", limit + 1);
 
     queryBuilder.AddText(
-        "SELECT `" CONNECTION_ID_COLUMN_NAME "`, `" CONNECTION_COLUMN_NAME "` FROM `" CONNECTIONS_TABLE_NAME "`\n"
+        "SELECT `" SCOPE_COLUMN_NAME "`, `" CONNECTION_ID_COLUMN_NAME "`, `" CONNECTION_COLUMN_NAME "` FROM `" CONNECTIONS_TABLE_NAME "`\n"
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` >= $last_connection\n"
     );
 
@@ -228,7 +228,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
             if (event.IsExactNameMatch) {
                 filters.push_back("`" NAME_COLUMN_NAME "` = $filter_name");
             } else {
-                filters.push_back("`" NAME_COLUMN_NAME "` LIKE '%' || $filter_name || '%'");
+                filters.push_back("FIND(`" NAME_COLUMN_NAME "`, $filter_name) IS NOT NULL");
             }
         }
 
@@ -257,7 +257,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
     }
 
     queryBuilder.AddText(
-        "ORDER BY `" CONNECTION_ID_COLUMN_NAME "`\n"
+        "ORDER BY `" SCOPE_COLUMN_NAME "`, `" CONNECTION_ID_COLUMN_NAME "`\n"
         "LIMIT $limit;"
     );
 

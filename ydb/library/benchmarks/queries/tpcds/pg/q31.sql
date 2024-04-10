@@ -48,6 +48,6 @@ with ss as
        > case when ss1.store_sales > 0::numeric then ss2.store_sales/ss1.store_sales else null::numeric end
     and case when ws2.web_sales > 0::numeric then ws3.web_sales/ws2.web_sales else null::numeric end
        > case when ss2.store_sales > 0::numeric then ss3.store_sales/ss2.store_sales else null::numeric end
- order by ss1.d_year;
+ order by ss1.ca_county;
 
 -- end query 1 in stream 0 using template ../query_templates/query31.tpl

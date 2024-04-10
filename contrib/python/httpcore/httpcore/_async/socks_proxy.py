@@ -228,7 +228,7 @@ class AsyncSocks5Connection(AsyncConnectionInterface):
                         "port": self._proxy_origin.port,
                         "timeout": timeout,
                     }
-                    with Trace("connect_tcp", logger, request, kwargs) as trace:
+                    async with Trace("connect_tcp", logger, request, kwargs) as trace:
                         stream = await self._network_backend.connect_tcp(**kwargs)
                         trace.return_value = stream
 
@@ -239,7 +239,7 @@ class AsyncSocks5Connection(AsyncConnectionInterface):
                         "port": self._remote_origin.port,
                         "auth": self._proxy_auth,
                     }
-                    with Trace(
+                    async with Trace(
                         "setup_socks5_connection", logger, request, kwargs
                     ) as trace:
                         await _init_socks5_connection(**kwargs)

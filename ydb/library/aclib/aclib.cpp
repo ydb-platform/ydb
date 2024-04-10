@@ -178,7 +178,7 @@ ui32 TSecurityObject::GetEffectiveAccessRights(const TUserToken& user) const {
 
 bool TSecurityObject::CheckAccess(ui32 access, const TUserToken& user) const {
     if (user.IsSystemUser()) {
-        return true; // the system alway has access
+        return true; // the system always has access
     }
     if (HasOwnerSID() && user.IsExist(GetOwnerSID()))
         return true; // the owner always has access

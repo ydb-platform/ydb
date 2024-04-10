@@ -90,6 +90,20 @@ TTenantTestConfig DefaultConsoleTestConfig()
     return res;
 }
 
+TString DefaultDatabaseQuotas() {
+    return R"(
+        data_size_hard_quota: 3000
+        storage_quotas {
+            unit_kind: "hdd"
+            data_size_hard_quota: 2000
+        }
+        storage_quotas {
+            unit_kind: "hdd-1"
+            data_size_hard_quota: 1000
+        }
+    )";
+}
+
 void CheckAlterTenantSlots(TTenantTestRuntime &runtime, const TString &path,
                            ui64 generation, Ydb::StatusIds::StatusCode code,
                            TVector<TSlotRequest> add,
@@ -363,7 +377,7 @@ NKikimrBlobStorage::TEvControllerConfigResponse ReadPoolState(TTenantTestRuntime
 
     NTabletPipe::TClientConfig pipeConfig;
     pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-    runtime.SendToPipe(MakeBSControllerID(0), runtime.Sender, request.Release(), 0, pipeConfig);
+    runtime.SendToPipe(MakeBSControllerID(), runtime.Sender, request.Release(), 0, pipeConfig);
 
     auto ev = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(runtime.Sender);
     return ev->Get()->Record;
@@ -379,7 +393,7 @@ void CheckPoolScope(TTenantTestRuntime &runtime, const TString &name)
 
 void RestartConsole(TTenantTestRuntime &runtime)
 {
-    runtime.Register(CreateTabletKiller(MakeConsoleID(0)));
+    runtime.Register(CreateTabletKiller(MakeConsoleID()));
     TDispatchOptions options;
     options.FinalEvents.emplace_back(&IsTabletActiveEvent, 1);
     runtime.DispatchEvents(options);
@@ -425,7 +439,7 @@ void LocalMiniKQL(TTenantTestRuntime& runtime, ui64 tabletId, const TString& que
 }
 
 void MakePoolBorrowed(TTenantTestRuntime& runtime, const TString& tenant, const TString& pool) {
-    LocalMiniKQL(runtime, MakeConsoleID(0), Sprintf(R"(
+    LocalMiniKQL(runtime, MakeConsoleID(), Sprintf(R"(
         (
             (let key '('('Tenant (Utf8 '"%s")) '('PoolType (Utf8 '"%s"))))
             (let row '('('Borrowed (Bool '1))))
@@ -649,7 +663,7 @@ Y_UNIT_TEST_SUITE(TConsoleTxProcessorTests) {
 
 Y_UNIT_TEST_SUITE(TConsoleTests) {
     void RestartTenantPool(TTenantTestRuntime& runtime) {
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(0), 0),
+        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(0)),
                                       runtime.Sender,
                                       new TEvents::TEvPoisonPill));
 
@@ -819,13 +833,13 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
     }
 
     void RunTestRestartConsoleAndPools(TTenantTestRuntime& runtime) {
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(1), 0),
+        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(1)),
                                       runtime.Sender,
                                       new TEvents::TEvPoisonPill));
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(2), 0),
+        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(2)),
                                       runtime.Sender,
                                       new TEvents::TEvPoisonPill));
-        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(3), 0),
+        runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(3)),
                                       runtime.Sender,
                                       new TEvents::TEvPoisonPill));
 
@@ -2026,6 +2040,58 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
     Y_UNIT_TEST(TestAlterTenantTooManyStorageResourcesForRunningExtSubdomain) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
         RunTestAlterTenantTooManyStorageResourcesForRunning(runtime);
+    }
+
+    void RunTestDatabaseQuotas(TTenantTestRuntime& runtime, const TString& quotas, bool shared = false) {
+        using EType = TCreateTenantRequest::EType;
+
+        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+            TCreateTenantRequest(TENANT1_1_NAME, shared ? EType::Shared : EType::Common)
+                .WithPools({{"hdd", 1}, {"hdd-1", 1}})
+                .WithDatabaseQuotas(quotas)
+        );
+
+        RestartTenantPool(runtime);
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, shared, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}, {"hdd-1", 1, 1}}, {});
+    }
+
+    Y_UNIT_TEST(TestDatabaseQuotas) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        RunTestDatabaseQuotas(runtime, DefaultDatabaseQuotas());
+    }
+
+    Y_UNIT_TEST(TestDatabaseQuotasBadOverallQuota) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST,
+            TCreateTenantRequest(TENANT1_1_NAME, TCreateTenantRequest::EType::Common)
+                .WithPools({{"hdd", 1}})
+                .WithDatabaseQuotas(R"(
+                        data_size_hard_quota: 1
+                        data_size_soft_quota: 1000
+                    )"
+                )
+        );
+    }
+
+    Y_UNIT_TEST(TestDatabaseQuotasBadStorageQuota) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+
+        CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST,
+            TCreateTenantRequest(TENANT1_1_NAME, TCreateTenantRequest::EType::Common)
+                .WithPools({{"hdd", 1}})
+                .WithDatabaseQuotas(R"(
+                        storage_quotas {
+                            unit_kind: "hdd"
+                            data_size_hard_quota: 1
+                            data_size_soft_quota: 1000
+                        }
+                    )"
+                )
+        );
     }
 }
 

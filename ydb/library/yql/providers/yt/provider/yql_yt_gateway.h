@@ -33,6 +33,8 @@
 
 namespace NYql {
 
+class TYtClusterConfig;
+
 namespace NCommon {
     class TMkqlCallableCompilerBase;
 }
@@ -140,6 +142,7 @@ public:
 
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD_DEFAULT(bool, Abort, false)
+        OPTION_FIELD_DEFAULT(bool, DetachSnapshotTxs, false)
     };
 
     struct TFinalizeResult : public NCommon::TOperationResult {
@@ -612,6 +615,8 @@ public:
     virtual void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) = 0;
 
     virtual TGetTablePartitionsResult GetTablePartitions(TGetTablePartitionsOptions&& options) = 0;
+
+    virtual void AddCluster(const TYtClusterConfig& cluster) = 0;
 };
 
 }

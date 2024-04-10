@@ -22,6 +22,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    sensors_owner
     solomon
     unittests
     example

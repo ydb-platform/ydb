@@ -1,5 +1,6 @@
 package NProtobufJsonTest;
 
+import "google/protobuf/any.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -229,4 +230,8 @@ message TCustomJsonEnumValue {
 
 extend TExtensionField {
   optional int32 bar = 123;
+}
+
+message TContainsAny {
+    optional google.protobuf.Any Any = 1;
 }

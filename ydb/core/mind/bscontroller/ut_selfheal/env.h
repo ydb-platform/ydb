@@ -10,7 +10,7 @@ struct TEnvironmentSetup {
     std::unique_ptr<TTestActorSystem> Runtime;
     const ui32 NodeCount;
     const ui32 Domain = 0;
-    const ui64 TabletId = MakeBSControllerID(Domain);
+    const ui64 TabletId = MakeBSControllerID();
     const TDuration Timeout = TDuration::Seconds(30);
     const ui32 GroupId = 0;
     const ui32 NodeId = 1;

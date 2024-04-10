@@ -196,7 +196,7 @@ public:
 
         return GetYsonNameFromDescriptor(
             descriptor,
-            descriptor->options().GetExtension(NYT::NYson::NProto::field_name));
+            FromProto<TString>(descriptor->options().GetExtension(NYT::NYson::NProto::field_name)));
     }
 
     //! This method is called while reflecting types.
@@ -205,9 +205,9 @@ public:
         VERIFY_SPINLOCK_AFFINITY(Lock_);
 
         std::vector<TStringBuf> aliases;
-        auto extensions = descriptor->options().GetRepeatedExtension(NYT::NYson::NProto::field_name_alias);
+        const auto& extensions = descriptor->options().GetRepeatedExtension(NYT::NYson::NProto::field_name_alias);
         for (const auto& alias : extensions) {
-            aliases.push_back(InternString(alias));
+            aliases.push_back(InternString(FromProto<TString>(alias)));
         }
         return aliases;
     }
@@ -219,7 +219,7 @@ public:
 
         return GetYsonNameFromDescriptor(
             descriptor,
-            descriptor->options().GetExtension(NYT::NYson::NProto::enum_value_name));
+            FromProto<TString>(descriptor->options().GetExtension(NYT::NYson::NProto::enum_value_name)));
     }
 
     const TProtobufMessageType* ReflectMessageType(const Descriptor* descriptor)
@@ -333,7 +333,9 @@ private:
     template <class TDescriptor>
     TStringBuf GetYsonNameFromDescriptor(const TDescriptor* descriptor, const TString& annotatedName)
     {
-        auto ysonName = annotatedName ? annotatedName : DeriveYsonName(descriptor->name(), descriptor->file());
+        auto ysonName = annotatedName
+            ? annotatedName
+            : DeriveYsonName(FromProto<TString>(descriptor->name()), descriptor->file());
         return InternString(ysonName);
     }
 
@@ -376,6 +378,7 @@ public:
     TProtobufField(TProtobufTypeRegistry* registry, const FieldDescriptor* descriptor)
         : Underlying_(descriptor)
         , YsonName_(registry->GetYsonName(descriptor))
+        , FullName_(FromProto<TString>(Underlying_->full_name()))
         , YsonNameAliases_(registry->GetYsonNameAliases(descriptor))
         , MessageType_(descriptor->type() == FieldDescriptor::TYPE_MESSAGE ? registry->ReflectMessageTypeInternal(
             descriptor->message_type()) : nullptr)
@@ -415,7 +418,7 @@ public:
 
     const TString& GetFullName() const
     {
-        return Underlying_->full_name();
+        return FullName_;
     }
 
     TStringBuf GetYsonName() const
@@ -587,6 +590,7 @@ public:
 private:
     const FieldDescriptor* const Underlying_;
     const TStringBuf YsonName_;
+    const TString FullName_;
     const std::vector<TStringBuf> YsonNameAliases_;
     const TProtobufMessageType* MessageType_;
     const TProtobufEnumType* EnumType_;
@@ -606,6 +610,7 @@ public:
         : Registry_(registry)
         , Underlying_(descriptor)
         , AttributeDictionary_(descriptor->options().GetExtension(NYT::NYson::NProto::attribute_dictionary))
+        , FullName_(FromProto<TString>(Underlying_->full_name()))
         , Converter_(registry->FindMessageTypeConverter(descriptor))
     { }
 
@@ -624,7 +629,7 @@ public:
         }
 
         for (int index = 0; index < Underlying_->reserved_name_count(); ++index) {
-            ReservedFieldNames_.insert(Underlying_->reserved_name(index));
+            ReservedFieldNames_.insert(FromProto<TString>(Underlying_->reserved_name(index)));
         }
     }
 
@@ -640,7 +645,7 @@ public:
 
     const TString& GetFullName() const
     {
-        return Underlying_->full_name();
+        return FullName_;
     }
 
     const std::vector<int>& GetRequiredFieldNumbers() const
@@ -728,6 +733,8 @@ private:
     const Descriptor* const Underlying_;
     const bool AttributeDictionary_;
 
+    const TString FullName_;
+
     std::vector<std::unique_ptr<TProtobufField>> Fields_;
     std::vector<int> RequiredFieldNumbers_;
     THashMap<TStringBuf, const TProtobufField*> NameToField_;
@@ -785,7 +792,8 @@ TProtobufElement TProtobufField::GetElement(bool insideRepeated) const
         });
     } else {
         return std::make_unique<TProtobufScalarElement>(TProtobufScalarElement{
-            static_cast<TProtobufScalarElement::TType>(GetType())
+            static_cast<TProtobufScalarElement::TType>(GetType()),
+            GetEnumYsonStorageType()
         });
     }
 }
@@ -798,6 +806,7 @@ public:
     TProtobufEnumType(TProtobufTypeRegistry* registry, const EnumDescriptor* descriptor)
         : Registry_(registry)
         , Underlying_(descriptor)
+        , FullName_(FromProto<TString>(Underlying_->full_name()))
     { }
 
     void Build()
@@ -820,7 +829,7 @@ public:
 
     const TString& GetFullName() const
     {
-        return Underlying_->full_name();
+        return FullName_;
     }
 
     std::optional<int> FindValueByLiteral(TStringBuf literal) const
@@ -850,6 +859,8 @@ public:
 private:
     TProtobufTypeRegistry* const Registry_;
     const EnumDescriptor* const Underlying_;
+
+    const TString FullName_;
 
     THashMap<TStringBuf, int> LiteralToValue_;
     THashMap<int, TStringBuf> ValueToLiteral_;
@@ -1066,7 +1077,7 @@ private:
     const TProtobufMessageType* const RootType_;
     const TProtobufWriterOptions Options_;
 
-    TString BodyString_;
+    TProtobufString BodyString_;
     google::protobuf::io::StringOutputStream BodyOutputStream_;
     google::protobuf::io::CodedOutputStream BodyCodedStream_;
 
@@ -1120,7 +1131,7 @@ private:
     TStringOutput YsonStringStream_;
     TBufferedBinaryYsonWriter YsonStringWriter_;
 
-    TString SerializedMessage_;
+    TProtobufString SerializedMessage_;
     TString BytesString_;
 
     TString UnknownYsonFieldKey_;
@@ -1908,10 +1919,10 @@ private:
                 std::unique_ptr<Message> message(MessageFactory::generated_factory()->GetPrototype(messageType->GetUnderlying())->New());
                 converter.Deserializer(message.get(), node);
                 SerializedMessage_.clear();
-                Y_PROTOBUF_SUPPRESS_NODISCARD message->SerializeToString(&SerializedMessage_);
+                Y_UNUSED(message->SerializeToString(&SerializedMessage_));
                 WriteTag();
                 BodyCodedStream_.WriteVarint64(SerializedMessage_.length());
-                BodyCodedStream_.WriteRaw(SerializedMessage_.begin(), static_cast<int>(SerializedMessage_.length()));
+                BodyCodedStream_.WriteRaw(SerializedMessage_.data(), static_cast<int>(SerializedMessage_.length()));
                 FieldStack_.pop_back();
                 YPathStack_.Pop();
             });
@@ -2680,7 +2691,7 @@ private:
                             std::unique_ptr<Message> message(MessageFactory::generated_factory()->GetPrototype(messageType->GetUnderlying())->New());
                             PooledString_.resize(length);
                             CodedStream_.ReadRaw(PooledString_.data(), PooledString_.size());
-                            Y_PROTOBUF_SUPPRESS_NODISCARD message->ParseFromArray(PooledString_.data(), PooledString_.size());
+                            Y_UNUSED(message->ParseFromArray(PooledString_.data(), PooledString_.size()));
                             converter.Serializer(Consumer_, message.get());
                             YPathStack_.Pop();
                         } else {
@@ -3144,11 +3155,11 @@ TString YsonStringToProto(
     const TProtobufMessageType* payloadType,
     TProtobufWriterOptions options)
 {
-    TString serializedProto;
+    TProtobufString serializedProto;
     google::protobuf::io::StringOutputStream protobufStream(&serializedProto);
     auto protobufWriter = CreateProtobufWriter(&protobufStream, payloadType, std::move(options));
     ParseYsonStringBuffer(ysonString.AsStringBuf(), EYsonType::Node, protobufWriter.get());
-    return serializedProto;
+    return FromProto<TString>(serializedProto);
 }
 
 void WriteSchema(const TProtobufEnumType* type, IYsonConsumer* consumer)

@@ -133,6 +133,14 @@ public:
         HasChanges_ = true;
     }
 
+    void PersistLockFlags(ui64 lockId, ui64 flags) override {
+        using Schema = TSchemaDescription;
+        NIceDb::TNiceDb db(DB);
+        db.Table<typename Schema::Locks>().Key(lockId).Update(
+            NIceDb::TUpdate<typename Schema::Locks::Flags>(flags));
+        HasChanges_ = true;
+    }
+
     // Persist adding/removing info on locked ranges
     void PersistAddRange(ui64 lockId, ui64 rangeId, const TPathId& tableId, ui64 flags = 0, const TString& data = {}) override {
         using Schema = TSchemaDescription;

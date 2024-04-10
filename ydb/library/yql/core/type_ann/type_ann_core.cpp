@@ -493,9 +493,7 @@ namespace NTypeAnnImpl {
             return false;
         }
 
-        // second argument must be "Utf8" type
-        const auto& jsonPathArg = function.JsonPath().Ref();
-        if (!EnsureSpecificDataType(jsonPathArg, EDataSlot::Utf8, ctx.Expr)) {
+        if (!EnsureValidJsonPath(function.JsonPath().Ref(), ctx.Expr)) {
             return false;
         }
 
@@ -728,22 +726,6 @@ namespace NTypeAnnImpl {
                 if (!IsValidTzData<ui64>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Timestamp, textValue)) {
                     return IGraphTransformer::TStatus::Error;
                 }
-            } else if (input->Content() == "Uuid") {
-                if (input->Head().Content().size() != 16) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Bad atom format for type: "
-                        << input->Content() << ", value: " << TString(input->Head().Content()).Quote()));
-
-                    return IGraphTransformer::TStatus::Error;
-                }
-            } else if (input->Content() == "JsonDocument") {
-                // check will be performed in JsonDocument callable
-            } else if (input->Content() == "DyNumber") {
-                if (!NKikimr::NMiniKQL::IsValidStringValue(EDataSlot::DyNumber, input->Head().Content())) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Bad atom format for type: "
-                        << input->Content() << ", value: " << TString(input->Head().Content()).Quote()));
-
-                    return IGraphTransformer::TStatus::Error;
-                }
             } else if (input->Content() == "Date32") {
                 if (!IsValidSmallData<i32>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Date32, textValue)) {
                     return IGraphTransformer::TStatus::Error;
@@ -758,6 +740,22 @@ namespace NTypeAnnImpl {
                 }
             } else if (input->Content() == "Interval64") {
                 if (!IsValidSmallData<i64>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Interval64, textValue)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else if (input->Content() == "Uuid") {
+                if (input->Head().Content().size() != 16) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Bad atom format for type: "
+                        << input->Content() << ", value: " << TString(input->Head().Content()).Quote()));
+
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else if (input->Content() == "JsonDocument") {
+                // check will be performed in JsonDocument callable
+            } else if (input->Content() == "DyNumber") {
+                if (!NKikimr::NMiniKQL::IsValidStringValue(EDataSlot::DyNumber, input->Head().Content())) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Bad atom format for type: "
+                        << input->Content() << ", value: " << TString(input->Head().Content()).Quote()));
+
                     return IGraphTransformer::TStatus::Error;
                 }
             } else {
@@ -2065,7 +2063,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!(IsDataTypeNumeric(dataType->GetSlot()) || IsDataTypeDecimal(dataType->GetSlot()) || dataType->GetSlot() == EDataSlot::Interval)) {
+        if (!(IsDataTypeNumeric(dataType->GetSlot()) || IsDataTypeDecimal(dataType->GetSlot()) || IsDataTypeInterval(dataType->GetSlot()))) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Expected numeric, decimal or interval type, but got: "
                 << *input->Head().GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
@@ -2245,7 +2243,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const bool isInterval = dataType1->GetSlot() == EDataSlot::Interval;
+        const bool isInterval = IsDataTypeInterval(dataType1->GetSlot());
 
         if (!(IsDataTypeNumeric(dataType1->GetSlot()) || IsDataTypeDecimal(dataType1->GetSlot()) || isInterval)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Expected numeric or decimal data type, but got: "
@@ -2345,14 +2343,14 @@ namespace NTypeAnnImpl {
             auto commonTypeSlot = GetNumericDataTypeByLevel(Max(GetNumericDataTypeLevel(dataType[0]->GetSlot()),
                 GetNumericDataTypeLevel(dataType[1]->GetSlot())));
             commonType = ctx.Expr.MakeType<TDataExprType>(commonTypeSlot);
-        } else if ((IsDataTypeDate(dataType[0]->GetSlot()) || IsDataTypeTzDate(dataType[0]->GetSlot())) && dataType[1]->GetSlot() == EDataSlot::Interval) {
+        } else if ((IsDataTypeDate(dataType[0]->GetSlot()) || IsDataTypeTzDate(dataType[0]->GetSlot())) && IsDataTypeInterval(dataType[1]->GetSlot())) {
             commonType = dataType[0];
             haveOptional = true;
-        } else if (dataType[0]->GetSlot() == EDataSlot::Interval && (IsDataTypeDate(dataType[1]->GetSlot()) || IsDataTypeTzDate(dataType[1]->GetSlot()))) {
+        } else if (IsDataTypeInterval(dataType[0]->GetSlot()) && (IsDataTypeDate(dataType[1]->GetSlot()) || IsDataTypeTzDate(dataType[1]->GetSlot()))) {
             commonType = dataType[1];
             haveOptional = true;
-        } else if (dataType[0]->GetSlot() == EDataSlot::Interval && dataType[1]->GetSlot() == EDataSlot::Interval) {
-            commonType = dataType[0];
+        } else if (IsDataTypeInterval(dataType[0]->GetSlot()) && IsDataTypeInterval(dataType[1]->GetSlot())) {
+            commonType = IsDataTypeBigDate(dataType[0]->GetSlot()) ? dataType[0] : dataType[1];
             haveOptional = true;
         } else if (IsDataTypeDecimal(dataType[0]->GetSlot()) && IsDataTypeDecimal(dataType[1]->GetSlot())) {
             const auto dataTypeOne = static_cast<const TDataExprParamsType*>(dataType[0]);
@@ -2439,11 +2437,18 @@ namespace NTypeAnnImpl {
                 GetNumericDataTypeLevel(dataType[1]->GetSlot())));
             commonType = ctx.Expr.MakeType<TDataExprType>(commonTypeSlot);
         } else if ((IsDataTypeDate(dataType[0]->GetSlot()) || IsDataTypeTzDate(dataType[0]->GetSlot())) &&
-            (IsDataTypeDate(dataType[1]->GetSlot()) || IsDataTypeTzDate(dataType[1]->GetSlot()))) {
-            commonType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Interval);
-        } else if (IsDataTypeDateOrTzDateOrInterval(dataType[0]->GetSlot()) &&
-            dataType[1]->GetSlot() == EDataSlot::Interval) {
+            (IsDataTypeDate(dataType[1]->GetSlot()) || IsDataTypeTzDate(dataType[1]->GetSlot())))
+        {
+            commonType = (IsDataTypeBigDate(dataType[0]->GetSlot()) || IsDataTypeBigDate(dataType[1]->GetSlot()))
+                ? ctx.Expr.MakeType<TDataExprType>(EDataSlot::Interval64)
+                : ctx.Expr.MakeType<TDataExprType>(EDataSlot::Interval);
+        } else if (IsDataTypeDateOrTzDate(dataType[0]->GetSlot()) && IsDataTypeInterval(dataType[1]->GetSlot())) {
             commonType = dataType[0];
+            haveOptional = true;
+        } else if (IsDataTypeInterval(dataType[0]->GetSlot()) && IsDataTypeInterval(dataType[1]->GetSlot())) {
+            commonType = (IsDataTypeBigDate(dataType[0]->GetSlot()) || IsDataTypeBigDate(dataType[1]->GetSlot()))
+                ? ctx.Expr.MakeType<TDataExprType>(EDataSlot::Interval64)
+                : ctx.Expr.MakeType<TDataExprType>(EDataSlot::Interval);
             haveOptional = true;
         } else if (IsDataTypeDecimal(dataType[0]->GetSlot()) && IsDataTypeDecimal(dataType[1]->GetSlot())) {
             const auto dataTypeOne = static_cast<const TDataExprParamsType*>(dataType[0]);
@@ -2525,10 +2530,10 @@ namespace NTypeAnnImpl {
             auto commonTypeSlot = GetNumericDataTypeByLevel(Max(GetNumericDataTypeLevel(dataType[0]->GetSlot()),
                 GetNumericDataTypeLevel(dataType[1]->GetSlot())));
             commonType = ctx.Expr.MakeType<TDataExprType>(commonTypeSlot);
-        } else if (IsDataTypeIntegral(dataType[0]->GetSlot()) && dataType[1]->GetSlot() == EDataSlot::Interval) {
+        } else if (IsDataTypeIntegral(dataType[0]->GetSlot()) && IsDataTypeInterval(dataType[1]->GetSlot())) {
             commonType = dataType[1];
             haveOptional = true;
-        } else if (dataType[0]->GetSlot() == EDataSlot::Interval && IsDataTypeIntegral(dataType[1]->GetSlot())) {
+        } else if (IsDataTypeInterval(dataType[0]->GetSlot()) && IsDataTypeIntegral(dataType[1]->GetSlot())) {
             commonType = dataType[0];
             haveOptional = true;
         } else if (IsDataTypeDecimal(dataType[0]->GetSlot()) || IsDataTypeDecimal(dataType[1]->GetSlot())) {
@@ -2606,7 +2611,7 @@ namespace NTypeAnnImpl {
             if (!IsDataTypeFloat(commonTypeSlot)) {
                 haveOptional = true;
             }
-        } else if (dataType[0]->GetSlot() == EDataSlot::Interval && IsDataTypeIntegral(dataType[1]->GetSlot())) {
+        } else if (IsDataTypeInterval(dataType[0]->GetSlot()) && IsDataTypeIntegral(dataType[1]->GetSlot())) {
             commonType = dataType[0];
             haveOptional = true;
         } else if (IsDataTypeDecimal(dataType[0]->GetSlot()) && (IsDataTypeDecimal(dataType[1]->GetSlot()) || IsDataTypeIntegral(dataType[1]->GetSlot()))) {
@@ -2872,7 +2877,7 @@ namespace NTypeAnnImpl {
         }
 
         auto dataSlot = dataType->GetSlot();
-        if (!(IsDataTypeNumeric(dataSlot) || IsDataTypeDecimal(dataSlot) || dataSlot == EDataSlot::Interval)) {
+        if (!(IsDataTypeNumeric(dataSlot) || IsDataTypeDecimal(dataSlot) || IsDataTypeInterval(dataSlot))) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Expected numeric, decimal or interval data type, but got: "
                 << *input->Head().GetTypeAnn()));
 
@@ -3331,6 +3336,12 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Repeat;
         }
 
+        auto name = input->Content();
+        bool warn = name.ChopSuffix("MayWarn");
+        if (warn) {
+            output = ctx.Expr.RenameNode(*input, name);
+        }
+
         if constexpr (IsStrict) {
             std::set<const TTypeAnnotationNode*> set;
             input->ForEachChild([&](const TExprNode& item) { set.emplace(item.GetTypeAnn()); });
@@ -3342,11 +3353,16 @@ namespace NTypeAnnImpl {
 
             output = ctx.Expr.RenameNode(*input, "AsList");
             return IGraphTransformer::TStatus::Repeat;
-        } else if (const auto commonItemType = CommonTypeForChildren(*input, ctx.Expr)) {
+        } else if (const auto commonItemType = CommonTypeForChildren(*input, ctx.Expr, warn)) {
             if (const auto status = ConvertChildrenToType(input, commonItemType, ctx.Expr); status != IGraphTransformer::TStatus::Ok)
                 return status;
-        } else
+        } else {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (warn) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
 
         input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(input->Head().GetTypeAnn()));
         return IGraphTransformer::TStatus::Ok;
@@ -3424,15 +3440,9 @@ namespace NTypeAnnImpl {
         }
         const auto kind = input->Head().GetTypeAnn()->GetKind();
 
-        if (ETypeAnnotationKind::Flow == kind || ETypeAnnotationKind::Stream == kind) {
-            if (!EnsureMaxArgsCount(*input, 1, ctx.Expr)) {
+        for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
+            if (!EnsureDependsOn(*input->Child(i), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
-            }
-        } else {
-            for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
-                if (!EnsureDependsOn(*input->Child(i), ctx.Expr)) {
-                    return IGraphTransformer::TStatus::Error;
-                }
             }
         }
 
@@ -4368,7 +4378,7 @@ namespace NTypeAnnImpl {
         }
 
         const bool isDecimal = IsDataTypeDecimal(sourceDataType->GetSlot());
-        const bool isInterval = sourceDataType->GetSlot() == EDataSlot::Interval;
+        const bool isInterval = IsDataTypeInterval(sourceDataType->GetSlot());
         if (!(isDecimal || IsDataTypeNumeric(sourceDataType->GetSlot()) || isInterval)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Expected numeric type, but got " <<
                 *input->Head().GetTypeAnn()));
@@ -5733,6 +5743,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
         }
 
+        auto name = input->Content();
+        bool warn = name.ChopSuffix("MayWarn");
+        if (warn) {
+            output = ctx.Expr.RenameNode(*input, name);
+        }
+
         if constexpr (IsStrict) {
             std::set<const TTypeAnnotationNode*> set;
             input->ForEachChild([&](const TExprNode& item) { set.emplace(item.GetTypeAnn()); });
@@ -5744,7 +5760,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
             output = ctx.Expr.RenameNode(*input, IsSet ? "AsSet" : "AsDict");
             return IGraphTransformer::TStatus::Repeat;
-        } else if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr)) {
+        } else if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr, warn)) {
             if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr); status != IGraphTransformer::TStatus::Ok)
                 return status;
 
@@ -5757,10 +5773,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
             input->SetTypeAnn(dictType);
-        } else
+        } else {
             return IGraphTransformer::TStatus::Error;
+        }
 
-        return IGraphTransformer::TStatus::Ok;
+        return warn ? IGraphTransformer::TStatus::Repeat : IGraphTransformer::TStatus::Ok;
     }
 
     IGraphTransformer::TStatus DictFromKeysWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -11745,6 +11762,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ByteAt"] = &ByteAtWrapper;
         Functions["ListIf"] = &ListIfWrapper;
         Functions["AsList"] = &AsListWrapper<false>;
+        Functions["AsListMayWarn"] = &AsListWrapper<false>;
         Functions["AsListStrict"] = &AsListWrapper<true>;
         Functions["ToList"] = &ToListWrapper;
         Functions["ToOptional"] = &ToOptionalWrapper;
@@ -11848,6 +11866,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Nanvl"] = &NanvlWrapper;
         Functions["Unwrap"] = &UnwrapWrapper;
         Functions["Exists"] = &ExistsWrapper;
+        Functions["BlockExists"] = &BlockExistsWrapper;
         Functions["Just"] = &JustWrapper;
         Functions["Optional"] = &OptionalWrapper;
         Functions["OptionalIf"] = &OptionalIfWrapper;
@@ -11903,8 +11922,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["AsStruct"] = &AsStructWrapper;
         Functions["AsStructUnordered"] = &AsStructWrapper;
         Functions["AsDict"] = &AsDictWrapper<false, false>;
+        Functions["AsDictMayWarn"] = &AsDictWrapper<false, false>;
         Functions["AsDictStrict"] = &AsDictWrapper<true, false>;
         Functions["AsSet"] = &AsDictWrapper<false, true>;
+        Functions["AsSetMayWarn"] = &AsDictWrapper<false, true>;
         Functions["AsSetStrict"] = &AsDictWrapper<true, true>;
         Functions["DictFromKeys"] = &DictFromKeysWrapper;
         Functions["Uniq"] = &UniqWrapper;
@@ -12050,6 +12071,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgAnd"] = &PgBoolOpWrapper;
         Functions["PgOr"] = &PgBoolOpWrapper;
         Functions["PgNot"] = &PgBoolOpWrapper;
+        Functions["PgIsTrue"] = &PgBoolOpWrapper;
+        Functions["PgIsFalse"] = &PgBoolOpWrapper;
+        Functions["PgIsUnknown"] = &PgBoolOpWrapper;
         Functions["PgAggregationTraits"] = &PgAggregationTraitsWrapper;
         Functions["PgAggregationTraitsOverState"] = &PgAggregationTraitsWrapper;
         Functions["PgWindowTraits"] = &PgAggregationTraitsWrapper;
@@ -12067,6 +12091,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgGroupRef"] = &PgGroupRefWrapper;
         Functions["PgGrouping"] = &PgGroupingWrapper;
         Functions["PgGroupingSet"] = &PgGroupingSetWrapper;
+        Functions["PgToRecord"] = &PgToRecordWrapper;
 
         Functions["AutoDemux"] = &AutoDemuxWrapper;
         Functions["AggrCountInit"] = &AggrCountInitWrapper;
@@ -12114,6 +12139,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["CallableTypeComponents"] = &SplitTypeHandleWrapper<ETypeAnnotationKind::Callable>;
         Functions["CallableArgument"] = &CallableArgumentWrapper;
         Functions["CallableTypeHandle"] = &MakeTypeHandleWrapper<ETypeAnnotationKind::Callable>;
+        Functions["PgTypeHandle"] = &MakeTypeHandleWrapper<ETypeAnnotationKind::Pg>;
+        Functions["PgTypeName"] = &SplitTypeHandleWrapper<ETypeAnnotationKind::Pg>;
         Functions["LambdaArgumentsCount"] = LambdaArgumentsCountWrapper;
         Functions["LambdaOptionalArgumentsCount"] = LambdaOptionalArgumentsCountWrapper;
         Functions["FormatCode"] = &FormatCodeWrapper;
@@ -12202,6 +12229,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WideSortBlocks"] = &WideSortBlocksWrapper;
         Functions["BlockExtend"] = &BlockExtendWrapper;
         Functions["BlockOrderedExtend"] = &BlockExtendWrapper;
+        Functions["ReplicateScalars"] = &ReplicateScalarsWrapper;
 
         Functions["BlockCoalesce"] = &BlockCoalesceWrapper;
         Functions["BlockAnd"] = &BlockLogicalWrapper;
@@ -12256,6 +12284,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["FromPg"] = &FromPgWrapper;
         Functions["ToPg"] = &ToPgWrapper;
         Functions["PgClone"] = &PgCloneWrapper;
+        Functions["PgNullIf"] = &PgNullIfWrapper;
         ExtFunctions["PgAgg"] = &PgAggWrapper;
         ExtFunctions["PgAggWindowCall"] = &PgAggWrapper;
         ExtFunctions["PgCall"] = &PgCallWrapper;
@@ -12264,6 +12293,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["PgResolvedCallCtx"] = &PgCallWrapper;
         ExtFunctions["PgOp"] = &PgOpWrapper;
         ExtFunctions["PgResolvedOp"] = &PgOpWrapper;
+        ExtFunctions["PgAnyOp"] = &PgArrayOpWrapper;
+        ExtFunctions["PgAllOp"] = &PgArrayOpWrapper;
+        ExtFunctions["PgAnyResolvedOp"] = &PgArrayOpWrapper;
+        ExtFunctions["PgAllResolvedOp"] = &PgArrayOpWrapper;
         ExtFunctions["PgSelect"] = &PgSelectWrapper;
         ExtFunctions["PgSetItem"] = &PgSetItemWrapper;
         ExtFunctions["PgValuesList"] = &PgValuesListWrapper;

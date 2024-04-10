@@ -373,81 +373,41 @@ SELECT f1
    FROM BOOLTBL1
    WHERE f1 IS TRUE;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 145
-    	--
-	^
 <sql-statement>
 SELECT f1
    FROM BOOLTBL1
    WHERE f1 IS NOT FALSE;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 145
-    	SELECT f1
-	^
 <sql-statement>
 SELECT f1
    FROM BOOLTBL1
    WHERE f1 IS FALSE;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 145
-    	SELECT f1
-	^
 <sql-statement>
 SELECT f1
    FROM BOOLTBL1
    WHERE f1 IS NOT TRUE;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 145
-    	SELECT f1
-	^
 <sql-statement>
 SELECT f1
    FROM BOOLTBL2
    WHERE f1 IS TRUE;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 145
-    	SELECT f1
-	^
 <sql-statement>
 SELECT f1
    FROM BOOLTBL2
    WHERE f1 IS NOT FALSE;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 145
-    	SELECT f1
-	^
 <sql-statement>
 SELECT f1
    FROM BOOLTBL2
    WHERE f1 IS FALSE;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 145
-    	SELECT f1
-	^
 <sql-statement>
 SELECT f1
    FROM BOOLTBL2
    WHERE f1 IS NOT TRUE;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 145
-    	SELECT f1
-	^
 <sql-statement>
 --
 -- Tests for BooleanTest
@@ -474,11 +434,10 @@ SELECT
     b IS NOT UNKNOWN AS isnotunknown
 FROM booltbl3 ORDER BY o;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 145
-    	SELECT
-	^
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.booltbl3
+    
 <sql-statement>
 -- Test to make sure short-circuiting and NULL handling is
 -- correct. Use a table as source to prevent constant simplification
@@ -486,7 +445,7 @@ FROM booltbl3 ORDER BY o;
 CREATE TABLE booltbl4(isfalse bool, istrue bool, isnul bool);
 </sql-statement>
 <sql-statement>
-INSERT INTO booltbl4 (isfalse, istrue, isnul) VALUES (false, true, null);
+INSERT INTO booltbl4 VALUES (false, true, null);
 </sql-statement>
 <sql-statement>
 \pset null '(null)'

@@ -272,7 +272,7 @@ void TGraceJoinPacker::Pack()  {
         case NUdf::EDataSlot::Interval:
             WriteUnaligned<i64>(buffPtr, value.Get<i64>()); break;
         case NUdf::EDataSlot::Date32:
-            WriteUnaligned<i64>(buffPtr, value.Get<i32>()); break;
+            WriteUnaligned<i32>(buffPtr, value.Get<i32>()); break;
         case NUdf::EDataSlot::Datetime64:
             WriteUnaligned<i64>(buffPtr, value.Get<i64>()); break;
         case NUdf::EDataSlot::Timestamp64:
@@ -300,7 +300,7 @@ void TGraceJoinPacker::Pack()  {
         }
         case NUdf::EDataSlot::TzTimestamp:
         {
-            WriteUnaligned<ui32>(buffPtr, value.Get<ui64>());
+            WriteUnaligned<ui64>(buffPtr, value.Get<ui64>());
             WriteUnaligned<ui16>(buffPtr + sizeof(ui64), value.GetTimezoneId());
             break;
         }
@@ -855,10 +855,6 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     }
                 }
 
-                if (resultLeft == EFetchResult::Yield || resultRight == EFetchResult::Yield) {
-                    return EFetchResult::Yield;
-                }
-
                 if (resultLeft == EFetchResult::Finish ) {
                     *HaveMoreLeftRows = false;
                 }
@@ -866,6 +862,12 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
 
                 if (resultRight == EFetchResult::Finish ) {
                     *HaveMoreRightRows = false;
+                }
+
+                if ((resultLeft == EFetchResult::Yield && (!*HaveMoreRightRows || resultRight == EFetchResult::Yield)) ||
+                    (resultRight == EFetchResult::Yield && !*HaveMoreLeftRows))
+                {
+                    return EFetchResult::Yield;
                 }
 
                 if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {

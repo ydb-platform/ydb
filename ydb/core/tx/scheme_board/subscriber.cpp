@@ -1,4 +1,5 @@
 #include "events.h"
+#include "events_internal.h"
 #include "helpers.h"
 #include "monitorable_actor.h"
 #include "subscriber.h"
@@ -127,6 +128,67 @@ namespace {
         }
     };
 
+    // TNotifyResponse isolates changes of how NKikimrSchemeBoard::TEvNotify is filled
+    // by previous and recent replica implementation.
+    //
+    // TNotifyResponse wouldn't be even needed if not for backward compatibility support.
+    // Consider removing compatibility support at version stable-25-1.
+    struct TNotifyResponse {
+        NKikimrSchemeBoard::TEvNotify Notify;
+        TPathId SubdomainPathId;
+        TSet<ui64> PathAbandonedTenantsSchemeShards;
+        TMaybe<NKikimrScheme::TEvDescribeSchemeResult> DescribeSchemeResult;
+
+        static TNotifyResponse FromNotify(NKikimrSchemeBoard::TEvNotify&& record) {
+            // PathSubdomainPathId's absence is a marker that input message was sent
+            // from the older replica implementation
+
+            if (record.HasPathSubdomainPathId()) {
+                // Sender implementation is as recent as ours.
+                // Just copy two fields from the notify message (this branch is practically a stub)
+
+                auto subdomainPathId = PathIdFromPathId(record.GetPathSubdomainPathId());
+                auto pathAbandonedTenantsSchemeShards = TSet<ui64>(
+                    record.GetPathAbandonedTenantsSchemeShards().begin(),
+                    record.GetPathAbandonedTenantsSchemeShards().end()
+                );
+                return TNotifyResponse{
+                    .Notify = std::move(record),
+                    .SubdomainPathId = std::move(subdomainPathId),
+                    .PathAbandonedTenantsSchemeShards = std::move(pathAbandonedTenantsSchemeShards),
+                };
+
+            } else {
+                // Sender implementation is older then ours.
+                // Extract two essential fields from the payload, hold deserialized proto,
+                // drop original payload to save on memory
+
+                // Move DescribeSchemeResult blob out of the input message.
+                auto data = std::move(*record.MutableDescribeSchemeResultSerialized());
+                record.ClearDescribeSchemeResultSerialized();
+
+                // it's inconvenient to use arena here
+                auto proto = DeserializeDescribeSchemeResult(data);
+
+                return TNotifyResponse{
+                    .Notify = std::move(record),
+                    .SubdomainPathId = NSchemeBoard::GetDomainId(proto),
+                    .PathAbandonedTenantsSchemeShards = NSchemeBoard::GetAbandonedSchemeShardIds(proto),
+                    .DescribeSchemeResult = std::move(proto),
+                };
+            }
+        }
+
+        NKikimrScheme::TEvDescribeSchemeResult GetDescribeSchemeResult() {
+            if (DescribeSchemeResult) {
+                return *DescribeSchemeResult;
+            } else {
+                // it's inconvenient to use arena here
+                return DeserializeDescribeSchemeResult(Notify.GetDescribeSchemeResultSerialized());
+            }
+        }
+    };
+
     struct TState {
         bool Deleted = false;
         bool Strong = false;
@@ -154,15 +216,17 @@ namespace {
         }
 
     public:
-        static TState FromNotify(const NKikimrSchemeBoard::TEvNotify& record) {
+        static TState FromNotify(const TNotifyResponse& notifyResponse) {
+            const auto& record = notifyResponse.Notify;
+            const TPathVersion& pathVersion = TPathVersion::FromNotify(record);
             if (!record.GetIsDeletion()) {
                 return TState(
-                    TPathVersion::FromNotify(record),
-                    GetDomainId(record.GetDescribeSchemeResult()),
-                    GetAbandonedSchemeShardIds(record.GetDescribeSchemeResult())
+                    pathVersion,
+                    notifyResponse.SubdomainPathId,
+                    notifyResponse.PathAbandonedTenantsSchemeShards
                 );
             } else {
-                return TState(record.GetStrong(), TPathVersion::FromNotify(record));
+                return TState(record.GetStrong(), pathVersion);
             }
         }
 
@@ -229,7 +293,7 @@ namespace {
 
             if (Version.PathId == other.DomainId) { // Update from TSS, GSS->TSS
                 if (AbandonedSchemeShards.contains(other.Version.PathId.OwnerId)) { // TSS is ignored, present GSS reverted that TSS
-                    reason = "Update was ignored, GSS implisytly banned that TSS";
+                    reason = "Update was ignored, GSS implicitly banned that TSS";
                     return false;
                 }
 
@@ -293,13 +357,13 @@ namespace {
 
 template <typename TPath, typename TDerived>
 class TReplicaSubscriber: public TMonitorableActor<TDerived> {
-    void Handle(TSchemeBoardEvents::TEvNotify::TPtr& ev) {
+    void Handle(NInternalEvents::TEvNotify::TPtr& ev) {
         auto& record = *ev->Get()->MutableRecord();
 
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender);
 
-        this->Send(ev->Sender, new TSchemeBoardEvents::TEvNotifyAck(record.GetVersion()));
+        this->Send(ev->Sender, new NInternalEvents::TEvNotifyAck(record.GetVersion()));
 
         if (!IsValidNotification(Path, record)) {
             SBS_LOG_E("Suspicious " << ev->Get()->ToString()
@@ -310,7 +374,7 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
         this->Send(Parent, ev->Release().Release(), 0, ev->Cookie);
     }
 
-    void Handle(TSchemeBoardEvents::TEvSyncVersionRequest::TPtr& ev) {
+    void Handle(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
@@ -319,7 +383,7 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
         this->Send(Replica, ev->Release().Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
-    void Handle(TSchemeBoardEvents::TEvSyncVersionResponse::TPtr& ev) {
+    void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
@@ -364,7 +428,7 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
             this->Send(MakeInterconnectProxyId(Replica.NodeId()), new TEvents::TEvUnsubscribe());
         }
 
-        this->Send(Replica, new TSchemeBoardEvents::TEvUnsubscribe(Path));
+        this->Send(Replica, new NInternalEvents::TEvUnsubscribe(Path));
         this->Send(Parent, new TEvents::TEvGone());
 
         TMonitorableActor<TDerived>::PassAway();
@@ -403,16 +467,16 @@ public:
     void Bootstrap(const TActorContext&) {
         TMonitorableActor<TDerived>::Bootstrap();
 
-        this->Send(Replica, new TSchemeBoardEvents::TEvSubscribe(Path, DomainOwnerId),
+        this->Send(Replica, new NInternalEvents::TEvSubscribe(Path, DomainOwnerId),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
         this->Become(&TDerived::StateWork);
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TSchemeBoardEvents::TEvNotify, Handle);
-            hFunc(TSchemeBoardEvents::TEvSyncVersionRequest, Handle);
-            hFunc(TSchemeBoardEvents::TEvSyncVersionResponse, Handle);
+            hFunc(NInternalEvents::TEvNotify, Handle);
+            hFunc(NInternalEvents::TEvSyncVersionRequest, Handle);
+            hFunc(NInternalEvents::TEvSyncVersionResponse, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
@@ -446,7 +510,7 @@ public:
 
 template <typename TPath, typename TDerived, typename TReplicaDerived>
 class TSubscriberProxy: public TMonitorableActor<TDerived> {
-    void Handle(TSchemeBoardEvents::TEvNotify::TPtr& ev) {
+    void Handle(NInternalEvents::TEvNotify::TPtr& ev) {
         if (ev->Sender != ReplicaSubscriber) {
             return;
         }
@@ -455,20 +519,20 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
         Delay = DefaultDelay;
     }
 
-    void Handle(TSchemeBoardEvents::TEvSyncVersionRequest::TPtr& ev) {
+    void Handle(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
         if (!ReplicaMissing) {
             CurrentSyncRequest = ev->Cookie;
             this->Send(ReplicaSubscriber, ev->Release().Release(), 0, ev->Cookie);
         } else {
-            this->Send(Parent, new TSchemeBoardEvents::TEvSyncVersionResponse(0, true), 0, ev->Cookie);
+            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0, true), 0, ev->Cookie);
         }
     }
 
-    void HandleSleep(TSchemeBoardEvents::TEvSyncVersionRequest::TPtr& ev) {
-        this->Send(Parent, new TSchemeBoardEvents::TEvSyncVersionResponse(0, true), 0, ev->Cookie);
+    void HandleSleep(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
+        this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0, true), 0, ev->Cookie);
     }
 
-    void Handle(TSchemeBoardEvents::TEvSyncVersionResponse::TPtr& ev) {
+    void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
         if (ev->Sender != ReplicaSubscriber || ev->Cookie != CurrentSyncRequest) {
             return;
         }
@@ -500,11 +564,11 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
 
     void OnReplicaFailure() {
         if (CurrentSyncRequest) {
-            this->Send(Parent, new TSchemeBoardEvents::TEvSyncVersionResponse(0, true), 0, CurrentSyncRequest);
+            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0, true), 0, CurrentSyncRequest);
             CurrentSyncRequest = 0;
         }
 
-        this->Send(Parent, new TSchemeBoardEvents::TEvNotifyBuilder(Path, true));
+        this->Send(Parent, new NInternalEvents::TEvNotifyBuilder(Path, true));
     }
 
     void Handle(TEvents::TEvGone::TPtr& ev) {
@@ -583,9 +647,9 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TSchemeBoardEvents::TEvNotify, Handle);
-            hFunc(TSchemeBoardEvents::TEvSyncVersionRequest, Handle);
-            hFunc(TSchemeBoardEvents::TEvSyncVersionResponse, Handle);
+            hFunc(NInternalEvents::TEvNotify, Handle);
+            hFunc(NInternalEvents::TEvSyncVersionRequest, Handle);
+            hFunc(NInternalEvents::TEvSyncVersionResponse, Handle);
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
@@ -597,7 +661,7 @@ public:
 
     STFUNC(StateSleep) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TSchemeBoardEvents::TEvSyncVersionRequest, HandleSleep);
+            hFunc(NInternalEvents::TEvSyncVersionRequest, HandleSleep);
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
@@ -685,7 +749,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         return it->second;
     }
 
-    NKikimrSchemeBoard::TEvNotify& SelectResponse() {
+    TNotifyResponse* SelectResponse() {
         Y_ABORT_UNLESS(IsMajorityReached());
 
         auto newest = SelectStateImpl();
@@ -694,14 +758,14 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         auto it = InitialResponses.find(newest->first);
         Y_ABORT_UNLESS(it != InitialResponses.end());
 
-        return it->second;
+        return &it->second;
     }
 
     bool IsMajorityReached() const {
         return InitialResponses.size() > (Proxies.size() / 2);
     }
 
-    void EnqueueSyncRequest(TSchemeBoardEvents::TEvSyncRequest::TPtr& ev) {
+    void EnqueueSyncRequest(NInternalEvents::TEvSyncRequest::TPtr& ev) {
         DelayedSyncRequest = Max(DelayedSyncRequest, ev->Cookie);
     }
 
@@ -715,31 +779,33 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
         Y_ABORT_UNLESS(PendingSync.empty());
         for (const auto& proxy : Proxies) {
-            this->Send(proxy, new TSchemeBoardEvents::TEvSyncVersionRequest(Path), 0, CurrentSyncRequest);
+            this->Send(proxy, new NInternalEvents::TEvSyncVersionRequest(Path), 0, CurrentSyncRequest);
             PendingSync.emplace(proxy);
         }
 
         return true;
     }
 
-    void Handle(TSchemeBoardEvents::TEvNotify::TPtr& ev) {
-        auto& record = *ev->Get()->MutableRecord();
-
+    void Handle(NInternalEvents::TEvNotify::TPtr& ev) {
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender);
 
-        if (!IsValidNotification(Path, record)) {
+        if (!IsValidNotification(Path, ev->Get()->GetRecord())) {
             SBS_LOG_E("Suspicious " << ev->Get()->ToString()
                 << ": sender# " << ev->Sender);
             return;
         }
 
-        States[ev->Sender] = TState::FromNotify(record);
+        // TEvNotify message is consumed here, can't be used after this point
+        TNotifyResponse notifyResponse = TNotifyResponse::FromNotify(std::move(*ev->Get()->MutableRecord()));
+        TNotifyResponse* selectedNotify = &notifyResponse;
+
+        States[ev->Sender] = TState::FromNotify(notifyResponse);
         if (!IsMajorityReached()) {
-            InitialResponses[ev->Sender] = std::move(record);
+            InitialResponses[ev->Sender] = std::move(notifyResponse);
             if (IsMajorityReached()) {
                 MaybeRunVersionSync();
-                record = SelectResponse();
+                selectedNotify = SelectResponse();
             } else {
                 return;
             }
@@ -773,14 +839,17 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             return;
         }
 
+        const auto& record = selectedNotify->Notify;
+
         if (!record.GetIsDeletion()) {
-            this->Send(Owner, BuildNotify<TSchemeBoardEvents::TEvNotifyUpdate>(record, std::move(*record.MutableDescribeSchemeResult())));
+            NKikimrScheme::TEvDescribeSchemeResult proto = selectedNotify->GetDescribeSchemeResult();
+            this->Send(Owner, BuildNotify<TSchemeBoardEvents::TEvNotifyUpdate>(record, std::move(proto)));
         } else {
             this->Send(Owner, BuildNotify<TSchemeBoardEvents::TEvNotifyDelete>(record, record.GetStrong()));
         }
     }
 
-    void Handle(TSchemeBoardEvents::TEvSyncRequest::TPtr& ev) {
+    void Handle(NInternalEvents::TEvSyncRequest::TPtr& ev) {
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
@@ -801,7 +870,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         Y_ABORT_UNLESS(MaybeRunVersionSync());
     }
 
-    void Handle(TSchemeBoardEvents::TEvSyncVersionResponse::TPtr& ev) {
+    void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
@@ -863,7 +932,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             SBS_LOG_W(done);
         }
 
-        this->Send(Owner, new TSchemeBoardEvents::TEvSyncResponse(Path, partial), 0, ev->Cookie);
+        this->Send(Owner, new NInternalEvents::TEvSyncResponse(Path, partial), 0, ev->Cookie);
 
         PendingSync.clear();
         ReceivedSync.clear();
@@ -877,8 +946,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         const auto& replicas = ev->Get()->Replicas;
 
         if (replicas.empty()) {
-            SBS_LOG_E("Subscribe on unconfigured SchemeBoard"
-                << ": StateStorage group# " << StateStorageGroup);
+            SBS_LOG_E("Subscribe on unconfigured SchemeBoard");
             this->Become(&TDerived::StateCalm);
             return;
         }
@@ -938,8 +1006,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void HandleUndelivered() {
-        SBS_LOG_E("Subscribe on unavailable SchemeBoard"
-            << ": StateStorage group# " << StateStorageGroup);
+        SBS_LOG_E("Subscribe on unavailable SchemeBoard");
         this->Become(&TDerived::StateCalm);
     }
 
@@ -970,11 +1037,9 @@ public:
     explicit TSubscriber(
             const TActorId& owner,
             const TPath& path,
-            const ui64 stateStorageGroup,
             const ui64 domainOwnerId)
         : Owner(owner)
         , Path(path)
-        , StateStorageGroup(stateStorageGroup)
         , DomainOwnerId(domainOwnerId)
         , DelayedSyncRequest(0)
         , CurrentSyncRequest(0)
@@ -984,14 +1049,14 @@ public:
     void Bootstrap(const TActorContext&) {
         TMonitorableActor<TDerived>::Bootstrap();
 
-        const TActorId proxy = MakeStateStorageProxyID(StateStorageGroup);
+        const TActorId proxy = MakeStateStorageProxyID();
         this->Send(proxy, new TEvStateStorage::TEvResolveSchemeBoard(Path), IEventHandle::FlagTrackDelivery);
         this->Become(&TDerived::StateResolve);
     }
 
     STATEFN(StateResolve) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TSchemeBoardEvents::TEvSyncRequest, EnqueueSyncRequest); // from owner (cache)
+            hFunc(NInternalEvents::TEvSyncRequest, EnqueueSyncRequest); // from owner (cache)
 
             hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
 
@@ -1004,9 +1069,9 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TSchemeBoardEvents::TEvNotify, Handle);
-            hFunc(TSchemeBoardEvents::TEvSyncRequest, Handle); // from owner (cache)
-            hFunc(TSchemeBoardEvents::TEvSyncVersionResponse, Handle); // from proxies
+            hFunc(NInternalEvents::TEvNotify, Handle);
+            hFunc(NInternalEvents::TEvSyncRequest, Handle); // from owner (cache)
+            hFunc(NInternalEvents::TEvSyncVersionResponse, Handle); // from proxies
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
@@ -1027,12 +1092,11 @@ public:
 private:
     const TActorId Owner;
     const TPath Path;
-    const ui64 StateStorageGroup;
     const ui64 DomainOwnerId;
 
     TSet<TActorId> Proxies;
     TMap<TActorId, TState> States;
-    TMap<TActorId, NKikimrSchemeBoard::TEvNotify> InitialResponses;
+    TMap<TActorId, TNotifyResponse> InitialResponses;
     TMaybe<TState> State;
 
     ui64 DelayedSyncRequest;
@@ -1058,50 +1122,43 @@ IActor* CreateSchemeBoardSubscriber(
     const TActorId& owner,
     const TString& path
 ) {
-    auto& domains = AppData()->DomainsInfo->Domains;
-    Y_ABORT_UNLESS(!domains.empty());
-    auto& domain = domains.begin()->second;
-    ui32 schemeBoardGroup = domain->DefaultSchemeBoardGroup;
+    auto *domain = AppData()->DomainsInfo->GetDomain();
     ui64 domainOwnerId = domain->SchemeRoot;
-    return CreateSchemeBoardSubscriber(owner, path, schemeBoardGroup, domainOwnerId);
+    return CreateSchemeBoardSubscriber(owner, path, domainOwnerId);
 }
 
 IActor* CreateSchemeBoardSubscriber(
     const TActorId& owner,
     const TString& path,
-    const ui64 stateStorageGroup,
     const ui64 domainOwnerId
 ) {
-    return new NSchemeBoard::TSubscriberByPath(owner, path, stateStorageGroup, domainOwnerId);
+    return new NSchemeBoard::TSubscriberByPath(owner, path, domainOwnerId);
 }
 
 IActor* CreateSchemeBoardSubscriber(
     const TActorId& owner,
     const TPathId& pathId,
-    const ui64 stateStorageGroup,
     const ui64 domainOwnerId
 ) {
-    return new NSchemeBoard::TSubscriberByPathId(owner, pathId, stateStorageGroup, domainOwnerId);
+    return new NSchemeBoard::TSubscriberByPathId(owner, pathId, domainOwnerId);
 }
 
 IActor* CreateSchemeBoardSubscriber(
     const TActorId& owner,
     const TString& path,
-    const ui64 stateStorageGroup,
     const EDeletionPolicy deletionPolicy
 ) {
     Y_UNUSED(deletionPolicy);
-    return new NSchemeBoard::TSubscriberByPath(owner, path, stateStorageGroup, 0);
+    return new NSchemeBoard::TSubscriberByPath(owner, path, 0);
 }
 
 IActor* CreateSchemeBoardSubscriber(
     const TActorId& owner,
     const TPathId& pathId,
-    const ui64 stateStorageGroup,
     const EDeletionPolicy deletionPolicy
 ) {
     Y_UNUSED(deletionPolicy);
-    return new NSchemeBoard::TSubscriberByPathId(owner, pathId, stateStorageGroup, 0);
+    return new NSchemeBoard::TSubscriberByPathId(owner, pathId, 0);
 }
 
 } // NKikimr

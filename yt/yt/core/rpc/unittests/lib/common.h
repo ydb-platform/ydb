@@ -17,6 +17,7 @@
 #include <yt/yt/core/bus/public.h>
 
 #include <yt/yt/core/misc/fs.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/rpc/bus/channel.h>
 #include <yt/yt/core/rpc/bus/server.h>
@@ -108,6 +109,42 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TTestNodeMemoryTracker
+    : public IMemoryUsageTracker
+{
+public:
+    explicit TTestNodeMemoryTracker(size_t limit);
+
+    i64 GetLimit() const;
+    i64 GetUsed() const;
+    i64 GetFree() const;
+    bool IsExceeded() const;
+
+    TError TryAcquire(i64 size) override;
+    TError TryChange(i64 size) override;
+    bool Acquire(i64 size) override;
+    void Release(i64 size) override;
+    void SetLimit(i64 size) override;
+
+    void ClearTotalUsage();
+    i64 GetTotalUsage() const;
+
+private:
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    i64 Usage_;
+    i64 Limit_;
+    i64 TotalUsage_;
+
+    TError DoTryAcquire(i64 size);
+    void DoAcquire(i64 size);
+    void DoRelease(i64 size);
+};
+
+DECLARE_REFCOUNTED_CLASS(TTestNodeMemoryTracker)
+DEFINE_REFCOUNTED_TYPE(TTestNodeMemoryTracker)
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class TImpl>
 class TTestBase
     : public ::testing::Test
@@ -120,9 +157,9 @@ public:
 
         WorkerPool_ = NConcurrency::CreateThreadPool(4, "Worker");
         bool secure = TImpl::Secure;
-
+        MemoryUsageTracker_ = New<TTestNodeMemoryTracker>(32_MB);
         TTestServerHost::InitializeServer(
-            TImpl::CreateServer(Port_),
+            TImpl::CreateServer(Port_, MemoryUsageTracker_),
             WorkerPool_->GetInvoker(),
             secure,
             /*createChannel*/ {});
@@ -131,6 +168,11 @@ public:
     void TearDown() final
     {
         TTestServerHost::TearDown();
+    }
+
+    TTestNodeMemoryTrackerPtr GetMemoryUsageTracker()
+    {
+        return MemoryUsageTracker_;
     }
 
     IChannelPtr CreateChannel(
@@ -168,6 +210,7 @@ public:
 
 private:
     NConcurrency::IThreadPoolPtr WorkerPool_;
+    TTestNodeMemoryTrackerPtr MemoryUsageTracker_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -179,9 +222,9 @@ public:
     static constexpr bool AllowTransportErrors = false;
     static constexpr bool Secure = false;
 
-    static IServerPtr CreateServer(ui16 port)
+    static IServerPtr CreateServer(ui16 port, IMemoryUsageTrackerPtr memoryUsageTracker)
     {
-        auto busServer = MakeBusServer(port);
+        auto busServer = MakeBusServer(port, memoryUsageTracker);
         return NRpc::NBus::CreateBusServer(busServer);
     }
 
@@ -193,9 +236,9 @@ public:
         return TImpl::CreateChannel(address, serverAddress, std::move(grpcArguments));
     }
 
-    static NYT::NBus::IBusServerPtr MakeBusServer(ui16 port)
+    static NYT::NBus::IBusServerPtr MakeBusServer(ui16 port, IMemoryUsageTrackerPtr memoryUsageTracker)
     {
-        return TImpl::MakeBusServer(port);
+        return TImpl::MakeBusServer(port, memoryUsageTracker);
     }
 };
 
@@ -214,10 +257,13 @@ public:
         return NRpc::NBus::CreateBusChannel(client);
     }
 
-    static NYT::NBus::IBusServerPtr MakeBusServer(ui16 port)
+    static NYT::NBus::IBusServerPtr MakeBusServer(ui16 port, IMemoryUsageTrackerPtr memoryUsageTracker)
     {
         auto busConfig = NYT::NBus::TBusServerConfig::CreateTcp(port);
-        return CreateBusServer(busConfig);
+        return CreateBusServer(
+            busConfig,
+            NYT::NBus::GetYTPacketTranscoderFactory(memoryUsageTracker),
+            memoryUsageTracker);
     }
 };
 
@@ -397,7 +443,9 @@ public:
         return NGrpc::CreateGrpcChannel(channelConfig);
     }
 
-    static IServerPtr CreateServer(ui16 port)
+    static IServerPtr CreateServer(
+        ui16 port,
+        IMemoryUsageTrackerPtr /*memoryUsageTracker*/)
     {
         auto serverAddressConfig = New<NGrpc::TServerAddressConfig>();
         if (EnableSsl) {
@@ -429,11 +477,14 @@ public:
 class TRpcOverUdsImpl
 {
 public:
-    static NYT::NBus::IBusServerPtr MakeBusServer(ui16 port)
+    static NYT::NBus::IBusServerPtr MakeBusServer(ui16 port, IMemoryUsageTrackerPtr memoryUsageTracker)
     {
         SocketPath_ = GetWorkPath() + "/socket_" + ToString(port);
         auto busConfig = NYT::NBus::TBusServerConfig::CreateUds(SocketPath_);
-        return CreateBusServer(busConfig);
+        return CreateBusServer(
+            busConfig,
+            NYT::NBus::GetYTPacketTranscoderFactory(memoryUsageTracker),
+            memoryUsageTracker);
     }
 
     static IChannelPtr CreateChannel(

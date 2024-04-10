@@ -82,6 +82,7 @@ are supported, but support for CFF2 variable fonts will be added soon.
 The discussion and implementation of these features are tracked at
 https://github.com/fonttools/fonttools/issues/1537
 """
+
 from fontTools.misc.fixedTools import (
     floatToFixedToFloat,
     strToFixedToFloat,
@@ -530,9 +531,13 @@ def changeTupleVariationsAxisLimits(variations, axisLimits):
 def changeTupleVariationAxisLimit(var, axisTag, axisLimit):
     assert isinstance(axisLimit, NormalizedAxisTripleAndDistances)
 
-    # Skip when current axis is missing (i.e. doesn't participate),
+    # Skip when current axis is missing or peaks at 0 (i.e. doesn't participate)
     lower, peak, upper = var.axes.get(axisTag, (-1, 0, 1))
     if peak == 0:
+        # explicitly defined, no-op axes can be omitted
+        # https://github.com/fonttools/fonttools/issues/3453
+        if axisTag in var.axes:
+            del var.axes[axisTag]
         return [var]
     # Drop if the var 'tent' isn't well-formed
     if not (lower <= peak <= upper) or (lower < 0 and upper > 0):
@@ -614,7 +619,7 @@ def _instantiateGvarGlyph(
     if optimize:
         isComposite = glyf[glyphname].isComposite()
         for var in tupleVarStore:
-            var.optimize(coordinates, endPts, isComposite)
+            var.optimize(coordinates, endPts, isComposite=isComposite)
 
 
 def instantiateGvarGlyph(varfont, glyphname, axisLimits, optimize=True):
@@ -643,9 +648,11 @@ def instantiateGvar(varfont, axisLimits, optimize=True):
     glyphnames = sorted(
         glyf.glyphOrder,
         key=lambda name: (
-            glyf[name].getCompositeMaxpValues(glyf).maxComponentDepth
-            if glyf[name].isComposite() or glyf[name].isVarComposite()
-            else 0,
+            (
+                glyf[name].getCompositeMaxpValues(glyf).maxComponentDepth
+                if glyf[name].isComposite() or glyf[name].isVarComposite()
+                else 0
+            ),
             name,
         ),
     )

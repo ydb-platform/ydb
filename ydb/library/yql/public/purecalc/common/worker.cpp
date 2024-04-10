@@ -25,6 +25,7 @@
 
 #include <util/stream/file.h>
 #include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
 
 using namespace NYql;
 using namespace NYql::NPureCalc;
@@ -116,7 +117,7 @@ TWorkerGraph::TWorkerGraph(
     explorer.Walk(rootNode.GetNode(), Env_);
 
     auto compositeNodeFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory(
-        {NKikimr::NMiniKQL::GetYqlFactory()}
+        {NKikimr::NMiniKQL::GetYqlFactory(), NYql::GetPgFactory()}
     );
 
     auto nodeFactory = [&](

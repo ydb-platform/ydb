@@ -1570,7 +1570,9 @@
                 {"Index": 3, "Name": "LeftKeysColumns", "Type": "TCoAtomList"},
                 {"Index": 4, "Name": "RightKeysColumns", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "LeftRenames", "Type": "TCoAtomList"},
-                {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList"}
+                {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList"},
+                {"Index": 7, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
+                {"Index": 8, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -1585,7 +1587,9 @@
                 {"Index": 4, "Name": "RightKeysColumns", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "LeftRenames", "Type": "TCoAtomList"},
                 {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList"},
-                {"Index": 7, "Name": "Flags", "Type": "TCoAtomList"}
+                {"Index": 7, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
+                {"Index": 8, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"},  
+                {"Index": 9, "Name": "Flags", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -1599,7 +1603,9 @@
                 {"Index": 3, "Name": "RightKeysColumns", "Type": "TCoAtomList"},
                 {"Index": 4, "Name": "LeftRenames", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "RightRenames", "Type": "TCoAtomList"},
-                {"Index": 6, "Name": "Flags", "Type": "TCoAtomList"}
+                {"Index": 6, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
+                {"Index": 7, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"}, 
+                {"Index": 8, "Name": "Flags", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -2444,6 +2450,14 @@
             "Match": {"Type": "Callable", "Name": "WideFromBlocks"}
         },
         {
+            "Name": "TCoReplicateScalars",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "ReplicateScalars"},
+            "Children": [
+                {"Index": 1, "Name": "Indexes", "Type": "TCoAtomList", "Optional": true}
+            ]
+        },
+        {
             "Name": "TCoWideToBlocks",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "WideToBlocks"}
@@ -2490,6 +2504,20 @@
                 {"Index": 0, "Name": "Type", "Type": "TCallable"},
                 {"Index": 1, "Name": "Buffer", "Type": "TExprBase"}
             ]
+        },
+        {
+            "Name" : "TCoReturningListItem",
+            "Base" : "TCallable",
+            "Match": {"Type": "Callable", "Name": "ReturningListItem"},
+            "Children": [
+                {"Index": 0, "Name": "ColumnRef", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TCoReturningStar",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "ReturningStar"},
+            "Children": []
         }
     ]
 }

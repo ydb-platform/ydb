@@ -30,7 +30,7 @@ public:
     void Stop();
 
     NThreading::TFuture<void> MakeOperationWaiter(const NYT::IOperationPtr& operation, TMaybe<ui32> publicId,
-        const TString& ytServer, const TOperationProgressWriter& writer, const TStatWriter& statWriter);
+        const TString& ytServer, const TString& ytClusterName, const TOperationProgressWriter& writer, const TStatWriter& statWriter);
 
 private:
     static void* Tracker(void* param);

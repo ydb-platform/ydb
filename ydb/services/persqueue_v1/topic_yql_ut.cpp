@@ -67,6 +67,8 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             partCfg->SetWriteSpeedInBytesPerSecond(9001);
             auto* rtfs = descrCopy.MutableReadFromTimestampsMs();
             rtfs->Set(1, 1609462861000);
+
+            descrCopy.MutableConsumers(1)->SetReadFromTimestampsMs(1609462861000);
         }
         const char *query2 = R"__(
         ALTER TOPIC `/Root/PQ/rt3.dc1--legacy--topic1`
@@ -80,6 +82,10 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         auto pqGroup2 = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--legacy--topic1")->Record.GetPathDescription()
                                                                                              .GetPersQueueGroup();
         const auto& descr2 = pqGroup2.GetPQTabletConfig();
+
+        Cerr << ">>>>> 1: " << descrCopy.DebugString() << Endl;
+        Cerr << ">>>>> 2: " << descr2.DebugString() << Endl;
+
         UNIT_ASSERT_VALUES_EQUAL(descrCopy.DebugString(), descr2.DebugString());
         
         const char *query3 = R"__(

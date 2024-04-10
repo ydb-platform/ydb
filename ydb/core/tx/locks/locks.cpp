@@ -43,16 +43,17 @@ TLockInfo::TLockInfo(TLockLocker * locker, ui64 lockId, ui32 lockNodeId)
     , CreationTime(TAppData::TimeProvider->Now())
 {}
 
-TLockInfo::TLockInfo(TLockLocker * locker, ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, TInstant createTs)
+TLockInfo::TLockInfo(TLockLocker * locker, const ILocksDb::TLockRow& row)
     : Locker(locker)
-    , LockId(lockId)
-    , LockNodeId(lockNodeId)
-    , Generation(generation)
-    , Counter(counter)
-    , CreationTime(createTs)
+    , LockId(row.LockId)
+    , LockNodeId(row.LockNodeId)
+    , Generation(row.Generation)
+    , Counter(row.Counter)
+    , CreationTime(TInstant::MicroSeconds(row.CreateTs))
+    , Flags(ELockFlags(row.Flags))
     , Persistent(true)
 {
-    if (counter == Max<ui64>()) {
+    if (Counter == Max<ui64>()) {
         BreakVersion.emplace(TRowVersion::Min());
     }
 }
@@ -144,7 +145,7 @@ void TLockInfo::OnRemoved() {
 void TLockInfo::PersistLock(ILocksDb* db) {
     Y_ABORT_UNLESS(!IsPersistent());
     Y_ABORT_UNLESS(db, "Cannot persist lock without a db");
-    db->PersistAddLock(LockId, LockNodeId, Generation, Counter, CreationTime.MicroSeconds());
+    db->PersistAddLock(LockId, LockNodeId, Generation, Counter, CreationTime.MicroSeconds(), ui64(Flags));
     Persistent = true;
 
     PersistRanges(db);
@@ -297,11 +298,11 @@ void TLockInfo::CleanupConflicts() {
     }
 }
 
-void TLockInfo::RestorePersistentRange(ui64 rangeId, const TPathId& tableId, ELockRangeFlags flags) {
+void TLockInfo::RestorePersistentRange(const ILocksDb::TLockRange& rangeRow) {
     auto& range = PersistentRanges.emplace_back();
-    range.Id = rangeId;
-    range.TableId = tableId;
-    range.Flags = flags;
+    range.Id = rangeRow.RangeId;
+    range.TableId = rangeRow.TableId;
+    range.Flags = ELockRangeFlags(rangeRow.Flags);
 
     if (!!(range.Flags & ELockRangeFlags::Read)) {
         if (ReadTables.insert(range.TableId).second) {
@@ -331,6 +332,14 @@ void TLockInfo::RestorePersistentVolatileDependency(ui64 txId) {
     Y_ABORT_UNLESS(IsPersistent());
 
     VolatileDependencies.insert(txId);
+}
+
+void TLockInfo::SetFrozen(ILocksDb* db) {
+    Y_ABORT_UNLESS(IsPersistent());
+    Flags |= ELockFlags::Frozen;
+    if (db) {
+        db->PersistLockFlags(LockId, ui64(Flags));
+    }
 }
 
 // TTableLocks
@@ -549,14 +558,14 @@ TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId, ui32 lockNodeId) {
     return lock;
 }
 
-TLockInfo::TPtr TLockLocker::AddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, TInstant createTs) {
-    Y_ABORT_UNLESS(Locks.find(lockId) == Locks.end());
+TLockInfo::TPtr TLockLocker::AddLock(const ILocksDb::TLockRow& row) {
+    Y_ABORT_UNLESS(Locks.find(row.LockId) == Locks.end());
 
-    TLockInfo::TPtr lock(new TLockInfo(this, lockId, lockNodeId, generation, counter, createTs));
+    TLockInfo::TPtr lock(new TLockInfo(this, row));
     Y_ABORT_UNLESS(lock->IsPersistent());
-    Locks[lockId] = lock;
-    if (lockNodeId) {
-        PendingSubscribeLocks.emplace_back(lockId, lockNodeId);
+    Locks[row.LockId] = lock;
+    if (row.LockNodeId) {
+        PendingSubscribeLocks.emplace_back(row.LockId, row.LockNodeId);
     }
     return lock;
 }
@@ -1158,9 +1167,9 @@ bool TSysLocks::Load(ILocksDb& db) {
     Locker.Clear();
 
     for (auto& lockRow : rows) {
-        TLockInfo::TPtr lock = Locker.AddLock(lockRow.LockId, lockRow.LockNodeId, lockRow.Generation, lockRow.Counter, TInstant::MicroSeconds(lockRow.CreateTs));
+        TLockInfo::TPtr lock = Locker.AddLock(lockRow);
         for (auto& rangeRow : lockRow.Ranges) {
-            lock->RestorePersistentRange(rangeRow.RangeId, rangeRow.TableId, ELockRangeFlags(rangeRow.Flags));
+            lock->RestorePersistentRange(rangeRow);
         }
     }
 

@@ -131,7 +131,12 @@ To update cluster (stop + start):
             default=False,
             action='store_true',
         )
-
+        sub_parser.add_argument(
+            '--base-port-offset',
+            type=int,
+            default=0,
+            action='store',
+        )
         sub_parser.add_argument(
             '--ydb-binary-path', required=True,
             help='Path to binary file'

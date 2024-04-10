@@ -3,6 +3,7 @@ Handling of Core Metadata for Python packages (including reading and writing).
 
 See: https://packaging.python.org/en/latest/specifications/core-metadata/
 """
+
 import os
 import stat
 import textwrap
@@ -61,7 +62,7 @@ def _read_list_from_msg(msg: Message, field: str) -> Optional[List[str]]:
 
 
 def _read_payload_from_msg(msg: Message) -> Optional[str]:
-    value = msg.get_payload().strip()
+    value = str(msg.get_payload()).strip()
     if value == 'UNKNOWN' or not value:
         return None
     return value

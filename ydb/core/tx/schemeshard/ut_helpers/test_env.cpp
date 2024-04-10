@@ -8,6 +8,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/filestore/core/filestore.h>
@@ -569,15 +570,15 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         set.SetMinimumStepSeconds(5); // 5 seconds
     }
     //
-                                                        
+
     for (const auto& sid : opts.SystemBackupSIDs_) {
         app.AddSystemBackupSID(sid);
     }
 
-    AddDomain(runtime, app, TTestTxConfig::DomainUid, 0, hive, schemeRoot);
+    AddDomain(runtime, app, TTestTxConfig::DomainUid, hive, schemeRoot);
 
     SetupLogging(runtime);
-    SetupChannelProfiles(app, TTestTxConfig::DomainUid, ChannelsCount);
+    SetupChannelProfiles(app, ChannelsCount);
 
     for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
         SetupSchemeCache(runtime, node, app.Domains->GetDomain(TTestTxConfig::DomainUid).Name);
@@ -613,6 +614,13 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         IActor* txProxy = CreateTxProxy(runtime.GetTxAllocatorTabletIds());
         TActorId txProxyId = runtime.Register(txProxy, node);
         runtime.RegisterService(MakeTxProxyID(), txProxyId, node);
+    }
+
+    // Create sequence proxies
+    for (size_t i = 0; i < runtime.GetNodeCount(); ++i) {
+        IActor* sequenceProxy = NSequenceProxy::CreateSequenceProxy();
+        TActorId sequenceProxyId = runtime.Register(sequenceProxy, i);
+        runtime.RegisterService(NSequenceProxy::MakeSequenceProxyServiceID(), sequenceProxyId, i);
     }
 
     //SetupBoxAndStoragePool(runtime, sender, TTestTxConfig::DomainUid);
@@ -692,17 +700,15 @@ void NSchemeShardUT_Private::TTestEnv::SetupLogging(TTestActorRuntime &runtime) 
     }
 }
 
-void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAppPrepare &app, ui32 domainUid, ui32 ssId, ui64 hive, ui64 schemeRoot) {
+void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAppPrepare &app, ui32 domainUid, ui64 hive, ui64 schemeRoot) {
     app.ClearDomainsAndHive();
     ui32 planResolution = 50;
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
                 "MyRoot", domainUid, schemeRoot,
-                ssId, ssId, TVector<ui32>{ssId},
-                domainUid, TVector<ui32>{domainUid},
                 planResolution,
-                TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(domainUid, 1)},
+                TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(1)},
                 TVector<ui64>{},
-                TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainUid, 1)},
+                TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(1)},
                 DefaultPoolKinds(2));
 
     TVector<ui64> ids = runtime.GetTxAllocatorTabletIds();
@@ -710,7 +716,7 @@ void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAp
     runtime.SetTxAllocatorTabletIds(ids);
 
     app.AddDomain(domain.Release());
-    app.AddHive(domainUid, hive);
+    app.AddHive(hive);
 }
 
 TFakeHiveState::TPtr NSchemeShardUT_Private::TTestEnv::GetHiveState() const {

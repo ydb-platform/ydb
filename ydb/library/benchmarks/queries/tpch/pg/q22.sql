@@ -24,7 +24,7 @@ from
                 from
                     {{customer}}
                 where
-                    c_acctbal > 0.00::numeric
+                    c_acctbal > 0.00
                     and substring(c_phone from 1 for 2) in
                         ('31', '29', '30', '26', '28', '25', '15')
             )

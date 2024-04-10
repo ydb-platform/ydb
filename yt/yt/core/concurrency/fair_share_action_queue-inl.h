@@ -16,8 +16,9 @@ public:
     TEnumIndexedFairShareActionQueue(
         const TString& threadName,
         const std::vector<TString>& queueNames,
-        const THashMap<TString, std::vector<TString>>& queueToBucket)
-        : Queue_(CreateFairShareActionQueue(threadName, queueNames, queueToBucket))
+        const THashMap<TString, std::vector<TString>>& bucketToQueues,
+        NProfiling::IRegistryImplPtr registry)
+        : Queue_(CreateFairShareActionQueue(threadName, queueNames, bucketToQueues, std::move(registry)))
     { }
 
     const IInvokerPtr& GetInvoker(EQueue queue) override
@@ -39,21 +40,22 @@ private:
 template <typename EQueue, typename EBucket>
 IEnumIndexedFairShareActionQueuePtr<EQueue> CreateEnumIndexedFairShareActionQueue(
     const TString& threadName,
-    const THashMap<EBucket, std::vector<EQueue>>& queueToBucket)
+    const THashMap<EBucket, std::vector<EQueue>>& bucketToQueues,
+    NProfiling::IRegistryImplPtr registry)
 {
     std::vector<TString> queueNames;
     for (const auto& queueName : TEnumTraits<EQueue>::GetDomainNames()) {
         queueNames.push_back(TString{queueName});
     }
     THashMap<TString, std::vector<TString>> stringBuckets;
-    for (const auto& [bucketName, bucket] : queueToBucket) {
+    for (const auto& [bucketName, bucket] : bucketToQueues) {
         auto& stringBucket = stringBuckets[ToString(bucketName)];
         stringBucket.reserve(bucket.size());
         for (const auto& queue : bucket) {
             stringBucket.push_back(ToString(queue));
         }
     }
-    return New<TEnumIndexedFairShareActionQueue<EQueue>>(threadName, queueNames, stringBuckets);
+    return New<TEnumIndexedFairShareActionQueue<EQueue>>(threadName, queueNames, stringBuckets, std::move(registry));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

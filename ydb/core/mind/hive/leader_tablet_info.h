@@ -4,6 +4,7 @@
 #include "tablet_info.h"
 #include "follower_tablet_info.h"
 #include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 namespace NKikimr {
 namespace NHive {
@@ -334,10 +335,10 @@ public:
     bool AcquireAllocationUnit(ui32 channelId);
     bool ReleaseAllocationUnit(ui32 channelId);
     const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* FindFreeAllocationUnit(ui32 channelId);
-    TString GetChannelStoragePoolName(const TTabletChannelInfo& channel);
-    TString GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel);
-    TString GetChannelStoragePoolName(ui32 channelId);
-    TStoragePoolInfo& GetStoragePool(ui32 channelId);
+    TString GetChannelStoragePoolName(const TTabletChannelInfo& channel) const;
+    TString GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel) const;
+    TString GetChannelStoragePoolName(ui32 channelId) const;
+    TStoragePoolInfo& GetStoragePool(ui32 channelId) const;
 
     void SetType(TTabletTypes::EType type);
 };

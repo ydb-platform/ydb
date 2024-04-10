@@ -5,7 +5,7 @@ namespace NKesus {
 
 TTestContext::TTestContext()
     : TabletType(TTabletTypes::Kesus)
-    , TabletId(MakeTabletID(0, 0, 1))
+    , TabletId(MakeTabletID(false, 1))
 {}
 
 void TTestContext::Setup(ui32 nodeCount) {

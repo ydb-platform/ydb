@@ -9,7 +9,6 @@ class TTxCreateTablet : public TTransactionBase<THive> {
     const ui64 OwnerId;
     const ui64 OwnerIdx;
     const TTabletTypes::EType TabletType;
-    const ui32 AssignStateStorage;
 
     const TActorId Sender;
     const ui64 Cookie;
@@ -40,8 +39,6 @@ public:
         , OwnerId(RequestData.GetOwner())
         , OwnerIdx(RequestData.GetOwnerIdx())
         , TabletType((TTabletTypes::EType)RequestData.GetTabletType())
-        , AssignStateStorage(RequestData.HasAssignStateStorage() ? RequestData.GetAssignStateStorage() :
-            StateStorageGroupFromTabletID(hive->TabletID()))
         , Sender(sender)
         , Cookie(cookie)
         , TabletId(0)
@@ -341,7 +338,7 @@ public:
             RequestFreeSequence();
             return true;
         } else {
-            TabletId = MakeTabletID(AssignStateStorage, Self->HiveUid, tabletIdIndex);
+            TabletId = MakeTabletID(true, tabletIdIndex);
             BLOG_D("Hive " << Self->TabletID() << " allocated TabletId " << TabletId << " from TabletIdIndex " << tabletIdIndex);
             Y_ABORT_UNLESS(Self->Tablets.count(TabletId) == 0);
             for (auto owner : modified) {

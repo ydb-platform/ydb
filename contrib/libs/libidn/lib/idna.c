@@ -1,5 +1,5 @@
 /* idna.c --- Prototypes for Internationalized Domain Name library.
-   Copyright (C) 2002-2022 Simon Josefsson
+   Copyright (C) 2002-2024 Simon Josefsson
 
    This file is part of GNU Libidn.
 
@@ -115,7 +115,7 @@ static char* STRCAT(char* destination, const char* source) {
  * Return value: Returns 0 on success, or an #Idna_rc error code.
  */
 int
-idna_to_ascii_4i (const uint32_t * in, size_t inlen, char *out, int flags)
+idna_to_ascii_4i (const uint32_t *in, size_t inlen, char *out, int flags)
 {
   size_t len, outlen;
   uint32_t *src;		/* XXX don't need to copy data? */
@@ -318,7 +318,7 @@ step8:
 /* ToUnicode().  May realloc() utf8in.  Will free utf8in unconditionally. */
 static int
 idna_to_unicode_internal (char *utf8in,
-			  uint32_t * out, size_t *outlen, int flags)
+			  uint32_t *out, size_t *outlen, int flags)
 {
   int rc;
   char tmpout[IDNA_LABEL_MAX_LENGTH + 1];
@@ -478,8 +478,8 @@ step3:
  *   checking it means breaking the standard.
  */
 int
-idna_to_unicode_44i (const uint32_t * in, size_t inlen,
-		     uint32_t * out, size_t *outlen, int flags)
+idna_to_unicode_44i (const uint32_t *in, size_t inlen,
+		     uint32_t *out, size_t *outlen, int flags)
 {
   int rc;
   size_t outlensave = *outlen;
@@ -518,7 +518,7 @@ idna_to_unicode_44i (const uint32_t * in, size_t inlen,
  * Return value: Returns %IDNA_SUCCESS on success, or error code.
  **/
 int
-idna_to_ascii_4z (const uint32_t * input, char **output, int flags)
+idna_to_ascii_4z (const uint32_t *input, char **output, int flags)
 {
   const uint32_t *start = input;
   const uint32_t *end;
@@ -681,7 +681,7 @@ idna_to_ascii_lz (const char *input, char **output, int flags)
  * Return value: Returns %IDNA_SUCCESS on success, or error code.
  **/
 int
-idna_to_unicode_4z4z (const uint32_t * input, uint32_t ** output, int flags)
+idna_to_unicode_4z4z (const uint32_t *input, uint32_t **output, int flags)
 {
   const uint32_t *start = input;
   const uint32_t *end;
@@ -760,7 +760,7 @@ idna_to_unicode_4z4z (const uint32_t * input, uint32_t ** output, int flags)
  * Return value: Returns %IDNA_SUCCESS on success, or error code.
  **/
 int
-idna_to_unicode_8z4z (const char *input, uint32_t ** output, int flags)
+idna_to_unicode_8z4z (const char *input, uint32_t **output, int flags)
 {
   uint32_t *ucs4;
   size_t ucs4len;

@@ -6,6 +6,7 @@ The ``requires.txt`` file has an specific format:
 
 See https://setuptools.pypa.io/en/latest/deprecated/python_eggs.html#requires-txt
 """
+
 import io
 from collections import defaultdict
 from itertools import filterfalse
@@ -34,7 +35,7 @@ def _prepare(
 
 
 def _convert_extras_requirements(
-    extras_require: _StrOrIter,
+    extras_require: Mapping[str, _StrOrIter],
 ) -> Mapping[str, _Ordered[Requirement]]:
     """
     Convert requirements in `extras_require` of the form

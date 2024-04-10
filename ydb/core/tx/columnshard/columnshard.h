@@ -5,6 +5,7 @@
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/core/tx/data_events/write_data.h>
 
 #include <ydb/core/tx/long_tx_service/public/types.h>
@@ -65,6 +66,22 @@ struct TEvColumnShard {
         EvRead,
         EvWriteResult,
         EvReadResult,
+
+        EvDeleteSharedBlobs,
+        EvDeleteSharedBlobsFinished,
+
+        EvDataSharingProposeFromInitiator,
+        EvDataSharingConfirmFromInitiator,
+        EvDataSharingAckFinishFromInitiator,
+        EvDataSharingStartToSource,
+        EvDataSharingSendDataFromSource,
+        EvDataSharingAckDataToSource,
+        EvDataSharingFinishedFromSource,
+        EvDataSharingAckFinishToSource,
+        EvDataSharingCheckStatusFromInitiator,
+        EvDataSharingCheckStatusResult,
+        EvApplyLinksModification,
+        EvApplyLinksModificationFinished,
 
         EvEnd
     };
@@ -210,8 +227,7 @@ struct TEvColumnShard {
         }
     };
 
-    struct TEvWriteResult : public TEventPB<TEvWriteResult, NKikimrTxColumnShard::TEvWriteResult,
-                            TEvColumnShard::EvWriteResult> {
+    struct TEvWriteResult : public TEventPB<TEvWriteResult, NKikimrTxColumnShard::TEvWriteResult, TEvColumnShard::EvWriteResult> {
         TEvWriteResult() = default;
 
         TEvWriteResult(ui64 origin, const NEvWrite::TWriteMeta& writeMeta, ui32 status)
@@ -235,6 +251,7 @@ struct TEvColumnShard {
     };
 
     using TEvScan = TEvDataShard::TEvKqpScan;
+
 };
 
 inline auto& Proto(TEvColumnShard::TEvProposeTransaction* ev) {

@@ -187,10 +187,10 @@ bool TTabletInfo::IsGoodForBalancer(TInstant now) const {
             && (now - LastBalancerDecisionTime > Hive.GetTabletKickCooldownPeriod());
 }
 
-bool TTabletInfo::InitiateBoot() {
+bool TTabletInfo::InitiateBoot(TNodeId node) {
     if (IsStopped()) {
         ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_BOOTING);
-        Hive.AddToBootQueue(this);
+        Hive.AddToBootQueue(this, node);
         Hive.ProcessBootQueue();
         return true;
     } else {
@@ -215,15 +215,15 @@ TNodeInfo* TTabletInfo::GetNode() const {
     return node;
 }
 
-bool TTabletInfo::InitiateStop(TSideEffects& sideEffects) {
+bool TTabletInfo::InitiateStop(TSideEffects& sideEffects, bool forMove) {
     TNodeInfo* node = GetNode();
     TActorId local;
     if (node != nullptr) {
         local = node->Local;
     }
     if (BecomeStopped()) {
-        if (Hive.GetEnableFastTabletMove() && node != nullptr && !node->Freeze && PreferredNodeId != 0) {
-            // we only do it when we have PreferredNodeId, which means that we are moving from one node to another
+        if (Hive.GetEnableFastTabletMove() && node != nullptr && !node->Freeze && forMove) {
+            // we only do it when we are moving from one node to another
             LastNodeId = node->Id;
         } else {
             SendStopTablet(local, sideEffects);
@@ -232,7 +232,7 @@ bool TTabletInfo::InitiateStop(TSideEffects& sideEffects) {
         if (IsLeader()) {
             for (TFollowerTabletInfo& follower : AsLeader().Followers) {
                 if (follower.FollowerGroup.LocalNodeOnly) {
-                    follower.InitiateStop(sideEffects);
+                    follower.InitiateStop(sideEffects, forMove);
                 }
             }
         }
@@ -294,9 +294,6 @@ void TTabletInfo::BecomeUnknown(TNodeInfo* node) {
     Y_ABORT_UNLESS(VolatileState == EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN);
     Y_ABORT_UNLESS(Node == nullptr || node == Node);
     Node = node;
-    if (Node->Freeze) {
-        PreferredNodeId = Node->Id;
-    }
     ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN);
 }
 

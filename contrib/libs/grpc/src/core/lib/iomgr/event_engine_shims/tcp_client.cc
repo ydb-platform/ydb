@@ -16,6 +16,7 @@
 #include "src/core/lib/iomgr/event_engine_shims/tcp_client.h"
 
 #include "y_absl/status/status.h"
+#include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/string_view.h"
 
 #include <grpc/event_engine/event_engine.h>

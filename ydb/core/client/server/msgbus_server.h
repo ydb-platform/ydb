@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/lib/base/defs.h>
 #include <ydb/public/lib/base/msgbus.h>
+#include <ydb/core/protos/tx_proxy.pb.h>
 #include "msgbus_http_server.h"
 #include "msgbus_server_pq_metacache.h"
 
@@ -281,7 +282,6 @@ IActor* CreateMessageBusTabletCountersRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusLocalMKQL(TBusMessageContext &msg);
 IActor* CreateMessageBusLocalSchemeTx(TBusMessageContext &msg);
 IActor* CreateMessageBusSchemeInitRoot(TBusMessageContext &msg);
-IActor* CreateMessageBusBSAdm(TBusMessageContext &msg);
 IActor* CreateMessageBusGetTypes(TBusMessageContext &msg);
 IActor* CreateMessageBusHiveCreateTablet(TBusMessageContext &msg);
 IActor* CreateMessageBusLocalEnumerateTablets(TBusMessageContext &msg);

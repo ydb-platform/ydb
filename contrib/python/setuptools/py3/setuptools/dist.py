@@ -10,7 +10,7 @@ import sys
 from contextlib import suppress
 from glob import iglob
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import TYPE_CHECKING, Dict, List, MutableMapping, Optional, Set, Tuple
 
 import distutils.cmd
 import distutils.command
@@ -87,7 +87,7 @@ def check_nsp(dist, attr, value):
         SetuptoolsDeprecationWarning.emit(
             "The namespace_packages parameter is deprecated.",
             "Please replace its usage with implicit namespaces (PEP 420).",
-            see_docs="references/keywords.html#keyword-namespace-packages"
+            see_docs="references/keywords.html#keyword-namespace-packages",
             # TODO: define due_date, it may break old packages that are no longer
             # maintained (e.g. sphinxcontrib extensions) when installed from source.
             # Warning officially introduced in May 2022, however the deprecation
@@ -202,7 +202,11 @@ def check_packages(dist, attr, value):
             )
 
 
-_Distribution = get_unpatched(distutils.core.Distribution)
+if TYPE_CHECKING:
+    # Work around a mypy issue where type[T] can't be used as a base: https://github.com/python/mypy/issues/10962
+    _Distribution = distutils.core.Distribution
+else:
+    _Distribution = get_unpatched(distutils.core.Distribution)
 
 
 class Distribution(_Distribution):
@@ -283,12 +287,12 @@ class Distribution(_Distribution):
                 dist._version = _normalization.safe_version(str(attrs['version']))
                 self._patched_dist = dist
 
-    def __init__(self, attrs=None):
+    def __init__(self, attrs: Optional[MutableMapping] = None) -> None:
         have_package_data = hasattr(self, "package_data")
         if not have_package_data:
-            self.package_data = {}
+            self.package_data: Dict[str, List[str]] = {}
         attrs = attrs or {}
-        self.dist_files = []
+        self.dist_files: List[Tuple[str, str, str]] = []
         # Filter-out setuptools' specific options.
         self.src_root = attrs.pop("src_root", None)
         self.patch_missing_pkg_info(attrs)
@@ -381,7 +385,7 @@ class Distribution(_Distribution):
             k: list(map(str, _reqs.parse(v or []))) for k, v in extras_require.items()
         }
 
-    def _finalize_license_files(self):
+    def _finalize_license_files(self) -> None:
         """Compute names of all license files which should be included."""
         license_files: Optional[List[str]] = self.metadata.license_files
         patterns: List[str] = license_files if license_files else []
@@ -394,7 +398,7 @@ class Distribution(_Distribution):
             # Default patterns match the ones wheel uses
             # See https://wheel.readthedocs.io/en/stable/user_guide.html
             # -> 'Including license files in the generated wheel file'
-            patterns = ('LICEN[CS]E*', 'COPYING*', 'NOTICE*', 'AUTHORS*')
+            patterns = ['LICEN[CS]E*', 'COPYING*', 'NOTICE*', 'AUTHORS*']
 
         self.metadata.license_files = list(
             unique_everseen(self._expand_patterns(patterns))
@@ -778,6 +782,8 @@ class Distribution(_Distribution):
             if p == package or p.startswith(pfx):
                 return True
 
+        return False
+
     def _exclude_misc(self, name, value):
         """Handle 'exclude()' for list/tuple attrs without a special handler"""
         if not isinstance(value, sequence):
@@ -912,11 +918,9 @@ class Distribution(_Distribution):
     def iter_distribution_names(self):
         """Yield all packages, modules, and extension names in distribution"""
 
-        for pkg in self.packages or ():
-            yield pkg
+        yield from self.packages or ()
 
-        for module in self.py_modules or ():
-            yield module
+        yield from self.py_modules or ()
 
         for ext in self.ext_modules or ():
             if isinstance(ext, tuple):

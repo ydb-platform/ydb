@@ -97,7 +97,6 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
     const TString Path;
     const TString Payload;
     const TActorId Owner;
-    const ui32 StateStorageGroupId;
     const ui32 TtlMs;
     const bool Register;
     const TBoardRetrySettings BoardRetrySettings;
@@ -143,7 +142,7 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
     }
 
     void HandleUndelivered() {
-        BLOG_ERROR("publish on unavailable statestorage board service " << StateStorageGroupId);
+        BLOG_ERROR("publish on unavailable statestorage board service");
         Become(&TThis::StateCalm);
     }
 
@@ -151,7 +150,7 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
         auto *msg = ev->Get();
 
         if (msg->Replicas.empty()) {
-            BLOG_ERROR("publish on unconfigured statestorage board service " << StateStorageGroupId);
+            BLOG_ERROR("publish on unconfigured statestorage board service");
         } else {
             auto now = TlsActivationContext->Monotonic();
             for (auto &replicaId : msg->Replicas) {
@@ -238,12 +237,11 @@ public:
     }
 
     TBoardPublishActor(
-        const TString &path, const TString &payload, const TActorId &owner, ui32 groupId, ui32 ttlMs, bool reg,
+        const TString &path, const TString &payload, const TActorId &owner, ui32 ttlMs, bool reg,
         TBoardRetrySettings boardRetrySettings)
         : Path(path)
         , Payload(payload)
         , Owner(owner)
-        , StateStorageGroupId(groupId)
         , TtlMs(ttlMs)
         , Register(reg)
         , BoardRetrySettings(std::move(boardRetrySettings))
@@ -253,7 +251,7 @@ public:
     }
 
     void Bootstrap() {
-        const TActorId proxyId = MakeStateStorageProxyID(StateStorageGroupId);
+        const TActorId proxyId = MakeStateStorageProxyID();
         Send(proxyId, new TEvStateStorage::TEvResolveBoard(Path), IEventHandle::FlagTrackDelivery);
 
         Become(&TThis::StateResolve);
@@ -277,9 +275,9 @@ public:
 };
 
 IActor* CreateBoardPublishActor(
-        const TString &path, const TString &payload, const TActorId &owner, ui32 groupId, ui32 ttlMs, bool reg,
+        const TString &path, const TString &payload, const TActorId &owner, ui32 ttlMs, bool reg,
         TBoardRetrySettings boardRetrySettings) {
-    return new TBoardPublishActor(path, payload, owner, groupId, ttlMs, reg, std::move(boardRetrySettings));
+    return new TBoardPublishActor(path, payload, owner, ttlMs, reg, std::move(boardRetrySettings));
 }
 
 TString MakeEndpointsBoardPath(const TString &database) {

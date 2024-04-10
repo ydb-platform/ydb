@@ -1,8 +1,9 @@
 LIBRARY()
 
 SRCS(
-    table.cpp
+    out.cpp
     proto_accessor.cpp
+    table.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(table_enum.h)

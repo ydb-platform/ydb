@@ -1,5 +1,11 @@
 LMDB 0.9 Change Log
 
+LMDB 0.9.32 Release (2024/01/29)
+	ITS#9378 - Add ability to replay log and replay log tool
+	ITS#10095 - partial revert of ITS#9278. The patch was incorrect and introduced numerous race conditions.
+	ITS#10125 - mdb_load: fix cursor reinit in Append mode
+	ITS#10137 - Allow users to define MDB_IDL_LOGN
+
 LMDB 0.9.31 Release (2023/07/10)
 	ITS#8447 - Fix cursor_put(MDB_CURRENT) on DUPSORT DB with different sized data
 

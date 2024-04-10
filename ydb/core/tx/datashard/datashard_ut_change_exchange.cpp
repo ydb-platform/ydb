@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/user_info.h>
 #include <ydb/core/persqueue/write_meta.h>
 #include <ydb/core/tx/scheme_board/events.h>
+#include <ydb/core/tx/scheme_board/events_internal.h>
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
@@ -729,7 +730,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableChangefeedDynamoDBStreamsFormat(true)
                 .SetEnableChangefeedDebeziumJsonFormat(true)
                 .SetEnableTopicMessageMeta(true)
-                .SetEnableChangefeedInitialScan(true);
+                .SetEnableChangefeedInitialScan(true)
+                .SetEnableUuidAsPrimaryKey(true);
 
             Server = new TServer(settings);
             if (useRealThreads) {
@@ -789,7 +791,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         static THolder<TDataStreamsClient> MakeClient(const NYdb::TDriver& driver, const TString& database) {
             return MakeHolder<TDataStreamsClient>(driver, NYdb::TCommonClientSettings().Database(database));
         }
-    }; 
+    };
 
     class TTestTopicEnv: public TTestEnv<TTestTopicEnv, NYdb::NTopic::TTopicClient> {
     public:
@@ -798,12 +800,16 @@ Y_UNIT_TEST_SUITE(Cdc) {
         static THolder<NYdb::NTopic::TTopicClient> MakeClient(const NYdb::TDriver& driver, const TString& database) {
             return MakeHolder<NYdb::NTopic::TTopicClient>(driver, NYdb::NTopic::TTopicClientSettings().Database(database));
         }
-    }; 
+    };
 
     TShardedTableOptions SimpleTable() {
+        return TShardedTableOptions();
+    }
+
+    TShardedTableOptions UuidTable() {
         return TShardedTableOptions()
             .Columns({
-                {"key", "Uint32", true, false},
+                {"key", "Uuid", true, false},
                 {"value", "Uint32", false, false},
             });
     }
@@ -1344,11 +1350,27 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 30);
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
+        )"}, {
             R"({"update":{},"key":[1]})",
             R"({"update":{},"key":[2]})",
             R"({"update":{},"key":[3]})",
             R"({"erase":{},"key":[1]})",
+        });
+    }
+
+    Y_UNIT_TEST_TRIPLET(UuidExchange, PqRunner, YdsRunner, TopicRunner) {
+        TRunner::Read(UuidTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), 10),
+            (Uuid("65df1ec2-a97d-47b2-ae56-3c023da6ee8c"), 20),
+            (Uuid("65df1ec3-a97d-47b2-ae56-3c023da6ee8c"), 30);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c");
+        )"}, {
+            R"({"update":{},"key":["65df1ec1-a97d-47b2-ae56-3c023da6ee8c"]})",
+            R"({"update":{},"key":["65df1ec2-a97d-47b2-ae56-3c023da6ee8c"]})",
+            R"({"update":{},"key":["65df1ec3-a97d-47b2-ae56-3c023da6ee8c"]})",
+            R"({"erase":{},"key":["65df1ec1-a97d-47b2-ae56-3c023da6ee8c"]})",
         });
     }
 
@@ -1360,7 +1382,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 30);
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
+        )"}, {
             {DebeziumBody("u", nullptr, nullptr), {{"__key", R"({"payload":{"key":1}})"}}},
             {DebeziumBody("u", nullptr, nullptr), {{"__key", R"({"payload":{"key":2}})"}}},
             {DebeziumBody("u", nullptr, nullptr), {{"__key", R"({"payload":{"key":3}})"}}},
@@ -1376,7 +1398,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 30);
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
+        )"}, {
             R"({"update":{"value":10},"key":[1]})",
             R"({"update":{"value":20},"key":[2]})",
             R"({"update":{"value":30},"key":[3]})",
@@ -1397,7 +1419,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 300);
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
+        )"}, {
             R"({"update":{},"newImage":{"value":10},"key":[1]})",
             R"({"update":{},"newImage":{"value":20},"key":[2]})",
             R"({"update":{},"newImage":{"value":30},"key":[3]})",
@@ -1421,7 +1443,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 300);
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
+        )"}, {
             {DebeziumBody("c", nullptr, R"({"key":1,"value":10})"), {{"__key", R"({"payload":{"key":1}})"}}},
             {DebeziumBody("c", nullptr, R"({"key":2,"value":20})"), {{"__key", R"({"payload":{"key":2}})"}}},
             {DebeziumBody("c", nullptr, R"({"key":3,"value":30})"), {{"__key", R"({"payload":{"key":3}})"}}},
@@ -1445,7 +1467,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 300);
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
+        )"}, {
             {DebeziumBody("u", nullptr, nullptr), {{"__key", R"({"payload":{"key":1}})"}}},
             {DebeziumBody("u", nullptr, nullptr), {{"__key", R"({"payload":{"key":2}})"}}},
             {DebeziumBody("u", nullptr, nullptr), {{"__key", R"({"payload":{"key":3}})"}}},
@@ -1456,7 +1478,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
-    Y_UNIT_TEST(NewImageLogDebezium) { 
+    Y_UNIT_TEST(NewImageLogDebezium) {
         TopicRunner::Read(SimpleTable(), NewImage(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),
@@ -1469,7 +1491,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 300);
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
+        )"}, {
             {DebeziumBody("u", nullptr, R"({"key":1,"value":10})"), {{"__key", R"({"payload":{"key":1}})"}}},
             {DebeziumBody("u", nullptr, R"({"key":2,"value":20})"), {{"__key", R"({"payload":{"key":2}})"}}},
             {DebeziumBody("u", nullptr, R"({"key":3,"value":30})"), {{"__key", R"({"payload":{"key":3}})"}}},
@@ -1486,7 +1508,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (1, 10),
             (2, 20),
             (3, 30);
-        )"}, { 
+        )"}, {
             R"({"update":{},"key":[1],"ts":"***"})",
             R"({"update":{},"key":[2],"ts":"***"})",
             R"({"update":{},"key":[3],"ts":"***"})",
@@ -1512,7 +1534,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData) VALUES (
                 1, "10", "100", JsonDocument('{"M":{"color":{"S":"pink"},"weight":{"N":"4.5"}}}')
             );
-        )"}, { 
+        )"}, {
             WriteJson(NJson::TJsonMap({
                 {"awsRegion", ""},
                 {"dynamodb", NJson::TJsonMap({
@@ -1541,7 +1563,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             );
         )", R"(
             DELETE FROM `/Root/Table` WHERE __Hash = 1;
-        )"}, { 
+        )"}, {
             WriteJson(NJson::TJsonMap({
                 {"awsRegion", ""},
                 {"dynamodb", NJson::TJsonMap({
@@ -1639,7 +1661,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 (1, 0.0%s/0.0%s),
                 (2, 1.0%s/0.0%s),
                 (3, -1.0%s/0.0%s);
-            )", s, s, s, s, s, s)}, { 
+            )", s, s, s, s, s, s)}, {
                 R"({"update":{"value":"nan"},"key":[1]})",
                 R"({"update":{"value":"inf"},"key":[2]})",
                 R"({"update":{"value":"-inf"},"key":[3]})",
@@ -1674,7 +1696,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         TopicRunner::Read(table, KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson), {Sprintf(R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             ("%s", 1);
-        )", key.c_str())}, { 
+        )", key.c_str())}, {
             {DebeziumBody("u", nullptr, nullptr), {{"__key", Sprintf(R"({"payload":{"key":"%s"}})", key.c_str())}}},
         });
     }
@@ -2043,7 +2065,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         ExecSQL(env.GetServer(), env.GetEdgeActor(), R"(
             UPSERT INTO `/Root/TableAux` (key, value)
             VALUES (1, 10);
-        )"); 
+        )");
 
         SetSplitMergePartCountLimit(&runtime, -1);
         const auto tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
@@ -2292,7 +2314,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         auto tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
 
-        WaitTxNotification(env.GetServer(), env.GetEdgeActor(), 
+        WaitTxNotification(env.GetServer(), env.GetEdgeActor(),
             AsyncSplitTable(env.GetServer(), env.GetEdgeActor(), "/Root/Table", tabletIds.at(0), 4));
 
         // execute on old partitions
@@ -2375,8 +2397,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 break;
 
             case TSchemeBoardEvents::EvUpdate:
-                if (auto* msg = ev->Get<TSchemeBoardEvents::TEvUpdate>()) {
-                    const auto desc = msg->GetRecord().GetDescribeSchemeResult();
+                if (auto* msg = ev->Get<NSchemeBoard::NInternalEvents::TEvUpdate>()) {
+                    NKikimrScheme::TEvDescribeSchemeResult desc;
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(desc, *msg->GetRecord().GetDescribeSchemeResultSerialized().begin()));
                     if (desc.GetPath() == "/Root/Table/Stream" && desc.GetPathDescription().GetSelf().GetCreateFinished()) {
                         delayed.emplace_back(ev.Release());
                         return TTestActorRuntime::EEventAction::DROP;
@@ -2446,7 +2469,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         ExecSQL(env.GetServer(), env.GetEdgeActor(), R"(
             UPSERT INTO `/Root/Table` (key, value)
             VALUES (1, 10);
-        )"); 
+        )");
 
         SetSplitMergePartCountLimit(&runtime, -1);
         const auto tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
@@ -3266,7 +3289,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         auto tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
 
-        WaitTxNotification(env.GetServer(), env.GetEdgeActor(), 
+        WaitTxNotification(env.GetServer(), env.GetEdgeActor(),
             AsyncSplitTable(env.GetServer(), env.GetEdgeActor(), "/Root/Table", tabletIds.at(0), 4));
 
         // merge
@@ -3298,7 +3321,7 @@ template <>
 void Out<std::pair<TString, TString>>(IOutputStream& output, const std::pair<TString, TString>& x) {
     output << x.first << ":" << x.second;
 }
- 
+
 void AppendToString(TString& dst, const std::pair<TString, TString>& x) {
     TStringOutput output(dst);
     output << x;

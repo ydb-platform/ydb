@@ -1,6 +1,6 @@
 /* tld.c --- Declarations for TLD restriction checking.
-   Copyright (C) 2004-2022 Simon Josefsson.
-   Copyright (C) 2003-2022 Free Software Foundation, Inc.
+   Copyright (C) 2004-2024 Simon Josefsson.
+   Copyright (C) 2003-2024 Free Software Foundation, Inc.
 
    Author: Thomas Jacob, Internet24.de
 
@@ -57,7 +57,7 @@ extern const Tld_table *_tld_tables[];
  *   thru @tables, or return %NULL if no such structure is found.
  */
 const Tld_table *
-tld_get_table (const char *tld, const Tld_table ** tables)
+tld_get_table (const char *tld, const Tld_table **tables)
 {
   const Tld_table **tldtable = NULL;
 
@@ -86,7 +86,7 @@ tld_get_table (const char *tld, const Tld_table ** tables)
  *   no such structure found.
  */
 const Tld_table *
-tld_default_table (const char *tld, const Tld_table ** overrides)
+tld_default_table (const char *tld, const Tld_table **overrides)
 {
   const Tld_table *tldtable = NULL;
 
@@ -119,7 +119,7 @@ tld_default_table (const char *tld, const Tld_table ** overrides)
  *   #Tld_rc error code otherwise.
  */
 int
-tld_get_4 (const uint32_t * in, size_t inlen, char **out)
+tld_get_4 (const uint32_t *in, size_t inlen, char **out)
 {
   const uint32_t *ipos;
   size_t olen;
@@ -168,7 +168,7 @@ tld_get_4 (const uint32_t * in, size_t inlen, char **out)
  *   #Tld_rc error code otherwise.
  */
 int
-tld_get_4z (const uint32_t * in, char **out)
+tld_get_4z (const uint32_t *in, char **out)
 {
   const uint32_t *ipos = in;
 
@@ -229,7 +229,7 @@ tld_get_z (const char *in, char **out)
  *   %TLD_INVALID if @ch is invalid as defined by @tld.
  */
 static int
-_tld_checkchar (uint32_t ch, const Tld_table * tld)
+_tld_checkchar (uint32_t ch, const Tld_table *tld)
 {
   const Tld_table_element *s, *e, *m;
 
@@ -277,8 +277,8 @@ _tld_checkchar (uint32_t ch, const Tld_table * tld)
  *   failure conditions.
  */
 int
-tld_check_4t (const uint32_t * in, size_t inlen, size_t *errpos,
-	      const Tld_table * tld)
+tld_check_4t (const uint32_t *in, size_t inlen, size_t *errpos,
+	      const Tld_table *tld)
 {
   const uint32_t *ipos;
   int rc;
@@ -319,7 +319,7 @@ tld_check_4t (const uint32_t * in, size_t inlen, size_t *errpos,
  *   failure conditions.
  */
 int
-tld_check_4tz (const uint32_t * in, size_t *errpos, const Tld_table * tld)
+tld_check_4tz (const uint32_t *in, size_t *errpos, const Tld_table *tld)
 {
   const uint32_t *ipos = in;
 
@@ -356,8 +356,8 @@ tld_check_4tz (const uint32_t * in, size_t *errpos, const Tld_table * tld)
  *   failure conditions.
  */
 int
-tld_check_4 (const uint32_t * in, size_t inlen, size_t *errpos,
-	     const Tld_table ** overrides)
+tld_check_4 (const uint32_t *in, size_t inlen, size_t *errpos,
+	     const Tld_table **overrides)
 {
   const Tld_table *tld;
   char *domain;
@@ -406,8 +406,7 @@ tld_check_4 (const uint32_t * in, size_t inlen, size_t *errpos,
  *   failure conditions.
  */
 int
-tld_check_4z (const uint32_t * in, size_t *errpos,
-	      const Tld_table ** overrides)
+tld_check_4z (const uint32_t *in, size_t *errpos, const Tld_table **overrides)
 {
   const uint32_t *ipos = in;
 
@@ -444,7 +443,7 @@ tld_check_4z (const uint32_t * in, size_t *errpos,
  *   failure conditions.
  */
 int
-tld_check_8z (const char *in, size_t *errpos, const Tld_table ** overrides)
+tld_check_8z (const char *in, size_t *errpos, const Tld_table **overrides)
 {
   uint32_t *iucs;
   size_t ilen;
@@ -489,7 +488,7 @@ tld_check_8z (const char *in, size_t *errpos, const Tld_table ** overrides)
  *   failure conditions.
  */
 int
-tld_check_lz (const char *in, size_t *errpos, const Tld_table ** overrides)
+tld_check_lz (const char *in, size_t *errpos, const Tld_table **overrides)
 {
   char *utf8;
   int rc;

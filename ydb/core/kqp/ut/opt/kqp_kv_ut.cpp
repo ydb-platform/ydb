@@ -8,7 +8,6 @@
 
 
 extern "C" {
-#include "postgres.h"
 #include "catalog/pg_type_d.h"
 }
 

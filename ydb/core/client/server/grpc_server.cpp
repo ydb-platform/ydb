@@ -11,8 +11,6 @@
 
 #include <util/string/join.h>
 
-#include <google/protobuf/text_format.h>
-
 #include <grpc++/resource_quota.h>
 #include <grpc++/security/server_credentials.h>
 #include <grpc++/server_builder.h>
@@ -266,15 +264,8 @@ private:
     }
 
     void Finish(const TOut& resp, ui32 status) {
-        auto makeResponseString = [&] {
-            TString x;
-            google::protobuf::TextFormat::Printer printer;
-            printer.SetSingleLineMode(true);
-            printer.PrintToString(resp, &x);
-            return x;
-        };
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] issuing response Name# %s data# %s peer# %s", this,
-            Name, makeResponseString().data(), GetPeerName().c_str());
+            Name, NYdbGrpc::FormatMessage(resp).data(), GetPeerName().c_str());
         ResponseSize = resp.ByteSize();
         ResponseStatus = status;
         StateFunc = &TSimpleRequest::FinishDone;
@@ -300,19 +291,8 @@ private:
     bool RequestDone(bool ok) {
         OnAfterCall();
 
-        auto makeRequestString = [&] {
-            TString resp;
-            if (ok) {
-                google::protobuf::TextFormat::Printer printer;
-                printer.SetSingleLineMode(true);
-                printer.PrintToString(Request, &resp);
-            } else {
-                resp = "<not ok>";
-            }
-            return resp;
-        };
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] received request Name# %s ok# %s data# %s peer# %s current inflight# %li", this,
-            Name, ok ? "true" : "false", makeRequestString().data(), GetPeerName().c_str(), Server->GetCurrentInFlight());
+            Name, ok ? "true" : "false", NYdbGrpc::FormatMessage(Request, ok).data(), GetPeerName().c_str(), Server->GetCurrentInFlight());
 
         if (Context.c_call() == nullptr) {
             Y_ABORT_UNLESS(!ok);
@@ -474,7 +454,6 @@ void TGRpcService::SetupIncomingRequests() {
 
 
     // actor requests
-    ADD_ACTOR_REQUEST(BSAdm,                     TBSAdm,                            MTYPE_CLIENT_BSADM)
     ADD_ACTOR_REQUEST(BlobStorageConfig,         TBlobStorageConfigRequest,         MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST)
     ADD_ACTOR_REQUEST(HiveCreateTablet,          THiveCreateTablet,                 MTYPE_CLIENT_HIVE_CREATE_TABLET)
     ADD_ACTOR_REQUEST(LocalEnumerateTablets,     TLocalEnumerateTablets,            MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS)

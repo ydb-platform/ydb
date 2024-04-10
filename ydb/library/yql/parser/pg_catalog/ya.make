@@ -11,6 +11,7 @@ RESOURCE(../pg_wrapper/postgresql/src/include/catalog/pg_amproc.dat pg_amproc.da
 RESOURCE(../pg_wrapper/postgresql/src/include/catalog/pg_amop.dat pg_amop.dat)
 RESOURCE(../pg_wrapper/postgresql/src/include/catalog/pg_am.dat pg_am.dat)
 RESOURCE(../pg_wrapper/postgresql/src/include/catalog/pg_conversion.dat pg_conversion.dat)
+RESOURCE(../pg_wrapper/postgresql/src/include/catalog/pg_language.dat pg_language.dat)
 
 SRCS(
     catalog.cpp

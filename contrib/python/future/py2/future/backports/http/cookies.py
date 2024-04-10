@@ -461,7 +461,7 @@ _CookiePattern = re.compile(r"""
     )?                             # End of optional value group
     \s*                            # Any number of spaces.
     (\s+|;|$)                      # Ending either at space, semicolon, or EOS.
-    """, re.ASCII | re.VERBOSE)    # May be removed if safe.
+    """, re.ASCII)                 # May be removed if safe.
 
 
 # At long last, here is the cookie class.  Using this class is almost just like

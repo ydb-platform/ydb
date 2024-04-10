@@ -34,6 +34,11 @@ static constexpr TTypeId Datetime = NYql::NProto::Datetime; // seconds since 197
 static constexpr TTypeId Timestamp = NYql::NProto::Timestamp; // microseconds since 1970 aka TInstant
 static constexpr TTypeId Interval = NYql::NProto::Interval; // microseconds aka TDuration, signed
 
+static constexpr TTypeId Date32 = NYql::NProto::Date32; // days since 1970, i32
+static constexpr TTypeId Datetime64 = NYql::NProto::Datetime64; // seconds since 1970
+static constexpr TTypeId Timestamp64 = NYql::NProto::Timestamp64; // microseconds since 1970 aka TInstant
+static constexpr TTypeId Interval64 = NYql::NProto::Interval64; // microseconds aka TDuration, signed
+
 static constexpr TTypeId PairUi64Ui64 = 0x101; // DEPRECATED, don't use
 
 static constexpr TTypeId String = NYql::NProto::String;
@@ -80,6 +85,10 @@ static constexpr TTypeId YqlIds[] = {
     JsonDocument,
     DyNumber,
     Uuid,
+    Date32,
+    Datetime64,
+    Timestamp64,
+    Interval64,
 };
 
 // types must be defined in GetValueHash and CompareTypedCells
@@ -117,6 +126,10 @@ const char *TypeName(TTypeId typeId) {
         case NTypeIds::Datetime:        return "Datetime";
         case NTypeIds::Timestamp:       return "Timestamp";
         case NTypeIds::Interval:        return "Interval";
+        case NTypeIds::Date32:          return "Date32";
+        case NTypeIds::Datetime64:      return "Datetime64";
+        case NTypeIds::Timestamp64:     return "Timestamp64";
+        case NTypeIds::Interval64:      return "Interval64";
         case NTypeIds::PairUi64Ui64:    return "PairUi64Ui64";
         case NTypeIds::String:          return "String";
         case NTypeIds::String4k:        return "SmallBoundedString"; // string name differs from var

@@ -52,7 +52,7 @@ void TBlobsManagerCounters::OnBlobsKeep(const TSet<TLogoBlobID>& blobs) const {
 //    BlobsKeepBytes->Set(size);
 }
 
-void TBlobsManagerCounters::OnBlobsDelete(const TSet<TLogoBlobID>& /*blobs*/) const {
+void TBlobsManagerCounters::OnBlobsDelete(const NOlap::TTabletsByBlob& /*blobs*/) const {
     //        BlobsDeleteCount->Set(blobs.size());
     //        ui64 size = 0;
     //        for (auto&& i : blobs) {

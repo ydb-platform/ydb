@@ -3,9 +3,11 @@ import inspect
 import glob
 import platform
 import distutils.command.install as orig
+from typing import cast
 
 import setuptools
 from ..warnings import SetuptoolsDeprecationWarning, SetuptoolsWarning
+from .bdist_egg import bdist_egg as bdist_egg_cls
 
 # Prior to numpy 1.9, NumPy relies on the '_install' name, so provide it for
 # now. See https://github.com/pypa/setuptools/issues/199/
@@ -71,6 +73,7 @@ class install(orig.install):
         # command without --root or --single-version-externally-managed
         self.path_file = None
         self.extra_dirs = ''
+        return None
 
     def run(self):
         # Explicit request for old-style install?  Just do it
@@ -82,6 +85,8 @@ class install(orig.install):
             orig.install.run(self)
         else:
             self.do_egg_install()
+
+        return None
 
     @staticmethod
     def _called_from_setup(run_frame):
@@ -114,6 +119,8 @@ class install(orig.install):
 
             return caller_module == 'distutils.dist' and info.function == 'run_commands'
 
+        return False
+
     def do_egg_install(self):
         easy_install = self.distribution.get_command_class('easy_install')
 
@@ -130,7 +137,8 @@ class install(orig.install):
         cmd.package_index.scan(glob.glob('*.egg'))
 
         self.run_command('bdist_egg')
-        args = [self.distribution.get_command_obj('bdist_egg').egg_output]
+        bdist_egg = cast(bdist_egg_cls, self.distribution.get_command_obj('bdist_egg'))
+        args = [bdist_egg.egg_output]
 
         if setuptools.bootstrap_install_from:
             # Bootstrap self-installation of setuptools

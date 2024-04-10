@@ -4,12 +4,13 @@
 #include "flat_page_index.h"
 #include "flat_part_index_iter_iface.h"
 #include "flat_table_part.h"
+#include "flat_stat_part_group_iter_iface.h"
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 
 namespace NKikimr::NTable {
 
-class TPartIndexIt : public IIndexIter {
+class TPartIndexIt : public IIndexIter, public IStatsPartGroupIterator {
 public:
     using TCells = NPage::TCells;
     using TRecord = NPage::TIndex::TRecord;
@@ -26,6 +27,10 @@ public:
         , EndRowId(groupId.IsMain() && part->Stat.Rows ? part->Stat.Rows : Max<TRowId>())
     { }
     
+    EReady Start() override {
+        return Seek(0);
+    }
+
     EReady Seek(TRowId rowId) override {
         auto index = TryGetIndex();
         if (!index) {
@@ -92,6 +97,15 @@ public:
         return bool(Iter);
     }
 
+    void AddLastDeltaDataSize(TChanneledDataSize& dataSize) override {
+        Y_DEBUG_ABORT_UNLESS(Index);
+        Y_DEBUG_ABORT_UNLESS(Iter.Off());
+        TPageId pageId = (Iter - 1)->GetPageId();
+        ui64 delta = Part->GetPageSize(pageId, GroupId);
+        ui8 channel = Part->GetGroupChannel(GroupId);
+        dataSize.Add(delta, channel);
+    }
+
     // for precharge and TForward only
     TIndex* TryLoadRaw() {
         return TryGetIndex();
@@ -123,10 +137,10 @@ public:
             : EndRowId;
     }
 
-    bool HasKeyCells() const override {
+    TPos GetKeyCellsCount() const override {
         Y_ABORT_UNLESS(Index);
         Y_ABORT_UNLESS(Iter);
-        return true;
+        return GroupInfo.KeyTypes.size();
     }
 
     TCell GetKeyCell(TPos index) const override {
@@ -157,7 +171,7 @@ private:
         if (Index) {
             return &*Index;
         }
-        auto pageId = GroupId.IsHistoric() ? Part->IndexPages.Historic[GroupId.Index] : Part->IndexPages.Groups[GroupId.Index];
+        auto pageId = Part->IndexPages.GetFlat(GroupId);
         auto page = Env->TryGetPage(Part, pageId);
         if (page) {
             Index = TIndex(*page);

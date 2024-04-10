@@ -238,6 +238,10 @@ public:
         const TBuildMasterSnapshotsOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TCellIdToSequenceNumberMap>, GetMasterConsistentState, (
+        const TGetMasterConsistentStateOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, ExitReadOnly, (
         NHydra::TCellId cellId,
         const TExitReadOnlyOptions& options),
@@ -327,7 +331,7 @@ public:
         const TResumeTabletCellsOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TMaintenanceId>, AddMaintenance, (
+    MOCK_METHOD(TFuture<TMaintenanceIdPerTarget>, AddMaintenance, (
         EMaintenanceComponent component,
         const TString& address,
         EMaintenanceType type,
@@ -335,7 +339,7 @@ public:
         const TAddMaintenanceOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TMaintenanceCounts>, RemoveMaintenance, (
+    MOCK_METHOD(TFuture<TMaintenanceCountsPerTarget>, RemoveMaintenance, (
         EMaintenanceComponent component,
         const TString& address,
         const TMaintenanceFilter& filter,
@@ -737,6 +741,10 @@ public:
 
     MOCK_METHOD(TFuture<void>, AlterQuery, (
         NQueryTrackerClient::TQueryId queryId, const TAlterQueryOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<TGetQueryTrackerInfoResult>, GetQueryTrackerInfo, (
+        const TGetQueryTrackerInfoOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (

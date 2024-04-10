@@ -120,8 +120,8 @@ namespace NKikimr {
             SubstGlobal(escapedPdiskPath, "\\", "\\\\");
             TStringStream str;
 
-            for (const auto &it: domains.Domains) {
-                str << "AvailabilityDomains: " << it.second->DomainUid << Endl;
+            if (const auto& domain = domains.Domain) {
+                str << "AvailabilityDomains: " << domain->DomainUid << Endl;
             }
             str << "PDisks { NodeID: " << Runtime.GetNodeId(0) << " PDiskID: 1 PDiskGuid: " << PDiskGuid
                 << " Path: \"" << escapedPdiskPath << "\"}" << Endl;

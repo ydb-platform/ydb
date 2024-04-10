@@ -9,6 +9,7 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/folder_service/events.h>
 #include <ydb/library/ycloud/api/access_service.h>
+#include <ydb/library/folder_service/proto/config.pb.h>
 
 #include <library/cpp/logger/global/global.h>
 

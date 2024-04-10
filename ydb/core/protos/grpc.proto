@@ -45,7 +45,6 @@ service TGRpcServer {
     // ADMIN INTERNAL INTERFACE
     /////////////////////////////////////////////////////////////////////////////////////////////////
     rpc SchemeInitRoot(TSchemeInitRoot) returns (TResponse);
-    rpc BSAdm(TBSAdm) returns (TResponse);
 
     rpc ResolveNode(TResolveNodeRequest) returns (TResponse);
     rpc FillNode(TFillNodeRequest) returns (TResponse);

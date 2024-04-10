@@ -68,11 +68,11 @@ IYsonStructParameterPtr TYsonStructMeta::GetParameter(const TString& keyOrAlias)
     THROW_ERROR_EXCEPTION("Key or alias %Qv not found in yson struct", keyOrAlias);
 }
 
-void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const TString& key, const NYTree::INodePtr& node, EMergeStrategy mergeStrategy) const
+void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const TString& key, const NYTree::INodePtr& node) const
 {
     const auto& parameter = GetParameter(key);
     auto validate = [&] () {
-        parameter->Postprocess(target, "/" + key);
+        parameter->PostprocessParameter(target, "/" + key);
         try {
             for (const auto& postprocessor : Postprocessors_) {
                 postprocessor(target);
@@ -87,16 +87,15 @@ void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const TString& key,
     };
     auto loadOptions = TLoadParameterOptions{
         .Path = "",
-        .MergeStrategy = mergeStrategy
     };
 
     parameter->SafeLoad(target, node, loadOptions, validate);
 }
 
-void TYsonStructMeta::Postprocess(TYsonStructBase* target, const TYPath& path) const
+void TYsonStructMeta::PostprocessStruct(TYsonStructBase* target, const TYPath& path) const
 {
     for (const auto& [name, parameter] : Parameters_) {
-        parameter->Postprocess(target, path + "/" + ToYPathLiteral(name));
+        parameter->PostprocessParameter(target, path + "/" + ToYPathLiteral(name));
     }
 
     try {
@@ -167,7 +166,7 @@ void TYsonStructMeta::LoadStruct(
     }
 
     if (postprocess) {
-        Postprocess(target, path);
+        PostprocessStruct(target, path);
     }
 }
 
@@ -275,11 +274,11 @@ void TYsonStructMeta::LoadStruct(
     });
 
     for (const auto parameter : pendingParameters) {
-        parameter->Load(target, /* cursor */ nullptr, createLoadOptions(parameter->GetKey()));
+        parameter->Load(target, /*cursor*/ nullptr, createLoadOptions(parameter->GetKey()));
     }
 
     if (postprocess) {
-        Postprocess(target, path);
+        PostprocessStruct(target, path);
     }
 }
 

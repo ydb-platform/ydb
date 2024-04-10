@@ -60,16 +60,15 @@ public:
         SendRequest(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
 
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
-        auto group = domains->GetDefaultStateStorageGroup(domain->DomainUid);
-        ui64 consoleId = MakeConsoleID(group);
+        auto *domain = domains->GetDomain();
+        ui64 consoleId = MakeConsoleID();
 
         if (consoleId != 0) {
             RequestConsoleListTenants();
         }
 
-        ui64 hiveId = domains->GetHive(domain->DefaultHiveUid);
-        if (hiveId != 0) {
+        ui64 hiveId = domains->GetHive();
+        if (hiveId != TDomainsInfo::BadTabletId) {
             RequestHiveDomainStats(hiveId);
         }
 

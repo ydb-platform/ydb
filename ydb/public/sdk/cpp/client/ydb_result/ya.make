@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    out.cpp
     proto_accessor.cpp
     result.cpp
 )

@@ -2,10 +2,10 @@
 --TPC-DS Q13
 
 -- start query 1 in stream 0 using template ../query_templates/query13.tpl
-select avg(ss_quantity)
-       ,avg(ss_ext_sales_price)
-       ,avg(ss_ext_wholesale_cost)
-       ,sum(ss_ext_wholesale_cost)
+select avg(ss_quantity) avg_ss_q
+       ,avg(ss_ext_sales_price) avg_ss_s
+       ,avg(ss_ext_wholesale_cost) avg_ss_w
+       ,sum(ss_ext_wholesale_cost) sum_ss_w
  from plato.store_sales
      ,plato.store
      ,plato.customer_demographics

@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TTabletResolver) {
         { }
 
         void Bootstrap() {
-            ProxyId = MakeStateStorageProxyID(StateStorageGroupFromTabletID(TabletId));
+            ProxyId = MakeStateStorageProxyID();
             Send(ProxyId, new TEvStateStorage::TEvLookup(TabletId, 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigSync)));
             Become(&TThis::StateLookup);
         }

@@ -55,6 +55,10 @@ void TNodeInfo::ChangeVolatileState(EVolatileState state) {
 }
 
 bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EVolatileState newState) {
+    if (Freeze) {
+        tablet->PreferredNodeId = Id;
+        FrozenTablets.push_back(tablet->GetFullTabletId());
+    }
     TTabletInfo::EVolatileState oldState = tablet->GetVolatileState();
     if (IsResourceDrainingState(oldState)) {
         if (Tablets[oldState].erase(tablet) != 0) {
@@ -366,7 +370,22 @@ void TNodeInfo::SetDown(bool down) {
 
 void TNodeInfo::SetFreeze(bool freeze) {
     Freeze = freeze;
-    if (!Freeze) {
+    if (Freeze) {
+        for (const auto& [state, tablets] : Tablets) {
+            FrozenTablets.reserve(FrozenTablets.size() + tablets.size());
+            for (auto* tablet : tablets) {
+                FrozenTablets.push_back(tablet->GetFullTabletId());
+                tablet->PreferredNodeId = Id;
+            }
+        }
+    } else {
+        for (auto tabletId : FrozenTablets) {
+            auto tablet = Hive.FindTablet(tabletId);
+            if (tablet) {
+                tablet->PreferredNodeId = 0;
+            }
+        }
+        FrozenTablets.clear();
         Hive.ProcessWaitQueue();
     }
 }

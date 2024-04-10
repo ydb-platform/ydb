@@ -2,6 +2,8 @@
 #include "defs.h"
 #include "blobstorage_pdisk_defs.h"
 
+#include <ydb/core/protos/blobstorage_disk_color.pb.h>
+
 namespace NKikimr {
 namespace NPDisk {
 

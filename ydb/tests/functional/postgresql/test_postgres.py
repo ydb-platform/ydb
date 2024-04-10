@@ -10,12 +10,10 @@ import yatest.common
 import os
 import pytest
 import re
-import time
 
 
 arcadia_root = yatest.common.source_path('')
 DATA_PATH = os.path.join(arcadia_root, yatest.common.test_source_path('cases'))
-pm = yatest.common.network.PortManager()
 
 
 def get_unique_path_case(sub_folder, file):
@@ -41,40 +39,28 @@ def get_ids():
 
 
 def psql_binary_path():
-    if os.getenv('PSQL_BINARY'):
-        return yatest_common.binary_path(os.getenv('PSQL_BINARY'))
-    else:
-        return yatest_common.work_path('psql/psql')
+    return yatest_common.binary_path('ydb/tests/functional/postgresql/psql/psql')
 
 
-def pgwire_binary_path():
-    assert os.getenv('PGWIRE_BINARY')
-    return yatest_common.binary_path(os.getenv('PGWIRE_BINARY'))
+def execute_binary(binary_name, cmd, stdin_string=None):
+    stdout = get_unique_path_case('psql', 'stdout')
 
+    with open(stdout, 'w') as stdout_file:
+        yatest.common.execute(
+            cmd,
+            stdout=stdout_file,
+            stderr=stdout_file,
+            wait=True
+        )
 
-def execute_binary(binary_name, cmd, wait, join_stderr=False):
-    stdin, stderr, stdout = map(
-        lambda x: get_unique_path_case(binary_name, x),
-        ['stdin', 'stderr', 'stdout']
-    )
-    stdin_file = open(stdin, 'w')
-    stdout_file = open(stdout, 'w')
-    stderr_file = stdout_file
-    if not join_stderr:
-        stderr_file = open(stderr, 'w')
-    process = yatest.common.execute(
-        cmd,
-        stdin=stdin_file,
-        stderr=stderr_file,
-        stdout=stdout_file,
-        wait=wait
-    )
-    return process, stdin, stderr, stdout
+    return stdout
 
 
 class BasePostgresTest(object):
     @classmethod
     def setup_class(cls):
+        cls.pm = yatest.common.network.PortManager()
+        cls.pgport = cls.pm.get_port()
         cls.cluster = kikimr_cluster_factory(KikimrConfigGenerator(
             additional_log_configs={
                 'LOCAL_PGWIRE': LogLevels.DEBUG,
@@ -82,56 +68,25 @@ class BasePostgresTest(object):
                 'KQP_COMPILE_ACTOR': LogLevels.DEBUG,
                 'KQP_COMPILE_REQUEST': LogLevels.DEBUG,
                 'KQP_PROXY': LogLevels.DEBUG
-            }
+            },
+            extra_feature_flags=['enable_table_pg_types', 'enable_temp_tables'],
+            pgwire_port=cls.pgport
         ))
         cls.cluster.start()
 
     @classmethod
     def teardown_class(cls):
         cls.cluster.stop()
-
-
-class TestPgwireSidecar(object):
-    @classmethod
-    def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
-        cls.cluster.start()
-        cls.endpoint = '%s:%s' % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port)
-        cls.pgwireListenPort = pm.get_port()
-        cls.pgwire, _, _, _ = execute_binary(
-            'pgwire',
-            [pgwire_binary_path(), '--endpoint={}'.format(cls.endpoint), '--port={}'.format(cls.pgwireListenPort), '--stderr'],
-            wait=False
-        )
-        time.sleep(1)
-
-    @classmethod
-    def teardown_class(cls):
-        cls.pgwire.terminate()
-        cls.cluster.stop()
-
-    @pytest.mark.parametrize(['sql', 'out'], get_tests(), ids=get_ids())
-    def test_pgwire_sidecar(self, sql, out):
-        _, _, psql_stderr, psql_stdout = execute_binary(
-            'psql',
-            [psql_binary_path(), 'postgresql://root:1234@localhost:{}/Root'.format(self.pgwireListenPort), '-w', '-a', '-f', sql],
-            wait=True,
-            join_stderr=True
-        )
-
-        with open(psql_stdout, 'rb') as stdout_file:
-            diff_sql(stdout_file.read(), sql, out)
+        cls.pm.release()
 
 
 class TestPostgresSuite(BasePostgresTest):
     @pytest.mark.parametrize(['sql', 'out'], get_tests(), ids=get_ids())
     def test_postgres_suite(self, sql, out):
-        _, _, psql_stderr, psql_stdout = execute_binary(
+        stdout_file = execute_binary(
             'psql',
-            [psql_binary_path(), 'postgresql://root:1234@localhost:5432/Root', '-w', '-a', '-f', sql],
-            wait=True,
-            join_stderr=True
+            [psql_binary_path(), 'postgresql://root:1234@localhost:{}/Root'.format(self.pgport), '-w', '-a', '-f', sql]
         )
 
-        with open(psql_stdout, 'rb') as stdout_file:
-            diff_sql(stdout_file.read(), sql, out)
+        with open(stdout_file, 'rb') as stdout_data:
+            diff_sql(stdout_data.read(), sql, out)

@@ -1689,6 +1689,34 @@ TEST_F(TFutureTest, AbandonDuringGet)
     thread.join();
 }
 
+TEST_F(TFutureTest, CancelAppliedToUncancellable)
+{
+    auto promise = NewPromise<void>();
+    auto future = promise.ToFuture();
+
+    auto uncancelable = future.ToUncancelable();
+    auto future1 = uncancelable.Apply(BIND([&] () -> void {}));
+    future1.Cancel(TError("Cancel"));
+    EXPECT_FALSE(promise.IsSet());
+    EXPECT_FALSE(promise.IsCanceled());
+    EXPECT_FALSE(uncancelable.IsSet());
+    EXPECT_FALSE(future1.IsSet());
+
+    auto immediatelyCancelable = uncancelable.ToImmediatelyCancelable();
+    auto future2 = immediatelyCancelable.Apply(BIND([&] () -> void {}));
+    future2.Cancel(TError("Cancel"));
+    EXPECT_FALSE(promise.IsSet());
+    EXPECT_FALSE(promise.IsCanceled());
+    EXPECT_TRUE(immediatelyCancelable.IsSet());
+    EXPECT_TRUE(future2.IsSet());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, future2.Get().GetCode());
+
+    promise.Set();
+    EXPECT_TRUE(uncancelable.IsSet());
+    EXPECT_TRUE(future1.IsSet());
+    EXPECT_TRUE(future1.Get().IsOK());
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 } // namespace

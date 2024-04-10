@@ -120,6 +120,7 @@ IClientPtr CreateClient(
     } else {
         sslContext->UseBuiltinOpenSslX509Store();
     }
+    sslContext->Commit();
 
     auto tlsDialer = sslContext->CreateDialer(
         New<TDialerConfig>(),

@@ -1,6 +1,7 @@
 #include "kqp_topics.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/persqueue/utils.h>
 #include <ydb/library/actors/core/log.h>
 
 #define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
@@ -221,7 +222,8 @@ bool TTopicOperations::TabletHasReadOperations(ui64 tabletId) const
 {
     for (auto& [_, value] : Operations_) {
         if (value.GetTabletId() == tabletId) {
-            return value.HasReadOperations();
+            // reading from a topic and writing to a topic contain read operations
+            return value.HasReadOperations() || value.HasWriteOperations();
         }
     }
     return false;
@@ -293,16 +295,7 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
                 result.PQGroupInfo->Description;
 
             if (Consumer_) {
-                bool found = false;
-
-                for (auto& consumer : description.GetPQTabletConfig().GetReadRules()) {
-                    if (Consumer_ == consumer) {
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (!found) {
+                if (!NPQ::HasConsumer(description.GetPQTabletConfig(), *Consumer_)) {
                     builder << "Unknown consumer '" << *Consumer_ << "'";
 
                     status = Ydb::StatusIds::BAD_REQUEST;

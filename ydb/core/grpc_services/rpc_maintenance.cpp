@@ -54,13 +54,9 @@ class TMaintenanceRPC: public TRpcRequestActor<TMaintenanceRPC<TEvRequest, TEvCm
             }
         }
 
-        Y_ABORT_UNLESS(AppData()->DomainsInfo);
-        Y_ABORT_UNLESS(AppData()->DomainsInfo->Domains);
-        const auto group = AppData()->DomainsInfo->Domains.begin()->second->DefaultStateStorageGroup;
-
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
-        CmsPipe = this->RegisterWithSameMailbox(NTabletPipe::CreateClient(this->SelfId(), MakeCmsID(group), pipeConfig));
+        CmsPipe = this->RegisterWithSameMailbox(NTabletPipe::CreateClient(this->SelfId(), MakeCmsID(), pipeConfig));
 
         NTabletPipe::SendData(this->SelfId(), CmsPipe, ev.Release());
     }

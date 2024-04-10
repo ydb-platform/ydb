@@ -52,10 +52,10 @@
 #define LDAP_SBINDIR		"/var/empty/tmp/out/sbin"
 #endif
 #ifndef LDAP_DATADIR
-#define LDAP_DATADIR		"/var/empty/openldap-2.6.6/share/openldap"
+#define LDAP_DATADIR		"/var/empty/openldap-2.6.7/share/openldap"
 #endif
 #ifndef LDAP_SYSCONFDIR
-#define LDAP_SYSCONFDIR		"/var/empty/openldap-2.6.6/etc/openldap"
+#define LDAP_SYSCONFDIR		"/var/empty/openldap-2.6.7/etc/openldap"
 #endif
 #ifndef LDAP_LIBEXECDIR
 #define LDAP_LIBEXECDIR		"/var/empty/tmp/out/libexec"
@@ -64,7 +64,7 @@
 #define LDAP_MODULEDIR		"/var/empty/tmp/out/libexec/openldap"
 #endif
 #ifndef LDAP_RUNDIR
-#define LDAP_RUNDIR			"/var/empty/openldap-2.6.6/var"
+#define LDAP_RUNDIR			"/var/empty/openldap-2.6.7/var"
 #endif
 #ifndef LDAP_LOCALEDIR
 #define LDAP_LOCALEDIR		""

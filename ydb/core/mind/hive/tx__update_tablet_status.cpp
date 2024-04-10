@@ -181,7 +181,6 @@ public:
                 default:
                     break;
                 };
-                tablet->PreferredNodeId = 0;
             }
             tablet->GetLeader().TryToBoot();
         }

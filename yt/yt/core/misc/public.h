@@ -100,8 +100,6 @@ DECLARE_REFCOUNTED_CLASS(TAsyncExpiringCacheConfig)
 DECLARE_REFCOUNTED_CLASS(TLogDigestConfig)
 DECLARE_REFCOUNTED_CLASS(THistogramDigestConfig)
 
-DECLARE_REFCOUNTED_CLASS(THistoricUsageConfig)
-
 class TSignalRegistry;
 
 class TBloomFilterBuilder;

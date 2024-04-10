@@ -5,7 +5,7 @@
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/ycloud/api/events.h>
-#include <ydb/library/ycloud/impl/grpc_service_client.h>
+#include <ydb/library/grpc/actor_client/grpc_service_client.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event.h>
@@ -34,12 +34,14 @@ class TComputeDatabaseMonitoringActor : public NActors::TActorBootstrapped<TComp
         ::NMonitoring::TDynamicCounters::TCounterPtr InstantLoadPercentage;
         ::NMonitoring::TDynamicCounters::TCounterPtr AverageLoadPercentage;
         ::NMonitoring::TDynamicCounters::TCounterPtr QuotedLoadPercentage;
+        ::NMonitoring::TDynamicCounters::TCounterPtr AvailableLoadPercentage;
+        ::NMonitoring::TDynamicCounters::TCounterPtr TargetLoadPercentage;
         ::NMonitoring::TDynamicCounters::TCounterPtr PendingQueueSize;
         ::NMonitoring::TDynamicCounters::TCounterPtr PendingQueueOverload;
 
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
-        { 
+        {
             Register();
         }
 
@@ -51,6 +53,8 @@ class TComputeDatabaseMonitoringActor : public NActors::TActorBootstrapped<TComp
             InstantLoadPercentage = subComponent->GetCounter("InstantLoadPercentage", false);
             AverageLoadPercentage = subComponent->GetCounter("AverageLoadPercentage", false);
             QuotedLoadPercentage = subComponent->GetCounter("QuotedLoadPercentage", false);
+            AvailableLoadPercentage = subComponent->GetCounter("AvailableLoadPercentage", false);
+            TargetLoadPercentage = subComponent->GetCounter("TargetLoadPercentage", false);
             PendingQueueSize = subComponent->GetCounter("PendingQueueSize", false);
             PendingQueueOverload = subComponent->GetCounter("PendingQueueOverload", true);
         }
@@ -78,7 +82,10 @@ public:
         , PendingQueueSize(config.GetPendingQueueSize())
         , Strict(config.GetStrict())
         , CpuNumber(config.GetCpuNumber())
-    {}
+    {
+        *Counters.AvailableLoadPercentage = 100;
+        *Counters.TargetLoadPercentage = static_cast<ui64>(MaxClusterLoad * 100);
+    }
 
     static constexpr char ActorName[] = "FQ_COMPUTE_DATABASE_MONITORING_ACTOR";
 
@@ -108,13 +115,17 @@ public:
     void Handle(TEvYdbCompute::TEvCpuLoadResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
 
-        auto now = TInstant::Now();    
+        auto now = TInstant::Now();
         if (!response.Issues) {
             auto delta = now - LastCpuLoad;
             LastCpuLoad = now;
 
+            if (response.CpuNumber) {
+                CpuNumber = response.CpuNumber;
+            }
+
             InstantLoad = response.InstantLoad;
-            // exponential moving average 
+            // exponential moving average
             if (!Ready || delta >= AverageLoadInterval) {
                 AverageLoad = InstantLoad;
                 QuotedLoad = InstantLoad;
@@ -138,7 +149,7 @@ public:
 
         // TODO: make load pulling reactive
         // 1. Long period (i.e. AverageLoadInterval/2) when idle (no requests)
-        // 2. Active pulling when busy 
+        // 2. Active pulling when busy
 
         if (MonitoringRequestDelay) {
             Schedule(MonitoringRequestDelay, new NActors::TEvents::TEvWakeup());
@@ -160,7 +171,7 @@ public:
             if (MaxClusterLoad > 0.0 && ((!Ready && Strict) || QuotedLoad >= MaxClusterLoad)) {
                 if (PendingQueue.size() >= PendingQueueSize) {
                     Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(NYdb::EStatus::OVERLOADED, NYql::TIssues{
-                        NYql::TIssue{TStringBuilder{} 
+                        NYql::TIssue{TStringBuilder{}
                         << "Cluster is overloaded, current quoted load " << static_cast<ui64>(QuotedLoad * 100)
                         << "%, average load " << static_cast<ui64>(AverageLoad * 100) << "%"
                         }}), 0, ev->Cookie);
@@ -252,7 +263,7 @@ private:
     const double DefaultQueryLoad;
     const ui32 PendingQueueSize;
     const bool Strict;
-    const ui32 CpuNumber;
+    ui32 CpuNumber = 0;
 
     TQueue<TEvYdbCompute::TEvCpuQuotaRequest::TPtr> PendingQueue;
 };

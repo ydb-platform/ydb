@@ -398,6 +398,14 @@ FROM (VALUES (0::int4, 0::int4),
              ((-2147483648)::int4, 2147483647::int4),
              ((-2147483648)::int4, 1073741824::int4)) AS v(a, b);
 </sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- test gcd()
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: gcd
+        	-- test gcd()
+	^
 <sql-statement>
 SELECT gcd((-2147483648)::int4, 0::int4); -- overflow
 </sql-statement>
@@ -432,6 +440,14 @@ FROM (VALUES (0::int4, 0::int4),
              (-330::int4, 462::int4),
              ((-2147483648)::int4, 0::int4)) AS v(a, b);
 </sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- test lcm()
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: lcm
+        	-- test lcm()
+	^
 <sql-statement>
 SELECT lcm((-2147483648)::int4, 1::int4); -- overflow
 </sql-statement>

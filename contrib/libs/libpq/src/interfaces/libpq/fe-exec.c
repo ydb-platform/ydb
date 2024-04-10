@@ -841,6 +841,8 @@ pqSaveWriteError(PGconn *conn)
  * using whatever is in conn->errorMessage.  In any case, clear the async
  * result storage, and update our notion of how much error text has been
  * returned to the application.
+ *
+ * Note that in no case (not even OOM) do we return NULL.
  */
 PGresult *
 pqPrepareAsyncResult(PGconn *conn)
@@ -2112,19 +2114,12 @@ PQgetResult(PGconn *conn)
 			break;
 
 		case PGASYNC_READY:
-
-			/*
-			 * For any query type other than simple query protocol, we advance
-			 * the command queue here.  This is because for simple query
-			 * protocol we can get the READY state multiple times before the
-			 * command is actually complete, since the command string can
-			 * contain many queries.  In simple query protocol, the queue
-			 * advance is done by fe-protocol3 when it receives ReadyForQuery.
-			 */
-			if (conn->cmd_queue_head &&
-				conn->cmd_queue_head->queryclass != PGQUERY_SIMPLE)
-				pqCommandQueueAdvance(conn);
 			res = pqPrepareAsyncResult(conn);
+
+			/* Advance the queue as appropriate */
+			pqCommandQueueAdvance(conn, false,
+								  res->resultStatus == PGRES_PIPELINE_SYNC);
+
 			if (conn->pipelineStatus != PQ_PIPELINE_OFF)
 			{
 				/*
@@ -2144,7 +2139,7 @@ PQgetResult(PGconn *conn)
 				 * (In other words: we don't return a NULL after a pipeline
 				 * sync.)
 				 */
-				if (res && res->resultStatus == PGRES_PIPELINE_SYNC)
+				if (res->resultStatus == PGRES_PIPELINE_SYNC)
 					pqPipelineProcessQueue(conn);
 			}
 			else
@@ -3012,18 +3007,44 @@ PQexitPipelineMode(PGconn *conn)
 
 /*
  * pqCommandQueueAdvance
- *		Remove one query from the command queue, when we receive
- *		all results from the server that pertain to it.
+ *		Remove one query from the command queue, if appropriate.
+ *
+ * If we have received all results corresponding to the head element
+ * in the command queue, remove it.
+ *
+ * In simple query protocol we must not advance the command queue until the
+ * ReadyForQuery message has been received.  This is because in simple mode a
+ * command can have multiple queries, and we must process result for all of
+ * them before moving on to the next command.
+ *
+ * Another consideration is synchronization during error processing in
+ * extended query protocol: we refuse to advance the queue past a SYNC queue
+ * element, unless the result we've received is also a SYNC.  In particular
+ * this protects us from advancing when an error is received at an
+ * inappropriate moment.
  */
 void
-pqCommandQueueAdvance(PGconn *conn)
+pqCommandQueueAdvance(PGconn *conn, bool isReadyForQuery, bool gotSync)
 {
 	PGcmdQueueEntry *prevquery;
 
 	if (conn->cmd_queue_head == NULL)
 		return;
 
-	/* delink from queue */
+	/*
+	 * If processing a query of simple query protocol, we only advance the
+	 * queue when we receive the ReadyForQuery message for it.
+	 */
+	if (conn->cmd_queue_head->queryclass == PGQUERY_SIMPLE && !isReadyForQuery)
+		return;
+
+	/*
+	 * If we're waiting for a SYNC, don't advance the queue until we get one.
+	 */
+	if (conn->cmd_queue_head->queryclass == PGQUERY_SYNC && !gotSync)
+		return;
+
+	/* delink element from queue */
 	prevquery = conn->cmd_queue_head;
 	conn->cmd_queue_head = conn->cmd_queue_head->next;
 
@@ -3031,7 +3052,7 @@ pqCommandQueueAdvance(PGconn *conn)
 	if (conn->cmd_queue_head == NULL)
 		conn->cmd_queue_tail = NULL;
 
-	/* and make it recyclable */
+	/* and make the queue element recyclable */
 	prevquery->next = NULL;
 	pqRecycleCmdQueueEntry(conn, prevquery);
 }
@@ -3239,6 +3260,14 @@ PQsendFlushRequest(PGconn *conn)
 	{
 		return 0;
 	}
+
+	/*
+	 * Give the data a push (in pipeline mode, only if we're past the size
+	 * threshold).  In nonblock mode, don't complain if we're unable to send
+	 * it all; PQgetResult() will do any additional flushing needed.
+	 */
+	if (pqPipelineFlush(conn) < 0)
+		return 0;
 
 	return 1;
 }

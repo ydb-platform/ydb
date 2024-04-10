@@ -6,6 +6,7 @@ RECURSE(
     arrow_kernels
     arrow_parquet
     backup
+    benchmarks
     binary_json
     chunks_limiter
     dynumber
@@ -17,6 +18,7 @@ RECURSE(
     logger
     mkql_proto
     naming_conventions
+    ncloud
     pdisk_io
     persqueue
     pretty_types_print

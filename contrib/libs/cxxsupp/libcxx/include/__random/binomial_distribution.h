@@ -42,7 +42,7 @@ public:
     public:
         typedef binomial_distribution distribution_type;
 
-        explicit param_type(result_type __t = 1, double __p = 0.5);
+        _LIBCPP_HIDE_FROM_ABI explicit param_type(result_type __t = 1, double __p = 0.5);
 
         _LIBCPP_INLINE_VISIBILITY
         result_type t() const {return __t_;}
@@ -85,7 +85,8 @@ public:
         _LIBCPP_INLINE_VISIBILITY
         result_type operator()(_URNG& __g)
         {return (*this)(__g, __p_);}
-    template<class _URNG> result_type operator()(_URNG& __g, const param_type& __p);
+    template<class _URNG>
+    _LIBCPP_HIDE_FROM_ABI result_type operator()(_URNG& __g, const param_type& __p);
 
     // property functions
     _LIBCPP_INLINE_VISIBILITY
@@ -112,10 +113,6 @@ public:
                         const binomial_distribution& __y)
         {return !(__x == __y);}
 };
-
-#ifndef _LIBCPP_MSVCRT_LIKE
-extern "C" double lgamma_r(double, int *);
-#endif
 
 inline _LIBCPP_INLINE_VISIBILITY double __libcpp_lgamma(double __d) {
 #if defined(_LIBCPP_MSVCRT_LIKE)

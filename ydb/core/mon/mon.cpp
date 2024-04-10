@@ -6,15 +6,19 @@
 namespace NActors {
 
 using namespace NMonitoring;
+using namespace NKikimr;
 
 namespace {
 
 const std::vector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntries(const TString& ticket) {
     if (ticket.StartsWith("Bearer")) {
-        static std::vector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
-            {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
-        };
-        return entries;
+        if (AppData()->AuthConfig.GetUseAccessService()
+            && (AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 || AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0)) {
+            static std::vector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
+                {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
+            };
+            return entries;
+        }
     }
     static std::vector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> emptyEntries = {};
     return emptyEntries;

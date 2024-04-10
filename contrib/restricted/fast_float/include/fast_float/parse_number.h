@@ -10,7 +10,6 @@
 #include <cstring>
 #include <limits>
 #include <system_error>
-
 namespace fast_float {
 
 
@@ -133,11 +132,59 @@ fastfloat_really_inline bool rounds_to_nearest() noexcept {
 
 } // namespace detail
 
+template <typename T>
+struct from_chars_caller
+{
+  template <typename UC>
+  FASTFLOAT_CONSTEXPR20
+  static from_chars_result_t<UC> call(UC const * first, UC const * last,
+                                      T &value, parse_options_t<UC> options)  noexcept {
+    return from_chars_advanced(first, last, value, options);
+  }
+};
+
+#if __STDCPP_FLOAT32_T__ == 1
+template <>
+struct from_chars_caller<std::float32_t>
+{
+  template <typename UC>
+  FASTFLOAT_CONSTEXPR20
+  static from_chars_result_t<UC> call(UC const * first, UC const * last,
+                                      std::float32_t &value, parse_options_t<UC> options) noexcept{
+    // if std::float32_t is defined, and we are in C++23 mode; macro set for float32; 
+    // set value to float due to equivalence between float and float32_t
+    float val;
+    auto ret = from_chars_advanced(first, last, val, options);
+    value = val;
+    return ret;
+  }
+};
+#endif
+
+#if __STDCPP_FLOAT64_T__ == 1
+template <>
+struct from_chars_caller<std::float64_t>
+{
+  template <typename UC>
+  FASTFLOAT_CONSTEXPR20
+  static from_chars_result_t<UC> call(UC const * first, UC const * last,
+                                      std::float64_t &value, parse_options_t<UC> options) noexcept{
+    // if std::float64_t is defined, and we are in C++23 mode; macro set for float64;
+    // set value as double due to equivalence between double and float64_t
+    double val;
+    auto ret = from_chars_advanced(first, last, val, options);
+    value = val;
+    return ret;
+  }
+};
+#endif
+
+
 template<typename T, typename UC, typename>
 FASTFLOAT_CONSTEXPR20
 from_chars_result_t<UC> from_chars(UC const * first, UC const * last,
                              T &value, chars_format fmt /*= chars_format::general*/)  noexcept  {
-  return from_chars_advanced(first, last, value, parse_options_t<UC>{fmt});
+  return from_chars_caller<T>::call(first, last, value, parse_options_t<UC>(fmt));
 }
 
 template<typename T, typename UC>
@@ -145,7 +192,7 @@ FASTFLOAT_CONSTEXPR20
 from_chars_result_t<UC> from_chars_advanced(UC const * first, UC const * last,
                                       T &value, parse_options_t<UC> options)  noexcept  {
 
-  static_assert (is_supported_float_type<T>(), "only float and double are supported");
+  static_assert (is_supported_float_type<T>(), "only some floating-point types are supported");
   static_assert (is_supported_char_type<UC>(), "only char, wchar_t, char16_t and char32_t are supported");
 
   from_chars_result_t<UC> answer;
@@ -232,8 +279,7 @@ from_chars_result_t<UC> from_chars_advanced(UC const * first, UC const * last,
 
 template <typename T, typename UC, typename>
 FASTFLOAT_CONSTEXPR20
-from_chars_result_t<UC> from_chars(UC const* first, UC const* last, T& value, int base) noexcept
-{
+from_chars_result_t<UC> from_chars(UC const* first, UC const* last, T& value, int base) noexcept {
   static_assert (is_supported_char_type<UC>(), "only char, wchar_t, char16_t and char32_t are supported");
 
   from_chars_result_t<UC> answer;

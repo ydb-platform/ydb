@@ -717,8 +717,9 @@ private:
                 owner->EventCount_,
                 "Logging",
                 "Logging",
-                /*threadPriority*/ NThreading::EThreadPriority::Normal,
-                /*shutdownPriority*/ 200)
+                NThreading::TThreadOptions{
+                    .ShutdownPriority = 200,
+                })
             , Owner_(owner)
         { }
 
@@ -852,7 +853,7 @@ private:
                     writerConfig->CommonFields,
                     writerConfig->AreSystemMessagesEnabled(),
                     writerConfig->EnableSourceLocation,
-                    writerConfig->EnableInstant,
+                    writerConfig->EnableSystemFields,
                     writerConfig->JsonFormat);
 
             default:

@@ -701,19 +701,12 @@ public:
         }
     }
 
-    void RunRecordOnAllNodes(const TEvLoadTestRequest& record, ui64& tag, TString& uuid, TString& msg) {
+    void RunRecordOnAllNodes(const TEvLoadTestRequest& record, ui64& tag, TString& uuid, TString& /*msg*/) {
         const auto& modifiedRequest = AddRequestInProcessing(record, /* legacyRequest */ false);
         AllNodesLoadConfigs.push_back(modifiedRequest);
-
-        if (AppData()->DomainsInfo->Domains.empty()) {
-            msg = "error while retrieving domain nodes info";
-            return;
-        }
-        auto domainInfo = AppData()->DomainsInfo->Domains.begin()->second;
         auto name = AppData()->TenantName;
         RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(name),
                                                         SelfId(),
-                                                        domainInfo->DefaultStateStorageGroup,
                                                         EBoardLookupMode::Second));
         tag = modifiedRequest.GetTag();
         uuid = modifiedRequest.GetUuid();

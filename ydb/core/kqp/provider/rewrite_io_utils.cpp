@@ -92,6 +92,8 @@ bool CheckTopLevelness(const TExprNode::TPtr& candidateRead, const TExprNode::TP
     });
 }
 
+}
+
 TExprNode::TPtr FindTopLevelRead(const TExprNode::TPtr& queryGraph) {
     const TExprNode::TPtr* lastReadInTopologicalOrder = nullptr;
     VisitExpr(
@@ -115,8 +117,6 @@ TExprNode::TPtr FindTopLevelRead(const TExprNode::TPtr& queryGraph) {
                    << queryGraph->Dump());
 
     return *lastReadInTopologicalOrder;
-}
-
 }
 
 TExprNode::TPtr RewriteReadFromView(

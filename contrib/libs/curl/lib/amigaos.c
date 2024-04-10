@@ -35,10 +35,10 @@
 #  if defined(__amigaos4__)
 #    error #include <bsdsocket/socketbasetags.h>
 #  elif !defined(USE_AMISSL)
-#    include <amitcp/socketbasetags.h>
+#    error #include <amitcp/socketbasetags.h>
 #  endif
 #  ifdef __libnix__
-#    include <stabs.h>
+#    error #include <stabs.h>
 #  endif
 #endif
 

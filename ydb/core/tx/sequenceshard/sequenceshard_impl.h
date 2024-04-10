@@ -7,6 +7,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 
 #include <ydb/core/protos/counters_sequenceshard.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
 
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
@@ -73,6 +74,7 @@ namespace NSequenceShard {
         struct TTxFreezeSequence;
         struct TTxRestoreSequence;
         struct TTxRedirectSequence;
+        struct TTxGetSequence;
 
         void RunTxInitSchema(const TActorContext& ctx);
         void RunTxInit(const TActorContext& ctx);
@@ -99,6 +101,7 @@ namespace NSequenceShard {
         void Handle(TEvSequenceShard::TEvFreezeSequence::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvSequenceShard::TEvRestoreSequence::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvSequenceShard::TEvRedirectSequence::TPtr& ev, const TActorContext& ctx);
+        void Handle(TEvSequenceShard::TEvGetSequence::TPtr& ev, const TActorContext& ctx);
 
     private:
         struct TPipeInfo {

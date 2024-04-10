@@ -6,13 +6,20 @@ VERSION(1.1.1t)
 
 ORIGINAL_SOURCE(https://github.com/openssl/openssl/archive/OpenSSL_1_1_1t.tar.gz)
 
-# TODO(YMAKE-92) Move this information out of ya.make and allow per project configuration
-IF (OPENSOURCE_PROJECT == "catboost")
+IF (OPENSOURCE_REPLACE_OPENSSL AND EXPORT_CMAKE)
+
     OPENSOURCE_EXPORT_REPLACEMENT(
         CMAKE OpenSSL
         CMAKE_TARGET OpenSSL::OpenSSL
-        CONAN openssl/1.1.1t
+        CONAN openssl/${OPENSOURCE_REPLACE_OPENSSL}
     )
+
+ELSE()
+
+    ADDINCL(
+        GLOBAL contrib/libs/openssl/include
+    )
+
 ENDIF()
 
 LICENSE(
@@ -33,12 +40,10 @@ PEERDIR(
 )
 
 ADDINCL(
-    GLOBAL contrib/libs/openssl/include
     contrib/libs/openssl
 )
 
-# TODO(YMAKE-92) Move this information out of ya.make and allow per project configuration
-IF (NOT EXPORT_CMAKE OR OPENSOURCE_PROJECT != "catboost")
+IF (NOT EXPORT_CMAKE OR NOT OPENSOURCE_REPLACE_OPENSSL)
 
 IF (OS_LINUX)
     IF (ARCH_ARM64)
@@ -135,17 +140,10 @@ IF (OS_LINUX AND ARCH_AARCH64 OR OS_LINUX AND ARCH_X86_64 OR OS_ANDROID)
     )
 ENDIF()
 
-IF (OS_DARWIN AND ARCH_X86_64)
-    CFLAGS(
-        -D_REENTRANT
-    )
-ENDIF()
-
 IF (OS_DARWIN AND ARCH_ARM64)
     CFLAGS(
         -DL_ENDIAN
         -DOPENSSL_PIC
-        -D_REENTRANT
     )
 ENDIF()
 
@@ -163,11 +161,6 @@ IF (OS_WINDOWS)
     ENDIF()
     CFLAGS(
         -DOPENSSL_SYS_WIN32
-        -DUNICODE
-        -DWIN32_LEAN_AND_MEAN
-        -D_CRT_SECURE_NO_DEPRECATE
-        -D_UNICODE
-        -D_WINSOCK_DEPRECATED_NO_WARNINGS
         /GF
     )
 ENDIF()
@@ -347,7 +340,7 @@ IF (OS_ANDROID AND ARCH_ARM64)
     )
 ENDIF()
 
-ENDIF()
+ENDIF() # IF (NOT EXPORT_CMAKE OR NOT OPENSOURCE_REPLACE_OPENSSL)
 
 END()
 

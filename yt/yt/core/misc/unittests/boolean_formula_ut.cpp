@@ -148,8 +148,9 @@ TEST(TBooleanFormulaTest, ValidateVariable)
     ValidateBooleanFormulaVariable("tablet_common/news-queue");
     ValidateBooleanFormulaVariable("VAR123VAR");
     ValidateBooleanFormulaVariable("IN");
+    ValidateBooleanFormulaVariable("2var");
 
-    EXPECT_THROW(ValidateBooleanFormulaVariable("2var"), TErrorException);
+    EXPECT_THROW(ValidateBooleanFormulaVariable("2"), TErrorException);
     EXPECT_THROW(ValidateBooleanFormulaVariable("foo bar"), TErrorException);
     EXPECT_THROW(ValidateBooleanFormulaVariable(""), TErrorException);
     EXPECT_THROW(ValidateBooleanFormulaVariable("a+b"), TErrorException);

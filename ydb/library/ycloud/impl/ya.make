@@ -12,9 +12,6 @@ SRCS(
     folder_service_transitional.cpp
     folder_service_transitional.h
     folder_service_adapter.cpp
-    grpc_service_cache.h
-    grpc_service_client.h
-    grpc_service_settings.h
     iam_token_service.cpp
     iam_token_service.h
     mock_access_service.cpp
@@ -28,8 +25,7 @@ SRCS(
 PEERDIR(
     ydb/library/ycloud/api
     ydb/library/actors/core
-    library/cpp/digest/crc32c
-    ydb/library/grpc/client
+    ydb/library/grpc/actor_client
     library/cpp/json
     ydb/core/base
     ydb/library/services

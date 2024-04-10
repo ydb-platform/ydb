@@ -88,8 +88,7 @@ public:
     void SendWhiteboardTabletStateRequest() {
         THashSet<TTabletId> filterTablets;
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-        if (!domains->Domains.empty()) {
-            TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+        if (const auto& domain = domains->Domain) {
             for (TTabletId id : domain->Coordinators) {
                 filterTablets.emplace(id);
             }
@@ -157,8 +156,7 @@ public:
             }
             NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
             TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-            if (!domains->Domains.empty()) {
-                TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+            if (const auto& domain = domains->Domain) {
                 TString domainPath = "/" + domain->Name;
                 record->SetPath(domainPath);
             }
@@ -326,14 +324,11 @@ public:
         EventLog.StartResponseBuildingTime = TActivationContext::Now();
         if (Tablets) {
             TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-            if (!domains->Domains.empty()) {
-                TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
-                ui32 hiveDomain = domains->GetHiveDomainUid(domain->DefaultHiveUid);
-                ui64 defaultStateStorageGroup = domains->GetDefaultStateStorageGroup(hiveDomain);
-                tablets.emplace(MakeBSControllerID(defaultStateStorageGroup));
-                tablets.emplace(MakeConsoleID(defaultStateStorageGroup));
+            if (const auto& domain = domains->Domain) {
+                tablets.emplace(MakeBSControllerID());
+                tablets.emplace(MakeConsoleID());
                 tablets.emplace(domain->SchemeRoot);
-                tablets.emplace(domains->GetHive(domain->DefaultHiveUid));
+                tablets.emplace(domains->GetHive());
                 for (TTabletId id : domain->Coordinators) {
                     tablets.emplace(id);
                 }
@@ -438,8 +433,8 @@ public:
         pbCluster.SetStorageUsed(totalStorageSize - availableStorageSize);
         pbCluster.SetHosts(hosts.size());
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-        if (!domains->Domains.empty()) {
-            TString domainName = "/" + domains->Domains.begin()->second->Name;
+        if (const auto& domain = domains->Domain) {
+            TString domainName = "/" + domain->Name;
             pbCluster.SetDomain(domainName);
         }
         for (const TString& dc : dataCenters) {

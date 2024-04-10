@@ -123,7 +123,7 @@ namespace NTabletFlatExecutor {
             return pipeConfig;
         }
 
-        ui32 Tablet = MakeTabletID(0, 0, 1);
+        ui64 Tablet = MakeTabletID(false, 1) & 0xFFFF'FFFF;
         const TActorId Edge;
     };
 

@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvHive::TEvCreateTablet::EventType);
 
         TestSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
-                            SourceTabletId: 9437194
+                            SourceTabletId: 72075186233409546
                             SplitBoundary {
                                 KeyPrefix {
                                     Tuple { Optional { Text: "A" } }
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 
         TestSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
-                        SourceTabletId: 9437194
+                        SourceTabletId: 72075186233409546
                         SplitBoundary {
                             KeyPrefix {
                                 Tuple { Optional { Text: "A" } }

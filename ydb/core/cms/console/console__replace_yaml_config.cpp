@@ -2,6 +2,8 @@
 #include "console_configs_provider.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/library/aclib/aclib.h>
+#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 
 namespace NKikimr::NConsole {
 
@@ -15,6 +17,7 @@ class TConfigsManager::TTxReplaceYamlConfig : public TTransactionBase<TConfigsMa
         : TBase(self)
         , Config(ev->Get()->Record.GetRequest().config())
         , Sender(ev->Sender)
+        , UserSID(NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetUserSID())
         , Force(force)
         , AllowUnknownFields(ev->Get()->Record.GetRequest().allow_unknown_fields())
         , DryRun(ev->Get()->Record.GetRequest().dry_run())
@@ -32,6 +35,26 @@ public:
                          TEvConsole::TEvSetYamlConfigRequest::TPtr &ev)
         : TTxReplaceYamlConfig(self, ev, true)
     {
+    }
+
+    void DoAudit(TTransactionContext &txc, const TActorContext &ctx)
+    {
+        auto logData = NKikimrConsole::TLogRecordData{};
+
+        // for backward compatibility in ui
+        logData.MutableAction()->AddActions()->MutableModifyConfigItem()->MutableConfigItem();
+        logData.AddAffectedKinds(NKikimrConsole::TConfigItem::YamlConfigChangeItem);
+
+        auto& yamlConfigChange = *logData.MutableYamlConfigChange();
+        yamlConfigChange.SetOldYamlConfig(Self->YamlConfig);
+        yamlConfigChange.SetNewYamlConfig(UpdatedConfig);
+        for (auto& [id, config] : Self->VolatileYamlConfigs) {
+            auto& oldVolatileConfig = *yamlConfigChange.AddOldVolatileYamlConfigs();
+            oldVolatileConfig.SetId(id);
+            oldVolatileConfig.SetConfig(config);
+        }
+
+        Self->Logger.DbLogData(UserSID, logData, txc, ctx);
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
@@ -80,6 +103,8 @@ public:
                 }
 
                 if (!DryRun) {
+                    DoAudit(txc, ctx);
+
                     db.Table<Schema::YamlConfig>().Key(Version + 1)
                         .Update<Schema::YamlConfig::Config>(UpdatedConfig)
                         // set config dropped by default to support rollback to previous versions
@@ -150,6 +175,7 @@ public:
 private:
     const TString Config;
     const TActorId Sender;
+    const TString UserSID;
     const bool Force = false;
     const bool AllowUnknownFields = false;
     const bool DryRun = false;

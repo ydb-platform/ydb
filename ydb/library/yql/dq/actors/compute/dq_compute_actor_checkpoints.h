@@ -127,6 +127,7 @@ private:
     void Handle(NActors::TEvents::TEvPoison::TPtr&);
     void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev);
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void Handle(TEvRetryQueuePrivate::TEvRetry::TPtr& ev);
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev);
     void HandleException(const std::exception& err);

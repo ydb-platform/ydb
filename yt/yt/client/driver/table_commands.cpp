@@ -783,6 +783,27 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
 
     registrar.Parameter("placeholder_values", &TThis::PlaceholderValues)
         .Optional();
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "use_canonical_null_relations",
+        [] (TThis* command) -> auto& {
+            return command->Options.UseCanonicalNullRelations;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "merge_versioned_rows",
+        [] (TThis* command) -> auto& {
+            return command->Options.MergeVersionedRows;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<NApi::EExecutionBackend>>(
+        "execution_backend",
+        [] (TThis* command) -> auto& {
+            return command->Options.ExecutionBackend;
+        })
+        .Optional(/*init*/ false);
 }
 
 bool TSelectRowsCommand::HasResponseParameters() const
@@ -816,7 +837,7 @@ void TSelectRowsCommand::DoExecute(ICommandContextPtr context)
     auto output = context->Request().OutputStream;
     auto writer = CreateSchemafulWriterForFormat(format, rowset->GetSchema(), output);
 
-    writer->Write(rowset->GetRows());
+    Y_UNUSED(writer->Write(rowset->GetRows()));
 
     WaitFor(writer->Close())
         .ThrowOnError();
@@ -1083,7 +1104,7 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
             .ValueOrThrow()
             .Rowset;
         auto writer = CreateVersionedWriterForFormat(format, rowset->GetSchema(), output);
-        writer->Write(rowset->GetRows());
+        Y_UNUSED(writer->Write(rowset->GetRows()));
         WaitFor(writer->Close())
             .ThrowOnError();
     } else {
@@ -1096,7 +1117,7 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
             .ValueOrThrow()
             .Rowset;
         auto writer = CreateSchemafulWriterForFormat(format, rowset->GetSchema(), output);
-        writer->Write(rowset->GetRows());
+        Y_UNUSED(writer->Write(rowset->GetRows()));
         WaitFor(writer->Close())
             .ThrowOnError();
     }
@@ -1162,12 +1183,12 @@ void TPullRowsCommand::DoExecute(ICommandContextPtr context)
 
     if (pullResult.Versioned) {
         auto writer = CreateVersionedWriterForFormat(format, pullResult.Rowset->GetSchema(), output);
-        writer->Write(ReinterpretCastRange<TVersionedRow>(pullResult.Rowset->GetRows()));
+        Y_UNUSED(writer->Write(ReinterpretCastRange<TVersionedRow>(pullResult.Rowset->GetRows())));
         WaitFor(writer->Close())
             .ThrowOnError();
     } else {
         auto writer = CreateSchemafulWriterForFormat(format, pullResult.Rowset->GetSchema(), output);
-        writer->Write(ReinterpretCastRange<TUnversionedRow>(pullResult.Rowset->GetRows()));
+        Y_UNUSED(writer->Write(ReinterpretCastRange<TUnversionedRow>(pullResult.Rowset->GetRows())));
         WaitFor(writer->Close())
             .ThrowOnError();
     }
@@ -1549,6 +1570,13 @@ void TCreateTableBackupCommand::Register(TRegistrar registrar)
             return command->Options.Force;
         })
         .Default(false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_account",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveAccount;
+        })
+        .Default(false);
 }
 
 void TCreateTableBackupCommand::DoExecute(ICommandContextPtr context)
@@ -1583,6 +1611,13 @@ void TRestoreTableBackupCommand::Register(TRegistrar registrar)
         "enable_replicas",
         [] (TThis* command) -> auto& {
             return command->Options.EnableReplicas;
+        })
+        .Default(false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_account",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveAccount;
         })
         .Default(false);
 }

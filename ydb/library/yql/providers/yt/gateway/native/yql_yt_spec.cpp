@@ -455,6 +455,15 @@ void FillSpec(NYT::TNode& spec,
         }
     }
 
+    if (auto val = settings->DockerImage.Get(cluster)) {
+        if (opProps.HasFlags(EYtOpProp::WithMapper)) {
+            spec["mapper"]["docker_image"] = *val;
+        }
+        if (opProps.HasFlags(EYtOpProp::WithReducer)) {
+            spec["reducer"]["docker_image"] = *val;
+        }
+    }
+
     if (auto val = settings->MaxSpeculativeJobCountPerTask.Get(cluster)) {
         spec["max_speculative_job_count_per_task"] = i64(*val);
     }
@@ -471,6 +480,14 @@ void FillSpec(NYT::TNode& spec,
         if (auto val = settings->_ForceJobSizeAdjuster.Get(cluster)) {
             spec["force_job_size_adjuster"] = *val;
         }
+    }
+
+    if (opProps.HasFlags(EYtOpProp::WithMapper)) {
+        spec["mapper"]["environment"]["TMPDIR"] = ".";
+    }
+
+    if (opProps.HasFlags(EYtOpProp::WithReducer)) {
+        spec["reducer"]["environment"]["TMPDIR"] = ".";
     }
 }
 

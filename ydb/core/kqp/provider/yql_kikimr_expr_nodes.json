@@ -110,7 +110,8 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Filter", "Type": "TCoLambda"}
+                {"Index": 3, "Name": "Filter", "Type": "TCoLambda"},
+                {"Index": 4, "Name": "ReturningColumns", "Type": "TCoAtomList"}
             ]
         },
         {

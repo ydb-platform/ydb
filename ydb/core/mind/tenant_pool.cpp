@@ -413,9 +413,7 @@ public:
 
         SubscribeForConfig(ctx);
 
-        auto domain = AppData(ctx)->DomainsInfo->GetDomainByName(DomainName);
-        Y_ABORT_UNLESS(domain);
-        TenantSlotBroker.TabletId = MakeTenantSlotBrokerID(domain->DefaultStateStorageGroup);
+        TenantSlotBroker.TabletId = MakeTenantSlotBrokerID();
 
         for (auto &pr : Config->StaticSlots) {
             TTenantInfo::TPtr tenant = new TTenantInfo(pr.second.GetTenantName());
@@ -853,12 +851,12 @@ public:
         }
 
         auto domains = AppData(ctx)->DomainsInfo;
+        auto *domain = domains->GetDomain();
         for (auto &pr : domainConfigs) {
-            auto *domain = domains->GetDomainByName(pr.first);
-            Y_ABORT_UNLESS(domain, "unknown domain %s in Tenant Pool config", pr.first.data());
+            Y_ABORT_UNLESS(domain->Name == pr.first, "unknown domain %s in Tenant Pool config", pr.first.data());
             auto aid = ctx.RegisterWithSameMailbox(new TDomainTenantPool(pr.first, LocalID, pr.second));
             DomainTenantPools[pr.first] = aid;
-            auto serviceId = MakeTenantPoolID(SelfId().NodeId(), domain->DomainUid);
+            auto serviceId = MakeTenantPoolID(SelfId().NodeId());
             ctx.ExecutorThread.ActorSystem->RegisterLocalService(serviceId, aid);
         }
 

@@ -2,6 +2,8 @@ import os
 from distutils import log
 import itertools
 
+from .compat import py39
+
 
 flatten = itertools.chain.from_iterable
 
@@ -23,7 +25,8 @@ class Installer:
             list(lines)
             return
 
-        with open(filename, 'wt') as f:
+        with open(filename, 'wt', encoding=py39.LOCALE_ENCODING) as f:
+            # Requires encoding="locale" instead of "utf-8" (python/cpython#77102).
             f.writelines(lines)
 
     def uninstall_namespaces(self):
@@ -42,12 +45,11 @@ class Installer:
 
     _nspkg_tmpl = (
         "import sys, types, os",
-        "has_mfs = sys.version_info > (3, 5)",
         "p = os.path.join(%(root)s, *%(pth)r)",
-        "importlib = has_mfs and __import__('importlib.util')",
-        "has_mfs and __import__('importlib.machinery')",
+        "importlib = __import__('importlib.util')",
+        "__import__('importlib.machinery')",
         (
-            "m = has_mfs and "
+            "m = "
             "sys.modules.setdefault(%(pkg)r, "
             "importlib.util.module_from_spec("
             "importlib.machinery.PathFinder.find_spec(%(pkg)r, "

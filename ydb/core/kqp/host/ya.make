@@ -8,6 +8,7 @@ SRCS(
     kqp_transform.cpp
     kqp_translate.cpp
     kqp_type_ann.cpp
+    kqp_statement_rewrite.cpp
 )
 
 PEERDIR(

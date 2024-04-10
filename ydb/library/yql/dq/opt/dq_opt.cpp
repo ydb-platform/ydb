@@ -76,6 +76,14 @@ ui32 GetStageOutputsCount(const TDqStageBase& stage) {
     return resultsTypeTuple->GetSize();
 }
 
+bool DqStageFirstInputIsBroadcast(const TDqStageBase& stage) {
+    if (stage.Inputs().Empty()) {
+        return false;
+    }
+
+    return TDqCnBroadcast::Match(stage.Inputs().Item(0).Raw());
+}
+
 bool IsDqPureNode(const TExprBase& node) {
     return !node.Maybe<TDqSource>() &&
            !node.Maybe<TDqConnection>() &&
@@ -168,6 +176,19 @@ bool IsDqSelfContainedExpr(const TExprBase& node) {
 bool IsDqDependsOnStage(const TExprBase& node, const TDqStageBase& stage) {
     return !!FindNode(node.Ptr(), [ptr = stage.Raw()](const TExprNode::TPtr& exprNode) {
         return exprNode.Get() == ptr;
+    });
+}
+
+bool IsDqDependsOnStageOutput(const TExprBase& node, const TDqStageBase& stage, ui32 outputIndex) {
+    return !!FindNode(node.Ptr(), [ptr = stage.Raw(), outputIndex](const TExprNode::TPtr& exprNode) {
+        if (TDqOutput::Match(exprNode.Get())) {
+            TDqOutput output(exprNode);
+            if (output.Stage().Ptr().Get() == ptr) {
+                return FromString<ui32>(output.Index().Value()) == outputIndex;
+            }
+        }
+
+        return false;
     });
 }
 

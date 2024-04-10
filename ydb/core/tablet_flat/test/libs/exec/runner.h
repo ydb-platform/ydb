@@ -66,11 +66,15 @@ namespace NFake {
             return &Env;
         }
 
-        void FireTablet(TActorId user, ui32 tablet, TStarter::TMake make, ui32 followerId = 0)
+        void FireTablet(TActorId user, ui32 tablet, TStarter::TMake make, ui32 followerId = 0, TStarter *starter = nullptr)
         {
             const auto mbx =  EMail::Simple;
+            TStarter defaultStarter;
+            if (starter == nullptr) {
+                starter = &defaultStarter;
+            }
 
-            RunOn(7, { }, TStarter().Do(user, 1, tablet, std::move(make), followerId), mbx);
+            RunOn(7, { }, starter->Do(user, 1, tablet, std::move(make), followerId), mbx);
         }
 
         void FireFollower(TActorId user, ui32 tablet, TStarter::TMake make, ui32 followerId)
@@ -132,11 +136,10 @@ namespace NFake {
         void SetupStaticServices()
         {
             {
-                const auto replica = MakeStateStorageReplicaID(NodeId, 0, 0);
+                const auto replica = MakeStateStorageReplicaID(NodeId, 0);
 
                 TIntrusivePtr<TStateStorageInfo> info(new TStateStorageInfo());
 
-                info->StateStorageGroup = 0;
                 info->NToSelect = 1;
                 info->Rings.resize(1);
                 info->Rings[0].Replicas.push_back(replica);
@@ -150,7 +153,7 @@ namespace NFake {
                 {
                     auto *actor = CreateStateStorageProxy(info, nullptr, nullptr);
 
-                    AddService(MakeStateStorageProxyID(0), actor, TMailboxType::Revolving);
+                    AddService(MakeStateStorageProxyID(), actor, TMailboxType::Revolving);
                 }
             }
 

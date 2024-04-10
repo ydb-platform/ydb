@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/msgbus.pb.h>
+#include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
@@ -49,6 +50,7 @@ struct TEvPersQueue {
         EvPeriodicTopicStats,
         EvGetPartitionsLocation,
         EvGetPartitionsLocationResponse,
+        EvReadingPartitionFinished,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -269,5 +271,16 @@ struct TEvPersQueue {
 
     using TEvProposeTransactionAttach = TEvDataShard::TEvProposeTransactionAttach;
     using TEvProposeTransactionAttachResult = TEvDataShard::TEvProposeTransactionAttachResult;
+
+    struct TEvReadingPartitionFinishedRequest : public TEventPB<TEvReadingPartitionFinishedRequest, NKikimrPQ::TEvReadingPartitionFinishedRequest, EvReadingPartitionFinished> {
+        TEvReadingPartitionFinishedRequest() = default;
+
+        TEvReadingPartitionFinishedRequest(const TString& consumer, ui32 partitionId, bool scaleAwareSDK, bool startedReadingFromEndOffset) {
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
+            Record.SetScaleAwareSDK(scaleAwareSDK);
+            Record.SetStartedReadingFromEndOffset(startedReadingFromEndOffset);
+        }
+    };
 };
 } //NKikimr

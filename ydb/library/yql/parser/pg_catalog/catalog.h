@@ -12,6 +12,8 @@ namespace NYql::NPg {
 constexpr ui32 UnknownOid = 705;
 constexpr ui32 AnyOid = 2276;
 constexpr ui32 AnyArrayOid = 2277;
+constexpr ui32 AnyNonArrayOid = 2776;
+constexpr ui32 AnyElementOid = 2283;
 constexpr ui32 RecordOid = 2249;
 constexpr ui32 VarcharOid = 1043;
 constexpr ui32 TextOid = 25;
@@ -39,13 +41,19 @@ struct TOperDesc {
     ui32 RightType = 0;
     ui32 ResultType = 0;
     ui32 ProcId = 0;
+    ui32 ComId = 0;
+    ui32 NegateId = 0;
 };
 
-enum EProcKind {
-    Function,
-    Aggregate,
-    Window
+enum class EProcKind : char {
+    Function = 'f',
+    Aggregate = 'a',
+    Window = 'w'
 };
+
+constexpr ui32 LangInternal = 12;
+constexpr ui32 LangC = 13;
+constexpr ui32 LangSQL = 14;
 
 struct TProcDesc {
     ui32 ProcId = 0;
@@ -53,12 +61,17 @@ struct TProcDesc {
     TString Src;
     TString Descr;
     TVector<ui32> ArgTypes;
+    TVector<TString> InputArgNames;
     ui32 ResultType = 0;
     bool IsStrict = true;
     EProcKind Kind = EProcKind::Function;
     bool ReturnSet = false;
     TVector<TString> OutputArgNames;
     TVector<ui32> OutputArgTypes;
+    ui32 Lang = LangInternal;
+    ui32 VariadicType = 0;
+    ui32 VariadicArgType = 0;
+    TString VariadicArgName;
 };
 
 // Copied from pg_collation_d.h
@@ -138,14 +151,14 @@ struct TCastDesc {
     ECoercionCode CoercionCode = ECoercionCode::Unknown;
 };
 
-enum class EAggKind {
-    Normal,
-    OrderedSet,
-    Hypothetical
+enum class EAggKind : char {
+    Normal = 'n',
+    OrderedSet = 'o',
+    Hypothetical = 'h'
 };
 
 struct TAggregateDesc {
-    ui32 InternalId = 0;
+    ui32 AggId = 0;
     TString Name;
     TVector<ui32> ArgTypes;
     EAggKind Kind = EAggKind::Normal;
@@ -156,6 +169,7 @@ struct TAggregateDesc {
     ui32 SerializeFuncId = 0;
     ui32 DeserializeFuncId = 0;
     TString InitValue;
+    bool FinalExtra = false;
 };
 
 enum class EAmType {
@@ -231,6 +245,12 @@ struct TConversionDesc {
     ui32 ProcId = 0;
 };
 
+struct TLanguageDesc {
+    ui32 LangId = 0;
+    TString Name;
+    TString Descr;
+};
+
 const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds);
 const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds);
 const TProcDesc& LookupProc(ui32 procId);
@@ -239,6 +259,7 @@ bool HasReturnSetProc(const TString& name);
 void EnumProc(std::function<void(ui32, const TProcDesc&)> f);
 
 bool HasType(const TString& name);
+bool HasType(ui32 typeId);
 const TTypeDesc& LookupType(const TString& name);
 const TTypeDesc& LookupType(ui32 typeId);
 TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::function<TPosition(size_t i)>& GetPosition, const TTypeDesc*& typeDesc);
@@ -262,7 +283,7 @@ const TOperDesc& LookupOper(const TString& name, const TVector<ui32>& argTypeIds
 const TOperDesc& LookupOper(ui32 operId, const TVector<ui32>& argTypeIds);
 const TOperDesc& LookupOper(ui32 operId);
 
-bool HasAggregation(const TString& name);
+bool HasAggregation(const TString& name, EAggKind kind);
 const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>& argTypeIds);
 const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui32 resultType);
 void EnumAggregation(std::function<void(ui32, const TAggregateDesc&)> f);
@@ -278,6 +299,9 @@ const TAmProcDesc& LookupAmProc(ui32 familyId, ui32 num, ui32 leftType, ui32 rig
 
 bool HasConversion(const TString& from, const TString& to);
 const TConversionDesc& LookupConversion(const TString& from, const TString& to);
+
+const TLanguageDesc& LookupLanguage(ui32 langId);
+void EnumLanguages(std::function<void(ui32, const TLanguageDesc&)> f);
 
 bool IsCompatibleTo(ui32 actualType, ui32 expectedType);
 bool IsCoercible(ui32 fromTypeId, ui32 toTypeId, ECoercionCode coercionType);
@@ -329,8 +353,8 @@ struct TColumnInfo {
 };
 
 const TVector<TTableInfo>& GetStaticTables();
+const TTableInfo& LookupStaticTable(const TTableInfoKey& tableKey);
 const THashMap<TTableInfoKey, TVector<TColumnInfo>>& GetStaticColumns();
-
 }
 
 template <>

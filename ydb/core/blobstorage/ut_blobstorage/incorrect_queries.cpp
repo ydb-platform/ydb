@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         auto blobId = LogoBlobIDFromLogoBlobID(pBlobId);
         SendPut(env,test, blobId, NKikimrProto::ERROR, 0);
 
-        pBlobId.set_rawx1(0);
+        pBlobId.set_rawx1(0xABC);
         pBlobId.set_rawx2(0);
         pBlobId.set_rawx3(crc);
 
@@ -267,6 +267,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         TTestInfo test = InitTest(env);
 
         NKikimrProto::TLogoBlobID protoBlobId;
+        protoBlobId.set_rawx1(0xABC);
         protoBlobId.set_rawx2(std::numeric_limits<uint64_t>::max());
         protoBlobId.set_rawx3(17);
 
@@ -387,7 +388,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
 
         SendMultiPut(env, test, NKikimrProto::OK, blobs);
 
-        pBlobId.set_rawx1(0);
+        pBlobId.set_rawx1(0xABC);
         pBlobId.set_rawx2(0);
         pBlobId.set_rawx3((1ull << 30) + (1ull << 31) + 1);
 

@@ -32,7 +32,7 @@ struct TEvYdbProxy {
         EV_REQUEST_RESPONSE(ModifyPermissions),
 
         EvTable = EvBegin + 1 * 100,
-        EV_REQUEST_RESPONSE(CreateSession),
+        EvCreateSessionResponse,
         EV_REQUEST_RESPONSE(CreateTable),
         EV_REQUEST_RESPONSE(DropTable),
         EV_REQUEST_RESPONSE(AlterTable),
@@ -48,6 +48,7 @@ struct TEvYdbProxy {
         EV_REQUEST_RESPONSE(DescribeTopic),
         EV_REQUEST_RESPONSE(DescribeConsumer),
         EV_REQUEST_RESPONSE(CreateTopicReader),
+        EvTopicReaderGone,
         EV_REQUEST_RESPONSE(ReadTopic),
         EV_REQUEST_RESPONSE(CommitOffset),
 
@@ -111,12 +112,42 @@ struct TEvYdbProxy {
         TString ToString() const override {
             auto ret = TStringBuilder() << this->ToStringHeader();
             if constexpr (THasOutFunc<TResult>::Value) {
-                ret << " { Result: " << Result << " }";
+                ret << " { Result: ";
+                Result.Out(ret.Out);
+                ret << " }";
             }
             return ret;
         }
 
         using TBase = TGenericResponse<TDerived, EventType, T>;
+    };
+
+    struct TEvTopicReaderGone: public TGenericResponse<TEvTopicReaderGone, EvTopicReaderGone, NYdb::TStatus> {
+        using TBase::TBase;
+    };
+
+    struct TTopicReaderSettings: private NYdb::NTopic::TReadSessionSettings {
+        using TSelf = TTopicReaderSettings;
+        using TBase = NYdb::NTopic::TReadSessionSettings;
+
+        const TBase& GetBase() const {
+            return *this;
+        }
+
+        FLUENT_SETTING_DEFAULT(bool, AutoCommit, true);
+
+        #define PROXY_METHOD(name) \
+            template <typename... Args> \
+            TSelf& name(Args&&... args) { \
+                return static_cast<TSelf&>(TBase::name(std::forward<Args>(args)...)); \
+            } \
+            Y_SEMICOLON_GUARD
+
+        PROXY_METHOD(ConsumerName);
+        PROXY_METHOD(AppendTopics);
+        PROXY_METHOD(MaxMemoryUsageBytes);
+
+        #undef PROXY_METHOD
     };
 
     struct TReadTopicResult {
@@ -207,7 +238,7 @@ struct TEvYdbProxy {
     DEFINE_GENERIC_REQUEST_RESPONSE(DropTopic, NYdb::TStatus, TString, NYdb::NTopic::TDropTopicSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(DescribeTopic, NYdb::NTopic::TDescribeTopicResult, TString, NYdb::NTopic::TDescribeTopicSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(DescribeConsumer, NYdb::NTopic::TDescribeConsumerResult, TString, TString, NYdb::NTopic::TDescribeConsumerSettings);
-    DEFINE_GENERIC_REQUEST_RESPONSE(CreateTopicReader, TActorId, NYdb::NTopic::TReadSessionSettings);
+    DEFINE_GENERIC_REQUEST_RESPONSE(CreateTopicReader, TActorId, TTopicReaderSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(ReadTopic, TReadTopicResult, void);
     DEFINE_GENERIC_REQUEST_RESPONSE(CommitOffset, NYdb::TStatus, TString, ui64, TString, ui64, NYdb::NTopic::TCommitOffsetSettings);
 

@@ -3,6 +3,7 @@
 #include <ydb/core/base/path.h>
 
 #include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -101,6 +102,7 @@ Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const Ydb::PersQ
             return Ydb::StatusIds::ABORTED;
         case OVERLOAD:
         case WRITE_ERROR_PARTITION_IS_FULL:
+        case WRITE_ERROR_PARTITION_INACTIVE:
         case WRITE_ERROR_DISK_IS_FULL:
             return Ydb::StatusIds::OVERLOADED;
         case BAD_REQUEST:
@@ -125,6 +127,8 @@ Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const Ydb::PersQ
             return Ydb::StatusIds::UNAUTHORIZED;
         case ERROR:
             return Ydb::StatusIds::UNAVAILABLE;
+        case UNKNOWN_TXID:
+            return Ydb::StatusIds::NOT_FOUND;
 
         default:
             return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;

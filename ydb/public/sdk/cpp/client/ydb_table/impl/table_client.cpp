@@ -923,7 +923,7 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const TString& table, TVa
     auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings);
     request.set_table(table);
     *request.mutable_rows()->mutable_type() = TProtoAccessor::GetProto(rows.GetType());
-    *request.mutable_rows()->mutable_value() = std::move(rows.GetProto());
+    *request.mutable_rows()->mutable_value() = rows.GetProto();
 
     auto promise = NewPromise<TBulkUpsertResult>();
 

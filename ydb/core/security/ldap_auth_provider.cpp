@@ -186,13 +186,12 @@ private:
     }
 
     TInitializeLdapConnectionResponse InitializeLDAPConnection(LDAP** ld) {
-        const TString& host = Settings.GetHost();
-        if (host.empty()) {
-            return {{TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = "Ldap server host is empty", .Retryable = false}}};
+        if (TInitializeLdapConnectionResponse response = CheckRequiredSettingsParameters(); response.Status != TEvLdapAuthProvider::EStatus::SUCCESS) {
+            return response;
         }
 
+        const TString& host = Settings.GetHost();
         const ui32 port = Settings.GetPort() != 0 ? Settings.GetPort() : NKikimrLdap::GetPort();
-
         int result = 0;
         if (Settings.GetUseTls().GetEnable()) {
             const TString& caCertificateFile = Settings.GetUseTls().GetCaCertFile();
@@ -288,6 +287,22 @@ private:
         }
         response.SearchMessage = searchMessage;
         return response;
+    }
+
+    TInitializeLdapConnectionResponse CheckRequiredSettingsParameters() const {
+        if (Settings.GetHost().empty()) {
+            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = "Ldap server host is empty", .Retryable = false}};
+        }
+        if (Settings.GetBaseDn().empty()) {
+            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = "Parameter BaseDn is empty", .Retryable = false}};
+        }
+        if (Settings.GetBindDn().empty()) {
+            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = "Parameter BindDn is empty", .Retryable = false}};
+        }
+        if (Settings.GetBindPassword().empty()) {
+            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = "Parameter BindPassword is empty", .Retryable = false}};
+        }
+        return {TEvLdapAuthProvider::EStatus::SUCCESS, {}};
     }
 
 private:

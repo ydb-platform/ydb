@@ -15,7 +15,7 @@ Below are examples of the code for enabling metrics in Prometheus in different {
        "context"
 
        "github.com/prometheus/client_golang/prometheus"
-       metrics "github.com/ydb-platform/ydb-go-sdk-prometheus"
+       metrics "github.com/ydb-platform/ydb-go-sdk-prometheus/v2"
        "github.com/ydb-platform/ydb-go-sdk/v3"
        "github.com/ydb-platform/ydb-go-sdk/v3/trace"
    )
@@ -49,7 +49,7 @@ Below are examples of the code for enabling metrics in Prometheus in different {
        "database/sql"
 
        "github.com/prometheus/client_golang/prometheus"
-       metrics "github.com/ydb-platform/ydb-go-sdk-prometheus"
+       metrics "github.com/ydb-platform/ydb-go-sdk-prometheus/v2"
        "github.com/ydb-platform/ydb-go-sdk/v3"
        "github.com/ydb-platform/ydb-go-sdk/v3/trace"
    )

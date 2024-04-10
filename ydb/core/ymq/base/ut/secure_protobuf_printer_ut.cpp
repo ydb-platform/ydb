@@ -1,6 +1,7 @@
 #include <ydb/core/ymq/base/secure_protobuf_printer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/protos/sqs.pb.h>
 
 namespace NKikimr::NSQS {
 

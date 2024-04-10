@@ -3,6 +3,7 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
+#include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 
 #include <ydb/public/lib/base/msgbus_status.h>
 

@@ -55,6 +55,7 @@ public:
     // Persist adding/removing a lock info
     virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0) = 0;
     virtual void PersistLockCounter(ui64 lockId, ui64 counter) = 0;
+    virtual void PersistLockFlags(ui64 lockId, ui64 flags) = 0;
     virtual void PersistRemoveLock(ui64 lockId) = 0;
 
     // Persist adding/removing info on locked ranges
@@ -196,6 +197,23 @@ struct TPendingSubscribeLock {
     }
 };
 
+// ELockFlags type safe enum
+
+enum class ELockFlags : ui64 {
+    None = 0,
+    Frozen = 1,
+};
+
+using ELockFlagsRaw = std::underlying_type<ELockFlags>::type;
+
+inline ELockFlags operator|(ELockFlags a, ELockFlags b) { return ELockFlags(ELockFlagsRaw(a) | ELockFlagsRaw(b)); }
+inline ELockFlags operator&(ELockFlags a, ELockFlags b) { return ELockFlags(ELockFlagsRaw(a) & ELockFlagsRaw(b)); }
+inline ELockFlags& operator|=(ELockFlags& a, ELockFlags b) { return a = a | b; }
+inline ELockFlags& operator&=(ELockFlags& a, ELockFlags b) { return a = a & b; }
+inline bool operator!(ELockFlags c) { return ELockFlagsRaw(c) == 0; }
+
+// ELockConflictFlags type safe enum
+
 enum class ELockConflictFlags : ui8 {
     None = 0,
     BreakThemOnOurCommit = 1,
@@ -209,6 +227,8 @@ inline ELockConflictFlags operator&(ELockConflictFlags a, ELockConflictFlags b) 
 inline ELockConflictFlags& operator|=(ELockConflictFlags& a, ELockConflictFlags b) { return a = a | b; }
 inline ELockConflictFlags& operator&=(ELockConflictFlags& a, ELockConflictFlags b) { return a = a & b; }
 inline bool operator!(ELockConflictFlags c) { return ELockConflictFlagsRaw(c) == 0; }
+
+// ELockRangeFlags type safe enum
 
 enum class ELockRangeFlags : ui8 {
     None = 0,
@@ -252,7 +272,7 @@ public:
     using TPtr = TIntrusivePtr<TLockInfo>;
 
     TLockInfo(TLockLocker * locker, ui64 lockId, ui32 lockNodeId);
-    TLockInfo(TLockLocker * locker, ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, TInstant createTs);
+    TLockInfo(TLockLocker * locker, const ILocksDb::TLockRow& row);
     ~TLockInfo();
 
     bool Empty() const {
@@ -293,6 +313,9 @@ public:
     ui32 GetLockNodeId() const { return LockNodeId; }
 
     TInstant GetCreationTime() const { return CreationTime; }
+
+    ELockFlags GetFlags() const { return Flags; }
+
     const THashSet<TPathId>& GetReadTables() const { return ReadTables; }
     const THashSet<TPathId>& GetWriteTables() const { return WriteTables; }
 
@@ -310,7 +333,7 @@ public:
     void PersistConflicts(ILocksDb* db);
     void CleanupConflicts();
 
-    void RestorePersistentRange(ui64 rangeId, const TPathId& tableId, ELockRangeFlags flags);
+    void RestorePersistentRange(const ILocksDb::TLockRange& rangeRow);
     void RestorePersistentConflict(TLockInfo* otherLock);
     void RestorePersistentVolatileDependency(ui64 txId);
 
@@ -331,8 +354,8 @@ public:
     ui64 GetLastOpId() const { return LastOpId; }
     void SetLastOpId(ui64 opId) { LastOpId = opId; }
 
-    bool IsFrozen() const { return Frozen; }
-    void SetFrozen() { Frozen = true; }
+    bool IsFrozen() const { return !!(Flags & ELockFlags::Frozen); }
+    void SetFrozen(ILocksDb* db = nullptr);
 
 private:
     void MakeShardLock();
@@ -359,6 +382,7 @@ private:
     ui32 Generation;
     ui64 Counter;
     TInstant CreationTime;
+    ELockFlags Flags = ELockFlags::None;
     THashSet<TPathId> ReadTables;
     THashSet<TPathId> WriteTables;
     TVector<TPointKey> Points;
@@ -376,7 +400,6 @@ private:
     TVector<TPersistentRange> PersistentRanges;
 
     ui64 LastOpId = 0;
-    bool Frozen = false;
 };
 
 struct TTableLocksReadListTag {};
@@ -631,7 +654,7 @@ private:
     void RemoveBrokenRanges();
 
     TLockInfo::TPtr GetOrAddLock(ui64 lockId, ui32 lockNodeId);
-    TLockInfo::TPtr AddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, TInstant createTs);
+    TLockInfo::TPtr AddLock(const ILocksDb::TLockRow& row);
     void RemoveOneLock(ui64 lockId, ILocksDb* db = nullptr);
 
     void SaveBrokenPersistentLocks(ILocksDb* db);

@@ -162,7 +162,7 @@ public:
         SendRequest(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
 
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+        auto *domain = domains->GetDomain();
 
         RequestConsoleListTenants();
 
@@ -174,7 +174,7 @@ public:
             tenant.SetType(NKikimrViewer::Domain);
             RequestSchemeCacheNavigate(DomainPath);
         }
-        RootHiveId = domains->GetHive(domain->DefaultHiveUid);
+        RootHiveId = domains->GetHive();
         if (Requests == 0) {
             ReplyAndPassAway();
         }

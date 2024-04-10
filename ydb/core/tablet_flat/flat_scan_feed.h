@@ -334,7 +334,7 @@ namespace NTable {
             }
 
             PrepareBoots();
-            SeekState = ESeekState::LoadIndexes;
+            SeekState = ESeekState::SeekBoots;
             return true;
         }
 
@@ -354,24 +354,6 @@ namespace NTable {
             }
 
             return LoadingParts == 0;
-        }
-
-        bool LoadIndexes() noexcept
-        {
-            bool ready = true;
-            if (Levels) {
-                for (const auto &run: *Levels) {
-                    for (const auto &item : run) {
-                        for (auto indexPageId : item.Part->IndexPages.Groups) {
-                            ready &= bool(CurrentEnv->TryGetPage(item.Part.Get(), indexPageId));
-                        }
-                        for (auto indexPageId : item.Part->IndexPages.Historic) {
-                            ready &= bool(CurrentEnv->TryGetPage(item.Part.Get(), indexPageId));
-                        }
-                    }
-                }
-            }
-            return ready;
         }
 
         void PrepareBoots() noexcept
@@ -465,12 +447,6 @@ namespace NTable {
                     [[fallthrough]];
                 case ESeekState::PrepareBoots:
                     PrepareBoots();
-                    SeekState = ESeekState::LoadIndexes;
-                    [[fallthrough]];
-                case ESeekState::LoadIndexes:
-                    if (!LoadIndexes()) {
-                        return true;
-                    }
                     SeekState = ESeekState::SeekBoots;
                     [[fallthrough]];
                 case ESeekState::SeekBoots:
@@ -500,7 +476,6 @@ namespace NTable {
         enum class ESeekState {
             LoadColdParts,
             PrepareBoots,
-            LoadIndexes,
             SeekBoots,
             Finished,
         };

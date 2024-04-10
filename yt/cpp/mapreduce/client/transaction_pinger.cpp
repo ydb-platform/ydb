@@ -14,16 +14,14 @@
 
 #include <yt/cpp/mapreduce/raw_client/raw_requests.h>
 
-#if defined(__x86_64__) || defined(__arm64__)
-    #include <yt/yt/core/concurrency/periodic_executor.h>
-    #include <yt/yt/core/concurrency/poller.h>
-    #include <yt/yt/core/concurrency/scheduler_api.h>
-    #include <yt/yt/core/concurrency/thread_pool_poller.h>
-    #include <yt/yt/core/concurrency/thread_pool.h>
+#include <yt/yt/core/concurrency/periodic_executor.h>
+#include <yt/yt/core/concurrency/poller.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
+#include <yt/yt/core/concurrency/thread_pool_poller.h>
+#include <yt/yt/core/concurrency/thread_pool.h>
 
-    #include <yt/yt/core/http/client.h>
-    #include <yt/yt/core/http/http.h>
-#endif // defined(__x86_64__) || defined(__arm64__)
+#include <yt/yt/core/http/client.h>
+#include <yt/yt/core/http/http.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -36,8 +34,6 @@
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
-
-#if defined(__x86_64__) || defined(__arm64__)
 
 namespace {
 
@@ -203,8 +199,6 @@ private:
     NHttp::IClientPtr HttpClient_;
 };
 
-#endif // defined(__x86_64__) || defined(__arm64__)
-
 ////////////////////////////////////////////////////////////////////////////////
 
 class TThreadPerTransactionPinger
@@ -296,8 +290,6 @@ private:
 ITransactionPingerPtr CreateTransactionPinger(const TConfigPtr& config)
 {
     if (config->UseAsyncTxPinger) {
-// TODO(aleexfi): Remove it after YT-17689
-#if defined(__x86_64__) || defined(__arm64__)
         YT_LOG_DEBUG("Using async transaction pinger");
         auto httpClientConfig = NYT::New<NHttp::TClientConfig>();
         httpClientConfig->MaxIdleConnections = 16;
@@ -309,11 +301,9 @@ ITransactionPingerPtr CreateTransactionPinger(const TConfigPtr& config)
         return MakeIntrusive<TSharedTransactionPinger>(
             std::move(httpClient),
             config->AsyncTxPingerPoolThreads);
-#else
-        YT_LOG_WARNING("Async transaction pinger is not supported on your platform. Fallback to TThreadPerTransactionPinger...");
-#endif // defined(__x86_64__) || defined(__arm64__)
+    } else {
+        return MakeIntrusive<TThreadPerTransactionPinger>();
     }
-    return MakeIntrusive<TThreadPerTransactionPinger>();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -328,8 +328,8 @@ const TString& TLongTxServiceActor::GetDatabaseNameOrLegacyDefault(const TString
         Y_ABORT_UNLESS(appData);
         Y_ABORT_UNLESS(appData->DomainsInfo);
         // Usually there's exactly one domain
-        if (appData->EnableMvccSnapshotWithLegacyDomainRoot && Y_LIKELY(appData->DomainsInfo->Domains.size() == 1)) {
-            DefaultDatabaseName = appData->DomainsInfo->Domains.begin()->second->Name;
+        if (appData->EnableMvccSnapshotWithLegacyDomainRoot && Y_LIKELY(appData->DomainsInfo->Domain)) {
+            DefaultDatabaseName = appData->DomainsInfo->GetDomain()->Name;
         }
     }
 

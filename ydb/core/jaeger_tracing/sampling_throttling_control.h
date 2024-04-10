@@ -1,48 +1,32 @@
 #pragma once
 
-#include "control_wrapper.h"
-#include "sampler.h"
-#include "throttler.h"
 #include "request_discriminator.h"
 
 #include <ydb/library/actors/wilson/wilson_trace.h>
 
 namespace NKikimr::NJaegerTracing {
 
-class TSamplingThrottlingControl
-    : public TThrRefBase
-    , private TMoveOnly {
+class TSamplingThrottlingControl: public TThrRefBase {
     friend class TSamplingThrottlingConfigurator;
     
 public:
-    void HandleTracing(NWilson::TTraceId& traceId, TRequestDiscriminator discriminator) {
-        Y_UNUSED(discriminator);
-        if (traceId && ExternalThrottler.Throttle()) {
-            traceId = {};
-        }
-        if (!traceId && Sampler.Sample() && !SampledThrottler.Throttle()) {
-            traceId = NWilson::TTraceId::NewTraceId(SampledLevel.Get(), 4095);
-        }
-    }
+    void HandleTracing(NWilson::TTraceId& traceId, const TRequestDiscriminator& discriminator);
+
+    ~TSamplingThrottlingControl();
     
 private:
-    // Should only be obtained from TSamplingThrottlingConfigurator
-    TSamplingThrottlingControl(
-        TSampler sampler,
-        TControlWrapper sampledLevel,
-        TThrottler sampledThrottler,
-        TThrottler externalThrottler
-    )
-        : Sampler(std::move(sampler))
-        , SampledLevel(std::move(sampledLevel))
-        , SampledThrottler(std::move(sampledThrottler))
-        , ExternalThrottler(std::move(externalThrottler))
-    {}
+    struct TSamplingThrottlingImpl;
 
-    TSampler Sampler;
-    TControlWrapper SampledLevel;
-    TThrottler SampledThrottler;
-    TThrottler ExternalThrottler;
+    // Should only be obtained from TSamplingThrottlingConfigurator
+    TSamplingThrottlingControl(std::unique_ptr<TSamplingThrottlingImpl> initialImpl);
+
+    void UpdateImpl(std::unique_ptr<TSamplingThrottlingImpl> newParams);
+
+    // Exclusively owned by the only thread, that may call HandleTracing
+    std::unique_ptr<TSamplingThrottlingImpl> Impl;
+
+    // Shared between the thread calling HandleTracing and the thread calling UpdateParams
+    std::atomic<TSamplingThrottlingImpl*> ImplUpdate{nullptr};
 };
 
 } // namespace NKikimr::NJaegerTracing

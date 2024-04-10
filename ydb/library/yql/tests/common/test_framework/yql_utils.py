@@ -693,7 +693,7 @@ def get_udfs_path(extra_paths=None):
         udfs_project_path = None
 
     try:
-        ydb_udfs_project_path = yql_binary_path('ydb/library/yql/test/common/test_framework/udfs_deps')
+        ydb_udfs_project_path = yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps')
     except Exception:
         ydb_udfs_project_path = None
 

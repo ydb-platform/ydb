@@ -25,7 +25,7 @@ SRCS(
     crc/internal/crc.cc
     crc/internal/crc_cord_state.cc
     crc/internal/crc_memcpy_fallback.cc
-    crc/internal/crc_memcpy_x86_64.cc
+    crc/internal/crc_memcpy_x86_arm_combined.cc
     crc/internal/crc_non_temporal_memcpy.cc
     crc/internal/crc_x86_arm_combined.cc
     status/statusor.cc
@@ -43,7 +43,6 @@ SRCS(
     strings/internal/cord_rep_btree_reader.cc
     strings/internal/cord_rep_consume.cc
     strings/internal/cord_rep_crc.cc
-    strings/internal/cord_rep_ring.cc
     strings/internal/cordz_functions.cc
     strings/internal/cordz_handle.cc
     strings/internal/cordz_info.cc

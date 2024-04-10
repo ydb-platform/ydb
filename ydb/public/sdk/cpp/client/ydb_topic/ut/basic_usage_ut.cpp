@@ -1,13 +1,14 @@
 #include "ut_utils/managed_executor.h"
 #include "ut_utils/topic_sdk_test_setup.h"
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/write_session.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/executor_impl.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/write_session.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/write_session.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -697,9 +698,133 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(stats->GetEndOffset(), count);
 
     }
+} // Y_UNIT_TEST_SUITE(BasicUsage)
+
+Y_UNIT_TEST_SUITE(TSettingsValidation) {
+    enum class EExpectedTestResult {
+        SUCCESS,
+        FAIL_ON_SDK,
+        FAIL_ON_RPC
+    };
+
+    Y_UNIT_TEST(TestDifferentDedupParams) {
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        setup.GetServer().EnableLogs({
+            NKikimrServices::PERSQUEUE, NKikimrServices::PERSQUEUE_READ_BALANCER, NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_PARTITION_CHOOSER},
+            NActors::NLog::PRI_ERROR);
 
 
+        auto client = setup.MakeClient();
+        ui64 producerIndex = 0u;
+        auto runTest = [&](TString producer, TString msgGroup, const TMaybe<bool>& useDedup, bool useSeqNo, EExpectedTestResult result) ->bool
+        {
+            TWriteSessionSettings writeSettings;
+            writeSettings.Path(setup.GetTopicPath()).Codec(NTopic::ECodec::RAW);
+            TString useDedupStr = useDedup.Defined() ? ToString(*useDedup) : "<unset>";
+            if (producer) {
+                producer += ToString(producerIndex);
+            }
+            if (!msgGroup.empty()) {
+                 msgGroup += ToString(producerIndex);
+            }
+            writeSettings.ProducerId(producer).MessageGroupId(msgGroup);
+            producerIndex++;
+            Cerr.Flush();
+            Sleep(TDuration::MilliSeconds(250));
+            Cerr << "=== === START TEST. Producer = '" << producer << "', MsgGroup = '" << msgGroup << "', useDedup: "
+                 << useDedupStr << ", manual SeqNo: " << useSeqNo << Endl;
 
-}
+            try {
+                if (useDedup.Defined()) {
+                    writeSettings.DeduplicationEnabled(useDedup);
+                }
+                auto session = client.CreateWriteSession(writeSettings);
+                TMaybe<TContinuationToken> token;
+                ui64 seqNo = 1u;
+                ui64 written = 0;
+                while (written < 10) {
+                    auto event = session->GetEvent(true);
+                    if (std::holds_alternative<TSessionClosedEvent>(event.GetRef())) {
+                        auto closed = std::get<TSessionClosedEvent>(*event);
+                        Cerr << "Session failed with error: " << closed.DebugString() << Endl;
+                        UNIT_ASSERT(result == EExpectedTestResult::FAIL_ON_RPC);
+                        return false;
+                    } else if (std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event.GetRef())) {
+                        token = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(*event).ContinuationToken);
+                        if (useSeqNo) {
+                            session->Write(std::move(*token), "data", seqNo++);
+                        } else {
+                            session->Write(std::move(*token), "data");
+                        }
+                        continue;
+                    } else {
+                        UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TAcksEvent>(*event));
+                        const auto& acks = std::get<TWriteSessionEvent::TAcksEvent>(*event);
+                        for (const auto& ack : acks.Acks) {
+                            UNIT_ASSERT(ack.State == TWriteSessionEvent::TWriteAck::EES_WRITTEN);
+                        }
+                        written += acks.Acks.size();
+                    }
+                }
+            } catch(const NYdb::TContractViolation& ex) {
+                Cerr << "Test fails on contract validation: " << ex.what() << Endl;
+                UNIT_ASSERT(result == EExpectedTestResult::FAIL_ON_SDK);
+                return false;
+            }
+            Cerr << "=== === END TEST (supposed ok)=== ===\n\n";
+            UNIT_ASSERT(result == EExpectedTestResult::SUCCESS);
+            return true;
+        };
+        // Normal scenarios:
+        // Most common:
+        TVector<TString> producers = {"producer", ""};
+        TVector<TMaybe<TString>> messageGroup = {Nothing(), "producer", "messageGroup", ""};
+        TVector<TMaybe<bool>> useDedupVariants = {Nothing(), true, false};
+        TVector<bool> manSeqNoVariants = {true, false};
+        runTest("producer", {}, {}, false, EExpectedTestResult::SUCCESS);
+        runTest("producer", {}, {}, true, EExpectedTestResult::SUCCESS);
+        // Enable dedup (doesnt take affect anything as it is enabled anyway)
+        runTest("producer", {}, true, true, EExpectedTestResult::SUCCESS);
+        runTest("producer", {}, true, false, EExpectedTestResult::SUCCESS);
 
-}
+        //No producer, do dedup
+        runTest({}, {}, {}, false, EExpectedTestResult::SUCCESS);
+        // manual seqNo with no-dedup - error
+        runTest({}, {}, {}, true, EExpectedTestResult::FAIL_ON_SDK);
+        // No producer but do enable dedup
+        runTest({}, {}, true, true, EExpectedTestResult::SUCCESS);
+        runTest({}, {}, true, false, EExpectedTestResult::SUCCESS);
+
+        // MsgGroup = producer with explicit dedup enabling or not
+        runTest("producer", "producer", {}, false, EExpectedTestResult::SUCCESS);
+        runTest("producer", "producer", {}, true, EExpectedTestResult::SUCCESS);
+        runTest("producer", "producer", true, true, EExpectedTestResult::SUCCESS);
+        runTest("producer", "producer", true, false, EExpectedTestResult::SUCCESS);
+
+        //Bad scenarios
+         // MsgGroup != producer, triggers error
+        runTest("producer", "msgGroup", {}, false, EExpectedTestResult::FAIL_ON_SDK);
+        runTest("producer", "msgGroup", {}, true, EExpectedTestResult::FAIL_ON_SDK);
+        runTest("producer", "msgGroup", true, true, EExpectedTestResult::FAIL_ON_SDK);
+        runTest("producer", "msgGroup", true, false, EExpectedTestResult::FAIL_ON_SDK);
+
+        //Set producer or msgGroupId but disnable dedup:
+        runTest("producer", {}, false, true, EExpectedTestResult::FAIL_ON_SDK);
+        runTest("producer", {}, false, false, EExpectedTestResult::FAIL_ON_SDK);
+        runTest({}, "msgGroup", false, true, EExpectedTestResult::FAIL_ON_SDK);
+        runTest({}, "msgGroup", false, false, EExpectedTestResult::FAIL_ON_SDK);
+
+        //Use msgGroupId as producerId, enable dedup
+        runTest({}, "msgGroup", true, true, EExpectedTestResult::SUCCESS);
+        runTest({}, "msgGroup", true, false, EExpectedTestResult::SUCCESS);
+
+
+        //Specify msg groupId and don't specify deduplication. Should work with dedup enable
+        runTest({}, "msgGroup", {}, true, EExpectedTestResult::SUCCESS);
+        runTest({}, "msgGroup", {}, false, EExpectedTestResult::SUCCESS);
+
+    }
+
+} // Y_UNIT_TEST_SUITE(TSettingsValidation)
+
+} // namespace

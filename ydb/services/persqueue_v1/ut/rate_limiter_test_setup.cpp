@@ -130,7 +130,7 @@ void TRateLimiterTestSetup::InitServer(bool enableReadQuoting) {
             NKikimrServices::QUOTER_SERVICE,
             NKikimrServices::QUOTER_PROXY,
             NKikimrServices::KESUS_TABLET,
-            NKikimrServices::PQ_READ_SPEED_LIMITER
+            NKikimrServices::PQ_RATE_LIMITER
         },
         NActors::NLog::PRI_TRACE
     );

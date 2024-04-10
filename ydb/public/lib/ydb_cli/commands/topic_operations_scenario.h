@@ -70,6 +70,7 @@ public:
     bool OnlyTopicInTx = false;
     bool OnlyTableInTx = false;
     bool UseTableSelect = true;
+    bool ReadWithoutConsumer = false;
 
 protected:
     void CreateTopic(const TString& database,

@@ -46,7 +46,7 @@ select  distinct(i_product_name)
         (i_color = 'maroon' or i_color = 'cyan') and
         (i_units = 'Each' or i_units = 'N/A') and
         (i_size = 'medium' or i_size = 'large')
-        ))) > 0
+        )))) > 0
  order by i_product_name
  limit 100;
 

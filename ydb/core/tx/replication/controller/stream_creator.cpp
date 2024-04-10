@@ -4,19 +4,23 @@
 #include "target_with_stream.h"
 #include "util.h"
 
+#include <ydb/core/base/path.h>
+#include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
-#include <ydb/core/base/path.h>
-#include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <library/cpp/json/json_writer.h>
+
+#include <util/string/cast.h>
 
 namespace NKikimr::NReplication::NController {
 
 class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
-    static NYdb::NTable::TChangefeedDescription MakeChangefeed(const TString& name) {
+    static NYdb::NTable::TChangefeedDescription MakeChangefeed(const TString& name, const NJson::TJsonMap& attrs) {
         using namespace NYdb::NTable;
         return TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json)
-            .WithInitialScan();
+            .WithInitialScan()
+            .AddAttribute("__async_replication", NJson::WriteJson(attrs, false));
     }
 
     void CreateStream() {
@@ -118,6 +122,7 @@ public:
             ui64 tid,
             TReplication::ETargetKind kind,
             const TString& srcPath,
+            const TString& dstPath,
             const TString& streamName)
         : Parent(parent)
         , YdbProxy(proxy)
@@ -125,7 +130,10 @@ public:
         , TargetId(tid)
         , Kind(kind)
         , SrcPath(srcPath)
-        , Changefeed(MakeChangefeed(streamName))
+        , Changefeed(MakeChangefeed(streamName, NJson::TJsonMap{
+            {"path", dstPath},
+            {"id", ToString(rid)},
+        }))
         , LogPrefix("StreamCreator", ReplicationId, TargetId)
     {
     }
@@ -152,10 +160,18 @@ private:
 
 }; // TStreamCreator
 
+IActor* CreateStreamCreator(TReplication::TPtr replication, ui64 targetId, const TActorContext& ctx) {
+    const auto* target = replication->FindTarget(targetId);
+    Y_ABORT_UNLESS(target);
+    return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
+        replication->GetId(), target->GetId(), target->GetKind(),
+        target->GetSrcPath(), target->GetDstPath(), target->GetStreamName());
+}
+
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
-        TReplication::ETargetKind kind, const TString& srcPath, const TString& streamName)
+        TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath, const TString& streamName)
 {
-    return new TStreamCreator(parent, proxy, rid, tid, kind, srcPath, streamName);
+    return new TStreamCreator(parent, proxy, rid, tid, kind, srcPath, dstPath, streamName);
 }
 
 }

@@ -1,6 +1,6 @@
 OWNER(g:ymake)
 
-PY23_LIBRARY()
+PY3_LIBRARY()
 
 STYLE_PYTHON()
 
@@ -26,6 +26,7 @@ PY_SRCS(
     lj_archive.py
     llvm_bc.py
     macros_with_error.py
+    nots.py
     pybuild.py
     res.py
     suppressions.py
@@ -43,7 +44,9 @@ END()
 RECURSE(
     tests
     lib
+    lib/nots
     lib/proxy
     lib/test_const
     lib/test_const/proxy
+    lib/tests/ruff
 )

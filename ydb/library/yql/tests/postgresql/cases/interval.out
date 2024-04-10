@@ -1,3 +1,7 @@
+--
+-- INTERVAL
+--
+SET DATESTYLE = 'ISO';
 -- check acceptance of "time zone style"
 SELECT INTERVAL '01:00' AS "One hour";
  One hour 
@@ -188,6 +192,9 @@ DROP TABLE INTERVAL_TBL_OF;
 -- stored internally.
 CREATE TABLE INTERVAL_MULDIV_TBL (span interval);
 DROP TABLE INTERVAL_MULDIV_TBL;
+SET DATESTYLE = 'postgres';
+-- test fractional second input, and detection of duplicate units
+SET DATESTYLE = 'ISO';
 SELECT '1 millisecond'::interval, '1 microsecond'::interval,
        '500 seconds 99 milliseconds 51 microseconds'::interval;
    interval   |    interval     |    interval     

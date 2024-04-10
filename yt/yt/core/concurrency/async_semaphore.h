@@ -44,7 +44,6 @@ private:
     TAsyncSemaphoreGuard(TAsyncSemaphorePtr semaphore, i64 slots);
 
     void MoveFrom(TAsyncSemaphoreGuard&& other);
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -64,17 +63,15 @@ public:
 
     //! Acquires a given number of slots.
     //! Cannot fail, may lead to an overcommit.
-    virtual void Acquire(i64 slots = 1);
+    //! Returns whether overcommit happened.
+    virtual bool Acquire(i64 slots = 1);
 
     //! Tries to acquire a given number of slots.
     //! Returns |true| on success (the number of remaining slots is non-negative).
     virtual bool TryAcquire(i64 slots = 1);
 
-    //! Runs #handler when a given number of slots becomes available.
-    //! These slots are immediately captured by TAsyncSemaphoreGuard instance passed to #handler.
-    void AsyncAcquire(
-        const TCallback<void(TAsyncSemaphoreGuard)>& handler,
-        i64 slots = 1);
+    //! Returns a future that becomes set when a given number of slots becomes available and acquired.
+    TFuture<TAsyncSemaphoreGuard> AsyncAcquire(i64 slots = 1);
 
     //! Returns |true| iff at least one slot is free.
     bool IsReady() const;
@@ -104,7 +101,7 @@ private:
 
     struct TWaiter
     {
-        TCallback<void(TAsyncSemaphoreGuard)> Handler;
+        TPromise<TAsyncSemaphoreGuard> Promise;
         i64 Slots;
     };
 
@@ -124,7 +121,7 @@ public:
         NProfiling::TGauge gauge);
 
     void Release(i64 slots = 1) override;
-    void Acquire(i64 slots = 1) override;
+    bool Acquire(i64 slots = 1) override;
     bool TryAcquire(i64 slots = 1) override;
 
 private:

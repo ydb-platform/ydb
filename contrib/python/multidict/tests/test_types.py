@@ -4,62 +4,65 @@ import types
 import pytest
 
 
-def test_proxies(_multidict):
-    assert issubclass(_multidict.CIMultiDictProxy, _multidict.MultiDictProxy)
+def test_proxies(multidict_module):
+    assert issubclass(
+        multidict_module.CIMultiDictProxy,
+        multidict_module.MultiDictProxy,
+    )
 
 
-def test_dicts(_multidict):
-    assert issubclass(_multidict.CIMultiDict, _multidict.MultiDict)
+def test_dicts(multidict_module):
+    assert issubclass(multidict_module.CIMultiDict, multidict_module.MultiDict)
 
 
-def test_proxy_not_inherited_from_dict(_multidict):
-    assert not issubclass(_multidict.MultiDictProxy, _multidict.MultiDict)
+def test_proxy_not_inherited_from_dict(multidict_module):
+    assert not issubclass(multidict_module.MultiDictProxy, multidict_module.MultiDict)
 
 
-def test_dict_not_inherited_from_proxy(_multidict):
-    assert not issubclass(_multidict.MultiDict, _multidict.MultiDictProxy)
+def test_dict_not_inherited_from_proxy(multidict_module):
+    assert not issubclass(multidict_module.MultiDict, multidict_module.MultiDictProxy)
 
 
-def test_multidict_proxy_copy_type(_multidict):
-    d = _multidict.MultiDict(key="val")
-    p = _multidict.MultiDictProxy(d)
-    assert isinstance(p.copy(), _multidict.MultiDict)
+def test_multidict_proxy_copy_type(multidict_module):
+    d = multidict_module.MultiDict(key="val")
+    p = multidict_module.MultiDictProxy(d)
+    assert isinstance(p.copy(), multidict_module.MultiDict)
 
 
-def test_cimultidict_proxy_copy_type(_multidict):
-    d = _multidict.CIMultiDict(key="val")
-    p = _multidict.CIMultiDictProxy(d)
-    assert isinstance(p.copy(), _multidict.CIMultiDict)
+def test_cimultidict_proxy_copy_type(multidict_module):
+    d = multidict_module.CIMultiDict(key="val")
+    p = multidict_module.CIMultiDictProxy(d)
+    assert isinstance(p.copy(), multidict_module.CIMultiDict)
 
 
-def test_create_multidict_proxy_from_nonmultidict(_multidict):
+def test_create_multidict_proxy_from_nonmultidict(multidict_module):
     with pytest.raises(TypeError):
-        _multidict.MultiDictProxy({})
+        multidict_module.MultiDictProxy({})
 
 
-def test_create_multidict_proxy_from_cimultidict(_multidict):
-    d = _multidict.CIMultiDict(key="val")
-    p = _multidict.MultiDictProxy(d)
+def test_create_multidict_proxy_from_cimultidict(multidict_module):
+    d = multidict_module.CIMultiDict(key="val")
+    p = multidict_module.MultiDictProxy(d)
     assert p == d
 
 
-def test_create_multidict_proxy_from_multidict_proxy_from_mdict(_multidict):
-    d = _multidict.MultiDict(key="val")
-    p = _multidict.MultiDictProxy(d)
+def test_create_multidict_proxy_from_multidict_proxy_from_mdict(multidict_module):
+    d = multidict_module.MultiDict(key="val")
+    p = multidict_module.MultiDictProxy(d)
     assert p == d
-    p2 = _multidict.MultiDictProxy(p)
+    p2 = multidict_module.MultiDictProxy(p)
     assert p2 == p
 
 
-def test_create_cimultidict_proxy_from_cimultidict_proxy_from_ci(_multidict):
-    d = _multidict.CIMultiDict(key="val")
-    p = _multidict.CIMultiDictProxy(d)
+def test_create_cimultidict_proxy_from_cimultidict_proxy_from_ci(multidict_module):
+    d = multidict_module.CIMultiDict(key="val")
+    p = multidict_module.CIMultiDictProxy(d)
     assert p == d
-    p2 = _multidict.CIMultiDictProxy(p)
+    p2 = multidict_module.CIMultiDictProxy(p)
     assert p2 == p
 
 
-def test_create_cimultidict_proxy_from_nonmultidict(_multidict):
+def test_create_cimultidict_proxy_from_nonmultidict(multidict_module):
     with pytest.raises(
         TypeError,
         match=(
@@ -67,11 +70,11 @@ def test_create_cimultidict_proxy_from_nonmultidict(_multidict):
             "not <class 'dict'>"
         ),
     ):
-        _multidict.CIMultiDictProxy({})
+        multidict_module.CIMultiDictProxy({})
 
 
-def test_create_ci_multidict_proxy_from_multidict(_multidict):
-    d = _multidict.MultiDict(key="val")
+def test_create_ci_multidict_proxy_from_multidict(multidict_module):
+    d = multidict_module.MultiDict(key="val")
     with pytest.raises(
         TypeError,
         match=(
@@ -79,31 +82,32 @@ def test_create_ci_multidict_proxy_from_multidict(_multidict):
             "not <class 'multidict._multidict.*.MultiDict'>"
         ),
     ):
-        _multidict.CIMultiDictProxy(d)
+        multidict_module.CIMultiDictProxy(d)
 
 
 @pytest.mark.skipif(
     sys.version_info >= (3, 9), reason="Python 3.9 uses GenericAlias which is different"
 )
-def test_generic_exists(_multidict) -> None:
-    assert _multidict.MultiDict[int] is _multidict.MultiDict
-    assert _multidict.MultiDictProxy[int] is _multidict.MultiDictProxy
-    assert _multidict.CIMultiDict[int] is _multidict.CIMultiDict
-    assert _multidict.CIMultiDictProxy[int] is _multidict.CIMultiDictProxy
+def test_generic_exists(multidict_module) -> None:
+    assert multidict_module.MultiDict[int] is multidict_module.MultiDict
+    assert multidict_module.MultiDictProxy[int] is multidict_module.MultiDictProxy
+    assert multidict_module.CIMultiDict[int] is multidict_module.CIMultiDict
+    assert multidict_module.CIMultiDictProxy[int] is multidict_module.CIMultiDictProxy
 
 
 @pytest.mark.skipif(
     sys.version_info < (3, 9), reason="Python 3.9 is required for GenericAlias"
 )
-def test_generic_alias(_multidict) -> None:
-
-    assert _multidict.MultiDict[int] == types.GenericAlias(_multidict.MultiDict, (int,))
-    assert _multidict.MultiDictProxy[int] == types.GenericAlias(
-        _multidict.MultiDictProxy, (int,)
+def test_generic_alias(multidict_module) -> None:
+    assert multidict_module.MultiDict[int] == types.GenericAlias(
+        multidict_module.MultiDict, (int,)
     )
-    assert _multidict.CIMultiDict[int] == types.GenericAlias(
-        _multidict.CIMultiDict, (int,)
+    assert multidict_module.MultiDictProxy[int] == types.GenericAlias(
+        multidict_module.MultiDictProxy, (int,)
     )
-    assert _multidict.CIMultiDictProxy[int] == types.GenericAlias(
-        _multidict.CIMultiDictProxy, (int,)
+    assert multidict_module.CIMultiDict[int] == types.GenericAlias(
+        multidict_module.CIMultiDict, (int,)
+    )
+    assert multidict_module.CIMultiDictProxy[int] == types.GenericAlias(
+        multidict_module.CIMultiDictProxy, (int,)
     )

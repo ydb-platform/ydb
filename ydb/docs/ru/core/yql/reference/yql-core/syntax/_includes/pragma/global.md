@@ -141,7 +141,6 @@ StrictJoinKeyTypes является [scoped](#pragmascope) настройкой.
 `1 IN (2, 3, NULL) = NULL (было Just(False))`
 `NULL IN () = Just(False) (было NULL)`
 `(1, null) IN ((2, 2), (3, 3)) = Just(False) (было NULL)`
-`2147483648u IN (1, 2147483648u) = True (было False)`
 
 Подробнее про поведение `IN` при наличии `NULL`ов в операндах можно почитать [здесь](../../expressions.md#in). Явным образом выбрать старое поведение можно указав прагму `DisableAnsiInForEmptyOrNullableItemsCollections`. Если никакой прагмы не задано, то выдается предупреждение и работает старый вариант.
 

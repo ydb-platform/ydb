@@ -123,11 +123,12 @@ namespace NKikimr {
         };
 
     public:
-        TCompactRecordMergerBase(const TBlobStorageGroupType &gtype)
+        TCompactRecordMergerBase(const TBlobStorageGroupType &gtype, bool addHeader)
             : TBase(gtype, true)
             , MemRecs()
             , ProducingSmallBlob(false)
             , NeedToLoadData(ELoadData::NotSet)
+            , AddHeader(addHeader)
         {}
 
         void Clear() {
@@ -235,7 +236,7 @@ namespace NKikimr {
             // in case when we keep data and disk merger contains small blobs, we set up small blob record -- this logic
             // is used in replication and in fresh compaction
             if (NeedToLoadData == ELoadData::LoadData && DataMerger.HasSmallBlobs()) {
-                TDiskPart addr(0, 0, DataMerger.GetDiskBlobRawSize());
+                TDiskPart addr(0, 0, DataMerger.GetDiskBlobRawSize(AddHeader));
                 MemRec.SetDiskBlob(addr);
             }
 
@@ -258,6 +259,7 @@ namespace NKikimr {
         bool ProducingSmallBlob;
         ELoadData NeedToLoadData;
         TDataMerger DataMerger;
+        const bool AddHeader;
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -276,8 +278,8 @@ namespace NKikimr {
         using TBase::MemRec;
 
     public:
-        TCompactRecordMergerIndexPass(const TBlobStorageGroupType &gtype)
-            : TBase(gtype)
+        TCompactRecordMergerIndexPass(const TBlobStorageGroupType &gtype, bool addHeader)
+            : TBase(gtype, addHeader)
         {}
 
         void Finish() {
@@ -314,8 +316,8 @@ namespace NKikimr {
         using TBase::SetLoadDataMode;
 
     public:
-        TCompactRecordMergerDataPass(const TBlobStorageGroupType &gtype)
-            : TBase(gtype)
+        TCompactRecordMergerDataPass(const TBlobStorageGroupType &gtype, bool addHeader)
+            : TBase(gtype, addHeader)
         {
             SetLoadDataMode(true);
         }

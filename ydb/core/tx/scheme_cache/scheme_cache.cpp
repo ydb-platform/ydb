@@ -14,14 +14,7 @@ TSchemeCacheConfig::TSchemeCacheConfig(const TAppData* appData, ::NMonitoring::T
 {
     Y_ABORT_UNLESS(appData);
     Y_ABORT_UNLESS(appData->DomainsInfo);
-
-    for (const auto& [_, domain] : appData->DomainsInfo->Domains) {
-        Y_ABORT_UNLESS(domain);
-
-        if (!domain->SchemeRoot) {
-            continue;
-        }
-
+    if (const auto& domain = appData->DomainsInfo->Domain; domain && domain->SchemeRoot) {
         Roots.emplace_back(domain->DomainRootTag(), domain->SchemeRoot, domain->Name);
     }
 }

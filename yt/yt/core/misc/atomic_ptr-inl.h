@@ -204,15 +204,15 @@ TAtomicPtr<T, EnableAcquireHazard>::operator bool() const
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T, bool EnableAcquireHazard>
-bool operator==(const TAtomicPtr<T, EnableAcquireHazard>& lhs, const TIntrusivePtr<T>& rhs)
+bool operator==(const TAtomicPtr<T, EnableAcquireHazard>& lhs, const T* rhs)
 {
-    return lhs.Ptr_.load() == rhs.Get();
+    return lhs.Ptr_.load() == rhs;
 }
 
 template <class T, bool EnableAcquireHazard>
-bool operator==(const TIntrusivePtr<T>& lhs, const TAtomicPtr<T, EnableAcquireHazard>& rhs)
+bool operator==(const T* lhs, const TAtomicPtr<T, EnableAcquireHazard>& rhs)
 {
-    return lhs.Get() == rhs.Ptr_.load();
+    return lhs == rhs.Ptr_.load();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

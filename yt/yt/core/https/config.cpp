@@ -10,6 +10,8 @@ void TServerCredentialsConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("cert_chain", &TThis::CertChain)
         .Optional();
+    registrar.Parameter("update_period", &TThis::UpdatePeriod)
+        .Optional();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

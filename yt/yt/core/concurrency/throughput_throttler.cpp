@@ -612,7 +612,7 @@ public:
             asyncResults.push_back(throttler->Throttle(amount));
         }
 
-        return AllSucceeded(asyncResults).Apply(BIND([weakThis = MakeWeak(this), amount] (const TError& /* error */ ) {
+        return AllSucceeded(asyncResults).Apply(BIND([weakThis = MakeWeak(this), amount] (const TError& /*error*/ ) {
             if (auto this_ = weakThis.Lock()) {
                 this_->SelfQueueSize_ -= amount;
             }

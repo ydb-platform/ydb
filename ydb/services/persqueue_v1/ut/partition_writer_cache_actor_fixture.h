@@ -75,6 +75,8 @@ protected:
 
     size_t CreatePartitionWriterCount = 0;
     size_t DeletePartitionWriterCount = 0;
+
+    ui64 NextWriteId = 1;
 };
 
 }

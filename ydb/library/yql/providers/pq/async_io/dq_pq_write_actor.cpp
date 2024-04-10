@@ -13,7 +13,7 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -30,12 +30,6 @@
 #include <algorithm>
 #include <queue>
 #include <variant>
-
-namespace NKikimrServices {
-    // using constant value from ydb/core/protos/services.proto
-    // but to avoid peerdir on ydb/core/protos we introduce this constant
-    constexpr ui32 KQP_COMPUTE = 535;
-};
 
 #define LOG_T(s) \
     LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, s)
@@ -114,9 +108,9 @@ public:
         , Driver(std::move(driver))
         , CredentialsProviderFactory(credentialsProviderFactory)
         , Callbacks(callbacks)
-        , LogPrefix(TStringBuilder() << "TxId: " << TxId << ", PQ sink. ")
+        , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", PQ sink. ")
         , FreeSpace(freeSpace)
-        , PersQueueClient(Driver, GetPersQueueClientSettings())
+        , TopicClient(Driver, GetTopicClientSettings())
     { 
         EgressStats.Level = statsLevel;
     }
@@ -252,17 +246,16 @@ private:
         return SourceId;
     }
 
-    NYdb::NPersQueue::TWriteSessionSettings GetWriteSessionSettings() {
-        return NYdb::NPersQueue::TWriteSessionSettings(SinkParams.GetTopicPath(), GetSourceId())
+    NYdb::NTopic::TWriteSessionSettings GetWriteSessionSettings() {
+        return NYdb::NTopic::TWriteSessionSettings(SinkParams.GetTopicPath(), GetSourceId(), GetSourceId())
             .MaxMemoryUsage(FreeSpace)
-            .ClusterDiscoveryMode(NYdb::NPersQueue::EClusterDiscoveryMode::Auto)
             .Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams
-                ? NYdb::NPersQueue::ECodec::RAW
-                : NYdb::NPersQueue::ECodec::GZIP);
+                ? NYdb::NTopic::ECodec::RAW
+                : NYdb::NTopic::ECodec::GZIP);
     }
 
-    NYdb::NPersQueue::TPersQueueClientSettings GetPersQueueClientSettings() {
-        return NYdb::NPersQueue::TPersQueueClientSettings()
+    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() {
+        return NYdb::NTopic::TTopicClientSettings()
             .Database(SinkParams.GetDatabase())
             .DiscoveryEndpoint(SinkParams.GetEndpoint())
             .SslCredentials(NYdb::TSslCredentials(SinkParams.GetUseSsl()))
@@ -275,7 +268,7 @@ private:
 
     void CreateSessionIfNotExists() {
         if (!WriteSession) {
-            WriteSession = PersQueueClient.CreateWriteSession(GetWriteSessionSettings());
+            WriteSession = TopicClient.CreateWriteSession(GetWriteSessionSettings());
             SubscribeOnNextEvent();
         }
     }
@@ -298,7 +291,7 @@ private:
 
         auto events = WriteSession->GetEvents();
         for (auto& event : events) {
-            auto issues = std::visit(TPQEventProcessor{*this}, event);
+            auto issues = std::visit(TTopicEventProcessor{*this}, event);
             if (issues) {
                 WriteSession->Close(TDuration::Zero());
                 WriteSession.reset();
@@ -331,7 +324,7 @@ private:
         return sinkState;
     }
 
-    void WriteNextMessage(NYdb::NPersQueue::TContinuationToken&& token) {
+    void WriteNextMessage(NYdb::NTopic::TContinuationToken&& token) {
         SINK_LOG_T("Write data: \"" << Buffer.front() << "\" with seq no " << NextSeqNo);
         WriteSession->Write(std::move(token), Buffer.front(), NextSeqNo++);
         auto itemSize = GetItemSize(Buffer.front());
@@ -346,14 +339,14 @@ private:
         Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
     }
 
-    struct TPQEventProcessor {
-        std::optional<TIssues> operator()(NYdb::NPersQueue::TSessionClosedEvent& ev) {
+    struct TTopicEventProcessor {
+        std::optional<TIssues> operator()(NYdb::NTopic::TSessionClosedEvent& ev) {
             TIssues issues;
             issues.AddIssue(TStringBuilder() << "Write session to topic \"" << Self.SinkParams.GetTopicPath() << "\" was closed: " << ev.DebugString());
             return issues;
         }
 
-        std::optional<TIssues> operator()(NYdb::NPersQueue::TWriteSessionEvent::TAcksEvent& ev) {
+        std::optional<TIssues> operator()(NYdb::NTopic::TWriteSessionEvent::TAcksEvent& ev) {
             if (ev.Acks.empty()) {
                 return std::nullopt;
             }
@@ -363,7 +356,7 @@ private:
             for (auto it = ev.Acks.begin(); it != ev.Acks.end(); ++it) {
                 //Y_ABORT_UNLESS(it == ev.Acks.begin() || it->SeqNo == std::prev(it)->SeqNo + 1);
                 LOG_T(Self.LogPrefix << "Ack seq no " << it->SeqNo);
-                if (it->State == NYdb::NPersQueue::TWriteSessionEvent::TWriteAck::EEventState::EES_DISCARDED) {
+                if (it->State == NYdb::NTopic::TWriteSessionEvent::TWriteAck::EEventState::EES_DISCARDED) {
                     TIssues issues;
                     issues.AddIssue(TStringBuilder() << "Message with seqNo " << it->SeqNo << " was discarded");
                     return issues;
@@ -384,7 +377,7 @@ private:
             return std::nullopt;
         }
 
-        std::optional<TIssues> operator()(NYdb::NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent& ev) {
+        std::optional<TIssues> operator()(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev) {
             //Y_ABORT_UNLESS(!Self.ContinuationToken);
 
             if (!Self.Buffer.empty()) {
@@ -417,12 +410,12 @@ private:
     i64 FreeSpace = 0;
     bool Finished = false;
 
-    NYdb::NPersQueue::TPersQueueClient PersQueueClient;
-    std::shared_ptr<NYdb::NPersQueue::IWriteSession> WriteSession;
+    NYdb::NTopic::TTopicClient TopicClient;
+    std::shared_ptr<NYdb::NTopic::IWriteSession> WriteSession;
     TString SourceId;
     ui64 NextSeqNo = 1;
     ui64 ConfirmedSeqNo = 0;
-    std::optional<NYdb::NPersQueue::TContinuationToken> ContinuationToken;
+    std::optional<NYdb::NTopic::TContinuationToken> ContinuationToken;
     NThreading::TFuture<void> EventFuture;
     bool ShouldNotifyNewFreeSpace = false;
     std::queue<TString> Buffer;

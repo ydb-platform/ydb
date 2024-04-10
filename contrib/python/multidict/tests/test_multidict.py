@@ -1,121 +1,129 @@
+from __future__ import annotations
+
 import gc
 import operator
 import sys
 import weakref
 from collections import deque
 from collections.abc import Mapping
-from functools import reduce
+from types import ModuleType
 from typing import (
-    Any,
     Callable,
     Dict,
     Iterable,
     Iterator,
+    KeysView,
     List,
     Mapping,
     Set,
     Tuple,
     Type,
-    TypeVar,
     Union,
+    cast,
 )
 
 import pytest
 
 import multidict
-from multidict import CIMultiDict, CIMultiDictProxy, MultiDict, MultiDictProxy
-
-_MultiDictClasses = Union[Type[MultiDict[str]], Type[CIMultiDict[str]]]
+from multidict import CIMultiDict, MultiDict, MultiMapping, MutableMultiMapping
 
 
 def chained_callable(
-    module: object, callables: Union[str, Iterable[str]]
-) -> Callable[..., Any]:
+    module: ModuleType,
+    callables: Iterable[str],
+) -> Callable[..., MultiMapping[int | str] | MutableMultiMapping[int | str]]:
     """
-    Returns callable that will get and call all given objects in module in
-    exact order. If `names` is a single object's name function will return
-    object itself.
-
-    Will treat `names` of type `str` as a list of single element.
+    Return callable that will get and call all given objects in module in
+    exact order.
     """
-    callables = (callables,) if isinstance(callables, str) else callables
-    _callable, *rest = (getattr(module, name) for name in callables)
 
-    def chained_call(*args: object, **kwargs: object) -> Any:
-        return reduce(lambda res, c: c(res), rest, _callable(*args, **kwargs))
+    def chained_call(
+        *args: object,
+        **kwargs: object,
+    ) -> MultiMapping[int | str] | MutableMultiMapping[int | str]:
+        nonlocal callables
 
-    return chained_call if len(rest) > 0 else _callable  # type: ignore[no-any-return]
+        callable_chain = (getattr(module, name) for name in callables)
+        first_callable = next(callable_chain)
+
+        value = first_callable(*args, **kwargs)
+        for element in callable_chain:
+            value = element(value)
+
+        return cast(
+            Union[
+                MultiMapping[Union[int, str]],
+                MutableMultiMapping[Union[int, str]],
+            ],
+            value,
+        )
+
+    return chained_call
 
 
-@pytest.fixture(scope="function")
-def cls(request: Any, _multidict: Any) -> Any:
-    return chained_callable(_multidict, request.param)
+@pytest.fixture
+def cls(  # type: ignore[misc]
+    request: pytest.FixtureRequest,
+    multidict_module: ModuleType,
+) -> Callable[..., MultiMapping[int | str] | MutableMultiMapping[int | str]]:
+    """Make a callable from multidict module, requested by name."""
+    return chained_callable(multidict_module, request.param)
 
 
-@pytest.fixture(scope="function")
-def classes(request: Any, _multidict: Any) -> Any:
-    return tuple(chained_callable(_multidict, n) for n in request.param)
-
-
-@pytest.mark.parametrize("cls", ["MultiDict", "CIMultiDict"], indirect=True)
-def test_exposed_names(
-    cls: Union[Type[MultiDict[object]], Type[CIMultiDict[object]]]
-) -> None:
-    name = cls.__name__
-
-    while name.startswith("_"):
-        name = name[1:]
-
-    assert name in multidict.__all__  # type: ignore[attr-defined]
+def test_exposed_names(any_multidict_class_name: str) -> None:
+    assert any_multidict_class_name in multidict.__all__  # type: ignore[attr-defined]
 
 
 @pytest.mark.parametrize(
-    "cls, key_cls",
-    [("MultiDict", str), (("MultiDict", "MultiDictProxy"), str)],
+    ("cls", "key_cls"),
+    (
+        (("MultiDict",), str),
+        (
+            ("MultiDict", "MultiDictProxy"),
+            str,
+        ),
+    ),
     indirect=["cls"],
 )
 def test__iter__types(
-    cls: Type[MultiDict[Union[str, int]]], key_cls: Type[object]
+    cls: Type[MultiDict[Union[str, int]]],
+    key_cls: Type[object],
 ) -> None:
     d = cls([("key", "one"), ("key2", "two"), ("key", 3)])
     for i in d:
         assert type(i) is key_cls, (type(i), key_cls)
 
 
-_ClsPair = TypeVar(
-    "_ClsPair",
-    Tuple[Type[MultiDict[str]], Type[MultiDictProxy[str]]],
-    Tuple[Type[CIMultiDict[str]], Type[CIMultiDictProxy[str]]],
-)
+def test_proxy_copy(
+    any_multidict_class: Type[MutableMultiMapping[str]],
+    any_multidict_proxy_class: Type[MultiMapping[str]],
+) -> None:
+    d1 = any_multidict_class(key="value", a="b")
+    p1 = any_multidict_proxy_class(d1)
 
-
-@pytest.mark.parametrize(
-    "classes",
-    [("MultiDict", "MultiDictProxy"), ("CIMultiDict", "CIMultiDictProxy")],
-    indirect=True,
-)
-def test_proxy_copy(classes: _ClsPair) -> None:
-    dict_cls, proxy_cls = classes
-    d1 = dict_cls(key="value", a="b")
-    p1 = proxy_cls(d1)
-
-    d2 = p1.copy()
+    d2 = p1.copy()  # type: ignore[attr-defined]
     assert d1 == d2
     assert d1 is not d2
 
 
-@pytest.mark.parametrize(
-    "cls",
-    ["MultiDict", "CIMultiDict", "MultiDictProxy", "CIMultiDictProxy"],
-    indirect=True,
-)
-def test_subclassing(cls: Any) -> None:
-    class MyClass(cls):  # type: ignore[valid-type,misc]
+def test_multidict_subclassing(
+    any_multidict_class: Type[MutableMultiMapping[str]],
+) -> None:
+    class DummyMultidict(any_multidict_class):  # type: ignore[valid-type,misc]
+        pass
+
+
+def test_multidict_proxy_subclassing(
+    any_multidict_proxy_class: Type[MultiMapping[str]],
+) -> None:
+    class DummyMultidictProxy(
+        any_multidict_proxy_class,  # type: ignore[valid-type,misc]
+    ):
         pass
 
 
 class BaseMultiDictTest:
-    def test_instantiate__empty(self, cls: _MultiDictClasses) -> None:
+    def test_instantiate__empty(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls()
         empty: Mapping[str, str] = {}
         assert d == empty
@@ -126,12 +134,12 @@ class BaseMultiDictTest:
 
         assert cls() != list()  # type: ignore[comparison-overlap]
         with pytest.raises(TypeError, match=r"(2 given)"):
-            cls(("key1", "value1"), ("key2", "value2"))  # type: ignore[arg-type,call-arg]  # noqa: E501
+            cls(("key1", "value1"), ("key2", "value2"))  # type: ignore[call-arg]  # noqa: E501
 
-    @pytest.mark.parametrize("arg0", [[("key", "value1")], {"key": "value1"}])
+    @pytest.mark.parametrize("arg0", ([("key", "value1")], {"key": "value1"}))
     def test_instantiate__from_arg0(
         self,
-        cls: _MultiDictClasses,
+        cls: Type[MutableMultiMapping[str]],
         arg0: Union[List[Tuple[str, str]], Dict[str, str]],
     ) -> None:
         d = cls(arg0)
@@ -142,7 +150,10 @@ class BaseMultiDictTest:
         assert list(d.values()) == ["value1"]
         assert list(d.items()) == [("key", "value1")]
 
-    def test_instantiate__with_kwargs(self, cls: _MultiDictClasses) -> None:
+    def test_instantiate__with_kwargs(
+        self,
+        cls: Type[MutableMultiMapping[str]],
+    ) -> None:
         d = cls([("key", "value1")], key2="value2")
 
         assert d == {"key": "value1", "key2": "value2"}
@@ -162,31 +173,30 @@ class BaseMultiDictTest:
         assert sorted(d.values()) == [0, 1]
         assert sorted(d.items()) == [("0", 0), ("1", 1)]
 
-    def test_instantiate__from_list_of_lists(self, cls: _MultiDictClasses) -> None:
+    def test_instantiate__from_list_of_lists(
+        self,
+        cls: Type[MutableMultiMapping[str]],
+    ) -> None:
         # Should work at runtime, but won't type check.
-        d = cls([["key", "value1"]])  # type: ignore[list-item]
+        d = cls([["key", "value1"]])  # type: ignore[call-arg]
         assert d == {"key": "value1"}
 
     def test_instantiate__from_list_of_custom_pairs(
-        self, cls: _MultiDictClasses
+        self,
+        cls: Type[MutableMultiMapping[str]],
     ) -> None:
         class Pair:
             def __len__(self) -> int:
                 return 2
 
             def __getitem__(self, pos: int) -> str:
-                if pos == 0:
-                    return "key"
-                elif pos == 1:
-                    return "value1"
-                else:
-                    raise IndexError
+                return ("key", "value1")[pos]
 
         # Works at runtime, but won't type check.
-        d = cls([Pair()])  # type: ignore[list-item]
+        d = cls([Pair()])
         assert d == {"key": "value1"}
 
-    def test_getone(self, cls: _MultiDictClasses) -> None:
+    def test_getone(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1")], key="value2")
 
         assert d.getone("key") == "value1"
@@ -199,18 +209,27 @@ class BaseMultiDictTest:
             d.getone("key2")
 
         assert d.getone("key2", "default") == "default"
-        assert d.getone(key="key2", default="default") == "default"
+
+    def test_call_with_kwargs(self, cls: Type[MultiDict[str]]) -> None:
+        d = cls([("present", "value")])
+        assert d.getall(default="missing", key="notfound") == "missing"
 
     def test__iter__(
         self,
-        cls: Union[Type[MultiDict[Union[str, int]]], Type[CIMultiDict[Union[str, int]]]]
+        cls: Union[
+            Type[MultiDict[Union[str, int]]],
+            Type[CIMultiDict[Union[str, int]]],
+        ],
     ) -> None:
         d = cls([("key", "one"), ("key2", "two"), ("key", 3)])
         assert list(d) == ["key", "key2", "key"]
 
     def test_keys__contains(
         self,
-        cls: Union[Type[MultiDict[Union[str, int]]], Type[CIMultiDict[Union[str, int]]]]
+        cls: Union[
+            Type[MultiDict[Union[str, int]]],
+            Type[CIMultiDict[Union[str, int]]],
+        ],
     ) -> None:
         d = cls([("key", "one"), ("key2", "two"), ("key", 3)])
 
@@ -223,7 +242,10 @@ class BaseMultiDictTest:
 
     def test_values__contains(
         self,
-        cls: Union[Type[MultiDict[Union[str, int]]], Type[CIMultiDict[Union[str, int]]]]
+        cls: Union[
+            Type[MultiDict[Union[str, int]]],
+            Type[CIMultiDict[Union[str, int]]],
+        ],
     ) -> None:
         d = cls([("key", "one"), ("key", "two"), ("key", 3)])
 
@@ -237,7 +259,10 @@ class BaseMultiDictTest:
 
     def test_items__contains(
         self,
-        cls: Union[Type[MultiDict[Union[str, int]]], Type[CIMultiDict[Union[str, int]]]]
+        cls: Union[
+            Type[MultiDict[Union[str, int]]],
+            Type[CIMultiDict[Union[str, int]]],
+        ],
     ) -> None:
         d = cls([("key", "one"), ("key", "two"), ("key", 3)])
 
@@ -249,58 +274,67 @@ class BaseMultiDictTest:
 
         assert ("foo", "bar") not in d.items()
 
-    def test_cannot_create_from_unaccepted(self, cls: _MultiDictClasses) -> None:
+    def test_cannot_create_from_unaccepted(
+        self,
+        cls: Type[MutableMultiMapping[str]],
+    ) -> None:
         with pytest.raises(TypeError):
-            cls([(1, 2, 3)])  # type: ignore[list-item]
+            cls([(1, 2, 3)])  # type: ignore[call-arg]
 
-    def test_keys_is_set_less(self, cls: _MultiDictClasses) -> None:
+    def test_keys_is_set_less(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1")])
 
         assert d.keys() < {"key", "key2"}
 
-    def test_keys_is_set_less_equal(self, cls: _MultiDictClasses) -> None:
+    def test_keys_is_set_less_equal(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1")])
 
         assert d.keys() <= {"key"}
 
-    def test_keys_is_set_equal(self, cls: _MultiDictClasses) -> None:
+    def test_keys_is_set_equal(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1")])
 
         assert d.keys() == {"key"}
 
-    def test_keys_is_set_greater(self, cls: _MultiDictClasses) -> None:
+    def test_keys_is_set_greater(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1")])
 
         assert {"key", "key2"} > d.keys()
 
-    def test_keys_is_set_greater_equal(self, cls: _MultiDictClasses) -> None:
+    def test_keys_is_set_greater_equal(
+        self,
+        cls: Type[MutableMultiMapping[str]],
+    ) -> None:
         d = cls([("key", "value1")])
 
         assert {"key"} >= d.keys()
 
-    def test_keys_is_set_not_equal(self, cls: _MultiDictClasses) -> None:
+    def test_keys_is_set_not_equal(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1")])
 
         assert d.keys() != {"key2"}
 
-    def test_eq(self, cls: _MultiDictClasses) -> None:
+    def test_eq(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1")])
 
         assert {"key": "value1"} == d
 
-    def test_eq2(self, cls: _MultiDictClasses) -> None:
+    def test_eq2(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d1 = cls([("key", "value1")])
         d2 = cls([("key2", "value1")])
 
         assert d1 != d2
 
-    def test_eq3(self, cls: _MultiDictClasses) -> None:
+    def test_eq3(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d1 = cls([("key", "value1")])
         d2 = cls()
 
         assert d1 != d2
 
-    def test_eq_other_mapping_contains_more_keys(self, cls: _MultiDictClasses) -> None:
+    def test_eq_other_mapping_contains_more_keys(
+        self,
+        cls: Type[MutableMultiMapping[str]],
+    ) -> None:
         d1 = cls(foo="bar")
         d2 = dict(foo="bar", bar="baz")
 
@@ -311,10 +345,10 @@ class BaseMultiDictTest:
     ) -> None:
         class BadMapping(Mapping[str, int]):
             def __getitem__(self, key: str) -> int:
-                return 1
+                return 1  # pragma: no cover  # `len()` fails earlier
 
             def __iter__(self) -> Iterator[str]:
-                yield "a"
+                yield "a"  # pragma: no cover  # `len()` fails earlier
 
             def __len__(self) -> int:  # type: ignore[return]
                 1 / 0
@@ -326,14 +360,14 @@ class BaseMultiDictTest:
 
     def test_eq_bad_mapping_getitem(
         self,
-        cls: Union[Type[MultiDict[int]], Type[CIMultiDict[int]]]
+        cls: Union[Type[MultiDict[int]], Type[CIMultiDict[int]]],
     ) -> None:
         class BadMapping(Mapping[str, int]):
             def __getitem__(self, key: str) -> int:  # type: ignore[return]
                 1 / 0
 
             def __iter__(self) -> Iterator[str]:
-                yield "a"
+                yield "a"  # pragma: no cover  # foreign objects no iterated
 
             def __len__(self) -> int:
                 return 1
@@ -343,60 +377,139 @@ class BaseMultiDictTest:
         with pytest.raises(ZeroDivisionError):
             d1 == d2
 
-    def test_ne(self, cls: _MultiDictClasses) -> None:
+    def test_ne(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1")])
 
         assert d != {"key": "another_value"}
 
-    def test_and(self, cls: _MultiDictClasses) -> None:
+    def test_and(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1")])
 
         assert {"key"} == d.keys() & {"key", "key2"}
 
-    def test_and2(self, cls: _MultiDictClasses) -> None:
+    def test_and2(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1")])
 
         assert {"key"} == {"key", "key2"} & d.keys()
 
-    def test_or(self, cls: _MultiDictClasses) -> None:
+    def test_bitwise_and_not_implemented(
+        self, cls: Type[MutableMultiMapping[str]]
+    ) -> None:
+        d = cls([("key", "value1")])
+
+        sentinel_operation_result = object()
+
+        class RightOperand:
+            def __rand__(self, other: KeysView[str]) -> object:
+                assert isinstance(other, KeysView)
+                return sentinel_operation_result
+
+        assert d.keys() & RightOperand() is sentinel_operation_result
+
+    def test_bitwise_and_iterable_not_set(
+        self, cls: Type[MutableMultiMapping[str]]
+    ) -> None:
+        d = cls([("key", "value1")])
+
+        assert {"key"} == d.keys() & ["key", "key2"]
+
+    def test_or(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1")])
 
         assert {"key", "key2"} == d.keys() | {"key2"}
 
-    def test_or2(self, cls: _MultiDictClasses) -> None:
+    def test_or2(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1")])
 
         assert {"key", "key2"} == {"key2"} | d.keys()
 
-    def test_sub(self, cls: _MultiDictClasses) -> None:
+    def test_bitwise_or_not_implemented(
+        self, cls: Type[MutableMultiMapping[str]]
+    ) -> None:
+        d = cls([("key", "value1")])
+
+        sentinel_operation_result = object()
+
+        class RightOperand:
+            def __ror__(self, other: KeysView[str]) -> object:
+                assert isinstance(other, KeysView)
+                return sentinel_operation_result
+
+        assert d.keys() | RightOperand() is sentinel_operation_result
+
+    def test_bitwise_or_iterable_not_set(
+        self, cls: Type[MutableMultiMapping[str]]
+    ) -> None:
+        d = cls([("key", "value1")])
+
+        assert {"key", "key2"} == d.keys() | ["key2"]
+
+    def test_sub(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1"), ("key2", "value2")])
 
         assert {"key"} == d.keys() - {"key2"}
 
-    def test_sub2(self, cls: _MultiDictClasses) -> None:
+    def test_sub2(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1"), ("key2", "value2")])
 
         assert {"key3"} == {"key", "key2", "key3"} - d.keys()
 
-    def test_xor(self, cls: _MultiDictClasses) -> None:
+    def test_sub_not_implemented(self, cls: Type[MutableMultiMapping[str]]) -> None:
+        d = cls([("key", "value1"), ("key2", "value2")])
+
+        sentinel_operation_result = object()
+
+        class RightOperand:
+            def __rsub__(self, other: KeysView[str]) -> object:
+                assert isinstance(other, KeysView)
+                return sentinel_operation_result
+
+        assert d.keys() - RightOperand() is sentinel_operation_result
+
+    def test_sub_iterable_not_set(self, cls: Type[MutableMultiMapping[str]]) -> None:
+        d = cls([("key", "value1"), ("key2", "value2")])
+
+        assert {"key"} == d.keys() - ["key2"]
+
+    def test_xor(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1"), ("key2", "value2")])
 
         assert {"key", "key3"} == d.keys() ^ {"key2", "key3"}
 
-    def test_xor2(self, cls: _MultiDictClasses) -> None:
+    def test_xor2(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls([("key", "value1"), ("key2", "value2")])
 
         assert {"key", "key3"} == {"key2", "key3"} ^ d.keys()
 
-    @pytest.mark.parametrize("_set, expected", [({"key2"}, True), ({"key"}, False)])
+    def test_xor_not_implemented(self, cls: Type[MutableMultiMapping[str]]) -> None:
+        d = cls([("key", "value1"), ("key2", "value2")])
+
+        sentinel_operation_result = object()
+
+        class RightOperand:
+            def __rxor__(self, other: KeysView[str]) -> object:
+                assert isinstance(other, KeysView)
+                return sentinel_operation_result
+
+        assert d.keys() ^ RightOperand() is sentinel_operation_result
+
+    def test_xor_iterable_not_set(self, cls: Type[MutableMultiMapping[str]]) -> None:
+        d = cls([("key", "value1"), ("key2", "value2")])
+
+        assert {"key", "key3"} == d.keys() ^ ["key2", "key3"]
+
+    @pytest.mark.parametrize(
+        ("key", "value", "expected"),
+        (("key2", "v", True), ("key", "value1", False)),
+    )
     def test_isdisjoint(
-        self, cls: _MultiDictClasses, _set: Set[str], expected: bool
+        self, cls: Type[MutableMultiMapping[str]], key: str, value: str, expected: bool
     ) -> None:
         d = cls([("key", "value1")])
+        assert d.items().isdisjoint({(key, value)}) is expected
+        assert d.keys().isdisjoint({key}) is expected
 
-        assert d.keys().isdisjoint(_set) == expected
-
-    def test_repr_issue_410(self, cls: _MultiDictClasses) -> None:
+    def test_repr_aiohttp_issue_410(self, cls: Type[MutableMultiMapping[str]]) -> None:
         d = cls()
 
         try:
@@ -405,15 +518,16 @@ class BaseMultiDictTest:
         except Exception as e:
             repr(d)
 
-            assert sys.exc_info()[1] == e
+            assert sys.exc_info()[1] == e  # noqa: PT017
 
     @pytest.mark.parametrize(
-        "op", [operator.or_, operator.and_, operator.sub, operator.xor]
+        "op",
+        (operator.or_, operator.and_, operator.sub, operator.xor),
     )
-    @pytest.mark.parametrize("other", [{"other"}])
-    def test_op_issue_410(
+    @pytest.mark.parametrize("other", ({"other"},))
+    def test_op_issue_aiohttp_issue_410(
         self,
-        cls: _MultiDictClasses,
+        cls: Type[MutableMultiMapping[str]],
         op: Callable[[object, object], object],
         other: Set[str],
     ) -> None:
@@ -425,9 +539,9 @@ class BaseMultiDictTest:
         except Exception as e:
             op(d.keys(), other)
 
-            assert sys.exc_info()[1] == e
+            assert sys.exc_info()[1] == e  # noqa: PT017
 
-    def test_weakref(self, cls: _MultiDictClasses) -> None:
+    def test_weakref(self, cls: Type[MutableMultiMapping[str]]) -> None:
         called = False
 
         def cb(wr: object) -> None:
@@ -443,7 +557,7 @@ class BaseMultiDictTest:
 
     def test_iter_length_hint_keys(
         self,
-        cls: Union[Type[MultiDict[int]], Type[CIMultiDict[int]]]
+        cls: Union[Type[MultiDict[int]], Type[CIMultiDict[int]]],
     ) -> None:
         md = cls(a=1, b=2)
         it = iter(md.keys())
@@ -451,7 +565,7 @@ class BaseMultiDictTest:
 
     def test_iter_length_hint_items(
         self,
-        cls: Union[Type[MultiDict[int]], Type[CIMultiDict[int]]]
+        cls: Union[Type[MultiDict[int]], Type[CIMultiDict[int]]],
     ) -> None:
         md = cls(a=1, b=2)
         it = iter(md.items())
@@ -459,7 +573,7 @@ class BaseMultiDictTest:
 
     def test_iter_length_hint_values(
         self,
-        cls: Union[Type[MultiDict[int]], Type[CIMultiDict[int]]]
+        cls: Union[Type[MultiDict[int]], Type[CIMultiDict[int]]],
     ) -> None:
         md = cls(a=1, b=2)
         it = iter(md.values())
@@ -467,7 +581,7 @@ class BaseMultiDictTest:
 
     def test_ctor_list_arg_and_kwds(
         self,
-        cls: Union[Type[MultiDict[int]], Type[CIMultiDict[int]]]
+        cls: Union[Type[MultiDict[int]], Type[CIMultiDict[int]]],
     ) -> None:
         arg = [("a", 1)]
         obj = cls(arg, b=2)
@@ -476,7 +590,7 @@ class BaseMultiDictTest:
 
     def test_ctor_tuple_arg_and_kwds(
         self,
-        cls: Union[Type[MultiDict[int]], Type[CIMultiDict[int]]]
+        cls: Union[Type[MultiDict[int]], Type[CIMultiDict[int]]],
     ) -> None:
         arg = (("a", 1),)
         obj = cls(arg, b=2)
@@ -485,7 +599,7 @@ class BaseMultiDictTest:
 
     def test_ctor_deque_arg_and_kwds(
         self,
-        cls: Union[Type[MultiDict[int]], Type[CIMultiDict[int]]]
+        cls: Union[Type[MultiDict[int]], Type[CIMultiDict[int]]],
     ) -> None:
         arg = deque([("a", 1)])
         obj = cls(arg, b=2)
@@ -494,9 +608,19 @@ class BaseMultiDictTest:
 
 
 class TestMultiDict(BaseMultiDictTest):
-    @pytest.fixture(params=["MultiDict", ("MultiDict", "MultiDictProxy")])
-    def cls(self, request: Any, _multidict: Any) -> Any:
-        return chained_callable(_multidict, request.param)
+    @pytest.fixture(
+        params=[
+            ("MultiDict",),
+            ("MultiDict", "MultiDictProxy"),
+        ],
+    )
+    def cls(  # type: ignore[misc]
+        self,
+        request: pytest.FixtureRequest,
+        multidict_module: ModuleType,
+    ) -> Callable[..., MultiMapping[int | str] | MutableMultiMapping[int | str]]:
+        """Make a case-sensitive multidict class/proxy constructor."""
+        return chained_callable(multidict_module, request.param)
 
     def test__repr__(self, cls: Type[MultiDict[str]]) -> None:
         d = cls()
@@ -523,7 +647,8 @@ class TestMultiDict(BaseMultiDictTest):
         assert d.getall("some_key", default) is default
 
     def test_preserve_stable_ordering(
-        self, cls: Type[MultiDict[Union[str, int]]]
+        self,
+        cls: Type[MultiDict[Union[str, int]]],
     ) -> None:
         d = cls([("a", 1), ("b", "2"), ("a", 3)])
         s = "&".join("{}={}".format(k, v) for k, v in d.items())
@@ -533,8 +658,6 @@ class TestMultiDict(BaseMultiDictTest):
     def test_get(self, cls: Type[MultiDict[int]]) -> None:
         d = cls([("a", 1), ("a", 2)])
         assert d["a"] == 1
-        assert d.get("a") == 1
-        assert d.get("z", 3) == 3
 
     def test_items__repr__(self, cls: Type[MultiDict[str]]) -> None:
         d = cls([("key", "value1")], key="value2")
@@ -551,9 +674,19 @@ class TestMultiDict(BaseMultiDictTest):
 
 
 class TestCIMultiDict(BaseMultiDictTest):
-    @pytest.fixture(params=["CIMultiDict", ("CIMultiDict", "CIMultiDictProxy")])
-    def cls(self, request: Any, _multidict: Any) -> Any:
-        return chained_callable(_multidict, request.param)
+    @pytest.fixture(
+        params=[
+            ("CIMultiDict",),
+            ("CIMultiDict", "CIMultiDictProxy"),
+        ],
+    )
+    def cls(  # type: ignore[misc]
+        self,
+        request: pytest.FixtureRequest,
+        multidict_module: ModuleType,
+    ) -> Callable[..., MultiMapping[int | str] | MutableMultiMapping[int | str]]:
+        """Make a case-insensitive multidict class/proxy constructor."""
+        return chained_callable(multidict_module, request.param)
 
     def test_basics(self, cls: Type[CIMultiDict[str]]) -> None:
         d = cls([("KEY", "value1")], KEY="value2")

@@ -16,14 +16,14 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <vector>
 
 #include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
-#include "y_absl/base/dynamic_annotations.h"
 #include "y_absl/base/internal/endian.h"
 #include "y_absl/base/prefetch.h"
 #include "y_absl/crc/internal/cpu_detect.h"
-#include "y_absl/crc/internal/crc.h"
 #include "y_absl/crc/internal/crc32_x86_arm_combined_simd.h"
 #include "y_absl/crc/internal/crc_internal.h"
 #include "y_absl/memory/memory.h"
@@ -634,8 +634,16 @@ CRCImpl* TryNewCRC32AcceleratedX86ARMCombined() {
       return new CRC32AcceleratedX86ARMCombinedMultipleStreams<
           3, 0, CutoffStrategy::Fold3>();
     case CpuType::kArmNeoverseN1:
+    case CpuType::kArmNeoverseN2:
+    case CpuType::kArmNeoverseV1:
       return new CRC32AcceleratedX86ARMCombinedMultipleStreams<
           1, 1, CutoffStrategy::Unroll64CRC>();
+    case CpuType::kAmpereSiryn:
+      return new CRC32AcceleratedX86ARMCombinedMultipleStreams<
+          3, 2, CutoffStrategy::Fold3>();
+    case CpuType::kArmNeoverseV2:
+      return new CRC32AcceleratedX86ARMCombinedMultipleStreams<
+          1, 2, CutoffStrategy::Unroll64CRC>();
 #if defined(__aarch64__)
     default:
       // Not all ARM processors support the needed instructions, so check here

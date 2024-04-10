@@ -21,9 +21,9 @@ namespace {
 
 class TS3DataSourceProvider : public TDataProviderBase {
 public:
-    TS3DataSourceProvider(TS3State::TPtr state, IHTTPGateway::TPtr gateway)
+    TS3DataSourceProvider(TS3State::TPtr state)
         : State_(std::move(state))
-        , IODiscoveryTransformer_(CreateS3IODiscoveryTransformer(State_, std::move(gateway)))
+        , IODiscoveryTransformer_(CreateS3IODiscoveryTransformer(State_))
         , ConfigurationTransformer_(MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{S3ProviderName}))
         , CallableExecutionTransformer_(CreateS3SourceCallableExecutionTransformer(State_))
         , TypeAnnotationTransformer_(CreateS3DataSourceTypeAnnotationTransformer(State_))
@@ -160,8 +160,8 @@ private:
 
 }
 
-TIntrusivePtr<IDataProvider> CreateS3DataSource(TS3State::TPtr state, IHTTPGateway::TPtr gateway) {
-    return new TS3DataSourceProvider(std::move(state), std::move(gateway));
+TIntrusivePtr<IDataProvider> CreateS3DataSource(TS3State::TPtr state) {
+    return new TS3DataSourceProvider(std::move(state));
 }
 
 } // namespace NYql

@@ -113,7 +113,7 @@ namespace NYql {
 
         private:
             TExprNode::TPtr Compile(TStringBuf query,
-                bool sql,
+                ETranslationMode mode,
                 IModuleResolver::TPtr moduleResolver,
                 ui16 syntaxVersion,
                 const THashMap<TString, TString>& modules,

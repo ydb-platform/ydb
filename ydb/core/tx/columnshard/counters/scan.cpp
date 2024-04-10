@@ -16,8 +16,6 @@ TScanCounters::TScanCounters(const TString& module)
     , NoResultsAckRequest(TBase::GetDeriviative("NoResultsAckRequest"))
     , AckWaitingDuration(TBase::GetDeriviative("AckWaitingDuration"))
 
-    , ScanDuration(TBase::GetDeriviative("ScanDuration"))
-
     , NoScanRecords(TBase::GetDeriviative("NoScanRecords"))
     , NoScanIntervals(TBase::GetDeriviative("NoScanIntervals"))
     , LinearScanRecords(TBase::GetDeriviative("LinearScanRecords"))
@@ -62,7 +60,16 @@ TScanCounters::TScanCounters(const TString& module)
     , BlobsReceivedBytes(TBase::GetDeriviative("BlobsReceivedBytes"))
 {
     ResourcesSubscriberCounters = std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>();
-
+    ScanDurationByStatus.resize((ui32)EStatusFinish::COUNT);
+    ui32 idx = 0;
+    for (auto&& i : GetEnumAllValues<EStatusFinish>()) {
+        if (i == EStatusFinish::COUNT) {
+            continue;
+        }
+        ScanDurationByStatus[(ui32)i] = TBase::GetHistogram("ScanDuration/" + ::ToString(i) + "/Milliseconds", NMonitoring::ExponentialHistogram(18, 2, 1));
+        AFL_VERIFY(idx == (ui32)i);
+        ++idx;
+    }
 }
 
 NKikimr::NColumnShard::TScanAggregations TScanCounters::BuildAggregations() {

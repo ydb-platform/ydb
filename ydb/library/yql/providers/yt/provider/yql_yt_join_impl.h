@@ -58,6 +58,7 @@ struct TYtJoinNodeOp : TYtJoinNode {
     TVector<TYtStarJoinOption> StarOptions;
     TMaybeNode<TYtOutputOpBase> Output;
     THashSet<TString> OutputRemoveColumns;
+    bool CostBasedOptPassed = false;
 };
 
 TYtJoinNodeOp::TPtr ImportYtEquiJoin(TYtEquiJoin equiJoin, TExprContext& ctx);

@@ -28,8 +28,9 @@ class IIndexMeta {
 private:
     YDB_READONLY_DEF(TString, IndexName);
     YDB_READONLY(ui32, IndexId, 0);
+    YDB_READONLY(TString, StorageId, IStoragesManager::DefaultStorageId);
 protected:
-    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const ui32 indexId, std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const = 0;
+    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const ui32 indexId, THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const = 0;
     virtual void DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) = 0;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const = 0;
@@ -59,7 +60,7 @@ public:
 
     virtual ~IIndexMeta() = default;
 
-    std::shared_ptr<IPortionDataChunk> BuildIndex(const ui32 indexId, std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
+    std::shared_ptr<IPortionDataChunk> BuildIndex(const ui32 indexId, THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
         return DoBuildIndex(indexId, data, indexInfo);
     }
 
@@ -67,19 +68,16 @@ public:
         return DoFillIndexCheckers(info, schema);
     }
 
-    bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
-        IndexId = proto.GetId();
-        AFL_VERIFY(IndexId);
-        IndexName = proto.GetName();
-        AFL_VERIFY(IndexName);
-        return DoDeserializeFromProto(proto);
-    }
+    bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto);
 
     void SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {
         AFL_VERIFY(IndexId);
         proto.SetId(IndexId);
         AFL_VERIFY(IndexName);
         proto.SetName(IndexName);
+        if (StorageId) {
+            proto.SetStorageId(StorageId);
+        }
         return DoSerializeToProto(proto);
     }
 
@@ -126,10 +124,10 @@ protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
         return nullptr;
     }
-    virtual void DoAddIntoPortion(const TBlobRange& bRange, TPortionInfo& portionInfo) const override;
+    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfo& portionInfo) const override;
 public:
-    TPortionIndexChunk(const ui32 entityId, const ui32 recordsCount, const ui64 rawBytes, const TString& data)
-        : TBase(entityId, 0)
+    TPortionIndexChunk(const TChunkAddress& address, const ui32 recordsCount, const ui64 rawBytes, const TString& data)
+        : TBase(address.GetColumnId(), address.GetChunkIdx())
         , RecordsCount(recordsCount)
         , RawBytes(rawBytes)
         , Data(data)
@@ -146,7 +144,7 @@ protected:
     std::set<ui32> ColumnIds;
     virtual std::shared_ptr<arrow::RecordBatch> DoBuildIndexImpl(TChunkedBatchReader& reader) const = 0;
 
-    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const ui32 indexId, std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const override final;
+    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const ui32 indexId, THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const override final;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& /*proto*/) override;
 
     TConclusionStatus CheckSameColumnsForModification(const IIndexMeta& newMeta) const;

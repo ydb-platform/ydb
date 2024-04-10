@@ -1,0 +1,5 @@
+--!syntax_pg
+set TablePathPrefix='{{table_path_prefix}}';
+set DqEngine="disable";
+set yt.HybridDqExecution="0";
+set yt.QueryCacheMode = "disable";

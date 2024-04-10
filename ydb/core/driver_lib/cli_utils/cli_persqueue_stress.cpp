@@ -1,6 +1,7 @@
 #include "cli.h"
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/core/base/tablet_types.h>
+#include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 
 namespace NKikimr {
 namespace NDriverClient {

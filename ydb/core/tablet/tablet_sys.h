@@ -251,7 +251,6 @@ class TTablet : public TActor<TTablet> {
     TString BlobStorageErrorReason;
     bool BlobStorageErrorReported = false;
 
-    ui64 StateStorageGroup() const;
     ui64 TabletID() const;
 
     void ReportTabletStateChange(ETabletState state);

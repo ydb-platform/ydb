@@ -1,5 +1,7 @@
 #include "msgbus_tabletreq.h"
 
+#include <ydb/core/protos/tablet_counters.pb.h>
+
 namespace NKikimr {
 namespace NMsgBusProxy {
 

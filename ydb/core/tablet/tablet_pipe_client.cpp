@@ -436,12 +436,10 @@ namespace NTabletPipe {
             Y_UNUSED(ev);
             Y_UNUSED(ctx);
 
-            const ui64 hiveUid = HiveUidFromTabletID(TabletId);
-            const ui64 hiveTabletId = AppData()->DomainsInfo->GetHive(hiveUid);
-
-            if (hiveUid == 0)
+            if (HiveUidFromTabletID(TabletId) == 0)
                 BLOG_ERROR("trying to check aliveness of hand-made tablet! would definitely fail");
 
+            const ui64 hiveTabletId = AppData()->DomainsInfo->GetHive();
             RequestHiveInfo(hiveTabletId);
         }
 

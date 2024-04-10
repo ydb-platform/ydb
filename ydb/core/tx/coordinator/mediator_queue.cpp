@@ -284,6 +284,7 @@ public:
 
     STFUNC(StateSync) {
         switch (ev->GetTypeRewrite()) {
+            HFunc(TEvMediatorQueueStep, Handle);
             HFunc(TEvTxProcessing::TEvPlanStepAck, Handle);
             HFunc(TEvTxCoordinator::TEvCoordinatorSyncResult, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -294,8 +295,8 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTxProcessing::TEvPlanStepAck, Handle);
             HFunc(TEvMediatorQueueStep, Handle);
+            HFunc(TEvTxProcessing::TEvPlanStepAck, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             CFunc(TEvents::TSystem::PoisonPill, Die)
         }

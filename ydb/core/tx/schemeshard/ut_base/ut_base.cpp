@@ -3085,7 +3085,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
-                                SourceTabletId: 9437195
+                                SourceTabletId: 72075186233409547
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Uint32: 3000000000 } }
@@ -3094,7 +3094,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncCopyTable(runtime, ++txId, "/MyRoot", "NewTable", "/MyRoot/Table");
         // New split must be rejected while CopyTable is in progress
         AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
-                                SourceTabletId: 9437194
+                                SourceTabletId: 72075186233409546
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Uint32: 1000000000 } }
@@ -3143,14 +3143,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         AsyncSplitTable(runtime, ++txId, "/MyRoot/Table",
                             R"(
-                                SourceTabletId: 9437195
-                                SourceTabletId: 9437196
+                                SourceTabletId: 72075186233409547
+                                SourceTabletId: 72075186233409548
                             )");
         AsyncCopyTable(runtime, ++txId, "/MyRoot", "NewTable", "/MyRoot/Table");
         // New split must be rejected while CopyTable is in progress
         AsyncSplitTable(runtime, ++txId, "/MyRoot/Table",
                             R"(
-                                SourceTabletId: 9437197
+                                SourceTabletId: 72075186233409549
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Uint32: 300 } }
@@ -3204,12 +3204,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // Merge and split so that overall partition count stays the same but shard boundaries change
         AsyncSplitTable(runtime, ++txId, "/MyRoot/Table",
                             R"(
-                                SourceTabletId: 9437194
-                                SourceTabletId: 9437195
+                                SourceTabletId: 72075186233409546
+                                SourceTabletId: 72075186233409547
                             )");
         AsyncSplitTable(runtime, ++txId, "/MyRoot/Table",
                             R"(
-                                SourceTabletId: 9437196
+                                SourceTabletId: 72075186233409548
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Uint32: 4000 } }
@@ -3978,8 +3978,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         fnWriteRow(TTestTxConfig::FakeHiveTablets+1, 0x80000000u);
 
         AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
-                                SourceTabletId: 9437194
-                                SourceTabletId: 9437195
+                                SourceTabletId: 72075186233409546
+                                SourceTabletId: 72075186233409547
                             )");
         AsyncAlterTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
@@ -4018,7 +4018,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         )");
         // New split must be rejected while CopyTable is in progress
         AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
-                                SourceTabletId: 9437196
+                                SourceTabletId: 72075186233409548
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Uint32: 300 } }
@@ -4109,13 +4109,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
-                                SourceTabletId: 9437195
-                                SourceTabletId: 9437196
+                                SourceTabletId: 72075186233409547
+                                SourceTabletId: 72075186233409548
                             )");
         AsyncDropTable(runtime, ++txId, "/MyRoot", "Table");
         // New split must be rejected while DropTable is in progress
         AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
-                                SourceTabletId: 9437197
+                                SourceTabletId: 72075186233409549
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Uint32: 300 } }
@@ -4295,7 +4295,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
-                                SourceTabletId: 9437194
+                                SourceTabletId: 72075186233409546
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Uint32: 3000000000 } }
@@ -4325,7 +4325,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
-                                SourceTabletId: 9437194
+                                SourceTabletId: 72075186233409546
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Uint32: 3000000000 } }
@@ -6172,7 +6172,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // Split the middle tablet in two
         TestSplitTable(runtime, ++txId, "/MyRoot/Table1", R"(
-                            SourceTabletId: 9437195
+                            SourceTabletId: 72075186233409547
                             SplitBoundary { KeyPrefix {
                                 Tuple { Optional { Uint32 : 150 } }
                             }}
@@ -6330,17 +6330,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         "PartitionPerTablet: 10 "
                         "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"
                         );
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_1", true),
-                           {NLs::PathsInsideDomain(4),
-                            NLs::ShardsInsideDomain(18),
-                            NLs::PathVersionEqual(1),
-                            NLs::NotFinished});
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
-
-        env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_1", true),
                            {NLs::CheckPartCount("PQGroup_1", 100, 10, 10, 100),
@@ -6863,7 +6852,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncForceDropUnsafe(runtime, ++txId, pVer.PathId.LocalPathId);
 
         TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
-        TestModificationResult(runtime, txId-1, NKikimrScheme::StatusMultipleModifications);
+        TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
         TActorId sender = runtime.AllocateEdgeActor();
@@ -9721,7 +9710,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            }});
 
         TestSplitTable(runtime, ++txId, "/MyRoot/USER_0/Table", R"(
-                                SourceTabletId: 9437196
+                                SourceTabletId: 72075186233409548
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Uint32: 1000 } }
@@ -10334,7 +10323,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
             ++txId;
             TestSplitTable(runtime, 103, "/MyRoot/Table", R"(
-                                    SourceTabletId: 9437194
+                                    SourceTabletId: 72075186233409546
                                     SplitBoundary {
                                         KeyPrefix {
                                             Tuple { Optional { Uint64: 1000 } }
@@ -10467,7 +10456,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
 
         TestSplitTable(runtime, ++txId, "/MyRoot/table/indexByValue/indexImplTable", R"(
-                            SourceTabletId: 9437195
+                            SourceTabletId: 72075186233409547
                             SplitBoundary {
                                 KeyPrefix {
                                     Tuple { Optional { Text: "B" } }

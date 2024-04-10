@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 
 #include <util/str_stl.h>
 
@@ -13,7 +14,6 @@ struct TKqpQuerySettings {
     bool IsInternalCall = false;
     NKikimrKqp::EQueryType QueryType = NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED;
     Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
-    bool IsPrepareQuery = false;
 
     explicit TKqpQuerySettings(NKikimrKqp::EQueryType queryType)
         : QueryType(queryType) {}

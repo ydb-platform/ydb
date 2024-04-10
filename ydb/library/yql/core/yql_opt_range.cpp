@@ -168,12 +168,14 @@ TExprNode::TPtr MakeWidePointRangeLambda(TPositionHandle pos, const TTypeAnnotat
         case EDataSlot::Int64:  name = "Int64"; maxValueStr = ToString(Max<i64>()); break;
         case EDataSlot::Uint64: name = "Uint64"; maxValueStr = ToString(Max<ui64>()); break;
 
-        case EDataSlot::Date:     name = "Date"; maxValueStr = ToString(NUdf::MAX_DATE - 1); break;
-        case EDataSlot::Datetime: name = "Datetime"; maxValueStr = ToString(NUdf::MAX_DATETIME - 1); break;
+        case EDataSlot::Date:        name = "Date"; maxValueStr = ToString(NUdf::MAX_DATE - 1); break;
+        case EDataSlot::Datetime:    name = "Datetime"; maxValueStr = ToString(NUdf::MAX_DATETIME - 1); break;
+        case EDataSlot::Timestamp:   name = "Timestamp"; maxValueStr = ToString(NUdf::MAX_TIMESTAMP - 1); break;
+        case EDataSlot::Date32:      name = "Date32"; maxValueStr = ToString(NUdf::MAX_DATE32); break;
+        case EDataSlot::Datetime64:  name = "Datetime64"; maxValueStr = ToString(NUdf::MAX_DATETIME64); break;
+        case EDataSlot::Timestamp64: name = "Timestamp64"; maxValueStr = ToString(NUdf::MAX_TIMESTAMP64); break;
         default:
-            YQL_ENSURE(keySlot == EDataSlot::Timestamp);
-            name = "Timestamp";
-            maxValueStr = ToString(NUdf::MAX_TIMESTAMP - 1);
+            ythrow yexception() << "Unexpected type: " << baseKeyType->Cast<TDataExprType>()->GetName();
     }
 
     TExprNode::TPtr maxValue = ctx.NewCallable(pos, name, { ctx.NewAtom(pos, maxValueStr, TNodeFlags::Default) });
@@ -184,6 +186,12 @@ TExprNode::TPtr MakeWidePointRangeLambda(TPositionHandle pos, const TTypeAnnotat
         addValue = ctx.NewCallable(pos, "Interval", { ctx.NewAtom(pos, "1000000", TNodeFlags::Default) });
     } else if (keySlot == EDataSlot::Timestamp) {
         addValue = ctx.NewCallable(pos, "Interval", { ctx.NewAtom(pos, "1", TNodeFlags::Default) });
+    } else if (keySlot == EDataSlot::Date32) {
+        addValue = ctx.NewCallable(pos, "Interval64", { ctx.NewAtom(pos, "86400000000", TNodeFlags::Default) });
+    } else if (keySlot == EDataSlot::Datetime64) {
+        addValue = ctx.NewCallable(pos, "Interval64", { ctx.NewAtom(pos, "1000000", TNodeFlags::Default) });
+    } else if (keySlot == EDataSlot::Timestamp64) {
+        addValue = ctx.NewCallable(pos, "Interval64", { ctx.NewAtom(pos, "1", TNodeFlags::Default) });
     } else {
         addValue = ctx.NewCallable(pos, name, { ctx.NewAtom(pos, "1", TNodeFlags::Default) });
     }

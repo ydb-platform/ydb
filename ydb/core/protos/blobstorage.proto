@@ -74,9 +74,11 @@ message TMsgQoS {
         uint32 ReplVDiskId = 11; // set when client is replication actor from specific vdisk
         uint64 VDiskLoadId = 13; // set when client is load test with specific tag
         uint32 VPatchVDiskId = 14; // set when client is vpatch actor from specific vdisk
+        uint32 BalancingVDiskId = 17; // set when client is balancing actor from specific vdisk
     }
     optional TExecTimeStats ExecTimeStats = 12;
     optional NActorsProto.TActorId SenderActorId = 15;
+    optional uint64 InternalMessageId = 16; // for in-process use
 }
 
 // message VDisk sends to the client, when backpressure window changes
@@ -465,6 +467,7 @@ message TEvVGetResult {
     optional NKikimrProto.EReplyStatus Status = 1;
     repeated TQueryResult Result = 2;
     optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
+    optional string ErrorReason = 4;
 
     optional uint64 Cookie = 5;
     optional TMsgQoS MsgQoS = 10;
@@ -1101,16 +1104,6 @@ message TEvControllerNodeServiceSetUpdate {
     optional string InstanceId = 5;
     optional bool Comprehensive = 6; // if this flag is set to true, then there will be no any other entities than elisted in the ServiceSet
     optional uint64 AvailDomain = 7; // availability domain of the controller
-}
-
-message TEvControllerGroupReconfigureWipe {
-    reserved 1;
-    optional NKikimrBlobStorage.TVSlotId VSlotId = 2;
-}
-
-message TEvControllerGroupReconfigureWipeResult {
-    optional NKikimrProto.EReplyStatus Status = 1;
-    optional string ErrorReason = 2;
 }
 
 message TEvControllerConfigRequest {

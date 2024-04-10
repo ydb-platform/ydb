@@ -33,13 +33,13 @@ namespace NYT::NYTree {
 struct TCacheKey
 {
     TYPath Path;
-    TString Method;
+    TProtobufString Method;
     TSharedRef RequestBody;
     TChecksum RequestBodyHash;
 
     TCacheKey(
         const TYPath& path,
-        const TString& method,
+        const TProtobufString& method,
         const TSharedRef& requestBody)
         : Path(path)
         , Method(method)
@@ -866,7 +866,7 @@ bool TCachedYPathService::DoInvoke(const IYPathServiceContextPtr& context)
 void TCachedYPathService::RebuildCache()
 {
     try {
-        auto asyncYson = AsyncYPathGet(UnderlyingService_, /* path */ TYPath(), TAttributeFilter());
+        auto asyncYson = AsyncYPathGet(UnderlyingService_, /*path*/ TYPath(), TAttributeFilter());
 
         auto yson = WaitFor(asyncYson)
             .ValueOrThrow();
@@ -928,7 +928,7 @@ private:
     TCachingPermissionValidator PermissionValidator_;
 
     void ValidatePermission(
-        EPermissionCheckScope /* scope */,
+        EPermissionCheckScope /*scope*/,
         EPermission permission,
         const TString& user) override
     {

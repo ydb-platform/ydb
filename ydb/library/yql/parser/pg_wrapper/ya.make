@@ -38,6 +38,7 @@ SRCS(
     cost_mocks.cpp
     syscache.cpp
     pg_utils_wrappers.cpp
+    utils.cpp
 )
 
 IF (ARCH_X86_64)
@@ -62,6 +63,10 @@ ELSE()
 CFLAGS(-DUSE_SLOW_PG_KERNELS)
 ENDIF()
 
+IF (BUILD_TYPE == "DEBUG")
+CFLAGS(-DDISABLE_COMPLEX_MACRO)
+ENDIF()
+
 PEERDIR(
     library/cpp/resource
     library/cpp/yson
@@ -74,6 +79,10 @@ PEERDIR(
     ydb/library/yql/public/issue
     ydb/library/yql/public/udf
     ydb/library/yql/utils
+    ydb/library/yql/public/decimal
+    ydb/library/binary_json
+    ydb/library/dynumber
+    ydb/library/uuid
 
     contrib/libs/icu
     contrib/libs/libc_compat

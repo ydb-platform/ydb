@@ -9,6 +9,7 @@ When adding, updating, or deleting a table row, CDC generates a change record by
 * Change records are sharded across topic partitions by primary key.
 * Each change is only delivered once (exactly-once delivery).
 * Changes by the same primary key are delivered to the same topic partition in the order they took place in the table.
+* Change record is delivered to the topic partition only after the corresponding transaction in the table has been committed.
 
 ## Limitations {#restrictions}
 
@@ -242,4 +243,4 @@ You can add a changefeed to an existing table or erase it using the [ADD CHANGEF
 
 ## CDC purpose and use {#best_practices}
 
-For information about using CDC when developing apps, see [best practices](../best_practices/cdc.md).
+For information about using CDC when developing apps, see [best practices](../dba/cdc.md).

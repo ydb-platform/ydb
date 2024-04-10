@@ -834,7 +834,7 @@ bool TWinRank::DoInit(TContext& ctx, ISource* src) {
 
     if (Args.empty()) {
         for (const auto& spec: orderSpec) {
-            Args.push_back(spec->OrderExpr->Clone());
+            Args.push_back(spec->OrderExpr);
         }
 
         if (Args.size() != 1) {

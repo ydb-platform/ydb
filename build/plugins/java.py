@@ -143,9 +143,9 @@ def onjava_module(unit, *args):
         '15',
         '17',
         '18',
-        '19',
         '20',
         '21',
+        '22',
     ):
         data['ENABLE_PREVIEW'] = extract_macro_calls(unit, 'ENABLE_PREVIEW_VALUE', args_delim)
 
@@ -416,9 +416,9 @@ def on_jdk_version_macro_check(unit, *args):
         '15',
         '17',
         '18',
-        '19',
         '20',
         '21',
+        '22',
     )
     if jdk_version not in available_versions:
         ymake.report_configure_error(

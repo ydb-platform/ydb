@@ -75,7 +75,7 @@ namespace NFwd {
         const TSharedData* Touch(TPageId pageId, TStat &stat) noexcept
         {
             if (PageId != pageId || (!Data && Fetch == EFetch::Done)) {
-                Y_ABORT("Touching page thatd doesn't fits to this action");
+                Y_ABORT("Touching page that doesn't fit to this action");
             } else {
                 auto to = Fetch == EFetch::None ? EUsage::Seen : EUsage::Keep;
 

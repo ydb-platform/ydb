@@ -71,14 +71,16 @@ struct TEvYdbCompute {
 
     // Events
     struct TEvExecuteScriptRequest : public NActors::TEventLocal<TEvExecuteScriptRequest, EvExecuteScriptRequest> {
-        TEvExecuteScriptRequest(TString sql, TString idempotencyKey, const TDuration& resultTtl, const TDuration& operationTimeout, Ydb::Query::Syntax syntax, Ydb::Query::ExecMode execMode, const TString& traceId)
+        TEvExecuteScriptRequest(TString sql, TString idempotencyKey, const TDuration& resultTtl, const TDuration& operationTimeout, Ydb::Query::Syntax syntax, Ydb::Query::ExecMode execMode, Ydb::Query::StatsMode statsMode, const TString& traceId, const std::map<TString, Ydb::TypedValue>& queryParameters)
             : Sql(std::move(sql))
             , IdempotencyKey(std::move(idempotencyKey))
             , ResultTtl(resultTtl)
             , OperationTimeout(operationTimeout)
             , Syntax(syntax)
             , ExecMode(execMode)
+            , StatsMode(statsMode)
             , TraceId(traceId)
+            , QueryParameters(queryParameters)
         {}
 
         TString Sql;
@@ -87,7 +89,9 @@ struct TEvYdbCompute {
         TDuration OperationTimeout;
         Ydb::Query::Syntax Syntax = Ydb::Query::SYNTAX_YQL_V1;
         Ydb::Query::ExecMode ExecMode = Ydb::Query::EXEC_MODE_EXECUTE;
+        Ydb::Query::StatsMode StatsMode = Ydb::Query::StatsMode::STATS_MODE_FULL;
         TString TraceId;
+        std::map<TString, Ydb::TypedValue> QueryParameters;
     };
 
     struct TEvExecuteScriptResponse : public NActors::TEventLocal<TEvExecuteScriptResponse, EvExecuteScriptResponse> {
@@ -117,18 +121,20 @@ struct TEvYdbCompute {
     };
 
     struct TEvGetOperationResponse : public NActors::TEventLocal<TEvGetOperationResponse, EvGetOperationResponse> {
-        TEvGetOperationResponse(NYql::TIssues issues, NYdb::EStatus status)
+        TEvGetOperationResponse(NYql::TIssues issues, NYdb::EStatus status, bool ready)
             : Issues(std::move(issues))
             , Status(status)
+            , Ready(ready)
         {}
 
-        TEvGetOperationResponse(NYdb::NQuery::EExecStatus execStatus, Ydb::StatusIds::StatusCode statusCode, const TVector<Ydb::Query::ResultSetMeta>& resultSetsMeta, const Ydb::TableStats::QueryStats& queryStats, NYql::TIssues issues)
+        TEvGetOperationResponse(NYdb::NQuery::EExecStatus execStatus, Ydb::StatusIds::StatusCode statusCode, const TVector<Ydb::Query::ResultSetMeta>& resultSetsMeta, const Ydb::TableStats::QueryStats& queryStats, NYql::TIssues issues, bool ready = true)
             : ExecStatus(execStatus)
             , StatusCode(statusCode)
             , ResultSetsMeta(resultSetsMeta)
             , QueryStats(queryStats)
             , Issues(std::move(issues))
             , Status(NYdb::EStatus::SUCCESS)
+            , Ready(ready)
         {}
 
         NYdb::NQuery::EExecStatus ExecStatus = NYdb::NQuery::EExecStatus::Unspecified;
@@ -137,6 +143,7 @@ struct TEvYdbCompute {
         Ydb::TableStats::QueryStats QueryStats;
         NYql::TIssues Issues;
         NYdb::EStatus Status;
+        bool Ready;
     };
 
     struct TEvFetchScriptResultRequest : public NActors::TEventLocal<TEvFetchScriptResultRequest, EvFetchScriptResultRequest> {
@@ -454,16 +461,17 @@ struct TEvYdbCompute {
     };
 
     struct TEvCpuLoadResponse : public NActors::TEventLocal<TEvCpuLoadResponse, EvCpuLoadResponse> {
-        TEvCpuLoadResponse(double instantLoad = 0.0, double averageLoad = 0.0)
-            : InstantLoad(instantLoad), AverageLoad(averageLoad)
+        TEvCpuLoadResponse(double instantLoad = 0.0, double averageLoad = 0.0, ui32 cpuNumber = 0)
+            : InstantLoad(instantLoad), AverageLoad(averageLoad), CpuNumber(cpuNumber)
         {}
 
         TEvCpuLoadResponse(NYql::TIssues issues)
-            : InstantLoad(0.0), AverageLoad(0.0), Issues(std::move(issues))
+            : InstantLoad(0.0), AverageLoad(0.0), CpuNumber(0), Issues(std::move(issues))
         {}
 
         double InstantLoad;
         double AverageLoad;
+        ui32 CpuNumber;
         NYql::TIssues Issues;
     };
 

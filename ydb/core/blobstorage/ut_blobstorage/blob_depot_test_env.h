@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/logoblob.h>
+#include <ydb/core/protos/blob_depot_config.pb.h>
 
 #include <util/random/entropy.h>
 #include <util/random/mersenne.h>
@@ -222,7 +223,7 @@ struct TBlobDepotTestEnvironment {
         {
             auto *cmd = request.AddCommand()->MutableAllocateVirtualGroup();
             cmd->SetName("vg");
-            cmd->SetHiveId(envPtr->Runtime->GetDomainsInfo()->HivesByHiveUid.begin()->second);
+            cmd->SetHiveId(envPtr->Runtime->GetDomainsInfo()->GetHive());
             cmd->SetStoragePoolName(virtualPool);
             auto *prof = cmd->AddChannelProfiles();
             prof->SetStoragePoolName(envPtr->StoragePoolName);

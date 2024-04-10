@@ -12,16 +12,14 @@
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-namespace NFq {
-namespace NPrivate {
+namespace NFq::NPrivate {
 
 template<class TRequestProto, class TRequest, class TResponse, class TRequestProxy, class TResponseProxy>
 class TRequestActor :
-    public NActors::TActorBootstrapped<
+    public TActorBootstrapped<
         TRequestActor<TRequestProto, TRequest, TResponse, TRequestProxy, TResponseProxy>> {
 protected:
-    using TBase = NActors::TActorBootstrapped<
-        TRequestActor<TRequestProto, TRequest, TResponse, TRequestProxy, TResponseProxy>>;
+    using TBase = TActorBootstrapped<TRequestActor>;
     using TBase::SelfId;
     using TBase::Send;
     using TBase::PassAway;
@@ -29,7 +27,7 @@ protected:
     using TBase::Schedule;
 
     typename TRequestProxy::TPtr RequestProxy;
-    ::NFq::TControlPlaneProxyConfig Config;
+    TControlPlaneProxyConfig Config;
     TActorId ServiceId;
     TRequestCounters Counters;
     TInstant StartTime;
@@ -42,7 +40,7 @@ public:
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_REQUEST_ACTOR";
 
     explicit TRequestActor(typename TRequestProxy::TPtr requestProxy,
-                           const ::NFq::TControlPlaneProxyConfig& config,
+                           const TControlPlaneProxyConfig& config,
                            const TActorId& serviceId,
                            const TRequestCounters& counters,
                            const std::function<void(const TDuration&, bool, bool)>& probe,
@@ -255,5 +253,4 @@ public:
     }
 };
 
-}
-}
+} // namespace NFq::NPrivate

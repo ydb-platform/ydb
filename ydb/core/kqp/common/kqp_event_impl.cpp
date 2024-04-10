@@ -18,10 +18,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     const ::Ydb::Table::QueryStatsCollection::Mode collectStats,
     const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
     const ::Ydb::Operations::OperationParams* operationParams,
-    bool keepSession,
-    bool useCancelAfter,
-    const ::Ydb::Query::Syntax syntax,
-    bool supportsStreamTrailingResult)
+    const TQueryRequestSettings& querySettings)
     : RequestCtx(ctx)
     , RequestActorId(requestActorId)
     , Database(CanonizePath(ctx->GetDatabaseName().GetOrElse("")))
@@ -35,13 +32,11 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     , CollectStats(collectStats)
     , QueryCachePolicy(queryCachePolicy)
     , HasOperationParams(operationParams)
-    , KeepSession(keepSession)
-    , Syntax(syntax)
-    , SupportsStreamTrailingResult(supportsStreamTrailingResult)
+    , QuerySettings(querySettings)
 {
     if (HasOperationParams) {
         OperationTimeout = GetDuration(operationParams->operation_timeout());
-        if (useCancelAfter) {
+        if (QuerySettings.UseCancelAfter) {
             CancelAfter = GetDuration(operationParams->cancel_after());
         }
     }
@@ -92,7 +87,7 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
         Record.MutableRequest()->SetSessionId(SessionId);
         Record.MutableRequest()->SetAction(QueryAction);
         Record.MutableRequest()->SetType(QueryType);
-        Record.MutableRequest()->SetSyntax(Syntax);
+        Record.MutableRequest()->SetSyntax(QuerySettings.Syntax);
         if (HasOperationParams) {
             Record.MutableRequest()->SetCancelAfterMs(CancelAfter.MilliSeconds());
             Record.MutableRequest()->SetTimeoutMs(OperationTimeout.MilliSeconds());

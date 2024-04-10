@@ -176,11 +176,10 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
     for (auto udfPtr : functions) {
         auto& udf = *udfPtr;
         try {
-            TProgramBuilder pgmBuilder(env, functionRegistry);
             TType* mkqlUserType = nullptr;
             if (udf.UserType) {
                 TStringStream err;
-                mkqlUserType = BuildType(*udf.UserType, pgmBuilder, err);
+                mkqlUserType = BuildType(*udf.UserType, {env}, err);//
                 if (!mkqlUserType) {
                     ctx.AddError(TIssue(udf.Pos, TStringBuilder() << "Invalid user type for function: "
                         << udf.Name << ", error: " << err.Str()));

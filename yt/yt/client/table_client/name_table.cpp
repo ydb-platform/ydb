@@ -26,7 +26,7 @@ TNameTablePtr TNameTable::FromSchemaStable(const TTableSchema& schema)
     auto nameTable = New<TNameTable>();
     nameTable->NameToId_.reserve(schema.Columns().size());
     for (const auto& column : schema.Columns()) {
-        nameTable->DoRegisterNameOrThrow(column.StableName().Get());
+        nameTable->DoRegisterNameOrThrow(column.StableName().Underlying());
     }
     return nameTable;
 }

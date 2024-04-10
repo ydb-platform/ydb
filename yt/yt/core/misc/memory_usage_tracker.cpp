@@ -70,6 +70,21 @@ void TMemoryUsageTrackerGuard::MoveFrom(TMemoryUsageTrackerGuard&& other)
     other.Granularity_ = 0;
 }
 
+TMemoryUsageTrackerGuard TMemoryUsageTrackerGuard::Build(
+    IMemoryUsageTrackerPtr tracker,
+    i64 granularity)
+{
+    if (!tracker) {
+        return {};
+    }
+
+    TMemoryUsageTrackerGuard guard;
+    guard.Tracker_ = tracker;
+    guard.Size_ = 0;
+    guard.Granularity_ = granularity;
+    return guard;
+}
+
 TMemoryUsageTrackerGuard TMemoryUsageTrackerGuard::Acquire(
     IMemoryUsageTrackerPtr tracker,
     i64 size,
@@ -96,8 +111,11 @@ TErrorOr<TMemoryUsageTrackerGuard> TMemoryUsageTrackerGuard::TryAcquire(
     i64 size,
     i64 granularity)
 {
+    if (!tracker) {
+        return {};
+    }
+
     YT_VERIFY(size >= 0);
-    YT_VERIFY(tracker);
 
     auto error = tracker->TryAcquire(size);
     if (!error.IsOK()) {
@@ -142,20 +160,41 @@ i64 TMemoryUsageTrackerGuard::GetSize() const
 
 void TMemoryUsageTrackerGuard::SetSize(i64 size)
 {
+    auto ignoredError = SetSizeGeneric(size, [&] (i64 delta) {
+        Tracker_->Acquire(delta);
+        return TError{};
+    });
+
+    Y_UNUSED(ignoredError);
+}
+
+TError TMemoryUsageTrackerGuard::TrySetSize(i64 size)
+{
+    return SetSizeGeneric(size, [&] (i64 delta) {
+        return Tracker_->TryAcquire(delta);
+    });
+}
+
+TError TMemoryUsageTrackerGuard::SetSizeGeneric(i64 size, auto acquirer)
+{
     if (!Tracker_) {
-        return;
+        return {};
     }
 
     YT_VERIFY(size >= 0);
     Size_ = size;
     if (std::abs(Size_ - AcquiredSize_) >= Granularity_) {
         if (Size_ > AcquiredSize_) {
-            Tracker_->Acquire(Size_ - AcquiredSize_);
+            if (auto result = acquirer(Size_ - AcquiredSize_); !result.IsOK()) {
+                return result;
+            }
         } else {
             Tracker_->Release(AcquiredSize_ - Size_);
         }
         AcquiredSize_ = Size_;
     }
+
+    return {};
 }
 
 void TMemoryUsageTrackerGuard::IncrementSize(i64 sizeDelta)
@@ -178,6 +217,105 @@ TMemoryUsageTrackerGuard TMemoryUsageTrackerGuard::TransferMemory(i64 size)
     guard.AcquiredSize_ = acquiredDelta;
     guard.Granularity_ = Granularity_;
     return std::move(guard);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TMemoryTrackedBlob::TMemoryTrackedBlob(
+    TBlob&& blob,
+    TMemoryUsageTrackerGuard&& guard)
+    : Blob_(std::move(blob))
+    , Guard_(std::move(guard))
+{ }
+
+TMemoryTrackedBlob TMemoryTrackedBlob::Build(
+    IMemoryUsageTrackerPtr tracker,
+    TRefCountedTypeCookie tagCookie)
+{
+    YT_VERIFY(tracker);
+
+    return TMemoryTrackedBlob(
+        TBlob(tagCookie),
+        TMemoryUsageTrackerGuard::Build(tracker));
+}
+
+void TMemoryTrackedBlob::Resize(
+    i64 size,
+    bool initializeStorage)
+{
+    YT_VERIFY(size >= 0);
+
+    Blob_.Resize(size, initializeStorage);
+    Guard_.SetSize(Blob_.Capacity());
+}
+
+TError TMemoryTrackedBlob::TryResize(
+    i64 size,
+    bool initializeStorage)
+{
+    YT_VERIFY(size >= 0);
+    auto result = Guard_.TrySetSize(size);
+
+    if (result.IsOK()) {
+        Blob_.Resize(size, initializeStorage);
+        return {};
+    } else {
+        return result;
+    }
+}
+
+void TMemoryTrackedBlob::Reserve(i64 size)
+{
+    YT_VERIFY(size >= 0);
+
+    Blob_.Reserve(size);
+    Guard_.SetSize(Blob_.Capacity());
+}
+
+TError TMemoryTrackedBlob::TryReserve(i64 size)
+{
+    YT_VERIFY(size >= 0);
+
+    auto result = Guard_.TrySetSize(size);
+
+    if (result.IsOK()) {
+        Blob_.Reserve(size);
+        return {};
+    } else {
+        return result;
+    }
+}
+
+char* TMemoryTrackedBlob::Begin()
+{
+    return Blob_.Begin();
+}
+
+char* TMemoryTrackedBlob::End()
+{
+    return Blob_.End();
+}
+
+size_t TMemoryTrackedBlob::Capacity() const
+{
+    return Blob_.Capacity();
+}
+
+size_t TMemoryTrackedBlob::Size() const
+{
+    return Blob_.Size();
+}
+
+void TMemoryTrackedBlob::Append(TRef ref)
+{
+    Blob_.Append(ref);
+    Guard_.SetSize(Blob_.Capacity());
+}
+
+void TMemoryTrackedBlob::Clear()
+{
+    Blob_.Clear();
+    Guard_.SetSize(Blob_.Capacity());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -63,6 +63,11 @@ namespace NActors {
     void TInterconnectProxyTCP::RequestNodeInfo(STATEFN_SIG) {
         ICPROXY_PROFILED;
 
+        if (ev->GetTypeRewrite() == TEvents::TSystem::Unsubscribe) {
+            // do not initiate new session upon receiving this event
+            return;
+        }
+
         Y_ABORT_UNLESS(!IncomingHandshakeActor && !OutgoingHandshakeActor && !PendingIncomingHandshakeEvents && !PendingSessionEvents);
         EnqueueSessionEvent(ev);
         StartConfiguring();

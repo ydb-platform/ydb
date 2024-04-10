@@ -38,23 +38,10 @@ public:
     {
         auto dinfo = AppData(ctx)->DomainsInfo;
 
-        if (Request.HasDomainName()) {
-            auto *domain = dinfo->GetDomainByName(Request.GetDomainName());
-            if (!domain) {
-                auto error = Sprintf("Unknown domain %s", Request.GetDomainName().data());
-                ReplyWithErrorAndDie(error, ctx);
-                return;
-            }
-            StateStorageGroup = dinfo->GetDefaultStateStorageGroup(domain->DomainUid);
-        } else {
-            if (dinfo->Domains.size() > 1) {
-                auto error = "Ambiguous domain (use --domain option)";
-                ReplyWithErrorAndDie(error, ctx);
-                return;
-            }
-
-            auto domain = dinfo->Domains.begin()->second;
-            StateStorageGroup = dinfo->GetDefaultStateStorageGroup(domain->DomainUid);
+        if (Request.HasDomainName() && (!dinfo->Domain || dinfo->GetDomain()->Name != Request.GetDomainName())) {
+            auto error = Sprintf("Unknown domain %s", Request.GetDomainName().data());
+            ReplyWithErrorAndDie(error, ctx);
+            return;
         }
 
         SendRequest(ctx);
@@ -65,7 +52,7 @@ public:
     {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
-        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeConsoleID(StateStorageGroup), pipeConfig);
+        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeConsoleID(), pipeConfig);
         ConsolePipe = ctx.RegisterWithSameMailbox(pipe);
 
         // Don't print security token.
@@ -351,7 +338,6 @@ public:
 private:
     NKikimrClient::TConsoleRequest Request;
     NKikimrClient::TConsoleResponse Response;
-    ui32 StateStorageGroup = 0;
     TActorId ConsolePipe;
 };
 

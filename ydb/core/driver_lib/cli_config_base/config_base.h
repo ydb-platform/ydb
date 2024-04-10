@@ -4,6 +4,14 @@
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
 #include <ydb/core/util/pb.h>
+#include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
+#include <ydb/core/protos/drivemodel.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/netclassifier.pb.h>
+#include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/protos/key.pb.h>
+#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 
 #include <google/protobuf/text_format.h>
 

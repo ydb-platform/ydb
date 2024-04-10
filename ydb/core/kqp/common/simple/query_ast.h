@@ -7,14 +7,16 @@
 namespace NKikimr::NKqp {
 
 struct TQueryAst {
-    TQueryAst(std::shared_ptr<NYql::TAstParseResult> ast, const TMaybe<ui16>& sqlVersion, const TMaybe<bool>& deprecatedSQL)
+    TQueryAst(std::shared_ptr<NYql::TAstParseResult> ast, const TMaybe<ui16>& sqlVersion, const TMaybe<bool>& deprecatedSQL, bool keepInCache)
         : Ast(std::move(ast))
         , SqlVersion(sqlVersion)
-        , DeprecatedSQL(deprecatedSQL) {}
+        , DeprecatedSQL(deprecatedSQL)
+        , KeepInCache(keepInCache) {}
 
     std::shared_ptr<NYql::TAstParseResult> Ast;
     TMaybe<ui16> SqlVersion;
     TMaybe<bool> DeprecatedSQL;
+    bool KeepInCache;
 };
 
 } // namespace NKikimr::NKqp

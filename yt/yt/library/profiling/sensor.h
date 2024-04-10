@@ -142,10 +142,10 @@ class TGaugeHistogram
 public:
     void Add(double value, int count = 1) const noexcept;
     void Remove(double value, int count = 1) const noexcept;
-    void Reset() noexcept;
+    void Reset() const noexcept;
 
     THistogramSnapshot GetSnapshot() const;
-    void LoadSnapshot(THistogramSnapshot snapshot);
+    void LoadSnapshot(THistogramSnapshot snapshot) const;
 
     explicit operator bool() const;
 
@@ -160,17 +160,13 @@ private:
 class TRateHistogram
 {
 public:
-    void Add(double value, int count = 1) noexcept;
-    void Remove(double value, int count = 1) noexcept;
-    void Reset() noexcept;
-
-    THistogramSnapshot GetSnapshot() const;
-    void LoadSnapshot(THistogramSnapshot snapshot);
+    void Add(double value, int count = 1) const noexcept;
 
     explicit operator bool() const;
 
 private:
     friend class TProfiler;
+    friend struct TTesting;
 
     IHistogramImplPtr Histogram_;
 };

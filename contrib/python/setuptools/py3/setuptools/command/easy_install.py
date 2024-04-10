@@ -25,6 +25,7 @@ from distutils.spawn import find_executable
 from distutils.command import install
 import sys
 import os
+from typing import Dict, List
 import zipimport
 import shutil
 import tempfile
@@ -42,7 +43,6 @@ import shlex
 import io
 import configparser
 import sysconfig
-
 
 from sysconfig import get_path
 
@@ -74,7 +74,7 @@ from pkg_resources import (
     DEVELOP_DIST,
 )
 import pkg_resources
-from .. import py312compat
+from ..compat import py39, py311
 from .._path import ensure_directory
 from ..extern.jaraco.text import yield_lines
 
@@ -245,31 +245,26 @@ class easy_install(Command):
 
         self.config_vars = dict(sysconfig.get_config_vars())
 
-        self.config_vars.update(
-            {
-                'dist_name': self.distribution.get_name(),
-                'dist_version': self.distribution.get_version(),
-                'dist_fullname': self.distribution.get_fullname(),
-                'py_version': py_version,
-                'py_version_short': (
-                    f'{sys.version_info.major}.{sys.version_info.minor}'
-                ),
-                'py_version_nodot': f'{sys.version_info.major}{sys.version_info.minor}',
-                'sys_prefix': self.config_vars['prefix'],
-                'sys_exec_prefix': self.config_vars['exec_prefix'],
-                # Only python 3.2+ has abiflags
-                'abiflags': getattr(sys, 'abiflags', ''),
-                'platlibdir': getattr(sys, 'platlibdir', 'lib'),
-            }
-        )
+        self.config_vars.update({
+            'dist_name': self.distribution.get_name(),
+            'dist_version': self.distribution.get_version(),
+            'dist_fullname': self.distribution.get_fullname(),
+            'py_version': py_version,
+            'py_version_short': f'{sys.version_info.major}.{sys.version_info.minor}',
+            'py_version_nodot': f'{sys.version_info.major}{sys.version_info.minor}',
+            'sys_prefix': self.config_vars['prefix'],
+            'sys_exec_prefix': self.config_vars['exec_prefix'],
+            # Only POSIX systems have abiflags
+            'abiflags': getattr(sys, 'abiflags', ''),
+            # Only python 3.9+ has platlibdir
+            'platlibdir': getattr(sys, 'platlibdir', 'lib'),
+        })
         with contextlib.suppress(AttributeError):
             # only for distutils outside stdlib
-            self.config_vars.update(
-                {
-                    'implementation_lower': install._get_implementation().lower(),
-                    'implementation': install._get_implementation(),
-                }
-            )
+            self.config_vars.update({
+                'implementation_lower': install._get_implementation().lower(),
+                'implementation': install._get_implementation(),
+            })
 
         # pypa/distutils#113 Python 3.9 compat
         self.config_vars.setdefault(
@@ -496,7 +491,7 @@ class easy_install(Command):
             try:
                 if test_exists:
                     os.unlink(testfile)
-                open(testfile, 'w').close()
+                open(testfile, 'wb').close()
                 os.unlink(testfile)
             except OSError:
                 self.cant_write_to_target()
@@ -581,7 +576,7 @@ class easy_install(Command):
             _one_liner(
                 """
             import os
-            f = open({ok_file!r}, 'w')
+            f = open({ok_file!r}, 'w', encoding="utf-8")
             f.write('OK')
             f.close()
             """
@@ -593,7 +588,8 @@ class easy_install(Command):
                 os.unlink(ok_file)
             dirname = os.path.dirname(ok_file)
             os.makedirs(dirname, exist_ok=True)
-            f = open(pth_file, 'w')
+            f = open(pth_file, 'w', encoding=py39.LOCALE_ENCODING)
+            # ^-- Requires encoding="locale" instead of "utf-8" (python/cpython#77102).
         except OSError:
             self.cant_write_to_target()
         else:
@@ -668,7 +664,7 @@ class easy_install(Command):
 
     @contextlib.contextmanager
     def _tmpdir(self):
-        tmpdir = tempfile.mkdtemp(prefix=u"easy_install-")
+        tmpdir = tempfile.mkdtemp(prefix="easy_install-")
         try:
             # cast to str as workaround for #709 and #710 and #712
             yield str(tmpdir)
@@ -746,6 +742,7 @@ class easy_install(Command):
             for dist in dists:
                 if dist in spec:
                     return dist
+        return None
 
     def select_scheme(self, name):
         try:
@@ -876,7 +873,7 @@ class easy_install(Command):
         ensure_directory(target)
         if os.path.exists(target):
             os.unlink(target)
-        with open(target, "w" + mode) as f:
+        with open(target, "w" + mode) as f:  # TODO: is it safe to use utf-8?
             f.write(contents)
         chmod(target, 0o777 - mask)
 
@@ -1020,7 +1017,7 @@ class easy_install(Command):
 
         # Write EGG-INFO/PKG-INFO
         if not os.path.exists(pkg_inf):
-            f = open(pkg_inf, 'w')
+            f = open(pkg_inf, 'w')  # TODO: probably it is safe to use utf-8
             f.write('Metadata-Version: 1.0\n')
             for k, v in cfg.items('metadata'):
                 if k != 'target_version':
@@ -1028,9 +1025,9 @@ class easy_install(Command):
             f.close()
         script_dir = os.path.join(_egg_info, 'scripts')
         # delete entry-point scripts to avoid duping
-        self.delete_blockers(
-            [os.path.join(script_dir, args[0]) for args in ScriptWriter.get_args(dist)]
-        )
+        self.delete_blockers([
+            os.path.join(script_dir, args[0]) for args in ScriptWriter.get_args(dist)
+        ])
         # Build .egg file from tmpdir
         bdist_egg.make_zipfile(
             egg_path,
@@ -1091,7 +1088,7 @@ class easy_install(Command):
             if locals()[name]:
                 txt = os.path.join(egg_tmp, 'EGG-INFO', name + '.txt')
                 if not os.path.exists(txt):
-                    f = open(txt, 'w')
+                    f = open(txt, 'w')  # TODO: probably it is safe to use utf-8
                     f.write('\n'.join(locals()[name]) + '\n')
                     f.close()
 
@@ -1281,7 +1278,9 @@ class easy_install(Command):
         filename = os.path.join(self.install_dir, 'setuptools.pth')
         if os.path.islink(filename):
             os.unlink(filename)
-        with open(filename, 'wt') as f:
+
+        with open(filename, 'wt', encoding=py39.LOCALE_ENCODING) as f:
+            # Requires encoding="locale" instead of "utf-8" (python/cpython#77102).
             f.write(self.pth_file.make_relative(dist.location) + '\n')
 
     def unpack_progress(self, src, dst):
@@ -1433,24 +1432,20 @@ def get_site_dirs():
         if sys.platform in ('os2emx', 'riscos'):
             sitedirs.append(os.path.join(prefix, "Lib", "site-packages"))
         elif os.sep == '/':
-            sitedirs.extend(
-                [
-                    os.path.join(
-                        prefix,
-                        "lib",
-                        "python{}.{}".format(*sys.version_info),
-                        "site-packages",
-                    ),
-                    os.path.join(prefix, "lib", "site-python"),
-                ]
-            )
-        else:
-            sitedirs.extend(
-                [
+            sitedirs.extend([
+                os.path.join(
                     prefix,
-                    os.path.join(prefix, "lib", "site-packages"),
-                ]
-            )
+                    "lib",
+                    "python{}.{}".format(*sys.version_info),
+                    "site-packages",
+                ),
+                os.path.join(prefix, "lib", "site-python"),
+            ])
+        else:
+            sitedirs.extend([
+                prefix,
+                os.path.join(prefix, "lib", "site-packages"),
+            ])
         if sys.platform != 'darwin':
             continue
 
@@ -1482,9 +1477,7 @@ def get_site_dirs():
     with contextlib.suppress(AttributeError):
         sitedirs.extend(site.getsitepackages())
 
-    sitedirs = list(map(normalize_path, sitedirs))
-
-    return sitedirs
+    return list(map(normalize_path, sitedirs))
 
 
 def expand_paths(inputs):  # noqa: C901  # is too complex (11)  # FIXME
@@ -1513,9 +1506,9 @@ def expand_paths(inputs):  # noqa: C901  # is too complex (11)  # FIXME
                 continue
 
             # Read the .pth file
-            f = open(os.path.join(dirname, name))
-            lines = list(yield_lines(f))
-            f.close()
+            with open(os.path.join(dirname, name), encoding=py39.LOCALE_ENCODING) as f:
+                # Requires encoding="locale" instead of "utf-8" (python/cpython#77102).
+                lines = list(yield_lines(f))
 
             # Yield existing non-dupe, non-import directory lines from it
             for line in lines:
@@ -1629,7 +1622,8 @@ class PthDistributions(Environment):
         paths = []
         dirty = saw_import = False
         seen = dict.fromkeys(self.sitedirs)
-        f = open(self.filename, 'rt')
+        f = open(self.filename, 'rt', encoding=py39.LOCALE_ENCODING)
+        # ^-- Requires encoding="locale" instead of "utf-8" (python/cpython#77102).
         for line in f:
             path = line.rstrip()
             # still keep imports and empty/commented lines for formatting
@@ -1678,9 +1672,11 @@ class PthDistributions(Environment):
                 last_paths.remove(path)
         # also, re-check that all paths are still valid before saving them
         for path in self.paths[:]:
-            if path not in last_paths and not path.startswith(
-                ('import ', 'from ', '#')
-            ):
+            if path not in last_paths and not path.startswith((
+                'import ',
+                'from ',
+                '#',
+            )):
                 absolute_path = os.path.join(self.basedir, path)
                 if not os.path.exists(absolute_path):
                     self.paths.remove(path)
@@ -1698,7 +1694,8 @@ class PthDistributions(Environment):
             data = '\n'.join(lines) + '\n'
             if os.path.islink(self.filename):
                 os.unlink(self.filename)
-            with open(self.filename, 'wt') as f:
+            with open(self.filename, 'wt', encoding=py39.LOCALE_ENCODING) as f:
+                # Requires encoding="locale" instead of "utf-8" (python/cpython#77102).
                 f.write(data)
         elif os.path.exists(self.filename):
             log.debug("Deleting empty %s", self.filename)
@@ -1751,8 +1748,7 @@ class RewritePthDistributions(PthDistributions):
     @classmethod
     def _wrap_lines(cls, lines):
         yield cls.prelude
-        for line in lines:
-            yield line
+        yield from lines
         yield cls.postlude
 
     prelude = _one_liner(
@@ -1774,7 +1770,7 @@ class RewritePthDistributions(PthDistributions):
 
 
 if os.environ.get('SETUPTOOLS_SYS_PATH_TECHNIQUE', 'raw') == 'rewrite':
-    PthDistributions = RewritePthDistributions
+    PthDistributions = RewritePthDistributions  # type: ignore[misc]  # Overwriting type
 
 
 def _first_line_re():
@@ -2024,7 +2020,7 @@ try:
     from os import chmod as _chmod
 except ImportError:
     # Jython compatibility
-    def _chmod(*args):
+    def _chmod(*args: object, **kwargs: object) -> None:  # type: ignore[misc] # Mypy re-uses the imported definition anyway
         pass
 
 
@@ -2032,7 +2028,7 @@ def chmod(path, mode):
     log.debug("changing mode of %s to %o", path, mode)
     try:
         _chmod(path, mode)
-    except os.error as e:
+    except OSError as e:
         log.debug("chmod failed: %s", e)
 
 
@@ -2042,8 +2038,8 @@ class CommandSpec(list):
     those passed to Popen.
     """
 
-    options = []
-    split_args = dict()
+    options: List[str] = []
+    split_args: Dict[str, bool] = dict()
 
     @classmethod
     def best(cls):
@@ -2188,8 +2184,7 @@ class ScriptWriter:
                 cls._ensure_safe_name(name)
                 script_text = cls.template % locals()
                 args = cls._get_script_args(type_, name, header, script_text)
-                for res in args:
-                    yield res
+                yield from args
 
     @staticmethod
     def _ensure_safe_name(name):
@@ -2339,7 +2334,7 @@ def load_launcher_manifest(name):
 
 
 def _rmtree(path, ignore_errors=False, onexc=auto_chmod):
-    return py312compat.shutil_rmtree(path, ignore_errors, onexc)
+    return py311.shutil_rmtree(path, ignore_errors, onexc)
 
 
 def current_umask():

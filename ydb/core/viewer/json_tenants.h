@@ -43,7 +43,7 @@ public:
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         State = FromStringWithDefault<bool>(params.Get("state"), true);
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+        auto *domain = domains->GetDomain();
         NKikimrViewer::TTenant& tenant = *Result.AddTenants();
         tenant.SetName("/" + domain->Name);
         if (State) {

@@ -88,7 +88,7 @@ namespace NTest {
             return cook.Add(Saved.begin(), Saved.end()).Finish();
         }
 
-        TAutoPtr<TSubset> Mixed(ui32 frozen, ui32 flatten, THash hash, float history = 0)
+        TAutoPtr<TSubset> Mixed(ui32 frozen, ui32 flatten, THash hash, float addHistory = 0, ui32 addSlices = 1)
         {
             TMersenne<ui64> rnd(0);
             TDeque<TAutoPtr<IBand>> bands;
@@ -104,12 +104,12 @@ namespace NTest {
             if (const auto slots = bands.size()) {
                 for (auto &row: Saved) {
                     auto &band = bands[hash(row) % slots];
-                    if (history) {
+                    if (addHistory) {
                         for (ui64 txId = 10; txId; txId--) {
                             band->Ver({0, txId});
                             // FIXME: change row data?
                             band->Add(row);
-                            if (rnd.GenRandReal4() > history) {
+                            if (rnd.GenRandReal4() > addHistory) {
                                 // each row will have from 1 to 10 versions
                                 break;
                             }
@@ -121,6 +121,7 @@ namespace NTest {
             }
 
             TAutoPtr<TSubset> subset = new TSubset(TEpoch::FromIndex(bands.size()), Scheme);
+            rnd = {0};
 
             for (auto &one: bands) {
                 if (auto *mem = dynamic_cast<TMem*>(one.Get())) {
@@ -131,13 +132,27 @@ namespace NTest {
                     subset->Frozen.emplace_back(std::move(table), table->Immediate());
                 } else if (auto *part_ = dynamic_cast<TPart*>(one.Get())) {
                     auto eggs = part_->Cook.Finish();
-
-                    if (eggs.Parts.size() != 1) {
-                        Y_Fail("Unexpected " << eggs.Parts.size() << " parts");
+                    auto part = eggs.Lone();
+                    TVector<TSlice> slices = *part->Slices;
+                    if (addSlices > 1) {
+                        slices.clear();
+                        auto pages = IndexTools::CountMainPages(*part);
+                        TSet<TRowId> points;
+                        while (points.size() < addSlices * 2) {
+                            points.insert(rnd.GenRand() % pages);
+                        }
+                        for (auto it = points.begin(); it != points.end(); std::advance(it, 2)) {
+                            slices.push_back(IndexTools::MakeSlice(*part, *it, *next(it) + 1));
+                        }
                     }
-
-                    subset->Flatten.push_back(
-                                { eggs.At(0), nullptr, eggs.At(0)->Slices });
+                    auto slices_ = MakeIntrusive<TSlices>(slices);
+                    TPartView partView {
+                        .Part = part,
+                        .Screen = slices_->ToScreen(),
+                        .Slices =  slices_
+                    };
+                    TOverlay{partView.Screen, partView.Slices}.Validate();
+                    subset->Flatten.push_back(partView);
                 } else {
                     Y_ABORT("Unknown IBand writer type, internal error");
                 }

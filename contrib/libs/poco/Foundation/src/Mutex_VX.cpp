@@ -13,7 +13,7 @@
 
 
 #include "Poco/Mutex_VX.h"
-#include <sysLib.h>
+#error #include <sysLib.h>
 
 
 namespace Poco {

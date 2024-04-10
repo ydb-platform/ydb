@@ -6,14 +6,16 @@
 
 #include <library/cpp/protobuf/json/json2proto.h>
 
+#include <ydb/core/protos/netclassifier.pb.h>
+
 namespace NKikimr::NYamlConfig {
 
 NKikimrConfig::TAppConfig YamlToProto(
     const NFyaml::TNodeRef& node,
     bool allowUnknown,
     bool preTransform,
-    TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector) {
-
+    TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector)
+{
     TStringStream sstr;
 
     sstr << NFyaml::TJsonEmitter(node);
@@ -24,37 +26,10 @@ NKikimrConfig::TAppConfig YamlToProto(
 
     NJson::ReadJsonTree(resolvedJsonConfig, &json);
 
-    if (preTransform) {
-        NKikimr::NYaml::TransformConfig(json, true);
-    }
-
     NKikimrConfig::TAppConfig yamlProtoConfig;
-
-    NProtobufJson::TJson2ProtoConfig c;
-    c.SetFieldNameMode(NProtobufJson::TJson2ProtoConfig::FieldNameSnakeCaseDense);
-    c.SetEnumValueMode(NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive);
-    c.CastRobust = true;
-    c.MapAsObject = true;
-    c.AllowUnknownFields = allowUnknown;
-    c.UnknownFieldsCollector = std::move(unknownFieldsCollector);
-
-    NProtobufJson::MergeJson2Proto(json, yamlProtoConfig, c);
+    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(allowUnknown, std::move(unknownFieldsCollector)), yamlProtoConfig, preTransform, true);
 
     return yamlProtoConfig;
-}
-
-/**
- * Config used to convert protobuf from/to json
- * changes how names are translated e.g. PDiskInfo -> pdisk_info instead of p_disk_info
- */
-NProtobufJson::TJson2ProtoConfig GetJsonToProtoConfig() {
-    NProtobufJson::TJson2ProtoConfig config;
-    config.SetFieldNameMode(NProtobufJson::TJson2ProtoConfig::FieldNameSnakeCaseDense);
-    config.SetEnumValueMode(NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive);
-    config.CastRobust = true;
-    config.MapAsObject = true;
-    config.AllowUnknownFields = false;
-    return config;
 }
 
 void ResolveAndParseYamlConfig(
@@ -63,8 +38,8 @@ void ResolveAndParseYamlConfig(
     const TMap<TString, TString>& labels,
     NKikimrConfig::TAppConfig& appConfig,
     TString* resolvedYamlConfig,
-    TString* resolvedJsonConfig) {
-
+    TString* resolvedJsonConfig)
+{
     auto tree = NFyaml::TDocument::Parse(yamlConfig);
 
     for (auto& [_, config] : volatileYamlConfigs) {
@@ -95,9 +70,7 @@ void ResolveAndParseYamlConfig(
     NJson::TJsonValue json;
     Y_ABORT_UNLESS(NJson::ReadJsonTree(resolvedJsonConfigStream.Str(), &json), "Got invalid config from Console");
 
-    NKikimr::NYaml::TransformConfig(json, true);
-
-    NProtobufJson::MergeJson2Proto(json, appConfig, NYamlConfig::GetJsonToProtoConfig().SetAllowUnknownFields(true));
+    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(true), appConfig, true, true);
 }
 
 void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to) {

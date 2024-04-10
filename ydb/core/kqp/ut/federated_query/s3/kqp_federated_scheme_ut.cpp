@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
 
         CreateBucketWithObject("CreateExternalDataSourceBucket", "obj", TEST_CONTENT);
 
-        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+        auto kikimr = MakeKikimrRunner(true);
 
         auto queryClient = kikimr->GetQueryClient();
 

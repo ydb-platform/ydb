@@ -70,6 +70,7 @@ SIMPLE_MODULE(TTestUdfsModule, TTestFilter, TTestFilterTerminate, TRandString);
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateJson2Module();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateRe2Module();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateStringModule();
+NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateDateTime2Module();
 
 NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
     Y_UNUSED(typeRegistry);
@@ -78,6 +79,7 @@ NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegi
     funcRegistry->AddModule("", "Json2", CreateJson2Module());
     funcRegistry->AddModule("", "Re2", CreateRe2Module());
     funcRegistry->AddModule("", "String", CreateStringModule());
+    funcRegistry->AddModule("", "DateTime", CreateDateTime2Module());
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     return funcRegistry.Release();
 }
@@ -161,6 +163,8 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         .SetDiscoveryMode(NYdb::EDiscoveryMode::Async)
         .SetAuthToken(settings.AuthToken);
     Driver.Reset(MakeHolder<NYdb::TDriver>(DriverConfig));
+
+    CountersRoot = settings.CountersRoot;
 
     Initialize(settings);
 }
@@ -1302,6 +1306,18 @@ TVector<ui64> GetTableShards(Tests::TServer* server,
     auto lsResult = DescribeTable(server, sender, path);
     for (auto &part : lsResult.GetPathDescription().GetTablePartitions())
         shards.push_back(part.GetDatashardId());
+
+    return shards;
+}
+
+TVector<ui64> GetColumnTableShards(Tests::TServer* server,
+                                   TActorId sender,
+                                   const TString &path)
+{
+    TVector<ui64> shards;
+    auto lsResult = DescribeTable(server, sender, path);
+    for (auto &part : lsResult.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards())
+        shards.push_back(part);
 
     return shards;
 }

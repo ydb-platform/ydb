@@ -95,6 +95,9 @@ namespace NProtobufJson {
         };
         EStringifyNumbersMode StringifyNumbers = StringifyLongNumbersNever;
 
+        /// Decode Any fields content
+        bool ConvertAny = false;
+
         /// Custom field names generator.
         TNameGenerator NameGenerator = {};
 
@@ -200,6 +203,11 @@ namespace NProtobufJson {
 
         TSelf& SetWriteNanAsString(bool value) {
             WriteNanAsString = value;
+            return *this;
+        }
+
+        TSelf& SetConvertAny(bool value) {
+            ConvertAny = value;
             return *this;
         }
     };

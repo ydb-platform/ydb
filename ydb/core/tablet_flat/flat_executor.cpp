@@ -486,6 +486,18 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     MakeLogSnapshot();
 
+    if (loadedState->ShouldSnapshotScheme) {
+        TTxStamp stamp = Stamp();
+        auto alter = Database->GetScheme().GetSnapshot();
+        alter->SetRewrite(true);
+        auto change = alter->SerializeAsString();
+        Database->RollUp(stamp, change, {}, {});
+        auto commit = CommitManager->Begin(true, ECommit::Misc, {});
+        LogicAlter->Clear();
+        LogicAlter->WriteLog(*commit, std::move(change));
+        CommitManager->Commit(commit);
+    }
+
     if (auto error = CheckBorrowConsistency()) {
         if (auto logl = Logger->Log(ELnLev::Crit))
             logl << NFmt::Do(*this) << " Borrow consistency failed: " << error;
@@ -4234,7 +4246,7 @@ TString TExecutor::CheckBorrowConsistency() {
 
 TTransactionWaitPad::TTransactionWaitPad(THolder<TSeat> seat)
     : Seat(std::move(seat))
-    , WaitingSpan(NWilson::TSpan(TWilsonTablet::Tablet, Seat->GetTxTraceId(), "Tablet.Transaction.Wait"))
+    , WaitingSpan(NWilson::TSpan(TWilsonTablet::TabletDetailed, Seat->GetTxTraceId(), "Tablet.Transaction.Wait"))
 {}
 
 TTransactionWaitPad::~TTransactionWaitPad()
@@ -4299,6 +4311,9 @@ const NTable::TRowVersionRanges& TExecutor::TableRemovedRowVersions(ui32 table)
 
 ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 {
+    if (auto logl = Logger->Log(ELnLev::Info))
+        logl << NFmt::Do(*this) << " starting compaction";
+
     using NTable::NPage::ECache;
 
     auto table = params->Table;
@@ -4315,6 +4330,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     comp->Epoch = snapshot->Subset->Epoch(); /* narrows requested to actual */
     comp->Layout.Final = comp->Params->IsFinal;
     comp->Layout.WriteBTreeIndex = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
+    comp->Layout.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
     comp->Writer.StickyFlatIndex = !comp->Layout.WriteBTreeIndex;
     comp->Layout.MaxRows = snapshot->Subset->MaxRows();
     comp->Layout.ByKeyFilter = tableInfo->ByKeyFilter;
@@ -4418,11 +4434,17 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     conf.Trace = true; /* Need for tracking gone blobs in GC */
     conf.Tablet = Owner->TabletID();
 
-    return Scans->StartSystem(table, scan, conf, std::move(snapshot));
+    auto result = Scans->StartSystem(table, scan, conf, std::move(snapshot));
+    if (auto logl = Logger->Log(ELnLev::Info))
+        logl << NFmt::Do(*this) << " started compaction " << result;
+    return result;
 }
 
 bool TExecutor::CancelCompaction(ui64 compactionId)
 {
+    if (auto logl = Logger->Log(ELnLev::Info))
+        logl << NFmt::Do(*this) << " cancelling compaction " << compactionId;
+
     return Scans->CancelSystem(compactionId);
 }
 

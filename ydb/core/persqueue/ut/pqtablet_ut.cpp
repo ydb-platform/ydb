@@ -46,6 +46,7 @@ struct TProposeTransactionParams {
     TVector<ui64> Receivers;
     TVector<TTxOperation> TxOps;
     TMaybe<TConfigParams> Configs;
+    TMaybe<ui64> WriteId;
 };
 
 struct TPlanStepParams {
@@ -67,6 +68,28 @@ struct TDropTabletParams {
 
 struct TCancelTransactionProposalParams {
     ui64 TxId = 0;
+};
+
+struct TGetOwnershipRequestParams {
+    TMaybe<ui32> Partition;
+    TMaybe<ui64> MsgNo;
+    TMaybe<ui64> WriteId;
+    TMaybe<TString> Owner; // o
+    TMaybe<ui64> Cookie;
+};
+
+struct TWriteRequestParams {
+    TMaybe<TString> Topic;
+    TMaybe<ui32> Partition;
+    TMaybe<TString> Owner;
+    TMaybe<ui64> MsgNo;
+    TMaybe<ui64> WriteId;
+    TMaybe<TString> SourceId; // w
+    TMaybe<ui64> SeqNo;       // w
+    TMaybe<TString> Data;     // w
+    //TMaybe<TInstant> CreateTime;
+    //TMaybe<TInstant> WriteTime;
+    TMaybe<ui64> Cookie;
 };
 
 using NKikimr::NPQ::NHelpers::CreatePQTabletMock;
@@ -131,15 +154,28 @@ protected:
         TMaybe<NKikimrPQ::ETabletState> State;
     };
 
+    struct TGetOwnershipResponseMatcher {
+        TMaybe<ui64> Cookie;
+        TMaybe<NMsgBusProxy::EResponseStatus> Status;
+        TMaybe<NPersQueue::NErrorCode::EErrorCode> ErrorCode;
+    };
+
+    struct TWriteResponseMatcher {
+        TMaybe<ui64> Cookie;
+    };
+
     using TProposeTransactionParams = NHelpers::TProposeTransactionParams;
     using TPlanStepParams = NHelpers::TPlanStepParams;
     using TReadSetParams = NHelpers::TReadSetParams;
     using TDropTabletParams = NHelpers::TDropTabletParams;
     using TCancelTransactionProposalParams = NHelpers::TCancelTransactionProposalParams;
+    using TGetOwnershipRequestParams = NHelpers::TGetOwnershipRequestParams;
+    using TWriteRequestParams = NHelpers::TWriteRequestParams;
 
     void SetUp(NUnitTest::TTestContext&) override;
     void TearDown(NUnitTest::TTestContext&) override;
 
+    void EnsurePipeExist();
     void SendToPipe(const TActorId& sender,
                     IEventBase* event,
                     ui32 node = 0, ui64 cookie = 0);
@@ -178,6 +214,17 @@ protected:
     bool FoundPQWriteState = false;
     bool FoundPQWriteTxs = false;
 
+    void SendGetOwnershipRequest(const TGetOwnershipRequestParams& params);
+    void WaitGetOwnershipResponse(const TGetOwnershipResponseMatcher& matcher);
+    void SyncGetOwnership(const TGetOwnershipRequestParams& params,
+                          const TGetOwnershipResponseMatcher& matcher);
+
+    void SendWriteRequest(const TWriteRequestParams& params);
+    void WaitWriteResponse(const TWriteResponseMatcher& matcher);
+
+    std::unique_ptr<TEvPersQueue::TEvRequest> MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
+                                                                      const TActorId& pipe) const;
+
     //
     // TODO(abcdef): для тестирования повторных вызовов нужны примитивы Send+Wait
     //
@@ -208,9 +255,7 @@ void TPQTabletFixture::TearDown(NUnitTest::TTestContext&)
     }
 }
 
-void TPQTabletFixture::SendToPipe(const TActorId& sender,
-                                  IEventBase* event,
-                                  ui32 node, ui64 cookie)
+void TPQTabletFixture::EnsurePipeExist()
 {
     if (Pipe == TActorId()) {
         Pipe = Ctx->Runtime->ConnectToPipe(Ctx->TabletId,
@@ -220,6 +265,13 @@ void TPQTabletFixture::SendToPipe(const TActorId& sender,
     }
 
     Y_ABORT_UNLESS(Pipe != TActorId());
+}
+
+void TPQTabletFixture::SendToPipe(const TActorId& sender,
+                                  IEventBase* event,
+                                  ui32 node, ui64 cookie)
+{
+    EnsurePipeExist();
 
     Ctx->Runtime->SendToPipe(Pipe,
                              sender,
@@ -267,7 +319,10 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
         for (ui64 tabletId : params.Receivers) {
             body->AddReceivingShards(tabletId);
         }
-        body->SetImmediate(params.Senders.empty() && params.Receivers.empty() && (partitions.size() == 1));
+        if (params.WriteId) {
+            body->SetWriteId(*params.WriteId);
+        }
+        body->SetImmediate(params.Senders.empty() && params.Receivers.empty() && (partitions.size() == 1) && !params.WriteId.Defined());
     }
 
     SendToPipe(Ctx->Edge,
@@ -477,6 +532,138 @@ void TPQTabletFixture::WaitForCalcPredicateResult()
     };
 
     UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+}
+
+std::unique_ptr<TEvPersQueue::TEvRequest> TPQTabletFixture::MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
+                                                                                    const TActorId& pipe) const
+{
+    auto event = std::make_unique<TEvPersQueue::TEvRequest>();
+    auto* request = event->Record.MutablePartitionRequest();
+    auto* command = request->MutableCmdGetOwnership();
+
+    if (params.Partition.Defined()) {
+        request->SetPartition(*params.Partition);
+    }
+    if (params.MsgNo.Defined()) {
+        request->SetMessageNo(*params.MsgNo);
+    }
+    if (params.WriteId.Defined()) {
+        request->SetWriteId(*params.WriteId);
+    }
+    if (params.Cookie.Defined()) {
+        request->SetCookie(*params.Cookie);
+    }
+
+    ActorIdToProto(pipe, request->MutablePipeClient());
+
+    if (params.Owner.Defined()) {
+        command->SetOwner(*params.Owner);
+    }
+
+    command->SetForce(true);
+
+    return event;
+}
+
+void TPQTabletFixture::SyncGetOwnership(const TGetOwnershipRequestParams& params,
+                                        const TGetOwnershipResponseMatcher& matcher)
+{
+    TActorId pipe = Ctx->Runtime->ConnectToPipe(Ctx->TabletId,
+                                                Ctx->Edge,
+                                                0,
+                                                GetPipeConfigWithRetries());
+
+    auto request = MakeGetOwnershipRequest(params, pipe);
+    Ctx->Runtime->SendToPipe(pipe,
+                             Ctx->Edge,
+                             request.release(),
+                             0, 0);
+    WaitGetOwnershipResponse(matcher);
+
+    Ctx->Runtime->ClosePipe(pipe, Ctx->Edge, 0);
+}
+
+void TPQTabletFixture::SendGetOwnershipRequest(const TGetOwnershipRequestParams& params)
+{
+    EnsurePipeExist();
+
+    auto request = MakeGetOwnershipRequest(params, Pipe);
+
+    SendToPipe(Ctx->Edge,
+               request.release());
+}
+
+void TPQTabletFixture::WaitGetOwnershipResponse(const TGetOwnershipResponseMatcher& matcher)
+{
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>();
+    UNIT_ASSERT(event != nullptr);
+
+    if (matcher.Cookie.Defined()) {
+        UNIT_ASSERT(event->Record.GetPartitionResponse().HasCookie());
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.Cookie, event->Record.GetPartitionResponse().GetCookie());
+    }
+    if (matcher.Status.Defined()) {
+        UNIT_ASSERT(event->Record.HasStatus());
+        UNIT_ASSERT_VALUES_EQUAL((int)*matcher.Status, (int)event->Record.GetStatus());
+    }
+    if (matcher.ErrorCode.Defined()) {
+        UNIT_ASSERT(event->Record.HasErrorCode());
+        UNIT_ASSERT_VALUES_EQUAL((int)*matcher.ErrorCode, (int)event->Record.GetErrorCode());
+    }
+}
+
+void TPQTabletFixture::SendWriteRequest(const TWriteRequestParams& params)
+{
+    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* request = event->Record.MutablePartitionRequest();
+
+    if (params.Topic.Defined()) {
+        request->SetTopic(*params.Topic);
+    }
+    if (params.Partition.Defined()) {
+        request->SetPartition(*params.Partition);
+    }
+    if (params.Owner.Defined()) {
+        request->SetOwnerCookie(*params.Owner);
+    }
+    if (params.MsgNo.Defined()) {
+        request->SetMessageNo(*params.MsgNo);
+    }
+    if (params.WriteId.Defined()) {
+        request->SetWriteId(*params.WriteId);
+    }
+    if (params.Cookie.Defined()) {
+        request->SetCookie(*params.Cookie);
+    }
+
+    EnsurePipeExist();
+    ActorIdToProto(Pipe, request->MutablePipeClient());
+
+    auto* command = request->AddCmdWrite();
+
+    if (params.SourceId.Defined()) {
+        command->SetSourceId(*params.SourceId);
+    }
+    if (params.SeqNo.Defined()) {
+        command->SetSeqNo(*params.SeqNo);
+    }
+    if (params.Data.Defined()) {
+        command->SetData(*params.Data);
+    }
+
+    SendToPipe(Ctx->Edge,
+               event.Release());
+}
+
+void TPQTabletFixture::WaitWriteResponse(const TWriteResponseMatcher& matcher)
+{
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>();
+    UNIT_ASSERT(event != nullptr);
+
+    if (matcher.Cookie.Defined()) {
+        UNIT_ASSERT(event->Record.HasCookie());
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.Cookie, event->Record.GetCookie());
+    }
 }
 
 void TPQTabletFixture::StartPQWriteObserver(bool& flag, unsigned cookie)
@@ -818,16 +1005,16 @@ Y_UNIT_TEST_F(DropTablet_Before_Write, TPQTabletFixture)
                                   }});
 
     //
-    // транзакция пришла после того как состояние было записано на диск. не будет обработана
-    //
-    WaitProposeTransactionResponse({.TxId=txId_3,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
-
-    //
     // транзакция пришла до того как состояние было записано на диск. будет обработана
     //
     WaitProposeTransactionResponse({.TxId=txId_2,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    //
+    // транзакция пришла после того как состояние было записано на диск. не будет обработана
+    //
+    WaitProposeTransactionResponse({.TxId=txId_3,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 }
 
 Y_UNIT_TEST_F(UpdateConfig_1, TPQTabletFixture)
@@ -1021,6 +1208,96 @@ Y_UNIT_TEST_F(Cancel_Tx, TPQTabletFixture)
     SendCancelTransactionProposal({.TxId=txId});
 
     WaitForPQWriteTxs();
+}
+
+Y_UNIT_TEST_F(ProposeTx_Missing_Operations, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 2;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  });
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+Y_UNIT_TEST_F(ProposeTx_Unknown_Partition_1, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 2;
+    const ui32 unknownPartitionId = 3;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .TxOps={{.Partition=unknownPartitionId, .Path="/topic"}}
+                                  });
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+Y_UNIT_TEST_F(ProposeTx_Unknown_WriteId, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 2;
+    const ui64 writeId = 3;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .TxOps={{.Partition=0, .Path="/topic"}},
+                                  .WriteId=writeId});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+Y_UNIT_TEST_F(ProposeTx_Unknown_Partition_2, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+
+    const ui64 txId = 2;
+    const ui64 writeId = 3;
+    const ui64 cookie = 4;
+
+    SendGetOwnershipRequest({.Partition=0,
+                            .WriteId=writeId,
+                            .Owner="-=[ 0wn3r ]=-",
+                            .Cookie=cookie});
+    WaitGetOwnershipResponse({.Cookie=cookie});
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .TxOps={{.Partition=1, .Path="/topic"}},
+                                  .WriteId=writeId});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui32 partitionId = 0;
+    const ui64 txId = 2;
+    const ui64 writeId = 3;
+
+    SyncGetOwnership({.Partition=partitionId,
+                     .WriteId=writeId,
+                     .Owner="-=[ 0wn3r ]=-",
+                     .Cookie=4},
+                     {.Cookie=4,
+                     .Status=NMsgBusProxy::MSTATUS_OK});
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .TxOps={{.Partition=partitionId, .Path="/topic"}},
+                                  .WriteId=writeId});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SyncGetOwnership({.Partition=partitionId,
+                     .WriteId=writeId,
+                     .Owner="-=[ 0wn3r ]=-",
+                     .Cookie=5},
+                     {.Cookie=5,
+                     .Status=NMsgBusProxy::MSTATUS_ERROR});
 }
 
 }

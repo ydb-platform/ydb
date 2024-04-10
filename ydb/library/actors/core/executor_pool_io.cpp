@@ -1,5 +1,6 @@
 #include "executor_pool_io.h"
 #include "actor.h"
+#include "config.h"
 #include "mailbox.h"
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/datetime.h>

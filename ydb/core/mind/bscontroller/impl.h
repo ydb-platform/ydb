@@ -56,7 +56,6 @@ public:
     class TTxUpdateDiskMetrics;
     class TTxUpdateGroupLatencies;
     class TTxGroupMetricsExchange;
-    class TTxGroupReconfigureWipe;
     class TTxNodeReport;
     class TTxUpdateSeenOperational;
     class TTxConfigCmd;
@@ -862,7 +861,8 @@ public:
     public:
         using Table = Schema::Node;
 
-        ui32 ConnectedCount = 0;
+        TActorId ConnectedServerId; // the latest ServerId who sent RegisterNode
+        TActorId InterconnectSessionId;
         Table::NextPDiskID::Type NextPDiskID;
         TInstant LastConnectTimestamp;
         TInstant LastDisconnectTimestamp;
@@ -1808,7 +1808,6 @@ private:
     void Handle(TEvBlobStorage::TEvControllerUpdateNodeDrives::TPtr &ev);
     void Handle(TEvControllerCommitGroupLatencies::TPtr &ev);
     void Handle(TEvBlobStorage::TEvRequestControllerInfo::TPtr &ev);
-    void Handle(TEvBlobStorage::TEvControllerGroupReconfigureWipe::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerNodeReport::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerProposeGroupKey::TPtr &ev);
@@ -1981,9 +1980,66 @@ public:
         }
     }
 
+    bool ValidateIncomingNodeWardenEvent(const IEventHandle& ev) {
+        auto makeError = [&](TString message) {
+            STLOG(PRI_ERROR, BS_CONTROLLER, BSC16, "ValidateIncomingNodeWardenEvent error",
+                (Sender, ev.Sender), (PipeServerId, ev.Recipient), (InterconnectSessionId, ev.InterconnectSession),
+                (Type, ev.GetTypeRewrite()), (Message, message));
+            return false;
+        };
+
+        switch (ev.GetTypeRewrite()) {
+            case TEvBlobStorage::EvControllerRegisterNode: {
+                if (const auto pipeIt = PipeServerToNode.find(ev.Recipient); pipeIt == PipeServerToNode.end()) {
+                    return makeError("incorrect pipe server");
+                } else if (pipeIt->second) {
+                    return makeError("duplicate RegisterNode event");
+                }
+                break;
+            }
+
+            case TEvBlobStorage::EvControllerGetGroup:
+                if (ev.Sender == SelfId()) {
+                    break;
+                } else if (ev.Cookie == Max<ui64>()) {
+                    break; // for testing purposes
+                }
+                [[fallthrough]];
+            case TEvBlobStorage::EvControllerUpdateDiskStatus:
+            case TEvBlobStorage::EvControllerProposeGroupKey:
+            case TEvBlobStorage::EvControllerUpdateGroupStat:
+            case TEvBlobStorage::EvControllerScrubQueryStartQuantum:
+            case TEvBlobStorage::EvControllerScrubQuantumFinished:
+            case TEvBlobStorage::EvControllerScrubReportQuantumInProgress:
+            case TEvBlobStorage::EvControllerUpdateNodeDrives:
+            case TEvBlobStorage::EvControllerNodeReport: {
+                if (const auto pipeIt = PipeServerToNode.find(ev.Recipient); pipeIt == PipeServerToNode.end()) {
+                    return makeError("incorrect pipe server");
+                } else if (const auto& nodeId = pipeIt->second; !nodeId) {
+                    return makeError("no RegisterNode event received");
+                } else if (*nodeId != ev.Sender.NodeId()) {
+                    return makeError("NodeId mismatch");
+                } else if (TNodeInfo *node = FindNode(*nodeId); !node) {
+                    return makeError("no TNodeInfo record for node");
+                } else if (node->InterconnectSessionId != ev.InterconnectSession) {
+                    return makeError("InterconnectSession mismatch");
+                } else if (node->ConnectedServerId != ev.Recipient) {
+                    return makeError("pipe server mismatch");
+                }
+                break;
+            }
+        }
+
+        return true;
+    }
+
     void ProcessControllerEvent(TAutoPtr<IEventHandle> ev) {
         const ui32 type = ev->GetTypeRewrite();
         THPTimer timer;
+
+        if (!ValidateIncomingNodeWardenEvent(*ev)) {
+            return;
+        }
 
         switch (type) {
             hFunc(TEvBlobStorage::TEvControllerRegisterNode, Handle);
@@ -1995,7 +2051,6 @@ public:
             hFunc(TEvBlobStorage::TEvControllerUpdateNodeDrives, Handle);
             hFunc(TEvControllerCommitGroupLatencies, Handle);
             hFunc(TEvBlobStorage::TEvRequestControllerInfo, Handle);
-            hFunc(TEvBlobStorage::TEvControllerGroupReconfigureWipe, Handle);
             hFunc(TEvBlobStorage::TEvControllerNodeReport, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigRequest, Handle);
             hFunc(TEvBlobStorage::TEvControllerProposeGroupKey, Handle);
@@ -2030,7 +2085,6 @@ public:
             fFunc(TEvBlobStorage::EvControllerUpdateNodeDrives, EnqueueIncomingEvent);
             fFunc(TEvControllerCommitGroupLatencies::EventType, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvRequestControllerInfo, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvControllerGroupReconfigureWipe, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerNodeReport, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerConfigRequest, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerProposeGroupKey, EnqueueIncomingEvent);
@@ -2286,10 +2340,12 @@ public:
 
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);
-    bool OnRegisterNode(const TActorId& serverId, TNodeId nodeId);
-    void OnWardenConnected(TNodeId nodeId);
-    void OnWardenDisconnected(TNodeId nodeId);
+    bool OnRegisterNode(const TActorId& serverId, TNodeId nodeId, TActorId interconnectSessionId);
+    void OnWardenConnected(TNodeId nodeId, TActorId serverId, TActorId interconnectSessionId);
+    void OnWardenDisconnected(TNodeId nodeId, TActorId serverId);
     void EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo);
+    void SendToWarden(TNodeId nodeId, std::unique_ptr<IEventBase> ev, ui64 cookie);
+    void SendInReply(const IEventHandle& query, std::unique_ptr<IEventBase> ev);
 
     using TVSlotFinder = std::function<void(TVSlotId, const std::function<void(const TVSlotInfo&)>&)>;
 

@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: httpcore
-Version: 1.0.2
+Version: 1.0.4
 Summary: A minimal low-level HTTP client.
 Project-URL: Documentation, https://www.encode.io/httpcore
 Project-URL: Homepage, https://www.encode.io/httpcore/
@@ -33,7 +33,7 @@ Requires-Dist: h2<5,>=3; extra == 'http2'
 Provides-Extra: socks
 Requires-Dist: socksio==1.*; extra == 'socks'
 Provides-Extra: trio
-Requires-Dist: trio<0.23.0,>=0.22.0; extra == 'trio'
+Requires-Dist: trio<0.25.0,>=0.22.0; extra == 'trio'
 Description-Content-Type: text/markdown
 
 # HTTP Core
@@ -153,7 +153,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## 1.0.2 (November 10th, 2023) 
+## 1.0.4 (February 21st, 2024)
+
+- Add `target` request extension. (#888)
+- Fix support for connection `Upgrade` and `CONNECT` when some data in the stream has been read. (#882)
+
+## 1.0.3 (February 13th, 2024)
+
+- Fix support for async cancellations. (#880)
+- Fix trace extension when used with socks proxy. (#849)
+- Fix SSL context for connections using the "wss" scheme (#869)
+
+## 1.0.2 (November 10th, 2023)
 
 - Fix `float("inf")` timeouts in `Event.wait` function. (#846)
 

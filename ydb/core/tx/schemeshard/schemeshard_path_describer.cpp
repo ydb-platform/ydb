@@ -4,6 +4,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/public/api/protos/annotations/sensitive.pb.h>
 
 #include <util/stream/format.h>
 
@@ -30,6 +31,14 @@ static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartiti
     stats->SetRangeReadRows(tableStats.RangeReadRows);
 
     stats->SetPartCount(tableStats.PartCount);
+
+    auto* storagePoolsStats = stats->MutableStoragePools()->MutablePoolsUsage();
+    for (const auto& [poolKind, stats] : tableStats.StoragePoolsStats) {
+        auto* storagePoolStats = storagePoolsStats->Add();
+        storagePoolStats->SetPoolKind(poolKind);
+        storagePoolStats->SetDataSize(stats.DataSize);
+        storagePoolStats->SetIndexSize(stats.IndexSize);
+    }
 }
 
 static void FillTableMetrics(NKikimrTabletBase::TMetrics* metrics, const TPartitionStats& tableStats) {
@@ -210,6 +219,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
     bool returnBackupInfo = Params.GetBackupInfo();
     bool returnBoundaries = false;
     bool returnRangeKey = true;
+    bool returnSetVal = Params.GetOptions().GetReturnSetVal();
     if (Params.HasOptions()) {
         returnConfig = Params.GetOptions().GetReturnPartitionConfig();
         returnPartitioning = Params.GetOptions().GetReturnPartitioningInfo();
@@ -360,7 +370,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
             Self->DescribeCdcStream(childPathId, childName, *entry->AddCdcStreams());
             break;
         case NKikimrSchemeOp::EPathTypeSequence:
-            Self->DescribeSequence(childPathId, childName, *entry->AddSequences());
+            Self->DescribeSequence(childPathId, childName, *entry->AddSequences(), returnSetVal);
             break;
         default:
             Y_FAIL_S("Unexpected table's child"
@@ -705,6 +715,14 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     diskSpaceUsage->MutableTopics()->SetAccountSize(subDomainInfo->GetPQAccountStorage());
     diskSpaceUsage->MutableTopics()->SetDataSize(subDomainInfo->GetDiskSpaceUsage().Topics.DataSize);
     diskSpaceUsage->MutableTopics()->SetUsedReserveSize(subDomainInfo->GetDiskSpaceUsage().Topics.UsedReserveSize);
+    auto* storagePoolsUsage = diskSpaceUsage->MutableStoragePoolsUsage();
+    for (const auto& [poolKind, usage] : subDomainInfo->GetDiskSpaceUsage().StoragePoolsUsage) {
+        auto* storagePoolUsage = storagePoolsUsage->Add();
+        storagePoolUsage->SetPoolKind(poolKind);
+        storagePoolUsage->SetDataSize(usage.DataSize);
+        storagePoolUsage->SetIndexSize(usage.IndexSize);
+        storagePoolUsage->SetTotalSize(usage.DataSize + usage.IndexSize);
+    }
 
     if (subDomainInfo->GetDeclaredSchemeQuotas()) {
         entry->MutableDeclaredSchemeQuotas()->CopyFrom(*subDomainInfo->GetDeclaredSchemeQuotas());
@@ -725,7 +743,7 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     if (const auto& serverlessComputeResourcesMode = subDomainInfo->GetServerlessComputeResourcesMode()) {
         entry->SetServerlessComputeResourcesMode(*serverlessComputeResourcesMode);
     }
-    
+
     if (TTabletId sharedHive = subDomainInfo->GetSharedHive()) {
         entry->SetSharedHive(sharedHive.GetValue());
     }
@@ -944,11 +962,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
                 pathStr = path.PathString();
             }
 
-            Result.Reset(new TEvSchemeShard::TEvDescribeSchemeResultBuilder(
-                pathStr,
-                Self->TabletID(),
-                pathId
-                ));
+            Result.Reset(new TEvSchemeShard::TEvDescribeSchemeResultBuilder(pathStr, pathId));
             Result->Record.SetStatus(checks.GetStatus());
             Result->Record.SetReason(checks.GetError());
 
@@ -963,7 +977,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         }
     }
 
-    Result = MakeHolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder>(pathStr, Self->TabletID(), pathId);
+    Result = MakeHolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder>(pathStr, pathId);
 
     auto descr = Result->Record.MutablePathDescription()->MutableSelf();
     FillPathDescr(descr, path);
@@ -1119,6 +1133,8 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
             }
         }
 
+        colDescr->SetIsBuildInProgress(cinfo.IsBuildInProgress);
+
         switch (cinfo.DefaultKind) {
             case ETableColumnDefaultKind::None:
                 break;
@@ -1242,23 +1258,27 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
 }
 
 void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name,
-        NKikimrSchemeOp::TSequenceDescription& desc)
+        NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal)
 {
     auto it = Sequences.find(pathId);
     Y_VERIFY_S(it != Sequences.end(), "Sequence not found"
         << " pathId# " << pathId
         << " name# " << name);
-    DescribeSequence(pathId, name, it->second, desc);
+    DescribeSequence(pathId, name, it->second, desc, fillSetVal);
 }
 
 void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name, TSequenceInfo::TPtr info,
-        NKikimrSchemeOp::TSequenceDescription& desc)
+        NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal)
 {
     Y_VERIFY_S(info, "Empty sequence info"
         << " pathId# " << pathId
         << " name# " << name);
 
     desc = info->Description;
+
+    if (!fillSetVal) {
+        desc.ClearSetVal();
+    }
 
     desc.SetName(name);
     PathIdFromPathId(pathId, desc.MutablePathId());
@@ -1284,6 +1304,26 @@ void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& nam
     DescribeReplication(pathId, name, it->second, desc);
 }
 
+static void ClearSensitiveFields(google::protobuf::Message* message) {
+    const auto* desc = message->GetDescriptor();
+    const auto* self = message->GetReflection();
+
+    for (int i = 0; i < desc->field_count(); ++i) {
+        const auto* field = desc->field(i);
+        if (field->options().GetExtension(Ydb::sensitive)) {
+            self->ClearField(message, field);
+        } else if (field->message_type()) {
+            if (!field->is_repeated() && self->HasField(*message, field)) {
+                ClearSensitiveFields(self->MutableMessage(message, field));
+            } else if (field->is_repeated()) {
+                for (int j = 0, size = self->FieldSize(*message, field); j < size; ++j) {
+                    ClearSensitiveFields(self->MutableRepeatedMessage(message, field, j));
+                }
+            }
+        }
+    }
+}
+
 void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& name, TReplicationInfo::TPtr info,
         NKikimrSchemeOp::TReplicationDescription& desc)
 {
@@ -1292,6 +1332,7 @@ void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& nam
         << " name# " << name);
 
     desc = info->Description;
+    ClearSensitiveFields(&desc);
 
     desc.SetName(name);
     PathIdFromPathId(pathId, desc.MutablePathId());

@@ -1,4 +1,5 @@
 #include "vdisk_config.h"
+#include "vdisk_performance_params.h"
 #include <ydb/core/base/interconnect_channels.h>
 #include <google/protobuf/text_format.h>
 
@@ -44,6 +45,7 @@ namespace NKikimr {
         HullCompMaxInFlightReads = 20;
         HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data
         AnubisOsirisMaxInFly = 1000;
+        AddHeader = true;
 
         RecoveryLogCutterFirstDuration = TDuration::Seconds(10);
         RecoveryLogCutterRegularDuration = TDuration::Seconds(30);
@@ -78,7 +80,8 @@ namespace NKikimr {
         HandoffMaxInFlightByteSize = 16u << 20u;
         HandoffTimeout = TDuration::Seconds(10);
         RunRepl = !baseInfo.ReadOnly;
-        RunHandoff = false;
+
+        ReplMaxTimeToMakeProgress = VDiskPerformance.at(baseInfo.DeviceType).ReplMaxTimeToMakeProgress;
 
         SkeletonFrontGets_MaxInFlightCount = 24;
         SkeletonFrontGets_MaxInFlightCost = 200000000;              // 200ms
@@ -119,6 +122,9 @@ namespace NKikimr {
 #else
         BarrierValidation = true; // switch by default on debug builds
 #endif
+
+        BurstThresholdNs = NPDisk::DevicePerformance.at(baseInfo.DeviceType).BurstThresholdNs;
+        DiskTimeAvailableScale = 1;
     }
 
     void TVDiskConfig::SetupHugeBytes() {
@@ -160,6 +166,7 @@ namespace NKikimr {
         UPDATE_MACRO(ReplInterconnectChannel);
 
         UPDATE_MACRO(BarrierValidation);
+
 #undef UPDATE_MACRO
     }
 
@@ -177,6 +184,15 @@ namespace NKikimr {
         bool result = google::protobuf::TextFormat::ParseFromString(prototext, &AllKindsConfig);
         Y_ABORT_UNLESS(result, "Failed to parse AllVDiskKinds config "
                 "(error in protobuf format):\n%s\n", prototext.data());
+        ParseConfig();
+    }
+
+    TAllVDiskKinds::TAllVDiskKinds(const NKikimrBlobStorage::TAllVDiskKinds &proto)
+        : AllKindsConfig()
+        , VDiskMegaBaseConfig(TVDiskConfig::TBaseInfo())
+        , KindsMap()
+    {
+        AllKindsConfig.CopyFrom(proto);
         ParseConfig();
     }
 

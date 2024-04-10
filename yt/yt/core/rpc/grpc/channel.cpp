@@ -168,7 +168,7 @@ public:
         if (!TerminationError_.IsOK()) {
             auto error = TerminationError_;
             guard.Release();
-            responseHandler->HandleError(error);
+            responseHandler->HandleError(std::move(error));
             return nullptr;
         }
         return New<TCallHandler>(
@@ -337,6 +337,13 @@ private:
                 responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "Request serialization failed")
                     << ex);
                 return;
+            }
+
+            if (Request_->Header().has_request_codec()) {
+                InitialMetadataBuilder_.Add(RequestCodecKey, ToString(Request_->Header().request_codec()));
+            }
+            if (Request_->Header().has_response_codec()) {
+                InitialMetadataBuilder_.Add(ResponseCodecKey, ToString(Request_->Header().response_codec()));
             }
 
             YT_VERIFY(RequestBody_.Size() >= 2);
@@ -609,19 +616,23 @@ private:
                 }
             }
 
+            NRpc::NProto::TResponseHeader responseHeader;
+            ToProto(responseHeader.mutable_request_id(), Request_->GetRequestId());
+            if (Request_->Header().has_response_codec()) {
+                responseHeader.set_codec(Request_->Header().response_codec());
+            }
+
             TMessageWithAttachments messageWithAttachments;
             try {
                 messageWithAttachments = ByteBufferToMessageWithAttachments(
                     ResponseBodyBuffer_.Unwrap(),
-                    messageBodySize);
+                    messageBodySize,
+                    !responseHeader.has_codec());
             } catch (const std::exception& ex) {
                 auto error = TError(NRpc::EErrorCode::TransportError, "Failed to receive request body") << ex;
                 NotifyError(TStringBuf("Failed to receive request body"), error);
                 return;
             }
-
-            NRpc::NProto::TResponseHeader responseHeader;
-            ToProto(responseHeader.mutable_request_id(), Request_->GetRequestId());
 
             auto responseMessage = CreateResponseMessage(
                 responseHeader,
@@ -675,7 +686,7 @@ private:
                 reason,
                 Request_->GetRequestId());
 
-            responseHandler->HandleError(detailedError);
+            responseHandler->HandleError(std::move(detailedError));
         }
 
         void NotifyResponse(TSharedRefArray message)

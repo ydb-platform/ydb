@@ -203,6 +203,7 @@ private:
     TDelayedExecutorCookie RediscoveryCookie_;
     TError TerminationError_;
     TError PeerDiscoveryError_;
+    TError LastGlobalDiscoveryError_;
 
     THashSet<TString> ActiveAddresses_;
     THashSet<TString> BannedAddresses_;
@@ -262,7 +263,7 @@ private:
         THashSet<TString> RequestingAddresses_;
 
         constexpr static int MaxDiscoveryErrorsToKeep = 100;
-        std::deque<TError> DiscoveryErrors_;
+        std::deque<TError> PeerDiscoveryErrors_;
 
         void DoRun()
         {
@@ -357,6 +358,10 @@ private:
                     BanPeer(address, error, owner->Config_->SoftBackoffTime);
                     InvalidatePeer(address);
                 }
+            } else if (rspOrError.GetCode() == NRpc::EErrorCode::GlobalDiscoveryError) {
+                YT_LOG_DEBUG(rspOrError, "Peer discovery session failed (Address: %v)",
+                    address);
+                OnFinished(rspOrError);
             } else {
                 YT_LOG_DEBUG(rspOrError, "Peer discovery request failed (Address: %v)",
                     address);
@@ -403,19 +408,19 @@ private:
                 auto guard = Guard(SpinLock_);
                 YT_VERIFY(RequestedAddresses_.erase(address) == 1);
 
-                DiscoveryErrors_.push_back(error);
-                while (std::ssize(DiscoveryErrors_) > MaxDiscoveryErrorsToKeep) {
-                    DiscoveryErrors_.pop_front();
+                PeerDiscoveryErrors_.push_back(error);
+                while (std::ssize(PeerDiscoveryErrors_) > MaxDiscoveryErrorsToKeep) {
+                    PeerDiscoveryErrors_.pop_front();
                 }
             }
 
             owner->BanPeer(address, backoffTime);
         }
 
-        std::vector<TError> GetDiscoveryErrors()
+        std::vector<TError> GetPeerDiscoveryErrors()
         {
             auto guard = Guard(SpinLock_);
-            return {DiscoveryErrors_.begin(), DiscoveryErrors_.end()};
+            return {PeerDiscoveryErrors_.begin(), PeerDiscoveryErrors_.end()};
         }
 
         void AddViablePeer(const TString& address)
@@ -438,7 +443,7 @@ private:
             owner->InvalidatePeer(address);
         }
 
-        void OnFinished()
+        void OnFinished(const TError& globalDiscoveryError = {})
         {
             auto owner = Owner_.Lock();
             if (!owner) {
@@ -453,7 +458,10 @@ private:
                 FinishedPromise_.Set();
             } else {
                 auto error = owner->MakeNoAlivePeersError()
-                    << GetDiscoveryErrors();
+                    << GetPeerDiscoveryErrors();
+                if (!globalDiscoveryError.IsOK()) {
+                    error <<= globalDiscoveryError;
+                }
                 YT_LOG_DEBUG(error, "Error performing peer discovery");
                 owner->ViablePeerRegistry_->SetError(error);
                 FinishedPromise_.Set(error);
@@ -567,6 +575,9 @@ private:
                             YT_LOG_DEBUG("Peer is down");
                         }
                     } else {
+                        if (rspOrError.GetCode() == NRpc::EErrorCode::GlobalDiscoveryError) {
+                            owner->SetLastGlobalDiscoveryError(rspOrError);
+                        }
                         YT_LOG_DEBUG(rspOrError, "Failed to poll peer");
                     }
 
@@ -618,6 +629,12 @@ private:
         return session;
     }
 
+    void SetLastGlobalDiscoveryError(const TError& error)
+    {
+        auto guard = WriterGuard(SpinLock_);
+        LastGlobalDiscoveryError_ = error;
+    }
+
     TError MakeNoAlivePeersError()
     {
         auto guard = ReaderGuard(SpinLock_);
@@ -657,10 +674,12 @@ private:
         session->Run();
     }
 
-    void OnDiscoverySessionFinished(const TError& /*error*/)
+    void OnDiscoverySessionFinished(const TError& globalDiscoveryError)
     {
         NTracing::TNullTraceContextGuard nullTraceContext;
         auto guard = WriterGuard(SpinLock_);
+
+        LastGlobalDiscoveryError_ = globalDiscoveryError;
 
         YT_VERIFY(CurrentDiscoverySession_);
         CurrentDiscoverySession_.Reset();
@@ -829,6 +848,17 @@ private:
         ViablePeerRegistry_->UnregisterPeer(address);
     }
 
+    TError MaybeTransformChannelError(TError error)
+    {
+        auto guard = ReaderGuard(SpinLock_);
+
+        if (!LastGlobalDiscoveryError_.IsOK()) {
+            return LastGlobalDiscoveryError_
+                << std::move(error);
+        }
+        return error;
+    }
+
     void OnChannelFailed(
         const TString& address,
         const IChannelPtr& channel,
@@ -854,7 +884,15 @@ private:
         return CreateFailureDetectingChannel(
             ChannelFactory_->CreateChannel(address),
             Config_->AcknowledgementTimeout,
-            BIND(&TImpl::OnChannelFailed, MakeWeak(this), address));
+            BIND(&TImpl::OnChannelFailed, MakeWeak(this), address),
+            BIND(&IsChannelFailureError),
+            BIND([this_ = MakeWeak(this)] (TError error) {
+                if (auto strongThis = this_.Lock()) {
+                    return strongThis->MaybeTransformChannelError(std::move(error));
+                } else {
+                    return error;
+                }
+            }));
     }
 };
 

@@ -1033,6 +1033,8 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         Y_ABORT("TODO: implement");
     case TTxState::ETxType::TxDropSequence:
         return CreateDropSequence(NextPartId(), txState);
+    case TTxState::ETxType::TxCopySequence:
+        return CreateCopySequence(NextPartId(), txState);
 
     case TTxState::ETxType::TxFillIndex:
         Y_ABORT("deprecated");

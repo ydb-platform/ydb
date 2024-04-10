@@ -511,31 +511,15 @@ SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 80) as expected
     AND t1.result != round(t2.expected, 80);
 INSERT INTO num_result SELECT id, 0, SQRT(ABS(val))
     FROM num_data;
-SELECT t1.id1, t1.result, t2.expected
-    FROM num_result t1, num_exp_sqrt t2
-    WHERE t1.id1 = t2.id
-    AND t1.result != t2.expected;
 INSERT INTO num_result SELECT id, 0, LN(ABS(val))
     FROM num_data
     WHERE val != '0.0';
-SELECT t1.id1, t1.result, t2.expected
-    FROM num_result t1, num_exp_ln t2
-    WHERE t1.id1 = t2.id
-    AND t1.result != t2.expected;
 INSERT INTO num_result SELECT id, 0, LOG(numeric '10', ABS(val))
     FROM num_data
     WHERE val != '0.0';
-SELECT t1.id1, t1.result, t2.expected
-    FROM num_result t1, num_exp_log10 t2
-    WHERE t1.id1 = t2.id
-    AND t1.result != t2.expected;
 INSERT INTO num_result SELECT id, 0, POWER(numeric '10', LN(ABS(round(val,200))))
     FROM num_data
     WHERE val != '0.0';
-SELECT t1.id1, t1.result, t2.expected
-    FROM num_result t1, num_exp_power_10_ln t2
-    WHERE t1.id1 = t2.id
-    AND t1.result != t2.expected;
 SELECT 'inf'::numeric / '0';
 SELECT '-inf'::numeric / '0';
 SELECT 'nan'::numeric / '0';
@@ -580,6 +564,11 @@ SELECT power('-inf'::numeric, '3');
 SELECT power('-inf'::numeric, '4.5');
 SELECT power('-inf'::numeric, '0');
 SELECT power('-inf'::numeric, 'inf');
+-- ******************************
+-- * miscellaneous checks for things that have been broken in the past...
+-- ******************************
+-- numeric AVG used to fail on some platforms
+SELECT AVG(val) FROM num_data;
 -- Check for appropriate rounding and overflow
 CREATE TABLE fract_only (id int, val numeric(4,4));
 INSERT INTO fract_only VALUES (1, '0.0');
@@ -636,15 +625,6 @@ INSERT INTO ceil_floor_round VALUES ('0.0');
 INSERT INTO ceil_floor_round VALUES ('0.0000001');
 INSERT INTO ceil_floor_round VALUES ('-0.000001');
 DROP TABLE ceil_floor_round;
--- Check rounding, it should round ties away from zero.
-SELECT i as pow,
-	round((-2.5 * 10 ^ i)::numeric, -i),
-	round((-1.5 * 10 ^ i)::numeric, -i),
-	round((-0.5 * 10 ^ i)::numeric, -i),
-	round((0.5 * 10 ^ i)::numeric, -i),
-	round((1.5 * 10 ^ i)::numeric, -i),
-	round((2.5 * 10 ^ i)::numeric, -i)
-FROM generate_series(-5,5) AS t(i);
 -- Testing for width_bucket(). For convenience, we test both the
 -- numeric and float8 versions of the function in this file.
 -- errors
@@ -664,12 +644,8 @@ CREATE TABLE width_bucket_test (operand_num numeric, operand_f8 float8);
 -- finite bucket bounds, but allow an infinite operand
 SELECT width_bucket(0.0::numeric, 'Infinity'::numeric, 5, 10); -- error
 SELECT width_bucket(0.0::numeric, 5, '-Infinity'::numeric, 20); -- error
-SELECT width_bucket('Infinity'::numeric, 1, 10, 10),
-       width_bucket('-Infinity'::numeric, 1, 10, 10);
 SELECT width_bucket(0.0::float8, 'Infinity'::float8, 5, 10); -- error
 SELECT width_bucket(0.0::float8, 5, '-Infinity'::float8, 20); -- error
-SELECT width_bucket('Infinity'::float8, 1, 10, 10),
-       width_bucket('-Infinity'::float8, 1, 10, 10);
 DROP TABLE width_bucket_test;
 -- Simple test for roundoff error when results should be exact
 SELECT x, width_bucket(x::float8, 10, 100, 9) as flt,
@@ -678,6 +654,36 @@ FROM generate_series(0, 110, 10) x;
 SELECT x, width_bucket(x::float8, 100, 10, 9) as flt,
        width_bucket(x::numeric, 100, 10, 9) as num
 FROM generate_series(0, 110, 10) x;
+--
+-- TO_CHAR()
+--
+SELECT to_char(val, '9G999G999G999G999G999')
+	FROM num_data;
+SELECT to_char(val, '9G999G999G999G999G999D999G999G999G999G999')
+	FROM num_data;
+SELECT to_char(val, '9999999999999999.999999999999999PR')
+	FROM num_data;
+SELECT to_char(val, '9999999999999999.999999999999999S')
+	FROM num_data;
+SELECT to_char(val, 'MI9999999999999999.999999999999999')     FROM num_data;
+SELECT to_char(val, 'FMS9999999999999999.999999999999999')    FROM num_data;
+SELECT to_char(val, 'FM9999999999999999.999999999999999THPR') FROM num_data;
+SELECT to_char(val, 'SG9999999999999999.999999999999999th')   FROM num_data;
+SELECT to_char(val, '0999999999999999.999999999999999')       FROM num_data;
+SELECT to_char(val, 'S0999999999999999.999999999999999')      FROM num_data;
+SELECT to_char(val, 'FM0999999999999999.999999999999999')     FROM num_data;
+SELECT to_char(val, 'FM9999999999999999.099999999999999') 	FROM num_data;
+SELECT to_char(val, 'FM9999999999990999.990999999999999') 	FROM num_data;
+SELECT to_char(val, 'FM0999999999999999.999909999999999') 	FROM num_data;
+SELECT to_char(val, 'FM9999999990999999.099999999999999') 	FROM num_data;
+SELECT to_char(val, 'L9999999999999999.099999999999999')	FROM num_data;
+SELECT to_char(val, 'FM9999999999999999.99999999999999')	FROM num_data;
+SELECT to_char(val, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
+SELECT to_char(val, 'FMS 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
+SELECT to_char(val, E'99999 "text" 9999 "9999" 999 "\\"text between quote marks\\"" 9999') FROM num_data;
+SELECT to_char(val, '999999SG9999999999')			FROM num_data;
+SELECT to_char(val, 'FM9999999999999999.999999999999999')	FROM num_data;
+SELECT to_char(val, '9.999EEEE')				FROM num_data;
 SELECT to_char('100'::numeric, 'FM999.9');
 SELECT to_char('100'::numeric, 'FM999.');
 SELECT to_char('100'::numeric, 'FM999');
@@ -827,6 +833,8 @@ select exp(32.999);
 select exp(-32.999);
 select exp(123.456);
 select exp(-123.456);
+-- big test
+select exp(1234.5678);
 --
 -- Tests for generate_series
 --
@@ -920,6 +928,7 @@ select trim_scale(1.1234500);
 select trim_scale(110123.12475871856128000);
 select trim_scale(-1123.124718561280000000);
 select trim_scale(-13.00000000000000000000);
+select trim_scale(1e100);
 --
 -- Tests for SUM()
 --

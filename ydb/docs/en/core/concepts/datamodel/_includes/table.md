@@ -28,7 +28,7 @@ Searching using an index allows you to swiftly locate the required rows without 
 
 You can create a row-oriented table through the YDB web interface, CLI, or SDK. Regardless of the method you choose to interact with YDB, it's important to keep in mind the following rule: the table must have at least one primary key column, and it's permissible to create a table consisting solely of primary key columns.
 
-By default, when creating a row-oriented table, all columns are optional and can have `NULL` values. This behavior can be modified by setting the `NOT NULL` conditions for key columns that are part of the primary key. Primary keys are unique, and row-oriented tables are always sorted by this key. This means that point reads by the key, as well as range queries by key or key prefix, are efficiently executed (essentially using an index). It's permissible to create a table consisting solely of key columns. When choosing a key, it's crucial to be careful, so we recommend reviewing the article: ["Choosing a Primary Key for Maximum Performance"](../../../best_practices/pk_scalability.md).
+By default, when creating a row-oriented table, all columns are optional and can have `NULL` values. This behavior can be modified by setting the `NOT NULL` conditions for key columns that are part of the primary key. Primary keys are unique, and row-oriented tables are always sorted by this key. This means that point reads by the key, as well as range queries by key or key prefix, are efficiently executed (essentially using an index). It's permissible to create a table consisting solely of key columns. When choosing a key, it's crucial to be careful, so we recommend reviewing the article: ["Choosing a Primary Key for Maximum Performance"](../../../dba/primary-key/row-oriented.md).
 
 ### Partitioning row-oriented tables {#partitioning}
 
@@ -167,9 +167,9 @@ Column-oriented {{ ydb-short-name }} tables are in the Preview mode.
 
 {% endnote %}
 
-YDB's column-oriented tables stores data of each column separately (independently) from each other. This data storage principle is optimized for handling Online Analytical Processing (OLAP) workloads, as only the columns directly involved in the query are read during its execution. One of the key advantages of this approach is the high data compression ratios since columns often contain repetitive or similar data. A downside, however, is that operations on whole rows become more resource-intensive.
+YDB's column-oriented tables store data of each column separately (independently) from each other. This data storage principle is optimized for handling Online Analytical Processing (OLAP) workloads, as only the columns directly involved in the query are read during its execution. One of the key advantages of this approach is the high data compression ratios since columns often contain repetitive or similar data. A downside, however, is that operations on whole rows become more resource-intensive.
 
-At the moment, the main use case for YDB column-oriented tables is writing data with an increasing primary key (for example, event time), analyzing this data, and deleting outdated data based on TTL. The optimal way to add data to YDB column-oriented tables is [batch upload](../../../best_practices/batch_upload.md), performed in MB-sized blocks. Data packet insertion is atomic: data will be written either to all partitions or none.
+At the moment, the main use case for YDB column-oriented tables is writing data with an increasing primary key (for example, event time), analyzing this data, and deleting outdated data based on TTL. The optimal way to add data to YDB column-oriented tables is [batch upload](../../../dev/batch-upload.md), performed in MB-sized blocks. Data packet insertion is atomic: data will be written either to all partitions or none.
 
 In most cases, working with YDB column-oriented tables is similar to working with row tables, but there are differences:
 * Only `NOT NULL` columns can be used as the primary key.
@@ -221,7 +221,7 @@ WITH (STORE = COLUMN);
 Unlike data partitioning in row-oriented {{ ydb-short-name }} tables, key values are not used to partition data in column-oriented tables. This way, you can uniformly distribute data across all your existing partitions. This kind of partitioning enables you to avoid hotspots at data inserta and speeding up analytical queries that process (that is, read) large amounts of data.
 
 
-How you select partitioning keys substantially affects the performance of queries to your column-oriented tables. Learn more in [{#T}](../../../best_practices/pk-olap-scalability.md).
+How you select partitioning keys substantially affects the performance of queries to your column-oriented tables. Learn more in [{#T}](../../../dba/primary-key/column-oriented.md).
 
 To manage data partitioning, use the `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` additional parameter. The system ignores other partitioning parameters for column-oriented tables.
 

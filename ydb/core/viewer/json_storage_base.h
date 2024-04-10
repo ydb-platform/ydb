@@ -62,6 +62,7 @@ protected:
 
     struct TStoragePoolInfo {
         TString Kind;
+        TString MediaType;
         TSet<TString> Groups;
         NKikimrViewer::EFlag Overall = NKikimrViewer::EFlag::Grey;
     };
@@ -98,6 +99,7 @@ protected:
         TString PoolName;
         TString GroupId;
         TString Kind;
+        TString MediaType;
         TString Erasure;
         ui32 Degraded;
         float Usage;
@@ -172,7 +174,7 @@ public:
             return;
         }
 
-        RequestBSControllerConfig();
+        RequestBSControllerConfigWithStoragePools();
 
         TBase::Become(&TThis::StateWork);
         Schedule(TDuration::MilliSeconds(Timeout / 100 * 70), new TEvents::TEvWakeup(TimeoutBSC)); // 70% timeout (for bsc)
@@ -205,10 +207,21 @@ public:
         RequestDone();
     }
 
+    TString GetMediaType(const NKikimrBlobStorage::TDefineStoragePool& pool) const {
+        for (const NKikimrBlobStorage::TPDiskFilter& filter : pool.GetPDiskFilter()) {
+            for (const NKikimrBlobStorage::TPDiskFilter::TRequiredProperty& property : filter.GetProperty()) {
+                if (property.HasType()) {
+                    return ToString(property.GetType());
+                }
+            }
+        }
+        return TString();
+    }
+
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
         const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(ev->Get()->Record);
 
-        if (pbRecord.HasResponse() && pbRecord.GetResponse().StatusSize() > 0) {
+        if (pbRecord.HasResponse() && pbRecord.GetResponse().StatusSize() > 1) {
             const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
             if (pbStatus.HasBaseConfig()) {
                 BaseConfig = ev->Release();
@@ -231,6 +244,10 @@ public:
                         SendNodeRequests(nodeId);
                     }
                 }
+            }
+            const NKikimrBlobStorage::TConfigResponse::TStatus& spStatus(pbRecord.GetResponse().GetStatus(1));
+            for (const NKikimrBlobStorage::TDefineStoragePool& pool : spStatus.GetStoragePool()) {
+                StoragePoolInfo[pool.GetName()].MediaType = GetMediaType(pool);
             }
         }
         RequestDone();

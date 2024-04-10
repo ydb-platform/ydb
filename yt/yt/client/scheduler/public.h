@@ -133,6 +133,7 @@ DEFINE_ENUM(EAbortReason,
     ((NonexistentPoolTree)             ( 51))
     ((WrongSchedulingSegmentModule)    ( 52))
     ((UnresolvedNodeId)                ( 53))
+    ((RootVolumePreparationFailed)     ( 54))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))

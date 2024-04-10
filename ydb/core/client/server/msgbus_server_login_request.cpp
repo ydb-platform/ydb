@@ -17,12 +17,6 @@ class TMessageBusLoginRequest : public TActorBootstrapped<TMessageBusLoginReques
     TActorId PipeClient;
     NMsgBusProxy::EResponseStatus Status;
 public:
-    static ui64 GetHiveTabletId(const TActorContext& ctx) {
-        TDomainsInfo* domainsInfo = AppData(ctx)->DomainsInfo.Get();
-        auto hiveTabletId = domainsInfo->GetHive(domainsInfo->GetDefaultHiveUid(domainsInfo->Domains.begin()->first));
-        return hiveTabletId;
-    }
-
     TMessageBusLoginRequest(TBusMessageContext& msg)
         : TMessageBusSessionIdentHolder(msg)
         , Request(static_cast<TBusLoginRequest*>(msg.ReleaseMessage()))
@@ -36,7 +30,7 @@ public:
     }
 
     void Bootstrap() {
-        TString domainName = "/" + AppData()->DomainsInfo->Domains.begin()->second->Name;
+        TString domainName = "/" + AppData()->DomainsInfo->GetDomain()->Name;
         TString path = AppData()->AuthConfig.GetDomainLoginOnly() ? domainName : TString();//Request.Get()->GetRecord()->GetDatabaseName();
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = path;

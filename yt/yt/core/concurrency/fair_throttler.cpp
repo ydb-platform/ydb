@@ -621,7 +621,7 @@ TFairThrottler::TFairThrottler(
 
         SharedBucket_->Limit.Value = std::shared_ptr<std::atomic<i64>>(
             &IPC_->State()->Value,
-            [ipc=IPC_] (auto /* ptr */) { }
+            [ipc=IPC_] (auto /*ptr*/) { }
         );
 
         Profiler_.AddFuncGauge("/leader", MakeStrong(this), [this] {

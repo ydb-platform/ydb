@@ -383,10 +383,6 @@ public:
     const TUserInfo* GetIfExists(const TString& user) const;
     TUserInfo* GetIfExists(const TString& user);
 
-    void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) {
-        Config = config;
-    }
-
     THashMap<TString, TUserInfo>& GetAll();
 
     TUserInfoBase CreateUserInfo(const TString& user,
@@ -422,7 +418,7 @@ private:
 
     TMaybe<TActorId> TabletActor;
     TMaybe<TActorId> PartitionActor;
-    NKikimrPQ::TPQTabletConfig Config;
+    const NKikimrPQ::TPQTabletConfig& Config;
 
     TString CloudId;
     TString DbId;

@@ -2,6 +2,8 @@
 
 #include "kqp_tasks_graph.h"
 #include <util/generic/vector.h>
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+#include <ydb/core/protos/query_stats.pb.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -161,6 +163,7 @@ public:
         NKikimrQueryStats::TTxStats&& txStats,
         TDuration collectLongTaskStatsTimeout = TDuration::Max()
     );
+    void AddDatashardStats(NKikimrQueryStats::TTxStats&& txStats);
 
     void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats);
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats);
@@ -191,6 +194,7 @@ struct TTableStat {
 struct TProgressStatEntry {
     TDuration ComputeTime;
     TTableStat ReadIOStat;
+    bool Defined = false;
 
     TProgressStatEntry& operator+=(const TProgressStatEntry& rhs);
 

@@ -45,8 +45,7 @@
     - complex.h:     contrib/libs/libm/include/complex.h
     - math.h:        contrib/libs/libm/include/math.h
 
-# Some more sysincl/addincl clashes.
-- source_filter: "^contrib/tools/bison/(bison|gnulib|m4)/src"
+- source_filter: "^contrib/tools/bison/"
   includes:
     - error.h:       contrib/tools/bison/gnulib/src/error.h
     - fcntl.h:       contrib/tools/bison/gnulib/platform/posix/fcntl.h
@@ -55,6 +54,13 @@
     - regex.h:       contrib/tools/bison/gnulib/src/regex.h
     - system.h
     - unlocked-io.h: contrib/tools/bison/gnulib/src/unlocked-io.h
+    # ucrt headers are included by bison/gnulib in a very specific way
+    - ../ucrt/fcntl.h
+    - ../ucrt/locale.h
+    - ../ucrt/math.h
+    - ../ucrt/signal.h
+    - ../ucrt/sys/stat.h
+
 - source_filter: "^contrib/tools/make"
   includes:
     - fnmatch.h:     contrib/tools/make/glob/fnmatch.h
@@ -384,6 +390,16 @@
     - lwip/stats.h
     - lwip/sys.h
     - lwip/tcpip.h
+    # contrib/libs/connectedhomeip/src/crypto uses boringssl on OS_DARWIN
+    - openssl/aead.h:
+      - contrib/libs/connectedhomeip/third_party/boringssl/repo/src/include/openssl/aead.h
+    - openssl/base.h:
+      - contrib/libs/connectedhomeip/third_party/boringssl/repo/src/include/openssl/base.h
+    - openssl/is_boringssl.h:
+      - contrib/libs/connectedhomeip/third_party/boringssl/repo/src/include/openssl/is_boringssl.h
+    # contrib/libs/connectedhomeip: src/lib/support, src/inet, src/system on OS_DARWIN
+    - nlfaultinjection.hpp:
+      - contrib/libs/connectedhomeip/third_party/nlfaultinjection/include/nlfaultinjection.hpp
 
 - source_filter: "^contrib/libs/glibcasm"
   includes:
@@ -499,6 +515,17 @@
   includes:
     - position.hh
 
-- source_filter: "^contrib/libs/fp16/include/fp16/psimd.h"
+- source_filter: "^vendor/github.com/NVIDIA"
   includes:
-    - psimd.h
+    - nvml.h:
+      - vendor/github.com/NVIDIA/go-dcgm/pkg/dcgm/nvml.h
+      - vendor/github.com/NVIDIA/go-nvml/gen/nvml/nvml.h
+      - vendor/github.com/NVIDIA/go-nvml/pkg/nvml/nvml.h
+
+- source_filter: "^smart_devices/third_party/beken_freertos_sdk"
+  includes:
+    - error.h: smart_devices/third_party/beken_freertos_sdk/beken378/common/error.h
+    - errno.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/lwip_intf/lwip-2.1.2/src/include/lwip/errno.h
+    - netdb.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/lwip_intf/lwip-2.1.2/src/include/lwip/netdb.h
+    - signal.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/wpa_supplicant_2_9/bk_patch/signal.h
+    - check_config.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/mbedtls/mbedtls-2.27.0/include/mbedtls/check_config.h

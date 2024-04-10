@@ -3,6 +3,7 @@
 
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <ydb/core/protos/sqs.pb.h>
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>

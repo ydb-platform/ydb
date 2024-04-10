@@ -199,11 +199,9 @@ namespace NDiscoveryPrivate {
 
         struct TEvRequest: public TEventLocal<TEvRequest, EvRequest> {
             const TString Database;
-            const ui32 StateStorageId;
 
-            TEvRequest(const TString& db, ui32 stateStorageId)
+            TEvRequest(const TString& db)
                 : Database(db)
-                , StateStorageId(stateStorageId)
             {
             }
         };
@@ -223,7 +221,7 @@ namespace NDiscoveryPrivate {
         THashMap<TString, TVector<TWaiter>> Requested;
         bool Scheduled = false;
 
-        auto Request(const TString& database, ui32 groupId) {
+        auto Request(const TString& database) {
             auto result = Requested.emplace(database, TVector<TWaiter>());
             if (result.second) {
                 auto mode = EBoardLookupMode::Second;
@@ -232,14 +230,14 @@ namespace NDiscoveryPrivate {
                 }
                 CLOG_D("Lookup"
                     << ": path# " << database);
-                Register(CreateBoardLookupActor(database, SelfId(), groupId, mode));
+                Register(CreateBoardLookupActor(database, SelfId(), mode));
             }
 
             return result.first;
         }
 
-        void Request(const TString& database, ui32 groupId, const TWaiter& waiter) {
-            auto it = Request(database, groupId);
+        void Request(const TString& database, const TWaiter& waiter) {
+            auto it = Request(database);
             it->second.push_back(waiter);
         }
 
@@ -342,16 +340,16 @@ namespace NDiscoveryPrivate {
                 if (enableSubscriptions) {
                     cachedData = CachedNotAvailable.FindPtr(msg->Database);
                     if (cachedData == nullptr) {
-                        Request(msg->Database, msg->StateStorageId, {ev->Sender, ev->Cookie});
+                        Request(msg->Database, {ev->Sender, ev->Cookie});
                         return;
                     }
                 } else {
                     cachedData = OldCachedMessages.FindPtr(msg->Database);
                     if (cachedData == nullptr) {
-                        Request(msg->Database, msg->StateStorageId, {ev->Sender, ev->Cookie});
+                        Request(msg->Database, {ev->Sender, ev->Cookie});
                         return;
                     }
-                    Request(msg->Database, msg->StateStorageId);
+                    Request(msg->Database);
                 }
             }
 
@@ -567,10 +565,9 @@ public:
             database.append("/").append(token);
         }
 
-        const auto stateStorageGroupId = domainInfo->DefaultStateStorageGroup;
         const auto reqPath = MakeLookupPath(database);
 
-        Send(CacheId, new NDiscoveryPrivate::TEvPrivate::TEvRequest(reqPath, stateStorageGroupId), 0, ++LookupCookie);
+        Send(CacheId, new NDiscoveryPrivate::TEvPrivate::TEvRequest(reqPath), 0, ++LookupCookie);
         LookupResponse.Reset();
     }
 

@@ -317,6 +317,7 @@ struct TJob
     NJobTrackerClient::TJobId JobCompetitionId;
     NJobTrackerClient::TJobId ProbingJobCompetitionId;
     NYson::TYsonString Error;
+    NYson::TYsonString InterruptionInfo;
     NYson::TYsonString BriefStatistics;
     NYson::TYsonString Statistics;
     NYson::TYsonString InputPaths;

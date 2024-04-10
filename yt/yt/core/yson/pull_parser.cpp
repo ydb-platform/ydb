@@ -148,19 +148,19 @@ public:
     void OnEndList()
     { }
 
-    void OnString(TStringBuf /* value */)
+    void OnString(TStringBuf /*value*/)
     { }
 
-    void OnInt64(i64 /* value */)
+    void OnInt64(i64 /*value*/)
     { }
 
-    void OnUint64(ui64 /* value */)
+    void OnUint64(ui64 /*value*/)
     { }
 
-    void OnDouble(double /* value */)
+    void OnDouble(double /*value*/)
     { }
 
-    void OnBoolean(bool /* value */)
+    void OnBoolean(bool /*value*/)
     { }
 
     void OnEntity()
@@ -465,19 +465,19 @@ EYsonType TYsonPullParser::GetYsonType() const
 void TYsonPullParser::SkipComplexValue()
 {
     auto visitor = NDetail::TNullVisitor();
-    TraverseComplexValueOrAttributes(&visitor, /* stopAfterAttributes */ false);
+    TraverseComplexValueOrAttributes(&visitor, /*stopAfterAttributes*/ false);
 }
 
 void TYsonPullParser::TransferComplexValue(TCheckedInDebugYsonTokenWriter* writer)
 {
     auto visitor = NDetail::TYsonTokenWritingVisitor(writer);
-    TraverseComplexValueOrAttributes(&visitor, /* stopAfterAttributes */ false);
+    TraverseComplexValueOrAttributes(&visitor, /*stopAfterAttributes*/ false);
 }
 
 void TYsonPullParser::SkipComplexValue(const TYsonItem& previousItem)
 {
     auto visitor = NDetail::TNullVisitor();
-    TraverseComplexValueOrAttributes(&visitor, previousItem, /* stopAfterAttributes */ false);
+    TraverseComplexValueOrAttributes(&visitor, previousItem, /*stopAfterAttributes*/ false);
 }
 
 void TYsonPullParser::TransferComplexValue(TCheckedInDebugYsonTokenWriter* writer, const TYsonItem& previousItem)
@@ -486,7 +486,7 @@ void TYsonPullParser::TransferComplexValue(TCheckedInDebugYsonTokenWriter* write
     TraverseComplexValueOrAttributes(
         &visitor,
         previousItem,
-        /* stopAfterAttributes */ false);
+        /*stopAfterAttributes*/ false);
 }
 
 void TYsonPullParser::TransferComplexValue(IYsonConsumer* consumer, const TYsonItem& previousItem)
@@ -495,7 +495,7 @@ void TYsonPullParser::TransferComplexValue(IYsonConsumer* consumer, const TYsonI
     TraverseComplexValueOrAttributes(
         &visitor,
         previousItem,
-        /* stopAfterAttributes */ false);
+        /*stopAfterAttributes*/ false);
 }
 
 
@@ -503,13 +503,13 @@ void TYsonPullParser::SkipAttributes(const TYsonItem& previousItem)
 {
     EnsureYsonToken("attributes", *this, previousItem, EYsonItemType::BeginAttributes);
     auto visitor = NDetail::TNullVisitor();
-    TraverseComplexValueOrAttributes(&visitor, previousItem, /* stopAfterAttributes */ true);
+    TraverseComplexValueOrAttributes(&visitor, previousItem, /*stopAfterAttributes*/ true);
 }
 
 void TYsonPullParser::SkipComplexValueOrAttributes(const TYsonItem& previousItem)
 {
     auto visitor = NDetail::TNullVisitor();
-    TraverseComplexValueOrAttributes(&visitor, previousItem, /* stopAfterAttributes */ true);
+    TraverseComplexValueOrAttributes(&visitor, previousItem, /*stopAfterAttributes*/ true);
 }
 
 void TYsonPullParser::TransferAttributes(TCheckedInDebugYsonTokenWriter* writer, const TYsonItem& previousItem)
@@ -519,7 +519,7 @@ void TYsonPullParser::TransferAttributes(TCheckedInDebugYsonTokenWriter* writer,
     TraverseComplexValueOrAttributes(
         &visitor,
         previousItem,
-        /* stopAfterAttributes */ true);
+        /*stopAfterAttributes*/ true);
 }
 
 void TYsonPullParser::TransferAttributes(IYsonConsumer* consumer, const TYsonItem& previousItem)
@@ -529,7 +529,7 @@ void TYsonPullParser::TransferAttributes(IYsonConsumer* consumer, const TYsonIte
     TraverseComplexValueOrAttributes(
         &visitor,
         previousItem,
-        /* stopAfterAttributes */ true);
+        /*stopAfterAttributes*/ true);
 }
 
 std::vector<TErrorAttribute> TYsonPullParser::GetErrorAttributes() const

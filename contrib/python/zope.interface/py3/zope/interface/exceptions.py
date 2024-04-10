@@ -191,7 +191,7 @@ class BrokenMethodImplementation(_TargetInvalid):
     def __implementation_str(impl):
         # It could be a callable or some arbitrary object, we don't
         # know yet.
-        import inspect # Inspect is a heavy-weight dependency, lots of imports
+        import inspect  # Inspect is a heavy-weight dependency, lots of imports
         try:
             sig = inspect.signature
             formatsig = str

@@ -248,32 +248,5 @@ IActor* CreateGraphService(const TString& database) {
     return new TGraphService(database);
 }
 
-double GetTimingForPercentile(double percentile, const TVector<ui64>& values, const TVector<ui64>& /*upper*/bounds, ui64 total) {
-    ui64 ppMark = total * percentile / 100;
-    ui64 accm = 0;
-    ui32 n = 0;
-    while (n < bounds.size() && accm < ppMark) {
-        if (accm + values[n] >= ppMark) {
-            ui64 lowerBound = 0;
-            if (n > 0) {
-                lowerBound = bounds[n - 1];
-            }
-            ui64 upperBound = bounds[n];
-            if (upperBound == std::numeric_limits<ui64>::max()) {
-                return lowerBound; // workaround for INF bucket
-            }
-            ui64 currentValue = values[n];
-            ui64 ppValue = ppMark - accm;
-            if (currentValue == 0) {
-                return NAN;
-            }
-            return (static_cast<double>(ppValue) / currentValue) * (upperBound - lowerBound) + lowerBound;
-        }
-        accm += values[n];
-        n++;
-    }
-    return NAN;
-}
-
 } // NGraph
 } // NKikimr

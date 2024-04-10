@@ -112,7 +112,7 @@ LDAP_END_DECL
  ********************************************/
 
 #include <thread.h>
-#include <synch.h>
+#error #include <synch.h>
 
 LDAP_BEGIN_DECL
 

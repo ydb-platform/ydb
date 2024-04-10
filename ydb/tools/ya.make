@@ -1,6 +1,8 @@
 RECURSE(
     blobsan
     cfg
+    query_replay
+    simple_queue
     ydbd_slice
     tsserver
     tstool

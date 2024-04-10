@@ -1,9 +1,9 @@
 {% include 'header.sql.jinja' %}
 
-select avg(ss_quantity)
-       ,avg(ss_ext_sales_price)
-       ,avg(ss_ext_wholesale_cost)
-       ,sum(ss_ext_wholesale_cost)
+select avg(ss_quantity) avg_ss_q
+       ,avg(ss_ext_sales_price) avg_ss_s
+       ,avg(ss_ext_wholesale_cost) avg_ss_w
+       ,sum(ss_ext_wholesale_cost) sum_ss_w
  from {{store_sales}}
      ,{{store}}
      ,{{customer_demographics}}

@@ -28,6 +28,10 @@ struct TBuildMasterSnapshotsOptions
     bool Retry = true;
 };
 
+struct TGetMasterConsistentStateOptions
+    : public TTimeoutOptions
+{ };
+
 struct TExitReadOnlyOptions
     : public TTimeoutOptions
 { };
@@ -155,6 +159,7 @@ struct TResurrectChunkLocationsResult
 };
 
 using TCellIdToSnapshotIdMap = THashMap<NHydra::TCellId, int>;
+using TCellIdToSequenceNumberMap = THashMap<NHydra::TCellId, i64>;
 
 struct TAddMaintenanceOptions
     : public TTimeoutOptions
@@ -199,6 +204,9 @@ struct IAdminClient
 
     virtual TFuture<TCellIdToSnapshotIdMap> BuildMasterSnapshots(
         const TBuildMasterSnapshotsOptions& options = {}) = 0;
+
+    virtual TFuture<TCellIdToSequenceNumberMap> GetMasterConsistentState(
+        const TGetMasterConsistentStateOptions& options = {}) = 0;
 
     virtual TFuture<void> ExitReadOnly(
         NHydra::TCellId cellId,
@@ -271,14 +279,14 @@ struct IAdminClient
         const std::vector<NObjectClient::TCellId>& cellIds,
         const TResumeTabletCellsOptions& options = {}) = 0;
 
-    virtual TFuture<TMaintenanceId> AddMaintenance(
+    virtual TFuture<TMaintenanceIdPerTarget> AddMaintenance(
         EMaintenanceComponent component,
         const TString& address,
         EMaintenanceType type,
         const TString& comment,
         const TAddMaintenanceOptions& options = {}) = 0;
 
-    virtual TFuture<TMaintenanceCounts> RemoveMaintenance(
+    virtual TFuture<TMaintenanceCountsPerTarget> RemoveMaintenance(
         EMaintenanceComponent component,
         const TString& address,
         const TMaintenanceFilter& filter,

@@ -3,6 +3,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/memobserver.h>
+#include <ydb/core/protos/shared_cache.pb.h>
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <library/cpp/testing/unittest/tests_data.h>

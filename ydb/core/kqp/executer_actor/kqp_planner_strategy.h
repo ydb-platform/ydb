@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
+#include <ydb/core/protos/kqp.pb.h>
 
 #include <ydb/library/actors/core/actorid.h>
 

@@ -449,8 +449,7 @@ bool ValidateNonKeyColumnsAgainstLock(
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
     const TNameTablePtr& nameTable,
-    const std::vector<int>& columnIndexToLockIndex,
-    bool allowSharedWriteLocks);
+    const std::vector<int>& columnIndexToLockIndex);
 
 //! Checks that #key is a valid client-side key. Throws on failure.
 /*! The components must pass #ValidateKeyValue check. */
@@ -772,10 +771,15 @@ public:
 
     size_t GetSpaceUsed() const
     {
-        return StringData_.GetHolder()->GetTotalByteSize().value_or(StringData_.Size()) +
-            RowData_.GetHolder()->GetTotalByteSize().value_or(RowData_.Size());
+        size_t size = 0;
+        if (StringData_) {
+            size += StringData_.GetHolder()->GetTotalByteSize().value_or(StringData_.Size());
+        }
+        if (RowData_) {
+            size += RowData_.GetHolder()->GetTotalByteSize().value_or(RowData_.Size());
+        }
+        return size;
     }
-
 
     friend void swap(TUnversionedOwningRow& lhs, TUnversionedOwningRow& rhs)
     {
@@ -901,7 +905,10 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSharedRange<TRowRange> MakeSingletonRowRange(TLegacyKey lowerBound, TLegacyKey upperBound);
+TSharedRange<TRowRange> MakeSingletonRowRange(
+    TLegacyKey lowerBound,
+    TLegacyKey upperBound,
+    TRowBufferPtr rowBuffer = nullptr);
 
 TKeyRef ToKeyRef(TUnversionedRow row);
 TKeyRef ToKeyRef(TUnversionedRow row, int prefixLength);

@@ -98,6 +98,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
             col->SetType(NScheme::TypeName(typeInfo, typeMod));
             col->SetName(colInfo.ColumnName);
             col->MutableDefaultFromLiteral()->CopyFrom(colInfo.DefaultFromLiteral);
+            col->SetIsBuildInProgress(true);
 
             if (!colInfo.FamilyName.empty()) {
                 col->SetFamilyName(colInfo.FamilyName);
@@ -1057,7 +1058,7 @@ public:
             }
 
             ReplyOnCreation(buildInfo, statusCode);
-            break;            
+            break;
         }
 
         case TIndexBuildInfo::EState::Locking:
@@ -1133,7 +1134,7 @@ public:
             } else {
                 buildInfo->Issue += TStringBuilder()
                     << "At applying state got unsuccess propose result"
-                    << ", status: " << NKikimrScheme::EStatus_Name(buildInfo->InitiateTxStatus)
+                    << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
                     << ", reason: " << record.GetReason();
                 Self->PersistBuildIndexIssue(db, buildInfo);
                 ChangeState(buildInfo->Id, TIndexBuildInfo::EState::Rejection_Unlocking);
@@ -1156,7 +1157,7 @@ public:
             } else {
                 buildInfo->Issue += TStringBuilder()
                     << "At unlocking state got unsuccess propose result"
-                    << ", status: " << NKikimrScheme::EStatus_Name(buildInfo->InitiateTxStatus)
+                    << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
                     << ", reason: " << record.GetReason();
                 Self->PersistBuildIndexIssue(db, buildInfo);
                 ChangeState(buildInfo->Id, TIndexBuildInfo::EState::Rejection_Unlocking);
@@ -1183,7 +1184,7 @@ public:
             } else {
                 buildInfo->Issue += TStringBuilder()
                     << "At cancellation applying state got unsuccess propose result"
-                    << ", status: " << NKikimrScheme::EStatus_Name(buildInfo->InitiateTxStatus)
+                    << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
                     << ", reason: " << record.GetReason();
                 Self->PersistBuildIndexIssue(db, buildInfo);
                 ChangeState(buildInfo->Id, TIndexBuildInfo::EState::Cancellation_Unlocking);
@@ -1206,7 +1207,7 @@ public:
             } else {
                 buildInfo->Issue += TStringBuilder()
                     << "At cancellation unlocking state got unsuccess propose result"
-                    << ", status: " << NKikimrScheme::EStatus_Name(buildInfo->InitiateTxStatus)
+                    << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
                     << ", reason: " << record.GetReason();
                 Self->PersistBuildIndexIssue(db, buildInfo);
                 ChangeState(buildInfo->Id, TIndexBuildInfo::EState::Cancelled);
@@ -1233,7 +1234,7 @@ public:
             } else {
                 buildInfo->Issue += TStringBuilder()
                     << "At rejection_applying state got unsuccess propose result"
-                    << ", status: " << NKikimrScheme::EStatus_Name(buildInfo->InitiateTxStatus)
+                    << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
                     << ", reason: " << record.GetReason();
                 Self->PersistBuildIndexIssue(db, buildInfo);
                 ChangeState(buildInfo->Id, TIndexBuildInfo::EState::Rejection_Unlocking);
@@ -1256,7 +1257,7 @@ public:
             } else {
                 buildInfo->Issue += TStringBuilder()
                     << "At rejection_unlocking state got unsuccess propose result"
-                    << ", status: " << NKikimrScheme::EStatus_Name(buildInfo->InitiateTxStatus)
+                    << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
                     << ", reason: " << record.GetReason();
                 Self->PersistBuildIndexIssue(db, buildInfo);
                 ChangeState(buildInfo->Id, TIndexBuildInfo::EState::Rejected);
@@ -1296,7 +1297,7 @@ public:
                 buildInfo->AlterMainTableTxId = txId;
                 NIceDb::TNiceDb db(txc.DB);
                 Self->PersistBuildIndexAlterMainTableTxId(db, buildInfo);
-        
+
             }
             break;
 

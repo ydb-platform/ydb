@@ -2,6 +2,7 @@
 
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/msgbus_kv.pb.h>
 #include <ydb/core/protos/tx.pb.h>
 #include <ydb/core/tx/tx_processing.h>
 

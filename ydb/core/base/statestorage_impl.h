@@ -1,12 +1,13 @@
 #pragma once
-#include "ydb/core/scheme/scheme_pathid.h"
+#include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/protos/base.pb.h>
 #include "statestorage.h"
 
 namespace NKikimr {
 
-inline TActorId MakeStateStorageReplicaID(ui32 node, ui64 stateStorageGroup, ui32 replicaIndex) {
+inline TActorId MakeStateStorageReplicaID(ui32 node, ui32 replicaIndex) {
     char x[12] = { 's', 't', 's' };
-    x[3] = (char)stateStorageGroup;
+    x[3] = (char)1; // stateStorageGroup
     memcpy(x + 5, &replicaIndex, sizeof(ui32));
     return TActorId(node, TStringBuf(x, 12));
 }

@@ -309,13 +309,12 @@ private:
     void SendToCms(IEventBase *ev, const TActorContext &ctx) {
         Y_ABORT_UNLESS(!CmsPipe);
 
-        ui32 domain = AppData(ctx)->DomainsInfo->Domains.begin()->first;
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {
             .MinRetryTime = TDuration::MilliSeconds(10),
             .MaxRetryTime = TDuration::Seconds(10),
         };
-        CmsPipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(domain), pipeConfig));
+        CmsPipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(), pipeConfig));
         NTabletPipe::SendData(ctx, CmsPipe, ev);
     }
 

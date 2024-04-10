@@ -20,6 +20,8 @@ add_vcs_info_to_mf="bool"
 junit4_test="flag"
 junit5_test="flag"
 app_main_class="str"
+enable_preview="flag"
+annotation_processors="list"
 
 publish="flag"
 publish_group="str"
@@ -35,11 +37,11 @@ proto_grpc="flag"
 proto_grpc_version="str"
 
 kotlin_version="str"
-with_kotlin="bool"
-with_kotlinc_plugin_allopen="bool"
-with_kotlinc_plugin_lombok="bool"
-with_kotlinc_plugin_noarg="bool"
-with_kotlinc_plugin_serialization="bool"
+with_kotlin="flag"
+with_kotlinc_plugin_allopen="flag"
+with_kotlinc_plugin_lombok="flag"
+with_kotlinc_plugin_noarg="flag"
+with_kotlinc_plugin_serialization="flag"
 
 [attrs.root]
 

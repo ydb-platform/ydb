@@ -17,6 +17,7 @@ See Adapter class.
 """
 from zope.interface import Declaration
 
+
 def _flatten(implements, include_None=0):
 
     try:

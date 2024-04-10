@@ -38,10 +38,6 @@ namespace {
 
 }
 
-ui64 TTablet::StateStorageGroup() const {
-    return StateStorageGroupFromTabletID(Info->TabletID);
-}
-
 ui64 TTablet::TabletID() const {
     return Info->TabletID;
 }
@@ -1899,7 +1895,7 @@ void TTablet::BootstrapFollower() {
         IntrospectionTrace.Reset(NTracing::CreateTrace(NTracing::ITrace::TypeSysTabletBootstrap));
     }
 
-    StateStorageInfo.ProxyID = MakeStateStorageProxyID(StateStorageGroup());
+    StateStorageInfo.ProxyID = MakeStateStorageProxyID();
     Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLookup(TabletID(), 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)));
     if (IntrospectionTrace) {
         IntrospectionTrace->Attach(MakeHolder<NTracing::TOnTabletBootstrap>(SuggestedGeneration, false, StateStorageInfo.ProxyID));
@@ -1918,7 +1914,7 @@ void TTablet::Bootstrap() {
         IntrospectionTrace.Reset(NTracing::CreateTrace(NTracing::ITrace::TypeSysTabletBootstrap));
     }
     ReportTabletStateChange(TTabletStateInfo::Created); // useless?
-    StateStorageInfo.ProxyID = MakeStateStorageProxyID(StateStorageGroup());
+    StateStorageInfo.ProxyID = MakeStateStorageProxyID();
     Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLookup(TabletID(), 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)));
     if (IntrospectionTrace) {
         IntrospectionTrace->Attach(MakeHolder<NTracing::TOnTabletBootstrap>(SuggestedGeneration, true, StateStorageInfo.ProxyID));

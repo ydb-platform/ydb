@@ -25,9 +25,9 @@ where
                 where
                     p_name like 'maroon%'
             )
-            and ps_availqty::numeric > (
+            and ps_availqty > (
                 select
-                    0.5::numeric * sum(l_quantity)
+                    0.5 * sum(l_quantity)
                 from
                     {{lineitem}}
                 where

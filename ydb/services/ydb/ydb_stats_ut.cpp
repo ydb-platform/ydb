@@ -222,6 +222,56 @@ static NYdb::TStatus SimpleSelect(TSession session, const TString& query) {
 }
 
 Y_UNIT_TEST_SUITE(ClientStatsCollector) {
+    Y_UNIT_TEST(PrepareQuery) {
+        NYdb::TKikimrWithGrpcAndRootSchema server;
+        auto endpoint = TStringBuilder() << "localhost:" << server.GetPort();
+        NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(endpoint));
+        TCountersExtractor extractor;
+        driver.AddExtension<TCountersExtractExtension>(TCountersExtractExtension::TParams().SetExtractor(&extractor));
+        auto clSettings = NYdb::NTable::TClientSettings().UseQueryCache(true);
+        NYdb::NTable::TTableClient client(driver, clSettings);
+
+        auto createSessionResult = client.GetSession(TCreateSessionSettings().ClientTimeout(OPERATION_TIMEOUT)).GetValueSync();
+        UNIT_ASSERT(createSessionResult.IsSuccess());
+
+        auto session = createSessionResult.GetSession();
+
+        {
+            auto prepareResult = session.PrepareDataQuery("SELECT 1").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(prepareResult.IsQueryFromCache(), false);
+ 
+            TStatCounters counters = extractor.Extract();
+            UNIT_ASSERT_VALUES_EQUAL(counters.CacheMiss, 1);
+
+            UNIT_ASSERT(prepareResult.IsSuccess());
+
+            {
+                auto executeResult = prepareResult.GetQuery().Execute(
+                    TTxControl::BeginTx(TTxSettings::SerializableRW())).GetValueSync();
+
+                UNIT_ASSERT(executeResult.IsSuccess());
+                UNIT_ASSERT_VALUES_EQUAL(executeResult.IsQueryFromCache(), false); // <- explicit prepared query
+                counters = extractor.Extract();
+                UNIT_ASSERT_VALUES_EQUAL(counters.CacheMiss, 1);
+            }
+
+            auto executeResult = session.ExecuteDataQuery("SELECT 1",
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
+
+            UNIT_ASSERT(executeResult.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(executeResult.IsQueryFromCache(), true);
+            counters = extractor.Extract();
+            UNIT_ASSERT_VALUES_EQUAL(counters.CacheMiss, 1);
+        }
+
+        {
+            auto prepareResult = session.PrepareDataQuery("SELECT 1").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(prepareResult.IsQueryFromCache(), true);
+            auto counters = extractor.Extract();
+            UNIT_ASSERT_VALUES_EQUAL(counters.CacheMiss, 1);
+        }
+    }
+
     Y_UNIT_TEST(CounterCacheMiss) {
         NYdb::TKikimrWithGrpcAndRootSchema server;
         auto endpoint = TStringBuilder() << "localhost:" << server.GetPort();

@@ -78,7 +78,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
 
     try {
         bool useGenericReadSets = dataTx->GetUseGenericReadSets();
-        const auto& kqpLocks = dataTx->GetKqpLocks();
+        const auto& kqpLocks = dataTx->HasKqpLocks() ? dataTx->GetKqpLocks() : NKikimrDataEvents::TKqpLocks{};
         auto& tasksRunner = dataTx->GetKqpTasksRunner();
 
         auto allocGuard = tasksRunner.BindAllocator(txc.GetMemoryLimit() - dataTx->GetTxSize());
@@ -111,8 +111,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
             }
         }
 
-        KqpFillOutReadSets(op->OutReadSets(), kqpLocks,
-            dataTx->HasKqpLocks(), useGenericReadSets, tasksRunner, DataShard.SysLocksTable(), tabletId);
+        KqpFillOutReadSets(op->OutReadSets(), kqpLocks, useGenericReadSets, &tasksRunner, DataShard.SysLocksTable(), tabletId);
     } catch (const TMemoryLimitExceededException&) {
         LOG_T("Operation " << *op << " at " << tabletId
             << " exceeded memory limit " << txc.GetMemoryLimit()

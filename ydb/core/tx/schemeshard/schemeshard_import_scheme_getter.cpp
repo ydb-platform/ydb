@@ -94,16 +94,17 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         LOG_E("Error at '" << marker << "'"
             << ": self# " << SelfId()
             << ", error# " << result);
-        MaybeRetry(result.GetError().GetMessage().c_str());
+        MaybeRetry(result.GetError());
 
         return false;
     }
 
-    void MaybeRetry(const TString& error) {
-        if (Attempt++ < Retries) {
-            Schedule(TDuration::Minutes(1), new TEvents::TEvWakeup());
+    void MaybeRetry(const Aws::S3::S3Error& error) {
+        if (Attempt < Retries && error.ShouldRetry()) {
+            Delay = Min(Delay * ++Attempt, MaxDelay);
+            Schedule(Delay, new TEvents::TEvWakeup());
         } else {
-            Reply(false, error);
+            Reply(false, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
         }
     }
 
@@ -148,8 +149,8 @@ public:
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
             hFunc(TEvExternalStorage::TEvGetObjectResponse, Handle);
 
-            cFunc(TEvents::TEvWakeup::EventType, Bootstrap);
-            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+            sFunc(TEvents::TEvWakeup, Bootstrap);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
         }
     }
 
@@ -163,6 +164,9 @@ private:
 
     const ui32 Retries;
     ui32 Attempt = 0;
+
+    TDuration Delay = TDuration::Minutes(1);
+    static constexpr TDuration MaxDelay = TDuration::Minutes(10);
 
     TActorId Client;
 

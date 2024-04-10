@@ -2,13 +2,10 @@
 Helpers for normalization as expected in wheel/sdist/module file names
 and core metadata
 """
+
 import re
-from pathlib import Path
-from typing import Union
 
 from .extern import packaging
-
-_Path = Union[str, Path]
 
 # https://packaging.python.org/en/latest/specifications/core-metadata/#name
 _VALID_NAME = re.compile(r"^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$", re.I)
@@ -117,6 +114,21 @@ def filename_component(value: str) -> str:
     'my_pkg'
     """
     return value.replace("-", "_").strip("_")
+
+
+def filename_component_broken(value: str) -> str:
+    """
+    Produce the incorrect filename component for compatibility.
+
+    See pypa/setuptools#4167 for detailed analysis.
+
+    TODO: replace this with filename_component after pip 24 is
+    nearly-ubiquitous.
+
+    >>> filename_component_broken('foo_bar-baz')
+    'foo-bar-baz'
+    """
+    return value.replace('_', '-')
 
 
 def safer_name(value: str) -> str:

@@ -416,7 +416,7 @@ TEST(TTableSchemaTest, ColumnSchemaProtobufBackwardCompatibility)
     EXPECT_EQ(*columnSchema.LogicalType(), *OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Uint64)));
     EXPECT_EQ(columnSchema.GetWireType(), EValueType::Uint64);
     EXPECT_EQ(columnSchema.Name(), "foo");
-    EXPECT_EQ(columnSchema.StableName().Get(), "foo");
+    EXPECT_EQ(columnSchema.StableName().Underlying(), "foo");
 
     columnSchemaProto.set_simple_logical_type(static_cast<int>(ESimpleLogicalValueType::Uint32));
     columnSchemaProto.set_name("foo");
@@ -426,7 +426,7 @@ TEST(TTableSchemaTest, ColumnSchemaProtobufBackwardCompatibility)
     EXPECT_EQ(*columnSchema.LogicalType(), *OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Uint32)));
     EXPECT_EQ(columnSchema.GetWireType(), EValueType::Uint64);
     EXPECT_EQ(columnSchema.Name(), "foo");
-    EXPECT_EQ(columnSchema.StableName().Get(), "foo_stable");
+    EXPECT_EQ(columnSchema.StableName().Underlying(), "foo_stable");
 }
 
 TEST(TTableSchemaTest, EqualIgnoringRequiredness)

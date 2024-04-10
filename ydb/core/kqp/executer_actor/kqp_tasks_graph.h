@@ -5,6 +5,8 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
@@ -92,6 +94,7 @@ struct TGraphMeta {
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;
     bool UseFollowers = false;
+    bool AllowInconsistentReads = false;
     TIntrusivePtr<TProtoArenaHolder> Arena;
     TString Database;
     NKikimrConfig::TTableServiceConfig::EChannelTransportVersion ChannelTransportVersion;
@@ -123,6 +126,7 @@ struct TTaskInputMeta {
 };
 
 struct TTaskOutputMeta {
+    NKikimrKqp::TKqpTableSinkSettings* SinkSettings = nullptr;
     THashMap<ui64, const TKeyDesc::TPartitionInfo*> ShardPartitions;
 };
 

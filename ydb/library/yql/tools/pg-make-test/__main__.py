@@ -11,6 +11,7 @@ import re
 import csv
 import click
 import patch
+from collections import Counter
 from library.python.svn_version import svn_version
 from ydb.library.yql.tests.postgresql.common import get_out_files, Differ
 
@@ -18,6 +19,8 @@ from ydb.library.yql.tests.postgresql.common import get_out_files, Differ
 PROGRAM_NAME = "pg-make-test"
 RUNNER = "../pgrun/pgrun"
 SPLITTER = "../pgrun/pgrun split-statements"
+INIT_SCRIPTS_CFG = "testinits.cfg"
+INIT_SCRIPTS_DIR = "initscripts"
 REPORT_FILE = "pg_tests.csv"
 LOGGER = None
 
@@ -40,10 +43,11 @@ def setup_logging(logfile, is_debug):
 
 class Configuration:
     def __init__(
-        self, srcdir, dstdir, patchdir, skip_tests, runner, splitter, report_path, parallel, logfile, is_debug
+        self, srcdir, dstdir, udfs, patchdir, skip_tests, runner, splitter, report_path, parallel, logfile, is_debug
     ):
         self.srcdir = srcdir
         self.dstdir = dstdir
+        self.udfs = udfs
         self.patchdir = patchdir
         self.skip_tests = skip_tests
         self.runner = runner
@@ -75,7 +79,9 @@ class TestCaseBuilder:
     def __init__(self, config):
         self.config = config
 
-    def build(self, sqlfile):
+    def build(self, args):
+        sqlfile, init_scripts = args
+
         is_split_logging = self.config.logfile is not None and self.config.parallel
         if is_split_logging:
             logger = get_logger(
@@ -88,6 +94,9 @@ class TestCaseBuilder:
 
         splitted_stmts = list(self.split_sql_file(sqlfile))
         stmts_count = len(splitted_stmts)
+
+        if init_scripts:
+            logging.debug("Init scripts: %s", init_scripts)
 
         ressqlfile = self.config.dstdir / sqlfile.name
         resoutfile = ressqlfile.with_suffix('.out')
@@ -106,11 +115,17 @@ class TestCaseBuilder:
             with open(outfile, 'rb') as fout:
                 outdata = fout.readlines()
 
+            only_out_stmts = Counter()
+            only_pgrun_stmts = Counter()
+
             statements = list(self.split_out_file(splitted_stmts, outdata, logger))
+            logger.debug("Matching sql statements to .out file lines")
             for (s_sql, s_out) in statements:
+                stmt = '\n'.join(str(sql_line) for sql_line in s_sql)
+                only_out_stmts[stmt] += 1
                 logger.debug(
                     "<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n%s\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n%s\n============================",
-                    '\n'.join(str(sql_line) for sql_line in s_sql),
+                    stmt,
                     '\n'.join(str(out_line) for out_line in s_out),
                 )
 
@@ -118,9 +133,27 @@ class TestCaseBuilder:
                 test_out_name = Path(tempdir) / "test.out"
                 test_err_name = test_out_name.with_suffix(".err")
 
-                logger.debug("Running %s '%s' -> [%s]", self.config.runner, sqlfile, outfile)
+                runner_args = self.config.runner + ["--datadir", tempdir]
+                for udf in self.config.udfs:
+                    runner_args.append("--udf")
+                    runner_args.append(udf)
+
+                if init_scripts:
+                    init_out_name = Path(tempdir) / "init.out"
+                    init_err_name = init_out_name.with_suffix(".err")
+
+                    for init_script in init_scripts:
+                        logger.debug("Running init script %s '%s'", self.config.runner, init_script)
+                        with open(init_script, 'rb') as f, open(init_out_name, 'wb') as fout, open(init_err_name, 'wb') as ferr:
+                            pi = subprocess.run(runner_args, stdin=f, stdout=fout, stderr=ferr)
+
+                        if pi.returncode != 0:
+                            logger.warning("%s returned error code %d", self.config.runner, pi.returncode)
+
+                logger.debug("Running test %s '%s' -> [%s]", self.config.runner, sqlfile, outfile)
+
                 with open(sqlfile, 'rb') as f, open(test_out_name, 'wb') as fout, open(test_err_name, 'wb') as ferr:
-                    pi = subprocess.run(self.config.runner + ["--datadir", tempdir], stdin=f, stdout=fout, stderr=ferr)
+                    pi = subprocess.run(runner_args, stdin=f, stdout=fout, stderr=ferr)
 
                 if pi.returncode != 0:
                     logger.warning("%s returned error code %d", self.config.runner, pi.returncode)
@@ -130,14 +163,30 @@ class TestCaseBuilder:
                     logger.debug("Run result:\n%s", str(b'\n'.join(out)))
 
                     real_statements = list(self.split_out_file(splitted_stmts, out, logger))
+                    logger.debug("Matching sql statements to pgrun's output")
                     for (s_sql, s_out) in real_statements:
+                        stmt = '\n'.join(str(sql_line) for sql_line in s_sql)
                         logger.debug(
                             "<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n%s\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n%s\n============================",
-                            '\n'.join(str(sql_line) for sql_line in s_sql),
+                            stmt,
                             '\n'.join(str(out_line) for out_line in s_out),
                         )
+
+                        if 0 < only_out_stmts[stmt]:
+                            only_out_stmts[stmt] -= 1
+                            if 0 == only_out_stmts[stmt]:
+                                del only_out_stmts[stmt]
+                        else:
+                            only_pgrun_stmts[stmt] += 1
                 reserrfile = reserrfile_base if outfile_idx == 0 else reserrfile_base.with_suffix(reserrfile_base.suffix + ".{0}".format(outfile_idx))
                 shutil.move(test_err_name, reserrfile)
+
+            if only_pgrun_stmts:
+                logger.info("Statements in pgrun output, but not in out file:\n%s",
+                            "\n--------------------------------\n".join(stmt for stmt in only_pgrun_stmts))
+            if only_out_stmts:
+                logger.info("Statements in out file, but not in pgrun output:\n%s",
+                            "\n--------------------------------\n".join(stmt for stmt in only_out_stmts))
 
             stmts_run = 0
             stmts = []
@@ -301,6 +350,50 @@ def load_patches(patchdir):
             yield p.stem, ps
 
 
+reInitScriptsCfgLine = re.compile(r"^([\w.]+):\s*([\w.]+(?:\s+[\w.]+)*)$")
+
+
+def load_init_scripts(initscriptscfg, initscriptsdir, tests_set):
+    init_scripts_map = dict()
+
+    if not initscriptscfg.is_file():
+        LOGGER.warning("Init scripts config file is not found: %s", initscriptscfg)
+        return init_scripts_map
+
+    if not initscriptsdir.is_dir():
+        LOGGER.warning("Init scripts directory is not found: %s", initscriptsdir)
+        return init_scripts_map
+
+    scripts = frozenset(s.stem for s in initscriptsdir.glob("*.sql"))
+
+    with open(initscriptscfg, 'r') as cfg:
+        for lineno, line in enumerate(cfg, 1):
+            line = line.strip()
+
+            if not line:
+                continue
+
+            m = reInitScriptsCfgLine.match(line)
+
+            if m is None:
+                LOGGER.warning("Bad line %d in init scripts config %s", lineno, initscriptscfg)
+                continue
+
+            test_name = m[1]
+            if test_name not in tests_set:
+                LOGGER.debug("Skipping init scripts for unknown test case %s", test_name)
+                continue
+
+            deps = [(initscriptsdir / s).with_suffix(".sql") for s in m[2].split() if s in scripts]
+            if not deps:
+                LOGGER.debug("No init scripts are listed for test case %s", test_name)
+                continue
+
+            init_scripts_map[test_name] = deps
+
+    return init_scripts_map
+
+
 def patch_cases(cases, patches, patchdir):
     for i, sql_full_name in enumerate(cases):
         sql_name = sql_full_name.name
@@ -342,7 +435,7 @@ def patch_cases(cases, patches, patchdir):
             continue
 
         cases[i] = patched_sql_full_name
-        LOGGER.info("Patched", sql_full_name, "->", cases[i])
+        LOGGER.info("Patched %s -> %s", sql_full_name, cases[i])
 
 
 @click.command()
@@ -371,6 +464,30 @@ def patch_cases(cases, patches, patchdir):
     multiple=False,
     type=click.Path(exists=True, file_okay=False, resolve_path=True, path_type=Path),
 )
+@click.option(
+    "--udf",
+    "-u",
+    help="Load shared library with UDF by given path",
+    required=False,
+    multiple=True,
+    type=click.Path(dir_okay=False, resolve_path=True, path_type=Path),
+)
+@click.option(
+    "--initscriptscfg",
+    help="Config file for tests' init scripts",
+    default=INIT_SCRIPTS_CFG,
+    required=False,
+    multiple=False,
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True, path_type=Path)
+)
+@click.option(
+    "--initscriptsdir",
+    help="Directory with tests' init scripts",
+    default=INIT_SCRIPTS_DIR,
+    required=False,
+    multiple=False,
+    type=click.Path(exists=True, file_okay=False, resolve_path=True, path_type=Path)
+)
 @click.option("--skip", "-s", help="Comma-separated list of testsuits to skip", multiple=False, type=click.STRING)
 @click.option("--runner", help="Test runner", default=RUNNER, required=False, multiple=False, type=click.STRING)
 @click.option(
@@ -397,8 +514,11 @@ def patch_cases(cases, patches, patchdir):
 )
 @click.option("--debug/--no-debug", help="Logs verbosity", default=False, required=False)
 @click.version_option(version=svn_version(), prog_name=PROGRAM_NAME)
-def cli(cases, srcdir, dstdir, patchdir, skip, runner, splitter, report, parallel, logfile, debug):
+def cli(cases, srcdir, dstdir, patchdir, udf, initscriptscfg, initscriptsdir, skip, runner, splitter, report, parallel, logfile, debug):
     setup_logging(logfile, debug)
+
+    if udf:
+        LOGGER.debug("UDFs: %s", udf)
 
     if skip is not None:
         skip_tests = frozenset(
@@ -408,13 +528,16 @@ def cli(cases, srcdir, dstdir, patchdir, skip, runner, splitter, report, paralle
         skip_tests = frozenset()
 
     config = Configuration(
-        srcdir, dstdir, patchdir, skip_tests, runner.split(), splitter.split(), report, parallel, logfile, debug
+        srcdir, dstdir, udf, patchdir, skip_tests, runner.split(), splitter.split(), report, parallel, logfile, debug
     )
 
     if not cases:
         cases = [c for c in config.srcdir.glob("*.sql") if c.stem not in skip_tests]
     else:
         cases = [Path(c) if os.path.isabs(c) else config.srcdir / c for c in cases]
+
+    init_scripts = load_init_scripts(initscriptscfg, initscriptsdir, frozenset(c.stem for c in cases))
+    LOGGER.debug("Init scripts: %s", init_scripts)
 
     if config.patchdir is not None:
         patches = dict(load_patches(config.patchdir))
@@ -430,14 +553,14 @@ def cli(cases, srcdir, dstdir, patchdir, skip, runner, splitter, report, paralle
         builder = TestCaseBuilder(config)
         if config.parallel:
             with Pool() as pool:
-                results = list(pool.imap_unordered(builder.build, cases))
+                results = list(pool.imap_unordered(builder.build, [(test_case, init_scripts.get(test_case.stem) or []) for test_case in cases]))
         else:
             results = [builder.build(c) for c in cases]
 
     with open(config.report_path, "w", newline='') as f:
         writer = csv.writer(f, dialect="excel")
         writer.writerow(["testcase", "statements", "successful", "ratio"])
-        writer.writerows(results)
+        writer.writerows(sorted(results))
 
 
 if __name__ == "__main__":

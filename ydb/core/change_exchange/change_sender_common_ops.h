@@ -21,28 +21,37 @@ struct TEvChangeExchangePrivate {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE));
 
-    template <typename TEv, ui32 TEventType>
-    struct TEvWithPartitionId: public TEventLocal<TEv, TEventType> {
+    struct TEvReady: public TEventLocal<TEvReady, EvReady> {
         ui64 PartitionId;
 
-        explicit TEvWithPartitionId(ui64 partiionId)
+        explicit TEvReady(ui64 partiionId)
             : PartitionId(partiionId)
         {
         }
 
         TString ToString() const override {
-            return TStringBuilder() << TEventLocal<TEv, TEventType>::ToStringHeader() << " {"
+            return TStringBuilder() << ToStringHeader() << " {"
                 << " PartitionId: " << PartitionId
             << " }";
         }
     };
 
-    struct TEvReady: public TEvWithPartitionId<TEvReady, EvReady> {
-        using TEvWithPartitionId::TEvWithPartitionId;
-    };
+    struct TEvGone: public TEventLocal<TEvGone, EvGone> {
+        ui64 PartitionId;
+        bool HardError;
 
-    struct TEvGone: public TEvWithPartitionId<TEvGone, EvGone> {
-        using TEvWithPartitionId::TEvWithPartitionId;
+        explicit TEvGone(ui64 partitionId, bool hardError = false)
+            : PartitionId(partitionId)
+            , HardError(hardError)
+        {
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " PartitionId: " << PartitionId
+                << " HardError: " << HardError
+            << " }";
+        }
     };
 
 }; // TEvChangeExchangePrivate

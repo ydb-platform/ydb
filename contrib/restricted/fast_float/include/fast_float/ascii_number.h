@@ -442,8 +442,7 @@ parsed_number_string_t<UC> parse_number_string(UC const *p, UC const * pend, par
 
 template <typename T, typename UC>
 fastfloat_really_inline FASTFLOAT_CONSTEXPR20
-from_chars_result_t<UC> parse_int_string(UC const* p, UC const* pend, T& value, int base)
-{
+from_chars_result_t<UC> parse_int_string(UC const* p, UC const* pend, T& value, int base) {
   from_chars_result_t<UC> answer;
   
   UC const* const first = p;
@@ -463,9 +462,11 @@ from_chars_result_t<UC> parse_int_string(UC const* p, UC const* pend, T& value, 
   }
 
   UC const* const start_num = p;
-  while (*p == UC('0')) { 
+
+  while (p!= pend && *p == UC('0')) {
     ++p; 
   }
+
   const bool has_leading_zeros = p > start_num;
 
   UC const* const start_digits = p;
@@ -528,8 +529,8 @@ from_chars_result_t<UC> parse_int_string(UC const* p, UC const* pend, T& value, 
     // this weird workaround is required because:
     // - converting unsigned to signed when its value is greater than signed max is UB pre-C++23.
     // - reinterpret_casting (~i + 1) would work, but it is not constexpr
-    // this is always optimized into a neg instruction.
-    value = T(-std::numeric_limits<T>::max() - T(i - std::numeric_limits<T>::max()));
+    // this is always optimized into a neg instruction (note: T is an integer type)
+    value = T(-std::numeric_limits<T>::max() - T(i - uint64_t(std::numeric_limits<T>::max())));
 #ifdef FASTFLOAT_VISUAL_STUDIO
 #pragma warning(pop)
 #endif

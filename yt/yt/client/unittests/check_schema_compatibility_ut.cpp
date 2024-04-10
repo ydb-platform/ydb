@@ -310,7 +310,7 @@ TEST_F(TTableSchemaCompatibilityTest, DeletedColumns)
                 TColumnSchema("value", ESimpleLogicalValueType::String),
             }, true, true, ETableSchemaModification::None,
             {
-                TDeletedColumn(TStableName("value1")),
+                TDeletedColumn(TColumnStableName("value1")),
             }),
             TTableSchema({
                 TColumnSchema("key1", ESimpleLogicalValueType::String, ESortOrder::Descending),
@@ -334,7 +334,7 @@ TEST_F(TTableSchemaCompatibilityTest, DeletedColumns)
                 TColumnSchema("value", ESimpleLogicalValueType::String),
             }, true, true, ETableSchemaModification::None,
             {
-                TDeletedColumn(TStableName("value1")),
+                TDeletedColumn(TColumnStableName("value1")),
             }),
         false);
 

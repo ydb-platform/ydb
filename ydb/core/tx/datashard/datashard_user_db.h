@@ -1,9 +1,21 @@
 #pragma once
-#include "datashard_impl.h"
+
+#include "change_collector.h"
+
+#include <ydb/core/base/row_version.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/library/accessor/accessor.h>
 
 #include <util/generic/maybe.h>
 
+namespace NKikimr::NMiniKQL {
+    struct TEngineHostCounters;
+}
+
 namespace NKikimr::NDataShard {
+
+class TUniqueConstrainException: public yexception {};
 
 class IDataShardUserDb {
 protected:
@@ -26,6 +38,16 @@ public:
             const TMaybe<TRowVersion>& readVersion = {}) = 0;
 
     virtual void UpdateRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+
+    virtual void ReplaceRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+    
+    virtual void InsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
@@ -90,6 +112,16 @@ public:
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops) override;
     
+    void ReplaceRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            
+    void InsertRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            
     void EraseRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key) override;
@@ -138,7 +170,9 @@ private:
     static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue> key);
 
     void UpdateRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
+    void EnsureMissingRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key);
 
+    void IncreaseUpdateCounters(const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
 private:
     TDataShard& Self;
     NTable::TDatabase& Db;

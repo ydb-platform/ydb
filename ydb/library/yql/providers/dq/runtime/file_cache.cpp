@@ -67,7 +67,7 @@ void TFileCache::Scan()
     Clean();
 }
 
-ui64 TFileCache::FreeDiskSize() {
+i64 TFileCache::FreeDiskSize() {
     return TotalSize - UsedSize;
 }
 
@@ -86,9 +86,13 @@ void TFileCache::Clean() {
 
             YQL_CLOG(DEBUG, ProviderDq) << "Remove File " << path << " UsedSize " << ToString(UsedSize) << " FileSize " << ToString(maybeFile->second.Size);
 
-            UsedSize -= maybeFile->second.Size;
+            if (maybeFile->second.UseCount == 0) {
+                UsedSize -= maybeFile->second.Size;
+                Files.erase(maybeFile);
+            } else {
+                maybeFile->second.Position = LRU.end();
+            }
             NFs::Remove(path);
-            Files.erase(maybeFile);
         }
     }
 }
@@ -118,8 +122,10 @@ void TFileCache::AddFile(const TString& path, const TString& objectId)
         TGuard<TMutex> guard(Mutex);
         LRU.push_back(objectId);
         file.Position = --LRU.end();
-        UsedSize += file.Size;
-        Files.insert(std::make_pair(objectId, file));
+        if (!Files.contains(objectId)) {
+            UsedSize += file.Size;
+        }
+        Files[objectId] = file;
     }
 
     // don't lock on fs
@@ -127,6 +133,20 @@ void TFileCache::AddFile(const TString& path, const TString& objectId)
 
     TGuard<TMutex> guard(Mutex);
     Clean();
+
+    YQL_CLOG(DEBUG, ProviderDq) << "FreeDiskSize/UsedDiskSize " << FreeDiskSize() << "/" << UsedDiskSize();
+}
+
+THashMap<TString, TFileCache::TFileObject>::iterator TFileCache::FindFileObject(const TString& objectId)
+{
+    auto maybeFile = Files.find(objectId);
+    if (maybeFile == Files.end() || maybeFile->second.Position == LRU.end()) {
+        return Files.end();
+    }
+    LRU.erase(maybeFile->second.Position);
+    LRU.push_back(objectId);
+    maybeFile->second.Position = --LRU.end();
+    return maybeFile;
 }
 
 TMaybe<TString> TFileCache::FindFile(const TString& objectId)
@@ -134,23 +154,48 @@ TMaybe<TString> TFileCache::FindFile(const TString& objectId)
     TString fileName;
     {
         TGuard<TMutex> guard(Mutex);
-        auto maybeFile = Files.find(objectId);
+        auto maybeFile = FindFileObject(objectId);
         if (maybeFile == Files.end()) {
             return { };
         }
-        LRU.erase(maybeFile->second.Position);
-        LRU.push_back(objectId);
-        maybeFile->second.Position = --LRU.end();
         fileName = maybeFile->second.Name;
     }
 
     return {GetDir(objectId) + "/" + fileName};
 }
 
+TMaybe<TString> TFileCache::AcquireFile(const TString& objectId)
+{
+    TString fileName;
+    {
+        TGuard<TMutex> guard(Mutex);
+        auto maybeFile = FindFileObject(objectId);
+        if (maybeFile == Files.end()) {
+            return { };
+        }
+        maybeFile->second.UseCount ++;
+        fileName = maybeFile->second.Name;
+    }
+
+    return {GetDir(objectId) + "/" + fileName};
+}
+
+void TFileCache::ReleaseFile(const TString& objectId) {
+    TGuard<TMutex> guard(Mutex);
+    auto maybeFile = Files.find(objectId);
+    if (maybeFile != Files.end()) {
+        maybeFile->second.UseCount = std::max((i64)0, maybeFile->second.UseCount-1);
+        if (maybeFile->second.UseCount == 0 && maybeFile->second.Position == LRU.end()) {
+            UsedSize -= maybeFile->second.Size;
+            Files.erase(maybeFile);
+        }
+    }
+}
+
 bool TFileCache::Contains(const TString& objectId)
 {
     TGuard<TMutex> guard(Mutex);
-    return Files.contains(objectId);
+    return FindFileObject(objectId) != Files.end();
 }
 
 void TFileCache::Walk(const std::function<void(const TString& objectId)>& f)

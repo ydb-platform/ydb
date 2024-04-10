@@ -37,7 +37,7 @@ using TInputType = NYT::TRawTableReaderPtr;
             for (int attempt = 0; attempt <= lastAttempt; ++attempt) {
                 try {
                     if (richYPath.TransactionId_) {
-                        auto transaction = client->AttachTransaction(richYPath.TransactionId_.GetRef());
+                        auto transaction = client->AttachTransaction(richYPath.TransactionId_.GetRef(), NYT::TAttachTransactionOptions().AutoPingable(true));
                         richYPath.TransactionId_.Clear();
                         reader = transaction->CreateRawReader(richYPath, format, readerOptions.CreateTransaction(false));
                     } else {

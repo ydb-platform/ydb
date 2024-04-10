@@ -6,6 +6,7 @@
 #include <yt/yt/core/actions/invoker_pool.h>
 #include <yt/yt/core/actions/public.h>
 
+#include <yt/yt/core/misc/adjusted_exponential_moving_average.h>
 #include <yt/yt/core/misc/public.h>
 
 #include <yt/yt/core/profiling/public.h>
@@ -52,12 +53,38 @@ TDiagnosableInvokerPoolPtr CreateFairShareInvokerPool(
     IInvokerPtr underlyingInvoker,
     int invokerCount,
     TFairShareCallbackQueueFactory callbackQueueFactory = CreateFairShareCallbackQueue,
-    THistoricUsageAggregationParameters aggregatorParameters =
-        THistoricUsageAggregationParameters{
-            EHistoricUsageAggregationMode::ExponentialMovingAverage,
-            /*emaAlpha*/ THistoricUsageAggregationParameters::DefaultEmaAlpha,
-        });
+    TDuration actionTimeRelevancyHalflife = TAdjustedExponentialMovingAverage::DefaultHalflife);
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Creates invoker pool from above with invokerCount = bucketNames.size()
+//! And adds profiling on top of it.
+
+TDiagnosableInvokerPoolPtr CreateProfiledFairShareInvokerPool(
+    IInvokerPtr underlyingInvoker,
+    TFairShareCallbackQueueFactory callbackQueueFactory = CreateFairShareCallbackQueue,
+    TDuration actionTimeRelevancyHalflife = TAdjustedExponentialMovingAverage::DefaultHalflife,
+    const TString& poolName = "fair_share_invoker_pool",
+    std::vector<TString> bucketNames = {},
+    NProfiling::IRegistryImplPtr registry = nullptr);
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Same as above but bucket names are derived from EInvoker domain values.
+
+template <class EInvoker>
+    requires TEnumTraits<EInvoker>::IsEnum
+TDiagnosableInvokerPoolPtr CreateEnumIndexedProfiledFairShareInvokerPool(
+    IInvokerPtr underlyingInvoker,
+    TFairShareCallbackQueueFactory callbackQueueFactory = CreateFairShareCallbackQueue,
+    TDuration actionTimeRelevancyHalflife = TAdjustedExponentialMovingAverage::DefaultHalflife,
+    const TString& poolName = "fair_share_invoker_pool",
+    NProfiling::IRegistryImplPtr registry = nullptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency
+
+#define FAIR_SHARE_INVOKER_POOL_INL_H_
+#include "fair_share_invoker_pool-inl.h"
+#undef FAIR_SHARE_INVOKER_POOL_INL_H_

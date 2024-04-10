@@ -16,12 +16,12 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_WRITE_INDEX; }
+    virtual void Describe(IOutputStream& out) const noexcept override;
 
 private:
 
     TEvPrivate::TEvWriteIndex::TPtr Ev;
     const ui32 TabletTxNo;
-    TBackgroundActivity TriggerActivity = TBackgroundActivity::All();
     bool CompleteReady = false;
 
     TStringBuilder TxPrefix() const {

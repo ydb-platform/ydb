@@ -307,9 +307,7 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
 /// Misc
 
 IActor* CreateBSControllerPipe(TCmsStatePtr cmsState) {
-    auto domains = AppData()->DomainsInfo;
-    const ui32 domainUid = domains->GetDomainUidByTabletId(cmsState->CmsTabletId);
-    const ui64 bscId = MakeBSControllerID(domains->GetDefaultStateStorageGroup(domainUid));
+    const ui64 bscId = MakeBSControllerID();
 
     NTabletPipe::TClientConfig config;
     config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();

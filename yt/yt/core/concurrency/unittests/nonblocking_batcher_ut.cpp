@@ -313,6 +313,25 @@ TEST(TNonblockingBatcherTest, AllowEmptyBatches)
     ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>({}));
 }
 
+TEST(TNonblockingBatcherTest, IncompleteBatchAfterDeque)
+{
+    auto timeout = Quantum;
+    auto overTimeout = timeout * 2;
+
+    auto b = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), timeout, false);
+    b->Enqueue(1);
+    b->Enqueue(2);
+    b->Enqueue(3);
+    auto e1 = b->DequeueBatch();
+    ASSERT_TRUE(e1.IsSet());
+    ASSERT_EQ(e1.Get().ValueOrThrow(), std::vector<int>({1, 2}));
+    Sleep(overTimeout);
+    b->Enqueue(4);
+    auto e2 = b->DequeueBatch();
+    ASSERT_TRUE(e2.IsSet());
+    ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>({3, 4}));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

@@ -61,16 +61,20 @@ void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescri
         aws.SetAwsAccessKeyIdSecretName(GetOrEmpty(settings, "aws_access_key_id_secret_name"));
         aws.SetAwsSecretAccessKeySecretName(GetOrEmpty(settings, "aws_secret_access_key_secret_name"));
         aws.SetAwsRegion(GetOrEmpty(settings, "aws_region"));
+    } else if (authMethod == "TOKEN") {
+        auto& token = *externaDataSourceDesc.MutableAuth()->MutableToken();
+        token.SetTokenSecretName(GetOrEmpty(settings, "token_secret_name"));
     } else {
         ythrow yexception() << "Internal error. Unknown auth method: " << authMethod;
     }
 
     static const TSet<TString> properties {
-        "database_name",
-        "protocol",
-        "mdb_cluster_id",
+        "database_name", 
+        "protocol", // managed PG, CH
+        "mdb_cluster_id", // managed PG, CH
+        "database_id", // managed YDB
         "use_tls",
-        "schema"
+        "schema", // managed PG
     };
 
     for (const auto& property: properties) {

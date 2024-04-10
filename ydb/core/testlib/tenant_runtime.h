@@ -204,7 +204,7 @@ public:
 
 NKikimrTenantPool::TSlotStatus MakeSlotStatus(const TString &id, const TString &type, const TString &tenant,
                                               ui64 cpu, ui64 memory, ui64 network, const TString &label = "");
-void CheckTenantPoolStatus(TTenantTestRuntime &runtime, ui32 domain,
+void CheckTenantPoolStatus(TTenantTestRuntime &runtime,
                            THashMap<TString, NKikimrTenantPool::TSlotStatus> status, ui32 nodeId = 0);
 
 } // namespace NKikimr

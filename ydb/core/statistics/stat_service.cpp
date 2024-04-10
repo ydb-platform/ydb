@@ -1,5 +1,6 @@
 #include "stat_service.h"
 #include "events.h"
+#include "save_load_stats.h"
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/base/feature_flags.h>
@@ -24,6 +25,19 @@ public:
         return NKikimrServices::TActivity::STAT_SERVICE;
     }
 
+   struct TEvPrivate {
+        enum EEv {
+            EvRequestTimeout = EventSpaceBegin(TEvents::ES_PRIVATE),
+
+            EvEnd
+        };
+
+        struct TEvRequestTimeout : public TEventLocal<TEvRequestTimeout, EvRequestTimeout> {
+            std::unordered_set<ui64> NeedSchemeShards;
+            TActorId PipeClientId;
+        };
+    };
+
     void Bootstrap() {
         EnableStatistics = AppData()->FeatureFlags.GetEnableStatistics();
 
@@ -41,9 +55,12 @@ public:
             hFunc(TEvStatistics::TEvGetStatistics, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvStatistics::TEvPropagateStatistics, Handle);
+            IgnoreFunc(TEvStatistics::TEvPropagateStatisticsResponse);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvStatistics::TEvStatisticsIsDisabled, Handle);
+            hFunc(TEvStatistics::TEvLoadStatisticsQueryResponse, Handle);
+            hFunc(TEvPrivate::TEvRequestTimeout, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 LOG_CRIT_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
@@ -77,10 +94,32 @@ private:
         auto& request = InFlight[requestId];
         request.ReplyToActorId = ev->Sender;
         request.EvCookie = ev->Cookie;
+        request.StatType = ev->Get()->StatType;
         request.StatRequests.swap(ev->Get()->StatRequests);
 
         if (!EnableStatistics) {
             ReplyFailed(requestId, true);
+            return;
+        }
+
+        if (request.StatType == EStatType::COUNT_MIN_SKETCH) {
+            request.StatResponses.reserve(request.StatRequests.size());
+            ui32 reqIndex = 0;
+            for (const auto& req : request.StatRequests) {
+                auto& response = request.StatResponses.emplace_back();
+                response.Req = req;
+                if (!req.ColumnName) {
+                    response.Success = false;
+                    ++reqIndex;
+                    continue;
+                }
+                ui64 loadCookie = NextLoadQueryCookie++;
+                LoadQueriesInFlight[loadCookie] = std::make_pair(requestId, reqIndex);
+                Register(CreateLoadStatisticsQuery(req.PathId, request.StatType,
+                    *req.ColumnName, loadCookie));
+                ++request.ReplyCounter;
+                ++reqIndex;
+            }
             return;
         }
 
@@ -160,6 +199,11 @@ private:
             return;
         }
 
+        bool isNewSS = (NeedSchemeShards.find(request.SchemeShardId) == NeedSchemeShards.end());
+        if (isNewSS) {
+            NeedSchemeShards.insert(request.SchemeShardId);
+        }
+
         auto navigateDomainKey = [this] (TPathId domainKey) {
             using TNavigate = NSchemeCache::TSchemeCacheNavigate;
             auto navigate = std::make_unique<TNavigate>();
@@ -202,11 +246,18 @@ private:
         if (!SAPipeClientId) {
             ConnectToSA();
             SyncNode();
-        } else {
+
+        } else if (isNewSS) {
             auto requestStats = std::make_unique<TEvStatistics::TEvRequestStats>();
             requestStats->Record.SetNodeId(SelfId().NodeId());
+            requestStats->Record.SetUrgent(false);
             requestStats->Record.AddNeedSchemeShards(request.SchemeShardId);
             NTabletPipe::SendData(SelfId(), SAPipeClientId, requestStats.release());
+
+            auto timeout = std::make_unique<TEvPrivate::TEvRequestTimeout>();
+            timeout->NeedSchemeShards.insert(request.SchemeShardId);
+            timeout->PipeClientId = SAPipeClientId;
+            Schedule(RequestTimeout, timeout.release());
         }
     }
 
@@ -214,9 +265,12 @@ private:
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
             "EvPropagateStatistics, node id = " << SelfId().NodeId());
 
+        Send(ev->Sender, new TEvStatistics::TEvPropagateStatisticsResponse);
+
         auto* record = ev->Get()->MutableRecord();
         for (const auto& entry : record->GetEntries()) {
             ui64 schemeShardId = entry.GetSchemeShardId();
+            NeedSchemeShards.erase(schemeShardId);
             auto& statisticsState = Statistics[schemeShardId];
 
             if (entry.GetStats().empty()) {
@@ -319,6 +373,66 @@ private:
         ReplyAllFailed();
     }
 
+    void Handle(TEvStatistics::TEvLoadStatisticsQueryResponse::TPtr& ev) {
+        ui64 cookie = ev->Get()->Cookie;
+
+        auto itLoadQuery = LoadQueriesInFlight.find(cookie);
+        Y_ABORT_UNLESS(itLoadQuery != LoadQueriesInFlight.end());
+        auto [requestId, requestIndex] = itLoadQuery->second;
+
+        auto itRequest = InFlight.find(requestId);
+        Y_ABORT_UNLESS(itRequest != InFlight.end());
+        auto& request = itRequest->second;
+
+        auto& response = request.StatResponses[requestIndex];
+        Y_ABORT_UNLESS(request.StatType == EStatType::COUNT_MIN_SKETCH);
+
+        if (ev->Get()->Success) {
+            response.Success = true;
+            auto& data = ev->Get()->Data;
+            Y_ABORT_UNLESS(data);
+            response.CountMinSketch.CountMin.reset(TCountMinSketch::FromString(data->Data(), data->Size()));
+        } else {
+            response.Success = false;
+        }
+
+        if (--request.ReplyCounter == 0) {
+            auto result = std::make_unique<TEvStatistics::TEvGetStatisticsResult>();
+            result->Success = true;
+            result->StatResponses.swap(request.StatResponses);
+
+            Send(request.ReplyToActorId, result.release(), 0, request.EvCookie);
+
+            InFlight.erase(requestId);
+        }
+    }
+
+    void Handle(TEvPrivate::TEvRequestTimeout::TPtr& ev) {
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "EvRequestTimeout"
+            << ", pipe client id = " << ev->Get()->PipeClientId
+            << ", schemeshard count = " << ev->Get()->NeedSchemeShards.size());
+
+        if (SAPipeClientId != ev->Get()->PipeClientId) {
+            return;
+        }
+        auto requestStats = std::make_unique<TEvStatistics::TEvRequestStats>();
+        bool hasNeedSchemeShards = false;
+        for (auto& ssId : ev->Get()->NeedSchemeShards) {
+            if (NeedSchemeShards.find(ssId) != NeedSchemeShards.end()) {
+                requestStats->Record.AddNeedSchemeShards(ssId);
+                hasNeedSchemeShards = true;
+            }
+        }
+        if (!hasNeedSchemeShards) {
+            return;
+        }
+        requestStats->Record.SetNodeId(SelfId().NodeId());
+        requestStats->Record.SetUrgent(true);
+
+        NTabletPipe::SendData(SelfId(), SAPipeClientId, requestStats.release());
+    }
+
     void ConnectToSA() {
         if (SAPipeClientId || !StatisticsAggregatorId) {
             return;
@@ -338,22 +452,24 @@ private:
         auto connect = std::make_unique<TEvStatistics::TEvConnectNode>();
         auto& record = connect->Record;
 
+        auto timeout = std::make_unique<TEvPrivate::TEvRequestTimeout>();
+        timeout->PipeClientId = SAPipeClientId;
+
         record.SetNodeId(SelfId().NodeId());
         for (const auto& [ssId, ssState] : Statistics) {
             auto* entry = record.AddHaveSchemeShards();
             entry->SetSchemeShardId(ssId);
             entry->SetTimestamp(ssState.Timestamp);
         }
-        std::unordered_set<ui64> ssIds;
-        for (const auto& [reqId, reqState] : InFlight) {
-            if (reqState.SchemeShardId != 0) {
-                ssIds.insert(reqState.SchemeShardId);
-            }
-        }
-        for (const auto& ssId : ssIds) {
+        for (const auto& ssId : NeedSchemeShards) {
             record.AddNeedSchemeShards(ssId);
+            timeout->NeedSchemeShards.insert(ssId);
         }
         NTabletPipe::SendData(SelfId(), SAPipeClientId, connect.release());
+
+        if (!NeedSchemeShards.empty()) {
+            Schedule(RequestTimeout, timeout.release());
+        }
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
             "SyncNode(), pipe client id = " << SAPipeClientId);
@@ -392,7 +508,7 @@ private:
                 stat.RowCount = 0;
                 stat.BytesSize = 0;
             }
-            rsp.Statistics = stat;
+            rsp.Simple = stat;
 
             result->StatResponses.push_back(rsp);
         }
@@ -425,7 +541,7 @@ private:
             TStatSimple stat;
             stat.RowCount = 0;
             stat.BytesSize = 0;
-            rsp.Statistics = stat;
+            rsp.Simple = stat;
 
             result->StatResponses.push_back(rsp);
         }
@@ -460,10 +576,18 @@ private:
         NActors::TActorId ReplyToActorId;
         ui64 EvCookie = 0;
         ui64 SchemeShardId = 0;
+        EStatType StatType = EStatType::SIMPLE;
         std::vector<TRequest> StatRequests;
+        std::vector<TResponse> StatResponses;
+        size_t ReplyCounter = 0;
     };
     std::unordered_map<ui64, TRequestState> InFlight; // request id -> state
     ui64 NextRequestId = 1;
+
+    std::unordered_map<ui64, std::pair<ui64, ui32>> LoadQueriesInFlight; // load cookie -> req id, req index
+    ui64 NextLoadQueryCookie = 1;
+
+    std::unordered_set<ui64> NeedSchemeShards;
 
     struct TStatEntry {
         ui64 RowCount = 0;
@@ -486,6 +610,8 @@ private:
         RSA_FINISHED
     };
     EResolveSAStage ResolveSAStage = RSA_INITIAL;
+
+    static constexpr TDuration RequestTimeout = TDuration::MilliSeconds(100);
 };
 
 THolder<IActor> CreateStatService() {

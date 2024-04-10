@@ -92,10 +92,6 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
 
         CreateShardedTable(server, sender, "/Root", "TestTable",
             TShardedTableOptions()
-                .Columns({
-                    {"key", "Uint32", true, false},
-                    {"value", "Uint32", false, false},
-                })
                 .Indexes({
                     TShardedTableOptions::TIndex{
                         "by_value",

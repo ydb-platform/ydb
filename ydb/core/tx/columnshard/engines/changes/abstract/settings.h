@@ -32,13 +32,6 @@ struct TCompactionLimits {
     i64 GranuleSizeForOverloadPrevent = WARNING_OVERLOAD_GRANULE_SIZE;
     i64 GranuleIndexedPortionsSizeLimit = WARNING_INSERTED_PORTIONS_SIZE;
     ui32 GranuleIndexedPortionsCountLimit = WARNING_INSERTED_PORTIONS_COUNT;
-
-    TSplitSettings GetSplitSettings() const {
-        return TSplitSettings()
-            .SetMinBlobSize(0.5 * std::min<ui64>(MAX_BLOB_SIZE, GranuleSizeForOverloadPrevent))
-            .SetMaxBlobSize(std::min<ui64>(MAX_BLOB_SIZE, GranuleSizeForOverloadPrevent))
-            .SetMaxPortionSize(0.5 * GranuleSizeForOverloadPrevent);
-    }
 };
 
 }

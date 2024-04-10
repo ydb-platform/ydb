@@ -121,7 +121,7 @@ TEST(TLockFreeHashTableTest, Simple)
         auto fingerprint = hash(item.Get());
         auto foundRef = table.FindRef(fingerprint, item.Get());
         EXPECT_TRUE(static_cast<bool>(foundRef));
-        foundRef.Update(item);
+        foundRef.Replace(item);
     }
 
     for (const auto& item : checkTable) {

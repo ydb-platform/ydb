@@ -18,6 +18,7 @@
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/blobstorage_disk.pb.h>
 
 #include <ydb/core/util/pb.h>
 
@@ -35,6 +36,10 @@
 #define BS_EVVGET_SIZE_VERIFY 0
 #endif
 
+#ifndef VDISK_SKELETON_TRACE
+#define VDISK_SKELETON_TRACE 0
+#endif
+
 namespace NKikimr {
 
     namespace NBackpressure {
@@ -45,6 +50,7 @@ namespace NKikimr {
             DSProxy,
             VDiskLoad,
             VPatch,
+            Balancing,
         };
 
         inline const char *EQueueClientType2String(EQueueClientType t) {
@@ -53,7 +59,8 @@ namespace NKikimr {
                 case EQueueClientType::ReplJob:     return "ReplJob";
                 case EQueueClientType::DSProxy:     return "DSProxy";
                 case EQueueClientType::VDiskLoad:   return "VDiskLoad";
-                case EQueueClientType::VPatch:   return "VPatch";
+                case EQueueClientType::VPatch:      return "VPatch";
+                case EQueueClientType::Balancing:   return "Balancing";
             }
 
             Y_ABORT("unexpected EQueueClientType");
@@ -103,6 +110,11 @@ namespace NKikimr {
                         Identifier = 0;
                         break;
 
+                    case NKikimrBlobStorage::TMsgQoS::ClientIdCase::kBalancingVDiskId:
+                        Type = EQueueClientType::Balancing;
+                        Identifier = msgQoS.GetBalancingVDiskId();
+                        break;
+
                     default:
                         Y_ABORT("unexpected case");
                 }
@@ -135,6 +147,10 @@ namespace NKikimr {
 
                     case EQueueClientType::VPatch:
                         msgQoS->SetVPatchVDiskId(Identifier);
+                        break;
+
+                    case EQueueClientType::Balancing:
+                        msgQoS->SetBalancingVDiskId(Identifier);
                         break;
                 }
             }
@@ -332,6 +348,7 @@ namespace NKikimr {
         const NKikimrBlobStorage::EVDiskQueueId ExtQueueId = NKikimrBlobStorage::EVDiskQueueId::Unknown;
         const NKikimrBlobStorage::EVDiskInternalQueueId IntQueueId = NKikimrBlobStorage::EVDiskInternalQueueId::IntUnknown;
         const TActorId ActorId;
+        const ui64 InternalMessageId = 0;
 
         TVMsgContext() = default;
 
@@ -343,6 +360,7 @@ namespace NKikimr {
             , ExtQueueId(msgQoS.GetExtQueueId())
             , IntQueueId(msgQoS.GetIntQueueId())
             , ActorId(ActorIdFromProto(msgQoS.GetSenderActorId()))
+            , InternalMessageId(msgQoS.GetInternalMessageId())
         {}
 
         void Output(IOutputStream &str) const {
@@ -352,6 +370,7 @@ namespace NKikimr {
                 << " Cost# " << Cost
                 << " ExtQueueId# " << ExtQueueId
                 << " IntQueueId# " << IntQueueId
+                << " InternalMessageId# " << InternalMessageId
                 << "}";
         }
 
@@ -498,6 +517,7 @@ namespace NKikimr {
                 resultQoS->Swap(queryRecord->MutableMsgQoS());
                 resultQoS->ClearDeadlineSeconds();
                 resultQoS->ClearSendMeCostSettings();
+                resultQoS->ClearInternalMessageId();
             } else {
                 Y_ABORT_UNLESS(!SkeletonFrontIDPtr);
             }
@@ -1432,6 +1452,9 @@ namespace NKikimr {
         TString ToString() const override {
             TStringStream str;
             str << "{EvVGetResult QueryResult Status# " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
+            if (Record.HasErrorReason()) {
+                str << " ErrorReason# '" << EscapeC(Record.GetErrorReason()) << '\'';
+            }
             for (const auto& result : Record.GetResult()) {
                 str << " {";
                 str << (result.HasBlobID() ? LogoBlobIDFromLogoBlobID(result.GetBlobID()).ToString() : "?")
@@ -1472,7 +1495,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
+        void MakeError(NKikimrProto::EReplyStatus status, const TString& errorReason,
                 const NKikimrBlobStorage::TEvVGet &request) {
             NKikimrProto::EReplyStatus messageStatus = status;
             NKikimrProto::EReplyStatus queryStatus = status != NKikimrProto::NOTREADY ? status : NKikimrProto::ERROR;
@@ -1505,6 +1528,9 @@ namespace NKikimr {
             if (request.HasTimestamps()) {
                 Record.MutableTimestamps()->CopyFrom(request.GetTimestamps());
             }
+            if (errorReason) {
+                Record.SetErrorReason(errorReason);
+            }
         }
     };
 
@@ -1518,7 +1544,9 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
-        TVDiskSkeletonTrace *VDiskSkeletonTrace = nullptr;
+#if VDISK_SKELETON_TRACE
+        std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
+#endif
 
         TEvVSpecialPatchBase() = default;
 
@@ -1912,7 +1940,9 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
-        TVDiskSkeletonTrace *VDiskSkeletonTrace = nullptr;
+#if VDISK_SKELETON_TRACE
+        std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
+#endif
 
         TEvVPatchStart() = default;
 
@@ -1998,7 +2028,9 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
-        TVDiskSkeletonTrace *VDiskSkeletonTrace = nullptr;
+#if VDISK_SKELETON_TRACE
+        std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
+#endif
 
         TEvVPatchDiff() = default;
 
@@ -2073,7 +2105,9 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
-        TVDiskSkeletonTrace *VDiskSkeletonTrace = nullptr;
+#if VDISK_SKELETON_TRACE
+        std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
+#endif
 
         TEvVPatchXorDiff() = default;
 

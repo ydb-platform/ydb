@@ -18,6 +18,7 @@ public:
     }
 
     TNodePtr Build(const TSQLv1ParserAST& ast);
+    TNodePtr Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core>& ast);
 
     bool Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core);
 private:

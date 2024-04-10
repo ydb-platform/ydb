@@ -105,6 +105,12 @@ TString FillAuthProperties(THashMap<TString, TString>& properties, const TExtern
             properties["awsRegion"] = externalSource.DataSourceAuth.GetAws().GetAwsRegion();
             return {};
 
+        case NKikimrSchemeOp::TAuth::kToken:
+            properties["authMethod"] = "TOKEN";
+            properties["token"] = externalSource.Token;
+            properties["tokenReference"] = externalSource.DataSourceAuth.GetToken().GetTokenSecretName();
+            return {};
+
         case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
             return {"Identity case is not specified"};
     }
@@ -350,6 +356,18 @@ public:
 
                 if (!AddCluster(table, res, input, ctx)) {
                     return TStatus::Error;
+                }
+
+                if (const auto& preparingQuery = SessionCtx->Query().PreparingQuery;
+                        preparingQuery
+                        && res.Metadata->Kind == EKikimrTableKind::View
+                ) {
+                    const auto& viewMetadata = *res.Metadata;
+                    auto* viewInfo = preparingQuery->MutablePhysicalQuery()->MutableViewInfos()->Add();
+                    auto* pathId = viewInfo->MutableTableId();
+                    pathId->SetOwnerId(viewMetadata.PathId.OwnerId());
+                    pathId->SetTableId(viewMetadata.PathId.TableId());
+                    viewInfo->SetSchemaVersion(viewMetadata.SchemaVersion);
                 }
             } else {
                 TIssueScopeGuard issueScope(ctx.IssueManager, [input, &table, &ctx]() {

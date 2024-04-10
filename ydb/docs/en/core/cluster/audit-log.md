@@ -37,8 +37,8 @@ The information about each operation is saved to the audit log as a separate eve
 | `detailed_status` | The status delivered by a {{ ydb-short-name }} component (for example, `StatusAccepted`, `StatusInvalidParameter `, `StatusNameConflict`).<br>Optional. |
 | **Ownership and permission attributes** |
 | `new_owner` | The SID of the new owner of the object when ownership is transferred. <br>Optional. |
-| `acl_add` | List of added permissions (for example, `[+R:someuser]`).<br>Optional. |
-| `acl_remove` | List of revoked permissions (for example, `[-R:someuser]`).<br>Optional. |
+| `acl_add` | List of added permissions in [short notation](./short-access-control-notation.md) (for example, `[+R:someuser]`).<br>Optional. |
+| `acl_remove` | List of revoked permissions in [short notation](./short-access-control-notation.md) (for example, `[-R:someuser]`).<br>Optional. |
 | **Custom attributes** |
 | `user_attrs_add` | List of custom attributes added when creating objects or updating attributes (for example, `[attr_name1: A, attr_name2: B]`).<br>Optional. |
 | `user_attrs_remove` | List of custom attributes removed when creating objects or updating attributes (for example, `[attr_name1, attr_name2]`).<br>Optional. |

@@ -25,6 +25,7 @@ public:
 
         TSourceIdInfo::EState State;
         ui64 SeqNo = 0;
+        ui64 MinSeqNo = 0;
         ui64 Offset = 0;
         bool Explicit = false;
         TInstant WriteTimestamp;

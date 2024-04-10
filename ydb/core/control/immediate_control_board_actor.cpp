@@ -33,7 +33,6 @@ class TImmediateControlActor : public TActorBootstrapped<TImmediateControlActor>
         }
     };
 
-    TMutex Mtx;
     TIntrusivePtr<TControlBoard> Board;
     TVector<TLogRecord> HistoryLog;
 

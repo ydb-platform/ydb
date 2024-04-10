@@ -124,14 +124,18 @@ public:
     }
 
 private:
+    static void PushHybridStats(const TYtState::TPtr& state, TStringBuf statName, TStringBuf opName, const TStringBuf& folderName = "") {
+        with_lock(state->StatisticsMutex) {
+            state->HybridStatistics[folderName].Entries.emplace_back(TString{statName}, 0, 0, 0, 0, 1);
+            state->HybridOpStatistics[opName][folderName].Entries.emplace_back(TString{statName}, 0, 0, 0, 0, 1);
+        }
+    }
+
     static TExprNode::TPtr FinalizeOutputOp(const TYtState::TPtr& state, const TString& operationHash,
         const IYtGateway::TRunResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, bool markFinished)
     {
         if (markFinished && !TYtDqProcessWrite::Match(input.Get())) {
-            with_lock(state->StatisticsMutex) {
-                state->HybridStatistics[input->Content()].Entries.emplace_back(TString{"YtExecution"}, 0, 0, 0, 0, 1);
-                state->Statistics[Max<ui32>()].Entries.emplace_back(TString{"YtExecution"}, 0, 0, 0, 0, 1);
-            }
+            PushHybridStats(state, "YtExecution", input->Content());
         }
         auto outSection = TYtOutputOpBase(input).Output();
         YQL_ENSURE(outSection.Size() == res.OutTableStats.size(), "Invalid output table count in IYtGateway::TRunResult");
@@ -289,26 +293,14 @@ private:
     }
 
     TStatusCallbackPair HandleTryFirst(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext&) {
-        auto statWriter = [this](TStringBuf name) {
-            with_lock(State_->StatisticsMutex) {
-                State_->Statistics[Max<ui32>()].Entries.emplace_back(TString{name}, 0, 0, 0, 0, 1);
-            }
-        };
-        auto hybridStatWriter = [this](TStringBuf statName, TStringBuf opName) {
-            with_lock(State_->StatisticsMutex) {
-                State_->HybridStatistics[opName].Entries.emplace_back(TString{statName}, 0, 0, 0, 0, 1);
-            }
-        };
 
         switch (input->Head().GetState()) {
             case TExprNode::EState::ExecutionComplete:
-                statWriter("HybridExecution");
-                hybridStatWriter("Execution", input->TailPtr()->Content());
+                PushHybridStats(State_, "Execution", input->TailPtr()->Content());
                 output = input->HeadPtr();
                 break;
             case TExprNode::EState::Error: {
-                statWriter("HybridFallback");
-                hybridStatWriter("Fallback", input->TailPtr()->Content());
+                PushHybridStats(State_, "Fallback", input->TailPtr()->Content());
                 if (State_->Configuration->HybridDqExecutionFallback.Get().GetOrElse(true)) {
                     output = input->TailPtr();
                 } else {

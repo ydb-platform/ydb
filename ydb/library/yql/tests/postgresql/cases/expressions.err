@@ -1,3 +1,5 @@
+Registering pre-existing tables
+	date_tbl
 <sql-statement>
 --
 -- expression evaluation tests that don't fit into a more specific file
@@ -53,52 +55,27 @@ SELECT now()::timestamp::text = localtimestamp::text;
 -- current database / catalog
 SELECT current_catalog = current_database();
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:3:8: Error: Usupported SQLValueFunction: 13
-    	SELECT current_catalog = current_database();
-	       ^
 <sql-statement>
 -- current_schema
 SELECT current_schema;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:8: Error: Usupported SQLValueFunction: 14
-    	SELECT current_schema;
-	       ^
 <sql-statement>
 SET search_path = 'notme';
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: search_path
+    -stdin-:<main>:1:1: Error: VariableSetStmt, search path supports only 'information_schema', 'public', 'pg_catalog', '' but got: 'notme'
     	SET search_path = 'notme';
 	^
 <sql-statement>
 SELECT current_schema;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:8: Error: Usupported SQLValueFunction: 14
-    	SELECT current_schema;
-	       ^
 <sql-statement>
 SET search_path = 'pg_catalog';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: search_path
-    	SET search_path = 'pg_catalog';
-	^
 <sql-statement>
 SELECT current_schema;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:8: Error: Usupported SQLValueFunction: 14
-    	SELECT current_schema;
-	       ^
 <sql-statement>
 RESET search_path;
 </sql-statement>
@@ -124,10 +101,17 @@ select count(*) from date_tbl
 select count(*) from date_tbl
   where f1 between '1997-01-01' and '1998-01-01';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.date_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select count(*) from date_tbl
+	^
+        -stdin-:<main>:1:22: Error: At function: PgReadTable!
+        	select count(*) from date_tbl
+	                     ^
+            -stdin-:<main>:1:22: Error: Unsupported table: date_tbl
+            	select count(*) from date_tbl
+	                     ^
 <sql-statement>
 explain (costs off)
 select count(*) from date_tbl
@@ -142,10 +126,17 @@ select count(*) from date_tbl
 select count(*) from date_tbl
   where f1 not between '1997-01-01' and '1998-01-01';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.date_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select count(*) from date_tbl
+	^
+        -stdin-:<main>:1:22: Error: At function: PgReadTable!
+        	select count(*) from date_tbl
+	                     ^
+            -stdin-:<main>:1:22: Error: Unsupported table: date_tbl
+            	select count(*) from date_tbl
+	                     ^
 <sql-statement>
 explain (costs off)
 select count(*) from date_tbl
@@ -160,10 +151,17 @@ select count(*) from date_tbl
 select count(*) from date_tbl
   where f1 between symmetric '1997-01-01' and '1998-01-01';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.date_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select count(*) from date_tbl
+	^
+        -stdin-:<main>:1:22: Error: At function: PgReadTable!
+        	select count(*) from date_tbl
+	                     ^
+            -stdin-:<main>:1:22: Error: Unsupported table: date_tbl
+            	select count(*) from date_tbl
+	                     ^
 <sql-statement>
 explain (costs off)
 select count(*) from date_tbl
@@ -178,10 +176,17 @@ select count(*) from date_tbl
 select count(*) from date_tbl
   where f1 not between symmetric '1997-01-01' and '1998-01-01';
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.date_tbl
-    
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select count(*) from date_tbl
+	^
+        -stdin-:<main>:1:22: Error: At function: PgReadTable!
+        	select count(*) from date_tbl
+	                     ^
+            -stdin-:<main>:1:22: Error: Unsupported table: date_tbl
+            	select count(*) from date_tbl
+	                     ^
 <sql-statement>
 --
 -- Test parsing of a no-op cast to a type with unspecified typmod
@@ -286,7 +291,7 @@ select '(0,0)'::point in ('(0,0,0,0)'::box, point(0,0));
         -stdin-:<main>:6:23: Error: At function: PgIn, At function: AsList
         	select '(0,0)'::point in ('(0,0,0,0)'::box, point(0,0));
 	                      ^
-            -stdin-:<main>:6:23: Error: Cannot infer common type for box and point
+            -stdin-:<main>:6:23: Error: Cannot infer common type for types 603 and 600
             	select '(0,0)'::point in ('(0,0,0,0)'::box, point(0,0));
 	                      ^
 <sql-statement>

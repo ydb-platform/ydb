@@ -18,6 +18,7 @@ interface as structured text.
 """
 import zope.interface
 
+
 __all__ = [
     'asReStructuredText',
     'asStructuredText',

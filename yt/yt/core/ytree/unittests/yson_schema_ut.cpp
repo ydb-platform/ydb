@@ -143,11 +143,6 @@ void Deserialize(TCustomType& value, NYT::NYTree::INodePtr node)
     value.Value = node->GetValue<int>();
 }
 
-void Deserialize(TCustomType& codec, NYT::NYson::TYsonPullParserCursor* cursor)
-{
-    Deserialize(codec, NYT::NYson::ExtractTo<NYT::NYTree::INodePtr>(cursor));
-}
-
 struct TTestStructWithCustomType
     : public TYsonStruct
 {

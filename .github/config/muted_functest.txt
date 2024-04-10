@@ -1,4 +1,3 @@
-ydb/tests/functional/postgresql::test_postgres.py.TestPostgresSuite.test_postgres_suite*
 ydb/tests/functional/tenants/test_dynamic_tenants.py::*
 ydb/tests/functional/tenants/test_storage_config.py::TestStorageConfig::*
 ydb/tests/functional/tenants/test_tenants.py::*

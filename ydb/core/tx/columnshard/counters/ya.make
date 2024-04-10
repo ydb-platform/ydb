@@ -17,4 +17,7 @@ PEERDIR(
     ydb/core/base
 )
 
+GENERATE_ENUM_SERIALIZATION(columnshard.h)
+GENERATE_ENUM_SERIALIZATION(scan.h)
+
 END()

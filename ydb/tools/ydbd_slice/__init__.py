@@ -10,6 +10,7 @@ import subprocess
 import warnings
 from urllib3.exceptions import HTTPWarning
 
+from ydb.tools.cfg.walle import NopHostsInformationProvider
 from ydb.tools.ydbd_slice import nodes, handlers, cluster_description
 from ydb.tools.ydbd_slice.kube import handlers as kube_handlers, docker
 
@@ -238,6 +239,7 @@ Example:
 '''
 
 
+KIKIMR_EXECUTABLE = 'kikimr/driver/kikimr'
 YDBD_EXECUTABLE = 'ydb/apps/ydbd/ydbd'
 
 
@@ -248,9 +250,9 @@ class Terminate(BaseException):
         raise Terminate(signum, frame)
 
 
-def safe_load_cluster_details(cluster_yaml):
+def safe_load_cluster_details(cluster_yaml, walle_provider):
     try:
-        cluster_details = cluster_description.ClusterDetails(cluster_yaml)
+        cluster_details = cluster_description.ClusterDetails(cluster_yaml, walle_provider)
     except IOError as io_err:
         print('', file=sys.stderr)
         print("unable to open YAML params as a file, check args", file=sys.stderr)
@@ -298,8 +300,8 @@ def deduce_components_from_args(args, cluster_details):
     return result
 
 
-def deduce_nodes_from_args(args):
-    cluster_hosts = safe_load_cluster_details(args.cluster).hosts_names
+def deduce_nodes_from_args(args, walle_provider):
+    cluster_hosts = safe_load_cluster_details(args.cluster, walle_provider).hosts_names
     result = cluster_hosts
 
     if args.nodes is not None:
@@ -381,9 +383,12 @@ def arcadia_root(begin_path='.'):
 def deduce_kikimr_bin_from_args(args):
     if args.kikimr is not None:
         path = os.path.abspath(args.kikimr)
-    elif args.arcadia:
+    elif args.ydbd:
         root = arcadia_root()
         path = ya_build(root, YDBD_EXECUTABLE, args.build_args, args.dry_run)
+    elif args.arcadia:
+        root = arcadia_root()
+        path = ya_build(root, KIKIMR_EXECUTABLE, args.build_args, args.dry_run)
     else:
         sys.exit("unable to deduce kikimr bin")
 
@@ -461,6 +466,11 @@ def binaries_args():
         help="explicit path to compressed kikimr binary file used for transfer acceleration"
     )
     args.add_argument(
+        "--ydbd",
+        action='store_true',
+        help="build ydb/apps/ydbd/ydbd binary from arcadia, figure out root by finding .arcadia.root upstairs"
+    )
+    args.add_argument(
         "--arcadia",
         action='store_true',
         help="build all binaries from arcadia, figure out root by finding .arcadia.root upstairs"
@@ -490,11 +500,11 @@ def component_args():
     return args
 
 
-def add_explain_mode(modes):
+def add_explain_mode(modes, walle_provider):
     def _run(args):
         logger.debug("run func explain with cmd args is '%s'", args)
 
-        cluster_details = safe_load_cluster_details(args.cluster)
+        cluster_details = safe_load_cluster_details(args.cluster, walle_provider)
         components = deduce_components_from_args(args, cluster_details)
 
         kikimr_bin, kikimr_compressed_bin = deduce_kikimr_bin_from_args(args)
@@ -508,6 +518,7 @@ def add_explain_mode(modes):
             args.out_cfg,
             kikimr_bin,
             kikimr_compressed_bin,
+            walle_provider
         )
 
         if 'kikimr' in components:
@@ -531,26 +542,26 @@ def add_explain_mode(modes):
     mode.set_defaults(handler=_run)
 
 
-def dispatch_run_light(func, args):
+def dispatch_run_light(func, args, walle_provider):
     logger.debug("run func '%s' with cmd args is '%s'", func.__name__, args)
 
-    cluster_details = safe_load_cluster_details(args.cluster)
+    cluster_details = safe_load_cluster_details(args.cluster, walle_provider)
     components = deduce_components_from_args(args, cluster_details)
 
     logger.debug("components is '%s'", components)
 
-    nodes = deduce_nodes_from_args(args)
+    nodes = deduce_nodes_from_args(args, walle_provider)
 
-    func(components, nodes, cluster_details)
+    func(components, nodes, cluster_details, walle_provider)
 
 
-def dispatch_run(func, args):
+def dispatch_run(func, args, walle_provider):
     logger.debug("run func '%s' with cmd args is '%s'", func.__name__, args)
 
-    cluster_details = safe_load_cluster_details(args.cluster)
+    cluster_details = safe_load_cluster_details(args.cluster, walle_provider)
     components = deduce_components_from_args(args, cluster_details)
 
-    nodes = deduce_nodes_from_args(args)
+    nodes = deduce_nodes_from_args(args, walle_provider)
 
     temp_dir = deduce_temp_dir_from_args(args)
     clear_tmp = not args.dry_run and args.temp_dir is None
@@ -561,31 +572,32 @@ def dispatch_run(func, args):
         cluster_details,
         out_dir=temp_dir,
         kikimr_bin=kikimr_bin,
-        kikimr_compressed_bin=kikimr_compressed_bin
+        kikimr_compressed_bin=kikimr_compressed_bin,
+        walle_provider=walle_provider
     )
 
     v = vars(args)
-    func(components, nodes, cluster_details, configurator, v.get('clear_logs'), args)
+    func(components, nodes, cluster_details, configurator, v.get('clear_logs'), args, walle_provider)
 
     if clear_tmp:
         logger.debug("remove temp dirs '%s'", temp_dir)
         shutil.rmtree(temp_dir)
 
 
-def dispatch_run_raw_cfg(func, args):
+def dispatch_run_raw_cfg(func, args, walle_provider):
     logger.debug("run func '%s' with cmd args is '%s'", func.__name__, args)
 
-    cluster_details = safe_load_cluster_details(args.cluster)
+    cluster_details = safe_load_cluster_details(args.cluster, walle_provider)
     components = deduce_components_from_args(args, cluster_details)
 
-    nodes = deduce_nodes_from_args(args)
+    nodes = deduce_nodes_from_args(args, walle_provider)
 
     func(components, nodes, cluster_details, args.raw_cfg)
 
 
-def add_install_mode(modes):
+def add_install_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.slice_install, args)
+        dispatch_run(handlers.slice_install, args, walle_provider)
 
     mode = modes.add_parser(
         "install",
@@ -597,9 +609,9 @@ def add_install_mode(modes):
     mode.set_defaults(handler=_run)
 
 
-def add_update_mode(modes):
+def add_update_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.slice_update, args)
+        dispatch_run(handlers.slice_update, args, walle_provider)
 
     mode = modes.add_parser(
         "update",
@@ -612,9 +624,9 @@ def add_update_mode(modes):
     mode.set_defaults(handler=_run)
 
 
-def add_update_raw_configs(modes):
+def add_update_raw_configs(modes, walle_provider):
     def _run(args):
-        dispatch_run_raw_cfg(handlers.slice_update_raw_configs, args)
+        dispatch_run_raw_cfg(handlers.slice_update_raw_configs, args, walle_provider)
 
     mode = modes.add_parser(
         "update-raw-cfg",
@@ -631,9 +643,9 @@ def add_update_raw_configs(modes):
     mode.set_defaults(handler=_run)
 
 
-def add_stop_mode(modes):
+def add_stop_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run_light(handlers.slice_stop, args)
+        dispatch_run_light(handlers.slice_stop, args, walle_provider)
 
     mode = modes.add_parser(
         "stop",
@@ -645,9 +657,9 @@ def add_stop_mode(modes):
     mode.set_defaults(handler=_run)
 
 
-def add_start_mode(modes):
+def add_start_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run_light(handlers.slice_start, args)
+        dispatch_run_light(handlers.slice_start, args, walle_provider)
 
     mode = modes.add_parser(
         "start",
@@ -660,9 +672,9 @@ def add_start_mode(modes):
     mode.set_defaults(handler=_run)
 
 
-def add_clear_mode(modes):
+def add_clear_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run_light(handlers.slice_clear, args)
+        dispatch_run_light(handlers.slice_clear, args, walle_provider)
 
     mode = modes.add_parser(
         "clear",
@@ -674,9 +686,9 @@ def add_clear_mode(modes):
     mode.set_defaults(handler=_run)
 
 
-def add_format_mode(modes):
+def add_format_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run_light(handlers.slice_format, args)
+        dispatch_run_light(handlers.slice_format, args, walle_provider)
 
     mode = modes.add_parser(
         "format",
@@ -695,7 +707,10 @@ def add_format_mode(modes):
 # docker and kube scenarios
 def build_and_push_docker_image(build_args, docker_package, build_ydbd, image, force_rebuild):
     if docker_package is None:
-        docker_package = docker.DOCKER_IMAGE_YDBD_PACKAGE_SPEC
+        if build_ydbd:
+            docker_package = docker.DOCKER_IMAGE_YDBD_PACKAGE_SPEC
+        else:
+            docker_package = docker.DOCKER_IMAGE_KIKIMR_PACKAGE_SPEC
 
     logger.debug(f'using docker package spec: {docker_package}')
 
@@ -724,6 +739,11 @@ def add_arguments_docker_build_with_remainder(mode, add_force_rebuild=False):
             action='store_true',
         )
     group.add_argument(
+        "--ydbd",
+        action='store_true',
+        help="build docker image with ydb/apps/ydbd/ydbd binary from arcadia, figure out root by finding .arcadia.root upstairs"
+    )
+    group.add_argument(
         '-d', '--docker-package',
         help='Optional: path to docker package description file relative from ARCADIA_ROOT.',
     )
@@ -749,7 +769,7 @@ def add_docker_build_mode(modes):
         logger.debug("starting docker-build cmd with args '%s'", args)
         try:
             image = docker.get_image_from_args(args)
-            build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=True)
+            build_and_push_docker_image(args.build_args, args.docker_package, args.ydbd, image, force_rebuild=True)
 
             logger.info('docker-build finished')
         except RuntimeError as e:
@@ -825,7 +845,7 @@ def add_kube_install_mode(modes):
         try:
             image = docker.get_image_from_args(args)
             if not args.use_prebuilt_image:
-                build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=args.force_rebuild)
+                build_and_push_docker_image(args.build_args, args.docker_package, args.ydbd, image, force_rebuild=args.force_rebuild)
 
             manifests = kube_handlers.get_all_manifests(args.path)
             kube_handlers.manifests_ydb_set_image(args.path, manifests, image)
@@ -872,7 +892,7 @@ def add_kube_update_mode(modes):
         try:
             image = docker.get_image_from_args(args)
             if not args.use_prebuilt_image:
-                build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=args.force_rebuild)
+                build_and_push_docker_image(args.build_args, args.docker_package, args.ydbd, image, force_rebuild=args.force_rebuild)
 
             manifests = kube_handlers.get_all_manifests(args.path)
             manifests = kube_handlers.manifests_ydb_filter_components(args.path, manifests, args.components)
@@ -1140,7 +1160,7 @@ def add_kube_uninstall_mode(modes):
     mode.set_defaults(handler=_run)
 
 
-def main():
+def main(walle_provider=None):
     try:
         signal.signal(signal.SIGTERM, Terminate.handler)
 
@@ -1185,14 +1205,15 @@ def main():
         )
 
         modes = parser.add_subparsers()
-        add_start_mode(modes)
-        add_stop_mode(modes)
-        add_install_mode(modes)
-        add_update_mode(modes)
-        add_update_raw_configs(modes)
-        add_clear_mode(modes)
-        add_format_mode(modes)
-        add_explain_mode(modes)
+        walle_provider = walle_provider or NopHostsInformationProvider()
+        add_start_mode(modes, walle_provider)
+        add_stop_mode(modes, walle_provider)
+        add_install_mode(modes, walle_provider)
+        add_update_mode(modes, walle_provider)
+        add_update_raw_configs(modes, walle_provider)
+        add_clear_mode(modes, walle_provider)
+        add_format_mode(modes, walle_provider)
+        add_explain_mode(modes, walle_provider)
         add_docker_build_mode(modes)
         add_kube_generate_mode(modes)
         add_kube_install_mode(modes)

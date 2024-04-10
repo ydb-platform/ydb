@@ -221,6 +221,17 @@ Y_UNIT_TEST_SUITE(ConfigProto) {
             "/AppConfig/FederatedQueryConfig/Gateways/Ydb/DefaultSettings/Name/Name",
             "/AppConfig/FederatedQueryConfig/Gateways/Pq/ClusterMapping/Settings/Name/Name",
             "/AppConfig/FederatedQueryConfig/Gateways/Pq/DefaultSettings/Name/Name",
+            "/AppConfig/QueryServiceConfig/Yt/ClusterMapping/Settings/Activation/ByHour/Hour/Hour",
+            "/AppConfig/QueryServiceConfig/Yt/ClusterMapping/Settings/Activation/ByHour/Percentage/Percentage",
+            "/AppConfig/QueryServiceConfig/Yt/ClusterMapping/Settings/Name/Name",
+            "/AppConfig/QueryServiceConfig/Yt/ClusterMapping/Settings/Value/Value",
+            "/AppConfig/QueryServiceConfig/Yt/DefaultSettings/Activation/ByHour/Hour/Hour",
+            "/AppConfig/QueryServiceConfig/Yt/DefaultSettings/Activation/ByHour/Percentage/Percentage",
+            "/AppConfig/QueryServiceConfig/Yt/DefaultSettings/Name/Name",
+            "/AppConfig/QueryServiceConfig/Yt/DefaultSettings/Value/Value",
+            "/AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Pattern/Pattern",
+            "/AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Cluster/Cluster",
+            "/AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Path/Path",
             "/AppConfig/QueryServiceConfig/Generic/DefaultSettings/Value/Value",
             "/AppConfig/FederatedQueryConfig/Gateways/S3/ClusterMapping/Settings/Value/Value",
             "/AppConfig/QueryServiceConfig/S3/ClusterMapping/Settings/Value/Value",
@@ -298,6 +309,17 @@ Y_UNIT_TEST_SUITE(ConfigProto) {
             {58, 9, 2, 102, 1, 1}, // /AppConfig/FederatedQueryConfig/Gateways/Dq/DefaultSettings/Name/Name
             {73, 6, 100, 2, 2}, // /AppConfig/QueryServiceConfig/S3/DefaultSettings/Value/Value
             {73, 11, 6, 2, 2}, // /AppConfig/QueryServiceConfig/Generic/DefaultSettings/Value/Value
+            {73, 15, 101, 100, 3, 2, 1, 1}, // /AppConfig/QueryServiceConfig/Yt/ClusterMapping/Settings/Activation/ByHour/Hour/Hour
+            {73, 15, 101, 100, 3, 2, 2, 2}, // /AppConfig/QueryServiceConfig/Yt/ClusterMapping/Settings/Activation/ByHour/Percentage/Percentage
+            {73, 15, 101, 100, 1, 1}, // /AppConfig/QueryServiceConfig/Yt/ClusterMapping/Settings/Name/Name
+            {73, 15, 101, 100, 2, 2}, // /AppConfig/QueryServiceConfig/Yt/ClusterMapping/Settings/Value/Value
+            {73, 15, 102, 3, 2, 1, 1}, // /AppConfig/QueryServiceConfig/Yt/DefaultSettings/Activation/ByHour/Hour/Hour
+            {73, 15, 102, 3, 2, 2, 2}, // /AppConfig/QueryServiceConfig/Yt/DefaultSettings/Activation/ByHour/Percentage/Percentage
+            {73, 15, 102, 1, 1}, // /AppConfig/QueryServiceConfig/Yt/DefaultSettings/Name/Name
+            {73, 15, 102, 2, 2}, // /AppConfig/QueryServiceConfig/Yt/DefaultSettings/Value/Value
+            {73, 15, 100, 1, 1}, // /AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Pattern/Pattern
+            {73, 15, 100, 2, 2}, // /AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Cluster/Cluster
+            {73, 15, 100, 3, 3}, // /AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Path/Path
             {58, 9, 6, 1, 100, 2, 2}, // /AppConfig/FederatedQueryConfig/Gateways/Solomon/ClusterMapping/Settings/Value/Value
             {58, 9, 5, 1, 100, 2, 2}, // /AppConfig/FederatedQueryConfig/Gateways/S3/ClusterMapping/Settings/Value/Value
             {58, 9, 6, 2, 2, 2}, // /AppConfig/FederatedQueryConfig/Gateways/Solomon/DefaultSettings/Value/Value

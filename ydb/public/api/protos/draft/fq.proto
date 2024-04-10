@@ -19,7 +19,7 @@ import "google/protobuf/empty.proto";
 
 // === Query API ===
 
-// Header: ydb-fq-project => yandexcloud://cloud_id/folder_id
+// Header: ydb-fq-project => yandexcloud://folder_id
 
 message Acl {
     enum Visibility {
@@ -126,8 +126,10 @@ message QueryContent {
     // "executor" - type of executor for this query
     map<string, string> execution_settings = 10 [(Ydb.map_key).length.range = {min: 1, max: 100}, (Ydb.length).le = 4096];
     // Syntax of the text
-    // By default it is "yql", but additional syntax "pg" (PostreSQL SQL frontend) is supported as well
+    // By default it is "yql", but additional syntax "pg" (PostgreSQL SQL frontend) is supported as well
     QuerySyntax syntax = 11;
+    // Map of query parameters
+    map<string, Ydb.TypedValue> parameters = 12 [(Ydb.map_key).length.range = {min: 1, max: 100}];
 }
 
 message CommonMeta {
@@ -372,6 +374,7 @@ message Job {
     bool automatic = 11;
     google.protobuf.Timestamp expire_at = 12;
     QueryContent.QuerySyntax syntax = 13;
+    map<string, Ydb.TypedValue> parameters = 14;
 }
 
 // Information about recent query runs

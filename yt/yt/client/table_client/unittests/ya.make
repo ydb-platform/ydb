@@ -8,6 +8,7 @@ SRCS(
     columnar_statistics_ut.cpp
     columnar_ut.cpp
     serialization_ut.cpp
+    unversioned_row_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)

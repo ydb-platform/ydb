@@ -197,30 +197,24 @@ create table inserttest (f1 int, f2 int[],
 <sql-statement>
 insert into inserttest (f2[1], f2[2]) values (1,2);
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f2[1], f2[2]) values (3,4), (5,6);
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f2[1], f2[2]) select 7,8;
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f2[1], f2[2]) values (1,default);  -- not supported
 </sql-statement>
@@ -232,30 +226,24 @@ insert into inserttest (f2[1], f2[2]) values (1,default);  -- not supported
 <sql-statement>
 insert into inserttest (f3.if1, f3.if2) values (1,array['foo']);
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f3.if1, f3.if2) values (1,'{foo}'), (2,'{bar}');
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f3.if1, f3.if2) select 3, '{baz,quux}';
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f3.if1, f3.if2) values (1,default);  -- not supported
 </sql-statement>
@@ -267,66 +255,52 @@ insert into inserttest (f3.if1, f3.if2) values (1,default);  -- not supported
 <sql-statement>
 insert into inserttest (f3.if2[1], f3.if2[2]) values ('foo', 'bar');
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f3.if2[1], f3.if2[2]) values ('foo', 'bar'), ('baz', 'quux');
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f3.if2[1], f3.if2[2]) select 'bear', 'beer';
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f4[1].if2[1], f4[1].if2[2]) values ('foo', 'bar');
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f4[1].if2[1], f4[1].if2[2]) values ('foo', 'bar'), ('baz', 'quux');
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 insert into inserttest (f4[1].if2[1], f4[1].if2[2]) select 'bear', 'beer';
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 select * from inserttest;
 </sql-statement>
--stdin-:<main>: Error: Table metadata loading
+-stdin-:<main>: Fatal: Table metadata loading
 
-    -stdin-:<main>: Error: Table inserttest
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.inserttest
     
-        -stdin-:<main>: Error: Failed to parse row spec: No such type: insert_test_type
-        
 <sql-statement>
 -- also check reverse-listing
 create table inserttest2 (f1 bigint, f2 text);
@@ -1306,10 +1280,6 @@ where attname = 'a'
    or attrelid = 'mlparted11'::regclass)
 order by attrelid::regclass::text;
 </sql-statement>
--stdin-:<main>: Fatal: Table metadata loading
-
-    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.pg_attribute
-    
 <sql-statement>
 alter table mlparted1 attach partition mlparted11 for values from (2) to (5);
 </sql-statement>
@@ -2660,7 +2630,7 @@ create table returningwrtest1 partition of returningwrtest for values in (1);
 <sql-statement>
 insert into returningwrtest values (1) returning returningwrtest;
 </sql-statement>
--stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'returning' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+-stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'returning' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
 
 <sql-statement>
 -- check also that the wholerow vars in RETURNING list are converted as needed
@@ -2693,7 +2663,7 @@ alter table returningwrtest attach partition returningwrtest2 for values in (2);
 <sql-statement>
 insert into returningwrtest values (2, 'foo') returning returningwrtest;
 </sql-statement>
--stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'returning' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+-stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'returning' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
 
 <sql-statement>
 drop table returningwrtest;

@@ -4,15 +4,16 @@
 
 #include <yt/yt/client/cypress_client/public.h>
 
+#include <yt/yt/client/tablet_client/public.h>
+
 #include <yt/yt/client/transaction_client/public.h>
 
 #include <yt/yt/core/misc/range.h>
 
 #include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/strong_typedef.h>
 
 #include <util/generic/size_literals.h>
-
-#include <initializer_list>
 
 namespace NYT::NTableClient {
 
@@ -121,6 +122,7 @@ extern const TString RowIndexColumnName;
 extern const TString RangeIndexColumnName;
 extern const TString TabletIndexColumnName;
 extern const TString TimestampColumnName;
+extern const TString TtlColumnName;
 extern const TString CumulativeDataWeightColumnName;
 extern const TString EmptyValueColumnName;
 extern const TString PrimaryLockName;
@@ -130,9 +132,10 @@ constexpr int TypicalHunkColumnCount = 8;
 ////////////////////////////////////////////////////////////////////////////////
 
 DEFINE_ENUM_WITH_UNDERLYING_TYPE(EHunkValueTag, ui8,
-    ((Inline)   (0))
-    ((LocalRef) (1))
-    ((GlobalRef)(2))
+    ((Inline)            (0))
+    ((LocalRef)          (1))
+    ((GlobalRef)         (2))
+    ((CompressedInline)  (3))
 );
 
 // Do not change these values since they are stored in the master snapshot.
@@ -298,7 +301,7 @@ class TKeyComparer;
 struct TColumnRenameDescriptor;
 using TColumnRenameDescriptors = std::vector<TColumnRenameDescriptor>;
 
-class TStableName;
+YT_DEFINE_STRONG_TYPEDEF(TColumnStableName, TString);
 
 class TColumnSchema;
 
@@ -351,6 +354,8 @@ DECLARE_REFCOUNTED_CLASS(TKeyPrefixFilterWriterConfig)
 DECLARE_REFCOUNTED_CLASS(TDictionaryCompressionConfig)
 
 DECLARE_REFCOUNTED_CLASS(TBatchHunkReaderConfig)
+
+DECLARE_REFCOUNTED_CLASS(TDictionaryCompressionSessionConfig)
 
 DECLARE_REFCOUNTED_CLASS(TTableReaderConfig)
 DECLARE_REFCOUNTED_CLASS(TTableWriterConfig)

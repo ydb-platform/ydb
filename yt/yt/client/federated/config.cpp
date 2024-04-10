@@ -18,6 +18,9 @@ void TFederationConfig::Register(TRegistrar registrar)
     registrar.Parameter("cluster_retry_attempts", &TThis::ClusterRetryAttempts)
         .GreaterThanOrEqual(0)
         .Default(3);
+
+    registrar.Parameter("retry_any_error", &TThis::RetryAnyError)
+        .Default(false);
 }
 
 void TConnectionConfig::Register(TRegistrar registrar)

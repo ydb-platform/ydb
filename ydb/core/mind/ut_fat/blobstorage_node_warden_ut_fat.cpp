@@ -125,7 +125,7 @@ void SetupServices(TTestActorRuntime &runtime) {
     { // setup domain info
         app.ClearDomainsAndHive();
         app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1", domainId).Release());
-        app.AddHive(domainId, MakeDefaultHiveID(stateStorageGroup));
+        app.AddHive(MakeDefaultHiveID());
     }
     { // setup channel profiles
         TIntrusivePtr<TChannelProfiles> channelProfiles = new TChannelProfiles;
@@ -229,8 +229,7 @@ void SetupServices(TTestActorRuntime &runtime) {
         runtime.DispatchEvents(options);
     }
 
-    ui64 defaultStateStorageGroup = runtime.GetAppData(0).DomainsInfo->GetDefaultStateStorageGroup(DOMAIN_ID);
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(defaultStateStorageGroup),
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(),
         TTabletTypes::BSController, TBlobStorageGroupType::ErasureMirror3, groupId),
         &CreateFlatBsController);
 }
@@ -247,10 +246,8 @@ void Setup(TTestActorRuntime& runtime) {
 
 
 Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
-    ui64 GetBsc(TTestActorRuntime &runtime) {
-        ui64 defaultStateStorageGroup = runtime.GetAppData(0).DomainsInfo->GetDefaultStateStorageGroup(DOMAIN_ID);
-        ui64 bsController = MakeBSControllerID(defaultStateStorageGroup);
-        return bsController;
+    ui64 GetBsc(TTestActorRuntime& /*runtime*/) {
+        return MakeBSControllerID();
     }
 
     void CreatePDiskInBox(TTestActorRuntime& runtime, const TActorId& sender, ui32 nodeId, ui64 boxId, TString pdiskPath,

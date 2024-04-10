@@ -31,16 +31,16 @@ is, ``verifyObject(ISequence, list()))`` will pass, for example), a few might no
 """
 
 import sys
-
 from abc import ABCMeta
-from collections import abc
 from collections import OrderedDict
-from collections import UserList
 from collections import UserDict
+from collections import UserList
 from collections import UserString
+from collections import abc
 
 from zope.interface.common import ABCInterface
 from zope.interface.common import optional
+
 
 # pylint:disable=inherit-non-class,
 # pylint:disable=no-self-argument,no-method-argument

@@ -432,6 +432,8 @@ TString TProgram::TakeSessionId() {
 }
 
 void TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+
     for (const auto& credential : credentials) {
         Credentials_->AddCredential(credential.first, credential.second);
     }
@@ -445,6 +447,8 @@ void TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& cr
 }
 
 void TProgram::ClearCredentials() {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+
     Credentials_ = MakeIntrusive<TCredentials>();
 
     if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {

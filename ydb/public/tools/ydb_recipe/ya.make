@@ -15,7 +15,6 @@ PEERDIR(
 FILES(
     start.sh
     stop.sh
-    ../../../epilogue.cmake
 )
 
 END()

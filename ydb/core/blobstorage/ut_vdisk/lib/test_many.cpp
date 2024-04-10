@@ -178,7 +178,7 @@ protected:
     virtual void Scenario(const TActorContext &ctx) {
         // load data
         SyncRunner->Run(ctx, CreateManyPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgSize, MsgNum,
-                                            0, 0, 1, HandleClassGen, BadSteps, TDuration::Seconds(0)));
+                                            DefaultTestTabletId, 0, 1, HandleClassGen, BadSteps, TDuration::Seconds(0)));
         LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
 
         // wait for compaction
@@ -188,8 +188,8 @@ protected:
         }
 
         // range read
-        TLogoBlobID readFrom(0, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
-        TLogoBlobID readTo  (0, 0, 0, 0, 0, 0, 1);
+        TLogoBlobID readFrom(DefaultTestTabletId, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
+        TLogoBlobID readTo  (DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
         SyncRunner->Run(ctx, CreateRangeGet(SyncRunner->NotifyID(), Conf->VDisks->Get(0), readFrom, readTo, IndexOnly, MsgNum));
         LOG_NOTICE(ctx, NActorsServices::TEST, "  RANGE GET done");
     }
@@ -230,12 +230,12 @@ protected:
     virtual void Scenario(const TActorContext &ctx) {
         // load data 1
         SyncRunner->Run(ctx, CreateManyPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgSize, MsgNum,
-                                            0, 0, 1, HandleClassGen1, BadSteps, TDuration::Seconds(0)));
+                                            DefaultTestTabletId, 0, 1, HandleClassGen1, BadSteps, TDuration::Seconds(0)));
         LOG_NOTICE(ctx, NActorsServices::TEST, "  Data1 is loaded");
 
         // load data 2
         SyncRunner->Run(ctx, CreateManyPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgSize, MsgNum,
-                                            0, 1, 1, HandleClassGen2, BadSteps, TDuration::Seconds(0)));
+                                            DefaultTestTabletId, 1, 1, HandleClassGen2, BadSteps, TDuration::Seconds(0)));
         LOG_NOTICE(ctx, NActorsServices::TEST, "  Data2 is loaded");
 
         // wait for compaction
@@ -245,8 +245,8 @@ protected:
         }
 
         // range read
-        TLogoBlobID readFrom(0, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
-        TLogoBlobID readTo  (0, 0, 0, 0, 0, 0, 1);
+        TLogoBlobID readFrom(DefaultTestTabletId, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
+        TLogoBlobID readTo  (DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
         SyncRunner->Run(ctx, CreateRangeGet(SyncRunner->NotifyID(), Conf->VDisks->Get(0), readFrom, readTo, IndexOnly, MsgNum));
         LOG_NOTICE(ctx, NActorsServices::TEST, "  RANGE GET done");
     }

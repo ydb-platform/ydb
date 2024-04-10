@@ -15,9 +15,6 @@ namespace NYT::NObjectClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! |#|-prefix.
-extern const TStringBuf ObjectIdPathPrefix;
-
 //! Function for temporary use: to gradually allow types supported in Sequoia.
 bool IsScalarType(NObjectClient::EObjectType type);
 
@@ -41,6 +38,9 @@ bool IsLogTableType(EObjectType type);
 
 //! Checks if the given type is tablet owner.
 bool IsTabletOwnerType(EObjectType type);
+
+//! Checks if the given type is chunk owner.
+bool IsChunkOwnerType(EObjectType type);
 
 //! Checks if the given type is cell.
 bool IsCellType(EObjectType type);

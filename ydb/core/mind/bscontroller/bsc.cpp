@@ -151,6 +151,8 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
                 SysViewChangedVSlots.insert(vslotId);
                 SysViewChangedGroups.insert(vdiskId.GroupID);
             }
+        } else {
+            Y_FAIL("no storage configuration provided");
         }
     }
 
@@ -370,7 +372,6 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerGroupDecommittedNotify:       return 1;
 
         // auxiliary messages that are not usually urgent (also includes RW transactions in TConfigRequest and UpdateDiskStatus)
-        case TEvBlobStorage::EvControllerGroupReconfigureWipe:         return 2;
         case TEvPrivate::EvDropDonor:                                  return 2;
         case TEvBlobStorage::EvControllerScrubQueryStartQuantum:       return 2;
         case TEvBlobStorage::EvControllerScrubQuantumFinished:         return 2;

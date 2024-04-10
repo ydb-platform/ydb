@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 
 #include <util/system/hostname.h>
 
@@ -120,7 +121,7 @@ private:
             const TString error = "Unable to resolve token";
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error);
             requestBaseCtx->RaiseIssue(issue);
-            requestBaseCtx->ReplyUnavaliable();
+            requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
             return;
         }
 

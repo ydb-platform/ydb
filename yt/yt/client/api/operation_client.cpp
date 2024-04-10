@@ -196,6 +196,7 @@ void Serialize(const TJob& job, NYson::IYsonConsumer* consumer, TStringBuf idKey
             .OptionalItem("stderr_size", job.StderrSize)
             .OptionalItem("fail_context_size", job.FailContextSize)
             .OptionalItem("error", job.Error)
+            .OptionalItem("interruption_info", job.InterruptionInfo)
             .OptionalItem("abort_reason", TryGetJobAbortReasonFromError(job.Error))
             .OptionalItem("brief_statistics", job.BriefStatistics)
             .OptionalItem("input_paths", job.InputPaths)

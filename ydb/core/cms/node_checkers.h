@@ -4,6 +4,7 @@
 
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/bootstrap.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/string/builder.h>

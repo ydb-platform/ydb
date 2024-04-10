@@ -212,7 +212,7 @@ public:
 
     bool IsAliveOnLocal(const TActorId& local) const;
     bool IsStopped() const;
-    bool InitiateBoot();
+    bool InitiateBoot(TNodeId node = 0);
     bool BecomeStarting(TNodeId nodeId);
     bool BecomeRunning(TNodeId nodeId);
     bool BecomeStopped();
@@ -221,7 +221,7 @@ public:
     TActorId GetLocal() const;
     void SendStopTablet(TSideEffects& sideEffects);
     void SendStopTablet(const TActorId& local, TSideEffects& sideEffects);
-    bool InitiateStop(TSideEffects& sideEffects);
+    bool InitiateStop(TSideEffects& sideEffects, bool forMove = false);
 
     void BecomeUnknown(TNodeInfo* node);
     bool Kick();

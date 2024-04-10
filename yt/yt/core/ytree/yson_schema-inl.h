@@ -21,9 +21,6 @@ template <class T>
 concept CIsEnum = TEnumTraits<T>::IsEnum;
 
 template <class T>
-concept CIsYsonStruct = std::derived_from<T, TYsonStructBase>;
-
-template <class T>
 concept CIsProtobufMessage = std::derived_from<std::decay_t<T>, google::protobuf::Message>;
 
 template <class T>
@@ -92,7 +89,7 @@ void WriteSchema(const T&, NYson::IYsonConsumer* consumer)
         .EndMap();
 }
 
-template <CIsYsonStruct T>
+template <CYsonStructDerived T>
 void WriteSchema(const NYT::TIntrusivePtr<T>& value, NYson::IYsonConsumer* consumer)
 {
     BuildYsonFluently(consumer)
@@ -104,7 +101,7 @@ void WriteSchema(const NYT::TIntrusivePtr<T>& value, NYson::IYsonConsumer* consu
         .EndMap();
 }
 
-template <CIsYsonStruct T>
+template <CYsonStructDerived T>
 void WriteSchema(const T& value, NYson::IYsonConsumer* consumer)
 {
     return value.WriteSchema(consumer);

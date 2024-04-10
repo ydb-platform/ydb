@@ -1,5 +1,13 @@
+--
+-- HOROLOGY
+--
+SET DateStyle = 'Postgres, MDY';
 -- should fail in mdy mode:
 SELECT timestamp with time zone '27/12/2001 04:05:06.789-08';
+set datestyle to dmy;
+reset datestyle;
+SET DateStyle = 'German';
+SET DateStyle = 'ISO';
 -- As of 7.4, allow time without time zone having a time zone specified
 SELECT time without time zone '040506.789+08';
 SELECT time without time zone '040506.789-08';
@@ -11,6 +19,7 @@ SELECT time with time zone 'T040506.789+08';
 SELECT time with time zone 'T040506.789-08';
 SELECT time with time zone 'T040506.789 +08';
 SELECT time with time zone 'T040506.789 -08';
+SET DateStyle = 'Postgres, MDY';
 -- Shorthand values
 -- Not directly usable for regression testing since these are not constants.
 -- So, just try to test parser and hope for the best - thomas 97/04/26
@@ -59,6 +68,11 @@ SELECT (timestamp without time zone '2000-11-26', timestamp without time zone '2
 SELECT (time '00:00', time '01:00')
   OVERLAPS (time '00:30', time '01:30') AS "True";
 CREATE TABLE TEMP_TIMESTAMP (f1 timestamp with time zone);
+-- get some candidate input values
+INSERT INTO TEMP_TIMESTAMP (f1)
+  SELECT d1 FROM TIMESTAMP_TBL
+  WHERE d1 BETWEEN '13-jun-1957' AND '1-jan-1997'
+   OR d1 BETWEEN '1-jan-1999' AND '1-jan-2010';
 DROP TABLE TEMP_TIMESTAMP;
 --
 -- Comparisons between datetime types, especially overflow cases
@@ -73,6 +87,17 @@ SELECT '4714-11-24 BC'::date < '2020-10-05'::timestamptz as t;
 SELECT '2020-10-05'::timestamptz >= '4714-11-24 BC'::date as t;
 SELECT '4714-11-24 BC'::timestamp < '2020-10-05'::timestamptz as t;
 SELECT '2020-10-05'::timestamptz >= '4714-11-24 BC'::timestamp as t;
+--
+-- Formats
+--
+SET DateStyle TO 'US,Postgres';
+SET DateStyle TO 'US,ISO';
+SELECT d1 AS us_iso FROM TIMESTAMP_TBL;
+SET DateStyle TO 'US,SQL';
+SET DateStyle TO 'European,Postgres';
+SET DateStyle TO 'European,ISO';
+SET DateStyle TO 'European,SQL';
+RESET DateStyle;
 SELECT to_timestamp('97/Feb/16', 'YYMonDD');
 SELECT to_timestamp('2011-12-18 11:38 PST', 'YYYY-MM-DD HH12:MI TZ');  -- NYI
 SELECT to_timestamp('2000 + + JUN', 'YYYY  MON');

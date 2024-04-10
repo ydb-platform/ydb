@@ -99,7 +99,8 @@ public:
     TKqpWorkerActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
         const TKqpWorkerSettings& workerSettings, std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
         TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
-        const TQueryServiceConfig& queryServiceConfig, const TMetadataProviderConfig& metadataProviderConfig
+        const TQueryServiceConfig& queryServiceConfig, const TMetadataProviderConfig& metadataProviderConfig,
+        const TGUCSettings::TPtr& gUCSettings
         )
         : Owner(owner)
         , SessionId(sessionId)
@@ -113,6 +114,7 @@ public:
         , CreationTime(TInstant::Now())
         , QueryId(0)
         , ShutdownState(std::nullopt)
+        , GUCSettings(gUCSettings)
     {
         Y_ABORT_UNLESS(ModuleResolverState);
         Y_ABORT_UNLESS(ModuleResolverState->ModuleResolver);
@@ -187,8 +189,8 @@ public:
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
-        KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver,
-            FederatedQuerySetup, QueryState->RequestEv->GetUserToken(), AppData(ctx)->FunctionRegistry, !Settings.LongSession, false);
+        KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver, FederatedQuerySetup,
+            QueryState->RequestEv->GetUserToken(), GUCSettings, Settings.ApplicationName, AppData(ctx)->FunctionRegistry, !Settings.LongSession, false);
 
         auto& queryRequest = QueryState->RequestEv;
         QueryState->ProxyRequestId = proxyRequestId;
@@ -1091,6 +1093,7 @@ private:
     THolder<TKqpQueryState> QueryState;
     THolder<TKqpCleanupState> CleanupState;
     std::optional<TSessionShutdownState> ShutdownState;
+    TGUCSettings::TPtr GUCSettings;
 };
 
 } // namespace
@@ -1099,11 +1102,12 @@ IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
-    const TQueryServiceConfig& queryServiceConfig, const TMetadataProviderConfig& metadataProviderConfig
+    const TQueryServiceConfig& queryServiceConfig, const TMetadataProviderConfig& metadataProviderConfig,
+    const TGUCSettings::TPtr& gUCSettings
     )
 {
     return new TKqpWorkerActor(owner, sessionId, kqpSettings, workerSettings, federatedQuerySetup,
-                               moduleResolverState, counters, queryServiceConfig, metadataProviderConfig);
+                               moduleResolverState, counters, queryServiceConfig, metadataProviderConfig, gUCSettings);
 }
 
 } // namespace NKqp

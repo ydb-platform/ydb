@@ -128,8 +128,7 @@ SRCS(
     misc/hazard_ptr.cpp
     misc/hedging_manager.cpp
     misc/histogram.cpp
-    misc/historic_usage_aggregator.cpp
-    misc/hr_timer.cpp
+    misc/adjusted_exponential_moving_average.cpp
     misc/id_generator.cpp
     misc/linear_probe.cpp
     misc/memory_reference_tracker.cpp
@@ -152,6 +151,7 @@ SRCS(
     misc/signal_registry.cpp
     misc/slab_allocator.cpp
     misc/statistics.cpp
+    misc/string_helpers.cpp
     misc/cache_config.cpp
     misc/utf8_decoder.cpp
     misc/zerocopy_output_writer.cpp
@@ -251,6 +251,7 @@ SRCS(
     yson/writer.cpp
     yson/string_merger.cpp
     yson/ypath_designated_consumer.cpp
+    yson/ypath_filtering_consumer.cpp
     yson/depth_limiting_yson_consumer.cpp
     yson/list_verb_lazy_yson_consumer.cpp
     yson/attributes_stripper.cpp
@@ -280,7 +281,6 @@ SRCS(
     ytree/ypath_detail.cpp
     ytree/ypath_resolver.cpp
     ytree/ypath_service.cpp
-    ytree/yson_serializable.cpp
     ytree/yson_struct.cpp
     ytree/yson_struct_detail.cpp
 

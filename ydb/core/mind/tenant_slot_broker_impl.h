@@ -1152,7 +1152,6 @@ private:
     NKikimrTenantSlotBroker::TConfig Config;
     TDuration PendingTimeout;
     ui64 RequestId;
-    ui32 DomainId;
     TString DomainName;
     // NodeId -> DataCenter
     THashMap<ui32, TString> NodeIdToDataCenter;

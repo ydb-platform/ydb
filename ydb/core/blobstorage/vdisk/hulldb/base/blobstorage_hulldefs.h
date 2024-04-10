@@ -137,6 +137,7 @@ namespace NKikimr {
         const double HullCompReadBatchEfficiencyThreshold;
         const TDuration HullCompStorageRatioCalcPeriod;
         const TDuration HullCompStorageRatioMaxCalcDuration;
+        const bool AddHeader;
 
         NMonGroup::TLsmHullGroup LsmHullGroup;
         NMonGroup::TLsmHullSpaceGroup LsmHullSpaceGroup;
@@ -157,7 +158,8 @@ namespace NKikimr {
                 ui32 hullCompMaxInFlightReads,
                 double hullCompReadBatchEfficiencyThreshold,
                 TDuration hullCompStorageRatioCalcPeriod,
-                TDuration hullCompStorageRatioMaxCalcDuration);
+                TDuration hullCompStorageRatioMaxCalcDuration,
+                bool addHeader);
 
         void UpdateSpaceCounters(const NHullComp::TSstRatio& prev, const NHullComp::TSstRatio& current);
     };
@@ -180,6 +182,12 @@ namespace NKikimr {
         bool ParseFromArray(const TBlobStorageGroupType &gtype, const char* data, size_t size);
         TString ToString() const;
         void Output(IOutputStream &str) const;
+    };
+
+    // prepared data to insert to Hull Database
+    struct THullDbInsert {
+        TLogoBlobID Id;
+        TIngress Ingress;
     };
 
 } // NKikimr

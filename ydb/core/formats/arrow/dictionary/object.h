@@ -13,7 +13,9 @@ private:
     TEncodingSettings() = default;
     friend class TEncodingDiff;
 public:
-
+    bool IsEqualTo(const TEncodingSettings& item) const {
+        return Enabled == item.Enabled;
+    }
     NTransformation::ITransformer::TPtr BuildEncoder() const;
     NTransformation::ITransformer::TPtr BuildDecoder() const;
 

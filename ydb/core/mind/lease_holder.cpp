@@ -140,13 +140,9 @@ private:
 
     void Connect(const TActorContext &ctx)
     {
-        auto dinfo = AppData(ctx)->DomainsInfo;
-        auto &domain = dinfo->GetDomain(NodeIdToDomain(ctx.SelfID.NodeId(), *dinfo));
-        ui32 group = domain.DefaultStateStorageGroup;
-
         NTabletPipe::TClientConfig config;
         config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeNodeBrokerID(group), config);
+        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeNodeBrokerID(), config);
         NodeBrokerPipe = ctx.Register(pipe);
     }
 

@@ -347,6 +347,10 @@ class YtError(Exception):
         """Chunk data is not preloaded yet"""
         return self.contains_code(1735)
 
+    def is_no_in_sync_replicas(self):
+        """No in-sync replicas found"""
+        return self.contains_code(1736)
+
     def is_already_present_in_group(self):
         """Member is already present in group"""
         return self.contains_code(908)
@@ -354,6 +358,10 @@ class YtError(Exception):
     def is_prohibited_cross_cell_copy(self):
         """Cross-cell "copy"/"move" command is explicitly disabled"""
         return self.contains_code(1002)
+
+    def is_sequoia_retriable_error(self):
+        """Probably lock conflict in Sequoia tables"""
+        return self.contains_code(6002)
 
 
 class YtResponseError(YtError):

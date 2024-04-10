@@ -1,82 +1,110 @@
 #include "read.h"
 #include <ydb/library/actors/core/log.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NOlap {
 
-void IBlobsReadingAction::StartReading(THashMap<TUnifiedBlobId, THashSet<TBlobRange>>&& ranges) {
+void IBlobsReadingAction::StartReading(std::vector<TBlobRange>&& ranges) {
     AFL_VERIFY(ranges.size());
     AFL_VERIFY(Counters);
     for (auto&& i : ranges) {
-        AFL_VERIFY(i.second.size());
-        for (auto&& br : i.second) {
-            Counters->OnRequest(br.Size);
-        }
+        Counters->OnRequest(i.Size);
     }
-    return DoStartReading(ranges);
-}
-
-void IBlobsReadingAction::ExtractBlobsDataTo(THashMap<TBlobRange, TString>& result) {
-    AFL_VERIFY(Started);
-    if (result.empty()) {
-        std::swap(result, Replies);
-    } else {
-        for (auto&& i : Replies) {
-            AFL_VERIFY(result.emplace(i.first, std::move(i.second)).second);
+    std::sort(ranges.begin(), ranges.end());
+    THashSet<TBlobRange> result;
+    std::optional<TBlobRange> currentRange;
+    std::vector<TBlobRange> currentList;
+    for (auto&& br : ranges) {
+        if (!currentRange) {
+            currentRange = br;
+        } else if (!currentRange->TryGlueWithNext(br)) {
+            result.emplace(*currentRange);
+            Groups.emplace(*currentRange, std::move(currentList));
+            currentRange = br;
+            currentList.clear();
         }
-        Replies.clear();
+        currentList.emplace_back(br);
     }
-    RangesForResult.clear();
+    if (currentRange) {
+        result.emplace(*currentRange);
+        Groups.emplace(*currentRange, std::move(currentList));
+    }
+    return DoStartReading(std::move(result));
 }
 
 void IBlobsReadingAction::Start(const THashSet<TBlobRange>& rangesInProgress) {
     Y_ABORT_UNLESS(!Started);
+    Started = true;
+
     Y_ABORT_UNLESS(RangesForRead.size() + RangesForResult.size());
     StartWaitingRanges = TMonotonic::Now();
-    for (auto&& i : RangesForRead) {
-        WaitingRangesCount += i.second.size();
-    }
-    THashMap<TUnifiedBlobId, THashSet<TBlobRange>> rangesFiltered;
+    WaitingRangesCount = RangesForRead.size();
+    std::vector<TBlobRange> rangesFiltered;
     if (rangesInProgress.empty()) {
-        rangesFiltered = RangesForRead;
+        rangesFiltered.insert(rangesFiltered.end(), RangesForRead.begin(), RangesForRead.end());
     } else {
-        for (auto&& i : RangesForRead) {
-            for (auto&& r : i.second) {
-                if (!rangesInProgress.contains(r)) {
-                    rangesFiltered[r.BlobId].emplace(r);
-                }
+        for (auto&& r : RangesForRead) {
+            if (!rangesInProgress.contains(r)) {
+                rangesFiltered.emplace_back(r);
             }
         }
     }
     if (rangesFiltered.size()) {
         StartReading(std::move(rangesFiltered));
     }
-    Started = true;
     for (auto&& i : RangesForResult) {
+        AFL_VERIFY(i.second.size() == i.first.Size);
         AFL_VERIFY(Replies.emplace(i.first, i.second).second);
     }
 }
 
 void IBlobsReadingAction::OnReadResult(const TBlobRange& range, const TString& data) {
+    auto it = Groups.find(range);
+    AFL_VERIFY(it != Groups.end());
     AFL_VERIFY(Counters);
-    AFL_VERIFY(--WaitingRangesCount >= 0);
+    WaitingRangesCount -= it->second.size();
+    AFL_VERIFY(WaitingRangesCount >= 0);
     Counters->OnReply(range.Size, TMonotonic::Now() - StartWaitingRanges);
-    Replies.emplace(range, data);
+    AFL_VERIFY(data.size() == range.Size);
+    for (auto&& i : it->second) {
+        AFL_VERIFY(i.Offset + i.GetBlobSize() <= range.Offset + data.size());
+        AFL_VERIFY(range.Offset <= i.Offset);
+        Replies.emplace(i, data.substr(i.Offset - range.Offset, i.GetBlobSize()));
+    }
+    Groups.erase(it);
 }
 
 void IBlobsReadingAction::OnReadError(const TBlobRange& range, const TErrorStatus& replyStatus) {
+    auto it = Groups.find(range);
+    AFL_VERIFY(it != Groups.end());
+
     AFL_VERIFY(Counters);
-    AFL_VERIFY(--WaitingRangesCount >= 0);
+    WaitingRangesCount -= it->second.size();
+    AFL_VERIFY(WaitingRangesCount >= 0);
     Counters->OnFail(range.Size, TMonotonic::Now() - StartWaitingRanges);
-    Fails.emplace(range, replyStatus);
+    for (auto&& i : it->second) {
+        Fails.emplace(i, replyStatus);
+    }
+    Groups.erase(it);
 }
 
-void IBlobsReadingAction::AddRange(const TBlobRange& range, const TString& result /*= Default<TString>()*/) {
+void IBlobsReadingAction::AddRange(const TBlobRange& range, const std::optional<TString>& result /*= {}*/) {
     Y_ABORT_UNLESS(!Started);
     if (!result) {
-        AFL_VERIFY(RangesForRead[range.BlobId].emplace(range).second)("range", range.ToString());
+        AFL_VERIFY(!RangesForResult.contains(range));
+        AFL_VERIFY(RangesForRead.emplace(range).second)("range", range.ToString());
     } else {
-        AFL_VERIFY(RangesForResult.emplace(range, result).second)("range", range.ToString());
+        AFL_VERIFY(result->size() == range.Size);
+        AFL_VERIFY(RangesForResult.emplace(range, *result).second)("range", range.ToString());
     }
+}
+
+TString TActionReadBlobs::DebugString() const {
+    THashSet<TBlobRange> ranges;
+    for (auto&& i : Blobs) {
+        ranges.emplace(i.first);
+    }
+    return JoinSeq(",", ranges);
 }
 
 }

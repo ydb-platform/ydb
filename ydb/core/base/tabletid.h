@@ -3,10 +3,6 @@
 
 namespace NKikimr {
     // extract 8 bits of state-storage group
-    inline ui64 StateStorageGroupFromTabletID(ui64 tabletId) {
-        return (tabletId >> 56) & 0xFFull;
-    }
-
     inline ui32 StateStorageHashFromTabletID(ui64 tabletId) {
         return (ui32)Hash64to32(tabletId);
     }
@@ -44,54 +40,52 @@ namespace NKikimr {
     }
 
     // 8 + 12 + 44
-    inline ui64 MakeTabletID(ui64 stateStorageGroup, ui64 hiveUid, ui64 uniqPart) {
-        Y_ABORT_UNLESS(stateStorageGroup < (1ull << 8ull) && hiveUid < (1ull << 12ull) && uniqPart < (1ull << 44ull));
-        return (stateStorageGroup << 56ull) | (hiveUid << 44ull) | uniqPart;
+    inline constexpr ui64 MakeTabletID(bool fromHive, ui64 uniqPart) {
+        Y_ABORT_UNLESS(uniqPart < (static_cast<ui64>(1) << 44));
+        return (static_cast<ui64>(1) << 56)
+            | (static_cast<ui64>(fromHive ? 1 : 0) << 44)
+            | uniqPart;
     }
 
     // blob storage controller (exactly one per domain in default state storage group)
-    inline ui64 MakeBSControllerID(ui64 stateStorageGroup) {
-        Y_DEBUG_ABORT_UNLESS(stateStorageGroup < (1ull << 8ull));
-        return MakeTabletID(stateStorageGroup, 0, 0x1001);
+    inline ui64 MakeBSControllerID() {
+        return MakeTabletID(false, 0x1001);
     }
 
     // one default hive per domain (in default state storage group!)
-    inline ui64 MakeDefaultHiveID(ui64 stateStorageGroup) {
-        Y_DEBUG_ABORT_UNLESS(stateStorageGroup < (1ull << 8ull));
-        return MakeTabletID(stateStorageGroup, 0, 1);
+    inline ui64 MakeDefaultHiveID() {
+        return MakeTabletID(false, 0x0001);
     }
 
     // cluster management system tablet (exactly one per domain in default state storage group)
-    inline ui64 MakeCmsID(ui64 stateStorageGroup) {
-        Y_DEBUG_ABORT_UNLESS(stateStorageGroup < (1ull << 8ull));
-        return MakeTabletID(stateStorageGroup, 0, 0x2000);
+    inline ui64 MakeCmsID() {
+        return MakeTabletID(false, 0x2000);
     }
 
     // node broker tablet (exactly one per domain in default state storage group)
-    inline ui64 MakeNodeBrokerID(ui64 stateStorageGroup) {
-        Y_DEBUG_ABORT_UNLESS(stateStorageGroup < (1ull << 8ull));
-        return MakeTabletID(stateStorageGroup, 0, 0x2001);
+    inline ui64 MakeNodeBrokerID() {
+        return MakeTabletID(false, 0x2001);
     }
 
     // tenant slot broker tablet (exactly one per domain in default state storage group)
-    inline ui64 MakeTenantSlotBrokerID(ui64 stateStorageGroup) {
-        Y_DEBUG_ABORT_UNLESS(stateStorageGroup < (1ull << 8ull));
-        return MakeTabletID(stateStorageGroup, 0, 0x2002);
+    inline ui64 MakeTenantSlotBrokerID() {
+        return MakeTabletID(false, 0x2002);
     }
 
     // console tablet (exactly one per domain in default state storage group)
-    inline ui64 MakeConsoleID(ui64 stateStorageGroup) {
-        Y_DEBUG_ABORT_UNLESS(stateStorageGroup < (1ull << 8ull));
-        return MakeTabletID(stateStorageGroup, 0, 0x2003);
+    inline ui64 MakeConsoleID() {
+        return MakeTabletID(false, 0x2003);
     }
 
     // TODO: think about encoding scheme for sibling group hive
 
-    inline TActorId MakeStateStorageProxyID(ui64 stateStorageGroup) {
-        Y_DEBUG_ABORT_UNLESS(stateStorageGroup < (1ull << 8ull));
-        char x[12] = { 's', 't', 's', 'p', 'r', 'o', 'x', 'y' };
-        x[8] = (char)stateStorageGroup;
+    inline TActorId MakeStateStorageProxyID() {
+        char x[12] = { 's', 't', 's', 'p', 'r', 'o', 'x', 'y', 0, 0, 0, 0};
         return TActorId(0, TStringBuf(x, 12));
     }
 
+    // NEVER USE THIS
+    /*[[deprecated]]*/ inline ui64 MakeBSControllerID(ui32) { return MakeBSControllerID(); }
+    /*[[deprecated]]*/ inline ui64 MakeDefaultHiveID(ui32) { return MakeDefaultHiveID(); }
+    /*[[deprecated]]*/ inline ui64 MakeTabletID(ui32, ui32 hiveId, ui64 uniqId) { return MakeTabletID(hiveId != 0, uniqId); }
 }

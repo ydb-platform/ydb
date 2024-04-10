@@ -17,9 +17,7 @@ public:
 
         TAppData* appData = AppData();
         TDomainsInfo* domainsInfo = appData->DomainsInfo.Get();
-        const TDomainsInfo::TDomain& domain = domainsInfo->GetDomain(Self->HiveDomain);
-
-        TTabletId rootHiveId = domainsInfo->GetHive(domain.DefaultHiveUid);
+        TTabletId rootHiveId = domainsInfo->GetHive();
         bool isRootHive = (rootHiveId == Self->TabletID());
 
         NIceDb::TNiceDb db(txc.DB);
@@ -316,6 +314,7 @@ public:
                 node.DrainInitiators = nodeRowset.GetValueOrDefault<Schema::Node::DrainInitiators>();
                 node.ServicedDomains = nodeRowset.GetValueOrDefault<Schema::Node::ServicedDomains>();
                 node.Statistics = nodeRowset.GetValueOrDefault<Schema::Node::Statistics>();
+                node.Name = nodeRowset.GetValueOrDefault<Schema::Node::Name>();
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();
                     if (location.HasDataCenter()) {

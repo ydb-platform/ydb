@@ -25,7 +25,7 @@ NJson::TJsonValue TTieringRule::SerializeDescriptionToJson() const {
     return result;
 }
 
-bool TTieringRule::DeserializeDescriptionFromJson(const NJson::TJsonValue & jsonInfo) {
+bool TTieringRule::DeserializeDescriptionFromJson(const NJson::TJsonValue& jsonInfo) {
     const NJson::TJsonValue::TArray* rules;
     if (!jsonInfo["rules"].GetArrayPointer(&rules)) {
         return false;
@@ -74,7 +74,7 @@ bool TTieringRule::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Val
 NKikimr::NOlap::TTiering TTieringRule::BuildOlapTiers() const {
     NOlap::TTiering result;
     for (auto&& r : Intervals) {
-        result.Add(std::make_shared<NOlap::TTierInfo>(r.GetTierName(), r.GetDurationForEvict(), GetDefaultColumn()));
+        AFL_VERIFY(result.Add(std::make_shared<NOlap::TTierInfo>(r.GetTierName(), r.GetDurationForEvict(), GetDefaultColumn())));
     }
     return result;
 }

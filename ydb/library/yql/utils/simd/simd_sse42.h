@@ -15,7 +15,7 @@ template<typename T>
 struct TSimd8 {
     __m128i Value;
 
-    static const int SIZE = 32;
+    static const int SIZE = 16;
 
     inline TSimd8()
         : Value{__m128i()} {
@@ -338,6 +338,17 @@ struct TSimd8 {
         return *this ^ 0xFFu;
     }
 };
+
+template<>
+inline TSimd8<ui64> TSimd8<ui64>::operator+(const TSimd8<ui64>& other) const {
+    return _mm_add_epi64(Value, other.Value);
+}
+
+template<>
+inline TSimd8<ui64>& TSimd8<ui64>::operator+=(const TSimd8<ui64>& other) {
+    *this = *this + other.Value;
+    return *this;
+}
 
 template<>
 inline TSimd8<bool> TSimd8<bool>::Set(bool value) {

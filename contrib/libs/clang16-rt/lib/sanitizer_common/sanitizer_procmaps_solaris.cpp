@@ -15,7 +15,7 @@
 #if SANITIZER_SOLARIS
 #  include <fcntl.h>
 #  include <limits.h>
-#  include <procfs.h>
+#  error #include <procfs.h>
 
 #  include "sanitizer_common.h"
 #  include "sanitizer_procmaps.h"

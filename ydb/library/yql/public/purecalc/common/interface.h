@@ -363,7 +363,8 @@ namespace NYql {
         enum class ETranslationMode {
             SQL   /* "SQL" */,
             SExpr /* "s-expression" */,
-            Mkql  /* "mkql" */
+            Mkql  /* "mkql" */,
+            PG    /* PostgreSQL */
         };
 
         /**

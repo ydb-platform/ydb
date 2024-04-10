@@ -1,25 +1,27 @@
+IF (NOT SANITIZER_TYPE AND NOT WITH_VALGRIND)
+
 PY3TEST()
 
 DATA(
     arcadia/ydb/tests/functional/postgresql/cases
-    sbr://4966407557=psql
 )
 
 DEPENDS(
     ydb/apps/ydbd
-    ydb/apps/pgwire
+    ydb/tests/functional/postgresql/psql
 )
+
 
 ENV(PYTHONWARNINGS="ignore")
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+ENV(YDB_TABLE_ENABLE_PREPARED_DDL=true)
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
+
 SIZE(MEDIUM)
 
 TEST_SRCS(
     test_postgres.py
 )
-
-ENV(PGWIRE_BINARY="ydb/apps/pgwire/pgwire")
 
 PEERDIR(
     library/python/testing/yatest_common
@@ -29,3 +31,5 @@ PEERDIR(
 )
 
 END()
+
+ENDIF()

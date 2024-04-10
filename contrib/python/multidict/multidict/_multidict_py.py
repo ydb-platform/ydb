@@ -10,6 +10,7 @@ _marker = object()
 if sys.version_info >= (3, 9):
     GenericAlias = types.GenericAlias
 else:
+
     def GenericAlias(cls):
         return cls
 

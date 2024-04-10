@@ -1,7 +1,7 @@
 #pragma once
 
 #include "node.h"
-#include "yson_serialize_common.h"
+#include "yson_struct_enum.h"
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/mpl.h>
@@ -9,6 +9,8 @@
 
 #include <yt/yt/core/yson/public.h>
 #include <yt/yt/library/syncmap/map.h>
+
+#include <library/cpp/yt/misc/enum.h>
 
 #include <util/generic/algorithm.h>
 
@@ -54,6 +56,8 @@ public:
     using TPostprocessor = std::function<void()>;
     using TPreprocessor = std::function<void()>;
 
+    TYsonStructBase();
+
     virtual ~TYsonStructBase() = default;
 
     void Load(
@@ -88,7 +92,7 @@ public:
 
     // TODO(renadeen): remove this methods.
     void SaveParameter(const TString& key, NYson::IYsonConsumer* consumer) const;
-    void LoadParameter(const TString& key, const NYTree::INodePtr& node, EMergeStrategy mergeStrategy);
+    void LoadParameter(const TString& key, const NYTree::INodePtr& node);
     void ResetParameter(const TString& key);
 
     std::vector<TString> GetAllParameterAliases(const TString& key) const;
@@ -162,7 +166,7 @@ public:
 
     template <std::default_initializable TStruct, class TSerializer>
         // requires std::derived_from<TSerializer, TExternalizedYsonStruct<TStruct>>
-    static TSerializer CreateWritable(TStruct& writable);
+    static TSerializer CreateWritable(TStruct& writable, bool setDefaults);
 
     template <std::default_initializable TStruct, class TSerializer>
         // requires std::derived_from<TSerializer, TExternalizedYsonStruct<TStruct>>
@@ -185,8 +189,13 @@ public:
     template <class TStruct>
     void InitializeStruct(TStruct* target);
 
+    void OnBaseCtorCalled();
+
+    void OnFinalCtorCalled();
+
 private:
     static inline YT_THREAD_LOCAL(IYsonStructMeta*) CurrentlyInitializingMeta_ = nullptr;
+    static inline YT_THREAD_LOCAL(i64) RegistryDepth_ = 0;
 
     template <class TStruct>
     friend class TYsonStructRegistrar;
@@ -283,6 +292,21 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
+concept CExternalizedYsonStructTraits = requires {
+    typename T::TExternalSerializer;
+};
+
+template <class T>
+concept CExternallySerializable = requires (T t) {
+    { GetExternalizedYsonStructTraits(t) } -> CExternalizedYsonStructTraits;
+};
+
+template <CExternallySerializable T>
+using TGetExternalizedYsonStructTraits = decltype(GetExternalizedYsonStructTraits(std::declval<T>()));
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
 TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<const T>& obj);
 template <class T>
 TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<T>& obj);
@@ -294,6 +318,16 @@ THashMap<TString, TIntrusivePtr<T>> CloneYsonStructs(const THashMap<TString, TIn
 void Serialize(const TYsonStructBase& value, NYson::IYsonConsumer* consumer);
 void Deserialize(TYsonStructBase& value, INodePtr node);
 void Deserialize(TYsonStructBase& value, NYson::TYsonPullParserCursor* cursor);
+
+template <class T>
+    requires CExternallySerializable<T>
+void Serialize(const T& value, NYson::IYsonConsumer* consumer);
+template <class T>
+    requires CExternallySerializable<T>
+void Deserialize(T& value, INodePtr node);
+template <class T>
+    requires CExternallySerializable<T>
+void Deserialize(T& value, NYson::TYsonPullParserCursor* cursor);
 
 template <class T>
 TIntrusivePtr<T> UpdateYsonStruct(
@@ -351,6 +385,11 @@ void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& 
 #define REGISTER_EXTERNALIZED_YSON_STRUCT(TStruct, TSerializer)
 
 #define REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT(TStruct, TSerializer, TBases)
+
+//! Assign TSerializer to a TStruct so it can be found during (de-) serialization.
+//! NB(arkady-e1ppa): This macro must be used in the same namespace as the one TStruct is in.
+//! Otherwise ADL will not be able to find proper overload.
+#define ASSIGN_EXTERNAL_YSON_SERIALIZER(TStruct, TSerializer)
 
 ////////////////////////////////////////////////////////////////////////////////
 

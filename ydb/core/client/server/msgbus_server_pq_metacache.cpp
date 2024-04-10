@@ -438,9 +438,7 @@ private:
     };
 private:
     static ui64 GetHiveTabletId(const TActorContext& ctx) {
-        TDomainsInfo* domainsInfo = AppData(ctx)->DomainsInfo.Get();
-        auto hiveTabletId = domainsInfo->GetHive(domainsInfo->GetDefaultHiveUid(domainsInfo->Domains.begin()->first));
-        return hiveTabletId;
+        return AppData(ctx)->DomainsInfo->GetHive();
     }
 
     void HandleDescribeTopics(TEvPqNewMetaCache::TEvDescribeTopicsRequest::TPtr& ev, const TActorContext& ctx) {

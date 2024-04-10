@@ -4,6 +4,14 @@ SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
             (1000000000::bigint), (1000000000000::bigint),
             (1000000000000000::bigint)) x(size);
 </sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: pg_size_pretty
+        	SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+	^
 <sql-statement>
 SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
     (VALUES (10::numeric), (1000::numeric), (1000000::numeric),
@@ -13,6 +21,14 @@ SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
             (1000000000.5::numeric), (1000000000000.5::numeric),
             (1000000000000000.5::numeric)) x(size);
 </sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: pg_size_pretty
+        	SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+	^
 <sql-statement>
 -- test where units change up
 SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
@@ -22,6 +38,14 @@ SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
             (10994579406847::bigint), (10994579406848::bigint),
             (11258449312612351::bigint), (11258449312612352::bigint)) x(size);
 </sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- test where units change up
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: pg_size_pretty
+        	-- test where units change up
+	^
 <sql-statement>
 SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
     (VALUES (10239::numeric), (10240::numeric),
@@ -30,6 +54,14 @@ SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
             (10994579406847::numeric), (10994579406848::numeric),
             (11258449312612351::numeric), (11258449312612352::numeric)) x(size);
 </sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: pg_size_pretty
+        	SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+	^
 <sql-statement>
 -- pg_size_bytes() tests
 SELECT size, pg_size_bytes(size) FROM

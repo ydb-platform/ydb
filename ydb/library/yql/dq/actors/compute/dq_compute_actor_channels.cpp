@@ -533,7 +533,7 @@ bool TDqComputeActorChannels::CanSendChannelData(const ui64 channelId) const {
 
 bool TDqComputeActorChannels::ShouldSkipData(ui64 channelId) {
     TOutputChannelState& outputChannel = OutCh(channelId);
-    return outputChannel.Finished && !SupportCheckpoints;
+    return outputChannel.Finished && (!SupportCheckpoints || outputChannel.EarlyFinish);
 }
 
 void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, const bool needAck) {

@@ -13,15 +13,16 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-# TODO(YMAKE-92) Move this information out of ya.make and allow per project configuration
-IF (OPENSOURCE_PROJECT == "catboost")
+IF (OPENSOURCE_REPLACE_OPENSSL)
+
     OPENSOURCE_EXPORT_REPLACEMENT(
         CMAKE OpenSSL
         CMAKE_PACKAGE_COMPONENT Crypto
         CMAKE_TARGET OpenSSL::Crypto
-        CONAN openssl/1.1.1t
+        CONAN openssl/${OPENSOURCE_REPLACE_OPENSSL}
     )
-ENDIF()
+
+ENDIF() # IF (OPENSOURCE_REPLACE_OPENSSL)
 
 PEERDIR(
     contrib/libs/zlib
@@ -37,8 +38,7 @@ ADDINCL(
     contrib/libs/openssl/include
 )
 
-# TODO(YMAKE-92) Move this information out of ya.make and allow per project configuration
-IF (NOT EXPORT_CMAKE OR OPENSOURCE_PROJECT != "catboost")
+IF (NOT EXPORT_CMAKE OR NOT OPENSOURCE_REPLACE_OPENSSL)
 
 IF (OS_LINUX)
     IF (ARCH_ARM64)
@@ -151,17 +151,10 @@ IF (OS_LINUX AND ARCH_AARCH64 OR OS_LINUX AND ARCH_X86_64)
     )
 ENDIF()
 
-IF (OS_DARWIN AND ARCH_X86_64)
-    CFLAGS(
-        -D_REENTRANT
-    )
-ENDIF()
-
 IF (OS_DARWIN AND ARCH_ARM64)
     CFLAGS(
         -DL_ENDIAN
         -DOPENSSL_PIC
-        -D_REENTRANT
     )
 ENDIF()
 
@@ -179,11 +172,6 @@ IF (OS_WINDOWS)
     ENDIF()
     CFLAGS(
         -DOPENSSL_SYS_WIN32
-        -DUNICODE
-        -DWIN32_LEAN_AND_MEAN
-        -D_CRT_SECURE_NO_DEPRECATE
-        -D_UNICODE
-        -D_WINSOCK_DEPRECATED_NO_WARNINGS
         /GF
     )
 ENDIF()
@@ -937,14 +925,6 @@ IF (OS_DARWIN AND ARCH_ARM64)
 ENDIF()
 
 IF (OS_LINUX AND ARCH_ARM7)
-    IF (CLANG)
-        # XXX: This is a workarond for 'out of range immediate fixup value'
-        # error with clang integrated assembler:
-        # https://github.com/openssl/openssl/issues/7878
-        CFLAGS(
-            -mno-thumb
-        )
-    ENDIF()
     CFLAGS(
         -DOPENSSL_PIC
         -DOPENSSL_BN_ASM_GF2m
@@ -1382,6 +1362,6 @@ IF (ARCADIA_OPENSSL_DISABLE_ARMV7_TICK)
     )
 ENDIF()
 
-ENDIF()
+ENDIF() # IF (NOT EXPORT_CMAKE OR NOT OPENSOURCE_REPLACE_OPENSSL)
 
 END()

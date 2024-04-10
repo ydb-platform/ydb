@@ -194,7 +194,7 @@ namespace NFake {
         }
 
     private:
-        const ui64 MyId = MakeTabletID(0, 0, 1);
+        const ui64 MyId = MakeTabletID(false, 1);
         TAutoPtr<NUtil::ILogger> Logger;
         TActorId Owner;
         TActorId Tablet;

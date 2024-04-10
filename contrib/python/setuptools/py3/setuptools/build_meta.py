@@ -121,16 +121,16 @@ def _file_with_extension(directory, extension):
         raise ValueError(
             'No distribution was found. Ensure that `setup.py` '
             'is not empty and that it calls `setup()`.'
-        )
+        ) from None
     return file
 
 
 def _open_setup_script(setup_script):
     if not os.path.exists(setup_script):
         # Supply a default setup.py
-        return io.StringIO(u"from setuptools import setup; setup()")
+        return io.StringIO("from setuptools import setup; setup()")
 
-    return getattr(tokenize, 'open', open)(setup_script)
+    return tokenize.open(setup_script)
 
 
 @contextlib.contextmanager
@@ -369,7 +369,12 @@ class _BuildMetaBackend(_ConfigSettingsTranslator):
         return self._bubble_up_info_directory(metadata_directory, ".dist-info")
 
     def _build_with_temp_dir(
-        self, setup_command, result_extension, result_directory, config_settings
+        self,
+        setup_command,
+        result_extension,
+        result_directory,
+        config_settings,
+        arbitrary_args=(),
     ):
         result_directory = os.path.abspath(result_directory)
 
@@ -384,6 +389,7 @@ class _BuildMetaBackend(_ConfigSettingsTranslator):
                 *setup_command,
                 "--dist-dir",
                 tmp_dist_dir,
+                *arbitrary_args,
             ]
             with no_install_setup_requires():
                 self.run_setup()
@@ -402,10 +408,11 @@ class _BuildMetaBackend(_ConfigSettingsTranslator):
     ):
         with suppress_known_deprecation():
             return self._build_with_temp_dir(
-                ['bdist_wheel', *self._arbitrary_args(config_settings)],
+                ['bdist_wheel'],
                 '.whl',
                 wheel_directory,
                 config_settings,
+                self._arbitrary_args(config_settings),
             )
 
     def build_sdist(self, sdist_directory, config_settings=None):
@@ -477,7 +484,7 @@ class _BuildMetaLegacyBackend(_BuildMetaBackend):
         sys.argv[0] = setup_script
 
         try:
-            super(_BuildMetaLegacyBackend, self).run_setup(setup_script=setup_script)
+            super().run_setup(setup_script=setup_script)
         finally:
             # While PEP 517 frontends should be calling each hook in a fresh
             # subprocess according to the standard (and thus it should not be

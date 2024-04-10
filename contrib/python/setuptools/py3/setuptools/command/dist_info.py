@@ -5,13 +5,14 @@ As defined in the wheel specification
 
 import os
 import shutil
-import sys
 from contextlib import contextmanager
 from distutils import log
 from distutils.core import Command
 from pathlib import Path
+from typing import cast
 
 from .. import _normalization
+from .egg_info import egg_info as egg_info_cls
 
 
 class dist_info(Command):
@@ -51,7 +52,7 @@ class dist_info(Command):
         project_dir = dist.src_root or os.curdir
         self.output_dir = Path(self.output_dir or project_dir)
 
-        egg_info = self.reinitialize_command("egg_info")
+        egg_info = cast(egg_info_cls, self.reinitialize_command("egg_info"))
         egg_info.egg_base = str(self.output_dir)
 
         if self.tag_date:
@@ -77,7 +78,7 @@ class dist_info(Command):
         if requires_bkp:
             bkp_name = f"{dir_path}.__bkp__"
             _rm(bkp_name, ignore_errors=True)
-            _copy(dir_path, bkp_name, dirs_exist_ok=True, symlinks=True)
+            shutil.copytree(dir_path, bkp_name, dirs_exist_ok=True, symlinks=True)
             try:
                 yield
             finally:
@@ -103,9 +104,3 @@ class dist_info(Command):
 def _rm(dir_name, **opts):
     if os.path.isdir(dir_name):
         shutil.rmtree(dir_name, **opts)
-
-
-def _copy(src, dst, **opts):
-    if sys.version_info < (3, 8):
-        opts.pop("dirs_exist_ok", None)
-    shutil.copytree(src, dst, **opts)

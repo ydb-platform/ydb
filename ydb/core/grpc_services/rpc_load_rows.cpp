@@ -117,8 +117,9 @@ const Ydb::Table::BulkUpsertRequest* GetProtoRequest(IRequestOpCtx* req) {
 class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
-    explicit TUploadRowsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)
-        : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
+    explicit TUploadRowsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded, const char* name)
+        : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
+                NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
         , Request(request)
     {}
 
@@ -131,7 +132,7 @@ private:
 
     void OnBeforePoison(const TActorContext&) override {
         // Client is gone, but we need to "reply" anyway?
-        Request->SendResult(Ydb::StatusIds::CANCELLED, {});
+        Request->ReplyWithYdbStatus(Ydb::StatusIds::CANCELLED);
     }
 
     bool ReportCostInfoEnabled() const {
@@ -298,7 +299,7 @@ private:
 
     void OnBeforePoison(const TActorContext&) override {
         // Client is gone, but we need to "reply" anyway?
-        Request->SendResult(Ydb::StatusIds::CANCELLED, {});
+        Request->ReplyWithYdbStatus(Ydb::StatusIds::CANCELLED);
     }
 
     bool ReportCostInfoEnabled() const {
@@ -461,8 +462,12 @@ private:
                 auto& nullValue = cvsSettings.null_value();
                 bool withHeader = cvsSettings.header();
 
-                NFormats::TArrowCSV reader(SrcColumns, withHeader, NotNullColumns);
-                reader.SetSkipRows(skipRows);
+                auto reader = NFormats::TArrowCSV::Create(SrcColumns, withHeader, NotNullColumns);
+                if (!reader.ok()) {
+                    errorMessage = reader.status().ToString();
+                    return false;
+                }
+                reader->SetSkipRows(skipRows);
 
                 if (!delimiter.empty()) {
                     if (delimiter.size() != 1) {
@@ -470,20 +475,20 @@ private:
                         return false;
                     }
 
-                    reader.SetDelimiter(delimiter[0]);
+                    reader->SetDelimiter(delimiter[0]);
                 }
 
                 if (!nullValue.empty()) {
-                    reader.SetNullValue(nullValue);
+                    reader->SetNullValue(nullValue);
                 }
 
                 if (data.size() > NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE) {
                     ui32 blockSize = NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE;
                     blockSize *= data.size() / blockSize + 1;
-                    reader.SetBlockSize(blockSize);
+                    reader->SetBlockSize(blockSize);
                 }
 
-                Batch = reader.ReadSingleBatch(data, errorMessage);
+                Batch = reader->ReadSingleBatch(data, errorMessage);
                 if (!Batch) {
                     return false;
                 }
@@ -517,7 +522,7 @@ void DoBulkUpsertRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvid
     } else if (GetProtoRequest(p.get())->has_csv_settings()) {
         f.RegisterActor(new TUploadColumnsRPCPublic(p.release(), diskQuotaExceeded));
     } else {
-        f.RegisterActor(new TUploadRowsRPCPublic(p.release(), diskQuotaExceeded));
+        f.RegisterActor(new TUploadRowsRPCPublic(p.release(), diskQuotaExceeded, "BulkRowsUpsertActor"));
     }
 }
 
@@ -530,7 +535,7 @@ IActor* TEvBulkUpsertRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCt
     } else if (GetProtoRequest(msg)->has_csv_settings()) {
         return new TUploadColumnsRPCPublic(msg, diskQuotaExceeded);
     } else {
-        return new TUploadRowsRPCPublic(msg, diskQuotaExceeded);
+        return new TUploadRowsRPCPublic(msg, diskQuotaExceeded, "BulkRowsUpsertActor");
     }
 }
 

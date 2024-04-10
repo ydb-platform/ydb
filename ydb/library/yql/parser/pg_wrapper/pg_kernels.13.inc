@@ -11,6 +11,7 @@ TExecFunc arrow_pg_dependencies_send() { return TGenericExec<TPgDirectFunc<&pg_d
 TExecFunc arrow_query_to_xml() { return TGenericExec<TPgDirectFunc<&query_to_xml>, true, false, TArgs_query_to_xml_Policy>({}); }
 TExecFunc arrow_query_to_xml_and_xmlschema() { return TGenericExec<TPgDirectFunc<&query_to_xml_and_xmlschema>, true, false, TArgs_query_to_xml_and_xmlschema_Policy>({}); }
 TExecFunc arrow_query_to_xmlschema() { return TGenericExec<TPgDirectFunc<&query_to_xmlschema>, true, false, TArgs_query_to_xmlschema_Policy>({}); }
+TExecFunc arrow_satisfies_hash_partition() { return TGenericExec<TPgDirectFunc<&satisfies_hash_partition>, false, true, TDefaultArgsPolicy>({}); }
 TExecFunc arrow_schema_to_xml() { return TGenericExec<TPgDirectFunc<&schema_to_xml>, true, false, TArgs_schema_to_xml_Policy>({}); }
 TExecFunc arrow_schema_to_xml_and_xmlschema() { return TGenericExec<TPgDirectFunc<&schema_to_xml_and_xmlschema>, true, false, TArgs_schema_to_xml_and_xmlschema_Policy>({}); }
 TExecFunc arrow_schema_to_xmlschema() { return TGenericExec<TPgDirectFunc<&schema_to_xmlschema>, true, false, TArgs_schema_to_xmlschema_Policy>({}); }

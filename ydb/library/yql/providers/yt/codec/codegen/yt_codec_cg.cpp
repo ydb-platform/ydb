@@ -168,8 +168,8 @@ public:
         auto& context = Codegen_->GetContext();
         const auto typeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)type);
         const auto valType = Type::getInt128Ty(context);
+        const auto flagsConst = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags);
         if (nativeYtTypeFlags) {
-            const auto flagsConst = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags);
             const auto funcAddr = ConstantInt::get(Type::getInt64Ty(context), (ui64)&NYql::NCommon::WriteContainerNativeYtValue);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {
                 Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(valType),
@@ -181,12 +181,12 @@ public:
         } else {
             const auto funcAddr = ConstantInt::get(Type::getInt64Ty(context), (ui64)&NYql::NCommon::WriteYsonContainerValue);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {
-                Type::getInt64Ty(context), PointerType::getUnqual(valType),
+                Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(valType),
                 PointerType::getUnqual(Type::getInt8Ty(context))
             }, false);
 
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
-            CallInst::Create(funType, funcPtr, { typeConst, elemPtr, buf }, "", Block_);
+            CallInst::Create(funType, funcPtr, { typeConst, flagsConst, elemPtr, buf }, "", Block_);
         }
         if constexpr (!Flat) {
             TCodegenContext ctx(*Codegen_);
@@ -236,6 +236,7 @@ public:
             break;
         }
 
+        case NUdf::TDataType<NUdf::TDate32>::Id:
         case NUdf::TDataType<i32>::Id: {
             const auto data = CastInst::Create(Instruction::Trunc, elem, Type::getInt32Ty(context), "data", Block_);
             const auto ext = CastInst::Create(Instruction::SExt, data, Type::getInt64Ty(context), "ext", Block_);
@@ -264,8 +265,11 @@ public:
         }
 
         case NUdf::TDataType<NUdf::TTimestamp>::Id:
-        case NUdf::TDataType<ui64>::Id:
         case NUdf::TDataType<NUdf::TInterval>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+        case NUdf::TDataType<ui64>::Id:
         case NUdf::TDataType<i64>::Id: {
             const auto data = CastInst::Create(Instruction::Trunc, elem, Type::getInt64Ty(context), "data", Block_);
             CallInst::Create(module.getFunction("Write64"), { buf, data }, "", Block_);
@@ -633,6 +637,7 @@ private:
             CallInst::Create(module.getFunction("ReadUint16"), { buf, velemPtr }, "", Block_);
             break;
         }
+        case NUdf::TDataType<NUdf::TDate32>::Id:
         case NUdf::TDataType<i32>::Id: {
             CallInst::Create(module.getFunction("ReadInt32"), { buf, velemPtr }, "", Block_);
             break;
@@ -643,6 +648,9 @@ private:
             break;
         }
         case NUdf::TDataType<NUdf::TInterval>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
         case NUdf::TDataType<i64>::Id: {
             CallInst::Create(module.getFunction("ReadInt64"), { buf, velemPtr }, "", Block_);
             break;
@@ -739,8 +747,8 @@ private:
         const auto typeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)type);
         const auto holderFactoryConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)&HolderFactory_);
         const auto wrapConst = ConstantInt::get(Type::getInt1Ty(context), wrapOptional);
+        const auto flagsConst = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags);
         if (nativeYtTypeFlags) {
-            const auto flagsConst = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {
                 Type::getInt64Ty(context), Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(Type::getInt8Ty(context)),
                 PointerType::getUnqual(Type::getInt8Ty(context)), Type::getInt1Ty(context)
@@ -750,12 +758,12 @@ private:
             CallInst::Create(funType, funcPtr, { typeConst, flagsConst, holderFactoryConst, velemPtr, buf, wrapConst }, "", Block_);
         } else {
             const auto funType = FunctionType::get(Type::getVoidTy(context), {
-                Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(Type::getInt8Ty(context)),
+                Type::getInt64Ty(context), Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(Type::getInt8Ty(context)),
                 PointerType::getUnqual(Type::getInt8Ty(context)), Type::getInt1Ty(context)
             }, false);
 
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
-            CallInst::Create(funType, funcPtr, { typeConst, holderFactoryConst, velemPtr, buf, wrapConst }, "", Block_);
+            CallInst::Create(funType, funcPtr, { typeConst, flagsConst, holderFactoryConst, velemPtr, buf, wrapConst }, "", Block_);
         }
     }
 
@@ -787,6 +795,10 @@ private:
             case NUdf::TDataType<i16>::Id:
             case NUdf::TDataType<i32>::Id:
             case NUdf::TDataType<i64>::Id:
+            case NUdf::TDataType<NUdf::TDate32>::Id:
+            case NUdf::TDataType<NUdf::TDatetime64>::Id:
+            case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+            case NUdf::TDataType<NUdf::TInterval64>::Id:
             case NUdf::TDataType<NUdf::TInterval>::Id: {
                 const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(i64));
                 CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);

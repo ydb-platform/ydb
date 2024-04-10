@@ -73,7 +73,7 @@ public:
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL);
         ev->Record.MutableRequest()->SetQuery(req->yql_text());
 
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Span_.GetTraceId());
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
@@ -84,7 +84,7 @@ public:
             const auto& kqpResponse = record.GetResponse();
             const auto& issueMessage = kqpResponse.GetQueryIssues();
 
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, ctx);
+            Reply(Ydb::StatusIds::SUCCESS, issueMessage, ctx);
         } else {
             return OnGenericQueryResponseError(record, ctx);
         }

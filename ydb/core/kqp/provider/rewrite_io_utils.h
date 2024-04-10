@@ -4,6 +4,8 @@
 
 namespace NYql {
 
+TExprNode::TPtr FindTopLevelRead(const TExprNode::TPtr& queryGraph);
+
 TExprNode::TPtr RewriteReadFromView(
     const TExprNode::TPtr& node,
     TExprContext& ctx,

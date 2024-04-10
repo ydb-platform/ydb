@@ -45,6 +45,13 @@ def current_async_library() -> str:
 
 
 class AsyncLock:
+    """
+    This is a standard lock.
+
+    In the sync case `Lock` provides thread locking.
+    In the async case `AsyncLock` provides async locking.
+    """
+
     def __init__(self) -> None:
         self._backend = ""
 
@@ -80,6 +87,26 @@ class AsyncLock:
             self._trio_lock.release()
         elif self._backend == "asyncio":
             self._anyio_lock.release()
+
+
+class AsyncThreadLock:
+    """
+    This is a threading-only lock for no-I/O contexts.
+
+    In the sync case `ThreadLock` provides thread locking.
+    In the async case `AsyncThreadLock` is a no-op.
+    """
+
+    def __enter__(self) -> "AsyncThreadLock":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]] = None,
+        exc_value: Optional[BaseException] = None,
+        traceback: Optional[TracebackType] = None,
+    ) -> None:
+        pass
 
 
 class AsyncEvent:
@@ -202,10 +229,41 @@ class AsyncShieldCancellation:
 
 
 class Lock:
+    """
+    This is a standard lock.
+
+    In the sync case `Lock` provides thread locking.
+    In the async case `AsyncLock` provides async locking.
+    """
+
     def __init__(self) -> None:
         self._lock = threading.Lock()
 
     def __enter__(self) -> "Lock":
+        self._lock.acquire()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]] = None,
+        exc_value: Optional[BaseException] = None,
+        traceback: Optional[TracebackType] = None,
+    ) -> None:
+        self._lock.release()
+
+
+class ThreadLock:
+    """
+    This is a threading-only lock for no-I/O contexts.
+
+    In the sync case `ThreadLock` provides thread locking.
+    In the async case `AsyncThreadLock` is a no-op.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+
+    def __enter__(self) -> "ThreadLock":
         self._lock.acquire()
         return self
 

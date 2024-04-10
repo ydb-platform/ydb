@@ -8,7 +8,6 @@ namespace NKikimr {
 Y_UNIT_TEST_SUITE(TStateStorageConfig) {
 
     void FillStateStorageInfo(TStateStorageInfo *info, ui32 replicas, ui32 nToSelect, ui32 replicasInRing, bool useRingSpecificNodeSelection) {
-        info->StateStorageGroup = 1;
         info->NToSelect = nToSelect;
 
         info->Rings.resize(replicas);

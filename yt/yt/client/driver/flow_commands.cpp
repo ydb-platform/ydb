@@ -90,8 +90,6 @@ void ExecuteRemovePipelineSpecCommand(
     auto specSetter)
 {
     auto client = context->GetClient();
-    auto spec = context->ConsumeInputValue();
-
     auto getResult = WaitFor(specGetter(client, specGetterOptions))
         .ValueOrThrow();
 

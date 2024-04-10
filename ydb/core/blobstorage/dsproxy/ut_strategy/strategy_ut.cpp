@@ -105,7 +105,7 @@ void RunStrategyTest(TBlobStorageGroupType type) {
         TLogoBlobID id(1'000'000'000, 1, 1, 0, data.size(), 0);
         std::vector<TRope> parts(type.TotalPartCount());
         ErasureSplit(TBlobStorageGroupType::CrcModeNone, type, TRope(data), parts);
-        blackboard.RegisterBlobForPut(id);
+        blackboard.RegisterBlobForPut(id, 0);
         for (ui32 i = 0; i < parts.size(); ++i) {
             blackboard.AddPartToPut(id, i, TRope(parts[i]));
         }

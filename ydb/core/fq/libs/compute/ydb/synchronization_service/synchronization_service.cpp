@@ -93,8 +93,8 @@ public:
             ReplyErrorAndPassAway(issues, "Error describe a database at the synchronization stage");
             return;
         }
-        const auto& result = ev.Get()->Get()->Record;
-        if (result.synchronized()) {
+        ComputeDatabase = ev.Get()->Get()->Record;
+        if (ComputeDatabase.synchronized()) {
             LOG_I("Synchronization has already completed for the scope " << Scope);
             ReplyAndPassAway();
         } else {
@@ -395,6 +395,7 @@ private:
                 new IEventHandle(SelfId(), SelfId(), new TEvControlPlaneProxy::TEvCreateConnectionRequest{{}, proto, {}, {}, {}});
 
             request.Get()->Get()->YDBClient = Client;
+            request.Get()->Get()->ComputeDatabase = ComputeDatabase;
 
             Register(NFq::NPrivate::MakeCreateConnectionActor(
                 SelfId(),
@@ -403,6 +404,7 @@ private:
                 Counters,
                 TPermissions{},
                 CommonConfig,
+                ComputeConfig,
                 Signer,
                 true,
                 connection.first
@@ -422,9 +424,11 @@ private:
                 new IEventHandle(SelfId(), SelfId(), new TEvControlPlaneProxy::TEvCreateBindingRequest{{}, proto, {}, {}, {}});
 
             request.Get()->Get()->YDBClient = Client;
+            request.Get()->Get()->ComputeDatabase = ComputeDatabase;
+
             auto it = Connections.find(binding.second.content().connection_id());
             if (it == Connections.end()) {
-                NYql::TIssue issue {TStringBuilder {} 
+                NYql::TIssue issue {TStringBuilder {}
                     << "While synchronizing tables for binding with id '" << binding.first << "'"};
                 issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(TStringBuilder{}
                     << "Can't find connection with id '" << binding.second.content().connection_id() << "'"));
@@ -439,6 +443,7 @@ private:
                 TDuration::Seconds(30),
                 Counters,
                 TPermissions{},
+                ComputeConfig,
                 true,
                 binding.first
             ));
@@ -556,6 +561,7 @@ private:
     TString Scope;
     NConfig::TCommonConfig CommonConfig;
     NFq::TComputeConfig ComputeConfig;
+    FederatedQuery::Internal::ComputeDatabaseInternal ComputeDatabase;
     NFq::NConfig::TYdbStorageConfig ConnectionConfig;
     TSigner::TPtr Signer;
     TYqSharedResources::TPtr YqSharedResources;

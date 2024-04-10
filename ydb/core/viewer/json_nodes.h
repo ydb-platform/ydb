@@ -37,6 +37,7 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
     std::unique_ptr<TEvBlobStorage::TEvControllerConfigResponse> BaseConfig;
     std::unordered_map<ui32, const NKikimrBlobStorage::TBaseConfig::TGroup*> BaseConfigGroupIndex;
     std::unordered_map<TNodeId, ui64> DisconnectTime;
+    std::unordered_map<TNodeId, TString> NodeName;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     TString FilterTenant;
@@ -411,27 +412,25 @@ public:
                     const auto localPathId = entry.DomainInfo->DomainKey.LocalPathId;
                     FilterSubDomainKey = TSubDomainKey(ownerId, localPathId);
                 }
+
+                if (FilterTenant.empty()) {
+                    RequestForTenant(path);
+                }
+                
                 if (entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
                     TPathId resourceDomainKey(entry.DomainInfo->ResourcesDomainKey);
                     BLOG_TRACE("Requesting navigate for resource domain " << resourceDomainKey);
                     RequestSchemeCacheNavigate(resourceDomainKey);
                     ++RequestsBeforeNodeList;
-                } else {
-                    if (FilterTenant.empty()) {
-                        RequestForTenant(path);
-                    }
-                    if (Storage) {
-                        if (entry.DomainDescription) {
-                            for (const auto& storagePool : entry.DomainDescription->Description.GetStoragePools()) {
-                                TString storagePoolName = storagePool.GetName();
-                                THolder<TEvBlobStorage::TEvControllerSelectGroups> request = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
-                                request->Record.SetReturnAllMatchingGroups(true);
-                                request->Record.AddGroupParameters()->MutableStoragePoolSpecifier()->SetName(storagePoolName);
-                                BLOG_TRACE("Requesting BSControllerSelectGroups for " << storagePoolName);
-                                RequestBSControllerSelectGroups(std::move(request));
-                                ++RequestsBeforeNodeList;
-                            }
-                        }
+                } else if (Storage && entry.DomainDescription) {
+                    for (const auto& storagePool : entry.DomainDescription->Description.GetStoragePools()) {
+                        TString storagePoolName = storagePool.GetName();
+                        THolder<TEvBlobStorage::TEvControllerSelectGroups> request = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
+                        request->Record.SetReturnAllMatchingGroups(true);
+                        request->Record.AddGroupParameters()->MutableStoragePoolSpecifier()->SetName(storagePoolName);
+                        BLOG_TRACE("Requesting BSControllerSelectGroups for " << storagePoolName);
+                        RequestBSControllerSelectGroups(std::move(request));
+                        ++RequestsBeforeNodeList;
                     }
                 }
             } else {
@@ -483,6 +482,9 @@ public:
             BLOG_TRACE("HiveNodeStats filter node by " << nodeId);
             FilterNodeIds.insert(nodeId);
             DisconnectTime[nodeId] = nodeStats.GetLastAliveTimestamp();
+            if (nodeStats.HasNodeName()) {
+                NodeName[nodeId] = nodeStats.GetNodeName();
+            }
         }
         if (--RequestsBeforeNodeList == 0) {
             ProcessNodeIds();
@@ -753,6 +755,10 @@ public:
                 auto itDisconnectTime = DisconnectTime.find(nodeId);
                 if (itDisconnectTime != DisconnectTime.end()) {
                     nodeInfo.MutableSystemState()->SetDisconnectTime(itDisconnectTime->second);
+                }
+                auto itNodeName = NodeName.find(nodeId);
+                if (itNodeName != NodeName.end()) {
+                    nodeInfo.MutableSystemState()->SetNodeName(itNodeName->second);
                 }
             }
             if (Storage) {

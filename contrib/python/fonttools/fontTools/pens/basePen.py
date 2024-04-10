@@ -39,7 +39,7 @@ sequence of length 2 will do.
 from typing import Tuple, Dict
 
 from fontTools.misc.loggingTools import LogMixin
-from fontTools.misc.transform import DecomposedTransform
+from fontTools.misc.transform import DecomposedTransform, Identity
 
 __all__ = [
     "AbstractPen",
@@ -148,7 +148,6 @@ class AbstractPen:
 
 
 class NullPen(AbstractPen):
-
     """A pen that does nothing."""
 
     def moveTo(self, pt):
@@ -187,7 +186,6 @@ class MissingComponentError(KeyError):
 
 
 class DecomposingPen(LoggingPen):
-
     """Implements a 'addComponent' method that decomposes components
     (i.e. draws them onto self as simple contours).
     It can also be used as a mixin class (e.g. see ContourRecordingPen).
@@ -197,17 +195,40 @@ class DecomposingPen(LoggingPen):
 
     By default a warning message is logged when a base glyph is missing;
     set the class variable ``skipMissingComponents`` to False if you want
-    to raise a :class:`MissingComponentError` exception.
+    all instances of a sub-class to raise a :class:`MissingComponentError`
+    exception by default.
     """
 
     skipMissingComponents = True
+    # alias error for convenience
+    MissingComponentError = MissingComponentError
 
-    def __init__(self, glyphSet):
-        """Takes a single 'glyphSet' argument (dict), in which the glyphs
-        that are referenced as components are looked up by their name.
+    def __init__(
+        self,
+        glyphSet,
+        *args,
+        skipMissingComponents=None,
+        reverseFlipped=False,
+        **kwargs,
+    ):
+        """Takes a 'glyphSet' argument (dict), in which the glyphs that are referenced
+        as components are looked up by their name.
+
+        If the optional 'reverseFlipped' argument is True, components whose transformation
+        matrix has a negative determinant will be decomposed with a reversed path direction
+        to compensate for the flip.
+
+        The optional 'skipMissingComponents' argument can be set to True/False to
+        override the homonymous class attribute for a given pen instance.
         """
-        super(DecomposingPen, self).__init__()
+        super(DecomposingPen, self).__init__(*args, **kwargs)
         self.glyphSet = glyphSet
+        self.skipMissingComponents = (
+            self.__class__.skipMissingComponents
+            if skipMissingComponents is None
+            else skipMissingComponents
+        )
+        self.reverseFlipped = reverseFlipped
 
     def addComponent(self, glyphName, transformation):
         """Transform the points of the base glyph and draw it onto self."""
@@ -220,8 +241,19 @@ class DecomposingPen(LoggingPen):
                 raise MissingComponentError(glyphName)
             self.log.warning("glyph '%s' is missing from glyphSet; skipped" % glyphName)
         else:
-            tPen = TransformPen(self, transformation)
-            glyph.draw(tPen)
+            pen = self
+            if transformation != Identity:
+                pen = TransformPen(pen, transformation)
+            if self.reverseFlipped:
+                # if the transformation has a negative determinant, it will
+                # reverse the contour direction of the component
+                a, b, c, d = transformation[:4]
+                det = a * d - b * c
+                if det < 0:
+                    from fontTools.pens.reverseContourPen import ReverseContourPen
+
+                    pen = ReverseContourPen(pen)
+            glyph.draw(pen)
 
     def addVarComponent(self, glyphName, transformation, location):
         # GlyphSet decomposes for us
@@ -229,7 +261,6 @@ class DecomposingPen(LoggingPen):
 
 
 class BasePen(DecomposingPen):
-
     """Base class for drawing pens. You must override _moveTo, _lineTo and
     _curveToOne. You may additionally override _closePath, _endPath,
     addComponent, addVarComponent, and/or _qCurveToOne. You should not

@@ -7,7 +7,11 @@
 #include <cstring>
 #include <type_traits>
 #include <system_error>
-
+#ifdef __has_include
+  #if __has_include(<stdfloat>) && (__cplusplus > 202002L || _MSVC_LANG > 202002L)
+    #error #include <stdfloat>
+  #endif
+#endif
 #include "constexpr_feature_detect.h"
 
 namespace fast_float {
@@ -96,7 +100,7 @@ using parse_options = parse_options_t<char>;
 #if defined(__APPLE__) || defined(__FreeBSD__)
 #include <machine/endian.h>
 #elif defined(sun) || defined(__sun)
-#include <sys/byteorder.h>
+#error #include <sys/byteorder.h>
 #elif defined(__MVS__)
 #include <sys/endian.h>
 #else
@@ -188,7 +192,14 @@ fastfloat_really_inline constexpr bool cpp20_and_in_constexpr() {
 
 template <typename T>
 fastfloat_really_inline constexpr bool is_supported_float_type() {
-  return std::is_same<T, float>::value || std::is_same<T, double>::value;
+  return std::is_same<T, float>::value || std::is_same<T, double>::value
+#if __STDCPP_FLOAT32_T__
+    || std::is_same<T, std::float32_t>::value
+#endif
+#if __STDCPP_FLOAT64_T__
+    || std::is_same<T, std::float64_t>::value
+#endif
+  ;
 }
 
 template <typename UC>
@@ -284,10 +295,10 @@ uint64_t umul128_generic(uint64_t ab, uint64_t cd, uint64_t *hi) {
   uint64_t ad = emulu((uint32_t)(ab >> 32), (uint32_t)cd);
   uint64_t bd = emulu((uint32_t)ab, (uint32_t)cd);
   uint64_t adbc = ad + emulu((uint32_t)ab, (uint32_t)(cd >> 32));
-  uint64_t adbc_carry = !!(adbc < ad);
+  uint64_t adbc_carry = (uint64_t)(adbc < ad);
   uint64_t lo = bd + (adbc << 32);
   *hi = emulu((uint32_t)(ab >> 32), (uint32_t)(cd >> 32)) + (adbc >> 32) +
-        (adbc_carry << 32) + !!(lo < bd);
+        (adbc_carry << 32) + (uint64_t)(lo < bd);
   return lo;
 }
 
@@ -320,7 +331,7 @@ value128 full_multiplication(uint64_t a, uint64_t b) {
   answer.low = a * b;
 #elif defined(FASTFLOAT_32BIT) || (defined(_WIN64) && !defined(__clang__))
   answer.low = _umul128(a, b, &answer.high); // _umul128 not available on ARM64
-#elif defined(FASTFLOAT_64BIT)
+#elif defined(FASTFLOAT_64BIT) && defined(__SIZEOF_INT128__)
   __uint128_t r = ((__uint128_t)a) * b;
   answer.low = uint64_t(r);
   answer.high = uint64_t(r >> 64);

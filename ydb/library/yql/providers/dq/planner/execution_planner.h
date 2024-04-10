@@ -103,7 +103,6 @@ namespace NYql::NDqs {
             const TString& program,
             NActors::TActorId executerID,
             NActors::TActorId resultID,
-            const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
             const TTypeAnnotationNode* typeAnn);
 
         TVector<NDqProto::TDqTask>& GetTasks() override;
@@ -118,7 +117,6 @@ namespace NYql::NDqs {
 
         TMaybe<NActors::TActorId> SourceID = {};
         TVector<NDqProto::TDqTask> Tasks;
-        const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
         const TTypeAnnotationNode* TypeAnn;
     };
 

@@ -1,58 +1,76 @@
 PY2_LIBRARY()
 
-LICENSE(BSD-3-Clause)
-
 VERSION(5.8.0)
 
-NO_UTIL()
-
-SRCDIR(contrib/python/psutil/py2/psutil)
+LICENSE(BSD-3-Clause)
 
 NO_COMPILER_WARNINGS()
+
+NO_LINT()
+
+NO_CHECK_IMPORTS(
+    psutil._psaix
+    psutil._psbsd
+    psutil._pslinux
+    psutil._psosx
+    psutil._pssunos
+    psutil._psutil_bsd
+    psutil._psutil_common
+    psutil._psutil_osx
+    psutil._psutil_sunos
+    psutil._psutil_windows
+    psutil._pswindows
+)
+
+NO_UTIL()
 
 CFLAGS(
     -DPSUTIL_VERSION=580
 )
 
-IF (OS_LINUX OR OS_DARWIN)
-    CFLAGS(
-        -DPSUTIL_POSIX=1
-    )
-    SRCS(
-        _psutil_common.c
-        _psutil_posix.c
-    )
-    PY_REGISTER(psutil._psutil_posix)
-ENDIF ()
+SRCS(
+    psutil/_psutil_common.c
+)
 
 IF (OS_LINUX)
     CFLAGS(
+        -DPSUTIL_POSIX=1
         -DPSUTIL_LINUX=1
     )
 
     SRCS(
-        _psutil_linux.c
+        psutil/_psutil_linux.c
+        psutil/_psutil_posix.c
     )
-    PY_REGISTER(psutil._psutil_linux)
-ENDIF ()
+
+    PY_REGISTER(
+        psutil._psutil_linux
+        psutil._psutil_posix
+    )
+ENDIF()
 
 IF (OS_DARWIN)
     CFLAGS(
+        -DPSUTIL_POSIX=1
         -DPSUTIL_OSX=1
     )
 
-    EXTRALIBS("-framework CoreFoundation -framework IOKit")
-
-    PEERDIR(
-        contrib/python/psutil/py2/psutil/arch/osx
+    LDFLAGS(
+        -framework CoreFoundation
+        -framework IOKit
     )
 
     SRCS(
-        _psutil_osx.c
+        psutil/_psutil_osx.c
+        psutil/_psutil_posix.c
+        psutil/arch/osx/process_info.c
     )
 
-    PY_REGISTER(psutil._psutil_osx)
-ENDIF ()
+    PY_REGISTER(
+        psutil._psutil_osx
+        psutil._psutil_posix
+    )
+ENDIF()
 
 IF (OS_WINDOWS)
     CFLAGS(
@@ -68,69 +86,37 @@ IF (OS_WINDOWS)
     )
 
     SRCS(
-        _psutil_common.c
-        _psutil_windows.c
-        arch/windows/cpu.c
-        arch/windows/disk.c
-        arch/windows/net.c
-        arch/windows/process_handles.c
-        arch/windows/process_info.c
-        arch/windows/process_utils.c
-        arch/windows/security.c
-        arch/windows/services.c
-        arch/windows/socks.c
-        arch/windows/wmi.c
+        psutil/_psutil_windows.c
+        psutil/arch/windows/cpu.c
+        psutil/arch/windows/disk.c
+        psutil/arch/windows/net.c
+        psutil/arch/windows/process_handles.c
+        psutil/arch/windows/process_info.c
+        psutil/arch/windows/process_utils.c
+        psutil/arch/windows/security.c
+        psutil/arch/windows/services.c
+        psutil/arch/windows/socks.c
+        psutil/arch/windows/wmi.c
     )
 
-    PY_REGISTER(psutil._psutil_windows)
-ENDIF ()
-
-NO_CHECK_IMPORTS(
-    psutil._psbsd
-    psutil._psosx
-    psutil._pssunos
-    psutil._psutil_bsd
-    psutil._psutil_common
-    psutil._psutil_osx
-    psutil._psutil_sunos
-    psutil._psutil_windows
-    psutil._pswindows
-)
+    PY_REGISTER(
+        psutil._psutil_windows
+    )
+ENDIF()
 
 PY_SRCS(
     TOP_LEVEL
     psutil/__init__.py
     psutil/_common.py
     psutil/_compat.py
+    psutil/_psaix.py
+    psutil/_psbsd.py
+    psutil/_pslinux.py
+    psutil/_psosx.py
+    psutil/_psposix.py
+    psutil/_pssunos.py
+    psutil/_pswindows.py
 )
-
-IF (OS_LINUX OR OS_DARWIN)
-    PY_SRCS(
-        TOP_LEVEL
-        psutil/_psposix.py
-    )
-ENDIF ()
-
-IF (OS_LINUX)
-    PY_SRCS(
-        TOP_LEVEL
-        psutil/_pslinux.py
-    )
-ENDIF ()
-
-IF (OS_DARWIN)
-    PY_SRCS(
-        TOP_LEVEL
-        psutil/_psosx.py
-    )
-ENDIF ()
-
-IF (OS_WINDOWS)
-    PY_SRCS(
-        TOP_LEVEL
-        psutil/_pswindows.py
-    )
-ENDIF ()
 
 RESOURCE_FILES(
     PREFIX contrib/python/psutil/py2/
@@ -138,10 +124,4 @@ RESOURCE_FILES(
     .dist-info/top_level.txt
 )
 
-NO_LINT()
-
 END()
-
-RECURSE_FOR_TESTS(
-    test
-)

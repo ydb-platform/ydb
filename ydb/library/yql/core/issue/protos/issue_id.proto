@@ -101,6 +101,7 @@ message TIssuesIds {
         YT_NATIVE_DESC_SORT_IGNORED = 3016;
         YT_MISSING_PROTO_FIELD = 3017;
         YT_FOLDER_INPUT_IS_NOT_A_FOLDER = 3018;
+        YT_SECURE_DATA_IN_COMMON_TMP = 3019;
 
 // yql parser warnings
         YQL_PRAGMA_WARNING_MSG = 4500;
@@ -185,6 +186,7 @@ message TIssuesIds {
 
 // pg
         PG_NO_LOCKING_SUPPORT = 7000;
+        PG_COMPAT = 7001;
 
 // range [200000, 399999) reserved for KiKiMR issue codes, do not use!
 

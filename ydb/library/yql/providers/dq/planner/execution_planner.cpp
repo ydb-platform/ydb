@@ -163,10 +163,6 @@ namespace NYql::NDqs {
 
             // Sinks
             if (auto maybeDqOutputsList = stage.Outputs()) {
-                TScopedAlloc alloc(__LOCATION__);
-                TTypeEnvironment typeEnv(alloc);
-                TProgramBuilder pgmBuilder(typeEnv, *FunctionRegistry);
-
                 auto dqOutputsList = maybeDqOutputsList.Cast();
                 for (const auto& output : dqOutputsList) {
                     const ui64 index = FromString(output.Ptr()->Child(TDqOutputAnnotationBase::idx_Index)->Content());
@@ -188,20 +184,13 @@ namespace NYql::NDqs {
                         YQL_ENSURE(!sinkSettings.type_url().empty(), "Data sink provider \"" << dataSinkName << "\" did't fill dq sink settings for its dq sink node");
                         YQL_ENSURE(sinkType, "Data sink provider \"" << dataSinkName << "\" did't fill dq sink settings type for its dq sink node");
                     } else if (output.Maybe<NNodes::TDqTransform>()) {
-                        TStringStream errorStream;
-
                         auto transform = output.Cast<NNodes::TDqTransform>();
                         outputTransform.Type = transform.Type();
                         const auto inputTypeAnnotation = transform.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-                        auto inputType = NCommon::BuildType(*inputTypeAnnotation, pgmBuilder, errorStream);
-                        Y_ENSURE(inputType, "Failed to build transform input type: " << errorStream.Str());
-                        outputTransform.InputType = NKikimr::NMiniKQL::SerializeNode(inputType, typeEnv);
+                        outputTransform.InputType = GetSerializedTypeAnnotation(inputTypeAnnotation);
 
-                        errorStream.clear();
                         const auto outputTypeAnnotation = transform.OutputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-                        auto outputType = NCommon::BuildType(*outputTypeAnnotation, pgmBuilder, errorStream);
-                        Y_ENSURE(outputType, "Failed to build transform output type: " << errorStream.Str());
-                        outputTransform.OutputType = NKikimr::NMiniKQL::SerializeNode(outputType, typeEnv);
+                        outputTransform.OutputType = GetSerializedTypeAnnotation(outputTypeAnnotation);
                         dqIntegration->FillTransformSettings(transform.Ref(), outputTransform.Settings);
                     } else {
                         YQL_ENSURE(false, "Unknown stage output type");
@@ -491,14 +480,7 @@ namespace NYql::NDqs {
             auto& item = result->Cast<TTupleExprType>()->GetItems()[0];
             YQL_ENSURE(item->GetKind() == ETypeAnnotationKind::List);
             auto exprType = item->Cast<TListExprType>()->GetItemType();
-
-            TScopedAlloc alloc(__LOCATION__);
-            TTypeEnvironment typeEnv(alloc);
-
-            TProgramBuilder pgmBuilder(typeEnv, *FunctionRegistry);
-            TStringStream errorStream;
-            auto type = NCommon::BuildType(*exprType, pgmBuilder, errorStream);
-            return SerializeNode(type, typeEnv);
+            return GetSerializedTypeAnnotation(exprType);
         }
         return {};
     }
@@ -558,7 +540,7 @@ namespace NYql::NDqs {
             TString sourceType;
             if (dqSource) {
                 sourceSettings.ConstructInPlace();
-                dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType);
+                dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType, maxPartitions);
                 YQL_ENSURE(!sourceSettings->type_url().empty(), "Data source provider \"" << dataSourceName << "\" did't fill dq source settings for its dq source node");
                 YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceName << "\" did't fill dq source settings type for its dq source node");
             }
@@ -602,7 +584,6 @@ namespace NYql::NDqs {
         }
     }
 
-#undef BUILD_CONNECTION
 
 void TDqsExecutionPlanner::BuildAllPrograms() {
         using namespace NKikimr::NMiniKQL;
@@ -760,12 +741,10 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
         const TString& program,
         NActors::TActorId executerID,
         NActors::TActorId resultID,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TTypeAnnotationNode* typeAnn)
         : Program(program)
         , ExecuterID(executerID)
         , ResultID(resultID)
-        , FunctionRegistry(functionRegistry)
         , TypeAnn(typeAnn)
     { }
 
@@ -827,14 +806,7 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
             auto item = TypeAnn;
             YQL_ENSURE(item->GetKind() == ETypeAnnotationKind::List);
             auto exprType = item->Cast<TListExprType>()->GetItemType();
-
-            TScopedAlloc alloc(__LOCATION__);
-            TTypeEnvironment typeEnv(alloc);
-
-            TProgramBuilder pgmBuilder(typeEnv, *FunctionRegistry);
-            TStringStream errorStream;
-            auto type = NCommon::BuildType(*exprType, pgmBuilder, errorStream);
-            return SerializeNode(type, typeEnv);
+            return GetSerializedTypeAnnotation(exprType);
         } else {
             return GetSerializedResultType(Program);
         }

@@ -13,7 +13,8 @@ enum class EDatabaseType {
     ClickHouse,
     DataStreams,
     ObjectStorage,
-    PostgreSQL
+    PostgreSQL,
+    YT
 };
 
 inline EDatabaseType DatabaseTypeFromDataSourceKind(NConnector::NApi::EDataSourceKind dataSourceKind) {

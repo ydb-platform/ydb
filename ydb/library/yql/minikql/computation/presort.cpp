@@ -132,6 +132,7 @@ void Encode(TVector<ui8>& output, NUdf::EDataSlot slot, const NUdf::TUnboxedValu
         EncodeUnsigned<ui16, Desc>(output, value.Get<ui16>());
         break;
     case NUdf::EDataSlot::Int32:
+    case NUdf::EDataSlot::Date32:
         EncodeSigned<i32, Desc>(output, value.Get<i32>());
         break;
     case NUdf::EDataSlot::Uint32:
@@ -140,6 +141,9 @@ void Encode(TVector<ui8>& output, NUdf::EDataSlot slot, const NUdf::TUnboxedValu
         break;
     case NUdf::EDataSlot::Int64:
     case NUdf::EDataSlot::Interval:
+    case NUdf::EDataSlot::Interval64:
+    case NUdf::EDataSlot::Datetime64:
+    case NUdf::EDataSlot::Timestamp64:
         EncodeSigned<i64, Desc>(output, value.Get<i64>());
         break;
     case NUdf::EDataSlot::Uint64:
@@ -203,6 +207,7 @@ NUdf::TUnboxedValue Decode(TStringBuf& input, NUdf::EDataSlot slot, TVector<ui8>
         return NUdf::TUnboxedValuePod(DecodeUnsigned<ui16, Desc>(input));
 
     case NUdf::EDataSlot::Int32:
+    case NUdf::EDataSlot::Date32:
         return NUdf::TUnboxedValuePod(DecodeSigned<i32, Desc>(input));
 
     case NUdf::EDataSlot::Uint32:
@@ -211,6 +216,9 @@ NUdf::TUnboxedValue Decode(TStringBuf& input, NUdf::EDataSlot slot, TVector<ui8>
 
     case NUdf::EDataSlot::Int64:
     case NUdf::EDataSlot::Interval:
+    case NUdf::EDataSlot::Interval64:
+    case NUdf::EDataSlot::Datetime64:
+    case NUdf::EDataSlot::Timestamp64:
         return NUdf::TUnboxedValuePod(DecodeSigned<i64, Desc>(input));
 
     case NUdf::EDataSlot::Uint64:

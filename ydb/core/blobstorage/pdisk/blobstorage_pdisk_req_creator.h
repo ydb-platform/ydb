@@ -218,7 +218,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TODO: Make all functions in style
     [[nodiscard]] TChunkTrim* CreateChunkTrim(ui32 chunkIdx, ui32 offset, ui64 size, const NWilson::TSpan& parent) {
-        NWilson::TSpan span = parent.CreateChild(TWilson::PDisk, "PDisk.ChunkTrim");
+        NWilson::TSpan span = parent.CreateChild(TWilson::PDiskTopLevel, "PDisk.ChunkTrim");
         span.Attribute("chunk_idx", chunkIdx)
             .Attribute("offset", offset)
             .Attribute("size", static_cast<i64>(size))
@@ -228,7 +228,7 @@ public:
     }
 
     [[nodiscard]] TLogWrite* CreateLogWrite(NPDisk::TEvLog &ev, const TActorId &sender, double& burstMs, NWilson::TTraceId traceId) {
-        NWilson::TSpan span(TWilson::PDisk, std::move(traceId), "PDisk.LogWrite", NWilson::EFlags::AUTO_END, ActorSystem);
+        NWilson::TSpan span(TWilson::PDiskTopLevel, std::move(traceId), "PDisk.LogWrite", NWilson::EFlags::AUTO_END, ActorSystem);
         span.Attribute("pdisk_id", PDiskId);
 
         TReqId reqId(TReqId::LogWrite, AtomicIncrement(LastReqId));
@@ -245,7 +245,7 @@ public:
 
     [[nodiscard]] TChunkRead* CreateChunkRead(const NPDisk::TEvChunkRead &ev, const TActorId &sender, double& burstMs,
             NWilson::TTraceId traceId) {
-        NWilson::TSpan span(TWilson::PDisk, std::move(traceId), "PDisk.ChunkRead", NWilson::EFlags::AUTO_END, ActorSystem);
+        NWilson::TSpan span(TWilson::PDiskTopLevel, std::move(traceId), "PDisk.ChunkRead", NWilson::EFlags::AUTO_END, ActorSystem);
         span.Attribute("pdisk_id", PDiskId);
 
         TReqId reqId(TReqId::ChunkRead, AtomicIncrement(LastReqId));
@@ -261,7 +261,7 @@ public:
 
     [[nodiscard]] TChunkWrite* CreateChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, double& burstMs,
             NWilson::TTraceId traceId) {
-        NWilson::TSpan span(TWilson::PDisk, std::move(traceId), "PDisk.ChunkWrite", NWilson::EFlags::AUTO_END, ActorSystem);
+        NWilson::TSpan span(TWilson::PDiskTopLevel, std::move(traceId), "PDisk.ChunkWrite", NWilson::EFlags::AUTO_END, ActorSystem);
         span.Attribute("pdisk_id", PDiskId);
 
         TReqId reqId(TReqId::ChunkWrite, AtomicIncrement(LastReqId));

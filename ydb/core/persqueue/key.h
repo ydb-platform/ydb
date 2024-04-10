@@ -35,8 +35,8 @@ public:
         : Partition(partition)
     {
         Resize(UnmarkedSize());
-        *PtrType() = type;
-        memcpy(PtrPartition(),  Sprintf("%.10" PRIu32, Partition.InternalPartitionId).data(), 10);
+        SetType(type);
+        memcpy(PtrPartition(), Sprintf("%.10" PRIu32, Partition.InternalPartitionId).data(), 10);
     }
 
     TKeyPrefix(EType type, const TPartitionId& partition, EMark mark)
@@ -62,13 +62,62 @@ public:
     static constexpr ui32 MarkPosition() { return UnmarkedSize(); }
     static constexpr ui32 MarkedSize() { return UnmarkedSize() + 1; }
 
+
     void SetType(EType type) {
-        *PtrType() = type;
+        if (!IsServicePartition()) {
+            *PtrType() = type;
+            return;
+        }
+        switch (type) {
+            case TypeNone:
+                *PtrType() = TypeNone;
+                return;
+	    case TypeData:
+                *PtrType() = ServiceTypeData;
+                return;
+            case TypeTmpData:
+                *PtrType() = ServiceTypeTmpData;
+                return;
+            case TypeInfo:
+                *PtrType() = ServiceTypeInfo;
+                return;
+            case TypeMeta:
+                *PtrType() = ServiceTypeMeta;
+                return;
+            case TypeTxMeta:
+               *PtrType() = ServiceTypeTxMeta;
+                return;
+            default:
+                Y_ABORT();
+        }
     }
 
+
     EType GetType() const {
-        return EType(*PtrType());
+        switch (*PtrType()) {
+            case TypeNone:
+                return TypeNone;
+            case TypeData:
+            case ServiceTypeData:
+                return TypeData;
+            case TypeTmpData:
+            case ServiceTypeTmpData:
+                return TypeTmpData;
+            case TypeInfo:
+            case ServiceTypeInfo:
+                return TypeInfo;
+            case TypeMeta:
+            case ServiceTypeMeta:
+                return TypeMeta;
+            case TypeTxMeta:
+            case ServiceTypeTxMeta:
+                return TypeTxMeta;
+        }
+        Y_ABORT();
+        return TypeNone;
     }
+
+    bool IsServicePartition() const {return Partition.WriteId.Defined();}
 
     const TPartitionId& GetPartition() const { return Partition; }
 
@@ -77,10 +126,20 @@ protected:
 
     void ParsePartition()
     {
-        Partition.InternalPartitionId = FromString<ui32>(TStringBuf{PtrPartition(), 10});
+        Partition.OriginalPartitionId = FromString<ui32>(TStringBuf{PtrPartition(), 10});
+        Partition.InternalPartitionId = Partition.OriginalPartitionId;
     }
 
+
 private:
+    enum EServiceType : char {
+        ServiceTypeInfo = 'M',
+        ServiceTypeData = 'D',
+        ServiceTypeTmpData = 'X',
+        ServiceTypeMeta = 'J',
+        ServiceTypeTxMeta = 'K'
+    };
+
     char* PtrType() { return Data(); }
     char* PtrMark() { return Data() + UnmarkedSize(); }
     char* PtrPartition() { return Data() + 1; }
@@ -90,6 +149,7 @@ private:
     const char* PtrPartition() const { return Data() + 1; }
 
     TPartitionId Partition;
+
 };
 
 // {char type; ui32 partiton; ui64 offset; ui16 partNo; ui32 count, ui16 internalPartsCount}

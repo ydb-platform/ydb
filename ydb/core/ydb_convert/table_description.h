@@ -4,6 +4,7 @@
 
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
@@ -29,7 +30,7 @@ enum class EAlterOperationKind {
 struct TPathId;
 
 
-THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTableRequest* req); 
+THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTableRequest* req);
 bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
     const TTableProfiles& profiles, const TPathId& resolvedPathId,
     Ydb::StatusIds::StatusCode& status, TString& error);
@@ -125,6 +126,15 @@ void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
 // in
 bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     const Ydb::Table::CreateTableRequest& in, const TTableProfiles& profiles,
-    Ydb::StatusIds::StatusCode& status, TString& error);
+    Ydb::StatusIds::StatusCode& status, TString& error, bool indexedTable = false);
+
+
+// out
+void FillSequenceDescription(Ydb::Table::CreateTableRequest& out,
+    const NKikimrSchemeOp::TTableDescription& in);
+
+// out
+void FillSequenceDescription(Ydb::Table::CreateTableRequest& out,
+    const NKikimrSchemeOp::TTableDescription& in);
 
 } // namespace NKikimr

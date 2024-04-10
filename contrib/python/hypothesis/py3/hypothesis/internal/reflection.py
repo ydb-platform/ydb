@@ -14,19 +14,23 @@ to really unreasonable lengths to produce pretty output."""
 import ast
 import hashlib
 import inspect
+import linecache
 import os
 import re
 import sys
 import textwrap
 import types
+import warnings
 from functools import partial, wraps
 from io import StringIO
 from keyword import iskeyword
+from random import _inst as global_random_instance
 from tokenize import COMMENT, detect_encoding, generate_tokens, untokenize
 from types import ModuleType
 from typing import TYPE_CHECKING, Any, Callable
 from unittest.mock import _patch as PatchType
 
+from hypothesis.errors import HypothesisWarning
 from hypothesis.internal.compat import PYPY, is_typed_named_tuple
 from hypothesis.utils.conventions import not_set
 from hypothesis.vendor.pretty import pretty
@@ -312,6 +316,10 @@ def extract_lambda_source(f):
     sig = inspect.signature(f)
     assert sig.return_annotation in (inspect.Parameter.empty, None), sig
 
+    # Using pytest-xdist on Python 3.13, there's an entry in the linecache for
+    # file "<string>", which then returns nonsense to getsource.  Discard it.
+    linecache.cache.pop("<string>", None)
+
     if sig.parameters:
         if_confused = f"lambda {str(sig)[1:-1]}: <unknown>"
     else:
@@ -326,7 +334,7 @@ def extract_lambda_source(f):
     source = source.strip()
     if "lambda" not in source and sys.platform == "emscripten":  # pragma: no cover
         return if_confused  # work around Pyodide bug in inspect.getsource()
-    assert "lambda" in source
+    assert "lambda" in source, source
 
     tree = None
 
@@ -444,6 +452,8 @@ def get_pretty_function_description(f):
         # Some objects, like `builtins.abs` are of BuiltinMethodType but have
         # their module as __self__.  This might include c-extensions generally?
         if not (self is None or inspect.isclass(self) or inspect.ismodule(self)):
+            if self is global_random_instance:
+                return f"random.{name}"
             return f"{self!r}.{name}"
     elif isinstance(name, str) and getattr(dict, name, object()) is f:
         # special case for keys/values views in from_type() / ghostwriter output
@@ -478,6 +488,15 @@ def repr_call(f, args, kwargs, *, reorder=True):
     rep = nicerepr(f)
     if rep.startswith("lambda") and ":" in rep:
         rep = f"({rep})"
+    repr_len = len(rep) + sum(len(b) for b in bits)  # approx
+    if repr_len > 30000:
+        warnings.warn(
+            "Generating overly large repr. This is an expensive operation, and with "
+            f"a length of {repr_len//1000} kB is is unlikely to be useful. Use -Wignore "
+            "to ignore the warning, or -Werror to get a traceback.",
+            HypothesisWarning,
+            stacklevel=2,
+        )
     return rep + "(" + ", ".join(bits) + ")"
 
 

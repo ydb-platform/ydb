@@ -147,7 +147,7 @@ static void Run(i64 instances = 1) {
 
         VERBOSE_COUT("Sending TEvBoot to test");
         for (ui32 i = 0; i < instances; ++i) {
-            ActorSystem->Send(testIds[i], new TEvTablet::TEvBoot(MakeTabletID(0, 0, 1), 0, nullptr, TActorId(), nullptr));
+            ActorSystem->Send(testIds[i], new TEvTablet::TEvBoot(MakeTabletID(false, 1), 0, nullptr, TActorId(), nullptr));
         }
 
         TAtomicBase doneCount = 0;

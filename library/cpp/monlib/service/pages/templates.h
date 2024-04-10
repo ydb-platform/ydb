@@ -3,15 +3,7 @@
 #include <util/stream/output.h>
 #include <util/system/defaults.h>
 
-#define WITH_SCOPED(var, value) WITH_SCOPED_I(var, value, Y_GENERATE_UNIQUE_ID(WITH_SCOPED_LABEL_))
-
-#define WITH_SCOPED_I(var, value, label) \
-    if (auto var = (value)) {              \
-        Y_UNUSED(var);                   \
-        goto label;                      \
-    } else                               \
-    label                                \
-        :
+#define WITH_SCOPED(var, value) if (auto var = (value); Y_UNUSED(var), true)
 
 #define TAG(name) WITH_SCOPED(tmp, ::NMonitoring::name(__stream))
 #define TAG_CLASS(name, cls) WITH_SCOPED(tmp, ::NMonitoring::name(__stream, cls))

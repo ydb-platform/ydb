@@ -2,7 +2,7 @@
 #include "utils.h"
 
 namespace NKikimr::NPQ {
- 
+
 TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& tx) :
     TDistributedTransaction()
 {
@@ -32,7 +32,7 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     case NKikimrPQ::TTransaction::KIND_UNKNOWN:
         Y_FAIL_S("unknown transaction type");
     }
- 
+
     if (tx.HasSelfPredicate()) {
         SelfDecision =
             tx.GetSelfPredicate() ? NKikimrTx::TReadSetData::DECISION_COMMIT : NKikimrTx::TReadSetData::DECISION_ABORT;
@@ -44,6 +44,10 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
 
     Y_ABORT_UNLESS(tx.HasSourceActor());
     SourceActor = ActorIdFromProto(tx.GetSourceActor());
+
+    if (tx.HasWriteId()) {
+        WriteId = tx.GetWriteId();
+    }
 }
 
 void TDistributedTransaction::InitDataTransaction(const NKikimrPQ::TTransaction& tx)
@@ -66,6 +70,8 @@ void TDistributedTransaction::InitConfigTransaction(const NKikimrPQ::TTransactio
     TabletConfig = tx.GetTabletConfig();
     BootstrapConfig = tx.GetBootstrapConfig();
 
+    Migrate(TabletConfig);
+
     InitPartitions();
 }
 
@@ -73,14 +79,8 @@ void TDistributedTransaction::InitPartitions()
 {
     Partitions.clear();
 
-    if (TabletConfig.PartitionsSize()) {
-        for (const auto& partition : TabletConfig.GetPartitions()) {
-            Partitions.emplace(partition.GetPartitionId());
-        }
-    } else {
-        for (auto partitionId : TabletConfig.GetPartitionIds()) {
-            Partitions.emplace(partitionId);
-        }
+    for (const auto& partition : TabletConfig.GetPartitions()) {
+        Partitions.emplace(partition.GetPartitionId());
     }
 }
 
@@ -133,6 +133,12 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransac
 
     InitPartitions(txBody.GetOperations());
 
+    if (txBody.HasWriteId()) {
+        WriteId = txBody.GetWriteId();
+    } else {
+        WriteId = Nothing();
+    }
+
     PartitionRepliesCount = 0;
     PartitionRepliesExpected = 0;
 
@@ -146,6 +152,8 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
 
     TabletConfig = txBody.GetTabletConfig();
     BootstrapConfig = txBody.GetBootstrapConfig();
+
+    Migrate(TabletConfig);
 
     TPartitionGraph graph = MakePartitionGraph(TabletConfig);
 
@@ -172,7 +180,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
             }
         }
     }
-    
+
     InitPartitions();
 
     PartitionRepliesCount = 0;
@@ -334,6 +342,9 @@ void TDistributedTransaction::AddCmdWriteDataTx(NKikimrPQ::TTransaction& tx)
     if (ParticipantsDecision != NKikimrTx::TReadSetData::DECISION_UNKNOWN) {
         tx.SetAggrPredicate(ParticipantsDecision == NKikimrTx::TReadSetData::DECISION_COMMIT);
     }
+    if (WriteId.Defined()) {
+        tx.SetWriteId(*WriteId);
+    }
 }
 
 void TDistributedTransaction::AddCmdWriteConfigTx(NKikimrPQ::TTransaction& tx)
@@ -363,7 +374,7 @@ TString TDistributedTransaction::GetKey() const
 {
     return GetTxKey(TxId);
 }
- 
+
 void TDistributedTransaction::BindMsgToPipe(ui64 tabletId, const IEventBase& event)
 {
     Y_ABORT_UNLESS(event.IsSerializable());
@@ -379,7 +390,7 @@ void TDistributedTransaction::UnbindMsgsFromPipe(ui64 tabletId)
     OutputMsgs.erase(tabletId);
 }
 
-auto TDistributedTransaction::GetBindedMsgs(ui64 tabletId) -> const TVector<TSerializedMessage>& 
+auto TDistributedTransaction::GetBindedMsgs(ui64 tabletId) -> const TVector<TSerializedMessage>&
 {
     if (auto p = OutputMsgs.find(tabletId); p != OutputMsgs.end()) {
         return p->second;

@@ -1,0 +1,85 @@
+title: gdb14
+service: buildroot
+
+shared:
+  resource_path: &resource-path "build/external_resources/gdb/resources.json"
+  input: &base-input
+    revision: ${tasks.checkout.result_output[0].string[0]}
+    package: gdb/14
+    toolchain_name: gdb14
+
+ci:
+  secret: sec-01hnfbz3r6xqfacy9t3he0rzvf
+  runtime:
+    sandbox:
+      owner: DTCC
+
+  permissions:
+    start-flow:
+      - service: cc
+      - service: ya_make
+
+  releases:
+    release-gdb:
+      title: "Release gdb14"
+      flow: build-and-release-gdb
+      flow-vars-ui:
+        schema:
+          required: [revision, ix_revision]
+          type: object
+          properties:
+            revision:
+              title: Repository revision (github.com/yandex/toolchains)
+              type: string
+              default: HEAD
+            ix_revision:
+              title: IX submodule revision (github.com/stal-ix/ix)
+              type: string
+              default: CURRENT
+            platforms:
+              title: Build only for particular platforms (comma separated)
+              type: string
+              default: ""
+      filters:
+        - discovery: dir
+          abs-paths:
+            - devtools/gdb/**
+            - toolchains/ynd/gdb/**
+
+  flows:
+    build-and-release-gdb:
+      title: "Build and Release gdb14"
+      jobs:
+        checkout:
+          title: Checkout IX submodule
+          task: projects/devtools/contrib/toolchain_registry/checkout
+
+        build:
+          title: Build
+          task: projects/devtools/contrib/toolchain_registry/build
+          needs: checkout
+          input:
+            <<: *base-input
+            resource_path: *resource-path
+            particular_platforms: ${flow-vars.platforms}
+
+        update-mapping:
+          title: Update mapping.conf.json
+          task: projects/devtools/deploy_mapping/deploy_mapping
+          needs: build
+          input:
+            config:
+              pr_id: ${tasks.build.output_params.pr_id}
+              create_pr: false
+              push_only: true
+              orig_mapping: devtools/ya/opensource/mapping.conf.json
+              public: true
+              write_comment: false
+
+        release:
+          title: Release
+          task: projects/devtools/contrib/toolchain_registry/release
+          needs: update-mapping
+          input:
+            <<: *base-input
+            pr_id: ${tasks.build.output_params.pr_id}

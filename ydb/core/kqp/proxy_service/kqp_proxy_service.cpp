@@ -27,6 +27,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/core/sys_view/common/schema.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
@@ -64,17 +65,8 @@ static constexpr TDuration DEFAULT_KEEP_ALIVE_TIMEOUT = TDuration::MilliSeconds(
 static constexpr TDuration DEFAULT_EXTRA_TIMEOUT_WAIT = TDuration::MilliSeconds(50);
 static constexpr TDuration DEFAULT_CREATE_SESSION_TIMEOUT = TDuration::MilliSeconds(5000);
 
-
+using VSessions = NKikimr::NSysView::Schema::QuerySessions;
 using namespace NKikimrConfig;
-
-
-std::optional<ui32> GetDefaultStateStorageGroupId(const TString& database) {
-    if (auto* domainInfo = AppData()->DomainsInfo->GetDomainByName(ExtractDomain(database))) {
-        return domainInfo->DefaultStateStorageGroup;
-    }
-
-    return std::nullopt;
-}
 
 
 std::optional<ui32> TryDecodeYdbSessionId(const TString& sessionId) {
@@ -277,7 +269,7 @@ public:
                 MakeKqpCompileComputationPatternServiceID(SelfId().NodeId()), CompileComputationPatternService);
         }
 
-        KqpNodeService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpNodeService(TableServiceConfig, Counters, nullptr, AsyncIoFactory));
+        KqpNodeService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpNodeService(TableServiceConfig, Counters, nullptr, AsyncIoFactory, FederatedQuerySetup));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpNodeServiceID(SelfId().NodeId()), KqpNodeService);
 
@@ -423,16 +415,9 @@ public:
             return;
         }
 
-        auto groupId = GetDefaultStateStorageGroupId(AppData()->TenantName);
-        if (!groupId) {
-            KQP_PROXY_LOG_D("Unable to determine default state storage group id for database " <<
-                AppData()->TenantName);
-            return;
-        }
-
         NodeResources.SetActiveWorkersCount(LocalSessions->size());
         PublishBoardPath = MakeKqpProxyBoardPath(AppData()->TenantName);
-        auto actor = CreateBoardPublishActor(PublishBoardPath, NodeResources.SerializeAsString(), SelfId(), *groupId, 0, true);
+        auto actor = CreateBoardPublishActor(PublishBoardPath, NodeResources.SerializeAsString(), SelfId(), 0, true);
         BoardPublishActor = Register(actor);
         LastPublishResourcesAt = TAppData::TimeProvider->Now();
     }
@@ -597,7 +582,11 @@ public:
         const auto deadline = TInstant::MicroSeconds(event.GetDeadlineUs());
 
         if (CheckRequestDeadline(requestInfo, deadline, result) &&
-            CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), true, request.GetDatabase(), event.GetSupportsBalancing(), event.GetPgWire(), result))
+            CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), true, request.GetDatabase(),
+                request.GetApplicationName(), event.GetSupportsBalancing(), event.GetPgWire(),
+                event.GetClientAddress(), event.GetUserSID(), event.GetClientUserAgent(), event.GetClientSdkBuildInfo(),
+                event.GetClientPID(),
+                event.GetApplicationName(), result))
         {
             auto& response = *responseEv->Record.MutableResponse();
             response.SetSessionId(result.Value->SessionId);
@@ -626,15 +615,16 @@ public:
         const auto queryAction = ev->Get()->GetAction();
         TKqpRequestInfo requestInfo(traceId);
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
+        bool explicitSession = true;
         if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
-                database, false, false, result))
+                database, {}, false, false, "", "", "", "", "", "", result))
             {
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;
             }
-
+            explicitSession = false;
             ev->Get()->SetSessionId(result.Value->SessionId);
         }
 
@@ -648,6 +638,20 @@ public:
         auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
         if (!dbCounters) {
             dbCounters = Counters->GetDbCounters(database);
+        }
+
+        if (queryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY ||
+            queryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY) {
+
+            if (explicitSession &&
+                sessionInfo &&
+                !sessionInfo->PgWire && // pg wire bypasses rpc layer and doesn't perform attach
+                !sessionInfo->AttachedRpcId)
+            {
+                TString error = "Attempt to execute query on explicit session without attach";
+                ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
+                return;
+            }
         }
 
         PendingRequests.SetSessionId(requestId, sessionId, dbCounters);
@@ -669,6 +673,10 @@ public:
                 << ev->Get()->GetParametersSize() << "b > " << paramsLimitBytes << "b)";
             ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
             return;
+        }
+
+        if (sessionInfo) {
+            LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery());
         }
 
         TActorId targetId;
@@ -863,11 +871,15 @@ public:
         }
 
         const TKqpSessionInfo* info = LocalSessions->FindPtr(proxyRequest->SessionId);
-        if (info) {
+        if (info && !info->AttachedRpcId) {
             LocalSessions->StartIdleCheck(info, GetSessionIdleDuration());
         }
 
         Send(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
+
+        if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest) {
+            LocalSessions->DetachQueryText(info);
+        }
 
         TKqpRequestInfo requestInfo(proxyRequest->TraceId);
         KQP_PROXY_LOG_D(requestInfo << "Forwarded response to sender actor, requestId: " << requestId
@@ -897,14 +909,8 @@ public:
             return;
         }
 
-        auto groupId = GetDefaultStateStorageGroupId(AppData()->TenantName);
-        if (!groupId) {
-            KQP_PROXY_LOG_W("Unable to determine default state storage group id");
-            return;
-        }
-
         if (PublishBoardPath) {
-            auto actor = CreateBoardLookupActor(PublishBoardPath, SelfId(), *groupId, EBoardLookupMode::Majority);
+            auto actor = CreateBoardLookupActor(PublishBoardPath, SelfId(), EBoardLookupMode::Majority);
             BoardLookupActor = Register(actor);
         }
     }
@@ -1321,6 +1327,8 @@ public:
             hFunc(NKqp::TEvCancelScriptExecutionOperation, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
+            hFunc(TEvKqp::TEvListSessionsRequest, Handle);
+            hFunc(TEvKqp::TEvListProxyNodesRequest, Handle);
         default:
             Y_ABORT("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -1406,8 +1414,13 @@ private:
         }
     }
 
-    bool CreateNewSessionWorker(const TKqpRequestInfo& requestInfo,
-        const TString& cluster, bool longSession, const TString& database, bool supportsBalancing, bool pgWire, TProcessResult<TKqpSessionInfo*>& result)
+    bool CreateNewSessionWorker(const TKqpRequestInfo& requestInfo, const TString& cluster, bool longSession,
+        const TString& database, const TMaybe<TString>& applicationName, bool supportsBalancing, bool pgWire,
+        const TString& clientHost, const TString& clientSid, const TString& userAgent,
+        const TString& sdkBuildInfo,
+        const TString& clientPid,
+        const TString& clientApplicationName,
+        TProcessResult<TKqpSessionInfo*>& result)
     {
         if (!database.empty() && AppData()->TenantName.empty()) {
             TString error = TStringBuilder() << "Node isn't ready to serve database requests.";
@@ -1445,7 +1458,7 @@ private:
 
         auto dbCounters = Counters->GetDbCounters(database);
 
-        TKqpWorkerSettings workerSettings(cluster, database, TableServiceConfig, QueryServiceConfig, dbCounters);
+        TKqpWorkerSettings workerSettings(cluster, database, applicationName, TableServiceConfig, QueryServiceConfig, dbCounters);
         workerSettings.LongSession = longSession;
 
         auto config = CreateConfig(KqpSettings, workerSettings);
@@ -1457,6 +1470,13 @@ private:
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(
             sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration(), pgWire);
         KqpProxySharedResources->AtomicLocalSessionCount.store(LocalSessions->size());
+
+        sessionInfo->ClientSID = clientSid;
+        sessionInfo->ClientHost = clientHost;
+        sessionInfo->UserAgent = userAgent;
+        sessionInfo->SdkBuildInfo = sdkBuildInfo;
+        sessionInfo->ClientPID = clientPid;
+        sessionInfo->ClientApplicationName = clientApplicationName;
 
         KQP_PROXY_LOG_D(requestInfo << "Created new session"
             << ", sessionId: " << sessionInfo->SessionId
@@ -1630,6 +1650,69 @@ private:
         for (const auto sessionInfo : sessions) {
             LocalSessions->StartIdleCheck(sessionInfo, IdleDurationAfterDisconnect);
         }
+    }
+
+    void Handle(TEvKqp::TEvListSessionsRequest::TPtr& ev) {
+        KQP_PROXY_LOG_D("incoming list sessions request " << ev->Get()->Record.ShortUtf8DebugString());
+
+        auto result = std::make_unique<TEvKqp::TEvListSessionsResponse>();
+        auto startIt = LocalSessions->GetOrderedLowerBound(ev->Get()->Record.GetSessionIdStart());
+        auto endIt = LocalSessions->GetOrderedEnd();
+        i32 freeSpace = ev->Get()->Record.GetFreeSpace();
+
+        TKqpSessionInfo::TFieldsMap fieldsMap(ev->Get()->Record.GetColumns());
+
+        const TString until = ev->Get()->Record.GetSessionIdEnd();
+        bool finished = false;
+
+        while(startIt != endIt && freeSpace > 0) {
+            auto* sessionInfo = startIt->second;
+
+            if (!until.empty()) {
+                if (sessionInfo->SessionId > until) {
+                    finished = true;
+                    break;
+                }
+
+                if (!ev->Get()->Record.GetSessionIdEndInclusive() && until == sessionInfo->SessionId) {
+                    finished = true;
+                    break;
+                }
+            }
+
+            auto* sessionProto = result->Record.AddSessions();
+            sessionInfo->SerializeTo(sessionProto, fieldsMap);
+            freeSpace -= sessionProto->ByteSizeLong();
+            ++startIt;
+        }
+
+        if (startIt == endIt) {
+            finished = true;
+        }
+
+        result->Record.SetNodeId(SelfId().NodeId());
+        if (finished) {
+            result->Record.SetFinished(true);
+        } else {
+            result->Record.SetContinuationToken(startIt->first);
+            result->Record.SetFinished(false);
+        }
+
+        Send(ev->Sender, result.release(), 0, ev->Cookie);
+    }
+
+    void Handle(TEvKqp::TEvListProxyNodesRequest::TPtr& ev) {
+        auto result = std::make_unique<TEvKqp::TEvListProxyNodesResponse>();
+        result->ProxyNodes.reserve(PeerProxyNodeResources.size());
+        for(const auto& resource: PeerProxyNodeResources) {
+            result->ProxyNodes.push_back(resource.GetNodeId());
+        }
+
+        if (result->ProxyNodes.size() < 1) {
+            result->ProxyNodes.push_back(SelfId().NodeId());
+        }
+
+        Send(ev->Sender, result.release(), 0, ev->Cookie);
     }
 
 private:

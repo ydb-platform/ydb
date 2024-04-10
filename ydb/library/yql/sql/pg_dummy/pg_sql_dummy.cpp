@@ -5,12 +5,20 @@
 
 namespace NSQLTranslationPG {
 
-NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
+NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TStmtParseInfo* stmtParseInfo) {
     Y_UNUSED(query);
     Y_UNUSED(settings);
+    Y_UNUSED(stmtParseInfo);
     NYql::TAstParseResult result;
     result.Issues.AddIssue(NYql::TIssue("PostgreSQL parser is not available"));
     return result;
+}
+
+TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TVector<NYql::TStmtParseInfo>* stmtParseInfo) {
+    Y_UNUSED(query);
+    Y_UNUSED(settings);
+    Y_UNUSED(stmtParseInfo);
+    return {};
 }
 
 }  // NSQLTranslationPG
@@ -373,9 +381,17 @@ std::function<NKikimr::NMiniKQL::IComputationNode* (NKikimr::NMiniKQL::TCallable
     };
 }
 
-IOptimizer* MakePgOptimizer(const IOptimizer::TInput& input, const std::function<void(const TString&)>& log)
+IOptimizer* MakePgOptimizerInternal(const IOptimizer::TInput& input, const std::function<void(const TString&)>& log)
 {
     Y_UNUSED(input);
+    Y_UNUSED(log);
+    ythrow yexception() << "PgJoinSearch does nothing";
+}
+
+IOptimizerNew* MakePgOptimizerNew(IProviderContext& pctx, TExprContext& ctx, const std::function<void(const TString&)>& log)
+{
+    Y_UNUSED(pctx);
+    Y_UNUSED(ctx);
     Y_UNUSED(log);
     ythrow yexception() << "PgJoinSearch does nothing";
 }

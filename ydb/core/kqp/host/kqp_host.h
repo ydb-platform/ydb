@@ -45,6 +45,7 @@ public:
     struct TPrepareSettings: public TExecSettings {
         TMaybe<bool> IsInternalCall;
         TMaybe<bool> ConcurrentResults;
+        bool PerStatementResult;
 
         TString ToString() const {
             return TStringBuilder() << "TPrepareSettings{"
@@ -86,7 +87,7 @@ public:
     virtual IAsyncQueryResultPtr ExplainScanQuery(const TKqpQueryRef& query, bool isSql) = 0;
 
     /* Generic queries */
-    virtual IAsyncQueryResultPtr PrepareGenericQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
+    virtual IAsyncQueryResultPtr PrepareGenericQuery(const TKqpQueryRef& query, const TPrepareSettings& settings, NYql::TExprNode::TPtr expr = nullptr) = 0;
 
     /* Federated queries */
     virtual IAsyncQueryResultPtr PrepareGenericScript(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
@@ -105,13 +106,24 @@ public:
 
     virtual IAsyncQueryResultPtr StreamExecuteYqlScript(const TKqpQueryRef& script, const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& parameters,
         const NActors::TActorId& target, const TExecScriptSettings& settings) = 0;
+
+    /* Split */
+    struct TSplitResult {
+        THolder<NYql::TExprContext> Ctx;
+        TVector<NYql::TExprNode::TPtr> Exprs;
+        NYql::TExprNode::TPtr World;
+    };
+
+    virtual TSplitResult SplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
 };
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, const TString& database, NYql::TKikimrConfiguration::TPtr config, NYql::IModuleResolver::TPtr moduleResolver,
-    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry = nullptr,
+    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TGUCSettings::TPtr& gUCSettings,
+    const TMaybe<TString>& applicationName = Nothing(), const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry = nullptr,
     bool keepConfigChanges = false, bool isInternalCall = false, TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
-    NActors::TActorSystem* actorSystem = nullptr /*take from TLS by default*/);
+    NActors::TActorSystem* actorSystem = nullptr /*take from TLS by default*/,
+    NYql::TExprContext* ctx = nullptr);
 
 } // namespace NKqp
 } // namespace NKikimr

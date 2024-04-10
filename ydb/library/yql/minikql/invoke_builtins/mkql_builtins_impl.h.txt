@@ -724,6 +724,18 @@ template <
     template<typename> class TFunc,
     template<typename, typename, bool> class TArgs
 >
+void RegisterBigDateAggregateFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterAggregateFunction<NUdf::TDataType<NUdf::TDate32>, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunction<NUdf::TDataType<NUdf::TDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunction<NUdf::TDataType<NUdf::TTimestamp64>, TFunc, TArgs>(registry, name);
+
+    RegisterAggregateFunction<NUdf::TDataType<NUdf::TInterval64>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
 void RegisterTzDatetimeAggregateFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterAggregateFunction<NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
     RegisterAggregateFunction<NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);

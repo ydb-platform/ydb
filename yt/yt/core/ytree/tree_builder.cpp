@@ -23,23 +23,23 @@ class TTreeBuilder
 {
 public:
     explicit TTreeBuilder(INodeFactory* factory)
-        : Factory(factory)
+        : Factory_(factory)
     {
-        YT_ASSERT(Factory);
+        YT_ASSERT(Factory_);
     }
 
     void BeginTree() override
     {
-        YT_VERIFY(NodeStack.size() == 0);
+        YT_VERIFY(NodeStack_.size() == 0);
     }
 
     INodePtr EndTree() override
     {
         // Failure here means that the tree is not fully constructed yet.
-        YT_VERIFY(NodeStack.size() == 0);
-        YT_VERIFY(ResultNode);
+        YT_VERIFY(NodeStack_.size() == 0);
+        YT_VERIFY(ResultNode_);
 
-        return ResultNode;
+        return ResultNode_;
     }
 
     void OnNode(INodePtr node) override
@@ -49,123 +49,123 @@ public:
 
     void OnMyStringScalar(TStringBuf value) override
     {
-        auto node = Factory->CreateString();
+        auto node = Factory_->CreateString();
         node->SetValue(TString(value));
         AddNode(node, false);
     }
 
     void OnMyInt64Scalar(i64 value) override
     {
-        auto node = Factory->CreateInt64();
+        auto node = Factory_->CreateInt64();
         node->SetValue(value);
         AddNode(node, false);
     }
 
     void OnMyUint64Scalar(ui64 value) override
     {
-        auto node = Factory->CreateUint64();
+        auto node = Factory_->CreateUint64();
         node->SetValue(value);
         AddNode(node, false);
     }
 
     void OnMyDoubleScalar(double value) override
     {
-        auto node = Factory->CreateDouble();
+        auto node = Factory_->CreateDouble();
         node->SetValue(value);
         AddNode(node, false);
     }
 
     void OnMyBooleanScalar(bool value) override
     {
-        auto node = Factory->CreateBoolean();
+        auto node = Factory_->CreateBoolean();
         node->SetValue(value);
         AddNode(node, false);
     }
 
     void OnMyEntity() override
     {
-        AddNode(Factory->CreateEntity(), false);
+        AddNode(Factory_->CreateEntity(), false);
     }
 
 
     void OnMyBeginList() override
     {
-        AddNode(Factory->CreateList(), true);
+        AddNode(Factory_->CreateList(), true);
     }
 
     void OnMyListItem() override
     {
-        YT_ASSERT(!Key);
+        YT_ASSERT(!Key_);
     }
 
     void OnMyEndList() override
     {
-        NodeStack.pop();
+        NodeStack_.pop();
     }
 
 
     void OnMyBeginMap() override
     {
-        AddNode(Factory->CreateMap(), true);
+        AddNode(Factory_->CreateMap(), true);
     }
 
     void OnMyKeyedItem(TStringBuf key) override
     {
-        Key = TString(key);
+        Key_ = TString(key);
     }
 
     void OnMyEndMap() override
     {
-        NodeStack.pop();
+        NodeStack_.pop();
     }
 
     void OnMyBeginAttributes() override
     {
-        YT_ASSERT(!AttributeConsumer);
-        Attributes = CreateEphemeralAttributes();
-        AttributeConsumer = std::make_unique<TAttributeConsumer>(Attributes.Get());
-        Forward(AttributeConsumer.get(), nullptr, NYson::EYsonType::MapFragment);
+        YT_ASSERT(!AttributeConsumer_);
+        Attributes_ = CreateEphemeralAttributes();
+        AttributeConsumer_ = std::make_unique<TAttributeConsumer>(Attributes_.Get());
+        Forward(AttributeConsumer_.get(), nullptr, NYson::EYsonType::MapFragment);
     }
 
     void OnMyEndAttributes() override
     {
-        AttributeConsumer.reset();
-        YT_ASSERT(Attributes);
+        AttributeConsumer_.reset();
+        YT_ASSERT(Attributes_);
     }
 
 private:
-    INodeFactory* const Factory;
+    INodeFactory* const Factory_;
 
     //! Contains nodes forming the current path in the tree.
-    std::stack<INodePtr> NodeStack;
-    std::optional<TString> Key;
-    INodePtr ResultNode;
-    std::unique_ptr<TAttributeConsumer> AttributeConsumer;
-    IAttributeDictionaryPtr Attributes;
+    std::stack<INodePtr> NodeStack_;
+    std::optional<TString> Key_;
+    INodePtr ResultNode_;
+    std::unique_ptr<TAttributeConsumer> AttributeConsumer_;
+    IAttributeDictionaryPtr Attributes_;
 
     void AddNode(INodePtr node, bool push)
     {
-        if (Attributes) {
-            node->MutableAttributes()->MergeFrom(*Attributes);
-            Attributes = nullptr;
+        if (Attributes_) {
+            node->MutableAttributes()->MergeFrom(*Attributes_);
+            Attributes_ = nullptr;
         }
 
-        if (NodeStack.empty()) {
-            ResultNode = node;
+        if (NodeStack_.empty()) {
+            ResultNode_ = node;
         } else {
-            auto collectionNode = NodeStack.top();
-            if (Key) {
-                if (!collectionNode->AsMap()->AddChild(*Key, node)) {
-                    THROW_ERROR_EXCEPTION("Duplicate key %Qv", *Key);
+            auto collectionNode = NodeStack_.top();
+            if (Key_) {
+                if (!collectionNode->AsMap()->AddChild(*Key_, node)) {
+                    THROW_ERROR_EXCEPTION("Duplicate key %Qv", *Key_);
                 }
-                Key.reset();
+                Key_.reset();
             } else {
                 collectionNode->AsList()->AddChild(node);
             }
         }
 
         if (push) {
-            NodeStack.push(node);
+            NodeStack_.push(node);
         }
     }
 };

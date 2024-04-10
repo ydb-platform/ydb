@@ -64,8 +64,10 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
 
         DataShard.IncCounter(COUNTER_WRITE_OUT_OF_SPACE);
 
-        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err);
+        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
         op->Abort(EExecutionUnitKind::FinishProposeWrite);
+
+        DataShard.SetOverloadSubscribed(writeOp->GetWriteTx()->GetOverloadSubscribe(), writeOp->GetRecipient(), op->GetTarget(), ERejectReasons::YellowChannels, writeOp->GetWriteResult()->Record);
 
         LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckWriteUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
 
@@ -88,8 +90,10 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
 
                             DataShard.IncCounter(COUNTER_WRITE_OUT_OF_SPACE);
 
-                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err);
+                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
                             op->Abort(EExecutionUnitKind::FinishProposeWrite);
+
+                            DataShard.SetOverloadSubscribed(writeOp->GetWriteTx()->GetOverloadSubscribe(), writeOp->GetRecipient(), op->GetTarget(), ERejectReasons::YellowChannels, writeOp->GetWriteResult()->Record);
 
                             LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckWriteUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
 
@@ -113,8 +117,16 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
             return EExecutionStatus::Executed;
         }
 
-        writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(DataShard.TabletID(), op->GetTxId(), {op->GetMinStep(), op->GetMaxStep(), {}}));
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Prepared " << *op << " at " << DataShard.TabletID());
+        writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(
+            DataShard.TabletID(),
+            op->GetTxId(),
+            {
+                op->GetMinStep(),
+                op->GetMaxStep(),
+                DataShard.GetProcessingParams() ? DataShard.GetProcessingParams()->GetCoordinators() : google::protobuf::RepeatedField<ui64>{}
+            }
+            ));
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Prepared write transaction " << *op << " at tablet " << DataShard.TabletID());
     }
 
     return EExecutionStatus::Executed;

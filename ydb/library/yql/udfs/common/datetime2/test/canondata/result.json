@@ -1,4 +1,9 @@
 {
+    "test.test[BlockFrom]": [
+        {
+            "uri": "file://test.test_BlockFrom_/results.txt"
+        }
+    ],
     "test.test[BlockGet]": [
         {
             "uri": "file://test.test_BlockGet_/results.txt"
@@ -32,6 +37,11 @@
     "test.test[ImplicitSplit]": [
         {
             "uri": "file://test.test_ImplicitSplit_/results.txt"
+        }
+    ],
+    "test.test[MultirowBlockTo]": [
+        {
+            "uri": "file://test.test_MultirowBlockTo_/results.txt"
         }
     ],
     "test.test[ParseIso8601]": [

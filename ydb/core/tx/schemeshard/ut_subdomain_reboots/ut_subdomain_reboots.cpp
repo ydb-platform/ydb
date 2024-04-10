@@ -336,7 +336,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
                 TestSplitTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0/table_0",
                                R"(
-                                    SourceTabletId: 9437196
+                                    SourceTabletId: 72075186233409548
                                     SplitBoundary {
                                         KeyPrefix {
                                             Tuple { Optional { Uint64: 300 } }
@@ -430,7 +430,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
             TestSplitTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0/table_0",
                            R"(
-                                SourceTabletId: 9437196
+                                SourceTabletId: 72075186233409548
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Uint64: 300 } }
@@ -680,7 +680,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
             }
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0/dir/table_0", R"(
-                                        SourceTabletId: 9437196
+                                        SourceTabletId: 72075186233409548
                                         SplitBoundary {
                                             KeyPrefix {
                                                 Tuple { Optional { Uint64: 3000000000 } }

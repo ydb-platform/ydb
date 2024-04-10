@@ -1,4 +1,5 @@
 LLVM_BC(
+    postgresql/src/backend/partitioning/partbounds.c
     postgresql/src/backend/statistics/dependencies.c
     postgresql/src/backend/utils/adt/datum.c
     postgresql/src/backend/utils/adt/rangetypes_spgist.c
@@ -22,6 +23,7 @@ LLVM_BC(
     arrow_query_to_xml
     arrow_query_to_xml_and_xmlschema
     arrow_query_to_xmlschema
+    arrow_satisfies_hash_partition
     arrow_schema_to_xml
     arrow_schema_to_xml_and_xmlschema
     arrow_schema_to_xmlschema

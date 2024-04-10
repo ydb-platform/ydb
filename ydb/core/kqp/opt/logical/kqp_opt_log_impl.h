@@ -24,6 +24,29 @@ TMaybe<TKqpMatchReadResult> MatchRead(NYql::NNodes::TExprBase node) {
 
 NYql::NNodes::TMaybeNode<NYql::NNodes::TKqlKeyInc> GetRightTableKeyPrefix(const NYql::NNodes::TKqlKeyRange& range);
 
+NYql::NNodes::TCoLambda MakeFilterForRange(NYql::NNodes::TKqlKeyRange range, NYql::TExprContext& ctx, NYql::TPositionHandle pos, TVector<TString> keyColumns);
+
+bool ExtractUsedFields(const NYql::TExprNode::TPtr& start, const NYql::TExprNode& arg, TSet<TString>& usedFields, const NYql::TParentsMap& parentsMap, bool allowDependsOn);
+
+struct TPrefixLookup {
+    NYql::NNodes::TCoAtomList LookupColumns;
+    NYql::NNodes::TCoAtomList ResultColumns;
+
+    NYql::NNodes::TMaybeNode<NYql::NNodes::TCoLambda> Filter;
+    TMaybe<TSet<TString>> FilterUsedColumnsHint;
+
+    size_t PrefixSize;
+    NYql::NNodes::TExprBase PrefixExpr;
+
+    TString LookupTableName;
+
+    NYql::NNodes::TKqpTable MainTable;
+    TString IndexName;
+};
+
+// Try to rewrite arbitrary table read to (ExtractMembers (Filter (Lookup LookupColumns) ResultColumns)
+TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(NYql::NNodes::TExprBase read, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, TMaybe<size_t> maxKeys);
+
 } // NKikimr::NKqp::NOpt
 
 

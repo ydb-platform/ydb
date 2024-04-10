@@ -544,9 +544,6 @@ ldap_int_destroy_global_options(void)
 		gopts->ldo_def_sasl_authcid = NULL;
 	}
 #endif
-#ifdef HAVE_TLS
-	ldap_int_tls_destroy( gopts );
-#endif
 }
 
 /* 

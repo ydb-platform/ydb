@@ -5,6 +5,8 @@ SRCS(
     managed_executor.h
     topic_sdk_test_setup.cpp
     topic_sdk_test_setup.h
+    trace.cpp
+    trace.h
 )
 
 PEERDIR(

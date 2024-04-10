@@ -58,15 +58,18 @@ TWorkloadCommand::TWorkloadCommand(const TString& name, const std::initializer_l
     : TYdbCommand(name, aliases, description)
     , TotalSec(0)
     , Threads(0)
+    , Rate(0)
     , ClientTimeoutMs(0)
     , OperationTimeoutMs(0)
     , CancelAfterTimeoutMs(0)
     , WindowSec(0)
     , Quiet(false)
+    , Verbose(false)
     , PrintTimestamp(false)
     , QueryExecuterType()
     , WindowHist(60000, 2) // highestTrackableValue 60000ms = 60s, precision 2
     , TotalHist(60000, 2)
+    , TotalQueries(0)
     , TotalRetries(0)
     , WindowRetryCount(0)
     , TotalErrors(0)
@@ -80,6 +83,17 @@ void TWorkloadCommand::Config(TConfig& config) {
         .DefaultValue(10).StoreResult(&TotalSec);
     config.Opts->AddLongOption('t', "threads", "Number of parallel threads in workload.")
         .DefaultValue(10).StoreResult(&Threads);
+
+    const auto name = Parent->Parent->Name;
+    if (name == "kv") {
+        config.Opts->AddLongOption("rate", "Total rate for all threads (requests per second).")
+            .DefaultValue(0).StoreResult(&Rate);
+    }
+    else if (name == "stock") {
+        config.Opts->AddLongOption("rate", "Total rate for all threads (transactions per second).")
+            .DefaultValue(0).StoreResult(&Rate);
+    }
+
     config.Opts->AddLongOption("quiet", "Quiet mode. Doesn't print statistics each second.")
         .StoreTrue(&Quiet);
     config.Opts->AddLongOption("print-timestamp", "Print timestamp each second with statistics.")
@@ -105,6 +119,7 @@ void TWorkloadCommand::PrepareForRun(TConfig& config) {
         .SetBalancingPolicy(EBalancingPolicy::UseAllNodes)
         .SetCredentialsProviderFactory(config.CredentialsGetter(config));
 
+    Verbose = config.IsVerbose();
     if (config.EnableSsl) {
         driverConfig.UseSecureConnection(config.CaCerts);
     }
@@ -206,15 +221,27 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
 
         auto opStartTime = Now();
         NYdbWorkload::TQueryInfoList::iterator it;
-        for (it = queryInfoList.begin(); it != queryInfoList.end(); ++it) {
+        for (it = queryInfoList.begin(); it != queryInfoList.end(); ) {
+
+            if (Rate != 0)
+            {
+                const ui64 expectedQueries = (Now() - StartTime).SecondsFloat() * Rate;
+                if (TotalQueries > expectedQueries) {
+                    Sleep(TDuration::MilliSeconds(1));
+                    continue;
+                }
+            }
+
             queryInfo = *it;
             auto status = runQuery();
-            if (!status.IsSuccess()) {
+            if (status.IsSuccess()) {
+                TotalQueries++;
+            } else {
                 TotalErrors++;
                 WindowErrors++;
-                // if (status.GetStatus() != EStatus::ABORTED) {
-                    // Cerr << "Task ID: " << taskId << " Status: " << status.GetStatus() << " " << status.GetIssues().ToString() << Endl;
-                // }
+                if (Verbose && status.GetStatus() != EStatus::ABORTED) {
+                    Cerr << "Task ID: " << taskId << " Status: " << status.GetStatus() << " " << status.GetIssues().ToString() << Endl;
+                }
                 break;
             }
             if (retryCount > 0) {
@@ -222,6 +249,8 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
                 WindowRetryCount += retryCount;
             }
             retryCount = -1;
+
+            ++it;
         }
         if (it != queryInfoList.end()) {
             continue;

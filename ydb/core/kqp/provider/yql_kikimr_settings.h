@@ -149,11 +149,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableKqpDataQueryStreamLookup = false;
     bool EnableKqpScanQueryStreamIdxLookupJoin = false;
     bool EnableKqpDataQueryStreamIdxLookupJoin = false;
-    bool EnablePredicateExtractForScanQuery = true;
-    bool EnablePredicateExtractForDataQuery = false;
     bool PredicateExtract20 = false;
     bool EnableKqpImmediateEffects = false;
-    bool EnableSequentialReads = false;
     bool EnablePreparedDdl = false;
     bool EnableSequences = false;
     bool EnableColumnsWithDefault = false;
@@ -162,6 +159,10 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableAstCache = false;
     bool EnablePgConstsToParams = false;
     ui64 ExtractPredicateRangesLimit = 0;
+    bool EnablePerStatementQueryExecution = false;
+    bool EnableCreateTableAs = false;
+    ui64 IdxLookupJoinsPrefixPointLimit = 1;
+    bool OldLookupJoinBehaviour = true;
 };
 
 }

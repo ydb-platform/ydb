@@ -24,7 +24,9 @@ struct TBundleConfigDescriptor
 {
     TString BundleName;
 
-    NBundleControllerClient::TBundleTargetConfigPtr BundleConfig;
+    TBundleTargetConfigPtr Config;
+    TBundleConfigConstraintsPtr ConfigConstraints;
+    TBundleResourceQuotaPtr ResourceQuota;
 
     REGISTER_YSON_STRUCT(TBundleConfigDescriptor);
 

@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
 
         auto getTabletGen = [&]() -> ui32 {
             const TActorId getGenEdge = env->Runtime->AllocateEdgeActor(env->Settings.ControllerNodeId, __FILE__, __LINE__);
-            const TActorId stateStorageProxyId = MakeStateStorageProxyID(StateStorageGroupFromTabletID(env->TabletId));
+            const TActorId stateStorageProxyId = MakeStateStorageProxyID();
             env->Runtime->WrapInActorContext(getGenEdge, [&] {
                 TActivationContext::Send(new IEventHandle(stateStorageProxyId, getGenEdge,
                     new TEvStateStorage::TEvLookup(env->TabletId, 0), 0, 0)

@@ -10,9 +10,7 @@ class TMessageBusDrainNode : public TMessageBusSecureRequest<TMessageBusTabletRe
     ui32 NodeId;
 public:
     static ui64 GetHiveTabletId(const TActorContext& ctx) {
-        TDomainsInfo* domainsInfo = AppData(ctx)->DomainsInfo.Get();
-        auto hiveTabletId = domainsInfo->GetHive(domainsInfo->GetDefaultHiveUid(domainsInfo->Domains.begin()->first));
-        return hiveTabletId;
+        return AppData(ctx)->DomainsInfo->GetHive();
     }
 
     TMessageBusDrainNode(TBusMessageContext& msg)

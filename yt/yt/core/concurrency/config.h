@@ -66,6 +66,9 @@ public:
 
 } // namespace NDetail
 
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TPeriodicExecutorOptions, NDetail::TPeriodicExecutorOptionsSerializer);
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TRetryingPeriodicExecutorOptions, NDetail::TRetryingPeriodicExecutorOptionsSerializer);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TThroughputThrottlerConfig
@@ -147,6 +150,3 @@ DEFINE_REFCOUNTED_TYPE(TPrefetchingThrottlerConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency
-
-ASSIGN_EXTERNAL_YSON_SERIALIZER(NYT::NConcurrency::TPeriodicExecutorOptions, NYT::NConcurrency::NDetail::TPeriodicExecutorOptionsSerializer);
-ASSIGN_EXTERNAL_YSON_SERIALIZER(NYT::NConcurrency::TRetryingPeriodicExecutorOptions, NYT::NConcurrency::NDetail::TRetryingPeriodicExecutorOptionsSerializer);

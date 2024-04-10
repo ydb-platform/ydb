@@ -67,9 +67,9 @@ public:
     TStructuredLogFormatter(
         ELogFormat format,
         THashMap<TString, NYTree::INodePtr> commonFields,
-        bool enablSystemlMessages = true,
+        bool enableSystemMessages = true,
         bool enableSourceLocation = false,
-        bool enableInstant = true,
+        bool enableSystemFields = true,
         NJson::TJsonFormatConfigPtr jsonFormat = nullptr);
 
     i64 WriteFormatted(IOutputStream* outputStream, const TLogEvent& event) override;
@@ -80,7 +80,7 @@ public:
 private:
     const ELogFormat Format_;
     const THashMap<TString, NYTree::INodePtr> CommonFields_;
-    const bool EnableInstant_;
+    const bool EnableSystemFields_;
     const NJson::TJsonFormatConfigPtr JsonFormat_;
 
     TCachingDateFormatter CachingDateFormatter_;

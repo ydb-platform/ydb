@@ -128,6 +128,7 @@ namespace NKikimr {
         ui32 HullCompMaxInFlightReads;
         double HullCompReadBatchEfficiencyThreshold;
         ui64 AnubisOsirisMaxInFly;
+        bool AddHeader;
 
         //////////////// LOG CUTTER SETTINGS ////////////////
         TDuration RecoveryLogCutterFirstDuration;
@@ -170,8 +171,8 @@ namespace NKikimr {
         ui32 HandoffMaxInFlightByteSize;
         TDuration HandoffTimeout;
         bool RunRepl;
-        bool RunHandoff;
         bool ReplPausedAtStart = false;
+        TDuration ReplMaxTimeToMakeProgress;
 
         ///////////// SKELETON SETTINGS /////////////////////
         ui64 SkeletonFrontGets_MaxInFlightCount;
@@ -210,6 +211,10 @@ namespace NKikimr {
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
 
+        ///////////// COST METRICS SETTINGS ////////////////
+        ui64 BurstThresholdNs = 1'000'000'000;
+        float DiskTimeAvailableScale = 1;
+
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;
 
@@ -228,6 +233,7 @@ namespace NKikimr {
     class TAllVDiskKinds : public TThrRefBase {
     public:
         TAllVDiskKinds(const TString &prototext = TString());
+        TAllVDiskKinds(const NKikimrBlobStorage::TAllVDiskKinds &proto);
         TIntrusivePtr<TVDiskConfig> MakeVDiskConfig(const TVDiskConfig::TBaseInfo &baseInfo);
         void Merge(const NKikimrBlobStorage::TAllVDiskKinds &allVDiskKinds);
 

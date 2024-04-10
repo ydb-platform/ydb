@@ -192,7 +192,8 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
                 columnDesc.Name, columnDesc.Id, typeName, notNull, columnDesc.PType, columnDesc.PTypeMod,
                 columnDesc.DefaultFromSequence,
                 defaultKind,
-                columnDesc.DefaultFromLiteral
+                columnDesc.DefaultFromLiteral,
+                columnDesc.IsBuildInProgress
             )
         );
         if (columnDesc.KeyOrder >= 0) {
@@ -449,6 +450,14 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
                 externalDataSourceMetadata.Metadata->ExternalSource.AwsSecretAccessKey = objectDescription.SecretValues[1];
                 return;
             }
+            case NKikimrSchemeOp::TAuth::kToken: {
+                if (objectDescription.SecretValues.size() != 1) {
+                    SetError(externalDataSourceMetadata, TStringBuilder{} << "Token auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 1");
+                    return;
+                }
+                externalDataSourceMetadata.Metadata->ExternalSource.Token = objectDescription.SecretValues[0];
+                return;
+            }
             case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET: {
                 SetError(externalDataSourceMetadata, "identity case is not specified in case of update external data source secrets");
                 return;
@@ -490,6 +499,13 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> LoadExternalDataSo
             const TString& awsAccessKeyKeySecretId = authDescription.GetAws().GetAwsSecretAccessKeySecretName();
             auto promise = NewPromise<TEvDescribeSecretsResponse::TDescription>();
             actorSystem->Register(CreateDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {awsAccessKeyIdSecretId, awsAccessKeyKeySecretId}, promise, maximalSecretsSnapshotWaitTime));
+            return promise.GetFuture();
+        }
+
+        case NKikimrSchemeOp::TAuth::kToken: {
+            const TString& tokenSecretId = authDescription.GetToken().GetTokenSecretName();
+            auto promise = NewPromise<TEvDescribeSecretsResponse::TDescription>();
+            actorSystem->Register(CreateDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {tokenSecretId}, promise, maximalSecretsSnapshotWaitTime));
             return promise.GetFuture();
         }
 
@@ -868,14 +884,13 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
         }
 
         NKikimr::NStat::TRequest t;
-        t.StatType = NKikimr::NStat::EStatType::SIMPLE;
         t.PathId = NKikimr::TPathId(result.Metadata->PathId.OwnerId(), result.Metadata->PathId.TableId());
 
         auto event = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
+        event->StatType = NKikimr::NStat::EStatType::SIMPLE;
         event->StatRequests.push_back(t);
 
         auto statServiceId = NStat::MakeStatServiceID(actorSystem->NodeId);
-
 
         return SendActorRequest<NStat::TEvStatistics::TEvGetStatistics, NStat::TEvStatistics::TEvGetStatisticsResult, TResult>(
             actorSystem,
@@ -886,11 +901,9 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     return;
                 }
                 auto resp = response.StatResponses[0];
-                if (std::holds_alternative<NKikimr::NStat::TStatSimple>(resp.Statistics)) {
-                    auto s = std::get<NKikimr::NStat::TStatSimple>(resp.Statistics);
-                    result.Metadata->RecordsCount = s.RowCount;
-                    result.Metadata->DataSize = s.BytesSize;
-                }
+                auto s = resp.Simple;
+                result.Metadata->RecordsCount = s.RowCount;
+                result.Metadata->DataSize = s.BytesSize;
                 promise.SetValue(result);
         });
 

@@ -90,7 +90,7 @@ Y_ABSL_NAMESPACE_BEGIN
 //
 // Such implicit cast chaining may be useful within template logic.
 template <typename To>
-constexpr To implicit_cast(typename y_absl::internal::identity_t<To> to) {
+constexpr To implicit_cast(typename y_absl::internal::type_identity_t<To> to) {
   return to;
 }
 
@@ -159,7 +159,7 @@ template <
 #endif  // !Y_ABSL_HAVE_BUILTIN(__builtin_bit_cast)
                             ,
                             int>::type = 0>
-#if Y_ABSL_HAVE_BUILTIN(__builtin_bit_cast) && (!defined(__CUDACC__) || CUDA_VERSION >= 11010)
+#if Y_ABSL_HAVE_BUILTIN(__builtin_bit_cast)
 inline constexpr Dest bit_cast(const Source& source) {
   return __builtin_bit_cast(Dest, source);
 }

@@ -1,11 +1,14 @@
 #include "pretty_table.h"
-#include "common.h"
 
+#include <library/cpp/colorizer/colors.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>
 #include <util/stream/format.h>
+#include <util/charset/utf8.h>
 
+#include <contrib/restricted/patched/replxx/src/utf8string.hxx>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -15,131 +18,131 @@ TPrettyTable::TRow::TRow(size_t nColumns)
 {
 }
 
-size_t TotalAnsiEscapeCodeLen(TStringBuf text) {
-    enum {
-        TEXT,
-        BEFORE_CODE,
-        IN_CODE,
-    } state = TEXT;
-
-    size_t totalLen = 0;
-    size_t curLen = 0;
-
-    for (auto it = text.begin(); it < text.end(); ++it) {
-        switch (state) {
-            case TEXT:
-                if (*it == '\033') {
-                    state = BEFORE_CODE;
-                    curLen = 1;
-                }
-                break;
-            case BEFORE_CODE:
-                if (*it == '[') {
-                    state = IN_CODE;
-                    curLen++;
-                } else {
-                    state = TEXT;
-                }
-                break;
-            case IN_CODE:
-                if (*it == ';' || isdigit(*it)) {
-                    curLen++;
-                } else {
-                    if (*it == 'm') {
-                        totalLen += curLen + 1;
-                    }
-                    state = TEXT;
-                }
-                break;
-        }
-    }
-
-    return totalLen;
-}
-
-size_t TPrettyTable::TRow::ExtraBytes(TStringBuf data) const {
-    // counter of previously uncounted bytes
-    size_t extraBytes = 0;
-    for (char ch : data) {
-        size_t n = 0;
-        // if the first bit of the character is not 0, we met a multibyte
-        // counting the number of single bits at the beginning of a byte
-        while ((ch & 0x80) != 0) {
-            n++;
-            ch <<= 1;
-        }
-        // update counter
-        if (n != 0) {
-            extraBytes += n - 1;
-        }
-    }
-    // update counter with len of color
-    extraBytes += TotalAnsiEscapeCodeLen(data);
-    
-    return extraBytes;
-}
+enum {
+    COLOR_BEGIN = '\033',
+    COLOR_END = 'm',
+};
 
 size_t TPrettyTable::TRow::ColumnWidth(size_t columnIndex) const {
     Y_ABORT_UNLESS(columnIndex < Columns.size());
 
     size_t width = 0;
-    TStringBuf data;
-    for (const auto& line : Columns.at(columnIndex)) {
-        data = line;
 
-        size_t extraBytes = ExtraBytes(data);
+    for (const auto& column: Columns.at(columnIndex)) {
+        size_t printableSymbols = 0;
 
-        width = Max(width, line.size() - extraBytes);
+        for (size_t i = 0; i < column.size();) {
+            if (column[i] == COLOR_BEGIN) {
+                while (i < column.size() && column[i] != COLOR_END) {
+                    ++i;
+                }
+                continue;
+            }
+
+
+            ++i;
+            while (i < column.size() && IsUTF8ContinuationByte(column[i])) {
+                ++i;
+            }
+            ++printableSymbols;
+        }
+
+        width = Max(width, printableSymbols);
     }
 
     return width;
 }
 
-bool TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>& widths, size_t lineNumber) const {
-    bool next = false;
+class TColumnLinesPrinter {
+public:
+    TColumnLinesPrinter(
+        IOutputStream& o,
+        const TVector<TVector<TString>>& columns,
+        const TVector<size_t>& widths
+    )
+        : Output_(o)
+        , Columns_(columns)
+        , Widths_(widths)
+        , PrintedIndexByColumnIndex_(columns.size())
+    {}
 
-    for (size_t columnIndex : xrange(Columns.size())) {
-        if (columnIndex == 0) {
-            o << "│ ";
-        } else {
-            o << " │ ";
-        }
+    bool HasNext() {
+        bool allColumnsPrinted = true; 
 
-        if (size_t width = widths.at(columnIndex)) {
-            const auto& column = Columns.at(columnIndex);
-
-            TStringBuf data;
-            size_t extraBytes;
-            size_t l = 0;
-            for (const auto& line : column) {
-                data = line;
-                extraBytes = ExtraBytes(data);
-                if (data && l < lineNumber) {
-                    data.Skip(extraBytes);
-                }
-                while (data && l < lineNumber) {
-                    data.Skip(width);
-                    ++l;
-                }
-            }
-            extraBytes = ExtraBytes(data);
-            width += extraBytes;
-            
-
-            if (data) {
-                o << RightPad(data.SubStr(0, width), width);
-            } else {
-                o << RightPad(' ', width);
-            }
-
-            if (data.size() > width) {
-                next = true;
+        for (size_t i = 0; i < PrintedIndexByColumnIndex_.size(); ++i) {
+            if (!Columns_[i].empty() && Columns_[i][0].size() > PrintedIndexByColumnIndex_[i]) {
+                allColumnsPrinted = false;
             }
         }
+
+        return !allColumnsPrinted;
     }
-    o << " │" << Endl;
 
-    return next;
+    void Print() {        
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        
+        Output_ << colors.Default();
+        Output_ << "│ ";
+
+        for (size_t columnIndex : xrange(Columns_.size())) {
+            Output_ << colors.Default();
+            if (columnIndex != 0) {
+                Output_ << " │ ";
+            }
+
+            size_t printedSymbols = PrintColumnLine(columnIndex);
+            Output_ << TString(Widths_[columnIndex] - printedSymbols, ' ');
+        }
+        
+        Output_ << colors.Default();
+        Output_ << " │" << Endl;
+    }
+
+private:
+    /* return's printed symbols cnt */
+    size_t PrintColumnLine(size_t columnIndex) {
+        if (Columns_[columnIndex].empty()) {
+            return 0;
+        }
+
+        size_t printedSymbols = 0;
+        const auto& column = Columns_[columnIndex][0];
+
+        size_t i = PrintedIndexByColumnIndex_[columnIndex];
+
+        for (; i < column.size() && printedSymbols < Widths_[columnIndex];) {
+            if (column[i] == COLOR_BEGIN) {
+                while (i < column.size() && column[i] != COLOR_END) {
+                    Output_ << column[i++];
+                }
+                continue;
+            }
+
+
+            Output_ << column[i++];
+            while (i < column.size() && IsUTF8ContinuationByte(column[i])) {
+                Output_ << column[i++];
+            }
+            ++printedSymbols;
+        }
+
+        PrintedIndexByColumnIndex_[columnIndex] = i;
+        return printedSymbols;
+    }
+
+private:
+    IOutputStream& Output_;
+    const TVector<TVector<TString>>& Columns_;
+    const TVector<size_t>& Widths_;
+    TVector<size_t> PrintedIndexByColumnIndex_;
+};
+
+void TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>& widths) const {
+    TColumnLinesPrinter printer(o, Columns, widths);
+
+    while (printer.HasNext()) {
+        printer.Print();
+    }
 }
 
 bool TPrettyTable::TRow::HasFreeText() const {
@@ -193,11 +196,7 @@ void TPrettyTable::Print(IOutputStream& o) const {
     PrintDelim(o, widths, "┌", "┬", "┐");
     for (auto i : xrange(Rows.size())) {
         const auto& row = Rows.at(i);
-
-        size_t line = 0;
-        while (row.PrintColumns(o, widths, line)) {
-            ++line;
-        }
+        row.PrintColumns(o, widths);
 
         if (row.HasFreeText()) {
             PrintDelim(o, widths, "├", "┴", "┤", true);

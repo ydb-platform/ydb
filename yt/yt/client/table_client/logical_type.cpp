@@ -835,6 +835,10 @@ void TDictLogicalType::ValidateNode(const TWalkContext&) const
                     case ESimpleLogicalValueType::Timestamp:
                     case ESimpleLogicalValueType::Interval:
                     case ESimpleLogicalValueType::Uuid:
+                    case ESimpleLogicalValueType::Date32:
+                    case ESimpleLogicalValueType::Datetime64:
+                    case ESimpleLogicalValueType::Timestamp64:
+                    case ESimpleLogicalValueType::Interval64:
                         return;
                 }
                 YT_ABORT();
@@ -1418,6 +1422,11 @@ bool IsComparable(const TLogicalTypePtr& type)
                 case ESimpleLogicalValueType::Void:
 
                 case ESimpleLogicalValueType::Uuid:
+
+                case ESimpleLogicalValueType::Date32:
+                case ESimpleLogicalValueType::Datetime64:
+                case ESimpleLogicalValueType::Timestamp64:
+                case ESimpleLogicalValueType::Interval64:
                     return true;
 
                 case ESimpleLogicalValueType::Any:
@@ -1458,34 +1467,39 @@ using TV3TypeName = std::variant<ESimpleLogicalValueType, ELogicalMetatype, TV3V
 
 static const std::pair<ESimpleLogicalValueType, TString> V3SimpleLogicalValueTypeEncoding[] =
 {
-    {ESimpleLogicalValueType::Null,      "null"},
-    {ESimpleLogicalValueType::Int64,     "int64"},
-    {ESimpleLogicalValueType::Uint64,    "uint64"},
-    {ESimpleLogicalValueType::Double,    "double"},
-    {ESimpleLogicalValueType::Float,     "float"},
-    {ESimpleLogicalValueType::Boolean,   "bool"},  // NB. diff
-    {ESimpleLogicalValueType::String,    "string"},
-    {ESimpleLogicalValueType::Any,       "yson"}, // NB. diff
-    {ESimpleLogicalValueType::Json,      "json"},
-    {ESimpleLogicalValueType::Int8,      "int8"},
-    {ESimpleLogicalValueType::Uint8,     "uint8"},
+    {ESimpleLogicalValueType::Null,         "null"},
+    {ESimpleLogicalValueType::Int64,        "int64"},
+    {ESimpleLogicalValueType::Uint64,       "uint64"},
+    {ESimpleLogicalValueType::Double,       "double"},
+    {ESimpleLogicalValueType::Float,        "float"},
+    {ESimpleLogicalValueType::Boolean,      "bool"},  // NB. diff
+    {ESimpleLogicalValueType::String,       "string"},
+    {ESimpleLogicalValueType::Any,          "yson"}, // NB. diff
+    {ESimpleLogicalValueType::Json,         "json"},
+    {ESimpleLogicalValueType::Int8,         "int8"},
+    {ESimpleLogicalValueType::Uint8,       "uint8"},
 
-    {ESimpleLogicalValueType::Int16,     "int16"},
-    {ESimpleLogicalValueType::Uint16,    "uint16"},
+    {ESimpleLogicalValueType::Int16,       "int16"},
+    {ESimpleLogicalValueType::Uint16,      "uint16"},
 
-    {ESimpleLogicalValueType::Int32,     "int32"},
-    {ESimpleLogicalValueType::Uint32,    "uint32"},
+    {ESimpleLogicalValueType::Int32,       "int32"},
+    {ESimpleLogicalValueType::Uint32,      "uint32"},
 
-    {ESimpleLogicalValueType::Utf8,      "utf8"},
+    {ESimpleLogicalValueType::Utf8,        "utf8"},
 
-    {ESimpleLogicalValueType::Date,      "date"},
-    {ESimpleLogicalValueType::Datetime,  "datetime"},
-    {ESimpleLogicalValueType::Timestamp, "timestamp"},
-    {ESimpleLogicalValueType::Interval,  "interval"},
+    {ESimpleLogicalValueType::Date,        "date"},
+    {ESimpleLogicalValueType::Datetime,    "datetime"},
+    {ESimpleLogicalValueType::Timestamp,   "timestamp"},
+    {ESimpleLogicalValueType::Interval,    "interval"},
 
-    {ESimpleLogicalValueType::Void,      "void"},
+    {ESimpleLogicalValueType::Void,        "void"},
 
-    {ESimpleLogicalValueType::Uuid,      "uuid"},
+    {ESimpleLogicalValueType::Uuid,        "uuid"},
+
+    {ESimpleLogicalValueType::Date32,      "date32"},
+    {ESimpleLogicalValueType::Datetime64,  "datetime64"},
+    {ESimpleLogicalValueType::Timestamp64, "timestamp64"},
+    {ESimpleLogicalValueType::Interval64,  "interval64"},
 };
 static_assert(std::size(V3SimpleLogicalValueTypeEncoding) == TEnumTraits<ESimpleLogicalValueType>::GetDomainSize());
 

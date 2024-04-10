@@ -145,7 +145,7 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
             LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR,
                  "tablet# " << Self->TabletID() <<
                  " CreateTxInit initialize himself");
-            Self->DoConfiguration(*CreateDomainConfigurationFromStatic(appData, Self->TabletID()), ctx);
+            Self->DoConfiguration(*CreateDomainConfigurationFromStatic(appData), ctx);
             return;
         }
 

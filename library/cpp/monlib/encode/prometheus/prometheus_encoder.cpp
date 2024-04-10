@@ -370,9 +370,9 @@ namespace NMonitoring {
                 }
 
                 TMaybe<TLabel> nameLabel = MetricState_.Labels.Extract(MetricNameLabel_);
-                Y_ENSURE(nameLabel,
-                         "labels " << MetricState_.Labels <<
-                         " does not contain label '" << MetricNameLabel_ << '\'');
+                if (!nameLabel) {
+                    return;
+                }
 
                 const TString& metricName = ToString(nameLabel->Value());
                 if (MetricState_.Type != EMetricType::DSUMMARY) {

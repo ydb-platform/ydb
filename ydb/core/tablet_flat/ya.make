@@ -35,6 +35,7 @@ SRCS(
     flat_executor_tx_env.h
     flat_executor_txloglogic.cpp
     flat_executor_txloglogic.h
+    flat_fwd_misc.cpp
     flat_iterator.h
     flat_load_blob_queue.cpp
     flat_mem_warm.cpp
@@ -56,6 +57,7 @@ SRCS(
     flat_stat_part.h
     flat_stat_table.h
     flat_stat_table.cpp
+    flat_stat_part_group_iter_create.cpp
     flat_store_hotdog.cpp
     flat_table.cpp
     flat_table.h

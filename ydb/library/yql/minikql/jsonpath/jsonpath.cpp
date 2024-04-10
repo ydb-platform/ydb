@@ -59,7 +59,7 @@ const TAstNodePtr ParseJsonPathAst(const TStringBuf path, TIssues& issues, size_
     }
 
     google::protobuf::Arena arena;
-    const google::protobuf::Message* rawAst;
+    const google::protobuf::Message* rawAst = nullptr;
     {
     #if defined(_tsan_enabled_)
         TGuard<TMutex> guard(SanitizerJsonPathTranslationMutex);

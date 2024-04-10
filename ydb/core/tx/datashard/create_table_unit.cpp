@@ -86,6 +86,7 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
         txc.DB.NoMoreReadsForTx();
         DataShard.SetPersistState(TShardState::Ready, txc);
         DataShard.CheckMvccStateChangeCanStart(ctx); // Recheck
+        DataShard.SendRegistrationRequestTimeCast(ctx);
     }
 
     return EExecutionStatus::DelayCompleteNoMoreRestarts;

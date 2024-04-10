@@ -16,7 +16,7 @@ public:
         auto promise = NThreading::NewPromise<ISpiller::TKey>();
 
         auto key = NextKey;
-        Storage[key] = blob;
+        Storage[key] = std::move(blob);
         NextKey++;
         promise.SetValue(key);
         return promise.GetFuture();;

@@ -92,7 +92,6 @@ public:
             default:
                 return;
         }
-
     }
 
     ///Get requested vector.
@@ -156,10 +155,9 @@ private:
     void SaveBuffer() {
         State = EState::SpillingData;
         WriteOperation = Spiller->Put(std::move(Buffer));
-        Buffer = TRope();
     }
 
-    bool IsDataFittingInCurrentChunk() {
+    bool IsRestOfVectorFittingIntoBuffer() {
         return (SizeLimit - Buffer.size()) >= (CurrentVector.size() - NextVectorPositionToSave) * sizeof(T);
     }
 
@@ -169,7 +167,7 @@ private:
 
     void SaveNextPartOfVector() {
 
-        if (IsDataFittingInCurrentChunk()) {
+        if (IsRestOfVectorFittingIntoBuffer()) {
             AddDataToRope(CurrentVector.data() + NextVectorPositionToSave,  CurrentVector.size() - NextVectorPositionToSave);
             CurrentVector.clear();
             NextVectorPositionToSave = 0;

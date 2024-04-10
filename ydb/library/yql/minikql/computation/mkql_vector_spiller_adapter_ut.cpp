@@ -98,7 +98,19 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
 
         std::vector<std::vector<int>> vectors;
         
-        for (size_t vectorSize = 0; vectorSize < 4; ++vectorSize) {
+        for (size_t vectorSize = 0; vectorSize < 100; ++vectorSize) {
+            std::vector v = CreateSimpleVectorOfSize<int>(vectorSize);
+            vectors.push_back(v);
+        }
+
+        SaveRestoreAndCompareVectors<int>(vectors, 20);
+    }
+
+    Y_UNIT_TEST(MultipleVectorsDifferentSizesReversed) {
+
+        std::vector<std::vector<int>> vectors;
+        
+        for (size_t vectorSize = 100; vectorSize > 0; --vectorSize) {
             std::vector v = CreateSimpleVectorOfSize<int>(vectorSize);
             vectors.push_back(v);
         }

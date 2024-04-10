@@ -81,12 +81,7 @@ public:
             CurrentChunk = std::move(ReadOperation->ExtractValue().value());
             ReadOperation = std::nullopt;
 
-            auto sizeToBeCopiedToVector = CurrentChunk.size();
-
             LoadNextVector();
-
-            StoredChunksSizes.front() -= sizeToBeCopiedToVector;
-            
         }
     }
 
@@ -101,8 +96,10 @@ public:
         MKQL_ENSURE(State == EState::AcceptingDataRequests, "Internal logic error");
         MKQL_ENSURE(!StoredChunksSizes.empty(), "Internal logic error");
 
+        // TODO size here in bytes
         CurrentVector.reserve(StoredChunksSizes.front());
         State = EState::RestoringData;
+
         LoadNextVector();
 
     }
@@ -124,15 +121,16 @@ private:
     void LoadNextVector() {
         if (ReadOperation.has_value()) return;
 
-        auto& requestedVectorSize = StoredChunksSizes.front();
+        auto requestedShunkSize= StoredChunksSizes.front();
+        size_t sizeToLoad = requestedShunkSize - CurrentVector.size() * sizeof(T);
 
         // if vector is fully loaded to memory now
-        if (CurrentChunk.size() >= requestedVectorSize) {
+        if (CurrentChunk.size() >= sizeToLoad) {
             auto data = CurrentChunk.GetContiguousSpan();
-            const char* from = data.SubSpan(0, requestedVectorSize).Data();
-            const char* to = from + requestedVectorSize;
+            const char* from = data.SubSpan(0, sizeToLoad).Data();
+            const char* to = from + sizeToLoad;
             CurrentVector.insert(CurrentVector.end(), (T*)from, (T*)to);
-            CurrentChunk = TRope(TString(data.Data() + requestedVectorSize, data.size() - requestedVectorSize));
+            CurrentChunk = TRope(TString(data.Data() + sizeToLoad, data.size() - sizeToLoad));
             State = EState::DataReady;
         } else {
             const char* from = CurrentChunk.GetContiguousSpan().Data();

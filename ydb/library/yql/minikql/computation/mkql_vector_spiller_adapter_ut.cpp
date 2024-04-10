@@ -157,6 +157,21 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
         SaveRestoreAndCompareVectors<int>(vectors, totalSize * sizeof(int) + 10);
     }
 
+    Y_UNIT_TEST(RequestedVectorPartlyInMemory) {
+
+        std::vector<std::vector<int>> vectors;
+        std::vector<int> small = CreateSimpleVectorOfSize<int>(1);
+        std::vector<int> big = CreateSimpleVectorOfSize<int>(10);
+
+        vectors.push_back(small);
+        vectors.push_back(big);
+
+        // small vector will also load most of big vector to memory
+        size_t chunkSizeBytes = (big.size() - small.size()) * sizeof(int);
+
+        SaveRestoreAndCompareVectors<int>(vectors, chunkSizeBytes);
+    }
+
 }
 
 } //namespace namespace NKikimr::NMiniKQL

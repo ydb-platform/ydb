@@ -3,10 +3,12 @@
 namespace NYql {
 
 IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions&& options) {
-    if (!options.MaxTime) {
-        options.MaxTime = TDuration::Minutes(5);
+    auto maxTime = options.MaxTime;
+    auto maxRetries = options.MaxRetries;
+    if (!maxTime) {
+        maxTime = TDuration::Minutes(5);
     }
-    return IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy([options](CURLcode curlCode, long httpCode) {
+    return IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy([options = std::move(options)](CURLcode curlCode, long httpCode) {
 
         switch (curlCode) {
             case CURLE_OK:
@@ -52,8 +54,8 @@ IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptio
     TDuration::MilliSeconds(10), // minDelay
     TDuration::MilliSeconds(200), // minLongRetryDelay
     TDuration::Seconds(30), // maxDelay
-    options.MaxRetries, // maxRetries
-    options.MaxTime); // maxTime
+    maxRetries, // maxRetries
+    maxTime); // maxTime
 }
 
 IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, size_t maxRetries) {

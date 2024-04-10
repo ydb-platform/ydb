@@ -555,14 +555,16 @@ namespace {
         NQuery::TExecuteQuerySettings>;
 
     template <typename TClient>
-    auto GetSettings(const TString& collectStatsMode, const bool basicStats, TDuration timeout) {
+    auto GetSettings(const TString& collectStatsMode, const bool basicStats, std::optional<TDuration> timeout) {
         if constexpr (std::is_same_v<TClient, NTable::TTableClient>) {
             const auto defaultStatsMode = basicStats
                 ? NTable::ECollectQueryStatsMode::Basic
                 : NTable::ECollectQueryStatsMode::None;
             NTable::TStreamExecScanQuerySettings settings;
             settings.CollectQueryStats(ParseQueryStatsModeOrThrow(collectStatsMode, defaultStatsMode));
-            settings.ClientTimeout(timeout);
+            if (timeout.has_value()) {
+                settings.ClientTimeout(*timeout);
+            }
             return settings;
         } else if constexpr (std::is_same_v<TClient, NQuery::TQueryClient>) {
             const auto defaultStatsMode = basicStats
@@ -570,7 +572,9 @@ namespace {
                 : NQuery::EStatsMode::None;
             NQuery::TExecuteQuerySettings settings;
             settings.StatsMode(ParseQueryStatsModeOrThrow(collectStatsMode, defaultStatsMode));
-            settings.ClientTimeout(timeout);
+            if (timeout.has_value()) {
+                settings.ClientTimeout(*timeout);
+            }
             return settings;
         }
         Y_UNREACHABLE();
@@ -657,8 +661,11 @@ int TCommandExecuteQuery::ExecuteScanQuery(TConfig& config) {
 template <typename TClient>
 int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
     TClient client(CreateDriver(config));
-    const auto settings = GetSettings<TClient>(CollectStatsMode, BasicStats,
-                                               TDuration::MilliSeconds(FromString<ui64>(OperationTimeout)));
+    std::optional<TDuration> optTimeout;
+    if (OperationTimeout) {
+        optTimeout = TDuration::MilliSeconds(FromString<ui64>(OperationTimeout));
+    }
+    const auto settings = GetSettings<TClient>(CollectStatsMode, BasicStats, optTimeout);
 
     TAsyncPartIterator<TClient> asyncResult;
     SetInterruptHandlers();

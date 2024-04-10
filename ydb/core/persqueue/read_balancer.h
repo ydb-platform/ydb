@@ -273,6 +273,7 @@ private:
         std::pair<TActorId, ui64> SessionKey(const TActorId pipe) const;
         bool EraseSession(const TActorId pipe);
         TSessionInfo* FindSession(const TActorId pipe);
+        TSessionInfo* FindSession(ui32 partitionId);
 
         void ScheduleBalance(const TActorContext& ctx);
         void Balance(const TActorContext& ctx);
@@ -286,7 +287,6 @@ private:
         void FreePartition(ui32 partitionId);
         void ActivatePartition(ui32 partitionId);
         void InactivatePartition(ui32 partitionId);
-        void ChangePartitionStatus(ui32 partitionId, std::function<void (TSessionInfo*)> modifier);
 
         TStringBuilder GetPrefix() const;
 

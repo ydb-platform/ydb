@@ -1045,27 +1045,16 @@ TPersQueueReadBalancer::TClientGroupInfo& TPersQueueReadBalancer::TClientInfo::A
 }
 
 void TPersQueueReadBalancer::TClientGroupInfo::ActivatePartition(ui32 partitionId) {
-    ChangePartitionStatus(partitionId, [](TSessionInfo* session) {
+    auto* session = FindSession(partitionId);
+    if (session) {
         --session->NumInactive;
-    });
+    }
 }
 
 void TPersQueueReadBalancer::TClientGroupInfo::InactivatePartition(ui32 partitionId) {
-    ChangePartitionStatus(partitionId, [](TSessionInfo* session) {
+    auto* session = FindSession(partitionId);
+    if (session) {
         ++session->NumInactive;
-    });
-}
-
-void TPersQueueReadBalancer::TClientGroupInfo::ChangePartitionStatus(ui32 partitionId, std::function<void (TSessionInfo*)> modifier) {
-    auto partitionIt = PartitionsInfo.find(partitionId);
-    if (partitionIt != PartitionsInfo.end()) {
-        auto& partitionInfo = partitionIt->second;
-        if (partitionInfo.Session) {
-            auto* session = FindSession(partitionInfo.Session);
-            if (session) {
-                modifier(session);
-            }
-        }
     }
 }
 
@@ -1612,6 +1601,18 @@ TPersQueueReadBalancer::TSessionInfo* TPersQueueReadBalancer::TClientGroupInfo::
         return nullptr;
     }
     return &(it->second);
+}
+
+TPersQueueReadBalancer::TSessionInfo* TPersQueueReadBalancer::TClientGroupInfo::FindSession(ui32 partitionId) {
+    auto partitionIt = PartitionsInfo.find(partitionId);
+    if (partitionIt != PartitionsInfo.end()) {
+        auto& partitionInfo = partitionIt->second;
+        if (partitionInfo.Session) {
+            return FindSession(partitionInfo.Session);
+        }
+    }
+
+    return nullptr;
 }
 
 void TPersQueueReadBalancer::TClientGroupInfo::ScheduleBalance(const TActorContext& ctx) {

@@ -2310,7 +2310,6 @@ void TReadSessionActor<UseMigrationProtocol>::RunAuthActor(const TActorContext& 
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev, const TActorContext& ctx) {
-    Cerr << ">>>>> TEvReadingStarted" << Endl;
     auto* msg = ev->Get();
 
     auto it = Topics.find(msg->Topic);

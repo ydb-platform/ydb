@@ -1461,7 +1461,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev
 }
 
 void TPersQueueReadBalancer::TClientInfo::UnlockPartition(ui32 partitionId, const TActorContext& ctx) {
-    if (GetPartitionReadingStatus(partitionId).Unlock()) {
+    if (GetPartitionReadingStatus(partitionId).StopReading()) {
         // Release all children partitions if required
 
         auto* n = Balancer.PartitionGraph.GetPartition(partitionId);

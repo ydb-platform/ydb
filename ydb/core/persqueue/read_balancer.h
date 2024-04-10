@@ -212,14 +212,25 @@ private:
         size_t Iteration = 0;
         ui64 Cookie = 0;
 
+        // Return true if the reading of the partition has been finished and children's partition are readable.
         bool IsFinished() const;
+        // Return true if children's partitions can't be balance separately.
         bool NeedReleaseChildren() const;
 
+        // Called when reading from a partition is started.
+        // Return true if the reading of the partition has been finished before.
         bool StartReading();
-        bool SetCommittedState();
-        bool SetFinishedState(bool scaleAwareSDK, bool startedReadingFromEndOffset);
+        // Called when reading from a partition is stopped.
+        // Return true if children's partitions can't be balance separately.
+        bool StopReading();
 
-        bool Unlock();
+        // Called when the partition is inactive and commited offset is equal to EndOffset.
+        // Return true if the commited status changed.
+        bool SetCommittedState();
+        // Called when the partition reading finished.
+        // Return true if the reading status changed.
+        bool SetFinishedState(bool scaleAwareSDK, bool startedReadingFromEndOffset);
+        // Called when the parent partition is reading.
         bool Reset();
     };
 

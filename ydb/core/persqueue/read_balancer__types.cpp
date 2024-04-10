@@ -19,6 +19,12 @@ bool TPersQueueReadBalancer::TReadingPartitionStatus::StartReading() {
     return std::exchange(ReadingFinished, false);
 }
 
+bool TPersQueueReadBalancer::TReadingPartitionStatus::StopReading() {
+    ReadingFinished = false;
+    ++Cookie;
+    return NeedReleaseChildren();
+}
+
 bool TPersQueueReadBalancer::TReadingPartitionStatus::SetCommittedState() {
     return !std::exchange(Commited, true);
 }
@@ -31,12 +37,6 @@ bool TPersQueueReadBalancer::TReadingPartitionStatus::SetFinishedState(bool scal
         ++Cookie;
     }
     return !std::exchange(ReadingFinished, true);
-}
-
-bool TPersQueueReadBalancer::TReadingPartitionStatus::Unlock() {
-    ReadingFinished = false;
-    ++Cookie;
-    return NeedReleaseChildren();
 }
 
 bool TPersQueueReadBalancer::TReadingPartitionStatus::Reset() {

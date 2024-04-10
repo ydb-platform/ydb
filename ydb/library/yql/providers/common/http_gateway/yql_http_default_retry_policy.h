@@ -2,6 +2,9 @@
 
 #include "yql_http_gateway.h"
 
+#include <curl/curl.h>
+#include <unordered_set>
+
 namespace NYql {
 
 struct THttpRetryPolicyOptions {

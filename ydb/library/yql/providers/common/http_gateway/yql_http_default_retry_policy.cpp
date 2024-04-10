@@ -28,10 +28,9 @@ IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptio
                 if (options.ExtendedRetriedCodes.contains(curlCode)) {
                     // retry explicitly enumerated codes
                     return ERetryErrorClass::ShortRetry;
-                } else {
-                    // do not retry others
-                    return ERetryErrorClass::NoRetry;
                 }
+                // do not retry others
+                return ERetryErrorClass::NoRetry;
         }
 
         switch (httpCode) {

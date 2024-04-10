@@ -481,9 +481,9 @@
     ],
     "test.test[blocks-complex_scalars--Results]": [
         {
-            "checksum": "1c0dba1d7327e34c067d75034d7e310a",
-            "size": 18930,
-            "uri": "https://{canondata_backend}/1924537/6033fa62c3628f7f8f85fe0b254eb896d2d9c2ce/resource.tar.gz#test.test_blocks-complex_scalars--Results_/results.txt"
+            "checksum": "b78304aa567f1f7a4f9b133f7dfd72b0",
+            "size": 19065,
+            "uri": "https://{canondata_backend}/1942671/1ab3b0390118be77e7d2b2a396b46905e5322f56/resource.tar.gz#test.test_blocks-complex_scalars--Results_/results.txt"
         }
     ],
     "test.test[coalesce-coalesce_sugar-default.txt-Debug]": [

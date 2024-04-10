@@ -841,9 +841,9 @@
     ],
     "test.test[flatten_by-flatten_columns_with_opt_struct-default.txt-Results]": [
         {
-            "checksum": "cd1ad3cd5687e5f65333e7331f156aa1",
-            "size": 1866,
-            "uri": "https://{canondata_backend}/1937027/642fd2ff53bdb0fed32ca89598d70c9c5848ac20/resource.tar.gz#test.test_flatten_by-flatten_columns_with_opt_struct-default.txt-Results_/results.txt"
+            "checksum": "8cca435a42bde1959b947861ea7baabf",
+            "size": 1907,
+            "uri": "https://{canondata_backend}/1942671/56c5cbd029bc22a48f1fd12fb501d9ef298d6848/resource.tar.gz#test.test_flatten_by-flatten_columns_with_opt_struct-default.txt-Results_/results.txt"
         }
     ],
     "test.test[flexible_types-inside_evaluate-default.txt-Debug]": [

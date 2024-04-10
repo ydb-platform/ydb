@@ -46,12 +46,12 @@ using TLoggerPtr = TIntrusivePtr<TLogger>;
         logger->Write(ELogPriority::TLOG_INFO, format, __VA_ARGS__); \
     } else { }
 
-
-inline TString FormatMessage(const NProtoBuf::Message& message, bool ok = true) {
+template <typename TMsg>
+inline TString FormatMessage(const TMsg& message, bool ok = true) {
     if (ok) {
         if (LogBodyEnabled) {
             TString text;
-            NKikimr::TSecurityTextFormatPrinter<NProtoBuf::Message> printer;
+            NKikimr::TSecurityTextFormatPrinter<TMsg> printer;
             printer.SetSingleLineMode(true);
             printer.PrintToString(message, &text);
             return text;

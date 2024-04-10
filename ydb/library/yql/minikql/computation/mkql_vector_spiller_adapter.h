@@ -144,6 +144,7 @@ private:
         size_t sizeToLoad = (requestedVectorSize - CurrentVector.size()) * sizeof(T);
 
         if (Buffer.size() >= sizeToLoad) {
+            // if all the data for requested vector is ready
             TRope remainingPartOfVector = Buffer.Extract(Buffer.Position(0), Buffer.Position(sizeToLoad));
             CopyRopeToTheEndOfVector(CurrentVector, remainingPartOfVector);
             State = EState::DataReady;

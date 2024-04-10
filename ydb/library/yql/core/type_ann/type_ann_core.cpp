@@ -12288,6 +12288,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockJust"] = &BlockJustWrapper;
         Functions["BlockAsTuple"] = &BlockAsTupleWrapper;
         Functions["BlockMember"] = &BlockMemberWrapper;
+        Functions["BlockRemoveMember"] = &BlockRemoveMemberWrapper;
         Functions["BlockNth"] = &BlockNthWrapper;
         Functions["BlockToPg"] = &BlockToPgWrapper;
         Functions["BlockFromPg"] = &BlockFromPgWrapper;

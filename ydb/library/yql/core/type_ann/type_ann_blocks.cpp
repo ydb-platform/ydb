@@ -430,6 +430,44 @@ IGraphTransformer::TStatus BlockAsTupleWrapper(const TExprNode::TPtr& input, TEx
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus BlockRemoveMemberWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto& structNode = *input->Child(0);
+    if (!EnsureBlockOrScalarType(structNode, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool isStructScalar;
+    const TTypeAnnotationNode* structBlockItemType = GetBlockItemType(*structNode.GetTypeAnn(), isStructScalar);
+
+    if (!EnsureStructType(structNode.Pos(), *structBlockItemType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto& nameNode = *input->Child(1);
+    if (!EnsureAtom(nameNode, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto newItems = structBlockItemType->Cast<TStructExprType>()->GetItems();
+    EraseIf(newItems, [&](const auto& item) { return item->GetName() == nameNode.Content(); });
+
+    const TTypeAnnotationNode* resultType = ctx.Expr.MakeType<TStructExprType>(newItems);
+
+    if (isStructScalar) {
+        resultType = ctx.Expr.MakeType<TScalarExprType>(resultType);
+    } else {
+        resultType = ctx.Expr.MakeType<TBlockExprType>(resultType);
+    }
+
+    input->SetTypeAnn(resultType);
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus BlockMemberWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 2, ctx.Expr)) {

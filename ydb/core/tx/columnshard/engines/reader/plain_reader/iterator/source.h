@@ -38,6 +38,7 @@ private:
     virtual NJson::TJsonValue DoDebugJson() const = 0;
     bool MergingStartedFlag = false;
     bool AbortedFlag = false;
+    std::shared_ptr<TFetchingScript> FetchingPlan;
 protected:
     bool IsSourceInMemoryFlag = true;
     THashMap<ui32, TFetchingInterval*> Intervals;
@@ -55,6 +56,8 @@ protected:
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) = 0;
     virtual bool DoAddSequentialEntityIds(const ui32 entityId) = 0;
 public:
+    void OnInitResourcesGuard(const std::shared_ptr<IDataSource>& sourcePtr);
+
     bool IsAborted() const {
         return AbortedFlag;
     }
@@ -113,7 +116,7 @@ public:
         AFL_VERIFY(indexes);
         return DoStartFetchingIndexes(sourcePtr, step, indexes);
     }
-    void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching, const std::shared_ptr<IDataSource>& sourcePtr);
+    void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching);
 
     std::shared_ptr<arrow::RecordBatch> GetLastPK() const {
         return Finish.ExtractSortingPosition();

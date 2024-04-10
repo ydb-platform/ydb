@@ -59,6 +59,7 @@ TScanCounters::TScanCounters(const TString& module)
     , BlobsReceivedCount(TBase::GetDeriviative("BlobsReceivedCount"))
     , BlobsReceivedBytes(TBase::GetDeriviative("BlobsReceivedBytes"))
 {
+    ScanIntervalState = std::make_shared<TScanIntervalState>(*this);
     ResourcesSubscriberCounters = std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>();
     ScanDurationByStatus.resize((ui32)EStatusFinish::COUNT);
     ui32 idx = 0;

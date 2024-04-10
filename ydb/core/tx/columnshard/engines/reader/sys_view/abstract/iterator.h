@@ -21,6 +21,10 @@ protected:
 
     std::deque<TGranuleMetaView> IndexGranules;
 public:
+    virtual TConclusionStatus Start() override {
+        return TConclusionStatus::Success();
+    }
+
     virtual bool Finished() const override {
         return IndexGranules.empty();
     }

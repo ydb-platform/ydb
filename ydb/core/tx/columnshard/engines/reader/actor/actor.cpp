@@ -82,13 +82,20 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
     std::shared_ptr<TReadContext> context = std::make_shared<TReadContext>(StoragesManager, ScanCountersPool,
         ReadMetadataRange, SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy);
     ScanIterator = ReadMetadataRange->StartScan(context);
-
-    // propagate self actor id // TODO: FlagSubscribeOnSession ?
-    Send(ScanComputeActorId, new NKqp::TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen, TabletId), IEventHandle::FlagTrackDelivery);
-
-    Become(&TColumnShardScan::StateScan);
+    auto startResult = ScanIterator->Start();
     StartInstant = TMonotonic::Now();
-    ContinueProcessing();
+    if (!startResult) {
+        ACFL_ERROR("event", "BootstrapError")("error", startResult.GetErrorMessage());
+        SendScanError("scanner_start_error:" + startResult.GetErrorMessage());
+        Finish(NColumnShard::TScanCounters::EStatusFinish::ProblemOnStart);
+    } else {
+
+        // propagate self actor id // TODO: FlagSubscribeOnSession ?
+        Send(ScanComputeActorId, new NKqp::TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen, TabletId), IEventHandle::FlagTrackDelivery);
+
+        Become(&TColumnShardScan::StateScan);
+        ContinueProcessing();
+    }
 }
 
 void TColumnShardScan::HandleScan(NConveyor::TEvExecution::TEvTaskProcessedResult::TPtr& ev) {
@@ -262,12 +269,14 @@ void TColumnShardScan::ContinueProcessing() {
 
     if (ScanIterator) {
         // Switch to the next range if the current one is finished
-        if (ScanIterator->Finished() && ChunksLimiter.HasMore()) {
-            auto g = Stats->MakeGuard("Finish");
-            MakeResult();
-            SendResult(false, true);
-            ScanIterator.reset();
-            Finish(NColumnShard::TScanCounters::EStatusFinish::Success);
+        if (ScanIterator->Finished()) {
+            if (ChunksLimiter.HasMore()) {
+                auto g = Stats->MakeGuard("Finish");
+                MakeResult();
+                SendResult(false, true);
+                ScanIterator.reset();
+                Finish(NColumnShard::TScanCounters::EStatusFinish::Success);
+            }
         } else {
             while (true) {
                 TConclusion<bool> hasMoreData = ScanIterator->ReadNextInterval();

@@ -20,6 +20,14 @@ namespace NYT::NConcurrency {
 
 namespace NDetail {
 
+DEFINE_ENUM(ECoroState,
+    ((Running)               (0))
+    ((Abandoned)             (1))
+    ((Completed)             (2))
+);
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TCoroutineBase
 {
 public:
@@ -35,7 +43,7 @@ protected:
     explicit TCoroutineBase(TBody body, EExecutionStackKind stackKind);
 
     void Resume();
-    void Suspend() noexcept;
+    void Suspend();
 
 private:
     std::shared_ptr<TExecutionStack> CoroutineStack_;
@@ -48,8 +56,11 @@ private:
         TExceptionSafeContext CoroutineContext;
     };
 
+    ECoroState State_ = ECoroState::Running;
+    struct TCoroutineAbandonedException
+    { };
+
     std::exception_ptr CoroutineException_;
-    bool Completed_ = false;
 
     // NB(arkady-e1ppa): We make a "proxy-trampoline"
     // which DoRun consist of two parts:

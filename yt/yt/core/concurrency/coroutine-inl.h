@@ -38,21 +38,29 @@ void TCoroutineBase::TTrampoLine<TBody>::DoRun()
 {
     // Move/Copy stuff on stack frame.
     auto* owner = Owner_;
+    bool abandoned = false;
 
     {
         auto body = std::move(*Body_);
 
-        owner->Suspend();
+        try {
+            owner->Suspend();
+        } catch (TCoroutineAbandonedException) {
+            abandoned = true;
+        }
 
         // Actual execution.
-        try {
-            body();
-        } catch (...) {
-            owner->CoroutineException_ = std::current_exception();
+        if (!abandoned) {
+            try {
+                body();
+            } catch (TCoroutineAbandonedException) {
+            } catch (...) {
+                owner->CoroutineException_ = std::current_exception();
+            }
         }
     }
 
-    owner->Completed_ = true;
+    owner->State_ = ECoroState::Completed;
     owner->Suspend();
 
     YT_ABORT();

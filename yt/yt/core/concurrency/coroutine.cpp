@@ -6,17 +6,26 @@ namespace NYT::NConcurrency::NDetail {
 
 TCoroutineBase::~TCoroutineBase()
 {
-    std::destroy_at(&CoroutineContext);
+    if (State_ == ECoroState::Running) {
+        State_ = ECoroState::Abandoned;
+        Resume();
+    }
+
+    std::destroy_at(std::launder(&CoroutineContext));
 }
 
-void TCoroutineBase::Suspend() noexcept
+void TCoroutineBase::Suspend()
 {
-    CoroutineContext.SwitchTo(&CallerContext_);
+    std::launder(&CoroutineContext)->SwitchTo(&CallerContext_);
+
+    if (State_ == ECoroState::Abandoned) {
+        throw TCoroutineAbandonedException{};
+    }
 }
 
 void TCoroutineBase::Resume()
 {
-    CallerContext_.SwitchTo(&CoroutineContext);
+    CallerContext_.SwitchTo(std::launder(&CoroutineContext));
 
     if (CoroutineException_) {
         std::exception_ptr exception;
@@ -27,7 +36,7 @@ void TCoroutineBase::Resume()
 
 bool TCoroutineBase::IsCompleted() const noexcept
 {
-    return Completed_;
+    return State_ == ECoroState::Completed;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

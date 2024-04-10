@@ -32,6 +32,10 @@ class Nodes(object):
 
         for cmd, process, host in running_jobs:
             out, err = process.communicate()
+            if out is None:
+                out = "<None>"
+            if err is None:
+                err = "<None>"
             out = out.decode("utf-8", errors='replace')
             err = err.decode("utf-8", errors='replace')
             retcode = process.poll()

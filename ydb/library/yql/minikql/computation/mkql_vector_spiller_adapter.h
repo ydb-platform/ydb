@@ -86,6 +86,7 @@ public:
                 if (!ReadOperation.HasValue()) return;
                 // TODO: check spilling error here: YQL-17970
                 Buffer = std::move(ReadOperation.ExtractValue().value());
+                StoredChunks.pop();
 
                 LoadNextVector();
                 return;
@@ -130,6 +131,13 @@ public:
 
 private:
 
+    void CopyRopeToTheEndOfVector(std::vector<T>& vec, TRope& rope) {
+        for (auto it = rope.begin(); it != rope.end(); ++it) {
+            const T* data = reinterpret_cast<const T*>(it.ContiguousData());
+            vec.insert(vec.end(), data, data + it.ContiguousSize() / sizeof(T)); // size is always multiple of sizeof(T)
+        }
+    }
+
     void LoadNextVector() {
         auto requestedVectorSize= StoredChunksElementsCount.front();
         MKQL_ENSURE(requestedVectorSize >= CurrentVector.size(), "Internal logic error");
@@ -137,18 +145,12 @@ private:
 
         // if vector is fully loaded to memory now
         if (Buffer.size() >= sizeToLoad) {
-            auto data = Buffer.GetContiguousSpan();
-            const char* from = data.SubSpan(0, sizeToLoad).Data();
-            const char* to = from + sizeToLoad;
-            CurrentVector.insert(CurrentVector.end(), (T*)from, (T*)to);
-            Buffer = TRope(TString(data.Data() + sizeToLoad, data.size() - sizeToLoad));
+            TRope remainingPartOfVector = Buffer.Extract(Buffer.Position(0), Buffer.Position(sizeToLoad));
+            CopyRopeToTheEndOfVector(CurrentVector, remainingPartOfVector);
             State = EState::DataReady;
         } else {
-            const char* from = Buffer.GetContiguousSpan().Data();
-            const char* to = from + Buffer.GetContiguousSpan().Size();
-            CurrentVector.insert(CurrentVector.end(), (T*)from, (T*)to);
+            CopyRopeToTheEndOfVector(CurrentVector, Buffer);
             ReadOperation = Spiller->Extract(StoredChunks.front());
-            StoredChunks.pop();
         }
     }
 
@@ -166,7 +168,6 @@ private:
     }
 
     void SaveNextPartOfVector() {
-
         if (IsRestOfVectorFittingIntoBuffer()) {
             AddDataToRope(CurrentVector.data() + NextVectorPositionToSave,  CurrentVector.size() - NextVectorPositionToSave);
             CurrentVector.clear();

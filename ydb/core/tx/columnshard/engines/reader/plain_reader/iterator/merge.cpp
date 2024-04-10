@@ -129,7 +129,7 @@ bool TStartMergeTask::DoExecute() {
     return true;
 }
 
-TStartMergeTask::TStartMergeTask(const std::shared_ptr<TMergingContext>& mergingContext, const std::shared_ptr<TSpecialReadContext>& readContext, std::map<ui32, std::shared_ptr<IDataSource>>&& sources)
+TStartMergeTask::TStartMergeTask(const std::shared_ptr<TMergingContext>& mergingContext, const std::shared_ptr<TSpecialReadContext>& readContext, THashMap<ui32, std::shared_ptr<IDataSource>>&& sources)
     : TBase(mergingContext, readContext)
     , Sources(std::move(sources))
 {

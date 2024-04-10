@@ -17,6 +17,8 @@ public:
 
     }
 
+    virtual TConclusionStatus Start() = 0;
+
     virtual const TReadStats& GetStats() const;
 
     void OnSentDataFromInterval(const std::optional<ui32> intervalIdx) const {

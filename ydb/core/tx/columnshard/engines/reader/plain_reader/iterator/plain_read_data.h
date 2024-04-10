@@ -18,6 +18,10 @@ private:
     ui32 ReadyResultsCount = 0;
     bool AbortedFlag = false;
 protected:
+    virtual TConclusionStatus DoStart() override {
+        return Scanner->Start();
+    }
+
     virtual TString DoDebugString(const bool verbose) const override {
         TStringBuilder sb;
         sb << SpecialReadContext->DebugString() << ";";

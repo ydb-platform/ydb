@@ -1,0 +1,157 @@
+{
+    "get": {
+        "tags": ["RTMR"],
+        "produces": ["application/json"],
+        "summary": "Lists data sinks",
+        "parameters": [{
+            "name": "installation",
+            "in": "path",
+            "description": "RTMR installation",
+            "required": true,
+            "type": "string"
+        },{
+            "name": "location",
+            "in": "query",
+            "description": "RTMR location",
+            "required": false,
+            "type": "string"
+        },{
+            "name": "task",
+            "in": "query",
+            "description": "list sinks for task only",
+            "type": "string"
+        },{
+            "name": "pool",
+            "in": "query",
+            "description": "list sinks for specified pool@account only (requires account parameter if set)",
+            "type": "string"
+        },{
+            "name": "account",
+            "in": "query",
+            "description": "list sinks for specified account only",
+            "type": "string"
+        },{
+            "name": "operation",
+            "in": "query",
+            "description": "get data for specific operation",
+            "type": "string"
+        }],
+        "responses": {
+            "200": {
+                "description": "OK",
+                "schema": {
+                    "type": "object",
+                    "title": "ListAccountsResult",
+                    "required": ["locations"],
+                    "properties": {
+                        "locations": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["location", "sinks"],
+                                "properties": {
+                                    "location": {
+                                        "type": "string"
+                                    },
+                                    "sinks": {
+                                        "title" : "SinksList",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "title" : "Sink",
+                                            "required": ["account", "pool", "task"],
+                                            "properties": {
+                                                "account": {
+                                                    "type": "string"
+                                                },
+                                                "pool": {
+                                                    "type": "string"
+                                                },
+                                                "task": {
+                                                    "type": "string"
+                                                },
+                                                "operation": {
+                                                    "type": "string",
+                                                    "description": "RTMR operation that is actually transferring data"
+                                                },
+                                                "owner": {
+                                                    "type": "string"
+                                                },
+                                                "my": {
+                                                    "type": "boolean"
+                                                },
+                                                "tables": {
+                                                    "description": "RTMR tables to be transfered",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "service": {
+                                                    "description": "service type data should be transfered to",
+                                                    "type": "string",
+                                                    "enum": ["rtmr", "logbroker", "ydb", "solomon"]
+                                                },
+                                                "installation": {
+                                                    "description": "service name or address data should be transfered to",
+                                                    "type": "string"
+                                                },
+                                                "objects": {
+                                                    "description": "output objects of specified service (one-to-one correspondance with tables)",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "vcpuConsumed": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuConsumedRead": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuConsumedExec": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuConsumedLoadState": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuCurrentLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "flowConsumed": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "flowLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "flowCurrentLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "weight": {
+                                                    "type": "integer",
+                                                    "format": "int64"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -37,7 +37,7 @@ namespace {
         while (!spiller.IsAcceptingDataRequests()) {
             spiller.Update();
         }
-
+        
         for (const auto& vec : vectors) {
             spiller.RequestNextVector();
 
@@ -45,7 +45,7 @@ namespace {
                 spiller.Update();
             }
 
-            auto extractedVector = spiller.ExtractVector();
+            std::vector<T> extractedVector = spiller.ExtractVector();
 
             UNIT_ASSERT_VALUES_EQUAL(vec, extractedVector);
         }   

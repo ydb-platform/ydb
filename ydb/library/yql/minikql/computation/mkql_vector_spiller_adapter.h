@@ -95,10 +95,10 @@ public:
     }
 
     ///Get requested vector.
-    std::vector<T> ExtractVector() {
+    std::vector<T>&& ExtractVector() {
         StoredChunksElementsCount.pop();
         State = EState::AcceptingDataRequests;
-        return CurrentVector;
+        return std::move(CurrentVector);
     }
 
     ///Start restoring next vector. If th eentire contents of the vector are in memory
@@ -106,9 +106,9 @@ public:
     ///to be called immediately.
     void RequestNextVector() {
         MKQL_ENSURE(State == EState::AcceptingDataRequests, "Internal logic error");
+        MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
         MKQL_ENSURE(!StoredChunksElementsCount.empty(), "Internal logic error");
 
-        CurrentVector.resize(0);
         CurrentVector.reserve(StoredChunksElementsCount.front());
         State = EState::RestoringData;
 

@@ -87,6 +87,24 @@ public:
         return removedItem != nullptr;
     }
 
+    void AttachReplayMessage(const TString uid, TString replayMessage) {
+        auto it = Index.find(TItem(uid));
+        if (it != Index.end()) {
+            TItem* item = &const_cast<TItem&>(*it);
+            DecBytes(item->Value.ReplayMessage.size());
+            item->Value.ReplayMessage = replayMessage;
+            IncBytes(replayMessage.size());
+        }
+    }
+
+    TString FindReplayMessageByUid(const TString uid) {
+        auto it = Index.find(TItem(uid));
+        if (it != Index.end()) {
+            return it->Value.ReplayMessage;
+        }
+        return "";
+    }
+
     TKqpCompileResult::TConstPtr FindByUid(const TString& uid, bool promote) {
         auto it = Index.find(TItem(uid));
         if (it != Index.end()) {
@@ -157,6 +175,7 @@ public:
         List.Erase(item);
 
         DecBytes(item->Value.CompileResult->PreparedQuery->ByteSize());
+        DecBytes(item->Value.ReplayMessage.size());
 
         Y_ABORT_UNLESS(item->Value.CompileResult);
         Y_ABORT_UNLESS(item->Value.CompileResult->Query);
@@ -217,6 +236,7 @@ private:
     struct TCacheEntry {
         TKqpCompileResult::TConstPtr CompileResult;
         TInstant ExpiredAt;
+        TString ReplayMessage;
     };
 
     using TList = TLRUList<TString, TCacheEntry>;
@@ -804,6 +824,7 @@ private:
 
                 if (ev->Get()->ReplayMessage) {
                     QueryReplayBackend->Collect(*ev->Get()->ReplayMessage);
+                    QueryCache.AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
                 }
 
                 auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query);
@@ -1072,6 +1093,10 @@ private:
     {
         TKqpStatsCompile stats;
         stats.FromCache = true;
+
+        if (auto replayMessage = QueryCache.FindReplayMessageByUid(compileResult->Uid)) {
+            QueryReplayBackend->Collect(replayMessage);
+        }
 
         LWTRACK(KqpCompileServiceReplyFromCache, orbit);
         Reply(sender, compileResult, stats, ctx, cookie, std::move(orbit), std::move(span));

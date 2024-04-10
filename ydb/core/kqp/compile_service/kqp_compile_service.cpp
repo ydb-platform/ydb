@@ -236,7 +236,7 @@ private:
     struct TCacheEntry {
         TKqpCompileResult::TConstPtr CompileResult;
         TInstant ExpiredAt;
-        TString ReplayMessage;
+        TString ReplayMessage = "";
     };
 
     using TList = TLRUList<TString, TCacheEntry>;

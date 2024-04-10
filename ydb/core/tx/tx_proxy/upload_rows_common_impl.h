@@ -100,8 +100,9 @@ public:
         }
         RowCost += TUpsertCost::OneRowCost(sz);
 
+        Y_VERIFY(cells.size() >= KeySize);
+        const auto valueSize = (cells.size() > KeySize) ? (cells.size() - KeySize) : 0;
         TConstArrayRef<TCell> keyCells(&cells[0], KeySize);
-        const auto valueSize = cells.size() - KeySize;
         TConstArrayRef<TCell> valueCells((valueSize > 0) ? &cells[KeySize] : nullptr, valueSize);
 
         TSerializedCellVec serializedKey(keyCells);

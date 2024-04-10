@@ -1088,6 +1088,22 @@ enum AutoScalingStrategy {
     SCALE_UP_AND_DOWN = 2;
 }
 
+message AutoScalingPartitionWriteSpeedStrategy {
+    // The time of exceeding the threshold value in seconds, after which the partition will be
+    // auto scaling.
+    // Zero value means default - 300.
+    int32 threshold_time_seconds = 1;
+    // The threshold value of the write speed to the partition as a percentage, when exceeded,
+    // the partition will be auto split.
+    // Zero value means default - 90.
+    int32 scale_up_threshold_percent = 2 [(Ydb.value) = ">= 0"];
+    // The threshold value of the write speed to the partition as a percentage, if it is not reached,
+    // the partition will be auto merged.
+    // Zero value means default - 30.
+    int32 scale_down_threshold_percent = 3 [(Ydb.value) = ">= 0"];
+}
+
+
 message AutoScalingSettings {
     // Strategy of auto scaling
     AutoScalingStrategy strategy = 1;
@@ -1102,18 +1118,8 @@ message AutoScalingSettings {
     // Zero value means default - 100.
     int64 partition_count_limit = 4 [(Ydb.value) = ">= 0"];
 
-    // The time of exceeding the threshold value in seconds, after which the partition will be
-    // auto scaling.
-    // Zero value means default - 300.
-    int32 threshold_time_seconds = 5;
-    // The threshold value of the write speed to the partition as a percentage, when exceeded,
-    // the partition will be auto split.
-    // Zero value means default - 90.
-    int32 scale_up_partition_write_speed_threshold_percent = 6 [(Ydb.value) = ">= 0"];
-    // The threshold value of the write speed to the partition as a percentage, if it is not reached,
-    // the partition will be auto merged.
-    // Zero value means default - 30.
-    int32 scale_down_partition_write_speed_threshold_percent = 7 [(Ydb.value) = ">= 0"];
+    /// AutoScaling partition write speed options.
+    AutoScalingPartitionWriteSpeedStrategy partition_write_speed = 5;
 }
 
 /**
@@ -1179,19 +1185,6 @@ message TopicSettings {
 
         // Client service type.
         string service_type = 7;
-
-        enum ScalingSupport {
-            // The consumer can't work with scaling.
-            SCALING_SUPPORT_NO = 0;
-            // The consumer does not commit offsets. The order of messages may be disrupted at the time of scaling.
-            SCALING_SUPPORT_WITHOUT_ORDER_GUARANTIES = 1;
-            // The consumer fully supports scaling: during the reading process, offsets are regularly committed.
-            SCALING_SUPPORT_WITH_ORDER_GUARANTIES = 2;
-        }
-
-        // Parameter for the consumer's support for topic scaling.
-        // Default NOT_SUPPORTED
-        ScalingSupport scaling_support = 8;
     }
 
     // List of consumer read rules for this topic.

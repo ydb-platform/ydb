@@ -306,7 +306,7 @@ message StreamReadMessage {
             StopPartitionSessionRequest stop_partition_session_request = 9;
 
             UpdatePartitionSession update_partition_session = 10;
-            PartitionFinished partition_finished = 11;
+            EndPartitionSession end_partition_session = 11;
         }
     }
 
@@ -562,10 +562,14 @@ message StreamReadMessage {
     // Signal from server that client has finished reading the partition and all messages has been read.
     // Once a partition has been finished no further records will ever arrive on that partition.
     // Client should not send a response to the command.
-    message PartitionFinished {
+    message EndPartitionSession {
         // Partition session identifier.
         int64 partition_session_id = 1;
-    }
+
+        // Ids of partitions which was merged with the ended partition.
+        repeated int64 adjacent_partition_ids = 2;
+        // Ids of partitions which was formed when the ended partition was split or merged.
+        repeated int64 child_partition_ids = 3;
 }
 
 // Messages for bidirectional streaming rpc StreamDirectRead
@@ -770,19 +774,6 @@ message Consumer {
     // Filled only when requested statistics in Describe*Request.
     ConsumerStats consumer_stats = 7;
 
-    enum ScalingSupport {
-        // The consumer can't work with scaling.
-        SCALING_SUPPORT_NO = 0;
-        // The consumer does not commit offsets. The order of messages may be disrupted at the time of scaling.
-        SCALING_SUPPORT_WITHOUT_ORDER_GUARANTIES = 1;
-        // The consumer fully supports scaling: during the reading process, offsets are regularly committed.
-        SCALING_SUPPORT_WITH_ORDER_GUARANTIES = 2;
-    }
-
-    // Parameter for the consumer's support for topic scaling.
-    // Default NOT_SUPPORTED
-    ScalingSupport scaling_support = 8;
-
     message ConsumerStats {
         // Minimal timestamp of last read from partitions.
         google.protobuf.Timestamp min_partitions_last_read_time = 1;
@@ -829,39 +820,48 @@ enum AutoScalingStrategy {
     SCALE_UP_AND_DOWN = 2;
 }
 
-message AutoScalingSettings {
-    // Strategy of auto scaling
-    AutoScalingStrategy strategy = 1;
+message AutoScalingPartitionWriteSpeedStrategy {
     // The time of exceeding the threshold value in seconds, after which the partition will be
     // auto scaling.
     // Zero value means default - 300.
-    int32 threshold_time_seconds = 2;
+    int32 threshold_time_seconds = 1;
     // The threshold value of the write speed to the partition as a percentage, when exceeded,
     // the partition will be auto split.
     // Zero value means default - 90.
-    int32 scale_up_partition_write_speed_threshold_percent = 3 [(Ydb.value) = ">= 0"];
+    int32 scale_up_threshold_percent = 2 [(Ydb.value) = ">= 0"];
     // The threshold value of the write speed to the partition as a percentage, if it is not reached,
     // the partition will be auto merged.
     // Zero value means default - 30.
-    int32 scale_down_partition_write_speed_threshold_percent = 4 [(Ydb.value) = ">= 0"];
+    int32 scale_down_threshold_percent = 3 [(Ydb.value) = ">= 0"];
+}
 
+message AutoScalingSettings {
+    // Strategy of auto scaling
+    AutoScalingStrategy strategy = 1;
+    // AutoScaling partition write speed options.
+    AutoScalingPartitionWriteSpeedStrategy partition_write_speed = 2;
+}
+
+message AlterAutoScalingPartitionWriteSpeedStrategy {
+    // The time of exceeding the threshold value in seconds, after which the partition will be
+    // auto scaling.
+    // Zero value means default - 300.
+    optional int32 set_threshold_time_seconds = 1;
+    // The threshold value of the write speed to the partition as a percentage, when exceeded,
+    // the partition will be auto split.
+    // Zero value means default - 90.
+    optional int32 set_scale_up_threshold_percent = 2 [(Ydb.value) = ">= 0"];
+    // The threshold value of the write speed to the partition as a percentage, if it is not reached,
+    // the partition will be auto merged.
+    // Zero value means default - 30.
+    optional int32 set_scale_down_threshold_percent = 3 [(Ydb.value) = ">= 0"];
 }
 
 message AlterAutoScalingSettings {
     // Strategy of auto scaling
-    optional AutoScalingStrategy strategy = 1;
-    // The time of exceeding the threshold value in seconds, after which the partition will be
-    // auto scaling.
-    // Zero value means default - 300.
-    optional int32 set_threshold_time_seconds = 2;
-    // The threshold value of the write speed to the partition as a percentage, when exceeded,
-    // the partition will be auto split.
-    // Zero value means default - 90.
-    optional int32 set_scale_up_partition_write_speed_threshold_percent = 3 [(Ydb.value) = ">= 0"];
-    // The threshold value of the write speed to the partition as a percentage, if it is not reached,
-    // the partition will be auto merged.
-    // Zero value means default - 30.
-    optional int32 set_scale_down_partition_write_speed_threshold_percent = 4 [(Ydb.value) = ">= 0"];
+    optional AutoScalingStrategy set_strategy = 1;
+    // AutoScaling partition write speed options.
+    optional AlterAutoScalingPartitionWriteSpeedStrategy set_partition_write_speed = 2;
 }
 
 // Partitioning settings for topic.
@@ -874,7 +874,8 @@ message PartitioningSettings {
     int64 max_active_partitions = 3 [(Ydb.value) = ">= 0"];
     // Limit for total partition count, including active (open for write) and read-only partitions.
     // Zero value means default - 100.
-    int64 partition_count_limit = 2 [(Ydb.value) = ">= 0"];
+    // Use max_active_partitions
+    int64 partition_count_limit = 2 [(Ydb.value) = ">= 0", deprecated = true];
     // Settings for auto scaling the partition number
     AutoScalingSettings auto_scaling_settings = 4;
 }
@@ -889,7 +890,8 @@ message AlterPartitioningSettings {
     optional int64 max_active_partitions = 3 [(Ydb.value) = ">= 0"];
     // Limit for total partition count, including active (open for write) and read-only partitions.
     // Zero value means default - 100.
-    optional int64 set_partition_count_limit = 2 [(Ydb.value) = ">= 0"];
+    // Use set_max_active_partitions
+    optional int64 set_partition_count_limit = 2 [(Ydb.value) = ">= 0", deprecated = true];
     // Settings for auto scaling the partition number
     optional AlterAutoScalingSettings alter_auto_scaling_settings = 4;
 }

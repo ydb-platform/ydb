@@ -265,7 +265,7 @@ public:
         auto busConfig = NYT::NBus::TBusServerConfig::CreateTcp(port);
         return CreateBusServer(
             busConfig,
-            NYT::NBus::GetYTPacketTranscoderFactory(memoryUsageTracker),
+            NYT::NBus::GetYTPacketTranscoderFactory(),
             memoryUsageTracker);
     }
 };
@@ -486,7 +486,7 @@ public:
         auto busConfig = NYT::NBus::TBusServerConfig::CreateUds(SocketPath_);
         return CreateBusServer(
             busConfig,
-            NYT::NBus::GetYTPacketTranscoderFactory(memoryUsageTracker),
+            NYT::NBus::GetYTPacketTranscoderFactory(),
             memoryUsageTracker);
     }
 

@@ -1261,7 +1261,7 @@ public:
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);
         auto client = CreateBusClient(
             std::move(config),
-            GetYTPacketTranscoderFactory(MemoryUsageTracker_),
+            GetYTPacketTranscoderFactory(),
             MemoryUsageTracker_);
         return CreateBusChannel(std::move(client));
     }
@@ -1301,7 +1301,7 @@ public:
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);
         auto client = CreateBusClient(
             std::move(config),
-            GetYTPacketTranscoderFactory(MemoryUsageTracker_),
+            GetYTPacketTranscoderFactory(),
             MemoryUsageTracker_);
         return CreateBusChannel(std::move(client));
     }

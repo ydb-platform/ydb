@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
         }
 
         { // wrong schema: not supported PK
-            NYdb::NLogStore::TSchema logSchema(TestSchemaColumns(), {"json_payload", "resource_id"});
+            NYdb::NLogStore::TSchema logSchema(TestSchemaColumns(EPrimitiveType::Double), {"json_payload", "resource_id"});
             THashMap<TString, NYdb::NLogStore::TSchema> schemaPresets;
             schemaPresets["default"] = logSchema;
             NYdb::NLogStore::TLogStoreDescription storeDescr(4, schemaPresets);

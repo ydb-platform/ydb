@@ -94,94 +94,105 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_SingleVector) {
 }
 
 Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
-    Y_UNIT_TEST(MultipleVectorsDifferentSizes) {
 
-        std::vector<std::vector<int>> vectors;
+    template <typename T>
+    void ManyDifferentSizes_TestRunner() {
+        std::vector<std::vector<T>> vectors;
         
         for (int vectorSize = 0; vectorSize <= 100; ++vectorSize) {
-            std::vector v = CreateSimpleVectorOfSize<int>(vectorSize);
-            vectors.push_back(v);
+            vectors.push_back(CreateSimpleVectorOfSize<T>(vectorSize));
         }
 
-        SaveRestoreAndCompareVectors<int>(vectors, 20);
+        SaveRestoreAndCompareVectors<T>(vectors, 20);
     }
 
-    Y_UNIT_TEST(MultipleVectorsDifferentSizesReversed) {
+    Y_UNIT_TEST(ManyDifferentSizes) {
+        ManyDifferentSizes_TestRunner<int>();
+        ManyDifferentSizes_TestRunner<char>();
+    }
 
-        std::vector<std::vector<int>> vectors;
+    template <typename T>
+    void ManyDifferentSizesReversed_TestRunner() {
+        std::vector<std::vector<T>> vectors;
         
         for (int vectorSize = 100; vectorSize >= 0; --vectorSize) {
-            std::vector v = CreateSimpleVectorOfSize<int>(vectorSize);
-            vectors.push_back(v);
+            vectors.push_back(CreateSimpleVectorOfSize<T>(vectorSize));
         }
 
-        SaveRestoreAndCompareVectors<int>(vectors, 20);
+        SaveRestoreAndCompareVectors<T>(vectors, 20);
     }
 
-    Y_UNIT_TEST(TwoVectors) {
-
-        std::vector<std::vector<int>> vectors;
-        
-        std::vector v1 = CreateSimpleVectorOfSize<int>(20);
-        vectors.push_back(v1);
-
-        std::vector v2 = CreateSimpleVectorOfSize<int>(30);
-        vectors.push_back(v2);
-
-        SaveRestoreAndCompareVectors<int>(vectors, 20);
+    Y_UNIT_TEST(ManyDifferentSizesReversed) {
+        ManyDifferentSizesReversed_TestRunner<int>();
+        ManyDifferentSizesReversed_TestRunner<char>();
     }
 
-    Y_UNIT_TEST(MultipleVectorsInOneChunk) {
-
-        std::vector<std::vector<int>> vectors;
+    template <typename T>
+    void VectorsInOneChunk_TestRunner() {
+        std::vector<std::vector<T>> vectors;
         
         size_t totalSize = 0;
 
         for (int vectorSize = 1; vectorSize < 5; ++vectorSize) {
-            std::vector v = CreateSimpleVectorOfSize<int>(vectorSize);
+            std::vector v = CreateSimpleVectorOfSize<T>(vectorSize);
             totalSize += vectorSize;
             vectors.push_back(v);
         }
 
-        SaveRestoreAndCompareVectors<int>(vectors, totalSize * sizeof(int) + 10);
+        SaveRestoreAndCompareVectors<T>(vectors, totalSize * sizeof(int) + 10);
+    }
+
+    Y_UNIT_TEST(VectorsInOneChunk) {
+        VectorsInOneChunk_TestRunner<int>();
+        VectorsInOneChunk_TestRunner<char>();
+    }
+
+    template <typename T>
+    void EmptyVectorsInTheMiddle_TestRunner() {
+        std::vector<std::vector<T>> vectors;
+        
+        size_t totalSize = 0;
+
+        for (int vectorSize = 1; vectorSize < 5; ++vectorSize) {
+            std::vector v = CreateSimpleVectorOfSize<T>(vectorSize);
+            totalSize += vectorSize;
+            vectors.push_back(v);
+        }
+        vectors.push_back({});
+        vectors.push_back({});
+
+        for (int vectorSize = 1; vectorSize < 5; ++vectorSize) {
+            std::vector v = CreateSimpleVectorOfSize<T>(vectorSize);
+            totalSize += vectorSize;
+            vectors.push_back(v);
+        }
+
+        SaveRestoreAndCompareVectors<T>(vectors, totalSize * sizeof(T) + 10);
     }
 
     Y_UNIT_TEST(EmptyVectorsInTheMiddle) {
-
-        std::vector<std::vector<int>> vectors;
-        
-        size_t totalSize = 0;
-
-        for (int vectorSize = 1; vectorSize < 5; ++vectorSize) {
-            std::vector v = CreateSimpleVectorOfSize<int>(vectorSize);
-            totalSize += vectorSize;
-            vectors.push_back(v);
-        }
-        vectors.push_back({});
-        vectors.push_back({});
-
-        for (int vectorSize = 1; vectorSize < 5; ++vectorSize) {
-            std::vector v = CreateSimpleVectorOfSize<int>(vectorSize);
-            totalSize += vectorSize;
-            vectors.push_back(v);
-        }
-
-        SaveRestoreAndCompareVectors<int>(vectors, totalSize * sizeof(int) + 10);
+        EmptyVectorsInTheMiddle_TestRunner<int>();
+        EmptyVectorsInTheMiddle_TestRunner<char>();
     }
 
-    Y_UNIT_TEST(RequestedVectorPartlyInMemory) {
-
-        std::vector<std::vector<int>> vectors;
-        std::vector<int> small = CreateSimpleVectorOfSize<int>(1);
-        std::vector<int> big = CreateSimpleVectorOfSize<int>(10);
+    template <typename T>
+    void RequestedVectorPartlyInMemory_TestRunner() {
+        std::vector<std::vector<T>> vectors;
+        std::vector<T> small = CreateSimpleVectorOfSize<T>(1);
+        std::vector<T> big = CreateSimpleVectorOfSize<T>(10);
 
         vectors.push_back(small);
         vectors.push_back(big);
 
         // small vector will also load most of big vector to memory
-        size_t chunkSizeBytes = (big.size() - small.size()) * sizeof(int);
+        size_t chunkSizeBytes = (big.size() - small.size()) * sizeof(T);
 
-        SaveRestoreAndCompareVectors<int>(vectors, chunkSizeBytes);
+        SaveRestoreAndCompareVectors<T>(vectors, chunkSizeBytes);
+    }
+
+    Y_UNIT_TEST(RequestedVectorPartlyInMemory) {
+        RequestedVectorPartlyInMemory_TestRunner<int>();
+        RequestedVectorPartlyInMemory_TestRunner<char>();
     }
 
 }

@@ -2,11 +2,78 @@
 #include "defs.h"
 
 #include <library/cpp/threading/chunk_queue/queue.h>
+#include <util/system/mutex.h>
 
 #include <atomic>
 #include <optional>
 
 namespace NActors {
+
+struct TMPMCRingQueueStats {
+
+    struct TStats {
+        ui64 SuccessPushes = 0;
+        ui64 SuccessSlowPushes = 0;
+        ui64 SuccessFastPushes = 0;
+        ui64 FailedPushes = 0;
+        ui64 FailedSlowPushAttempts = 0;
+
+        ui64 ChangesFastPushToSlowPush = 0;
+
+        TStats& operator += (const TStats &other) {
+            SuccessPushes += other.SuccessPushes;
+            SuccessSlowPushes += other.SuccessSlowPushes;
+            SuccessFastPushes += other.SuccessFastPushes;
+            ChangesFastPushToSlowPush += other.ChangesFastPushToSlowPush;
+            FailedPushes += other.FailedPushes;
+            FailedSlowPushAttempts += other.FailedSlowPushAttempts;
+            return *this;
+        }
+    };
+    static thread_local TStats Stats;
+
+#ifdef MPMC_RING_QUEUE_COLLECT_STATISTICS
+    static constexpr bool CollectStatistics = true;
+#else
+    static constexpr bool CollectStatistics = false;
+#endif
+
+    static void IncrementSuccessSlowPushes() {
+        if constexpr (CollectStatistics) {
+            Stats.SuccessSlowPushes++;
+            Stats.SuccessPushes++;
+        }
+    }
+
+    static void IncrementSuccessFastPushes() {
+        if constexpr (CollectStatistics) {
+            Stats.SuccessFastPushes++;
+            Stats.SuccessPushes++;
+        }
+    }
+
+    static void IncrementChangesFastPushToSlowPush() {
+        if constexpr (CollectStatistics) {
+            Stats.ChangesFastPushToSlowPush++;
+        }
+    }
+
+    static void IncrementFailedPushes() {
+        if constexpr (CollectStatistics) {
+            Stats.FailedPushes++;
+        }
+    }
+
+    static void IncrementFailedSlowPushAttempts() {
+        if constexpr (CollectStatistics) {
+            Stats.FailedSlowPushAttempts++;
+        }
+    }
+
+    static TStats GetLocalStats() {
+        return Stats;
+    }
+};
 
 template <ui32 MaxSizeBits>
 struct TMPMCRingQueue {
@@ -64,8 +131,8 @@ struct TMPMCRingQueue {
     }
 
     bool TryPushSlow(ui32 val) {
+        ui64 currentTail = Tail.load(std::memory_order_relaxed);
         for (;;) {
-            ui64 currentTail = Tail.load(std::memory_order_acquire);
             ui32 generation = currentTail / MaxSize;
 
             std::atomic<ui64> &currentSlot = Buffer[ConvertIdx(currentTail)];
@@ -74,6 +141,7 @@ struct TMPMCRingQueue {
             do {
                 if (currentSlot.compare_exchange_weak(expected, val)) {
                     Tail.compare_exchange_strong(currentTail, currentTail + 1);
+                    TMPMCRingQueueStats::IncrementSuccessSlowPushes();
                     return true;
                 }
                 slot = TSlot::Recognise(expected);
@@ -81,13 +149,14 @@ struct TMPMCRingQueue {
 
             if (!slot.IsEmpty) {
                 ui64 currentHead = Head.load(std::memory_order_acquire);
-                if (currentHead + MaxSize <= currentTail + std::min<ui64>(1024, MaxSize - 1)) {
+                if (currentHead + MaxSize <= currentTail + std::min<ui64>(64, MaxSize - 1)) {
                     return false;
                 }
             }
 
-            Tail.compare_exchange_strong(currentTail, currentTail + 1);
             SpinLockPause();
+            TMPMCRingQueueStats::IncrementFailedSlowPushAttempts();
+            Tail.compare_exchange_strong(currentTail, currentTail + 1, std::memory_order_acq_rel);
         }
     }
 
@@ -100,26 +169,16 @@ struct TMPMCRingQueue {
         ui64 expected = TSlot::MakeEmpty(generation);
         do {
             if (currentSlot.compare_exchange_weak(expected, val)) {
+                TMPMCRingQueueStats::IncrementSuccessFastPushes();
                 return true;
             }
             slot = TSlot::Recognise(expected);
         } while (slot.Generation <= generation && slot.IsEmpty);
 
-        if (!slot.IsEmpty) {
-            ui64 nextTail = currentTail + 1;
-            for (;;) {
-                ui64 currentHead = Head.load(std::memory_order_acquire);
-                if (currentHead + MaxSize <= currentTail + std::min<ui64>(1024, MaxSize - 1)) {
-                    if (Tail.compare_exchange_weak(nextTail, currentTail, std::memory_order_acq_rel)) {
-                        return false;
-                    }
-                    if (nextTail > currentTail && nextTail - currentTail < 16) {
-                        continue;
-                    }
-                }
-                break;
-            }
-        }
+        // TODO(kruall): mesure it's impact in bechmark
+        TMPMCRingQueueStats::IncrementChangesFastPushToSlowPush();
+        currentTail++;
+        Tail.compare_exchange_weak(currentTail, currentTail - 1, std::memory_order_relaxed);
         return TryPushSlow(val);
     }
 
@@ -217,7 +276,7 @@ struct TMPMCRingQueue {
         if (!currentHead) {
             currentHead = Head.load(std::memory_order_acquire);
         }
-        for (ui32 it = 0; it < 3; ++it) {
+        for (;;) {
             ui32 generation = currentHead / MaxSize;
 
             std::atomic<ui64> &currentSlot = Buffer[ConvertIdx(currentHead)];

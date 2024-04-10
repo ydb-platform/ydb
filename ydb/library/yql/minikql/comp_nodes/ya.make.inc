@@ -8,6 +8,7 @@ SET(ORIG_SOURCES
     mkql_aggrcount.cpp
     mkql_append.cpp
     mkql_apply.cpp
+    mkql_block_addmember.cpp
     mkql_block_agg.cpp
     mkql_block_agg_count.cpp
     mkql_block_agg_factory.cpp

@@ -1028,6 +1028,11 @@ TTableSchemaPtr TTableSchema::ToDelete() const
     return ToLookup();
 }
 
+TTableSchemaPtr TTableSchema::ToLock() const
+{
+    return ToLookup();
+}
+
 TTableSchemaPtr TTableSchema::ToKeys() const
 {
     if (!ColumnInfo_) {

@@ -822,7 +822,7 @@ private:
                     UpdateQueryCache(compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution);
                 }
 
-                if (ev->Get()->ReplayMessage) {
+                if (ev->Get()->ReplayMessage && !QueryReplayBackend->IsNull()) {
                     QueryReplayBackend->Collect(*ev->Get()->ReplayMessage);
                     QueryCache.AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
                 }

@@ -531,7 +531,7 @@ def _select_matching_version(erm_json, resource_name, range_str, dep_is_required
                 resource_name,
                 range_str,
                 ", ".join(map(str, toolchain_versions)),
-                "https://docs.yandex-team.ru/ya-make/manual/typescript/toolchain",
+                "https://docs.yandex-team.ru/frontend-in-arcadia/_generated/toolchain",
                 str(error),
             )
         )

@@ -807,9 +807,6 @@ message AlterConsumer {
     // User and server attributes of consumer. Server attributes starts from "_" and will be validated by server.
     // Leave the value blank to drop an attribute.
     map<string, string> alter_attributes = 6;
-
-    // Parameter for the consumer's support for topic scaling.
-    optional Consumer.ScalingSupport set_scaling_support = 7;
 }
 
 enum AutoScalingStrategy {

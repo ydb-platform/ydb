@@ -1,6 +1,8 @@
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/public/api/protos/draft/persqueue_common.proto";
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
+
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/node_limits.proto";

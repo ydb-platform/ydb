@@ -151,7 +151,7 @@ void PipeReaderToWriter(
             }
         } catch (const std::exception& ex) {
             if (options.ReaderErrorWrapper) {
-                THROW_ERROR(options.ReaderErrorWrapper(ex));
+                THROW_ERROR options.ReaderErrorWrapper(ex);
             } else {
                 throw;
             }

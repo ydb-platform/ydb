@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
 
         std::vector<std::vector<int>> vectors;
         
-        for (size_t vectorSize = 0; vectorSize < 100; ++vectorSize) {
+        for (int vectorSize = 0; vectorSize <= 100; ++vectorSize) {
             std::vector v = CreateSimpleVectorOfSize<int>(vectorSize);
             vectors.push_back(v);
         }
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
 
         std::vector<std::vector<int>> vectors;
         
-        for (size_t vectorSize = 100; vectorSize > 0; --vectorSize) {
+        for (int vectorSize = 100; vectorSize >= 0; --vectorSize) {
             std::vector v = CreateSimpleVectorOfSize<int>(vectorSize);
             vectors.push_back(v);
         }
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
         
         size_t totalSize = 0;
 
-        for (size_t vectorSize = 1; vectorSize < 5; ++vectorSize) {
+        for (int vectorSize = 1; vectorSize < 5; ++vectorSize) {
             std::vector v = CreateSimpleVectorOfSize<int>(vectorSize);
             totalSize += vectorSize;
             vectors.push_back(v);
@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
         
         size_t totalSize = 0;
 
-        for (size_t vectorSize = 1; vectorSize < 5; ++vectorSize) {
+        for (int vectorSize = 1; vectorSize < 5; ++vectorSize) {
             std::vector v = CreateSimpleVectorOfSize<int>(vectorSize);
             totalSize += vectorSize;
             vectors.push_back(v);
@@ -160,7 +160,7 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
         vectors.push_back({});
         vectors.push_back({});
 
-        for (size_t vectorSize = 1; vectorSize < 5; ++vectorSize) {
+        for (int vectorSize = 1; vectorSize < 5; ++vectorSize) {
             std::vector v = CreateSimpleVectorOfSize<int>(vectorSize);
             totalSize += vectorSize;
             vectors.push_back(v);

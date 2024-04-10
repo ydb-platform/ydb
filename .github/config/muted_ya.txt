@@ -83,8 +83,6 @@ ydb/tests/fq/s3 *
 ydb/tests/fq/yds *
 ydb/tests/functional/audit *
 ydb/tests/functional/blobstorage test_replication.py.TestReplicationAfterNodesRestart.test_replication*
-ydb/tests/functional/clickbench test.py.test_plans*
-ydb/tests/functional/clickbench test.py.test_run*
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/postgresql test_postgres.py.TestPostgresSuite.test_postgres_suite*

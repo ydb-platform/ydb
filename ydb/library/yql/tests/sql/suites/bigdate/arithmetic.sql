@@ -8,6 +8,7 @@ $interval64_min = unwrap(cast(-9223339708799999999 as interval64));
 $interval64_max = unwrap(cast(9223339708799999999 as interval64));
 $interval64_plus1 = unwrap(cast(1 as interval64));
 $interval64_minus1 = unwrap(cast(-1 as interval64));
+$interval64_zero = unwrap(cast(0 as interval64));
 
 $date_max_value = 49673l;
 $date_max = unwrap(cast($date_max_value - 1 as date));
@@ -17,6 +18,9 @@ $interval_min = unwrap(cast(-$date_max_value*86400*1000000 + 1 as interval));
 $interval_max = unwrap(cast($date_max_value*86400*1000000 - 1 as interval));
 $interval_plus1 = unwrap(cast(1 as interval));
 $interval_minus1 = unwrap(cast(-1 as interval));
+
+$i64_max = 9223372036854775807l;
+$ui64_max = 18446744073709551615ul;
 
 select 1, $date32_min - $date32_max, $date32_max - $date32_min
 , $date32_min - $datetime64_max, $date32_max - $datetime64_min
@@ -84,7 +88,15 @@ select 1, $interval_min - $interval64_min, $interval_min + $interval64_min
 , $interval64_max + $interval64_min, $interval64_max + $interval64_max
 , $interval64_min - $interval64_min, $interval64_max - $interval64_max;
 
-select $interval64_minus1*2, $interval64_plus1*2
-, $interval64_min/2, $interval64_max/2
-, -$interval64_min, -$interval64_max
-, abs($interval64_min), abs($interval64_max);
+select 0, -$interval64_max, -$interval64_min, -$interval64_zero
+, 1, $interval64_max*0, 0*$interval64_max
+, 2, $interval64_max*1, 1*$interval64_max, $interval64_max*(-1), (-1)*$interval64_max
+, 3, $interval64_min*1, 1*$interval64_min, $interval64_min*(-1), (-1)*$interval64_min
+, 4, $interval64_plus1*cast($interval64_max as int64), $interval64_minus1*cast($interval64_min as int64)
+, 5, $interval64_max*$ui64_max, $i64_max*$interval64_max, $interval64_min*$ui64_max, $i64_max*$interval64_min
+, 6, $interval64_zero*$ui64_max, $ui64_max*$interval64_zero, $interval64_zero*$i64_max, $i64_max*$interval64_zero
+, 7, $interval64_max/0, $interval64_min/0, $interval64_max/1, $interval64_min/1, $interval64_max/(-1), $interval64_min/(-1)
+, 8, $interval64_zero/$ui64_max, $interval64_zero/$i64_max, $interval64_plus1/$ui64_max, $interval64_plus1/$i64_max, $interval64_minus1/$ui64_max, $interval64_minus1/$i64_max
+, 9, $interval64_max/cast($interval64_max as int64), $interval64_min/cast($interval64_min as int64)
+, 10, abs($interval64_max), abs($interval64_min), abs($interval64_zero)
+;

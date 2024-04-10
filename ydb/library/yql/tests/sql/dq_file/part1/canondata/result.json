@@ -533,23 +533,23 @@
     "test.test[bigdate-const_date32-default.txt-Results]": [],
     "test.test[bigdate-table_arithmetic-default.txt-Analyze]": [
         {
-            "checksum": "4773cb3bad50f0812326867669915463",
-            "size": 19895,
-            "uri": "https://{canondata_backend}/1937429/6bd6b2a80b367cb9c23b76d6e59c293f53ac06a9/resource.tar.gz#test.test_bigdate-table_arithmetic-default.txt-Analyze_/plan.txt"
+            "checksum": "46e3cb70fefd16c31ac200a44b657751",
+            "size": 10052,
+            "uri": "https://{canondata_backend}/1784826/fff6c7690453c14e8a0ab17cc1dbdc617c2e4169/resource.tar.gz#test.test_bigdate-table_arithmetic-default.txt-Analyze_/plan.txt"
         }
     ],
     "test.test[bigdate-table_arithmetic-default.txt-Debug]": [
         {
-            "checksum": "8169939c3aae177a311293f7adbdcdad",
-            "size": 11833,
-            "uri": "https://{canondata_backend}/1937429/6bd6b2a80b367cb9c23b76d6e59c293f53ac06a9/resource.tar.gz#test.test_bigdate-table_arithmetic-default.txt-Debug_/opt.yql_patched"
+            "checksum": "9e80cf329f3affecec1d4fdf5334d3a4",
+            "size": 7233,
+            "uri": "https://{canondata_backend}/1784826/fff6c7690453c14e8a0ab17cc1dbdc617c2e4169/resource.tar.gz#test.test_bigdate-table_arithmetic-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[bigdate-table_arithmetic-default.txt-Plan]": [
         {
-            "checksum": "4773cb3bad50f0812326867669915463",
-            "size": 19895,
-            "uri": "https://{canondata_backend}/1937429/6bd6b2a80b367cb9c23b76d6e59c293f53ac06a9/resource.tar.gz#test.test_bigdate-table_arithmetic-default.txt-Plan_/plan.txt"
+            "checksum": "46e3cb70fefd16c31ac200a44b657751",
+            "size": 10052,
+            "uri": "https://{canondata_backend}/1784826/fff6c7690453c14e8a0ab17cc1dbdc617c2e4169/resource.tar.gz#test.test_bigdate-table_arithmetic-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[bigdate-table_arithmetic-default.txt-Results]": [],

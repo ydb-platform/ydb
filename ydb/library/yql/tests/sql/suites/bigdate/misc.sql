@@ -79,3 +79,11 @@ select -4, Yql::RoundDown($datetime64_min, date32), Yql::RoundUp($datetime64_min
 , Yql::RoundDown($timestamp64_max, date32), Yql::RoundUp($timestamp64_max, date32)
 , Yql::RoundDown($timestamp64_max, datetime64), Yql::RoundUp($timestamp64_max, datetime64)
 ;
+
+select 0, Yql::RoundDown($date32_min, date32), Yql::RoundUp($date32_max, date32)
+, 1, Yql::RoundDown($date32_min, datetime64), Yql::RoundUp($date32_max, datetime64)
+, 2, Yql::RoundDown($date32_min, timestamp64), Yql::RoundUp($date32_max, timestamp64)
+, 3, Yql::RoundDown($datetime64_min, datetime64), Yql::RoundUp($datetime64_max, datetime64)
+, 4, Yql::RoundDown($datetime64_min, timestamp64), Yql::RoundUp($datetime64_max, timestamp64)
+, 5, Yql::RoundDown($timestamp64_min, timestamp64), Yql::RoundUp($timestamp64_max, timestamp64)
+;

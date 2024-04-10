@@ -9,16 +9,74 @@
 
 namespace NKikimr::NGRpcService::NYdbOverFq {
 
+template<typename TDerived, typename TReq>
+class TRpcStreamingBase : public TActorBootstrapped<TDerived> {
+public:
+    TRpcStreamingBase(IRequestNoOpCtx* request)
+        : Request_{request}
+    {}
 
-template <typename TDerived, typename TReq, typename TResp>
+    using TRequest = typename TReq::TRequest;
+    using TResponse = typename TReq::TResponse;
+
+    void Reply(Ydb::StatusIds::StatusCode status, TString issueMsg, NKikimrIssues::TIssuesIds::EIssueCode issueCode, const TActorContext& ctx) {
+        NYql::TIssues issues;
+        issues.AddIssue(MakeIssue(issueCode, std::move(issueMsg)));
+        Reply(status, issues, ctx);
+    }
+
+    void Reply(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TActorContext& ctx) {
+        if (status == Ydb::StatusIds::SUCCESS) {
+            FinishStream(status, ctx);
+            return;
+        }
+
+        Request_->RaiseIssues(issues);
+        TResponse response;
+        response.set_status(status);
+        NYql::IssuesToMessage(issues, response.mutable_issues());
+
+        TString serialized;
+        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&serialized);
+        Request_->SendSerializedResult(std::move(serialized), status);
+        FinishStream(status, ctx);
+    }
+
+    const TRequest* GetProtoRequest() const noexcept {
+        return TReq::GetProtoRequest(Request_);
+    }
+
+    TRequest* GetProtoRequestMut() noexcept {
+        return TReq::GetProtoRequestMut(Request_);
+    }
+
+    IRequestNoOpCtx& Request() noexcept { return *Request_; }
+
+private:
+    void FinishStream(Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
+        Request_->FinishStream(status);
+        this->Die(ctx);
+    }
+
+protected:
+    std::shared_ptr<IRequestNoOpCtx> Request_ = nullptr;
+};
+
+
+template <typename TDerived, typename TReq, typename TResp, bool IsOp = true>
 class TRpcBase
-    : public TRpcOperationRequestActor<
-        TDerived, TGrpcRequestOperationCall<TReq, TResp>>
+    : public std::conditional_t<IsOp,
+            TRpcOperationRequestActor<TDerived, TGrpcRequestOperationCall<TReq, TResp>>,
+            TRpcStreamingBase<TDerived, TGrpcRequestNoOperationCall<TReq, TResp>>
+        >
     , public NLocalGrpc::TCaller {
 public:
-    using TBase = TRpcOperationRequestActor<TDerived, TGrpcRequestOperationCall<TReq, TResp>>;
+    using TBase = std::conditional_t<IsOp,
+            TRpcOperationRequestActor<TDerived, TGrpcRequestOperationCall<TReq, TResp>>,
+            TRpcStreamingBase<TDerived, TGrpcRequestNoOperationCall<TReq, TResp>>>;
+    using TRequestCtx = std::conditional_t<IsOp, IRequestOpCtx, IRequestNoOpCtx>;
 
-    TRpcBase(IRequestOpCtx* request, TActorId grpcProxyId)
+    TRpcBase(TRequestCtx* request, TActorId grpcProxyId)
         : TBase{request}
         , TCaller{grpcProxyId}
     {}
@@ -31,6 +89,16 @@ public:
     using TBase::Request_;
 
 protected:
+    TStringBuilder LogCtx(TStringBuf queryId = "") {
+        auto builder = TStringBuilder{} << "YdbOverFq::" << TDerived::RpcName << " actorId: " << SelfId().ToString();
+        if (!queryId.empty()) {
+            builder << " queryId: " << queryId;
+        } else if (!QueryId_.empty()) {
+            builder << "queryId: " << QueryId_;
+        }
+        return builder;
+    }
+
     // create query
 
     STRICT_STFUNC(CreateQueryState,
@@ -48,8 +116,7 @@ protected:
         auto& acl = *queryContent.mutable_acl();
         acl.set_visibility(FederatedQuery::Acl_Visibility::Acl_Visibility_SCOPE);
 
-        LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                        "YdbOverFq::" << TDerived::RpcName << " actorId: " << SelfId().ToString() << ", creating query");
+        LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, LogCtx() << ", creating query");
 
         Become(&TRpcBase::CreateQueryState);
         MakeLocalCall(std::move(req), ctx);
@@ -99,7 +166,7 @@ protected:
 
         if (!NFq::IsTerminalStatus(result.status())) {
             LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                "YdbOverFq::" << TDerived::RpcName << " actorId: " << SelfId().ToString() << ", still waiting for query: " << QueryId_ <<
+                LogCtx() << ", still waiting for query: " << QueryId_ <<
                 ", current status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()));
             auto delay = WaitRetryState_->GetNextRetryDelay(result.status());
             if (!delay) {
@@ -140,10 +207,9 @@ protected:
         NYql::TIssues issues;
         NYql::IssuesFromMessage(operation.issues(), issues);
 
-        TString errorMsg = TStringBuilder{} << "YdbOverFq::" << TDerived::RpcName << " actorId: " << SelfId().ToString() <<
-            " failed to " << opName << " with status: " << Ydb::StatusIds::StatusCode_Name(operation.status());
+        TString errorMsg = TStringBuilder{} << "failed to " << opName << " with status: " << Ydb::StatusIds::StatusCode_Name(operation.status());
         LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-            errorMsg << ", issues: " << issues.ToOneLineString());
+            LogCtx() << ' ' << errorMsg << ", issues: " << issues.ToOneLineString());
         issues.AddIssue(errorMsg);
 
         TBase::Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR, issues, ctx);

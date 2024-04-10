@@ -33,6 +33,17 @@ def assert_dicts(lhs: typing.Dict[str, typing.Any], rhs: typing.Dict[str, typing
     assert len(lhs) == len(rhs)
 
 
+def read_scan_rows(it) -> typing.List[ydb_pb.Value]:
+    scanned_rows = []
+    while True:
+        try:
+            part = next(it)
+            scanned_rows.extend(part.result_set.rows)
+        except StopIteration:
+            break
+    return scanned_rows
+
+
 class TestYdbOverFq(TestYdsBase):
     def make_binding(self, client: FederatedQueryClient, name: str, path: str, connection_id: str, columns: typing.List[typing.Tuple[str, str]]):
         columns = [ydb_pb.Column(name=name, type=ydb_pb.Type(type_id=ydb_pb.Type.PrimitiveTypeId.Value(type))) for name, type in columns]
@@ -142,6 +153,38 @@ class TestYdbOverFq(TestYdsBase):
             result_set = tx.execute(query)[0]
             for res_row, expected_row in zip(result_set.rows, fruits):
                 assert res_row == expected_row
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_stream_execute_scan_query(self, kikimr, s3, client, unique_prefix, yq_version):
+        fruits = [
+            {"Fruit": b"Banana", "Price": 3, "Weight": 100},
+            {"Fruit": b"Apple", "Price": 2, "Weight": 22},
+            {"Fruit": b"Pear", "Price": 15, "Weight": 33},
+        ]
+
+        self.put_s3_object(self.make_s3_client(s3), fruits, "fruits.csv")
+
+        kikimr.control_plane.wait_bootstrap()
+        connection_id = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket").result.connection_id
+        bind_name = unique_prefix + "fruits_bind"
+        self.make_binding(client, bind_name, "fruits.csv", connection_id, [("Fruit", "STRING"), ("Price", "INT32"), ("Weight", "INT32")])
+
+        driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
+
+        query = "select * from {}{}".format("bindings." if yq_version == "v1" else "", bind_name)
+        it = driver.table_client.scan_query(query)
+        scanned_rows = read_scan_rows(it)
+
+        for res_row, expected_row in zip(scanned_rows, fruits):
+            assert res_row == expected_row
+
+        it = driver.table_client.scan_query("select 42; select 4, 2;")
+        assert_that(
+            calling(next).with_args(it),
+            raises(ydb.issues.BadRequest, "Scan query should have a single result set")
+        )
+        scanned_rows = read_scan_rows(it)
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

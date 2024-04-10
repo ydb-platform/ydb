@@ -560,7 +560,7 @@ message StreamReadMessage {
     }
 
     // Signal from server that client has finished reading the partition and all messages has been read.
-    // Once a partition has been finished no further records will ever arrive on that partition.
+    // Once a partition has been finished no further messages will ever arrive on that partition.
     // Client should not send a response to the command.
     message EndPartitionSession {
         // Partition session identifier.

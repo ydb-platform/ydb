@@ -73,7 +73,8 @@ protected:
     TVector<TString> ReadFromTopic(const TString& topicPath,
                                    const TString& consumerName,
                                    const TDuration& duration);
-    void WaitForAcks(const TString& topicPath);
+    void WaitForAcks(const TString& topicPath,
+                     const TString& messageGroupId);
 
 //    TMaybe<NTopic::TContinuationToken> WaitForContinuationToken(TTopicWriteSessionPtr session);
 //    void Write(TTopicWriteSessionPtr session,
@@ -93,7 +94,7 @@ private:
     std::unique_ptr<TTopicSdkTestSetup> Setup;
     std::unique_ptr<TDriver> Driver;
 
-    THashMap<TString, TTopicWriteSessionContext> TopicWriteSessions;
+    THashMap<std::pair<TString, TString>, TTopicWriteSessionContext> TopicWriteSessions;
     THashMap<TString, TTopicReadSessionPtr> TopicReadSessions;
 };
 
@@ -433,6 +434,7 @@ auto TFixture::CreateTopicWriteSession(const TString& topicPath,
     NTopic::TTopicClient client(GetDriver());
     NTopic::TWriteSessionSettings options;
     options.Path(topicPath);
+    options.ProducerId(messageGroupId);
     options.MessageGroupId(messageGroupId);
     return client.CreateWriteSession(options);
 }
@@ -440,15 +442,16 @@ auto TFixture::CreateTopicWriteSession(const TString& topicPath,
 auto TFixture::GetTopicWriteSession(const TString& topicPath,
                                     const TString& messageGroupId) -> TTopicWriteSessionContext&
 {
-    auto i = TopicWriteSessions.find(topicPath);
+    std::pair<TString, TString> key(topicPath, messageGroupId);
+    auto i = TopicWriteSessions.find(key);
 
     if (i == TopicWriteSessions.end()) {
         TTopicWriteSessionContext context;
         context.Session = CreateTopicWriteSession(topicPath, messageGroupId);
 
-        TopicWriteSessions.emplace(topicPath, std::move(context));
+        TopicWriteSessions.emplace(key, std::move(context));
 
-        i = TopicWriteSessions.find(topicPath);
+        i = TopicWriteSessions.find(key);
     }
 
     return i->second;
@@ -535,9 +538,11 @@ void TFixture::TTopicWriteSessionContext::Write(const TString& message, NTable::
 //            } else if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
 //                DBGTRACE_LOG("Acks");
 //                for (auto& ack : e->Acks) {
+//                    if (ack.State == NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN) {
+//                        ++AckCount;
+//                    }
 //                    DBGTRACE_LOG("SeqNo: " << ack.SeqNo << ", State: " << (int)ack.State);
 //                }
-//                AckCount += e->Acks.size();
 //                return;
 //            } else if (auto* e = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
 //                DBGTRACE_LOG("SessionClosed");
@@ -558,6 +563,7 @@ void TFixture::WriteToTopic(const TString& topicPath,
     context.WaitForContinuationToken();
     UNIT_ASSERT(context.ContinuationToken.Defined());
     context.Write(message, tx);
+    //context.WaitForAck();
 }
 
 TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
@@ -582,6 +588,7 @@ TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
                 for (auto& m : e->GetMessages()) {
                     messages.push_back(m.GetData());
                 }
+                e->Commit();
             }
         }
 
@@ -591,11 +598,12 @@ TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
     return messages;
 }
 
-void TFixture::WaitForAcks(const TString& topicPath)
+void TFixture::WaitForAcks(const TString& topicPath, const TString& messageGroupId)
 {
     DBGTRACE("TFixture::WaitForAcks");
 
-    auto i = TopicWriteSessions.find(topicPath);
+    std::pair<TString, TString> key(topicPath, messageGroupId);
+    auto i = TopicWriteSessions.find(key);
     UNIT_ASSERT(i != TopicWriteSessions.end());
 
     auto& context = i->second;
@@ -626,7 +634,7 @@ void TFixture::WaitForAcks(const TString& topicPath)
     UNIT_ASSERT(context.AckCount == context.WriteCount);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_1, TFixture)
 {
     CreateTopic("topic_A");
     CreateTopic("topic_B");
@@ -645,8 +653,8 @@ Y_UNIT_TEST_F(WriteToTopic_Demo, TFixture)
     WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "город", &tx);
     WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "утрат", &tx);
 
-    WaitForAcks("topic_A");
-    WaitForAcks("topic_B");
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID);
 
     {
         auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
@@ -656,6 +664,60 @@ Y_UNIT_TEST_F(WriteToTopic_Demo, TFixture)
     {
         auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
+    }
+
+    CommitTx(tx);
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "Лидер");
+        UNIT_ASSERT_VALUES_EQUAL(messages[3], "бредил");
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "Тарту");
+        UNIT_ASSERT_VALUES_EQUAL(messages[4], "утрат");
+    }
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_2, TFixture)
+{
+    CreateTopic("topic_A");
+    CreateTopic("topic_B");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", "message_group_tx", "Лидер", &tx);
+    WriteToTopic("topic_A", "message_group_tx", "бодро", &tx);
+    WriteToTopic("topic_A", "message_group_tx", "гордо", &tx);
+    WriteToTopic("topic_A", "message_group_tx", "бредил", &tx);
+
+    WriteToTopic("topic_A", "message_group_not_tx", "вне");
+    WriteToTopic("topic_B", "message_group_not_tx", "транзакции");
+
+    WriteToTopic("topic_B", "message_group_tx", "Тарту", &tx);
+    WriteToTopic("topic_B", "message_group_tx", "дорог", &tx);
+    WriteToTopic("topic_B", "message_group_tx", "как", &tx);
+    WriteToTopic("topic_B", "message_group_tx", "город", &tx);
+    WriteToTopic("topic_B", "message_group_tx", "утрат", &tx);
+
+    WaitForAcks("topic_A", "message_group_tx");
+    WaitForAcks("topic_B", "message_group_tx");
+    WaitForAcks("topic_A", "message_group_not_tx");
+    WaitForAcks("topic_B", "message_group_not_tx");
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
     }
 
     CommitTx(tx);

@@ -1989,7 +1989,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequ
                         group->ActivatePartition(partitionId);
                     }
                     group->ReleasePartition(partitionId, ctx);
-                    group->ScheduleBalance(ctx);
                 }
 
                 return true;

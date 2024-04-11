@@ -2342,7 +2342,14 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             const auto queryCreate = R"(
                 --!syntax_pg
-                CREATE SEQUENCE seq;
+                CREATE SEQUENCE IF NOT EXISTS seq
+                    AS bigint
+                    START WITH 10
+                    INCREMENT BY 2
+                    MINVALUE 1
+                    NO MAXVALUE
+                    CACHE 3
+                    CYCLE;
             )";
 
             auto resultCreate = session.ExecuteQuery(queryCreate, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -2350,13 +2357,18 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
 
         {
-            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-            auto describeResult = session.DescribeTable(
-                "/Root/seq",
-                TDescribeTableSettings().WithTableStatistics(true).WithKeyShardBoundary(true)
-            ).GetValueSync();
-            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-            UNIT_ASSERT(describeResult.GetEntry().Type == NYdb::NScheme::ESchemeEntryType::Sequence);
+            auto runtime = kikimr.GetTestServer().GetRuntime();
+            TActorId sender = runtime->AllocateEdgeActor();
+            auto describeResult = DescribeTable(&kikimr.GetTestServer(), sender, "/Root/seq");
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetStatus(), NKikimrScheme::StatusSuccess);
+            auto& sequenceDescription = describeResult.GetPathDescription().GetSequenceDescription();
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetName(), "seq");
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMinValue(), 1);
+            UNIT_ASSERT(!sequenceDescription.HasMaxValue());
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetStartValue(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCache(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetIncrement(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCycle(), true);
         }
     }
 

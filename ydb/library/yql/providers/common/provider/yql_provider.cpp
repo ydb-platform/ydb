@@ -397,7 +397,7 @@ TWriteSequenceSettings ParseSequenceSettings(NNodes::TExprList node, TExprContex
     TVector<TCoNameValueTuple> other;
 
     const static std::unordered_set<TString> sequenceSettingNames =
-        {"start", "increment", "cache", "minvalue", "maxvalue", "cycle", "owned_by"};
+        {"start", "increment", "cache", "minvalue", "maxvalue", "cycle"};
 
     for (auto child : node) {
         if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
@@ -1446,7 +1446,7 @@ bool ValidateFormatForInput(
             << ". Use one of: " << JoinSeq(", ", FormatsForInput)));
         return false;
     }
-    
+
     if (schemaStructRowType && format == TStringBuf("raw")) {
         ui64 realSchemaColumnsCount = 0;
 
@@ -1469,7 +1469,7 @@ bool ValidateFormatForInput(
         }
 
         if (realSchemaColumnsCount > 1) {
-            ctx.AddError(TIssue(TStringBuilder() << "Only one column in schema supported in raw format (you have " 
+            ctx.AddError(TIssue(TStringBuilder() << "Only one column in schema supported in raw format (you have "
                 << realSchemaColumnsCount << " fields)"));
             return false;
         }

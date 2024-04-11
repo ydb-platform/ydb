@@ -271,12 +271,12 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
         TString program = R"(
-            (
-                (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-                (let world (Write! world (DataSink '"kikimr" '"") (Key '('pgObject (String 'seq) (String 'pgSequence))) (Void) '('('mode 'create_if_not_exists) '('temporary) '('"as" '"int4") '('"start" '10) '('"increment" '2) '('"cache" '3))))
-                (let world (CommitAll! world))
-                (return world)
-            )
+            ((let world (Configure! world (DataSource 'config) 'OrderedColumns))
+            (let world (Write! world (DataSink '"kikimr" '"")
+            (Key '('pgObject (String '"seq") (String 'pgSequence))) (Void) '(
+                '('mode 'create_if_not_exists) '('temporary) '('"as" '"int4")
+                '('"start" '10) '('"increment" '2) '('"cache" '3))))
+            (let world (CommitAll! world)) (return world))
         )";
         const auto expectedAst = NYql::ParseAst(program);
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());

@@ -288,6 +288,24 @@ namespace {
     TCreateSequenceSettings ParseCreateSequenceSettings(TKiCreateSequence createSequence) {
         TCreateSequenceSettings createSequenceSettings;
         createSequenceSettings.Name = TString(createSequence.Sequence());
+        createSequenceSettings.Temporary = TString(createSequence.Temporary()) == "true" ? true : false;
+        for (const auto& setting: createSequence.SequenceSettings()) {
+            auto name = setting.Name().Value();
+            auto value = TString(setting.Value().template Cast<TCoAtom>().Value());
+            if (name == "start") {
+                createSequenceSettings.SequenceSettings.StartValue = FromString<i64>(value);
+            } else if (name == "maxvalue") {
+                createSequenceSettings.SequenceSettings.MaxValue = FromString<i64>(value);
+            } else if (name == "minvalue") {
+                createSequenceSettings.SequenceSettings.MinValue = FromString<i64>(value);
+            } else if (name == "cache") {
+                createSequenceSettings.SequenceSettings.Cache = FromString<ui64>(value);
+            } else if (name == "cycle") {
+                createSequenceSettings.SequenceSettings.Cycle = value == "1" ? true : false;
+            } else if (name == "increment") {
+                createSequenceSettings.SequenceSettings.Increment = FromString<i64>(value);
+            }
+        }
 
         return createSequenceSettings;
     }

@@ -1394,6 +1394,13 @@ public:
             const TCreateSequenceSettings& settings, bool existingOk) override {
         CHECK_PREPARED_DDL(CreateSequence);
 
+        if (!sessionCtx->Config().EnableSequences) {
+            IKqpGateway::TGenericResult errResult;
+            errResult.AddIssue(NYql::TIssue("Sequences are not supported yet."));
+            errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::UNSUPPORTED));
+            return MakeFuture(std::move(errResult));
+        }
+
         try {
 
             if (cluster != SessionCtx->GetCluster()) {
@@ -1417,6 +1424,25 @@ public:
             NKikimrSchemeOp::TSequenceDescription* seqDesc = schemeTx.MutableSequence();
 
             seqDesc->SetName(pathPair.second);
+
+            if (settings.SequenceSettings.MinValue) {
+                seqDesc->SetMinValue(*settings.SequenceSettings.MinValue);
+            }
+            if (settings.SequenceSettings.MaxValue) {
+                seqDesc->SetMaxValue(*settings.SequenceSettings.MaxValue);
+            }
+            if (settings.SequenceSettings.Increment) {
+                seqDesc->SetIncrement(*settings.SequenceSettings.Increment);
+            }
+            if (settings.SequenceSettings.StartValue) {
+                seqDesc->SetStartValue(*settings.SequenceSettings.StartValue);
+            }
+            if (settings.SequenceSettings.Cache) {
+                seqDesc->SetCache(*settings.SequenceSettings.Cache);
+            }
+            if (settings.SequenceSettings.Cycle) {
+                seqDesc->SetCycle(*settings.SequenceSettings.Cycle);
+            }
 
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();

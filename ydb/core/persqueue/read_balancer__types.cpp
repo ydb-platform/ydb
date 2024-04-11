@@ -40,9 +40,14 @@ bool TPersQueueReadBalancer::TReadingPartitionStatus::SetFinishedState(bool scal
 }
 
 bool TPersQueueReadBalancer::TReadingPartitionStatus::Reset() {
+    bool result = IsFinished();
+
     ScaleAwareSDK = false;
+    ReadingFinished = false;
+    Commited = false;
     ++Cookie;
-    return std::exchange(ReadingFinished, false);
+
+    return result;
 };
 
 

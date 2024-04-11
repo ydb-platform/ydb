@@ -7,7 +7,6 @@
 #include <library/cpp/logger/stream.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NYdb::NTopic::NTests {
 
@@ -486,24 +485,18 @@ auto TFixture::GetTopicReadSession(const TString& topicPath,
 
 void TFixture::TTopicWriteSessionContext::WaitForContinuationToken()
 {
-    DBGTRACE("TFixture::TTopicWriteSessionContext::WaitForContinuationToken");
-
     while (!ContinuationToken.Defined()) {
         Session->WaitEvent().Wait();
         for (auto& event : Session->GetEvents()) {
             if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
-                DBGTRACE_LOG("ReadyToAccept");
                 ContinuationToken = std::move(e->ContinuationToken);
             } else if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
-                DBGTRACE_LOG("Acks");
                 for (auto& ack : e->Acks) {
                     if (ack.State == NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN) {
                         ++AckCount;
                     }
-                    DBGTRACE_LOG("SeqNo: " << ack.SeqNo << ", State: " << (int)ack.State);
                 }
             } else if (auto* e = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
-                DBGTRACE_LOG("SessionClosed");
                 UNIT_FAIL("");
             }
         }
@@ -512,7 +505,6 @@ void TFixture::TTopicWriteSessionContext::WaitForContinuationToken()
 
 void TFixture::TTopicWriteSessionContext::Write(const TString& message, NTable::TTransaction* tx)
 {
-    DBGTRACE("TFixture::TTopicWriteSessionContext::Write");
     NTopic::TWriteMessage params(message);
 
     if (tx) {
@@ -528,24 +520,19 @@ void TFixture::TTopicWriteSessionContext::Write(const TString& message, NTable::
 
 //void TFixture::TTopicWriteSessionContext::WaitForAck()
 //{
-//    DBGTRACE("TFixture::TTopicWriteSessionContext::WaitForAck");
 //    while (true) {
 //        Session->WaitEvent().Wait();
 //        for (auto& event : Session->GetEvents()) {
 //            if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
-//                DBGTRACE_LOG("ReadyToAccept");
 //                ContinuationToken = std::move(e->ContinuationToken);
 //            } else if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
-//                DBGTRACE_LOG("Acks");
 //                for (auto& ack : e->Acks) {
 //                    if (ack.State == NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN) {
 //                        ++AckCount;
 //                    }
-//                    DBGTRACE_LOG("SeqNo: " << ack.SeqNo << ", State: " << (int)ack.State);
 //                }
 //                return;
 //            } else if (auto* e = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
-//                DBGTRACE_LOG("SessionClosed");
 //                UNIT_FAIL("");
 //            }
 //        }
@@ -557,20 +544,17 @@ void TFixture::WriteToTopic(const TString& topicPath,
                             const TString& message,
                             NTable::TTransaction* tx)
 {
-    DBGTRACE("TFixture::WriteToTopic(with tx)");
     TTopicWriteSessionContext& context = GetTopicWriteSession(topicPath, messageGroupId);
 
     context.WaitForContinuationToken();
     UNIT_ASSERT(context.ContinuationToken.Defined());
     context.Write(message, tx);
-    //context.WaitForAck();
 }
 
 TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
                                          const TString& consumerName,
                                          const TDuration& duration)
 {
-    DBGTRACE("TFixture::ReadFromTopic");
     TVector<TString> messages;
 
     TInstant end = TInstant::Now() + duration;
@@ -600,8 +584,6 @@ TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
 
 void TFixture::WaitForAcks(const TString& topicPath, const TString& messageGroupId)
 {
-    DBGTRACE("TFixture::WaitForAcks");
-
     std::pair<TString, TString> key(topicPath, messageGroupId);
     auto i = TopicWriteSessions.find(key);
     UNIT_ASSERT(i != TopicWriteSessions.end());
@@ -614,18 +596,14 @@ void TFixture::WaitForAcks(const TString& topicPath, const TString& messageGroup
         context.Session->WaitEvent().Wait();
         for (auto& event : context.Session->GetEvents()) {
             if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
-                DBGTRACE_LOG("ReadyToAccept");
                 context.ContinuationToken = std::move(e->ContinuationToken);
             } else if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
-                DBGTRACE_LOG("Acks");
                 for (auto& ack : e->Acks) {
                     if (ack.State == NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN) {
                         ++context.AckCount;
                     }
-                    DBGTRACE_LOG("SeqNo: " << ack.SeqNo << ", State: " << (int)ack.State);
                 }
             } else if (auto* e = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
-                DBGTRACE_LOG("SessionClosed");
                 UNIT_FAIL("");
             }
         }

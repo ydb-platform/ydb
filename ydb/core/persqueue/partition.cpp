@@ -19,7 +19,6 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace {
 
@@ -1836,7 +1835,6 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
                                 const TActorContext& ctx)
 {
-    DBGTRACE("TPartition::EndTransaction(TEvPQ::TEvTxCommit)");
     if (PlanStep.Defined() && TxId.Defined()) {
         if (GetStepAndTxId(event) < GetStepAndTxId(*PlanStep, *TxId)) {
             ctx.Send(Tablet, MakeCommitDone(event.Step, event.TxId).Release());

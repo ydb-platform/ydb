@@ -59,6 +59,7 @@ struct TFinalStatus {
     NYql::TIssues TransientIssues;
     StatsValuesList FinalStatistics;
     TString CloudId;
+    TString JobId;
 };
 
 TPingTaskParams ConstructHardPingTask(
@@ -420,6 +421,7 @@ TPingTaskParams ConstructHardPingTask(
         finalStatus->Status = query.meta().status();
         finalStatus->StatusCode = internal.status_code();
         finalStatus->CloudId = internal.cloud_id();
+        finalStatus->JobId = jobId;
         NYql::IssuesFromMessage(query.issue(), finalStatus->Issues);
         NYql::IssuesFromMessage(query.transient_issue(), finalStatus->TransientIssues);
 
@@ -660,7 +662,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
 
             if (success) {
                 actorSystem->Send(ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvFinalStatusReport(
-                    request.query_id().value(), request.job_id().value(), finalStatus->CloudId, scope, std::move(finalStatus->FinalStatistics),
+                    request.query_id().value(), finalStatus->JobId, finalStatus->CloudId, scope, std::move(finalStatus->FinalStatistics),
                     finalStatus->Status, finalStatus->StatusCode, finalStatus->Issues, finalStatus->TransientIssues));
             }
         });

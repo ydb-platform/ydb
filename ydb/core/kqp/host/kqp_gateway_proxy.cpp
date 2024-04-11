@@ -1394,7 +1394,7 @@ public:
             const TCreateSequenceSettings& settings, bool existingOk) override {
         CHECK_PREPARED_DDL(CreateSequence);
 
-        if (!sessionCtx->Config().EnableSequences) {
+        if (!SessionCtx->Config().EnableSequences) {
             IKqpGateway::TGenericResult errResult;
             errResult.AddIssue(NYql::TIssue("Sequences are not supported yet."));
             errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::UNSUPPORTED));

@@ -33,8 +33,9 @@ namespace NKikimr::NStorage {
         if (const auto it = ScatterTasks.find(cookie); it != ScatterTasks.end()) {
             TScatterTask& task = it->second;
             Y_ABORT_UNLESS(task.AsyncOperationsPending);
-            task.AsyncOperationsPending = false;
-            CheckCompleteScatterTask(it);
+            if (!--task.AsyncOperationsPending) {
+                CheckCompleteScatterTask(it);
+            }
         }
     }
 

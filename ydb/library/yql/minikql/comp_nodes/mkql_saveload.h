@@ -214,7 +214,7 @@ public:
     template<typename Type, typename ReturnType = Type>
     ReturnType Read() {
         if constexpr (std::is_same_v<std::remove_cv_t<Type>, TString>) {
-            return ReadString(Buf);
+            return ReturnType(ReadString(Buf));
         } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui64>) {
             return ReadUi64(Buf);
         } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, i64>) {
@@ -227,6 +227,7 @@ public:
             return ReadUi32(Buf);
         } else if constexpr (std::is_empty_v<Type>){
             // Empty struct is not saved/loaded.
+            return ReturnType{};
         } else {
             static_assert(always_false_v<Type>, "Not supported type / not implemented");
         }
@@ -244,25 +245,6 @@ public:
     void Read(Type& value) {
         value = Read<Type, Type>();
     }
-    void Read(Type& value) {
-        if constexpr (std::is_same_v<std::remove_cv_t<Type>, TString>) {
-            value = ReadString(Buf);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui64>) {
-            value = ReadUi64(Buf);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, i64>) {
-            value = ReadUi64(Buf);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, bool>) {
-            value = ReadBool(Buf);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui8>) {
-            value = ReadByte(Buf);
-        } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui32>) {
-            value = ReadUi32(Buf);
-        } else if constexpr (std::is_empty_v<Type>){
-            // Empty struct is not saved/loaded.
-        } else {
-            static_assert(always_false_v<Type>, "Not supported type / not implemented");
-        }
-    }
 
     template<class Type1, class Type2>
     void Read(std::pair<Type1, Type2>& value) {
@@ -274,7 +256,6 @@ public:
     void Read(std::vector<Type, Allocator>& value) {
         using TVector = std::vector<Type, Allocator>;
         auto size = Read<typename TVector::size_type>();
-        //auto size = Read<TVector::size_type>();
         value.clear();
         value.resize(size);
         for (size_t i = 0; i < size; ++i) {

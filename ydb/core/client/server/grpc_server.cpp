@@ -152,14 +152,6 @@ public:
         }
     }
 
-    void Reply(const NKikimrClient::TDsTestLoadResponse& resp) override {
-        if (const TOut* x = dynamic_cast<const TOut*>(&resp)) {
-            Finish(*x, 0);
-        } else {
-            ReplyError("request failed");
-        }
-    }
-
     void Reply(const NKikimrClient::TBsTestLoadResponse& resp) override {
         if (const TOut* x = dynamic_cast<const TOut*>(&resp)) {
             Finish(*x, 0);

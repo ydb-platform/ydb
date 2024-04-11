@@ -612,8 +612,8 @@ namespace NKikimr::NYaml {
 
     void ApplySingleNodeDefaults(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
         const TString erasureName = "none";
-        const TString diskType;
-        const TString diskPath;
+        TString diskType;
+        TString diskPath;
 
         if (ephemeralConfig.HostConfigsSize() && ephemeralConfig.GetHostConfigs(0).DriveSize())
         {

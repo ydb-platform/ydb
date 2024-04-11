@@ -6303,6 +6303,45 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         MakeSureTabletIsUp(runtime, dummyTabletId, 0);
         AssertTabletStartedOnNode(runtime, dummyTabletId, 0); // started in allowed domain
     }
+
+    Y_UNIT_TEST(TestSkipBadNode) {
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        TVector<TTabletId> tablets;
+        TActorId senderB = runtime.AllocateEdgeActor(0);
+        ui32 badNode = runtime.GetNodeId(0);
+
+        TTestActorRuntime::TEventObserver prevObserverFunc;
+        prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvLocal::EvBootTablet) {
+                const auto& record = event->Get<TEvLocal::TEvBootTablet>()->Record;
+                if (event->Recipient.NodeId() == badNode) {
+                    auto* response = new TEvLocal::TEvTabletStatus(
+                        TEvLocal::TEvTabletStatus::EStatus::StatusBootFailed,
+                        TEvTablet::TEvTabletDead::EReason::ReasonBootBSError,
+                        {record.GetInfo().GetTabletID(), record.GetFollowerId()},
+                        record.GetSuggestedGeneration()
+                    );
+                    runtime.Send(new IEventHandle(event->Sender, event->Recipient, response));
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return prevObserverFunc(event);
+        });
+
+        for (int i = 0; i < 3; ++i) {
+            runtime.SendToPipe(hiveTablet, senderB, new TEvHive::TEvCreateTablet(testerTablet, i, tabletType, BINDED_CHANNELS), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            auto createTabletReply = runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(handle);
+            ui64 tabletId = createTabletReply->Record.GetTabletID();
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(TStorageBalanceTest) {

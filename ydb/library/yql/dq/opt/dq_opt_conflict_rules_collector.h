@@ -1,11 +1,8 @@
 #pragma once
 
-#include <vector>
 #include <ydb/library/yql/core/cbo/cbo_optimizer_new.h> 
 
-#include "dphyp_join_tree_node.h"
-
-namespace NYql::NDq::NDphyp {
+namespace NYql::NDq {
 
 bool OperatorIsCommut(EJoinKind);
 
@@ -26,6 +23,12 @@ struct TConflictRule {
     TNodeSet RequiredNodes;
 };
 
+/* 
+ * This class finds and collect conflicts between root of subtree and it's nodes.
+ * It traverses both sides of root and checks algebraic join properties (ASSOC, LASSCOM, RASSCOM).
+ * The name of algorithm is "CD-C", and details are described in white papper -
+ * - "On the Correct and Complete Enumeration of the Core Search Space" in section "5.4 Approach CD-C".
+ */
 template<typename TNodeSet>
 class TConflictRulesCollector {
 public:
@@ -41,12 +44,12 @@ public:
     TVector<TConflictRule<TNodeSet>> CollectConflicts() {
         VisitJoinTree(Root_->LeftArg, GetLeftConflictsVisitor());
         VisitJoinTree(Root_->RightArg, GetRightConflictsVisitor());
-        return ConflictRules_;
+        return std::move(ConflictRules_);
     }
 
 private:
     auto GetLeftConflictsVisitor() {
-        auto visitor = [this](std::shared_ptr<TJoinOptimizerNode> child) {
+        auto visitor = [this](const std::shared_ptr<TJoinOptimizerNode>& child) {
             if (!OperatorsAreAssoc(child->JoinType, Root_->JoinType)) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->RightArg],
@@ -66,7 +69,7 @@ private:
     }
 
     auto GetRightConflictsVisitor() {
-        auto visitor = [this](std::shared_ptr<TJoinOptimizerNode> child) {
+        auto visitor = [this](const std::shared_ptr<TJoinOptimizerNode>& child) {
             if (!OperatorsAreAssoc(Root_->JoinType, child->JoinType)) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->LeftArg],
@@ -87,7 +90,7 @@ private:
 
 private:
     template <typename TFunction>
-    void VisitJoinTree(std::shared_ptr<IBaseOptimizerNode> child, TFunction visitor) {
+    void VisitJoinTree(const std::shared_ptr<IBaseOptimizerNode>& child, TFunction visitor) {
         if (child->Kind == EOptimizerNodeKind::RelNodeType) {
             return;
         }
@@ -105,6 +108,12 @@ private:
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet>& SubtreeNodes_;
 };
 
+/* 
+ * This function converts conflict rules into TES. 
+ * TES (Total Eligibility Set) captures reordering constraints and represents 
+ * set of table, that must present, before join expresion can be evaluated.
+ * It is initialized with SES (Syntatic Eligibility Set) - condition used tables.
+ */
 template <typename TNodeSet>
 TNodeSet ConvertConflictRulesIntoTES(const TNodeSet& SES, TVector<TConflictRule<TNodeSet>> conflictRules) {
     auto TES = SES;

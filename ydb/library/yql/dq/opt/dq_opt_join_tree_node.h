@@ -2,8 +2,18 @@
 
 #include <ydb/library/yql/core/cbo/cbo_optimizer_new.h> 
 
-namespace NYql::NDq::NDphyp {
+namespace NYql::NDq {
 
+/**
+ * Internal Join nodes are used inside the CBO. They don't own join condition data structures
+ * and therefore avoid copying them during generation of candidate plans.
+ *
+ * These datastructures are owned by the query graph, so it is important to keep the graph around
+ * while internal nodes are being used.
+ *
+ * After join enumeration, internal nodes need to be converted to regular nodes, that own the data
+ * structures
+*/
 struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
     TJoinOptimizerNodeInternal(
         const std::shared_ptr<IBaseOptimizerNode>& left, 
@@ -58,6 +68,13 @@ std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
     IProviderContext& ctx
 );
 
+/**
+ * Convert a tree of internal optimizer nodes to external nodes that own the data structures.
+ *
+ * The internal node tree can have references to external nodes (since some subtrees are optimized
+ * separately if the plan contains non-orderable joins). So we check the instances and if we encounter
+ * an external node, we return the whole subtree unchanged.
+*/
 std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(const std::shared_ptr<IBaseOptimizerNode> internal);
 
 } // namespace NYql::NDq

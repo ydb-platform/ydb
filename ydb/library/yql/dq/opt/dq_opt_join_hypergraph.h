@@ -1,14 +1,18 @@
 #pragma once
 
 #include <vector>
-
-#include "dphyp_bitset.h"
+#include <util/string/printf.h>
+#include "bitset.h"
 
 #include <ydb/library/yql/core/cbo/cbo_optimizer_new.h> 
 #include <ydb/library/yql/core/yql_cost_function.h>
 
-namespace NYql::NDq::NDphyp {
+namespace NYql::NDq {
 
+/* 
+ * Hypergraph - a graph, whose edge connects two sets of nodes.
+ * It represents relation between tables and ordering restriction. 
+ */
 template <typename TNodeSet>
 class TJoinHypergraph {
 public:
@@ -52,16 +56,16 @@ public:
                 auto leftKey = left.AttributeName;
                 auto rightKey = right.AttributeName;
 
-                for (size_t i = leftKey.size() - 1; i>0; i--) {
-                    if (leftKey[i]=='.') {
-                        leftKey = leftKey.substr(i+1);
+                for (size_t i = leftKey.size() - 1; i > 0; --i) {
+                    if (leftKey[i] == '.') {
+                        leftKey = leftKey.substr(i + 1);
                         break;
                     }
                 }
 
-                for (size_t i = rightKey.size() - 1; i>0; i--) {
-                    if (rightKey[i]=='.') {
-                        rightKey = rightKey.substr(i+1);
+                for (size_t i = rightKey.size() - 1; i > 0; --i) {
+                    if (rightKey[i] == '.') {
+                        rightKey = rightKey.substr(i + 1);
                         break;
                     }
                 }
@@ -79,6 +83,9 @@ public:
     };
 
 public:
+    /* 
+     * Return's ID of added node. It doesn't add anything, if node already exists in graph.
+     */
     size_t AddNode(const std::shared_ptr<IBaseOptimizerNode>& relationNode) {
         Y_ASSERT(relationNode->Labels().size() == 1);
 
@@ -132,10 +139,6 @@ public:
         return Nodes_.size();
     }
 
-    TVector<TEdge>& GetEdges() {
-        return Edges_;
-    }
-
     TEdge& GetEdge(size_t edgeId) {
         Y_ASSERT(edgeId < Edges_.size());
         return Edges_[edgeId];
@@ -147,7 +150,12 @@ public:
 
     const TEdge* FindEdgeBetween(const TNodeSet& lhs, const TNodeSet& rhs) {
         for (const auto& edge: Edges_) {
-            if (IsSubset(edge.Left, lhs) && !AreOverlaps(edge.Left, rhs) && IsSubset(edge.Right, rhs) && !AreOverlaps(edge.Right, lhs)) {
+            if (
+                IsSubset(edge.Left, lhs) &&
+                !AreOverlaps(edge.Left, rhs) &&
+                IsSubset(edge.Right, rhs) &&
+                !AreOverlaps(edge.Right, lhs)
+            ) {
                 return &edge;
             }
         }

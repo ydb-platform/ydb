@@ -3134,6 +3134,7 @@ public:
         if (WriteResult || writeSettings.Discard) {
             if (EOrderKind::None == Source->GetOrderKind() && ctx.UseUnordered(*Source)) {
                 node = L(node, Y("let", "output", Y("Unordered", "output")));
+                settings = L(settings, Q(Y(Q("unordered"))));
             }
             auto writeResult(BuildWriteResult(Pos, "output", settings));
             if (!writeResult->Init(ctx, src)) {

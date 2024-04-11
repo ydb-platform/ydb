@@ -321,6 +321,8 @@ message StreamReadMessage {
         string reader_name = 3;
         // Direct reading from a partition node.
         bool direct_read = 4;
+        // Indicates that the SDK supports autoscaling
+        book autoscaling_support = 5;
 
         message TopicReadSettings {
             // Topic path.

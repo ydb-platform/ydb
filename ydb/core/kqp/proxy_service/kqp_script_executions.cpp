@@ -1819,7 +1819,7 @@ public:
                         .AddMember("result_set")
                             .String(std::move(rowValueSerialized))
                         .AddMember("accumulated_size")
-                            .Int64(SavedSize - AccumulatedSize)
+                            .Int64(AccumulatedSize + SavedSize)
                     .EndStruct();
         }
         param

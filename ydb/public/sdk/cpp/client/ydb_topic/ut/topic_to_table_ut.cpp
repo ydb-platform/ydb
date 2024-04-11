@@ -10,6 +10,9 @@
 
 namespace NYdb::NTopic::NTests {
 
+const auto TEST_MESSAGE_GROUP_ID_1 = TEST_MESSAGE_GROUP_ID + "_1";
+const auto TEST_MESSAGE_GROUP_ID_2 = TEST_MESSAGE_GROUP_ID + "_2";
+
 Y_UNIT_TEST_SUITE(TxUsage) {
 
 class TFixture : public NUnitTest::TBaseFixture {
@@ -620,16 +623,16 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_1, TFixture)
     NTable::TSession tableSession = CreateTableSession();
     NTable::TTransaction tx = BeginTx(tableSession);
 
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "Лидер", &tx);
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "бодро", &tx);
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "гордо", &tx);
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "бредил", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #3", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #4", &tx);
 
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "Тарту", &tx);
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "дорог", &tx);
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "как", &tx);
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "город", &tx);
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "утрат", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #5", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #6", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #7", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #8", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #9", &tx);
 
     WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
     WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID);
@@ -649,15 +652,15 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_1, TFixture)
     {
         auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(messages[0], "Лидер");
-        UNIT_ASSERT_VALUES_EQUAL(messages[3], "бредил");
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+        UNIT_ASSERT_VALUES_EQUAL(messages[3], "message #4");
     }
 
     {
         auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 5);
-        UNIT_ASSERT_VALUES_EQUAL(messages[0], "Тарту");
-        UNIT_ASSERT_VALUES_EQUAL(messages[4], "утрат");
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #5");
+        UNIT_ASSERT_VALUES_EQUAL(messages[4], "message #9");
     }
 }
 
@@ -669,33 +672,33 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_2, TFixture)
     NTable::TSession tableSession = CreateTableSession();
     NTable::TTransaction tx = BeginTx(tableSession);
 
-    WriteToTopic("topic_A", "message_group_tx", "Лидер", &tx);
-    WriteToTopic("topic_A", "message_group_tx", "бодро", &tx);
-    WriteToTopic("topic_A", "message_group_tx", "гордо", &tx);
-    WriteToTopic("topic_A", "message_group_tx", "бредил", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #1", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #2", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #3", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #4", &tx);
 
-    WriteToTopic("topic_A", "message_group_not_tx", "вне");
-    WriteToTopic("topic_B", "message_group_not_tx", "транзакции");
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, "message #5");
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_2, "message #6");
 
-    WriteToTopic("topic_B", "message_group_tx", "Тарту", &tx);
-    WriteToTopic("topic_B", "message_group_tx", "дорог", &tx);
-    WriteToTopic("topic_B", "message_group_tx", "как", &tx);
-    WriteToTopic("topic_B", "message_group_tx", "город", &tx);
-    WriteToTopic("topic_B", "message_group_tx", "утрат", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_1, "message #7", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_1, "message #8", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_1, "message #9", &tx);
 
-    WaitForAcks("topic_A", "message_group_tx");
-    WaitForAcks("topic_B", "message_group_tx");
-    WaitForAcks("topic_A", "message_group_not_tx");
-    WaitForAcks("topic_B", "message_group_not_tx");
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
+    WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID_1);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_2);
+    WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID_2);
 
     {
         auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #5");
     }
 
     {
         auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #6");
     }
 
     CommitTx(tx, EStatus::SUCCESS);
@@ -703,15 +706,15 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_2, TFixture)
     {
         auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(messages[0], "Лидер");
-        UNIT_ASSERT_VALUES_EQUAL(messages[3], "бредил");
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+        UNIT_ASSERT_VALUES_EQUAL(messages[3], "message #4");
     }
 
     {
         auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 5);
-        UNIT_ASSERT_VALUES_EQUAL(messages[0], "Тарту");
-        UNIT_ASSERT_VALUES_EQUAL(messages[4], "утрат");
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #7");
+        UNIT_ASSERT_VALUES_EQUAL(messages[2], "message #9");
     }
 }
 
@@ -723,13 +726,13 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_3, TFixture)
     NTable::TSession tableSession = CreateTableSession();
     NTable::TTransaction tx = BeginTx(tableSession);
 
-    WriteToTopic("topic_A", "producer_id", "message #1", &tx);
-    WriteToTopic("topic_B", "producer_id", "message #2", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
 
-    WriteToTopic("topic_A", "producer_id", "message #3");
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #3");
 
-    WaitForAcks("topic_A", "producer_id");
-    WaitForAcks("topic_B", "producer_id");
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID);
 
     {
         auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
@@ -741,11 +744,11 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_3, TFixture)
 
     tx = BeginTx(tableSession);
 
-    WriteToTopic("topic_A", "producer_id", "message #1", &tx);
-    WriteToTopic("topic_B", "producer_id", "message #2", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
 
-    WaitForAcks("topic_A", "producer_id");
-    WaitForAcks("topic_B", "producer_id");
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID);
 
     CommitTx(tx, EStatus::SUCCESS);
 }
@@ -758,19 +761,19 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_4, TFixture)
     NTable::TSession tableSession = CreateTableSession();
     NTable::TTransaction tx_1 = BeginTx(tableSession);
 
-    WriteToTopic("topic_A", "producer", "message #1", &tx_1);
-    WriteToTopic("topic_B", "producer", "message #2", &tx_1);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx_1);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", &tx_1);
 
-    WaitForAcks("topic_A", "producer");
-    WaitForAcks("topic_B", "producer");
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID);
 
     NTable::TTransaction tx_2 = BeginTx(tableSession);
 
-    WriteToTopic("topic_A", "producer", "message #3", &tx_2);
-    WriteToTopic("topic_B", "producer", "message #4", &tx_2);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #3", &tx_2);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #4", &tx_2);
 
-    WaitForAcks("topic_A", "producer");
-    WaitForAcks("topic_B", "producer");
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID);
 
     {
         auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
@@ -808,11 +811,11 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_5, TFixture)
     {
         NTable::TTransaction tx_1 = BeginTx(tableSession);
 
-        WriteToTopic("topic_A", "producer", "message #1", &tx_1);
-        WriteToTopic("topic_B", "producer", "message #2", &tx_1);
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx_1);
+        WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", &tx_1);
 
-        WaitForAcks("topic_A", "producer");
-        WaitForAcks("topic_B", "producer");
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+        WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID);
 
         CommitTx(tx_1, EStatus::SUCCESS);
     }
@@ -820,11 +823,11 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_5, TFixture)
     {
         NTable::TTransaction tx_2 = BeginTx(tableSession);
 
-        WriteToTopic("topic_A", "producer", "message #3", &tx_2);
-        WriteToTopic("topic_B", "producer", "message #4", &tx_2);
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #3", &tx_2);
+        WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #4", &tx_2);
 
-        WaitForAcks("topic_A", "producer");
-        WaitForAcks("topic_B", "producer");
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+        WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID);
 
         CommitTx(tx_2, EStatus::SUCCESS);
     }

@@ -248,13 +248,13 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() == 0);
         AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 0);
         TInstant start = Now();
-        ui32 compactionsStart = csController->GetCompactions().Val();
+        ui32 compactionsStart = csController->GetCompactionStartedCounter().Val();
         while (Now() - start < TDuration::Seconds(10)) {
-            if (compactionsStart != csController->GetCompactions().Val()) {
-                compactionsStart = csController->GetCompactions().Val();
+            if (compactionsStart != csController->GetCompactionStartedCounter().Val()) {
+                compactionsStart = csController->GetCompactionStartedCounter().Val();
                 start = Now();
             }
-            Cerr << "WAIT_COMPACTION: " << csController->GetCompactions().Val() << Endl;
+            Cerr << "WAIT_COMPACTION: " << csController->GetCompactionStartedCounter().Val() << Endl;
             Sleep(TDuration::Seconds(1));
         }
 

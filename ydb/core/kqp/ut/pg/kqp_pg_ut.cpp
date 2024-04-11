@@ -2274,7 +2274,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-     Y_UNIT_TEST(CreateTempTableSerial) {
+    Y_UNIT_TEST(CreateTempTableSerial) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
         auto setting = NKikimrKqp::TKqpSetting();

@@ -92,6 +92,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx); // from Partition/PQ
+    void Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx); // from ReadSession
     void Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx); // from ReadSession
 
     TStringBuilder GetPrefix() const;
@@ -211,10 +212,26 @@ private:
         size_t Iteration = 0;
         ui64 Cookie = 0;
 
-        bool IsFinished() const { return Commited || (ReadingFinished && (StartedReadingFromEndOffset || ScaleAwareSDK)); };
-        bool SetCommittedState() { return !std::exchange(Commited, true); };
-        bool Unlock() { ReadingFinished = false; ++Cookie; return ReleaseChildren(); };
-        bool ReleaseChildren() { return !Commited; }
+        // Return true if the reading of the partition has been finished and children's partition are readable.
+        bool IsFinished() const;
+        // Return true if children's partitions can't be balance separately.
+        bool NeedReleaseChildren() const;
+
+        // Called when reading from a partition is started.
+        // Return true if the reading of the partition has been finished before.
+        bool StartReading();
+        // Called when reading from a partition is stopped.
+        // Return true if children's partitions can't be balance separately.
+        bool StopReading();
+
+        // Called when the partition is inactive and commited offset is equal to EndOffset.
+        // Return true if the commited status changed.
+        bool SetCommittedState();
+        // Called when the partition reading finished.
+        // Return true if the reading status changed.
+        bool SetFinishedState(bool scaleAwareSDK, bool startedReadingFromEndOffset);
+        // Called when the parent partition is reading.
+        bool Reset();
     };
 
     struct TSessionInfo {
@@ -241,7 +258,7 @@ private:
         ui32 ProxyNodeId;
         TInstant Timestamp;
 
-        void Unlock(bool inactive) { --NumActive; --NumSuspended; if (inactive) { -- NumInactive; } }
+        void Unlock(bool inactive);
     };
 
     struct TClientGroupInfo {
@@ -267,6 +284,7 @@ private:
         std::pair<TActorId, ui64> SessionKey(const TActorId pipe) const;
         bool EraseSession(const TActorId pipe);
         TSessionInfo* FindSession(const TActorId pipe);
+        TSessionInfo* FindSession(ui32 partitionId);
 
         void ScheduleBalance(const TActorContext& ctx);
         void Balance(const TActorContext& ctx);
@@ -278,6 +296,7 @@ private:
         THolder<TEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(const TActorId pipe, const TSessionInfo& sessionInfo, const ui32 count, const std::set<ui32>& partitions);
 
         void FreePartition(ui32 partitionId);
+        void ActivatePartition(ui32 partitionId);
         void InactivatePartition(ui32 partitionId);
 
         TStringBuilder GetPrefix() const;
@@ -484,6 +503,7 @@ public:
             HFunc(TEvPersQueue::TEvStatus, Handle);
             HFunc(TEvPersQueue::TEvGetPartitionsLocation, Handle);
             HFunc(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
+            HFunc(TEvPersQueue::TEvReadingPartitionStartedRequest, Handle);
             HFunc(TEvPersQueue::TEvReadingPartitionFinishedRequest, Handle);
             HFunc(TEvPQ::TEvWakeupReleasePartition, Handle);
 

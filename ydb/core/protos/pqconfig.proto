@@ -999,6 +999,12 @@ message TEvReadingPartitionFinishedRequest {
     optional bool StartedReadingFromEndOffset = 4;
 };
 
+// The consumer's reading of the partition is started (from ReadSession)
+message TEvReadingPartitionStartedRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+};
+
 message TTransaction {
     enum EKind {
         KIND_UNKNOWN = 0;

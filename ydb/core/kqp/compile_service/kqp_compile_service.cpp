@@ -97,10 +97,15 @@ public:
         }
     }
 
-    TString FindReplayMessageByUid(const TString uid) {
+    TString ReplayMessageByUid(const TString uid, TDuration timeout) {
         auto it = Index.find(TItem(uid));
         if (it != Index.end()) {
-            return it->Value.ReplayMessage;
+            TInstant& lastReplayTime = const_cast<TItem&>(*it).Value.LastReplayTime;
+            TInstant now = TInstant::Now();
+            if (lastReplayTime + timeout < now) {
+                lastReplayTime = now;
+                return it->Value.ReplayMessage;
+            }
         }
         return "";
     }
@@ -237,6 +242,7 @@ private:
         TKqpCompileResult::TConstPtr CompileResult;
         TInstant ExpiredAt;
         TString ReplayMessage = "";
+        TInstant LastReplayTime;
     };
 
     using TList = TLRUList<TString, TCacheEntry>;
@@ -1094,7 +1100,7 @@ private:
         TKqpStatsCompile stats;
         stats.FromCache = true;
 
-        if (auto replayMessage = QueryCache.FindReplayMessageByUid(compileResult->Uid)) {
+        if (auto replayMessage = QueryCache.ReplayMessageByUid(compileResult->Uid, TDuration::Seconds(TableServiceConfig.GetQueryReplayCacheUploadTTLSec()))) {
             QueryReplayBackend->Collect(replayMessage);
         }
 

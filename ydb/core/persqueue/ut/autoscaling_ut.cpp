@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
 
         Sleep(TDuration::Seconds(1)); // Wait read session events
 
-        UNIT_ASSERT_EQUAL_C(1, ReadSession.Partitions.size(), "We are reading only one partitions because offset is not commited");
+        UNIT_ASSERT_VALUES_EQUAL_C(std::set<size_t>{0}, ReadSession.Partitions, "We are reading only one partitions because offset is not commited");
         ReadSession.Commit();
 
         ReadSession.WaitAllMessages();
@@ -167,6 +167,9 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         writeSession1->Close(TDuration::Seconds(1));
         writeSession2->Close(TDuration::Seconds(1));
         writeSession3->Close(TDuration::Seconds(1));
+        writeSession4->Close(TDuration::Seconds(1));
+
+        ReadSession.Session->Close(TDuration::Seconds(1));
     }
 
     Y_UNIT_TEST(PartitionMerge_PreferedPartition) {

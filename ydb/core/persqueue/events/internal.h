@@ -186,6 +186,8 @@ struct TEvPQ {
         EvReadingPartitionStatusRequest,
         EvProcessChangeOwnerRequests,
         EvWakeupReleasePartition,
+        EvPartitionScaleStatusChanged,
+        EvPartitionScaleRequestDone,
         EvEnd
     };
 
@@ -1111,6 +1113,15 @@ struct TEvPQ {
         TString Consumer;
         ui32 PartitionId;
         ui64 Cookie;
+    };
+
+    struct TEvPartitionScaleStatusChanged : public TEventPB<TEvPartitionScaleStatusChanged, NKikimrPQ::TEvPartitionScaleStatusChanged, EvPartitionScaleStatusChanged> {
+        TEvPartitionScaleStatusChanged() = default;
+
+        TEvPartitionScaleStatusChanged(NKikimrPQ::EScaleStatus scaleStatus, ui32 partitionId) {
+            Record.SetScaleStatus(scaleStatus);
+            Record.SetPartitionId(partitionId);
+        }
     };
 };
 

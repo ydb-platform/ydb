@@ -4410,6 +4410,13 @@ void TPersQueue::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const
     }
 }
 
+void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx)
+{
+    if (ReadBalancerActorId) {
+        ctx.Send(ReadBalancerActorId, ev->Release().Release());
+    }
+}
+
 TString TPersQueue::LogPrefix() const {
     return TStringBuilder() << SelfId() << " ";
 }
@@ -4463,6 +4470,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPersQueue::TEvCancelTransactionProposal, Handle);
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
+        HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
         HFuncTraced(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
         HFuncTraced(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
         default:

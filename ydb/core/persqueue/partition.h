@@ -89,6 +89,7 @@ public:
 
 private:
     static const ui32 MAX_ERRORS_COUNT_TO_STORE = 10;
+    static const ui32 SCALE_REQUEST_REPEAT_MIN_SECONDS = 60;
 
 private:
     struct THasDataReq;
@@ -357,6 +358,9 @@ private:
     // void DestroyReadSession(const TReadSessionKey& key);
 
     void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
+
+    NKikimrPQ::EScaleStatus CheckScaleStatus(const TActorContext& ctx);
+    void ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus);
 
     TString LogPrefix() const;
 
@@ -719,6 +723,10 @@ private:
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgWriteBytes;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> AvgReadBytes;
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgQuotaBytes;
+
+    std::unique_ptr<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> SplitMergeAvgWriteBytes;
+    TInstant LastScaleRequestTime = TInstant::Zero();
+    NKikimrPQ::EScaleStatus ScaleStatus = NKikimrPQ::EScaleStatus::NORMAL;
 
     ui64 ReservedSize;
     std::deque<THolder<TEvPQ::TEvReserveBytes>> ReserveRequests;

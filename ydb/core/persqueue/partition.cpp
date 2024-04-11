@@ -963,6 +963,64 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
     ContinueProcessTxsAndUserActs(ctx);
 }
 
+void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& ctx)
+{
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                "TEvGetWriteInfoResponse Cookie: " << ev->Get()->Cookie);
+
+    Y_ABORT_UNLESS(TxInProgress);
+    auto& t = GetCurrentTransaction();
+    Y_ABORT_UNLESS(t.Tx);
+
+    bool predicate = true;
+    for (auto& [k, v] : ev->Get()->SrcIdInfo) {
+        auto s = SourceManager.Get(k);
+        if (s.State == TSourceIdInfo::EState::Unknown) {
+            continue;
+        }
+
+        if (v.MinSeqNo < s.SeqNo) {
+            predicate = false;
+            break;
+        }
+    }
+
+    WriteInfoResponse = nullptr;
+    if (ev->Get()->BodyKeys.empty()) {
+        t.Predicate = predicate && BeginTransaction(*t.Tx, ctx);
+        if (*t.Predicate) {
+            WriteInfoResponse = ev->Release();
+        }
+    } else {
+        t.Predicate = false;
+    }
+
+    ctx.Send(Tablet,
+             MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(t.Tx->Step,
+                                                         t.Tx->TxId,
+                                                         Partition,
+                                                         *t.Predicate).Release());
+}
+
+void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& ctx)
+{
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                "TEvGetWriteInfoError Cookie: " << ev->Get()->Cookie);
+
+    Y_ABORT_UNLESS(TxInProgress);
+    auto& t = GetCurrentTransaction();
+    Y_ABORT_UNLESS(t.Tx);
+
+    t.Predicate = false;
+    WriteInfoResponse = nullptr;
+
+    ctx.Send(Tablet,
+             MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(t.Tx->Step,
+                                                         t.Tx->TxId,
+                                                         Partition,
+                                                         *t.Predicate).Release());
+}
+
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx) {
     if (ClosedInternalPartition || WaitingForPreviousBlobQuota() || (CurrentStateFunc() != &TThis::StateIdle)) {
         auto* response = new TEvPQ::TEvGetWriteInfoError(Partition.InternalPartitionId,
@@ -1660,13 +1718,18 @@ TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TTransacti
             return EProcessResult::Break;
         }
 
-        t.Predicate = BeginTransaction(*t.Tx, ctx);
+        if (t.Tx->SupportivePartitionActor != TActorId()) {
+            ctx.Send(t.Tx->SupportivePartitionActor,
+                     MakeHolder<TEvPQ::TEvGetWriteInfoRequest>(0).Release());
+        } else {
+            t.Predicate = BeginTransaction(*t.Tx, ctx);
 
-        ctx.Send(Tablet,
-                 MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(t.Tx->Step,
-                                                             t.Tx->TxId,
-                                                             Partition,
-                                                             *t.Predicate).Release());
+            ctx.Send(Tablet,
+                     MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(t.Tx->Step,
+                                                                 t.Tx->TxId,
+                                                                 Partition,
+                                                                 *t.Predicate).Release());
+        }
 
         TxInProgress = true;
 
@@ -1707,10 +1770,6 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
 {
     Y_UNUSED(ctx);
     bool predicate = true;
-
-    if (tx.SupportivePartitionActor != TActorId()) {
-        return false;
-    }
 
     for (auto& operation : tx.Operations) {
         const TString& consumer = operation.GetConsumer();
@@ -1825,6 +1884,36 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
     }
 
     RemoveDistrTx();
+
+    if (WriteInfoResponse) {
+        for (auto i = WriteInfoResponse->BlobsFromHead.rbegin(); i != WriteInfoResponse->BlobsFromHead.rend(); ++i) {
+            auto& blob = *i;
+
+            TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
+                .SourceId = blob.SourceId,
+                    .SeqNo = blob.SeqNo,
+                    .PartNo = (ui16)(blob.PartData ? blob.PartData->PartNo : 0),
+                    .TotalParts = (ui16)(blob.PartData ? blob.PartData->TotalParts : 1),
+                    .TotalSize = (ui32)(blob.PartData ? blob.PartData->TotalSize : blob.UncompressedSize),
+                    .CreateTimestamp = blob.CreateTimestamp.MilliSeconds(),
+                    .ReceiveTimestamp = blob.CreateTimestamp.MilliSeconds(),
+                    .DisableDeduplication = false,
+                    .WriteTimestamp = blob.WriteTimestamp.MilliSeconds(),
+                    .Data = blob.Data,
+                    .UncompressedSize = blob.UncompressedSize,
+                    .PartitionKey = blob.PartitionKey,
+                    .ExplicitHashKey = blob.ExplicitHashKey,
+                    .External = false,
+                    .IgnoreQuotaDeadline = true,
+                    .HeartbeatVersion = std::nullopt,
+            }, std::nullopt};
+            TMessage message(std::move(msg), ctx.Now() - TInstant::Zero());
+
+            UserActionAndTransactionEvents.emplace_front(std::move(message));
+        }
+
+        WriteInfoResponse = nullptr;
+    }
 }
 
 void TPartition::EndTransaction(const TEvPQ::TEvTxRollback& event,

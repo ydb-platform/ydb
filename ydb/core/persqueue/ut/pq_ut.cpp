@@ -1062,7 +1062,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
             UNIT_ASSERT(result);
 
             UNIT_ASSERT(result->Record.HasStatus());
-            UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
+            UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::INITIALIZING);
         }
 
         PQGetPartInfo(0, 1, tc);
@@ -1088,8 +1088,8 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
                 UNIT_ASSERT(result);
 
                 UNIT_ASSERT(result->Record.HasStatus());
-                if ( j == toWrite) {
-                    UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
+                if (j == toWrite) {
+                    UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::INITIALIZING);
                 } else {
                     UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK);
 
@@ -1161,7 +1161,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
 
             UNIT_ASSERT(result);
             UNIT_ASSERT(result->Record.HasStatus());
-            UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
+            UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::INITIALIZING);
 
             //check very big msg
             cookie = CmdSetOwner(0, tc).first;

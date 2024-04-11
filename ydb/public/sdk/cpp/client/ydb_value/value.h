@@ -431,6 +431,10 @@ public:
     TDerived& Uuid(const TUuidValue& value);
     TDerived& JsonDocument(const TString& value);
     TDerived& DyNumber(const TString& value);
+    TDerived& Date32(const i32 value);
+    TDerived& Datetime64(const i64 value);
+    TDerived& Timestamp64(const i64 value);
+    TDerived& Interval64(const i64 value);
 
     TDerived& OptionalBool(const TMaybe<bool>& value);
     TDerived& OptionalInt8(const TMaybe<i8>& value);
@@ -457,6 +461,10 @@ public:
     TDerived& OptionalUuid(const TMaybe<TUuidValue>& value);
     TDerived& OptionalJsonDocument(const TMaybe<TString>& value);
     TDerived& OptionalDyNumber(const TMaybe<TString>& value);
+    TDerived& OptionalDate32(const TMaybe<i32>& value);
+    TDerived& OptionalDatetime64(const TMaybe<i64>& value);
+    TDerived& OptionalTimestamp64(const TMaybe<i64>& value);
+    TDerived& OptionalInterval64(const TMaybe<i64>& value);
 
     // Optional
     TDerived& BeginOptional();

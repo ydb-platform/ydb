@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.access;
+
+// * `type = system, id = allUsers`: A special identifier that represents anyone.
+//
+// * `type = system, id = allAuthenticatedUsers`: A special identifier that represents anyone
+//    who is authenticated.
+//
+// * `type = userAccount, id = <cloud generated id>`
+//
+// * `type = federatedUser, id = <cloud generated id>`
+//
+// * `type = serviceAccount, id = <cloud generated id>`
+//
+// * `type = group, id = <cloud generated id>`
+
+message Subject {
+  string id = 1; // [(required) = true, (length) = "<=50"];
+  string type = 2; // [(required) = true, (length) = "<=100"];
+}
+
+message AccessBinding {
+  string role_id = 1; // [(required) = true, (length) = "<=50"];
+  Subject subject = 2; // [(required) = true];
+}
+
+message ListAccessBindingsRequest {
+  string resource_id = 1; // [(required) = true, (length) = "<=50"];
+  int64 page_size = 2; // [(value) = "0-1000"];
+  string page_token = 3; // [(length) = "<=100"];
+  // A flag allowing the service to determine that the original action was
+  // initiated from services (private API) when [private_call] = true, or from
+  // the public API when [private_call] = false. [private_call] = false adds
+  // additional restrictions on the execution of the action (ex. the prohibition
+  // of manipulating internal roles, internal roles are not returned in a result).
+  // When proxying from the public API, this field MUST be mapped to false.
+  bool private_call = 4;
+}
+
+message ListAccessBindingsResponse {
+  repeated AccessBinding access_bindings = 1;
+  string next_page_token = 2;
+}
+
+message SetAccessBindingsRequest {
+  string resource_id = 1; // [(required) = true, (length) = "<=50"];
+  repeated AccessBinding access_bindings = 2; // [(size) = "<=1000"];
+  // A flag allowing the service to determine that the original action was
+  // initiated from services (private API) when [private_call] = true, or from
+  // the public API when [private_call] = false. [private_call] = false adds
+  // additional restrictions on the execution of the action (ex. the prohibition
+  // of manipulating internal roles, throwing NotFoundException on an
+  // internal role). When proxying from the public API,
+  // this field MUST be mapped to false.
+  bool private_call = 3;
+}
+
+message SetAccessBindingsMetadata {
+  string resource_id = 1;
+  // Access bindings from the set request parameter
+  repeated AccessBinding access_bindings = 2;
+}
+
+message UpdateAccessBindingsRequest {
+  string resource_id = 1; // [(required) = true, (length) = "<=50"];
+  repeated AccessBindingDelta access_binding_deltas = 2; // [(size) = "1-1000"];
+  // A flag allowing the service to determine that the original action was
+  // initiated from services (private API) when [private_call] = true, or from
+  // the public API when [private_call] = false. [private_call] = false adds
+  // additional restrictions on the execution of the action (ex. the prohibition
+  // of manipulating internal roles, throwing NotFoundException on an
+  // internal role). When proxying from the public API,
+  // this field MUST be mapped to false.
+  bool private_call = 3;
+}
+
+message UpdateAccessBindingsMetadata {
+  string resource_id = 1;
+  // Access binding deltas from the update request parameter
+  repeated AccessBindingDelta access_binding_deltas = 2;
+}
+
+enum AccessBindingAction {
+  ACCESS_BINDING_ACTION_UNSPECIFIED = 0;
+  ADD = 1;
+  REMOVE = 2;
+}
+
+message AccessBindingDelta {
+  AccessBindingAction action = 1; // [(required) = true];
+  AccessBinding access_binding = 2; // [(required) = true];
+}
+
+message AccessBindingsOperationResult {
+  repeated AccessBindingDelta effective_deltas = 1;
+}

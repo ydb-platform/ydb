@@ -268,7 +268,7 @@ struct THiveSharedSettings {
 
 struct TDrainSettings {
     bool Persist = true;
-    bool KeepDown = false;
+    NKikimrHive::EDrainDownPolicy DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_KEEP_DOWN_UNTIL_RESTART;
     ui32 DrainInFlight = 0;
 };
 

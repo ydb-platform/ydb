@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             } while (!fdsRequest.has_value());
 
             if (answerOk) {
-                fdsRequest->Result.SetValue(fdsMock.ComposeOkResult());
+                fdsRequest->Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
             } else {
                 fdsRequest->Result.SetValue({{}, grpc::Status(grpc::StatusCode::UNAVAILABLE, "mock 'unavailable'")});
             }
@@ -268,14 +268,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         op->mutable_result()->PackFrom(mockResult);
 
-        std::optional<TFederationDiscoveryServiceMock::TManualRequest> fdsRequest;
-        do {
-            fdsRequest = fdsMock.GetNextPendingRequest();
-            if (!fdsRequest.has_value()) {
-                Sleep(TDuration::MilliSeconds(50));
-            }
-        } while (!fdsRequest.has_value());
-        fdsRequest->Result.SetValue({Response, grpc::Status::OK});
+        auto fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue({Response, grpc::Status::OK});
 
         NPersQueue::TWriteSessionSettings writeSettings;
         writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
@@ -350,16 +344,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto event = ReadSession->GetEvent(false);
         UNIT_ASSERT(!event.Defined());
 
-
-        std::optional<TFederationDiscoveryServiceMock::TManualRequest> fdsRequest;
-        do {
-            fdsRequest = fdsMock.GetNextPendingRequest();
-            if (!fdsRequest.has_value()) {
-                Sleep(TDuration::MilliSeconds(50));
-            }
-        } while (!fdsRequest.has_value());
-
-        fdsRequest->Result.SetValue({{}, grpc::Status(grpc::StatusCode::UNAVAILABLE, "mock 'unavailable'")});
+        auto fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue({{}, grpc::Status(grpc::StatusCode::UNAVAILABLE, "mock 'unavailable'")});
 
         ReadSession->WaitEvent().Wait();
         event = ReadSession->GetEvent(false);
@@ -374,14 +360,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         event = ReadSession2->GetEvent(false);
         UNIT_ASSERT(!event.Defined());
 
-        do {
-            fdsRequest = fdsMock.GetNextPendingRequest();
-            if (!fdsRequest.has_value()) {
-                Sleep(TDuration::MilliSeconds(50));
-            }
-        } while (!fdsRequest.has_value());
-
-        fdsRequest->Result.SetValue(fdsMock.ComposeOkResult());
+        fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
 
         event = ReadSession2->GetEvent(true);
         UNIT_ASSERT(event.Defined());
@@ -547,15 +527,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto events = ReadSession->GetEvents(false);
         UNIT_ASSERT(events.empty());
 
-        std::optional<TFederationDiscoveryServiceMock::TManualRequest> fdsRequest;
-        do {
-            fdsRequest = fdsMock.GetNextPendingRequest();
-            if (!fdsRequest.has_value()) {
-                Sleep(TDuration::MilliSeconds(50));
-            }
-        } while (!fdsRequest.has_value());
-
-        fdsRequest->Result.SetValue(fdsMock.ComposeOkResult());
+        auto fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
 
         NPersQueue::TWriteSessionSettings writeSettings;
         writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
@@ -659,15 +632,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto events = ReadSession->GetEvents(false);
         UNIT_ASSERT(events.empty());
 
-        std::optional<TFederationDiscoveryServiceMock::TManualRequest> fdsRequest;
-        do {
-            fdsRequest = fdsMock.GetNextPendingRequest();
-            if (!fdsRequest.has_value()) {
-                Sleep(TDuration::MilliSeconds(50));
-            }
-        } while (!fdsRequest.has_value());
-
-        fdsRequest->Result.SetValue(fdsMock.ComposeOkResult());
+        auto fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
 
         {
             NPersQueue::TWriteSessionSettings writeSettings;
@@ -789,7 +755,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             }
         } while (!fdsRequest.has_value());
 
-        fdsRequest->Result.SetValue(fdsMock.ComposeOkResult());
+        fdsRequest->Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
 
         WriteSession->WaitEvent().Wait(TDuration::Seconds(1));
         event = WriteSession->GetEvent(false);
@@ -834,6 +800,114 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         Cerr << "Session was created" << Endl;
 
         WriteSession->Close(TDuration::MilliSeconds(10));
+    }
+
+    Y_UNIT_TEST(WriteSessionCloseWaitsForWrites) {
+        // Write a bunch of messages before the federation observer initialization.
+        // Then as soon as the federation discovery service responds to the observer, close the write session.
+        // The federated write session must wait for acks of all written messages.
+
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(
+            TEST_CASE_NAME, false, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, 2);
+
+        setup->Start(true, true);
+
+        TFederationDiscoveryServiceMock fdsMock;
+        fdsMock.Port = setup->GetGrpcPort();
+        ui16 newServicePort = setup->GetPortManager()->GetPort(4285);
+        auto grpcServer = setup->StartGrpcService(newServicePort, &fdsMock);
+
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
+        cfg.SetDatabase("/Root");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        NYdb::TDriver driver(cfg);
+        NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver);
+
+        // Create write session.
+        auto writeSettings = NTopic::TWriteSessionSettings()
+            .DirectWriteToPartition(false)
+            .Path(setup->GetTestTopic())
+            .MessageGroupId("src_id");
+
+        int acks = 0;
+        writeSettings.EventHandlers_.AcksHandler([&acks](NTopic::TWriteSessionEvent::TAcksEvent& ev) {
+            acks += ev.Acks.size();
+        });
+
+        auto WriteSession = topicClient.CreateWriteSession(writeSettings);
+        Cerr << "Session was created" << Endl;
+
+        int messageCount = 100;
+        for (int i = 0; i < messageCount; ++i) {
+            auto event = WriteSession->GetEvent(true);
+            auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
+            WriteSession->Write(std::move(readyToAcceptEvent->ContinuationToken), NTopic::TWriteMessage("hello-" + ToString(i)));
+        }
+
+        auto fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
+
+        // Close method should wait until all messages have been acked.
+        WriteSession->Close();
+        UNIT_ASSERT_VALUES_EQUAL(acks, messageCount);
+    }
+
+    Y_UNIT_TEST(WriteSessionCloseIgnoresWrites) {
+        // Create a federated topic client with NoRetryPolicy.
+        // Make federation discovery service to respond with an UNAVAILABLE status.
+        // It makes a federation observer object to become stale and the write session to close.
+
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(
+            TEST_CASE_NAME, false, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, 2);
+
+        setup->Start(true, true);
+
+        TFederationDiscoveryServiceMock fdsMock;
+        fdsMock.Port = setup->GetGrpcPort();
+        ui16 newServicePort = setup->GetPortManager()->GetPort(4285);
+        auto grpcServer = setup->StartGrpcService(newServicePort, &fdsMock);
+
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
+        cfg.SetDatabase("/Root");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        NYdb::TDriver driver(cfg);
+        TFederatedTopicClientSettings clientSettings;
+        clientSettings.RetryPolicy(NPersQueue::IRetryPolicy::GetNoRetryPolicy());
+        NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver, clientSettings);
+
+        // Create write session.
+        auto writeSettings = NTopic::TWriteSessionSettings()
+            .DirectWriteToPartition(false)
+            .Path(setup->GetTestTopic())
+            .MessageGroupId("src_id");
+
+        int acks = 0;
+        writeSettings.EventHandlers_.AcksHandler([&acks](NTopic::TWriteSessionEvent::TAcksEvent& ev) {
+            acks += ev.Acks.size();
+        });
+
+        auto WriteSession = topicClient.CreateWriteSession(writeSettings);
+        Cerr << "Session was created" << Endl;
+
+        int messageCount = 100;
+        for (int i = 0; i < messageCount; ++i) {
+            auto event = WriteSession->GetEvent(true);
+            auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
+            WriteSession->Write(std::move(readyToAcceptEvent->ContinuationToken), NTopic::TWriteMessage("hello-" + ToString(i)));
+        }
+
+        auto fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeUnavailableResult());
+
+        // At this point the observer that federated write session works with should become stale, and the session closes.
+        // No messages we have written and no federation discovery requests should be sent.
+
+        Sleep(TDuration::Seconds(3));
+        UNIT_ASSERT(!fdsMock.GetNextPendingRequest().has_value());
+        WriteSession->Close();
+        UNIT_ASSERT_VALUES_EQUAL(acks, 0);
     }
 
     Y_UNIT_TEST(PreferredDatabaseNoFallback) {
@@ -909,13 +983,127 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         // fdsMock.PreparedResponse.Clear();
         // std::optional<TFederationDiscoveryServiceMock::TManualRequest> fdsRequest;
         fdsRequest = fdsMock.WaitNextPendingRequest();
-        fdsRequest.Result.SetValue(fdsMock.ComposeOkResult());
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
 
         Cerr << "=== Waiting for repair" << Endl;
         retryPolicy->WaitForRepairSync();
 
         Cerr << "=== Closing the session" << Endl;
         writer->Close(TDuration::MilliSeconds(10));
+    }
+
+    Y_UNIT_TEST(WriteSessionNoAvailableDatabase) {
+        // Create a federated write session with NoRetryPolicy, PreferredDatabase set and AllowFallback=false.
+        // Make federation discovery service to respond with an UNAVAILABLE status for the preferred database.
+        // It makes the write session to close itself.
+
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(
+            TEST_CASE_NAME, false, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, 2);
+
+        setup->Start(true, true);
+
+        TFederationDiscoveryServiceMock fdsMock;
+        fdsMock.Port = setup->GetGrpcPort();
+        ui16 newServicePort = setup->GetPortManager()->GetPort(4285);
+        auto grpcServer = setup->StartGrpcService(newServicePort, &fdsMock);
+
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << newServicePort);
+        cfg.SetDatabase("/Root");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        NYdb::TDriver driver(cfg);
+        TFederatedTopicClientSettings clientSettings;
+        NYdb::NFederatedTopic::TFederatedTopicClient topicClient(driver, clientSettings);
+
+        auto writeSettings = NTopic::TWriteSessionSettings()
+            .DirectWriteToPartition(false)
+            .RetryPolicy(NPersQueue::IRetryPolicy::GetNoRetryPolicy())
+            .Path(setup->GetTestTopic())
+            .MessageGroupId("src_id");
+
+        auto WriteSession = topicClient.CreateWriteSession(writeSettings);
+        Cerr << "Session was created" << Endl;
+
+        auto fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResultUnavailableDatabases());
+
+        {
+            auto e = WriteSession->GetEvent(true);
+            UNIT_ASSERT(e.Defined());
+            Cerr << ">>> Got event: " << DebugString(*e) << Endl;
+            UNIT_ASSERT(std::holds_alternative<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(*e));
+        }
+        {
+            auto e = WriteSession->GetEvent(true);
+            UNIT_ASSERT(e.Defined());
+            Cerr << ">>> Got event: " << DebugString(*e) << Endl;
+            UNIT_ASSERT(std::holds_alternative<NYdb::NTopic::TSessionClosedEvent>(*e));
+        }
+
+        WriteSession->Close();
+    }
+
+    Y_UNIT_TEST(WriteSessionWriteInHandlers) {
+        // Write messages from all event handlers. It shouldn't deadlock.
+
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(
+            TEST_CASE_NAME, false, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, 2);
+        setup->Start(true, true);
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << setup->GetGrpcPort());
+        cfg.SetDatabase("/Root");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        NYdb::TDriver driver(cfg);
+        NYdb::NFederatedTopic::TFederatedTopicClient client(driver);
+
+        auto writeSettings = NTopic::TWriteSessionSettings()
+            .DirectWriteToPartition(false)
+            .Path(setup->GetTestTopic())
+            .MessageGroupId("src_id");
+
+        std::shared_ptr<NTopic::IWriteSession> WriteSession;
+
+        // 1. The session issues the first token: write a message inside AcksHandler.
+        // 2. The session issues another token: close the session, write a message inside SessionClosedHandler.
+
+        bool gotAcksEvent = false;
+        std::optional<NTopic::TContinuationToken> token;
+        auto [acksHandlerPromise, sessionClosedHandlerPromise] = std::tuple{NThreading::NewPromise(), NThreading::NewPromise()};
+        auto [sentFromAcksHandler, sentFromSessionClosedHandler] = std::tuple{acksHandlerPromise.GetFuture(), sessionClosedHandlerPromise.GetFuture()};
+        writeSettings.EventHandlers(
+            NTopic::TWriteSessionSettings::TEventHandlers()
+                .HandlersExecutor(NTopic::CreateSyncExecutor())
+                .ReadyToAcceptHandler([&token](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& e) {
+                    Cerr << "=== Inside ReadyToAcceptHandler" << Endl;
+                    token = std::move(e.ContinuationToken);
+                })
+                .AcksHandler([&token, &gotAcksEvent, &WriteSession, promise = std::move(acksHandlerPromise)](NTopic::TWriteSessionEvent::TAcksEvent&) mutable {
+                    Cerr << "=== Inside AcksHandler" << Endl;
+                    if (!gotAcksEvent) {
+                        gotAcksEvent = true;
+                        WriteSession->Write(std::move(*token), "From AcksHandler");
+                        promise.SetValue();
+                    }
+                })
+                .SessionClosedHandler([&token, &WriteSession, promise = std::move(sessionClosedHandlerPromise)](NTopic::TSessionClosedEvent const&) mutable {
+                    Cerr << "=== Inside SessionClosedHandler" << Endl;
+                    WriteSession->Write(std::move(*token), "From SessionClosedHandler");
+                    promise.SetValue();
+                })
+        );
+
+        Cerr << "=== Before CreateWriteSession" << Endl;
+        WriteSession = client.CreateWriteSession(writeSettings);
+        Cerr << "=== Session created" << Endl;
+
+        WriteSession->Write(std::move(*token), "After CreateWriteSession");
+
+        sentFromAcksHandler.Wait();
+        Cerr << "=== AcksHandler has written a message, closing the session" << Endl;
+
+        WriteSession->Close();
+        sentFromSessionClosedHandler.Wait();
+        Cerr << "=== SessionClosedHandler has 'written' a message" << Endl;
     }
 
     void AddDatabase(std::vector<std::shared_ptr<TDbInfo>>& dbInfos, int id, int weight) {
@@ -941,7 +1129,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         using Settings = TFederatedWriteSessionSettings;
 
         {
-            auto [db, status] = SelectDatabaseByHash(Settings(), dbInfos);
+            auto [db, status] = SelectDatabaseByHashImpl(Settings(), dbInfos);
             UNIT_ASSERT(!db);
             UNIT_ASSERT_EQUAL(status, EStatus::NOT_FOUND);
         }
@@ -949,7 +1137,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         AddDatabase(dbInfos, 1, 0);
 
         {
-            auto [db, status] = SelectDatabaseByHash(Settings(), dbInfos);
+            auto [db, status] = SelectDatabaseByHashImpl(Settings(), dbInfos);
             UNIT_ASSERT(!db);
             UNIT_ASSERT_EQUAL(status, EStatus::NOT_FOUND);
         }
@@ -957,7 +1145,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         AddDatabase(dbInfos, 2, 100);
 
         {
-            auto [db, status] = SelectDatabaseByHash(Settings(), dbInfos);
+            auto [db, status] = SelectDatabaseByHashImpl(Settings(), dbInfos);
             UNIT_ASSERT(db);
             UNIT_ASSERT_EQUAL(db->id(), "2");
             UNIT_ASSERT_EQUAL(status, EStatus::SUCCESS);
@@ -980,7 +1168,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             */
             for (bool allow : {false, true}) {
                 auto settings = Settings().PreferredDatabase("db0").AllowFallback(allow);
-                auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+                auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc1");
                 UNIT_ASSERT(!db);
                 UNIT_ASSERT_EQUAL(status, EStatus::NOT_FOUND);
             }
@@ -994,7 +1182,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             */
             for (bool allow : {false, true}) {
                 auto settings = Settings().PreferredDatabase("db8").AllowFallback(allow);
-                auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+                auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc1");
                 UNIT_ASSERT(db);
                 UNIT_ASSERT_EQUAL(db->id(), "8");
             }
@@ -1008,7 +1196,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             */
             DisableDatabase(dbInfos, 8);
             auto settings = Settings().PreferredDatabase("db8").AllowFallback(false);
-            auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+            auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc1");
             UNIT_ASSERT(!db);
             UNIT_ASSERT_EQUAL(status, EStatus::UNAVAILABLE);
             EnableDatabase(dbInfos, 8);
@@ -1022,7 +1210,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             */
             DisableDatabase(dbInfos, 8);
             auto settings = Settings().PreferredDatabase("db8").AllowFallback(true);
-            auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+            auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc1");
             UNIT_ASSERT(db);
             UNIT_ASSERT_UNEQUAL(db->id(), "8");
             UNIT_ASSERT_EQUAL(status, EStatus::SUCCESS);
@@ -1036,7 +1224,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             | unset       | -               | not found   | false         | NOT_FOUND   |
             */
             auto settings = Settings().AllowFallback(false);
-            auto [db, status] = SelectDatabase(settings, dbInfos, "dc0");
+            auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc0");
             UNIT_ASSERT(!db);
             UNIT_ASSERT_EQUAL(status, EStatus::NOT_FOUND);
         }
@@ -1047,7 +1235,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             | unset       | -               | not found   | true          | by hash     |
             */
             auto settings = Settings().AllowFallback(true);
-            auto [db, status] = SelectDatabase(settings, dbInfos, "dc0");
+            auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc0");
             UNIT_ASSERT(db);
             UNIT_ASSERT_EQUAL(status, EStatus::SUCCESS);
         }
@@ -1060,7 +1248,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             */
             for (bool allow : {false, true}) {
                 auto settings = Settings().AllowFallback(allow);
-                auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+                auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc1");
                 UNIT_ASSERT(db);
                 UNIT_ASSERT_EQUAL(db->id(), "1");
             }
@@ -1074,7 +1262,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             */
             DisableDatabase(dbInfos, 1);
             auto settings = Settings().AllowFallback(false);
-            auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+            auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc1");
             UNIT_ASSERT(!db);
             UNIT_ASSERT_EQUAL(status, EStatus::UNAVAILABLE);
             EnableDatabase(dbInfos, 1);
@@ -1088,7 +1276,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             */
             DisableDatabase(dbInfos, 1);
             auto settings = Settings().AllowFallback(true);
-            auto [db, status] = SelectDatabase(settings, dbInfos, "dc1");
+            auto [db, status] = SelectDatabaseImpl(settings, dbInfos, "dc1");
             UNIT_ASSERT(db);
             UNIT_ASSERT_UNEQUAL(db->id(), "1");
             UNIT_ASSERT_EQUAL(status, EStatus::SUCCESS);

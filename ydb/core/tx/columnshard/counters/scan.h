@@ -1,5 +1,6 @@
 #pragma once
 #include "common/owner.h"
+#include "common/histogram.h"
 #include <ydb/core/tx/columnshard/resources/memory.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/counters.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -41,6 +42,17 @@ public:
 
 class TScanCounters: public TCommonCountersOwner {
 public:
+    enum class EIntervalStatus {
+        Undefined = 0,
+        WaitResources,
+        WaitSources,
+        WaitMergerStart,
+        WaitMergerContinue,
+        WaitPartialReply,
+
+        COUNT
+    };
+
     enum class EStatusFinish {
         Success /* "Success" */ = 0,
         ConveyorInternalError /* "ConveyorInternalError" */,
@@ -50,9 +62,56 @@ public:
         Deadline /* "Deadline" */,
         UndeliveredEvent /* "UndeliveredEvent" */,
         CannotAddInFlight /* "CannotAddInFlight" */,
+        ProblemOnStart /*ProblemOnStart*/,
 
         COUNT
     };
+
+    class TScanIntervalState {
+    private:
+        std::vector<NMonitoring::TDynamicCounters::TCounterPtr> ValuesByStatus;
+    public:
+        TScanIntervalState(const TScanCounters& counters) {
+            ValuesByStatus.resize((ui32)EIntervalStatus::COUNT);
+            for (auto&& i : GetEnumAllValues<EIntervalStatus>()) {
+                if (i == EIntervalStatus::COUNT) {
+                    continue;
+                }
+                ValuesByStatus[(ui32)i] = counters.CreateSubGroup("status", ::ToString(i)).GetValue("Intervals/Count");
+            }
+        }
+        void Add(const EIntervalStatus status) const {
+            AFL_VERIFY((ui32)status < ValuesByStatus.size());
+            ValuesByStatus[(ui32)status]->Add(1);
+        }
+        void Remove(const EIntervalStatus status) const {
+            AFL_VERIFY((ui32)status < ValuesByStatus.size());
+            ValuesByStatus[(ui32)status]->Sub(1);
+        }
+    };
+
+    class TScanIntervalStateGuard {
+    private:
+        EIntervalStatus Status = EIntervalStatus::Undefined;
+        const std::shared_ptr<TScanIntervalState> BaseCounters;
+    public:
+        TScanIntervalStateGuard(const std::shared_ptr<TScanIntervalState>& baseCounters)
+            : BaseCounters(baseCounters)
+        {
+            BaseCounters->Add(Status);
+        }
+
+        ~TScanIntervalStateGuard() {
+            BaseCounters->Remove(Status);
+        }
+
+        void SetStatus(const EIntervalStatus status) {
+            BaseCounters->Remove(Status);
+            Status = status;
+            BaseCounters->Add(Status);
+        }
+    };
+
 private:
     using TBase = TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr ProcessingOverload;
@@ -75,8 +134,16 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr LinearScanIntervals;
     NMonitoring::TDynamicCounters::TCounterPtr LogScanRecords;
     NMonitoring::TDynamicCounters::TCounterPtr LogScanIntervals;
+    std::shared_ptr<TScanIntervalState> ScanIntervalState;
 
+    NMonitoring::THistogramPtr HistogramIntervalMemoryRequiredOnFail;
+    NMonitoring::THistogramPtr HistogramIntervalMemoryReduceSize;
+    NMonitoring::THistogramPtr HistogramIntervalMemoryRequiredAfterReduce;
 public:
+
+    TScanIntervalStateGuard CreateIntervalStateGuard() const {
+        return TScanIntervalStateGuard(ScanIntervalState);
+    }
 
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters> ResourcesSubscriberCounters;
 
@@ -117,6 +184,18 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr BlobsReceivedBytes;
 
     TScanCounters(const TString& module = "Scan");
+
+    void OnOptimizedIntervalMemoryFailed(const ui64 memoryRequired) const {
+        HistogramIntervalMemoryRequiredOnFail->Collect(memoryRequired / (1024.0 * 1024.0 * 1024.0));
+    }
+
+    void OnOptimizedIntervalMemoryReduced(const ui64 memoryReduceVolume) const {
+        HistogramIntervalMemoryReduceSize->Collect(memoryReduceVolume / (1024.0 * 1024.0 * 1024.0));
+    }
+
+    void OnOptimizedIntervalMemoryRequired(const ui64 memoryRequired) const {
+        HistogramIntervalMemoryRequiredAfterReduce->Collect(memoryRequired / (1024.0 * 1024.0));
+    }
 
     void OnNoScanInterval(const ui32 recordsCount) const {
         NoScanRecords->Add(recordsCount);

@@ -40,9 +40,10 @@ static constexpr ui64 PUT_UNIT_SIZE = 40960u; // 40Kb
 
 ui64 PutUnitsSize(const ui64 size) {
     ui64 putUnitsCount = size / PUT_UNIT_SIZE;
-    if (size % PUT_UNIT_SIZE != 0)
-        ++putUnitsCount;    
-    return putUnitsCount;        
+    if (size % PUT_UNIT_SIZE != 0) {
+        ++putUnitsCount;
+    }
+    return putUnitsCount;
 }
 
 bool IsImportantClient(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {
@@ -86,6 +87,12 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
                 consumer->SetGeneration(config.GetReadRuleGenerations(i));
             }
             consumer->SetImportant(IsImportantClient(config, consumer->GetName()));
+        }
+    }
+
+    if (!config.PartitionsSize()) {
+        for (const auto partitionId : config.GetPartitionIds()) {
+            config.AddPartitions()->SetPartitionId(partitionId);
         }
     }
 }

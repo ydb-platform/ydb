@@ -30,6 +30,8 @@ private:
 
 public:
     static TCountMinSketch* Create(ui64 width = 256, ui64 depth = 8);
+    static TCountMinSketch* FromString(const char* data, size_t size);
+
     void operator delete(void* data) noexcept;
 
     TCountMinSketch() = delete;

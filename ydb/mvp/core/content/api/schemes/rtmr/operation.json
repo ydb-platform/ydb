@@ -1,0 +1,141 @@
+{
+    "get": {
+        "tags": ["RTMR"],
+        "produces": ["application/json"],
+        "summary": "Operation info",
+        "parameters": [{
+            "name": "installation",
+            "in": "path",
+            "description": "RTMR installation",
+            "required": true,
+            "type": "string"
+        },{
+            "name": "location",
+            "in": "query",
+            "description": "RTMR location",
+            "required": true,
+            "type": "string"
+        },{
+            "name": "operation",
+            "in": "query",
+            "description": "RTMR operation",
+            "required": true,
+            "type": "string"
+        }],
+        "responses": {
+            "200": {
+                "description": "OK",
+                "schema": {
+                    "type": "object",
+                    "title" : "Operation",
+                    "required": [],
+                    "properties": {
+                        "name": {
+                            "type": "string"
+                        },
+                        "task": {
+                            "type": "string"
+                        },
+                        "postponeTimeout": {
+                            "type": "integer",
+                            "format": "int64"
+                        },
+                        "execOnPartition": {
+                            "type": "boolean"
+                        },
+                        "options": {
+                            "type": "string"
+                        },
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "dataInputBandwidth": {
+                            "type": "number",
+                            "format": "double"
+                        },
+                        "input": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "state": {
+                            "type": "boolean"
+                        },
+                        "id": {
+                            "type": "string"
+                        },
+                        "maxTimeBack": {
+                            "type": "integer",
+                            "format": "int64"
+                        },
+                        "stateInputBandwidth": {
+                            "type": "number",
+                            "format": "double"
+                        },
+                        "skipIfMoreThanBytes": {
+                            "type": "integer",
+                            "format": "int64"
+                        },
+                        "stateStorage": {
+                            "type": "integer",
+                            "format": "int64"
+                        },
+                        "incremental": {
+                            "type": "boolean"
+                        },
+                        "cpuRead": {
+                            "type": "number",
+                            "format": "double"
+                        },
+                        "weight": {
+                            "type": "integer",
+                            "format": "int64"
+                        },
+                        "maxInputBytes": {
+                            "type": "integer",
+                            "format": "int64"
+                        },
+                        "dataOutputBandwidth": {
+                            "type": "number",
+                            "format": "double"
+                        },
+                        "stateLifeTime": {
+                            "type": "integer",
+                            "format": "int64"
+                        },
+                        "account": {
+                            "type": "string"
+                        },
+                        "pool": {
+                            "type": "string"
+                        },
+                        "cpuExecute": {
+                            "type": "number",
+                            "format": "double"
+                        },
+                        "stateOutputBandwidth": {
+                            "type": "number",
+                            "format": "double"
+                        },
+                        "owner": {
+                            "type": "string"
+                        },
+                        "factoryName": {
+                            "type": "string"
+                        },
+                        "libraryName": {
+                            "type": "string"
+                        },
+                        "output": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

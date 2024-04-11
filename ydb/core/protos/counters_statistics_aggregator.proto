@@ -7,8 +7,13 @@ option java_package = "ru.yandex.kikimr.proto";
 option (TabletTypeName) = "StatisticsAggregator";
 
 enum ETxTypes {
-    TXTYPE_INIT_SCHEMA = 0       [(TxTypeOpts) = {Name: "TxInitSchema"}];
-    TXTYPE_INIT = 1              [(TxTypeOpts) = {Name: "TxInit"}];
-    TXTYPE_CONFIGURE = 2         [(TxTypeOpts) = {Name: "TxConfigure"}];
-    TXTYPE_SCHEMESHARD_STATS = 3 [(TxTypeOpts) = {Name: "TxSchemeShardStats"}];
+    TXTYPE_INIT_SCHEMA = 0         [(TxTypeOpts) = {Name: "TxInitSchema"}];
+    TXTYPE_INIT = 1                [(TxTypeOpts) = {Name: "TxInit"}];
+    TXTYPE_CONFIGURE = 2           [(TxTypeOpts) = {Name: "TxConfigure"}];
+    TXTYPE_SCHEMESHARD_STATS = 3   [(TxTypeOpts) = {Name: "TxSchemeShardStats"}];
+    TXTYPE_SCAN_TABLE = 4          [(TxTypeOpts) = {Name: "TxScanTable"}];
+    TXTYPE_NAVIGATE = 5            [(TxTypeOpts) = {Name: "TxNavigate"}];
+    TXTYPE_RESOLVE = 6             [(TxTypeOpts) = {Name: "TxResolve"}];
+    TXTYPE_SCAN_RESPONSE = 7       [(TxTypeOpts) = {Name: "TxScanResponse"}];
+    TXTYPE_SAVE_QUERY_RESPONSE = 8 [(TxTypeOpts) = {Name: "TxSaveQueryResponse"}];
 }

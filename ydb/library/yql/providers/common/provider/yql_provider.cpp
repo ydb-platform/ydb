@@ -1382,13 +1382,49 @@ bool ValidateCompressionForOutput(std::string_view format, std::string_view comp
     return false;
 }
 
-bool ValidateFormatForInput(std::string_view format, TExprContext& ctx) {
-    if (format.empty() || IsIn(FormatsForInput, format)) {
+bool ValidateFormatForInput(
+    std::string_view format,
+    const TStructExprType* schemaStructRowType,
+    const std::function<bool(TStringBuf)>& excludeFields,
+    TExprContext& ctx) {
+    if (format.empty()) {
         return true;
     }
-    ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << format
-        << ". Use one of: " << JoinSeq(", ", FormatsForInput)));
-    return false;
+
+    if (!IsIn(FormatsForInput, format)) {
+        ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << format
+            << ". Use one of: " << JoinSeq(", ", FormatsForInput)));
+        return false;
+    }
+    
+    if (schemaStructRowType && format == TStringBuf("raw")) {
+        ui64 realSchemaColumnsCount = 0;
+
+        for (const TItemExprType* item : schemaStructRowType->GetItems()) {
+            if (excludeFields && excludeFields(item->GetName())) {
+                continue;
+            }
+            const TTypeAnnotationNode* rowType = item->GetItemType();
+            if (rowType->GetKind() == ETypeAnnotationKind::Optional) {
+                rowType = rowType->Cast<TOptionalExprType>()->GetItemType();
+            }
+
+            if (rowType->GetKind() != ETypeAnnotationKind::Data
+                || !IsDataTypeString(rowType->Cast<TDataExprType>()->GetSlot())) {
+                ctx.AddError(TIssue(TStringBuilder() << "Only string type column in schema supported in raw format (you have '"
+                    << item->GetName() << " " << FormatType(rowType) << "' field)"));
+                return false;
+            }
+            ++realSchemaColumnsCount;
+        }
+
+        if (realSchemaColumnsCount > 1) {
+            ctx.AddError(TIssue(TStringBuilder() << "Only one column in schema supported in raw format (you have " 
+                << realSchemaColumnsCount << " fields)"));
+            return false;
+        }
+    }
+    return true;
 }
 
 bool ValidateFormatForOutput(std::string_view format, TExprContext& ctx) {

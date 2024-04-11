@@ -227,11 +227,11 @@ std::optional<Ydb::Type::PrimitiveTypeId> TYDBType::ConvertYQLToYDB(const NSchem
         case NScheme::NTypeIds::Timestamp:
             return Ydb::Type::TIMESTAMP;
         case NScheme::NTypeIds::Timestamp64:
-            return Ydb::Type::DATE32;
-        case NScheme::NTypeIds::Date32:
-            return Ydb::Type::DATETIME64;
-        case NScheme::NTypeIds::Datetime64:
             return Ydb::Type::TIMESTAMP64;
+        case NScheme::NTypeIds::Date32:
+            return Ydb::Type::DATE32;
+        case NScheme::NTypeIds::Datetime64:
+            return Ydb::Type::DATETIME64;
         case NScheme::NTypeIds::Interval64:
             return Ydb::Type::INTERVAL64;
         default:

@@ -107,7 +107,7 @@ class ConnectionParams:
                     self.token = f.readline().strip('\r\n')
             except Exception:
                 pass
-        
+
         if self.token is not None and len(self.token.split(' ')) == 2:
             self.token_type, self.token = self.token.split(' ')
         else:

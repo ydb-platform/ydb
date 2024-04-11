@@ -386,6 +386,12 @@ const TTypeAnnotationNode* FromPgImpl(TPositionHandle pos, const TTypeAnnotation
         dataType = ctx.MakeType<TDataExprType>(EDataSlot::String);
     } else if (name == "unknown") {
         return ctx.MakeType<TNullExprType>();
+    } else if (name == "date") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Date32);
+    } else if (name == "timestamp") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Timestamp64);
+    } else if (name == "uuid") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Uuid);
     } else {
         ctx.AddError(TIssue(ctx.GetPosition(pos),
             TStringBuilder() << "Unsupported type: " << name));

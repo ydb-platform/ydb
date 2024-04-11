@@ -1,6 +1,9 @@
 #pragma once
 
-#include <ydb/library/yql/providers/yt/comp_nodes/yql_mkql_file_input_state.h>
+#include <ydb/library/yql/providers/yt/codec/yt_codec.h>
+#include <ydb/library/yql/public/udf/udf_value_builder.h>
+
+#include <yt/cpp/mapreduce/interface/io.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/interface/client.h>
 #include <yt/cpp/mapreduce/interface/serialize.h>
@@ -13,6 +16,8 @@
 #include <yt/yt/client/api/rpc_proxy/config.h>
 #include <yt/yt/client/api/rpc_proxy/connection.h>
 #include <yt/yt/client/api/rpc_proxy/row_stream.h>
+
+#include <arrow/memory_pool.h>
 
 namespace NYql::NDqs {
 NYT::NYPath::TRichYPath ConvertYPathFromOld(const NYT::TRichYPath& richYPath);

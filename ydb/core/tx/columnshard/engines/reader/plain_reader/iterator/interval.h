@@ -16,7 +16,7 @@ private:
     std::unique_ptr<NArrow::NMerger::TMergePartialStream> Merger;
     std::shared_ptr<TSpecialReadContext> Context;
     NColumnShard::TCounterGuard TaskGuard;
-    std::map<ui32, std::shared_ptr<IDataSource>> Sources;
+    THashMap<ui32, std::shared_ptr<IDataSource>> Sources;
 
     void ConstructResult();
 
@@ -25,6 +25,7 @@ private:
     TAtomicCounter ReadySourcesCount = 0;
     TAtomicCounter ReadyGuards = 0;
     ui32 WaitSourcesCount = 0;
+    NColumnShard::TConcreteScanCounters::TScanIntervalStateGuard IntervalStateGuard;
     void OnInitResourcesGuard(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard);
 protected:
     virtual void DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) override;
@@ -42,7 +43,7 @@ public:
         return IntervalIdx;
     }
 
-    const std::map<ui32, std::shared_ptr<IDataSource>>& GetSources() const {
+    const THashMap<ui32, std::shared_ptr<IDataSource>>& GetSources() const {
         return Sources;
     }
 
@@ -84,7 +85,7 @@ public:
     bool HasMerger() const;
 
     TFetchingInterval(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& finish,
-        const ui32 intervalIdx, const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,
+        const ui32 intervalIdx, const THashMap<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,
         const bool includeFinish, const bool includeStart, const bool isExclusiveInterval);
 };
 

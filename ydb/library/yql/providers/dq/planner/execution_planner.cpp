@@ -559,14 +559,56 @@ namespace NYql::NDqs {
 
     const static std::unordered_map<
         std::string_view,
-        void(*)(TDqsTasksGraph&, const NNodes::TDqPhyStage&, ui32,  const TChannelLogFunc&)
+        void(*)(TDqsTasksGraph&, const NNodes::TDqPhyStage&, ui32, const TChannelLogFunc&)
     > ConnectionBuilders = {
-        {TDqCnUnionAll::CallableName(), &BuildUnionAllChannels},
+        {TDqCnUnionAll::CallableName(), &BuildUnionAllChannels<TDqsTasksGraph>},
         {TDqCnHashShuffle::CallableName(), &BuildHashShuffleChannels},
         {TDqCnBroadcast::CallableName(), &BuildBroadcastChannels},
-        {TDqCnMap::CallableName(), BuildMapChannels},
-        {TDqCnMerge::CallableName(), BuildMergeChannels},
+        {TDqCnMap::CallableName(), &BuildMapChannels},
+        {TDqCnStreamLookup::CallableName(), &BuildStreamLookupChannels},
+        {TDqCnMerge::CallableName(), &BuildMergeChannels},
     };
+
+    NDqProto::TDqStreamLookupSource FillLookupSource(const NNodes::TExprBase& node) {
+        NDqProto::TDqStreamLookupSource result;
+        //TODO use provider to fill DataSource, see FillSourcePlanProperties
+        auto rowType = node.Raw()->GetTypeAnn();
+        result.SetSerializedRowType(NYql::NCommon::GetSerializedTypeAnnotation(rowType));
+        return result;
+    }
+
+    void TDqsExecutionPlanner::ConfigureInputTransformStreamLookup(const NNodes::TDqCnStreamLookup& streamLookup, const NNodes::TDqPhyStage& stage, ui32 inputIndex) {
+        //TODO use provider, see FillSourcePlanProperties
+        auto rightSource = FillLookupSource(streamLookup.RightInputRowType());
+        NDqProto::TDqInputTransformLookupSettings settings;
+        settings.SetLeftLabel(streamLookup.LeftLabel().Cast<NNodes::TCoAtom>().StringValue());
+        *settings.MutableRightSource() = rightSource;
+        settings.SetRightLabel(streamLookup.RightLabel().StringValue());
+        settings.SetJoinType(streamLookup.JoinType().StringValue());
+        for (const auto& k: streamLookup.LeftJoinKeyNames()) {
+            *settings.AddLeftJoinKeyNames() = k.StringValue();
+        }
+        for (const auto& k: streamLookup.RightJoinKeyNames()) {
+            *settings.AddRightJoinKeyNames() = k.StringValue();
+        }
+
+        const auto inputRowType = GetSeqItemType(streamLookup.Output().Ptr()->GetTypeAnn());
+        const auto outputRowType = GetSeqItemType(streamLookup.Ptr()->GetTypeAnn());
+
+        TTransform streamLookupTransform {
+            .Type = "StreamLookupInputTransform",
+            .InputType = NYql::NCommon::GetSerializedTypeAnnotation(inputRowType),
+            .OutputType = NYql::NCommon::GetSerializedTypeAnnotation(outputRowType),
+            .Settings = {} //set up in the next line
+        };
+        Y_ABORT_UNLESS(streamLookupTransform.Settings.PackFrom(settings));
+        auto& stageInfo = TasksGraph.GetStageInfo(stage);
+        for (auto taskId : stageInfo.Tasks) {
+            auto& task = TasksGraph.GetTask(taskId);
+            task.Inputs[inputIndex].Transform = streamLookupTransform;
+        }
+    }
+
 
     void TDqsExecutionPlanner::BuildConnections(const NNodes::TDqPhyStage& stage) {
         NDq::TChannelLogFunc logFunc = [](ui64, ui64, ui64, TStringBuf, bool) {};
@@ -575,6 +617,9 @@ namespace NYql::NDqs {
             if (input.Maybe<TDqConnection>()) {
                 if (const auto it = ConnectionBuilders.find(input.Cast<NNodes::TCallable>().CallableName()); it != ConnectionBuilders.cend()) {
                     it->second(TasksGraph, stage, inputIndex, logFunc);
+                    if (auto streamLookup = input.Maybe<TDqCnStreamLookup>())  {
+                        ConfigureInputTransformStreamLookup(streamLookup.Cast(), stage, inputIndex);
+                    }
                 } else {
                     YQL_ENSURE(false, "Unknown stage connection type: " << input.Cast<NNodes::TCallable>().CallableName());
                 }
@@ -584,8 +629,7 @@ namespace NYql::NDqs {
         }
     }
 
-
-void TDqsExecutionPlanner::BuildAllPrograms() {
+    void TDqsExecutionPlanner::BuildAllPrograms() {
         using namespace NKikimr::NMiniKQL;
 
         StagePrograms.clear();
@@ -673,6 +717,13 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
             }
             default:
                 YQL_ENSURE(false, "Unexpected task input type.");
+        }
+        if (input.Transform) {
+            auto transform = inputDesc.MutableTransform();
+            transform->SetType(input.Transform->Type);
+            transform->SetInputType(input.Transform->InputType);
+            transform->SetOutputType(input.Transform->OutputType);
+            *transform->mutable_settings() = input.Transform->Settings;
         }
 
         for (ui64 channel : input.Channels) {

@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.oauth.v1;
+
+import "google/protobuf/timestamp.proto";
+import "ydb/public/api/client/yc_private/oauth/claims.proto";
+import "ydb/public/api/client/yc_private/oauth/cloud_user.proto";
+import "ydb/public/api/client/yc_private/iam/iam_token.proto";
+
+service SessionService {
+    // Verify the identity of a subject for services, authenticated via Yandex.Cloud IdP.
+    // IAM-token authorization is required.
+    //
+    // gRPC error codes
+    //
+    // Unauthenticated: authorization iam_token are invalid or may have expired.
+    // InvalidArgument: the provided cookies are invalid or may have expired.
+    //      Additional information can be found in details at AuthorizationRequired message - in this case user should be redirected to specified URL
+    rpc Check (CheckSessionRequest) returns (CheckSessionResponse);
+
+    // Create per-service session
+    //
+    // gRPC error codes
+    // Unauthenticated: authorization iam_token are invalid or may have expired.
+    // InvalidArgument: the provided access_token is invalid or may have expired.
+    //      Additional information can be found in details at AuthorizationRequired message - in this case user should be redirected to specified URL
+    // FailedPrecondition: openid scope is missed for specified access_token
+    rpc Create (CreateSessionRequest) returns (CreateSessionResponse);
+
+}
+
+message CheckSessionRequest {
+    // HTTP-header Cookie with required per-service cookie values (e.g. yc_session)
+    string cookie_header = 1; // [(length) = "<=32768", (sensitive) = true, (sensitive_type) = SENSITIVE_COOKIE_HEADER];
+    // Service host address, for example "datalens.yandex.ru" or "tracker.yandex.com".
+    // Used for authorize_url TLD calculation, Yandex.Passport cookie revalidation (Yandex.Passport cookie is TLD-specific)
+    string host = 2; // [(length) = "<=253"];
+    // If present - specified federation id should be used for authorization
+    // otherwise authorization IdP calculated from cookies.
+    string federation_id = 3; // [(length) = "<=50"];
+}
+
+message CheckSessionResponse {
+    // Authenticated subject claims.
+    SubjectClaims subject_claims = 1; // [(required) = true];
+    // per-service cookie expiration time.
+    google.protobuf.Timestamp expires_at = 2;
+    CloudUserInfo cloud_user_info = 3;
+    yandex.cloud.priv.iam.v1.IamToken iam_token = 4;
+    // Yandex.Passport active multisession.
+    PassportSession passport_session = 5;
+}
+
+message PassportSession {
+    // Yandex.Passport active multisession user info (including default user)
+    repeated YandexClaims users = 1;
+}
+
+message CreateSessionRequest {
+    // access_token from successful token response, see https://openid.net/specs/openid-connect-core-1_0.html#TokenResponse for details.
+    string access_token = 1; // [(length) = "<=4096", (sensitive) = true];
+    // Which hosts are allowed to receive the cookie. In general - application should not send this parameter.
+    // Domain should match one of the client_id redirect_uri. Unmatched domain parameter is ignored.
+    // see http://www.rfcreader.com/#rfc6265_line474 for details.
+    string domain = 2; // [(length) = "<=253"];
+    // HTTP-header Cookie with optional per-service cookie values (e.g. yc_device)
+    string cookie_header = 3; // [(length) = "<=32768", (sensitive) = true, (sensitive_type) = SENSITIVE_COOKIE_HEADER];
+}
+
+message CreateSessionResponse {
+    // HTTP-header Set-Cookie for End-User with required per-service cookies, e.g. yc_session
+    repeated string set_cookie_header = 1; // [(sensitive) = true, (sensitive_type) = SENSITIVE_SET_COOKIE_HEADER];
+    // per-service cookie expiration time.
+    google.protobuf.Timestamp expires_at = 2;
+}
+
+message AuthorizationRequired {
+    // authorize URL, e.g. URL for /authorize OpenID Connect endpoint.
+    string authorize_url = 1; // [(required) = true, (length) = "<=2048"];
+}

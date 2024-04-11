@@ -10,11 +10,11 @@
 
 namespace NYdb::NFederatedTopic {
 
-std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseByHash(
+std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseByHashImpl(
     NTopic::TFederatedWriteSessionSettings const& settings,
     std::vector<std::shared_ptr<TDbInfo>> const& dbInfos);
 
-std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabase(
+std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseImpl(
     NTopic::TFederatedWriteSessionSettings const& settings,
     std::vector<std::shared_ptr<TDbInfo>> const& dbInfos, TString const& selfLocation);
 
@@ -84,26 +84,29 @@ private:
 
 private:
     void Start();
-    void OpenSubSessionImpl(std::shared_ptr<TDbInfo> db);
+    void OpenSubsessionImpl(std::shared_ptr<TDbInfo> db);
 
-    std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseImpl();
-
-    void OnFederatedStateUpdateImpl();
-    void ScheduleFederatedStateUpdateImpl(TDuration delay);
+    void OnFederationStateUpdateImpl();
+    void ScheduleFederationStateUpdateImpl(TDuration delay);
 
     void WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& message);
-    bool PrepareDeferredWrite(TDeferredWrite& deferred);
+    bool PrepareDeferredWriteImpl(TDeferredWrite& deferred);
 
-    void CloseImpl(EStatus statusCode, NYql::TIssues&& issues, TDuration timeout = TDuration::Zero());
-    void CloseImpl(NTopic::TSessionClosedEvent const& ev, TDuration timeout = TDuration::Zero());
+    void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
+    void CloseImpl(NTopic::TSessionClosedEvent const& ev);
 
-    TStringBuilder GetLogPrefix() const;
+    bool MessageQueuesAreEmptyImpl() const;
+    void UpdateFederationStateImpl();
+
+    void IssueTokenIfAllowed();
+
+    TStringBuilder GetLogPrefixImpl() const;
 
 private:
     // For subsession creation
     const NTopic::TFederatedWriteSessionSettings Settings;
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
-    const NTopic::TTopicClientSettings SubClientSetttings;
+    const NTopic::TTopicClientSettings SubclientSettings;
     std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> ProvidedCodecs;
 
     NTopic::IRetryPolicy::IRetryState::TPtr RetryState;
@@ -131,8 +134,15 @@ private:
     std::deque<TWrappedWriteMessage> OriginalMessagesToGetAck;
     i64 BufferFreeSpace;
 
-    // Exiting.
-    bool Closing = false;
+    enum class State {
+        CREATED,  // The session has not been started.
+        WORKING,  // Start method has been called.
+        CLOSING,  // Close method has been called, but the session may still send some messages.
+        CLOSED    // The session is closed, either due to the user request or some server error.
+    };
+    State SessionState{State::CREATED};
+    NThreading::TPromise<void> MessageQueuesHaveBeenEmptied;
+    NThreading::TPromise<void> HasBeenClosed;
 };
 
 class TFederatedWriteSession : public NTopic::IWriteSession,

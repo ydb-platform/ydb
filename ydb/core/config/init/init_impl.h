@@ -13,6 +13,8 @@
 #include <ydb/core/protos/alloc.pb.h>
 #include <ydb/core/protos/resource_broker.pb.h>
 #include <ydb/core/protos/http_config.pb.h>
+#include <ydb/core/protos/local.pb.h>
+#include <ydb/core/protos/tablet.pb.h>
 #include <ydb/core/protos/tenant_pool.pb.h>
 #include <ydb/core/protos/compile_service_config.pb.h>
 #include <ydb/core/protos/cms.pb.h>
@@ -44,6 +46,7 @@ extern TAutoPtr<NKikimrConfig::TActorSystemConfig> DummyActorSystemConfig();
 extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();
 
 using namespace NYdb::NConsoleClient;
+using namespace NKikimrTabletBase;
 
 namespace NKikimr::NConfig {
 
@@ -323,6 +326,7 @@ struct TCommonAppOptions {
     bool SysLogEnabled = false;
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
+    EWorkload Workload = EWorkload::Hybrid; 
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
@@ -413,6 +417,9 @@ struct TCommonAppOptions {
 
         opts.AddLongOption("tiny-mode", "Start in a tiny mode")
             .NoArgument().SetFlag(&TinyMode);
+
+        opts.AddLongOption("workload", Sprintf("Workload to be served by this node, allowed values are %s", GetEnumAllNames<EWorkload>().data()))
+            .RequiredArgument("NAME").StoreResult(&Workload);
     }
 
     void ApplyFields(NKikimrConfig::TAppConfig& appConfig, IEnv& env, IConfigUpdateTracer& ConfigUpdateTracer) const {
@@ -625,6 +632,80 @@ struct TCommonAppOptions {
                 ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::FederatedQueryConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
             }
         }
+
+        if (TenantName) {
+            switch (Workload) {
+                case EWorkload::Operational:
+                    ApplyTabletDenyList(*appConfig.MutableDynamicNodeConfig(), { TTabletTypes::ColumnShard }, ConfigUpdateTracer);
+                    break;
+                case EWorkload::Analyitical:
+                    ApplyTabletAllowList(*appConfig.MutableDynamicNodeConfig(), { TTabletTypes::ColumnShard }, ConfigUpdateTracer);
+                    ApplyDontStartGrpcProxy(*appConfig.MutableGRpcConfig(), ConfigUpdateTracer);
+                    break;
+                case EWorkload::Hybrid:
+                    // default, do nothing 
+                    break;
+            }
+        }
+    }
+
+    void ApplyTabletAvailability(NKikimrConfig::TDynamicNodeConfig& config,
+        const std::unordered_set<TTabletTypes::EType>& allowList,
+        const std::unordered_set<TTabletTypes::EType>& denyList,
+        IConfigUpdateTracer& configUpdateTracer) const
+    {
+        std::unordered_map<TTabletTypes::EType, NKikimrLocal::TTabletAvailability> tabletAvailabilities;
+        for (const auto& availability : config.GetTabletAvailability()) {
+            tabletAvailabilities.emplace(availability.GetType(), availability);
+        }
+
+        if (!allowList.empty()) {
+            Y_ABORT_UNLESS(denyList.empty());
+
+            for (int i = TTabletTypes::EType_MIN; i < TTabletTypes::EType_MAX; ++i) {
+                const auto type = static_cast<TTabletTypes::EType>(i);
+                tabletAvailabilities[type].SetType(type);
+                if (allowList.contains(type)) {
+                    tabletAvailabilities[type].ClearMaxCount(); // default is big enough
+                    tabletAvailabilities[type].SetPriority(std::numeric_limits<i32>::max());
+                } else {
+                    tabletAvailabilities[type].SetMaxCount(0);
+                }
+            }
+        } else if (!denyList.empty()) {
+            Y_ABORT_UNLESS(allowList.empty());
+
+            for (const auto type : denyList) {
+                tabletAvailabilities[type].SetType(type);
+                tabletAvailabilities[type].SetMaxCount(0);
+            }
+        }
+
+        config.MutableTabletAvailability()->Clear();
+        for (const auto& [_, tabletAvailability] : tabletAvailabilities) {
+            config.MutableTabletAvailability()->Add()->CopyFrom(tabletAvailability);
+        }
+
+        configUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::DynamicNodeConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+    }
+
+    void ApplyTabletAllowList(NKikimrConfig::TDynamicNodeConfig& config,
+        const std::unordered_set<TTabletTypes::EType>& allowList,
+        IConfigUpdateTracer& configUpdateTracer) const
+    {
+        ApplyTabletAvailability(config, allowList, {}, configUpdateTracer);
+    }
+
+    void ApplyTabletDenyList(NKikimrConfig::TDynamicNodeConfig& config,
+        const std::unordered_set<TTabletTypes::EType>& denyList,
+        IConfigUpdateTracer& configUpdateTracer) const
+    {
+        ApplyTabletAvailability(config, {}, denyList, configUpdateTracer);
+    }
+
+    void ApplyDontStartGrpcProxy(NKikimrConfig::TGRpcConfig& config, IConfigUpdateTracer& configUpdateTracer) const {
+        config.SetStartGRpcProxy(false);
+        configUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
     }
 
     ui32 DeduceNodeId(const NKikimrConfig::TAppConfig& appConfig, IEnv& env) const {

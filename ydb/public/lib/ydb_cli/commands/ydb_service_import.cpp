@@ -277,6 +277,7 @@ void TCommandImportFromCsv::Config(TConfig& config) {
 int TCommandImportFromCsv::Run(TConfig& config) {
     TImportFileSettings settings;
     settings.OperationTimeout(OperationTimeout);
+    settings.ClientTimeout(OperationTimeout + TDuration::MilliSeconds(200));
     settings.Format(InputFormat);
     settings.MaxInFlightRequests(MaxInFlightRequests);
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));

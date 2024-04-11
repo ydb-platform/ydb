@@ -93,6 +93,7 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
             Record.MutableRequest()->SetTimeoutMs(OperationTimeout.MilliSeconds());
         }
         Record.MutableRequest()->SetIsInternalCall(RequestCtx->IsInternalCall());
+        Record.MutableRequest()->SetOutputChunkMaxSize(QuerySettings.OutputChunkMaxSize);
 
         RequestCtx.reset();
     }

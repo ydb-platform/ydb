@@ -133,6 +133,69 @@ private:
     const EDataSlot To;
 };
 
+class TRoundBigDateTypeWrapper : public TMutableComputationNode<TRoundBigDateTypeWrapper> {
+    using TSelf = TRoundBigDateTypeWrapper;
+    using TBase = TMutableComputationNode<TSelf>;
+    typedef TBase TBaseComputation;
+public:
+    TRoundBigDateTypeWrapper(TComputationMutables& mutables, IComputationNode* source, bool down, EDataSlot from, EDataSlot to)
+        : TBaseComputation(mutables)
+        , Source(source)
+        , Down(down)
+        , From(from)
+        , To(to)
+    {
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        constexpr i64 usInDay = 86400'000'000ll;
+        constexpr i64 usInSec = 1000'000ll;
+
+        i64 us = Source->GetValue(ctx).Get<i64>();
+        if (From != EDataSlot::Timestamp64) {
+            Y_ENSURE(From == EDataSlot::Datetime64);
+            us *= usInSec;
+        }
+
+        // lower bound check is not needed as RoundDown(MinTimestamp64) is valid value for both date32 and datetime64
+        if (To == EDataSlot::Date32) {
+            i32 rounded = us / usInDay;
+            i32 rem = us % usInDay;
+            if (rem > 0 && !Down) {
+                rounded += 1;
+            } else if (rem < 0 && Down) {
+                rounded -= 1;
+            }
+            if (rounded <= MAX_DATE32) {
+                return TUnboxedValuePod(rounded);
+            }
+        } else {
+            Y_ENSURE(To == EDataSlot::Datetime64);
+            i64 rounded = us / usInSec;
+            i64 rem = us % usInSec;
+            if (rem > 0 && !Down) {
+                rounded += 1;
+            } else if (rem < 0 && Down) {
+                rounded -= 1;
+            }
+            if (rounded <= MAX_DATETIME64) {
+                return TUnboxedValuePod(rounded);
+            }
+        }
+        return {};
+    }
+
+private:
+    void RegisterDependencies() const final {
+        this->DependsOn(Source);
+    }
+
+    IComputationNode* const Source;
+    const bool Down;
+    const EDataSlot From;
+    const EDataSlot To;
+};
+
 class TRoundStringWrapper : public TMutableComputationNode<TRoundStringWrapper> {
     using TSelf = TRoundStringWrapper;
     using TBase = TMutableComputationNode<TSelf>;
@@ -213,6 +276,10 @@ IComputationNode* WrapRound(TCallable& callable, const TComputationNodeFactoryCo
         case EDataSlot::Timestamp:
             Y_ENSURE(GetDataTypeInfo(to).Features & DateType);
             return new TRoundDateTypeWrapper(ctx.Mutables, source, down, from, to);
+        case EDataSlot::Datetime64:
+        case EDataSlot::Timestamp64:
+            Y_ENSURE(GetDataTypeInfo(to).Features & BigDateType);
+            return new TRoundBigDateTypeWrapper(ctx.Mutables, source, down, from, to);
         case EDataSlot::String:
             Y_ENSURE(to == EDataSlot::Utf8);
             return new TRoundStringWrapper(ctx.Mutables, source, down);

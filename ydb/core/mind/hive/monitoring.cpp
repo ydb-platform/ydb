@@ -2691,9 +2691,9 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Wait) {
-            Self->Execute(Self->CreateSwitchDrainOn(NodeId, {.Persist = true, .KeepDown = true}, WaitActorId));
+            Self->Execute(Self->CreateSwitchDrainOn(NodeId, {}, WaitActorId));
         } else {
-            Self->Execute(Self->CreateSwitchDrainOn(NodeId, {.Persist = true, .KeepDown = true}, {}));
+            Self->Execute(Self->CreateSwitchDrainOn(NodeId, {}, {}));
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"SCHEDULED\"}"));
         }
     }

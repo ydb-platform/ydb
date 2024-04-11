@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.ydb.v1;
+
+import "ydb/public/api/client/yc_private/ydb/v1/storage_type.proto";
+
+service StorageTypeService {
+  // Returns the specified storage types.
+  rpc Get (GetStorageTypeRequest) returns (StorageType);
+
+  // Returns the list of available storage types.
+  rpc List (ListStorageTypesRequest) returns (ListStorageTypesResponse);
+}
+
+message GetStorageTypeRequest {
+  // Required. ID of the storage type to return.
+  string storage_type_id = 1; // [(required) = true];
+}
+
+message ListStorageTypesRequest {
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `page_size`, the service returns a `next_page_token` that can be used
+  // to get the next page of results in subsequent ListStorageTypes requests.
+  // Acceptable values are 0 to 1000, inclusive. Default value: 100.
+  int64 page_size = 1; // [(value) = "0-1000"];
+
+  // Page token. Set `page_token` to the `next_page_token` returned by a previous ListStorageTypes
+  // request to get the next page of results.
+  string page_token = 2; // [(length) = "<=100"];
+}
+
+message ListStorageTypesResponse {
+  // Requested list of storage types.
+  repeated StorageType storage_types = 1;
+
+  // This token allows you to get the next page of results for ListStorageTypes requests,
+  // if the number of results is larger than `page_size` specified in the request.
+  // To get the next page, specify the value of `next_page_token` as a value for
+  // the `page_token` parameter in the next ListStorageTypes request. Subsequent ListStorageTypes
+  // requests will have their own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}

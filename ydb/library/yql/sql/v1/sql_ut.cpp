@@ -535,6 +535,18 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         }
     }
 
+    Y_UNIT_TEST(WarnCrossJoinStrategyHint) {
+        NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a CROSS JOIN /*+ merge() */ plato.Input AS b;");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:32: Warning: Non-default join strategy will not be used for CROSS JOIN, code: 4534\n");
+    }
+
+    Y_UNIT_TEST(WarnUnknownJoinStrategyHint) {
+        NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ xmerge() */ plato.Input AS b USING (key);");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:41: Warning: Unsupported join strategy: xmerge, code: 4534\n");
+    }
+
     Y_UNIT_TEST(ReverseLabels) {
         NYql::TAstParseResult res = SqlToYql("select in.key as subkey, subkey as key from plato.Input as in;");
         UNIT_ASSERT(res.Root);

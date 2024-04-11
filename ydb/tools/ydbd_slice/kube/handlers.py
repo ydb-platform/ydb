@@ -2,7 +2,6 @@ import re
 import os
 import sys
 import logging
-import time
 
 from collections import defaultdict
 from kubernetes.client import Configuration
@@ -263,7 +262,7 @@ def wait_for_storage(api_client, project_path, manifests):
         except TimeoutError as e:
             sys.exit(e.args[0])
 
-#
+
 # macro level ydb functions
 def slice_ydb_apply(api_client, project_path, manifests, dynamic_config_type):
     # process storages first

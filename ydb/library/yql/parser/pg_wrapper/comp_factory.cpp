@@ -2064,6 +2064,29 @@ NUdf::TUnboxedValuePod ConvertFromPgValue(NUdf::TUnboxedValuePod value, TMaybe<N
             auto x = (const text*)PointerDatumFromPod(value);
             return MakeString(GetVarBuf(x));
         }
+    case NUdf::EDataSlot::Date32: {
+        auto res = (i32)DatumGetInt32(ScalarDatumFromPod(value)) - PgDateShift;
+        if (res < NUdf::MIN_DATE32 || res > NUdf::MAX_DATE32) {
+            return NUdf::TUnboxedValuePod();
+        }
+
+        return NUdf::TUnboxedValuePod(res);
+    }
+    case NUdf::EDataSlot::Timestamp64: {
+        auto res = (i64)DatumGetInt64(ScalarDatumFromPod(value)) - PgTimestampShift;
+        if (res < NUdf::MIN_TIMESTAMP64 || res > NUdf::MAX_TIMESTAMP64) {
+            return NUdf::TUnboxedValuePod();
+        }
+
+        return NUdf::TUnboxedValuePod(res);
+    }
+    case NUdf::EDataSlot::Uuid: {
+        auto str = (char*)DirectFunctionCall1Coll(uuid_out, DEFAULT_COLLATION_OID, PointerDatumFromPod(value));
+        auto res = ParseUuid(NUdf::TStringRef(TStringBuf(str)));
+        pfree(str);
+        return res;
+    }
+
     default:
         ythrow yexception() << "Unexpected data slot in ConvertFromPgValue: " << Slot;
     }
@@ -2607,6 +2630,50 @@ struct TFromPgExec {
             *res = builder.Build(true);
             break;
         }
+        case DATEOID: {
+            NUdf::TFixedSizeBlockReader<ui64, true> reader;
+            NUdf::TFixedSizeArrayBuilder<i32, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::int32(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                auto res = (i32)DatumGetInt32((Datum)item.Get<ui64>()) - PgDateShift;
+                if (res < NUdf::MIN_DATE32 || res > NUdf::MAX_DATE32) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                builder.Add(NUdf::TBlockItem(res));
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
+        case TIMESTAMPOID: {
+            NUdf::TFixedSizeBlockReader<ui64, true> reader;
+            NUdf::TFixedSizeArrayBuilder<i64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::int64(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                auto res = (i64)DatumGetInt64((Datum)item.Get<ui64>()) - PgTimestampShift;
+                if (res < NUdf::MIN_TIMESTAMP64 || res > NUdf::MAX_TIMESTAMP64) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                builder.Add(NUdf::TBlockItem(res));
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
         default:
             ythrow yexception() << "Unsupported type: " << NPg::LookupType(SourceId).Name;
         }
@@ -2640,6 +2707,8 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeFromPgKernel(TType* inputType,
     case VARCHAROID:
     case BYTEAOID:
     case CSTRINGOID:
+    case DATEOID:
+    case TIMESTAMPOID:
         kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
         break;
     default:
@@ -3147,6 +3216,12 @@ TComputationNodeFactory GetPgFactory() {
                     return new TFromPg<NUdf::EDataSlot::String, false>(ctx.Mutables, arg);
                 case CSTRINGOID:
                     return new TFromPg<NUdf::EDataSlot::Utf8, true>(ctx.Mutables, arg);
+                case DATEOID:
+                    return new TFromPg<NUdf::EDataSlot::Date32, true>(ctx.Mutables, arg);
+                case TIMESTAMPOID:
+                    return new TFromPg<NUdf::EDataSlot::Timestamp64, true>(ctx.Mutables, arg);
+                case UUIDOID:
+                    return new TFromPg<NUdf::EDataSlot::Uuid, true>(ctx.Mutables, arg);
                 default:
                     ythrow yexception() << "Unsupported type: " << NPg::LookupType(sourceId).Name;
                 }

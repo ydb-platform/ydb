@@ -884,14 +884,13 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
         }
 
         NKikimr::NStat::TRequest t;
-        t.StatType = NKikimr::NStat::EStatType::SIMPLE;
         t.PathId = NKikimr::TPathId(result.Metadata->PathId.OwnerId(), result.Metadata->PathId.TableId());
 
         auto event = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
+        event->StatType = NKikimr::NStat::EStatType::SIMPLE;
         event->StatRequests.push_back(t);
 
         auto statServiceId = NStat::MakeStatServiceID(actorSystem->NodeId);
-
 
         return SendActorRequest<NStat::TEvStatistics::TEvGetStatistics, NStat::TEvStatistics::TEvGetStatisticsResult, TResult>(
             actorSystem,
@@ -902,11 +901,9 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     return;
                 }
                 auto resp = response.StatResponses[0];
-                if (std::holds_alternative<NKikimr::NStat::TStatSimple>(resp.Statistics)) {
-                    auto s = std::get<NKikimr::NStat::TStatSimple>(resp.Statistics);
-                    result.Metadata->RecordsCount = s.RowCount;
-                    result.Metadata->DataSize = s.BytesSize;
-                }
+                auto s = resp.Simple;
+                result.Metadata->RecordsCount = s.RowCount;
+                result.Metadata->DataSize = s.BytesSize;
                 promise.SetValue(result);
         });
 

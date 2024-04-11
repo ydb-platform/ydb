@@ -682,19 +682,7 @@ void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie,
 
 void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
 {
-    THashSet<ui32> was;
-    if (NewConfig.PartitionsSize()) {
-        for (const auto& partition : NewConfig.GetPartitions()) {
-            was.insert(partition.GetPartitionId());
-        }
-    } else {
-        for (const auto partitionId : NewConfig.GetPartitionIds()) {
-            was.insert(partitionId);
-        }
-    }
-    for (const auto& partition : Config.GetPartitions()) {
-        Y_VERIFY_S(was.contains(partition.GetPartitionId()), "New config is bad, missing partition " << partition.GetPartitionId());
-    }
+    EnsurePartitionsAreNotDeleted(NewConfig);
 
     // in order to answer only after all parts are ready to work
     Y_ABORT_UNLESS(ConfigInited && AllOriginalPartitionsInited());
@@ -726,12 +714,6 @@ void TPersQueue::ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
                                 const TActorContext& ctx)
 {
     Config = newConfig;
-
-    if (!Config.PartitionsSize()) {
-        for (const auto partitionId : Config.GetPartitionIds()) {
-            Config.AddPartitions()->SetPartitionId(partitionId);
-        }
-    }
 
     ui32 cacheSize = CACHE_SIZE;
     if (Config.HasCacheSize()) {
@@ -1016,12 +998,6 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         Y_ABORT_UNLESS(res);
 
         Migrate(Config);
-
-        if (!Config.PartitionsSize()) {
-            for (const auto partitionId : Config.GetPartitionIds()) {
-                Config.AddPartitions()->SetPartitionId(partitionId);
-            }
-        }
 
         TopicName = Config.GetTopicName();
         TopicPath = Config.GetTopicPath();
@@ -4250,12 +4226,6 @@ void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
 
     Y_ABORT_UNLESS(ConfigInited && AllOriginalPartitionsInited());
 
-    if (!config.PartitionsSize()) {
-        for (const auto partitionId : config.GetPartitionIds()) {
-            config.AddPartitions()->SetPartitionId(partitionId);
-        }
-    }
-
     for (const auto& partition : config.GetPartitions()) {
         const TPartitionId partitionId(partition.GetPartitionId());
         if (Partitions.contains(partitionId)) {
@@ -4274,15 +4244,8 @@ void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
 void TPersQueue::EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig& config) const
 {
     THashSet<ui32> was;
-
-    if (config.PartitionsSize()) {
-        for (const auto& partition : config.GetPartitions()) {
-            was.insert(partition.GetPartitionId());
-        }
-    } else {
-        for (const auto partitionId : config.GetPartitionIds()) {
-            was.insert(partitionId);
-        }
+    for (const auto& partition : config.GetPartitions()) {
+        was.insert(partition.GetPartitionId());
     }
 
     for (const auto& partition : Config.GetPartitions()) {

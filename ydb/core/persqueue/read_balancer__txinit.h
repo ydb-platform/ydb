@@ -66,18 +66,20 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                     return false;
             }
 
+            std::map<ui32, TPartitionInfo> partitionsInfo;
             while (!partsRowset.EndOfSet()) { //found out tablets for partitions
                 ++Self->NumActiveParts;
                 ui32 part = partsRowset.GetValue<Schema::Partitions::Partition>();
                 ui64 tabletId = partsRowset.GetValue<Schema::Partitions::TabletId>();
 
-                Self->PartitionsInfo[part] = {tabletId, EPartitionState::EPS_FREE, TActorId(), part + 1};
-                Self->AggregatedStats.AggrStats(part, partsRowset.GetValue<Schema::Partitions::DataSize>(), 
+                partitionsInfo[part] = {tabletId, EPartitionState::EPS_FREE, TActorId(), part + 1};
+                Self->AggregatedStats.AggrStats(part, partsRowset.GetValue<Schema::Partitions::DataSize>(),
                                                 partsRowset.GetValue<Schema::Partitions::UsedReserveSize>());
 
                 if (!partsRowset.Next())
                     return false;
             }
+            Self->PartitionsInfo.insert(partitionsInfo.rbegin(), partitionsInfo.rend());
 
             while (!groupsRowset.EndOfSet()) { //found out tablets for partitions
                 ui32 groupId = groupsRowset.GetValue<Schema::Groups::GroupId>();

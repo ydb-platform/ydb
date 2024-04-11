@@ -207,6 +207,19 @@ void BuildMapChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui32 inpu
 }
 
 template <typename TGraph>
+void BuildStreamLookupChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui32 inputIndex,
+    const TChannelLogFunc& logFunc)
+{
+    auto& stageInfo = graph.GetStageInfo(stage);
+    auto cnStreamLookup = stage.Inputs().Item(inputIndex).Cast<NNodes::TDqCnStreamLookup>();
+
+    auto& originStageInfo = graph.GetStageInfo(cnStreamLookup.Output().Stage());
+    auto outputIndex = FromString<ui32>(cnStreamLookup.Output().Index().Value());
+
+    BuildMapChannels(graph, stageInfo, inputIndex, originStageInfo, outputIndex, false /*spilling*/, logFunc);
+}
+
+template <typename TGraph>
 void BuildBroadcastChannels(TGraph& graph, const typename TGraph::TStageInfoType& stageInfo, ui32 inputIndex,
     const typename TGraph::TStageInfoType& inputStageInfo, ui32 outputIndex, bool enableSpilling,
     const TChannelLogFunc& logFunc)

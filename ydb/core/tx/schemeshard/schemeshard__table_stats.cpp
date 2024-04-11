@@ -247,7 +247,13 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
     TShardIdx shardIdx = Self->TabletIdToShardIdx[datashardId];
     const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx);
-    Y_ABORT_UNLESS(shardInfo, "ShardInfos does not know about the shardIdx returned by TabletIdToShardIdx.");
+    if (!shardInfo) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "No ShardInfo by shardIdx " << shardIdx << " of shard " << datashardId;
+        );
+        return true;
+    }
+
     auto subDomainInfo = Self->ResolveDomainInfo(pathId);
     const auto channelsMapping = MapChannelsToStoragePoolKinds(ctx,
                                                                subDomainInfo->EffectiveStoragePools(),

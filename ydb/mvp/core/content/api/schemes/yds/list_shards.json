@@ -1,0 +1,167 @@
+{
+  "post": {
+    "security": {
+      "Bearer": []
+    },
+    "consumes": [
+      "application/json"
+    ],
+    "produces": [
+      "application/json"
+    ],
+    "description": "Call ListShards specified stream with AT_LATEST filter",
+    "parameters": [
+      {
+        "description": "The location of the database",
+        "in": "path",
+        "name": "location",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "The database of the data stream",
+        "in": "query",
+        "name": "databaseId",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "The name of the data stream",
+        "in": "query",
+        "name": "name",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "successfull operation",
+        "title": "list_datastream_shards response",
+        "type": "object",
+        "schema": {
+          "properties": {
+            "databaseId": {
+              "type": "string"
+            },
+            "folderId": {
+              "type": "string"
+            },
+            "alternativeEndpoint": {
+              "type": "string"
+            },
+            "endpoint": {
+              "type": "string"
+            },
+            "alternativeRegion": {
+              "type": "string"
+            },
+            "streamDescription": {
+              "properties": {
+                "owner": {
+                  "type": "string"
+                },
+                "alternativeStreamName": {
+                  "type": "string"
+                },
+                "streamModeDetails": {
+                  "properties": {
+                    "streamMode": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "storageLimitMb": {
+                  "type": "number"
+                },
+                "streamStatus": {
+                  "type": "string"
+                },
+                "totalWriteQuotaKbPerSec": {
+                  "type": "number"
+                },
+                "retentionPeriodHours": {
+                  "type": "number"
+                },
+                "streamCreationTimestamp": {
+                  "type": "number"
+                },
+                "nextToken": {
+                  "description": "not returned if empty",
+                  "type": "string"
+                },
+                "shards": {
+                  "items": {
+                    "properties": {
+                      "adjacentParentShardId": {
+                        "description": "not returned if empty",
+                        "type": "string"
+                      },
+                      "hashKeyRange": {
+                        "properties": {
+                          "endingHashKey": {
+                            "type": "string"
+                          },
+                          "startingHashKey": {
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "parentShardId": {
+                        "description": "not returned if empty",
+                        "type": "string"
+                      },
+                      "shardId": {
+                        "type": "string"
+                      },
+                      "sequenceNumberRange": {
+                        "properties": {
+                          "startingSequenceNumber": {
+                            "type": "string"
+                          },
+                          "endingSequenceNumber": {
+                            "description": "not returned if empty",
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "writeQuotaKbPerSec": {
+                  "type": "number"
+                },
+                "streamName": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "cloudId": {
+              "type": "string"
+            },
+            "region": {
+              "type": "string"
+            },
+            "databaseName": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "503": {
+        "description": "service unavailable (some errors occurred)"
+      }
+    },
+    "summary": "get records from the data stream",
+    "tags": [
+      "YDS UI v1",
+      "YDBC"
+    ]
+  }
+}

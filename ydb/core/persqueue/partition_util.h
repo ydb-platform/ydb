@@ -4,8 +4,6 @@
 
 namespace NKikimr::NPQ {
 
-static const ui64 SET_OFFSET_COOKIE = 1;
-
 class TKeyLevel {
 public:
     friend IOutputStream& operator <<(IOutputStream& out, const TKeyLevel& value);

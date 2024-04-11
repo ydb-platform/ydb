@@ -530,9 +530,13 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
     auto wideFlow = MakeExpandMap(Node->Pos(), inputColumns, flow, Ctx);
 
     TExprNode::TListType extractorArgs;
+    TExprNode::TListType newRowItems;
     for (ui32 i = 0; i < RowType->GetSize(); ++i) {
         extractorArgs.push_back(Ctx.NewArgument(Node->Pos(), "field" + ToString(i)));
+        newRowItems.push_back(Ctx.NewList(Node->Pos(), { Ctx.NewAtom(Node->Pos(), RowType->GetItems()[i]->GetName()), extractorArgs.back() }));
     }
+
+    const TExprNode::TPtr newRow = Ctx.NewCallable(Node->Pos(), "AsStruct", std::move(newRowItems));
 
     TExprNode::TListType extractorRoots;
     TVector<const TTypeAnnotationNode*> allKeyTypes;
@@ -585,21 +589,14 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
         }
 
         auto rowArg = &trait->Child(2)->Head().Head();
+        const TNodeOnNodeOwnedMap remaps{ { rowArg, newRow } };
+
         TVector<TExprNode::TPtr> roots;
         for (ui32 i = 1; i < argsCount + 1; ++i) {
             auto root = trait->Child(2)->ChildPtr(i);
             allTypes.push_back(root->GetTypeAnn());            
 
-            auto status = OptimizeExpr(root, root, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-                Y_UNUSED(ctx);
-                if (node->IsCallable("Member") && &node->Head() == rowArg) {
-                    auto i = RowType->FindItem(node->Tail().Content());
-                    YQL_ENSURE(i, "Missing member");
-                    return extractorArgs[*i];
-                }
-
-                return node;
-            }, Ctx, TOptimizeExprSettings(&TypesCtx));
+            auto status = RemapExpr(root, root, remaps, Ctx, TOptimizeExprSettings(&TypesCtx));
 
             YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error);
             roots.push_back(root);

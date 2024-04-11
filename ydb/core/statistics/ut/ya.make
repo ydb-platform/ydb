@@ -26,6 +26,7 @@ PEERDIR(
 SRCS(
     ut_common.h
     ut_common.cpp
+    ut_aggregator.cpp
     ut_statistics.cpp
     ut_save_load_stats.cpp
 )

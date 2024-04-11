@@ -35,11 +35,43 @@ public:
     }
 };
 
+class TScanContext {
+private:
+    using TCurrentSources = THashMap<ui32, std::shared_ptr<IDataSource>>;
+    YDB_READONLY(bool, IncludeStart, false);
+    YDB_READONLY(bool, IncludeFinish, false);
+    YDB_READONLY_DEF(TCurrentSources, CurrentSources);
+    YDB_READONLY(bool, IsSpecialPoint, false);
+    YDB_READONLY(bool, IsExclusiveInterval, false);
+public:
+    void OnStartPoint(const TDataSourceEndpoint& point) {
+        IsSpecialPoint = point.GetStartSources().size() && point.GetFinishSources().size();
+        IncludeStart = point.GetStartSources().size() && !IsSpecialPoint;
+        for (auto&& i : point.GetStartSources()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("add_source", i->GetSourceIdx());
+            AFL_VERIFY(CurrentSources.emplace(i->GetSourceIdx(), i).second)("idx", i->GetSourceIdx());
+        }
+    }
+
+    void OnFinishPoint(const TDataSourceEndpoint& point) {
+        for (auto&& i : point.GetFinishSources()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("remove_source", i->GetSourceIdx());
+            AFL_VERIFY(CurrentSources.erase(i->GetSourceIdx()))("idx", i->GetSourceIdx());
+        }
+    }
+
+    void OnNextPointInfo(const TDataSourceEndpoint& nextPoint) {
+        IncludeFinish = nextPoint.GetStartSources().empty();
+        IsExclusiveInterval = (CurrentSources.size() == 1) && IncludeStart && IncludeFinish;
+    }
+};
+
 class TScanHead {
 private:
     std::shared_ptr<TSpecialReadContext> Context;
+    bool SourcesInitialized = false;
+    TScanContext CurrentState;
     std::map<NArrow::NMerger::TSortableBatchPosition, TDataSourceEndpoint> BorderPoints;
-    std::map<ui32, std::shared_ptr<IDataSource>> CurrentSegments;
     std::optional<NArrow::NMerger::TSortableBatchPosition> CurrentStart;
     std::map<ui32, std::shared_ptr<TFetchingInterval>> FetchingIntervals;
     THashMap<ui32, std::shared_ptr<TPartialReadResult>> ReadyIntervals;
@@ -49,7 +81,7 @@ private:
     ui64 ZeroCount = 0;
     bool AbortFlag = false;
     void DrainSources();
-    [[nodiscard]] TConclusionStatus DetectSourcesFeatureInContextIntervalScan(const std::map<ui32, std::shared_ptr<IDataSource>>& intervalSources, const bool isExclusiveInterval) const;
+    [[nodiscard]] TConclusionStatus DetectSourcesFeatureInContextIntervalScan(const THashMap<ui32, std::shared_ptr<IDataSource>>& intervalSources, const bool isExclusiveInterval) const;
 public:
     void OnSentDataFromInterval(const ui32 intervalIdx) const {
         if (AbortFlag) {
@@ -79,6 +111,8 @@ public:
 
     void OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch>& batch, const std::shared_ptr<arrow::RecordBatch>& lastPK, 
         std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, const ui32 intervalIdx, TPlainReadData& reader);
+
+    TConclusionStatus Start();
 
     TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context);
 

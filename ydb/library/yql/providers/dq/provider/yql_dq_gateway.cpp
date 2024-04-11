@@ -413,7 +413,7 @@ public:
         sessions.clear(); // Destroy session objects explicitly before stopping grpc
         TaskScheduler.Stop();
         try {
-            GrpcClient.Stop();
+            GrpcClient.Stop(/* wait = */ true);
         } catch (...) {
             YQL_CLOG(ERROR, ProviderDq) << "Error while stopping GRPC client: " << CurrentExceptionMessage();
         }
@@ -479,7 +479,7 @@ public:
                 return;
             }
 
-            if (status.GRpcStatusCode == grpc::INVALID_ARGUMENT) {
+            if (status.GRpcStatusCode == grpc::INVALID_ARGUMENT || status.GRpcStatusCode == grpc::CANCELLED) {
                 YQL_CLOG(INFO, ProviderDq) << "Session closed " << sessionId;
                 this_->DropSession(sessionId);
             } else {

@@ -322,7 +322,7 @@ public:
     }
 
     ui64 GetOutputChunkMaxSize() const {
-        return QuerySettings.OutputChunkMaxSize;
+        return RequestCtx ? QuerySettings.OutputChunkMaxSize : Record.GetRequest().GetOutputChunkMaxSize();
     }
 
     TDuration GetProgressStatsPeriod() const {

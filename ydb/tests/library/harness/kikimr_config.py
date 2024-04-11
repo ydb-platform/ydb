@@ -223,6 +223,11 @@ class KikimrConfigGenerator(object):
 
         self.__additional_log_configs = {} if additional_log_configs is None else additional_log_configs
         self.__additional_log_configs.update(get_additional_log_configs())
+        if pg_compatible_expirement:
+            self.__additional_log_configs.update({
+                'PGWIRE': 'DEBUG',
+                'LOCAL_PGWIRE':'DEBUG',
+            })
 
         self.dynamic_pdisk_size = dynamic_pdisk_size
         self.dynamic_storage_pools = dynamic_storage_pools

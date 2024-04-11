@@ -56,6 +56,11 @@ public:
                 node.SetFreeze(false);
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::Freeze>(false, false);
             }
+            if (node.BecomeUpOnRestart) {
+                node.SetDown(false);
+                node.BecomeUpOnRestart = false;
+                db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(false, false);
+            }
             node.Local = Local;
             node.ServicedDomains.swap(servicedDomains);
             node.LastSeenServicedDomains = node.ServicedDomains;

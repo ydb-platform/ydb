@@ -6,6 +6,7 @@ import os
 import sys
 import urllib.parse
 import zipfile
+from typing import Set
 from xml.etree import ElementTree as ET
 from mute_utils import mute_target, pattern_to_re
 from junit_utils import add_junit_link_property, is_faulty_testcase
@@ -54,7 +55,7 @@ class YTestReportTrace:
     def __init__(self, out_root):
         self.out_root = out_root
         self.traces = {}
-        self.logs_dir = None
+        self.logs_dir = set()
 
     def abs_path(self, path):
         return path.replace("$(BUILD_ROOT)", self.out_root)
@@ -83,8 +84,7 @@ class YTestReportTrace:
                         cls = cls.replace("::", ".")
                         self.traces[(cls, subtest)] = event
                         logs_dir = self.abs_path(event['logs']['logsdir'])
-                        self.logs_dir = logs_dir
-            break
+                        self.logs_dir.add(logs_dir)
 
     def has(self, cls, name):
         return (cls, name) in self.traces
@@ -144,18 +144,21 @@ def save_log(build_root, fn, out_dir, log_url_prefix, trunc_size):
     return f"{log_url_prefix}{quoted_fpath}"
 
 
-def save_zip(suite_name, out_dir, url_prefix, logs_dir):
+def save_zip(suite_name, out_dir, url_prefix, logs_dir: Set[str]):
     arc_name = f"{suite_name.replace('/', '-')}.zip"
 
     arc_fn = os.path.join(out_dir, arc_name)
 
     zf = zipfile.ZipFile(arc_fn, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=9)
 
-    log_print(f"put {logs_dir} into {arc_name}")
-    for root, dirs, files in os.walk(logs_dir):
-        for f in files:
-            filename = os.path.join(root, f)
-            zf.write(filename, os.path.relpath(filename, logs_dir))
+    for path in logs_dir:
+        # path is .../test-results/black/testing_out_stuff
+        log_print(f"put {path} into {arc_name}")
+        test_type = os.path.basename(os.path.dirname(path))
+        for root, dirs, files in os.walk(path):
+            for f in files:
+                filename = os.path.join(root, f)
+                zf.write(filename, os.path.join(test_type, os.path.relpath(filename, path)))
     zf.close()
 
     quoted_fpath = urllib.parse.quote(arc_name)

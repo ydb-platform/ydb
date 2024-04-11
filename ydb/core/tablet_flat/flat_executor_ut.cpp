@@ -6095,22 +6095,6 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorReboot) {
         env.WaitForWakeUp();
 
         TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
-        policy->InMemSizeToSnapshot = 40 * 1024 *1024;
-        policy->InMemStepsToSnapshot = 10;
-        policy->InMemForceStepsToSnapshot = 10;
-        policy->InMemForceSizeToSnapshot = 64 * 1024 * 1024;
-        policy->InMemResourceBrokerTask = NLocalDb::LegacyQueueIdToTaskName(0);
-        policy->ReadAheadHiThreshold = 100000;
-        policy->ReadAheadLoThreshold = 50000;
-        policy->Generations.push_back({100 * 1024 * 1024, 5, 5, 200 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true});
-        policy->Generations.push_back({400 * 1024 * 1024, 5, 5, 800 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(2), false});
-        for (auto& gen : policy->Generations) {
-            gen.ExtraCompactionPercent = 0;
-            gen.ExtraCompactionMinSize = 0;
-            gen.ExtraCompactionExpPercent = 0;
-            gen.ExtraCompactionExpMaxSize = 0;
-            gen.UpliftPartSize = 0;
-        }
 
         env.SendSync(data.MakeScheme(std::move(policy)));
         env.SendSync(data.MakeRows(250));
@@ -6120,7 +6104,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorReboot) {
         env.Env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvBlobStorage::EvCollectGarbage) {
                 auto* event = ev->Get<TEvBlobStorage::TEvCollectGarbage>();
-                if (event->Channel == 0) {
+                if (event->Channel == 1) {
                     wasGc = true;
                 }
             }
@@ -6133,7 +6117,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorReboot) {
             struct TReassignedStarter : NFake::TStarter {
                 NFake::TStorageInfo* MakeTabletInfo(ui64 tablet) noexcept override {
                     auto *info = TStarter::MakeTabletInfo(tablet);
-                    info->Channels[0].History.emplace_back(3, 3);
+                    info->Channels[1].History.emplace_back(3, 3);
                     return info;
                 }
             };
@@ -6142,21 +6126,19 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorReboot) {
                 return tabletActor = new TTestFlatTablet(env.Edge, tablet, info);
             }, 0, &starter);
             env.WaitForWakeUp();
-            env.SendEv(tabletActor->SelfId(), data.MakeRows(50));
-            env.WaitForWakeUp();
             env.SendEv(tabletActor->SelfId(), new TEvTestFlatTablet::TEvQueueScan(data.Rows(), true));
             env.WaitForWakeUp();
             env.SendEv(tabletActor->SelfId(), new TEvTestFlatTablet::TEvStartQueuedScan());
             TAutoPtr<IEventHandle> handle;
             env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle);
             env.SendEv(tabletActor->SelfId(), new TEvents::TEvPoison);
+            env.WaitForGone();
             // do 1 more iter after gc happened
             if (timeToStop) {
                 break;
             }
             timeToStop = wasGc;
         }
-        env.SendEv(tabletActor->SelfId(), new TEvents::TEvPoison);
     }
 }
 

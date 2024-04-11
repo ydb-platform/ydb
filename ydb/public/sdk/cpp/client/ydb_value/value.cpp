@@ -2143,6 +2143,26 @@ public:
         GetValue().set_int64_value(value);
     }
 
+    void Date32(const i32 value) {
+        FillPrimitiveType(EPrimitiveType::Date32);
+        GetValue().set_int32_value(value);
+    }
+
+    void Datetime64(const i64 value) {
+        FillPrimitiveType(EPrimitiveType::Datetime64);
+        GetValue().set_int64_value(value);
+    }
+
+    void Timestamp64(const i64 value) {
+        FillPrimitiveType(EPrimitiveType::Timestamp64);
+        GetValue().set_int64_value(value);
+    }
+
+    void Interval64(const i64 value) {
+        FillPrimitiveType(EPrimitiveType::Interval64);
+        GetValue().set_int64_value(value);
+    }
+
     void TzDate(const TString& value) {
         FillPrimitiveType(EPrimitiveType::TzDate);
         GetValue().set_text_value(value);
@@ -2881,6 +2901,30 @@ TDerived& TValueBuilderBase<TDerived>::Interval(i64 value) {
 }
 
 template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::Date32(const i32 value) {
+    Impl_->Date32(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::Datetime64(const i64 value) {
+    Impl_->Datetime64(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::Timestamp64(const i64 value) {
+    Impl_->Timestamp64(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::Interval64(const i64 value) {
+    Impl_->Interval64(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::TzDate(const TString& value) {
     Impl_->TzDate(value);
     return static_cast<TDerived&>(*this);
@@ -3041,6 +3085,26 @@ TDerived& TValueBuilderBase<TDerived>::OptionalTimestamp(const TMaybe<TInstant>&
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::OptionalInterval(const TMaybe<i64>& value) {
     SET_OPT_VALUE_MAYBE(Interval);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::OptionalDate32(const TMaybe<i32>& value) {
+    SET_OPT_VALUE_MAYBE(Date32);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::OptionalDatetime64(const TMaybe<i64>& value) {
+    SET_OPT_VALUE_MAYBE(Datetime64);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::OptionalTimestamp64(const TMaybe<i64>& value) {
+    SET_OPT_VALUE_MAYBE(Timestamp64);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::OptionalInterval64(const TMaybe<i64>& value) {
+    SET_OPT_VALUE_MAYBE(Interval64);
 }
 
 template<typename TDerived>

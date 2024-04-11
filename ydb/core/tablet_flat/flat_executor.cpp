@@ -4311,6 +4311,9 @@ const NTable::TRowVersionRanges& TExecutor::TableRemovedRowVersions(ui32 table)
 
 ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 {
+    if (auto logl = Logger->Log(ELnLev::Info))
+        logl << NFmt::Do(*this) << " starting compaction";
+
     using NTable::NPage::ECache;
 
     auto table = params->Table;
@@ -4431,11 +4434,17 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     conf.Trace = true; /* Need for tracking gone blobs in GC */
     conf.Tablet = Owner->TabletID();
 
-    return Scans->StartSystem(table, scan, conf, std::move(snapshot));
+    auto result = Scans->StartSystem(table, scan, conf, std::move(snapshot));
+    if (auto logl = Logger->Log(ELnLev::Info))
+        logl << NFmt::Do(*this) << " started compaction " << result;
+    return result;
 }
 
 bool TExecutor::CancelCompaction(ui64 compactionId)
 {
+    if (auto logl = Logger->Log(ELnLev::Info))
+        logl << NFmt::Do(*this) << " cancelling compaction " << compactionId;
+
     return Scans->CancelSystem(compactionId);
 }
 

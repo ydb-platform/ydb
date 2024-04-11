@@ -28,6 +28,7 @@ TEST_SRCS(
     test_cpu_quota.py
     test_delete_read_rules_after_abort_by_system.py
     test_eval.py
+    test_invalid_consumer.py
     test_kill_pq_bill.py
     test_mem_alloc.py
     test_metrics_cleanup.py

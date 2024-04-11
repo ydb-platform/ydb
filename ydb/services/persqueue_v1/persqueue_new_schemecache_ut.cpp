@@ -19,7 +19,7 @@
 #include <util/string/join.h>
 #include <util/generic/overloaded.h>
 
-#include <grpc++/client_context.h>
+#include <grpcpp/client_context.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>

@@ -11,11 +11,11 @@
 
 #include <util/string/join.h>
 
-#include <grpc++/resource_quota.h>
-#include <grpc++/security/server_credentials.h>
-#include <grpc++/server_builder.h>
-#include <grpc++/server_context.h>
-#include <grpc++/server.h>
+#include <grpcpp/resource_quota.h>
+#include <grpcpp/security/server_credentials.h>
+#include <grpcpp/server_builder.h>
+#include <grpcpp/server_context.h>
+#include <grpcpp/server.h>
 
 using grpc::Server;
 using grpc::ServerContext;

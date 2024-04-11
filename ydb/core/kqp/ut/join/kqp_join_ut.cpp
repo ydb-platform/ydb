@@ -249,25 +249,39 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin()) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
+
+            for (const auto& tableStat : stats.query_phases(0).table_access()) {
+                if (tableStat.name() == "/Root/Join1_2") {
+                    UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), 1);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(tableStat.name(), "/Root/Join1_1");
+                    UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), 8);
+                }
+            }
         } else {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+            if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Join1_1");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 8);
+
+            ui32 index = 1;
+            if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+                UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
+                index = 2;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Join1_2");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 1);
         }
-
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Join1_1");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 8);
-
-        ui32 index = 1;
-        if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
-            index = 2;
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Join1_2");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 1);
     }
 
     Y_UNIT_TEST(IdxLookupPartialLeftPredicate) {
@@ -299,25 +313,39 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         Cerr << stats.DebugString() << Endl;
 
-        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin()) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
+
+            for (const auto& tableStat : stats.query_phases(0).table_access()) {
+                if (tableStat.name() == "/Root/Join1_2") {
+                    UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), 3);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(tableStat.name(), "/Root/Join1_1");
+                    UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), 8);
+                }
+            }
         } else {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+            if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Join1_1");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 8);
+
+            ui32 index = 1;
+            if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+                UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
+                index = 2;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Join1_2");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 3);
         }
-
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Join1_1");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 8);
-
-        ui32 index = 1;
-        if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
-            index = 2;
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Join1_2");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 3);
     }
 
     Y_UNIT_TEST(IdxLookupPartialWithTempTable) {

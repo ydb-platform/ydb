@@ -1,6 +1,6 @@
 #pragma once
 
-#include <grpcpp/grpc++.h>
+#include <grpcpp/grpcpp.h>
 #include <grpcpp/resource_quota.h>
 
 #include <ydb/library/grpc/common/constants.h>

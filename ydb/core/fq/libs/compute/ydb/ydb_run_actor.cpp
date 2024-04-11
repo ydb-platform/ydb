@@ -115,16 +115,10 @@ public:
             return;
         }
 
-        if (OperationIsFailing()) {
-            LOG_I("StatusTrackerResponse (operation is failing). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
-            CreateResourcesCleaner();
-            return;
-        }
-
-        ExecStatus = response.ExecStatus;
-        Params.Status = response.ComputeStatus;
         LOG_I("StatusTrackerResponse (success) " << response.Status << " ExecStatus: " << static_cast<int>(response.ExecStatus) << " Issues: " << response.Issues.ToOneLineString());
-        if (response.ExecStatus == NYdb::NQuery::EExecStatus::Completed) {
+        if (response.ExecStatus == NYdb::NQuery::EExecStatus::Completed && !OperationIsFailing()) {
+            ExecStatus = response.ExecStatus;
+            Params.Status = response.ComputeStatus;
             Register(ActorFactory->CreateResultWriter(SelfId(), Connector, Pinger, Params.OperationId, true).release());
         } else {
             CreateResourcesCleaner();

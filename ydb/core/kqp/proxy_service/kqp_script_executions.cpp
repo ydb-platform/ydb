@@ -911,12 +911,9 @@ public:
                 return;
             }
 
-            TMaybe<i64> maxAccumulatedSize = result.ColumnParser("max_accumulated_size").GetOptionalInt64();
-            if (!maxAccumulatedSize) {
-                maxAccumulatedSize = 0;
-            }
+            i64 maxAccumulatedSize = result.ColumnParser("max_accumulated_size").GetOptionalInt64().GetOrElse(0);
 
-            ResultSetsDescription.emplace_back(TResultSetDescription{*maxRowId, *maxAccumulatedSize, *resultSetId});
+            ResultSetsDescription.emplace_back(TResultSetDescription{*maxRowId, maxAccumulatedSize, *resultSetId});
         }
 
         DeleteScriptResults();
@@ -947,8 +944,8 @@ public:
             WHERE database = $database
               AND execution_id = $execution_id
               AND result_set_id = $result_set_id
-              AND row_id > $max_row_id
-              AND (accumulated_size > $max_accumulated_size OR accumulated_size IS NULL);
+              AND (accumulated_size > $max_accumulated_size OR accumulated_size IS NULL)
+              AND row_id > $max_row_id;
 
             SELECT MAX(row_id) AS max_row_id, MAX(accumulated_size) AS max_accumulated_size
             FROM `.metadata/result_sets`
@@ -997,7 +994,7 @@ public:
 
         if (maxRowId) {
             ResultSetsDescription.back().MaxRowId = *maxRowId;
-            ResultSetsDescription.back().MaxAccumulatedSize = maxAccumulatedSize ? *maxAccumulatedSize : 0;
+            ResultSetsDescription.back().MaxAccumulatedSize = maxAccumulatedSize.GetOrElse(0);
         } else {
             ResultSetsDescription.pop_back();
         }
@@ -1812,7 +1809,7 @@ public:
 
         auto row = FirstRow;
         auto accumulatedSize = AccumulatedSize;
-        for(const auto& rowValue : ResultSet.rows()) {
+        for (const auto& rowValue : ResultSet.rows()) {
             accumulatedSize += rowValue.ByteSizeLong();
             param
                     .AddListItem()
@@ -1881,7 +1878,7 @@ public:
 
         i64 numberRows = ResultSets.back().rows_size();
         i64 rowsSize = 0;
-        for(const auto& rowValue : ResultSets.back().rows()) {
+        for (const auto& rowValue : ResultSets.back().rows()) {
             rowsSize += rowValue.ByteSizeLong();
         }
         Register(new TQueryRetryActor<TSaveScriptExecutionResultQuery, TEvSaveScriptResultFinished, TString, TString, i32, TMaybe<TInstant>, i64, i64, Ydb::ResultSet>(SelfId(), Database, ExecutionId, ResultSetId, ExpireAt, FirstRow, AccumulatedSize, ResultSets.back()));

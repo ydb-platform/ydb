@@ -4,9 +4,10 @@ import os
 import pytest
 import yatest.common
 
-from file_common import run_file_kqp
-from utils import DATA_PATH
-from yql_utils import do_custom_query_check
+from file_common import check_provider, get_sql_query
+from kqprun import KqpRun
+from utils import DATA_PATH, get_config
+from yql_utils import KSV_ATTR, do_custom_query_check, get_tables, is_xfail, yql_binary_path
 
 EXCLUDED_SUITES = [
     'match_recognize',  # MATCH_RECOGNIZE is disabled
@@ -207,3 +208,36 @@ def run_test(suite, case, cfg):
 
     if os.path.exists(result.results_file) and full_test_name not in EXCLUDED_CANONIZATION:
         return yatest.common.canonical_file(result.results_file)
+
+
+def run_file_kqp_no_cache(suite, case, cfg):
+    config = get_config(suite, case, cfg)
+
+    if is_xfail(config):
+        pytest.skip('skip fail tests')
+
+    check_provider('yt', config)
+
+    sql_query = get_sql_query('yt', suite, case, config)
+    in_tables = get_tables(suite, config, DATA_PATH, def_attr=KSV_ATTR)[0]
+
+    kqprun = KqpRun(
+        udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps')
+    )
+
+    return kqprun.yql_exec(
+        program=sql_query,
+        verbose=True,
+        check_error=True,
+        tables=in_tables
+    )
+
+
+def run_file_kqp(suite, case, cfg):
+    if (suite, case, cfg) not in run_file_kqp.cache:
+        run_file_kqp.cache[(suite, case, cfg)] = run_file_kqp_no_cache(suite, case, cfg)
+
+    return run_file_kqp.cache[(suite, case, cfg)]
+
+
+run_file_kqp.cache = {}

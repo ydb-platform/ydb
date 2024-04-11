@@ -11,7 +11,6 @@ import ydb.library.yql.providers.common.proto.gateways_config_pb2 as gateways_co
 from google.protobuf import text_format
 from yql_utils import execute_sql, get_supported_providers, get_tables, get_files, get_http_files, \
     get_pragmas, log, KSV_ATTR, is_xfail, get_param, YQLExecResult, yql_binary_path
-from kqprun import KqpRun
 from yqlrun import YQLRun
 
 from utils import get_config, get_parameters_json, DATA_PATH
@@ -46,10 +45,12 @@ def is_hybrid(provider):
     return provider == 'hybrid'
 
 
-def get_sql_query(provider, suite, case, config):
+def check_provider(provider, config):
     if provider not in get_supported_providers(config):
         pytest.skip('%s provider is not supported here' % provider)
 
+
+def get_sql_query(provider, suite, case, config):
     pragmas = get_pragmas(config)
 
     if get_param('TARGET_PLATFORM'):
@@ -78,6 +79,8 @@ def get_sql_query(provider, suite, case, config):
 
 
 def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server, yqlrun_binary=None, extra_args=[], force_blocks=False):
+    check_provider(provider, config)
+
     sql_query = get_sql_query(provider, suite, case, config)
 
     xfail = is_xfail(config)
@@ -141,27 +144,6 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server, 
     return fixed_result, tables_res
 
 
-def run_file_kqp_no_cache(suite, case, cfg):
-    config = get_config(suite, case, cfg)
-
-    if is_xfail(config):
-        pytest.skip('skip fail tests')
-
-    sql_query = get_sql_query('yt', suite, case, config)
-    in_tables = get_tables(suite, config, DATA_PATH, def_attr=KSV_ATTR)[0]
-
-    kqprun = KqpRun(
-        udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps')
-    )
-
-    return kqprun.yql_exec(
-        program=sql_query,
-        verbose=True,
-        check_error=True,
-        tables=in_tables
-    )
-
-
 def run_file(provider, suite, case, cfg, config, yql_http_file_server, yqlrun_binary=None, extra_args=[], force_blocks=False):
     if (suite, case, cfg) not in run_file.cache:
         run_file.cache[(suite, case, cfg)] = run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server, yqlrun_binary, extra_args, force_blocks=force_blocks)
@@ -169,12 +151,4 @@ def run_file(provider, suite, case, cfg, config, yql_http_file_server, yqlrun_bi
     return run_file.cache[(suite, case, cfg)]
 
 
-def run_file_kqp(suite, case, cfg):
-    if (suite, case, cfg) not in run_file_kqp.cache:
-        run_file_kqp.cache[(suite, case, cfg)] = run_file_kqp_no_cache(suite, case, cfg)
-
-    return run_file_kqp.cache[(suite, case, cfg)]
-
-
 run_file.cache = {}
-run_file_kqp.cache = {}

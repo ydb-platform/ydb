@@ -186,8 +186,6 @@ namespace NActors {
         TWorkerId workerId = wctx.WorkerId;
         Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
 
-        TlsThreadContext->Timers.Reset();
-
         if (workerId >= 0) {
             Threads[workerId].UnsetWork();
         } else {
@@ -197,7 +195,7 @@ namespace NActors {
 
         if (Harmonizer) {
             LWPROBE(TryToHarmonize, PoolId, PoolName);
-            Harmonizer->Harmonize(TlsThreadContext->Timers.HPStart);
+            Harmonizer->Harmonize(TlsThreadContext->StartOfElapsingTime.load(std::memory_order_relaxed));
         }
 
         TAtomic x = AtomicGet(Semaphore);
@@ -205,8 +203,6 @@ namespace NActors {
         while (!StopFlag.load(std::memory_order_acquire)) {
             if (!semaphore.OldSemaphore || workerId >= 0 && semaphore.CurrentSleepThreadCount < 0) {
                 if (workerId < 0 || !wctx.IsNeededToWaitNextActivation) {
-                    TlsThreadContext->Timers.HPNow = GetCycleCountFast();
-                    wctx.AddElapsedCycles(ActorSystemIndex, TlsThreadContext->Timers.HPNow - TlsThreadContext->Timers.HPStart);
                     return 0;
                 }
 
@@ -227,13 +223,6 @@ namespace NActors {
                         wctx.SharedThread->SetWork();
                     }
                     AtomicDecrement(Semaphore);
-                    TlsThreadContext->Timers.HPNow = GetCycleCountFast();
-                    TlsThreadContext->Timers.Elapsed += TlsThreadContext->Timers.HPNow - TlsThreadContext->Timers.HPStart;
-                    wctx.AddElapsedCycles(ActorSystemIndex, TlsThreadContext->Timers.Elapsed);
-                    if (TlsThreadContext->Timers.Parked > 0) {
-                        wctx.AddParkedCycles(TlsThreadContext->Timers.Parked);
-                    }
-
                     return activation;
                 }
             }

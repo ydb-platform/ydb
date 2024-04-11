@@ -90,12 +90,16 @@ namespace NBoot {
         TArrayRef<const TTabletChannelInfo::THistoryEntry> GetHistoryToCut(ui32 channel) const {
             const auto& history = Info->Channels[channel].History;
             ui32 cutoffGen = EarliestGenerationForChannel[channel];
-            auto cutoffIt = std::lower_bound(history.begin(), history.end(), cutoffGen, TTabletChannelInfo::THistoryEntry::TCmp());
-            if (cutoffIt == history.end()) {
-                // Happens only if the log is empty
-                // We must not cut the current entry under any circumstances
-                --cutoffIt;
+            if (cutoffGen == std::numeric_limits<ui32>::max()) {
+                // We saw no writes in this channel
+                // It is likely this channel is used by the tablet directly, don't cut it
+                return {};
             }
+            auto cutoffIt = std::upper_bound(history.begin(), history.end(), cutoffGen, TTabletChannelInfo::THistoryEntry::TCmp());
+            if (cutoffIt == history.begin()) {
+                return {};
+            }
+            --cutoffIt;
             return {history.data(), &(*cutoffIt)};
         }
     private:

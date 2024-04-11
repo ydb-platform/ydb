@@ -1227,7 +1227,23 @@ bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme &scheme, TS
 
         if (item.HasPathVersion()) {
             const auto requiredVersion = item.GetPathVersion();
-            const auto actualVersion = GetPathVersion(TPath::Init(pathId, this)).GetGeneralVersion();
+            arc_ui64 actualVersion;
+            auto path = TPath::Init(pathId, this);
+            auto pathVersion = GetPathVersion(path);
+
+            if (item.HasCheckGeneralVersion() && !item.GetCheckGeneralVersion()) {
+                switch(path.Base()->PathType) { //savnik: fill
+                    case NKikimrSchemeOp::EPathTypePersQueueGroup:
+                        actualVersion = pathVersion.GetPQVersion();
+                        break;
+                    default:
+                        actualVersion = pathVersion.GetGeneralVersion();
+                        break;
+                }
+            } else {
+                actualVersion = pathVersion.GetGeneralVersion();
+            }
+
             if (requiredVersion != actualVersion) {
                 errStr = TStringBuilder()
                     << "fail user constraint in ApplyIf section:"
@@ -4006,7 +4022,7 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
             case NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup:
                 Y_ABORT_UNLESS(Topics.contains(pathId));
                 result.SetPQVersion(Topics.at(pathId)->AlterVersion);
-                generalVersion += result.GetPQVersion();
+                generalVersion += result.GetPQVersion(); //тут уже единичка
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypeBlockStoreVolume:
                 Y_ABORT_UNLESS(BlockStoreVolumes.contains(pathId));
@@ -4135,7 +4151,7 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
     generalVersion += result.GetChildrenVersion();
 
     result.SetUserAttrsVersion(pathEl->UserAttrs->AlterVersion);
-    generalVersion += result.GetUserAttrsVersion();
+    generalVersion += result.GetUserAttrsVersion(); //тут инкременится второй раз
 
     result.SetACLVersion(pathEl->ACLVersion); // do not add ACL version to the generalVersion here
     result.SetEffectiveACLVersion(path.GetEffectiveACLVersion()); // ACL version is added to generalVersion here

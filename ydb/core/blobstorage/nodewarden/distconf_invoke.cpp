@@ -36,6 +36,9 @@ namespace NKikimr::NStorage {
                 return FinishWithError(TResult::ERROR, "distributed config keeper terminated");
             }
 
+            STLOG(PRI_DEBUG, BS_NODE, NWDC42, "TInvokeRequestHandlerActor::Bootstrap", (Sender, Sender), (Cookie, Cookie),
+                (SelfId, SelfId()), (Binding, Self->Binding), (RootState, Self->RootState));
+
             ParentId = parentId;
             Become(&TThis::StateFunc);
 
@@ -94,10 +97,57 @@ namespace NKikimr::NStorage {
         // Query execution logic
 
         void ExecuteQuery() {
+            STLOG(PRI_DEBUG, BS_NODE, NWDC43, "ExecuteQuery", (SelfId, SelfId()));
+
             auto& record = Event->Get()->Record;
             switch (record.GetRequestCase()) {
-                case TQuery::kUpdateConfig:
-                    break;
+                case TQuery::kUpdateConfig: {
+                    auto *request = record.MutableUpdateConfig();
+
+                    if (!request->HasConfig()) {
+                        return FinishWithError(TResult::ERROR, "Config field is not filled in");
+                    } else if (!Self->StorageConfig) {
+                        return FinishWithError(TResult::ERROR, "no agreed StorageConfig");
+                    } else if (Self->CurrentProposedStorageConfig) {
+                        return FinishWithError(TResult::ERROR, "config proposition request in flight");
+                    } else if (Self->RootState != ERootState::RELAX) {
+                        return FinishWithError(TResult::ERROR, "something going on with default FSM");
+                    }
+
+                    auto *config = request->MutableConfig();
+
+                    if (auto error = ValidateConfig(*Self->StorageConfig)) {
+                        return FinishWithError(TResult::ERROR, TStringBuilder() << "current config validation failed: " << *error);
+                    } else if (auto error = ValidateConfigUpdate(*Self->StorageConfig, *config)) {
+                        return FinishWithError(TResult::ERROR, TStringBuilder() << "config validation failed: " << *error);
+                    }
+
+                    config->MutablePrevConfig()->CopyFrom(*Self->StorageConfig);
+                    config->MutablePrevConfig()->ClearPrevConfig();
+                    UpdateFingerprint(config);
+
+                    Self->CurrentProposedStorageConfig.emplace();
+                    Self->CurrentProposedStorageConfig->Swap(config);
+
+                    TEvScatter task;
+                    auto *propose = task.MutableProposeStorageConfig();
+                    propose->MutableConfig()->CopyFrom(*Self->CurrentProposedStorageConfig);
+
+                    return Self->IssueScatterTask(SelfId(), std::move(task));
+                }
+
+                case TQuery::kQueryConfig: {
+                    auto ev = PrepareResult(TResult::OK, std::nullopt);
+                    auto *record = &ev->Record;
+                    auto *response = record->MutableQueryConfig();
+                    if (Self->StorageConfig) {
+                        response->MutableConfig()->CopyFrom(*Self->StorageConfig);
+                    }
+                    if (Self->CurrentProposedStorageConfig) {
+                        response->MutableCurrentProposedStorageConfig()->CopyFrom(*Self->CurrentProposedStorageConfig);
+                    }
+                    return Finish(Sender, SelfId(), ev.release(), 0, Cookie);
+                }
 
                 case TQuery::REQUEST_NOT_SET:
                     return FinishWithError(TResult::ERROR, "Request field not set");
@@ -107,23 +157,45 @@ namespace NKikimr::NStorage {
         }
 
         void Handle(TEvNodeConfigGather::TPtr ev) {
-            (void)ev;
+            auto& record = ev->Get()->Record;
+            STLOG(PRI_DEBUG, BS_NODE, NWDC44, "Handle(TEvNodeConfigGather)", (SelfId, SelfId()), (Record, record));
+            switch (record.GetResponseCase()) {
+                case TEvGather::kProposeStorageConfig: {
+                    std::unique_ptr<TEvNodeConfigInvokeOnRootResult> ev;
+                    if (auto error = Self->ProcessProposeStorageConfig(record.MutableProposeStorageConfig())) {
+                        ev = PrepareResult(TResult::ERROR, *error);
+                    } else {
+                        ev = PrepareResult(TResult::OK, std::nullopt);
+                    }
+                    return Finish(Sender, SelfId(), ev.release(), 0, Cookie);
+                }
+
+                default:
+                    return FinishWithError(TResult::ERROR, "unexpected Response case in resulting TEvGather");
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Query termination and result delivery
 
-        void FinishWithError(TResult::EStatus status, const TString& errorReason) {
+        std::unique_ptr<TEvNodeConfigInvokeOnRootResult> PrepareResult(TResult::EStatus status,
+                std::optional<std::reference_wrapper<const TString>> errorReason) {
             auto ev = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
             auto *record = &ev->Record;
             record->SetStatus(status);
-            record->SetErrorReason(errorReason);
+            if (errorReason) {
+                record->SetErrorReason(*errorReason);
+            }
             if (auto scepter = Scepter.lock()) {
                 auto *s = record->MutableScepter();
                 s->SetId(scepter->Id);
                 s->SetNodeId(SelfId().NodeId());
             }
-            Finish(Sender, SelfId(), ev.release(), 0, Cookie);
+            return ev;
+        }
+
+        void FinishWithError(TResult::EStatus status, const TString& errorReason) {
+            Finish(Sender, SelfId(), PrepareResult(status, errorReason).release(), 0, Cookie);
         }
 
         template<typename... TArgs>

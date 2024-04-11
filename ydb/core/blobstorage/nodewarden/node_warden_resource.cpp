@@ -116,7 +116,7 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, nullptr));
     }
     TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, 0, ev->Sender, SelfId(),
-        nullptr, 0));
+        nullptr, ev->Cookie));
 }
 
 void TNodeWarden::HandleUnsubscribe(STATEFN_SIG) {

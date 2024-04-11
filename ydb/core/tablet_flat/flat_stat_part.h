@@ -95,7 +95,7 @@ public:
         LastRowId = Groups[0]->GetRowId();
         auto ready = Groups[0]->Next();
         if (ready == EReady::Page) {
-            Y_DEBUG_ABORT_UNLESS(false, "Shouldn't really happen");
+            Y_DEBUG_ABORT("Shouldn't really happen");
             return ready;
         }
 
@@ -110,7 +110,7 @@ public:
             while (Groups[groupIndex]->IsValid() && Groups[groupIndex]->GetRowId() < nextRowId) {
                 // eagerly include all data up to the next row id
                 if (Groups[groupIndex]->Next() == EReady::Page) {
-                    Y_DEBUG_ABORT_UNLESS(false, "Shouldn't really happen");
+                    Y_DEBUG_ABORT("Shouldn't really happen");
                     ready = EReady::Page;
                     break;
                 }
@@ -125,7 +125,7 @@ public:
             while (HistoricGroups[0]->IsValid() && (!HistoricGroups[0]->GetKeyCellsCount() || HistoricGroups[0]->GetKeyCell(0).AsValue<TRowId>() < nextRowId)) {
                 // eagerly include all history up to the next row id
                 if (HistoricGroups[0]->Next() == EReady::Page) {
-                    Y_DEBUG_ABORT_UNLESS(false, "Shouldn't really happen");
+                    Y_DEBUG_ABORT("Shouldn't really happen");
                     ready = EReady::Page;
                     break;
                 }
@@ -138,7 +138,7 @@ public:
                 while (HistoricGroups[groupIndex]->IsValid() && HistoricGroups[groupIndex]->GetRowId() < nextHistoryRowId) {
                     // eagerly include all data up to the next row id
                     if (HistoricGroups[groupIndex]->Next() == EReady::Page) {
-                        Y_DEBUG_ABORT_UNLESS(false, "Shouldn't really happen");
+                        Y_DEBUG_ABORT("Shouldn't really happen");
                         ready = EReady::Page;
                         break;
                     }

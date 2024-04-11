@@ -1032,9 +1032,9 @@
     ],
     "test.test[join-full_equal_not_null--Debug]": [
         {
-            "checksum": "86647e9e82a04dcdbcac37f4dc8055a7",
-            "size": 3074,
-            "uri": "https://{canondata_backend}/1937367/518bbcf510ad7a43c5e77746bafd21ed0e3fdc6e/resource.tar.gz#test.test_join-full_equal_not_null--Debug_/opt.yql_patched"
+            "checksum": "9613ef5581eec7bdaccb7790a8840a14",
+            "size": 3081,
+            "uri": "https://{canondata_backend}/1889210/42721ab3d5715670a72e6833a318f3255e230d6a/resource.tar.gz#test.test_join-full_equal_not_null--Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-full_equal_not_null--Plan]": [

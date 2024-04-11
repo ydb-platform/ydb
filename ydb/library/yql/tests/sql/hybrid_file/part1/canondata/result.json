@@ -169,9 +169,9 @@
     ],
     "test.test[agg_phases-max_null-default.txt-Debug]": [
         {
-            "checksum": "039b643fd38f93a0024fdc604a72578e",
-            "size": 1967,
-            "uri": "https://{canondata_backend}/1871102/597d6ee930787f14a7fd3507c37be2e17e206201/resource.tar.gz#test.test_agg_phases-max_null-default.txt-Debug_/opt.yql_patched"
+            "checksum": "f6466f8cd9aa0ae57acffbaacb4d389a",
+            "size": 1805,
+            "uri": "https://{canondata_backend}/1946324/e1f7c67cafa20200008de81571567844ef07755d/resource.tar.gz#test.test_agg_phases-max_null-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[agg_phases-max_null-default.txt-Plan]": [
@@ -197,9 +197,9 @@
     ],
     "test.test[agg_phases-sum_null-default.txt-Debug]": [
         {
-            "checksum": "e8de69771b00e96546753448f2e9921b",
-            "size": 1949,
-            "uri": "https://{canondata_backend}/1871102/597d6ee930787f14a7fd3507c37be2e17e206201/resource.tar.gz#test.test_agg_phases-sum_null-default.txt-Debug_/opt.yql_patched"
+            "checksum": "2e40595d136cde726a1085ed674a7f29",
+            "size": 1805,
+            "uri": "https://{canondata_backend}/1946324/e1f7c67cafa20200008de81571567844ef07755d/resource.tar.gz#test.test_agg_phases-sum_null-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[agg_phases-sum_null-default.txt-Plan]": [
@@ -379,9 +379,9 @@
     ],
     "test.test[aggregate-subquery_aggregation--Debug]": [
         {
-            "checksum": "14844890b4b0aac56006a57f8ed9d03b",
-            "size": 5246,
-            "uri": "https://{canondata_backend}/1871182/cf13957d635dc8c77a65ef70797b7c6b8d4646c5/resource.tar.gz#test.test_aggregate-subquery_aggregation--Debug_/opt.yql_patched"
+            "checksum": "304515c098e86226cb123d7d25c62cec",
+            "size": 5270,
+            "uri": "https://{canondata_backend}/1946324/e1f7c67cafa20200008de81571567844ef07755d/resource.tar.gz#test.test_aggregate-subquery_aggregation--Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-subquery_aggregation--Plan]": [

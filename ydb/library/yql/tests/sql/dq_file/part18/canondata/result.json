@@ -30,9 +30,9 @@
     ],
     "test.test[action-eval_like--Debug]": [
         {
-            "checksum": "68c395c5c9ea591e2fc3b6d5195f9868",
-            "size": 2301,
-            "uri": "https://{canondata_backend}/1130705/d9515e536cf880a45dedae2a41661295b91c6258/resource.tar.gz#test.test_action-eval_like--Debug_/opt.yql_patched"
+            "checksum": "d47dbb26cdd9a7e10af54927707ee104",
+            "size": 2308,
+            "uri": "https://{canondata_backend}/1936842/c642aa0e8ba8df646b4ff92018c848b92dcb289d/resource.tar.gz#test.test_action-eval_like--Debug_/opt.yql_patched"
         }
     ],
     "test.test[action-eval_like--Plan]": [
@@ -353,9 +353,9 @@
     ],
     "test.test[aggregate-null_type-default.txt-Debug]": [
         {
-            "checksum": "ccd70d7f0533b52d92275e25ad4debe4",
-            "size": 2262,
-            "uri": "https://{canondata_backend}/1130705/d9515e536cf880a45dedae2a41661295b91c6258/resource.tar.gz#test.test_aggregate-null_type-default.txt-Debug_/opt.yql_patched"
+            "checksum": "06294d6032fb8ad832bd597d7c01271a",
+            "size": 1951,
+            "uri": "https://{canondata_backend}/1936842/c642aa0e8ba8df646b4ff92018c848b92dcb289d/resource.tar.gz#test.test_aggregate-null_type-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-null_type-default.txt-Plan]": [
@@ -397,9 +397,9 @@
     ],
     "test.test[binding-table_range_binding-default.txt-Debug]": [
         {
-            "checksum": "28a53d8a066a87e2e06b5f8a9c085e27",
-            "size": 4096,
-            "uri": "https://{canondata_backend}/1130705/d9515e536cf880a45dedae2a41661295b91c6258/resource.tar.gz#test.test_binding-table_range_binding-default.txt-Debug_/opt.yql_patched"
+            "checksum": "5a1e926e9cc8863a018832381cfb1e30",
+            "size": 4104,
+            "uri": "https://{canondata_backend}/1936842/c642aa0e8ba8df646b4ff92018c848b92dcb289d/resource.tar.gz#test.test_binding-table_range_binding-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[binding-table_range_binding-default.txt-Plan]": [
@@ -529,9 +529,9 @@
     ],
     "test.test[count-boolean_count--Debug]": [
         {
-            "checksum": "8e0b86244ce7abbe1baf786bf15da42a",
-            "size": 5199,
-            "uri": "https://{canondata_backend}/1130705/d9515e536cf880a45dedae2a41661295b91c6258/resource.tar.gz#test.test_count-boolean_count--Debug_/opt.yql_patched"
+            "checksum": "0d295916c478b72cdac1471fbb91a4e7",
+            "size": 5206,
+            "uri": "https://{canondata_backend}/1936842/c642aa0e8ba8df646b4ff92018c848b92dcb289d/resource.tar.gz#test.test_count-boolean_count--Debug_/opt.yql_patched"
         }
     ],
     "test.test[count-boolean_count--Plan]": [
@@ -1782,9 +1782,9 @@
     ],
     "test.test[optimizers-sort_constraint_in_left--Debug]": [
         {
-            "checksum": "880a52933f8ab772f110a94b2166deb3",
-            "size": 4094,
-            "uri": "https://{canondata_backend}/1880306/e4ccac619cc79d4b07e7e803e386d47da238c793/resource.tar.gz#test.test_optimizers-sort_constraint_in_left--Debug_/opt.yql_patched"
+            "checksum": "7751986ad85155c4d11611ec43c72b75",
+            "size": 4108,
+            "uri": "https://{canondata_backend}/1936842/c642aa0e8ba8df646b4ff92018c848b92dcb289d/resource.tar.gz#test.test_optimizers-sort_constraint_in_left--Debug_/opt.yql_patched"
         }
     ],
     "test.test[optimizers-sort_constraint_in_left--Plan]": [
@@ -2637,9 +2637,9 @@
     ],
     "test.test[table_range-range_tables_with_view--Debug]": [
         {
-            "checksum": "f49335c9093a4dc3c103d27c2dc5f8a6",
-            "size": 2428,
-            "uri": "https://{canondata_backend}/1130705/d9515e536cf880a45dedae2a41661295b91c6258/resource.tar.gz#test.test_table_range-range_tables_with_view--Debug_/opt.yql_patched"
+            "checksum": "ed5eb7eb4942a2e74ad01c0462270820",
+            "size": 2435,
+            "uri": "https://{canondata_backend}/1936842/c642aa0e8ba8df646b4ff92018c848b92dcb289d/resource.tar.gz#test.test_table_range-range_tables_with_view--Debug_/opt.yql_patched"
         }
     ],
     "test.test[table_range-range_tables_with_view--Plan]": [

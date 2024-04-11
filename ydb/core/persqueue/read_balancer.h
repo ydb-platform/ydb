@@ -1,20 +1,21 @@
 #pragma once
 
-#include "utils.h"
-
-#include <util/system/hp_timer.h>
-
-#include <ydb/core/tablet_flat/tablet_flat_executed.h>
-#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/partition_scale_manager.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+
+#include "utils.h"
+#include <util/system/hp_timer.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -49,7 +50,6 @@ enum EPartitionState {
 };
 
 class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTabletExecutedFlat {
-
     struct TTxPreInit;
     friend struct TTxPreInit;
 
@@ -60,11 +60,13 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         ui32 PartitionId;
         ui64 TabletId;
         ui32 Group;
+        NSchemeShard::TTopicTabletInfo::TKeyRange KeyRange;
 
-        TPartInfo(const ui32 partitionId, const ui64 tabletId, const ui32 group)
+        TPartInfo(const ui32 partitionId, const ui64 tabletId, const ui32 group, NSchemeShard::TTopicTabletInfo::TKeyRange keyRange)
             : PartitionId(partitionId)
             , TabletId(tabletId)
             , Group(group)
+            , KeyRange(keyRange)
         {}
     };
 
@@ -143,6 +145,9 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
+    void Handle(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
+
     void RegisterSession(const TActorId& pipe, const TActorContext& ctx);
     struct TPipeInfo;
     void UnregisterSession(const TActorId& pipe, const TActorContext& ctx);
@@ -205,6 +210,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         EPartitionState State;
         TActorId Session;
         ui32 GroupId;
+        NSchemeShard::TTopicTabletInfo::TKeyRange KeyRange;
     };
 
     struct TClientInfo;
@@ -285,6 +291,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     ui32 TotalGroups;
     bool NoGroupsInBase;
 
+    std::unique_ptr<TPartitionScaleManager> PartitionsScaleManager;
 
     struct TClientInfo {
         constexpr static ui32 MAIN_GROUP = 0;
@@ -403,7 +410,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     TPartitionGraph PartitionGraph;
 
-public:
+public: 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_READ_BALANCER_ACTOR;
     }
@@ -481,7 +488,8 @@ public:
             HFunc(TEvPersQueue::TEvStatus, Handle);
             HFunc(TEvPersQueue::TEvGetPartitionsLocation, Handle);
             HFunc(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
-
+            HFunc(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
+            HFunc(TPartitionScaleRequest::TEvPartitionScaleRequestDone, Handle);
             default:
                 HandleDefaultEvents(ev, SelfId());
                 break;

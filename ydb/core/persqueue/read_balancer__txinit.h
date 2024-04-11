@@ -71,7 +71,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 ui32 part = partsRowset.GetValue<Schema::Partitions::Partition>();
                 ui64 tabletId = partsRowset.GetValue<Schema::Partitions::TabletId>();
 
-                Self->PartitionsInfo[part] = {tabletId, EPartitionState::EPS_FREE, TActorId(), part + 1};
+                Self->PartitionsInfo[part] = {tabletId, EPartitionState::EPS_FREE, TActorId(), part + 1, {}}; //savnik: add key range?
                 Self->AggregatedStats.AggrStats(part, partsRowset.GetValue<Schema::Partitions::DataSize>(), 
                                                 partsRowset.GetValue<Schema::Partitions::UsedReserveSize>());
 

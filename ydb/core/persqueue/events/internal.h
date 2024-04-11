@@ -185,6 +185,8 @@ struct TEvPQ {
         EvGetWriteInfoError,
         EvReadingPartitionStatusRequest,
         EvProcessChangeOwnerRequests,
+        EvPartitionScaleStatusChanged,
+        EvPartitionScaleRequestDone,
         EvEnd
     };
 
@@ -1096,6 +1098,15 @@ struct TEvPQ {
     };
 
     struct TEvProcessChangeOwnerRequests : public TEventLocal<TEvProcessChangeOwnerRequests, EvProcessChangeOwnerRequests> {
+    };
+
+    struct TEvPartitionScaleStatusChanged : public TEventPB<TEvPartitionScaleStatusChanged, NKikimrPQ::TEvPartitionScaleStatusChanged, EvPartitionScaleStatusChanged> {
+        TEvPartitionScaleStatusChanged() = default;
+
+        TEvPartitionScaleStatusChanged(NKikimrPQ::EScaleStatus scaleStatus, ui32 partitionId) {
+            Record.SetScaleStatus(scaleStatus);
+            Record.SetPartitionId(partitionId);
+        }
     };
 };
 

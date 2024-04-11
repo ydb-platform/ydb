@@ -12,6 +12,8 @@
 #include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/delayed_executor.h>
 
+#include <yt/yt/core/actions/invoker_util.h>
+
 #include <library/cpp/yt/system/handle_eintr.h>
 
 #include <util/folder/dirut.h>

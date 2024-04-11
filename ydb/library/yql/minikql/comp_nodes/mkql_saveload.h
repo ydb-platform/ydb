@@ -242,6 +242,9 @@ public:
 
     template<typename Type>
     void Read(Type& value) {
+        value = Read<Type, Type>();
+    }
+    void Read(Type& value) {
         if constexpr (std::is_same_v<std::remove_cv_t<Type>, TString>) {
             value = ReadString(Buf);
         } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui64>) {

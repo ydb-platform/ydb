@@ -1,18 +1,16 @@
 # DROP VIEW
 
-DROP VIEW - удалить представление.
+`DROP VIEW` удаляет представление.
 
 ## Синтаксис
 
 ```sql
-DROP VIEW имя
+DROP VIEW <имя>
 ```
 
 ### Параметры
 
-* `имя`
-
-Имя представления, подлежащего удалению.
+* `имя` - имя представления, подлежащего удалению.
 
 ## Примеры
 
@@ -24,4 +22,5 @@ DROP VIEW recent_series;
 
 ## См. также
 
-[CREATE VIEW](create_view), [ALTER VIEW](alter_view)
+* [CREATE VIEW](create-view.md)
+* [ALTER VIEW](alter-view.md)

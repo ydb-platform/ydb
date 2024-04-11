@@ -4,8 +4,8 @@
 
 * [Директории](../dir.md)
 * [Таблицы](../table.md)
+* [Представления (VIEWs)](../view.md)
 * [Топики](../../topic.md)
 * [Секреты](../secrets.md)
 * [Подключения к внешним БД](../external_data_source.md)
 * [Внешние источники данных](../external_table.md)
-* [Представления (VIEWs)](../view.md)

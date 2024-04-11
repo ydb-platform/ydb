@@ -144,6 +144,20 @@ TErrorOr<TString> ResolveBinaryPath(const TString& binary)
     return failure();
 }
 
+std::vector<TString> GetEnviron()
+{
+    std::vector<TString> env;
+    size_t size = 0;
+    for (char** envIt = environ; *envIt; ++envIt) {
+        ++size;
+    }
+    env.reserve(size);
+    for (char** envIt = environ; *envIt; ++envIt) {
+        env.emplace_back(*envIt);
+    }
+    return env;
+}
+
 bool TryKillProcessByPid(int pid, int signal)
 {
 #ifdef _unix_

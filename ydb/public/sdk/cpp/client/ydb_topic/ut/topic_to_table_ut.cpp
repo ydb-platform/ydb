@@ -30,7 +30,6 @@ protected:
 
         void WaitForContinuationToken();
         void Write(const TString& message, NTable::TTransaction* tx = nullptr);
-        void WaitForAck();
     };
 
     void SetUp(NUnitTest::TTestContext&) override;

@@ -355,6 +355,51 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool IsWhitelisted(const TError& error, const THashSet<TStringBuf>& attributeWhitelist)
+{
+    for (const auto& key : error.Attributes().ListKeys()) {
+        if (attributeWhitelist.contains(key)) {
+            return true;
+        }
+    }
+
+    for (const auto& innerError : error.InnerErrors()) {
+        if (IsWhitelisted(innerError, attributeWhitelist)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+//! Returns vector which consists of objects from errors such that:
+//! if N is the number of objects in errors s.t. IsWhitelisted is true
+//! then first N objects of returned vector are the ones for which IsWhitelisted is true
+//! followed by std::max(0, maxInnerErrorCount - N - 1) remaining objects
+//! finally followed by errors.back().
+std::vector<TError>& ApplyWhitelist(std::vector<TError>& errors, const THashSet<TStringBuf>& attributeWhitelist, int maxInnerErrorCount)
+{
+    if (std::ssize(errors) < std::max(2, maxInnerErrorCount)) {
+        return errors;
+    }
+
+    auto firstNotWhitelisted = std::partition(
+        errors.begin(),
+        std::prev(errors.end()),
+        [&attributeWhitelist] (const TError& error) {
+            return IsWhitelisted(error, attributeWhitelist);
+        });
+
+    int lastErrorOffset = std::max<int>(firstNotWhitelisted - errors.begin(), maxInnerErrorCount - 1);
+
+    *(errors.begin() + lastErrorOffset) = std::move(errors.back());
+    errors.resize(lastErrorOffset + 1);
+
+    return errors;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TError::TErrorOr() = default;
 
 TError::~TErrorOr() = default;
@@ -629,7 +674,10 @@ std::vector<TError>* TError::MutableInnerErrors()
 
 const TString InnerErrorsTruncatedKey("inner_errors_truncated");
 
-TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<TStringBuf>& attributeWhitelist) const &
+TError TError::Truncate(
+    int maxInnerErrorCount,
+    i64 stringLimit,
+    const THashSet<TStringBuf>& attributeWhitelist) const &
 {
     if (!Impl_) {
         return TError();
@@ -666,22 +714,37 @@ TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<
     }
     result->CopyBuiltinAttributesFrom(*Impl_);
 
-    if (std::ssize(InnerErrors()) <= maxInnerErrorCount) {
-        for (const auto& innerError : InnerErrors()) {
-            result->MutableInnerErrors()->push_back(truncateInnerError(innerError));
+    const auto& innerErrors = InnerErrors();
+    auto& copiedInnerErrors = *result->MutableInnerErrors();
+
+    if (std::ssize(innerErrors) <= maxInnerErrorCount) {
+        for (const auto& innerError : innerErrors) {
+            copiedInnerErrors.push_back(truncateInnerError(innerError));
         }
     } else {
         result->MutableAttributes()->Set(InnerErrorsTruncatedKey, true);
-        for (int i = 0; i + 1 < maxInnerErrorCount; ++i) {
-            result->MutableInnerErrors()->push_back(truncateInnerError(InnerErrors()[i]));
+
+        // NB(arkady-e1ppa): We want to always keep the last inner error,
+        // so we make room for it and do not check if it is whitelisted.
+        for (int idx = 0; idx < std::ssize(innerErrors) - 1; ++idx) {
+            const auto& innerError = innerErrors[idx];
+            if (
+                IsWhitelisted(innerError, attributeWhitelist) ||
+                std::ssize(copiedInnerErrors) < maxInnerErrorCount - 1)
+            {
+                copiedInnerErrors.push_back(truncateInnerError(innerError));
+            }
         }
-        result->MutableInnerErrors()->push_back(truncateInnerError(InnerErrors().back()));
+        copiedInnerErrors.push_back(truncateInnerError(innerErrors.back()));
     }
 
     return TError(std::move(result));
 }
 
-TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<TStringBuf>& attributeWhitelist) &&
+TError TError::Truncate(
+    int maxInnerErrorCount,
+    i64 stringLimit,
+    const THashSet<TStringBuf>& attributeWhitelist) &&
 {
     if (!Impl_) {
         return TError();
@@ -711,14 +774,12 @@ TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<
             truncateInnerError(innerError);
         }
     } else {
-        auto& innerErrors = *MutableInnerErrors();
+        auto& innerErrors = ApplyWhitelist(*MutableInnerErrors(), attributeWhitelist, maxInnerErrorCount);
         MutableAttributes()->Set(InnerErrorsTruncatedKey, true);
-        for (int i = 0; i + 1 < maxInnerErrorCount; ++i) {
-            truncateInnerError(innerErrors[i]);
+
+        for (auto& innerError : innerErrors) {
+            truncateInnerError(innerError);
         }
-        truncateInnerError(innerErrors.back());
-        innerErrors[maxInnerErrorCount - 1] = std::move(innerErrors.back());
-        innerErrors.resize(maxInnerErrorCount);
     }
 
     return std::move(*this);

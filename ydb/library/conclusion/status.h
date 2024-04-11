@@ -68,10 +68,6 @@ public:
         return !!ErrorMessage;
     }
 
-    explicit operator bool() const {
-        return Ok();
-    }
-
     static TConclusionStatus Success() {
         return TConclusionStatus();
     }

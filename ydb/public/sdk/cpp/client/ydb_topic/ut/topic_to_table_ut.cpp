@@ -788,11 +788,59 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_4, TFixture)
     {
         auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #3");
     }
 
     {
         auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #4");
+    }
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_5, TFixture)
+{
+    CreateTopic("topic_A");
+    CreateTopic("topic_B");
+
+    NTable::TSession tableSession = CreateTableSession();
+
+    {
+        NTable::TTransaction tx_1 = BeginTx(tableSession);
+
+        WriteToTopic("topic_A", "producer", "message #1", &tx_1);
+        WriteToTopic("topic_B", "producer", "message #2", &tx_1);
+
+        WaitForAcks("topic_A", "producer");
+        WaitForAcks("topic_B", "producer");
+
+        CommitTx(tx_1, EStatus::SUCCESS);
+    }
+
+    {
+        NTable::TTransaction tx_2 = BeginTx(tableSession);
+
+        WriteToTopic("topic_A", "producer", "message #3", &tx_2);
+        WriteToTopic("topic_B", "producer", "message #4", &tx_2);
+
+        WaitForAcks("topic_A", "producer");
+        WaitForAcks("topic_B", "producer");
+
+        CommitTx(tx_2, EStatus::SUCCESS);
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+        UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #3");
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #2");
+        UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #4");
     }
 }
 

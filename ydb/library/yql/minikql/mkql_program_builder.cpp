@@ -1504,7 +1504,7 @@ TRuntimeNode TProgramBuilder::AsScalar(TRuntimeNode value) {
 }
 
 TRuntimeNode TProgramBuilder::ReplicateScalar(TRuntimeNode value, TRuntimeNode count) {
-    if constexpr (RuntimeVersion < 43U) {
+    if constexpr (RuntimeVersion < 39U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
 

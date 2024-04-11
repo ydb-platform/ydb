@@ -30,7 +30,6 @@ protected:
 
         void WaitForContinuationToken();
         void Write(const TString& message, NTable::TTransaction* tx = nullptr);
-        void WaitForAck();
     };
 
     void SetUp(NUnitTest::TTestContext&) override;
@@ -77,12 +76,6 @@ protected:
                                    const TDuration& duration);
     void WaitForAcks(const TString& topicPath,
                      const TString& messageGroupId);
-
-//    TMaybe<NTopic::TContinuationToken> WaitForContinuationToken(TTopicWriteSessionPtr session);
-//    void Write(TTopicWriteSessionPtr session,
-//               NTopic::TContinuationToken&& continuationToken,
-//               const TString& message);
-//    void WaitForAck(TTopicWriteSessionPtr session);
 
 protected:
     const TDriver& GetDriver() const;
@@ -338,24 +331,6 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
     CommitTx(tx1, EStatus::ABORTED);
 }
 
-Y_UNIT_TEST_F(WriteToTopic, TFixture)
-{
-    TString topic[2] = {
-        TEST_TOPIC,
-        TEST_TOPIC + "_2"
-    };
-
-    CreateTopic(topic[1]);
-
-    auto session = CreateTableSession();
-    auto tx = BeginTx(session);
-
-    WriteMessages({"#1", "#2", "#3"}, topic[0], TEST_MESSAGE_GROUP_ID, tx);
-    WriteMessages({"#4", "#5"}, topic[1], TEST_MESSAGE_GROUP_ID, tx);
-
-    CommitTx(tx, EStatus::ABORTED);
-}
-
 Y_UNIT_TEST_F(WriteToTopic_Invalid_Session, TFixture)
 {
     WriteToTopicWithInvalidTxId(false);
@@ -520,27 +495,6 @@ void TFixture::TTopicWriteSessionContext::Write(const TString& message, NTable::
     ++WriteCount;
     ContinuationToken = Nothing();
 }
-
-//void TFixture::TTopicWriteSessionContext::WaitForAck()
-//{
-//    while (true) {
-//        Session->WaitEvent().Wait();
-//        for (auto& event : Session->GetEvents()) {
-//            if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
-//                ContinuationToken = std::move(e->ContinuationToken);
-//            } else if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
-//                for (auto& ack : e->Acks) {
-//                    if (ack.State == NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN) {
-//                        ++AckCount;
-//                    }
-//                }
-//                return;
-//            } else if (auto* e = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
-//                UNIT_FAIL("");
-//            }
-//        }
-//    }
-//}
 
 void TFixture::WriteToTopic(const TString& topicPath,
                             const TString& messageGroupId,

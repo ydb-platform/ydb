@@ -103,7 +103,7 @@ public:
 
 private:
     void InitCheckpoint();
-    void InjectCheckpoint(const TCheckpointId& checkpointId, NYql::NDqProto::TCheckpoint::EType type);
+    void InjectCheckpoint(const TCheckpointId& checkpointId, NYql::NDqProto::ECheckpointType type);
     void ScheduleNextCheckpoint();
     void UpdateInProgressMetric();
     void PassAway() override;

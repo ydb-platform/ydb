@@ -342,7 +342,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         void InjectCheckpoint(
             TCheckpointId checkpointId,
             TMaybe<TString> graphDescId = {},
-            NYql::NDqProto::TCheckpoint::EType type = NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT) {
+            NYql::NDqProto::ECheckpointType type = NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT) {
 
             Cerr << "Waiting for TEvCreateCheckpointRequest (storage)" << Endl;
             if (graphDescId) {
@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
 
         void AllSavedAndCommited(
             TCheckpointId checkpointId,
-            NYql::NDqProto::TCheckpoint::EType type = NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT) {
+            NYql::NDqProto::ECheckpointType type = NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT) {
             MockNodeStateSavedEvent(checkpointId, IngressActor);
             MockNodeStateSavedEvent(checkpointId, MapActor);
             MockNodeStateSavedEvent(checkpointId, EgressActor);
@@ -451,8 +451,8 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         test.AllSavedAndCommited(test.CheckpointId1);
 
         test.ScheduleCheckpointing();
-        test.InjectCheckpoint(test.CheckpointId2, test.GraphDescId, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT);
-        test.AllSavedAndCommited(test.CheckpointId2, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT);
+        test.InjectCheckpoint(test.CheckpointId2, test.GraphDescId, NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT);
+        test.AllSavedAndCommited(test.CheckpointId2, NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT);
     }
 
     Y_UNIT_TEST(Should2Increments1Snapshot) {
@@ -462,16 +462,16 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         test.AllSavedAndCommited(test.CheckpointId1);
 
         test.ScheduleCheckpointing();
-        test.InjectCheckpoint(test.CheckpointId2, test.GraphDescId, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_INCREMENT_OR_SNAPSHOT);
-        test.AllSavedAndCommited(test.CheckpointId2, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_INCREMENT_OR_SNAPSHOT);
+        test.InjectCheckpoint(test.CheckpointId2, test.GraphDescId, NYql::NDqProto::CHECKPOINT_TYPE_INCREMENT_OR_SNAPSHOT);
+        test.AllSavedAndCommited(test.CheckpointId2, NYql::NDqProto::CHECKPOINT_TYPE_INCREMENT_OR_SNAPSHOT);
 
         test.ScheduleCheckpointing();
-        test.InjectCheckpoint(test.CheckpointId3, test.GraphDescId, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_INCREMENT_OR_SNAPSHOT);
-        test.AllSavedAndCommited(test.CheckpointId3, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_INCREMENT_OR_SNAPSHOT);
+        test.InjectCheckpoint(test.CheckpointId3, test.GraphDescId, NYql::NDqProto::CHECKPOINT_TYPE_INCREMENT_OR_SNAPSHOT);
+        test.AllSavedAndCommited(test.CheckpointId3, NYql::NDqProto::CHECKPOINT_TYPE_INCREMENT_OR_SNAPSHOT);
 
         test.ScheduleCheckpointing();
-        test.InjectCheckpoint(test.CheckpointId4, test.GraphDescId, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT);
-        test.AllSavedAndCommited(test.CheckpointId4, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT);
+        test.InjectCheckpoint(test.CheckpointId4, test.GraphDescId, NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT);
+        test.AllSavedAndCommited(test.CheckpointId4, NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT);
     }
 
     Y_UNIT_TEST(ShouldAbortPreviousCheckpointsIfNodeStateCantBeSaved) {
@@ -481,7 +481,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         test.SaveFailed(test.CheckpointId1);
 
         test.ScheduleCheckpointing();
-        test.InjectCheckpoint(test.CheckpointId2, test.GraphDescId, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT);
+        test.InjectCheckpoint(test.CheckpointId2, test.GraphDescId, NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT);
     }
 }
 

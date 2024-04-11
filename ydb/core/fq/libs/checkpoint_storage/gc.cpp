@@ -92,7 +92,7 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
     LOG_STREAMS_STORAGE_SERVICE_DEBUG("GC received upperbound checkpoint " << checkpointUpperBound
         << " for graph '" << graphId << "'");
 
-    if (event->Type != NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT) {
+    if (event->Type != NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT) {
         LOG_STREAMS_STORAGE_SERVICE_DEBUG("GC skip increment checkpoint for graph '" << graphId << "'");
         return;
     }

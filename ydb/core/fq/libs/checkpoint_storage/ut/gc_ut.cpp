@@ -86,8 +86,6 @@ struct TTestRuntime {
         storageConfig.SetDatabase(YdbDatabase);
         storageConfig.SetToken("");
         storageConfig.SetTablePrefix(TablePrefix);
-        auto& stateStorageLimits = *config.MutableStateStorageLimits();
-        stateStorageLimits.SetMaxRowSizeBytes(16000000);
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
@@ -148,7 +146,7 @@ struct TTestRuntime {
         SaveCheckpoint(coordinator, checkpointId3, false);
     }
 
-    void CheckpointSucceeded(const TCheckpointId& checkpointUpperBound, NYql::NDqProto::TCheckpoint::EType type = NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT) {
+    void CheckpointSucceeded(const TCheckpointId& checkpointUpperBound, NYql::NDqProto::ECheckpointType type = NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT) {
         TActorId sender = Runtime->AllocateEdgeActor();
 
         TCoordinatorId coordinator("graph", 11);
@@ -235,7 +233,7 @@ Y_UNIT_TEST_SUITE(TGcTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(runtime.CountGraphDescriptions(), 3);
 
-        runtime.CheckpointSucceeded(checkpointId3,  NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_INCREMENT_OR_SNAPSHOT);
+        runtime.CheckpointSucceeded(checkpointId3,  NYql::NDqProto::CHECKPOINT_TYPE_INCREMENT_OR_SNAPSHOT);
 
         Sleep(TDuration::MilliSeconds(2000));
         ICheckpointStorage::TGetCheckpointsResult getResult = runtime.CheckpointStorage->GetCheckpoints("graph").GetValueSync();

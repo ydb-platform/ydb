@@ -14,13 +14,13 @@ struct TPendingCheckpointStats {
 
 class TPendingCheckpoint {
     THashSet<NActors::TActorId> NotYetAcknowledged;
-    NYql::NDqProto::TCheckpoint::EType Type;
+    NYql::NDqProto::ECheckpointType Type;
     TPendingCheckpointStats Stats;
 
 public:
     explicit TPendingCheckpoint(
         THashSet<NActors::TActorId> toBeAcknowledged,
-        NYql::NDqProto::TCheckpoint::EType type,
+        NYql::NDqProto::ECheckpointType type,
         TPendingCheckpointStats stats = TPendingCheckpointStats());
 
     void Acknowledge(const NActors::TActorId& actorId);
@@ -37,7 +37,7 @@ public:
     const TPendingCheckpointStats& GetStats() const;
 
     [[nodiscard]]
-    NYql::NDqProto::TCheckpoint::EType GetType() const;
+    NYql::NDqProto::ECheckpointType GetType() const;
 };
 
 class TPendingRestoreCheckpoint {

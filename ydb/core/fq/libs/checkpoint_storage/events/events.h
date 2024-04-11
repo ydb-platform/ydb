@@ -130,7 +130,7 @@ struct TEvCheckpointStorage {
             TCoordinatorId coordinatorId,
             TCheckpointId checkpointId,
             ui64 stateSizeBytes,
-            NYql::NDqProto::TCheckpoint::EType type)
+            NYql::NDqProto::ECheckpointType type)
             : CoordinatorId(std::move(coordinatorId))
             , CheckpointId(std::move(checkpointId))
             , StateSizeBytes(stateSizeBytes)
@@ -140,7 +140,7 @@ struct TEvCheckpointStorage {
         TCoordinatorId CoordinatorId;
         TCheckpointId CheckpointId;
         ui64 StateSizeBytes;
-        NYql::NDqProto::TCheckpoint::EType Type;
+        NYql::NDqProto::ECheckpointType Type;
     };
 
     struct TEvCompleteCheckpointResponse
@@ -209,7 +209,7 @@ struct TEvCheckpointStorage {
         TEvNewCheckpointSucceeded(
             TCoordinatorId coordinatorId,
             TCheckpointId checkpointId,
-            NYql::NDqProto::TCheckpoint::EType type)
+            NYql::NDqProto::ECheckpointType type)
             : CoordinatorId(std::move(coordinatorId))
             , CheckpointId(std::move(checkpointId))
             , Type(type)
@@ -218,7 +218,7 @@ struct TEvCheckpointStorage {
 
         TCoordinatorId CoordinatorId;
         TCheckpointId CheckpointId;
-        NYql::NDqProto::TCheckpoint::EType Type;
+        NYql::NDqProto::ECheckpointType Type;
     };
 };
 

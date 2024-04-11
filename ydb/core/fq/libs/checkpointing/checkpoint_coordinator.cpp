@@ -171,7 +171,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvNewCheckpo
 
         if (PendingInit->CanInjectCheckpoint()) {
             auto checkpointId = *PendingInit->CheckpointId;
-            InjectCheckpoint(checkpointId, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT);
+            InjectCheckpoint(checkpointId, NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT);
         }
     }
 }
@@ -316,7 +316,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
 
         if (PendingRestoreCheckpoint->CommitAfterRestore) {
             CC_LOG_I("[" << checkpoint << "] State restored, send TEvCommitState to " << ActorsToNotify.size() << " actor(s)");
-            PendingCommitCheckpoints.emplace(checkpoint, TPendingCheckpoint(ActorsToNotifySet, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT));
+            PendingCommitCheckpoints.emplace(checkpoint, TPendingCheckpoint(ActorsToNotifySet, NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT));
             UpdateInProgressMetric();
             for (const auto& [actor, transport] : ActorsToNotify) {
                 transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvCommitState(checkpoint.SeqNo, checkpoint.CoordinatorGeneration, CoordinatorId.Generation));
@@ -341,9 +341,9 @@ void TCheckpointCoordinator::InitCheckpoint() {
     const auto nextCheckpointId = CheckpointIdGenerator->NextId();
     CC_LOG_I("[" << nextCheckpointId << "] Registering new checkpoint in storage");
 
-    auto checkpointType = NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_INCREMENT_OR_SNAPSHOT;
+    auto checkpointType = NYql::NDqProto::CHECKPOINT_TYPE_INCREMENT_OR_SNAPSHOT;
     if (++CheckpointingSnapshotRotationIndex > CheckpointingSnapshotRotationPeriod) {
-        checkpointType = NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT;
+        checkpointType = NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT;
         CheckpointingSnapshotRotationIndex = 0;
     }
     PendingCheckpoints.emplace(nextCheckpointId, TPendingCheckpoint(ActorsToWaitForSet, checkpointType));
@@ -401,7 +401,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpo
         PendingInit->CheckpointId = checkpointId;
         if (PendingInit->CanInjectCheckpoint()) {
             PendingInit = nullptr;
-            InjectCheckpoint(checkpointId, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT);
+            InjectCheckpoint(checkpointId, NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT);
         }
     } else {
         const auto it = PendingCheckpoints.find(checkpointId);
@@ -415,7 +415,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpo
     }
 }
 
-void TCheckpointCoordinator::InjectCheckpoint(const TCheckpointId& checkpointId, NYql::NDqProto::TCheckpoint::EType type) {
+void TCheckpointCoordinator::InjectCheckpoint(const TCheckpointId& checkpointId, NYql::NDqProto::ECheckpointType type) {
     CC_LOG_I("[" << checkpointId << "] Checkpoint successfully created, going to inject barriers to " << ActorsToTrigger.size() << " actor(s)");
     for (const auto& [toTrigger, transport] : ActorsToTrigger) {
         transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvInjectCheckpoint(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, type));

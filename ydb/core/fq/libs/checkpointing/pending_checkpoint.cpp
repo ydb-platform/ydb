@@ -4,7 +4,7 @@ namespace NFq {
 
 TPendingCheckpoint::TPendingCheckpoint(
     THashSet<NActors::TActorId> toBeAcknowledged,
-    NYql::NDqProto::TCheckpoint::EType type,
+    NYql::NDqProto::ECheckpointType type,
     TPendingCheckpointStats stats)
     : NotYetAcknowledged(std::move(toBeAcknowledged))
     , Type(type)
@@ -28,7 +28,7 @@ size_t TPendingCheckpoint::NotYetAcknowledgedCount() const {
     return NotYetAcknowledged.size();
 }
 
-NYql::NDqProto::TCheckpoint::EType TPendingCheckpoint::GetType() const {
+NYql::NDqProto::ECheckpointType TPendingCheckpoint::GetType() const {
     return Type;   
 }
 

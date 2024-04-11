@@ -78,6 +78,7 @@ public:
                                 nodeState.Items[TString(key)] = TString(value);
                             },
                             [&](std::string_view key) {
+                                // Not used for SNAPSHOT.
                                 nodeState.Items.erase(TString(key));
                             });
                     }
@@ -334,7 +335,7 @@ private:
     std::list<TString> SerializeState(
         const NYql::NDqProto::TComputeActorState& state);
     
-    EStateType DeserealizeState(
+    EStateType DeserializeState(
         TContext::TaskInfo& taskInfo);
 
     TFuture<TStatus> SkipStatesInFuture(
@@ -410,7 +411,7 @@ TFuture<TIssues> TStateStorage::Init() {
     return MakeFuture(std::move(issues));
 }
 
-EStateType TStateStorage::DeserealizeState(TContext::TaskInfo& taskInfo) {
+EStateType TStateStorage::DeserializeState(TContext::TaskInfo& taskInfo) {
     TString blob;
     for (auto it = taskInfo.Rows.begin(); it != taskInfo.Rows.end();) {
         blob += *it;
@@ -928,7 +929,7 @@ TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context) {
                 ++taskInfo.CurrentProcessingRow;
 
                 if (taskInfo.CurrentProcessingRow == taskInfo.ListOfStatesForReading.front().StateRowsCount) {
-                    auto type = thisPtr->DeserealizeState(taskInfo);
+                    auto type = thisPtr->DeserializeState(taskInfo);
                     if (type != EStateType::Snapshot) {
                         taskInfo.ListOfStatesForReading.pop_front();
                         taskInfo.CurrentProcessingRow = 0;

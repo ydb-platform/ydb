@@ -88,7 +88,7 @@ struct TEvDqCompute {
 
         TEvInjectCheckpoint() = default;
 
-        TEvInjectCheckpoint(ui64 id, ui64 generation, NDqProto::TCheckpoint::EType type) {
+        TEvInjectCheckpoint(ui64 id, ui64 generation, NDqProto::ECheckpointType type) {
             Record.MutableCheckpoint()->SetId(id);
             Record.MutableCheckpoint()->SetGeneration(generation);
             Record.MutableCheckpoint()->SetType(type);

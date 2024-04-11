@@ -189,12 +189,12 @@ protected:
 
 struct TInputSerializer {
 public:
-    TInputSerializer(const NUdf::TStringRef& state, TMaybe<EMkqlStateType> ExpectedType = Nothing())
+    TInputSerializer(const NUdf::TStringRef& state, TMaybe<EMkqlStateType> expectedType = Nothing())
         : Buf(state) { 
         Type = static_cast<EMkqlStateType>(Read<ui32>());
         Read(StateVersion);
-        if (ExpectedType) {
-            MKQL_ENSURE(Type == *ExpectedType, "state type is not expected");
+        if (expectedType) {
+            MKQL_ENSURE(Type == *expectedType, "state type is not expected");
         }
     }
 

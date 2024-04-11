@@ -972,9 +972,22 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorCo
     auto& t = GetCurrentTransaction();
     Y_ABORT_UNLESS(t.Tx);
 
+    bool predicate = true;
+    for (auto& [k, v] : ev->Get()->SrcIdInfo) {
+        auto s = SourceManager.Get(k);
+        if (s.State == TSourceIdInfo::EState::Unknown) {
+            continue;
+        }
+
+        if (v.MinSeqNo < s.SeqNo) {
+            predicate = false;
+            break;
+        }
+    }
+
     WriteInfoResponse = nullptr;
     if (ev->Get()->BodyKeys.empty()) {
-        t.Predicate = BeginTransaction(*t.Tx, ctx);
+        t.Predicate = predicate && BeginTransaction(*t.Tx, ctx);
         if (*t.Predicate) {
             WriteInfoResponse = ev->Release();
         }
@@ -1757,10 +1770,6 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
 {
     Y_UNUSED(ctx);
     bool predicate = true;
-
-//    if (tx.SupportivePartitionActor != TActorId()) {
-//        return false;
-//    }
 
     for (auto& operation : tx.Operations) {
         const TString& consumer = operation.GetConsumer();

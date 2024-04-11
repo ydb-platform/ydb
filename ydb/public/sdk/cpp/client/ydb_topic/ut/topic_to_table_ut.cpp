@@ -644,7 +644,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_1, TFixture)
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
     }
 
-    CommitTx(tx);
+    CommitTx(tx, EStatus::SUCCESS);
 
     {
         auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
@@ -698,7 +698,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_2, TFixture)
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
     }
 
-    CommitTx(tx);
+    CommitTx(tx, EStatus::SUCCESS);
 
     {
         auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
@@ -713,6 +713,41 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_2, TFixture)
         UNIT_ASSERT_VALUES_EQUAL(messages[0], "Тарту");
         UNIT_ASSERT_VALUES_EQUAL(messages[4], "утрат");
     }
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_3, TFixture)
+{
+    CreateTopic("topic_A");
+    CreateTopic("topic_B");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", "producer_id", "message #1", &tx);
+    WriteToTopic("topic_B", "producer_id", "message #2", &tx);
+
+    WriteToTopic("topic_A", "producer_id", "message #3");
+
+    WaitForAcks("topic_A", "producer_id");
+    WaitForAcks("topic_B", "producer_id");
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #3");
+    }
+
+    CommitTx(tx, EStatus::ABORTED);
+
+    tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", "producer_id", "message #1", &tx);
+    WriteToTopic("topic_B", "producer_id", "message #2", &tx);
+
+    WaitForAcks("topic_A", "producer_id");
+    WaitForAcks("topic_B", "producer_id");
+
+    CommitTx(tx, EStatus::SUCCESS);
 }
 
 }

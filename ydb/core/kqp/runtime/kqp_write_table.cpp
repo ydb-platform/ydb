@@ -59,15 +59,44 @@ std::vector<ui32> BuildWriteIndex(
     return result;
 }
 
-std::vector<ui32> BuildWriteColumnIds(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) {
-    YQL_ENSURE(schemeEntry.ColumnTableInfo);
-    YQL_ENSURE(schemeEntry.ColumnTableInfo->Description.HasSchema());
-    const auto& columns = schemeEntry.ColumnTableInfo->Description.GetSchema().GetColumns();
+std::vector<ui32> BuildWriteIndexKeyFirst(
+    const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
+    const auto& columns = schemeEntry.Columns;
+
+    THashMap<ui32, ui32> writeColumnIdToIndex;
+    {
+        for (const auto& [index, column] : columns) {
+            if (column.KeyOrder >= 0) {
+                writeColumnIdToIndex[column.Id] = column.KeyOrder;
+            }
+        }
+        ui32 number = writeColumnIdToIndex.size();
+        for (const auto& [index, column] : columns) {
+            if (column.KeyOrder < 0) {
+                writeColumnIdToIndex[column.Id] = number++;
+            }
+        }
+    }
 
     std::vector<ui32> result;
-    result.reserve(columns.size());
-    for (const auto& column : columns) {
-        result.push_back(column.GetId());
+    {
+        result.reserve(inputColumns.size());
+        for (const auto& column : inputColumns) {
+            result.push_back(writeColumnIdToIndex.at(column.GetId()));
+        }
+    }
+    return result;
+}
+
+
+std::vector<ui32> BuildWriteColumnIds(
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        const std::vector<ui32>& writeIndex) {
+    std::vector<ui32> result;
+    result.resize(inputColumns.size(), 0);
+    for (size_t index = 0; index < inputColumns.size(); ++index) {
+        result[writeIndex.at(index)] = inputColumns.at(index).GetId();
     }
     return result;
 }
@@ -123,7 +152,7 @@ public:
         , SchemeEntry(schemeEntry)
         , Columns(BuildColumns(inputColumns))
         , WriteIndex(BuildWriteIndex(schemeEntry, inputColumns))
-        , WriteColumnIds(BuildWriteColumnIds(schemeEntry))
+        , WriteColumnIds(BuildWriteColumnIds(inputColumns, WriteIndex))
         , BatchBuilder(arrow::Compression::UNCOMPRESSED, BuildNotNullColumns(inputColumns)) {
         TString err;
         if (!BatchBuilder.Start(BuildBatchBuilderColumns(schemeEntry), 0, 0, err)) {
@@ -256,8 +285,8 @@ public:
         , SchemeEntry(schemeEntry)
         , PartitionsEntry(partitionsEntry)
         , Columns(BuildColumns(inputColumns))
-        , WriteIndex(BuildWriteIndex(SchemeEntry, inputColumns))
-        , WriteColumnIds(BuildWriteColumnIds(SchemeEntry))
+        , WriteIndex(BuildWriteIndexKeyFirst(SchemeEntry, inputColumns))
+        , WriteColumnIds(BuildWriteColumnIds(inputColumns, WriteIndex))
         , KeyColumnTypes(BuildKeyColumnTypes(SchemeEntry)) {
     }
 
@@ -286,11 +315,11 @@ public:
                     return 0 > CompareBorders<true, false>(range.EndKeyPrefix.GetCells(), key,
                         range.IsInclusive || range.IsPoint, true, KeyColumnTypes);
                 });
-            
-            const size_t shardIdx = it - keyRange.GetPartitions().begin();
+
+            YQL_ENSURE(it != keyRange.GetPartitions().end());
 
             for (auto& cell : cells) {
-                Batches[shardIdx].emplace_back(std::move(cell));
+                Batches[it->ShardId].emplace_back(std::move(cell));
             }
         });
     }
@@ -326,6 +355,7 @@ public:
             TSerializedCellMatrix matrix(batch, batch.size() / Columns.size(), Columns.size());
             result[shardId].push_back(matrix.ReleaseBuffer());
         }
+        Batches.clear();
         return result;
     }
 

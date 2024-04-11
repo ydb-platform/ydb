@@ -282,7 +282,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
 {
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, node.Table().Path());
 
-    sinkEffect = kqpCtx.IsGenericQuery() && table.Metadata->Kind == EKikimrTableKind::Olap;
+    sinkEffect = kqpCtx.IsGenericQuery() /*&& table.Metadata->Kind == EKikimrTableKind::Olap*/;
 
     TKqpUpsertRowsSettings settings;
     if (node.Settings()) {

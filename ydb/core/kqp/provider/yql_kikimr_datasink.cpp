@@ -657,19 +657,24 @@ public:
         return true;
     }
 
-    bool CheckIOOlap(const TKikimrKey& key, const TExprNode::TPtr& node, const TCoAtom& mode, TExprContext& ctx) {
+    bool CheckIOSinkTable(const TKikimrKey& key, const TExprNode::TPtr& node, const TCoAtom& mode, TExprContext& ctx) {
         TKiDataSink dataSink(node->ChildPtr(1));
         auto& tableDesc = SessionCtx->Tables().GetTable(TString{dataSink.Cluster()}, key.GetTablePath());
-        if (!tableDesc.Metadata || tableDesc.Metadata->Kind != EKikimrTableKind::Olap) {
-            return true;
-        }
-
-        if (mode != "replace" && mode != "drop" && mode != "drop_if_exists") {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for olap tables."));
+        if (!tableDesc.Metadata) {
             return false;
         }
 
-        return true;
+        if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && mode != "replace" && mode != "drop" && mode != "drop_if_exists") {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for olap tables."));
+            return true;
+        }
+
+        if (tableDesc.Metadata->Kind == EKikimrTableKind::Datashard && mode != "replace" && mode != "drop" && mode != "drop_if_exists") {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for oltp tables."));
+            return true;
+        }
+
+        return false;
     }
 
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
@@ -693,7 +698,7 @@ public:
                     return resultNode;
                 }
 
-                if (!CheckIOOlap(key, node, mode, ctx)) {
+                if (CheckIOSinkTable(key, node, mode, ctx)) {
                     return nullptr;
                 }
 

@@ -47,4 +47,21 @@ namespace NActors::NTests {
     template <ui32 SizeBits>
     using TSingleQueue = TMPMCQueueBase<SizeBits, &TMPMCRingQueue<SizeBits>::TryPush, &TMPMCRingQueue<SizeBits>::TryPopSingleConsumer>;
 
+    template <ui32 SizeBits>
+    struct TAdaptiveQueue : IQueue {
+        TMPMCRingQueue<SizeBits> *Queue;
+        typename TMPMCRingQueue<SizeBits>::EPopMode State = TMPMCRingQueue<SizeBits>::EPopMode::ReallySlow;
+
+        TAdaptiveQueue(TMPMCRingQueue<SizeBits> *queue)
+            : Queue(queue)
+        {}
+
+        bool TryPush(ui32 value) final {
+            return Queue->TryPush(value);
+        }
+        std::optional<ui32> TryPop() final {
+            return Queue->TryPop(State);
+        }
+    };
+
 }

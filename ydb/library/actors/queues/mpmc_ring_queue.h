@@ -31,14 +31,19 @@ struct TMPMCRingQueueStats {
         ui64 FailedPops = 0;
         ui64 FailedSingleConsumerPops = 0;
         ui64 FailedSingleConsumerPopAttempts = 0;
-        ui64 FailedVerySlowPops = 0;
+        ui64 FailedReallySlowPops = 0;
         ui64 FailedSlowPops = 0;
         ui64 FailedSlowPopAttempts = 0;
-        ui64 InvalidateSlotInSlowPop = 0;
         ui64 FailedFastPops = 0;
         ui64 FailedFastPopAttempts = 0;
         ui64 FailedReallyFastPops = 0;
         ui64 FailedReallyFastPopAttempts = 0;
+
+
+        ui64 InvalidatedSlots = 0;
+        ui64 InvalidatedSlotsInSlowPop = 0;
+        ui64 InvalidatedSlotsInFastPop = 0;
+        ui64 InvalidatedSlotsInReallyFastPop = 0;
 
         ui64 MoveTailBecauseHeadOvertakesInReallySlowPop = 0;
         ui64 MoveTailBecauseHeadOvertakesInFastPop = 0;
@@ -61,10 +66,9 @@ struct TMPMCRingQueueStats {
             FailedPops += other.FailedPops;
             FailedSingleConsumerPops += other.FailedSingleConsumerPops;
             FailedSingleConsumerPopAttempts += other.FailedSingleConsumerPopAttempts;
-            FailedVerySlowPops += other.FailedVerySlowPops;
+            FailedReallySlowPops += other.FailedReallySlowPops;
             FailedSlowPops += other.FailedSlowPops;
             FailedSlowPopAttempts += other.FailedSlowPopAttempts;
-            InvalidateSlotInSlowPop += other.InvalidateSlotInSlowPop;
             FailedFastPops += other.FailedFastPops;
             FailedFastPopAttempts += other.FailedFastPopAttempts;
             FailedReallyFastPops += other.FailedReallyFastPops;
@@ -72,6 +76,11 @@ struct TMPMCRingQueueStats {
 
             MoveTailBecauseHeadOvertakesInReallySlowPop += other.MoveTailBecauseHeadOvertakesInReallySlowPop;
             MoveTailBecauseHeadOvertakesInFastPop += other.MoveTailBecauseHeadOvertakesInFastPop;
+
+            InvalidatedSlots += other.InvalidatedSlots;
+            InvalidatedSlotsInSlowPop += other.InvalidatedSlotsInSlowPop;
+            InvalidatedSlotsInFastPop += other.InvalidatedSlotsInFastPop;
+            InvalidatedSlotsInReallyFastPop += other.InvalidatedSlotsInReallyFastPop;
 
             return *this;
         }
@@ -113,11 +122,10 @@ struct TMPMCRingQueueStats {
     DEFINE_INCREMENT_STATS_2(FailedSingleConsumerPops, FailedPops)
     DEFINE_INCREMENT_STATS_1(FailedSingleConsumerPopAttempts)
     DEFINE_INCREMENT_STATS_1(MoveTailBecauseHeadOvertakesInReallySlowPop)
-    DEFINE_INCREMENT_STATS_2(FailedVerySlowPops, FailedPops)
+    DEFINE_INCREMENT_STATS_2(FailedReallySlowPops, FailedPops)
     DEFINE_INCREMENT_STATS_2(SuccessSlowPops, SuccessPops)
     DEFINE_INCREMENT_STATS_2(FailedSlowPops, FailedPops)
     DEFINE_INCREMENT_STATS_1(FailedSlowPopAttempts)
-    DEFINE_INCREMENT_STATS_1(InvalidateSlotInSlowPop)
     DEFINE_INCREMENT_STATS_1(ChangesReallySlowPopToSlowPop)
     DEFINE_INCREMENT_STATS_2(SuccessFastPops, SuccessPops)
     DEFINE_INCREMENT_STATS_2(FailedFastPops, FailedPops)
@@ -126,6 +134,9 @@ struct TMPMCRingQueueStats {
     DEFINE_INCREMENT_STATS_2(SuccessReallyFastPops, SuccessPops)
     DEFINE_INCREMENT_STATS_2(FailedReallyFastPops, FailedPops)
     DEFINE_INCREMENT_STATS_1(FailedReallyFastPopAttempts)
+    DEFINE_INCREMENT_STATS_2(InvalidatedSlotsInSlowPop, InvalidatedSlots)
+    DEFINE_INCREMENT_STATS_2(InvalidatedSlotsInFastPop, InvalidatedSlots)
+    DEFINE_INCREMENT_STATS_2(InvalidatedSlotsInReallyFastPop, InvalidatedSlots)
 
     static TStats GetLocalStats() {
         return Stats;
@@ -326,7 +337,7 @@ struct TMPMCRingQueue {
             }
         }
         if (currentHead == currentTail) {
-            TMPMCRingQueueStats::IncrementFailedVerySlowPops();
+            TMPMCRingQueueStats::IncrementFailedReallySlowPops();
             return std::nullopt;
         }
 
@@ -390,7 +401,7 @@ struct TMPMCRingQueue {
             while (slot.Generation == generation && slot.IsEmpty) {
                 if (currentSlot.compare_exchange_weak(expected, TSlot::MakeEmpty(generation + 1))) {
                     Head.compare_exchange_strong(currentHead, currentHead + 1);
-                    TMPMCRingQueueStats::IncrementInvalidateSlotInSlowPop();
+                    TMPMCRingQueueStats::IncrementInvalidatedSlotsInSlowPop();
                     TMPMCRingQueueStats::IncrementMoveTailBecauseHeadOvertakesInFastPop();
                     break;
                 }
@@ -442,6 +453,12 @@ struct TMPMCRingQueue {
                 continue;
             }
 
+            if constexpr (TMPMCRingQueueStats::CollectStatistics) {
+                if (slot.Generation <= generation) {
+                    TMPMCRingQueueStats::IncrementInvalidatedSlotsInFastPop();
+                }
+            }
+
             ui64 currentTail = Tail.load(std::memory_order_acquire);
             if (currentTail > currentHead) {
                 TMPMCRingQueueStats::IncrementFailedFastPopAttempts();
@@ -450,10 +467,20 @@ struct TMPMCRingQueue {
             }
 
             while (currentTail <= currentHead) {
+                ui64 newHead = Head.load(std::memory_order_acquire);
+                if (newHead > currentHead + 1) {
+                    TMPMCRingQueueStats::IncrementFailedFastPops();
+                    return std::nullopt;
+                }
                 if (Tail.compare_exchange_weak(currentTail, currentHead + 1)) {
                     TMPMCRingQueueStats::IncrementFailedFastPops();
                     return std::nullopt;
                 }
+            }
+            
+            if (currentTail == currentHead + 1) {
+                TMPMCRingQueueStats::IncrementFailedFastPops();
+                return std::nullopt;
             }
 
             TMPMCRingQueueStats::IncrementFailedFastPopAttempts();
@@ -496,6 +523,12 @@ struct TMPMCRingQueue {
                 continue;
             }
 
+            if constexpr (TMPMCRingQueueStats::CollectStatistics) {
+                if (slot.Generation <= generation) {
+                    TMPMCRingQueueStats::IncrementInvalidatedSlotsInReallyFastPop();
+                }
+            }
+
             if (slot.Generation > generation) {
                 TMPMCRingQueueStats::IncrementFailedReallyFastPopAttempts();
                 SpinLockPause();
@@ -504,10 +537,20 @@ struct TMPMCRingQueue {
 
             ui64 currentTail = Tail.load(std::memory_order_acquire);
             while (currentTail <= currentHead) {
+                ui64 newHead = Head.load(std::memory_order_acquire);
+                if (newHead > currentHead + 1) {
+                    TMPMCRingQueueStats::IncrementFailedReallyFastPops();
+                    return std::nullopt;
+                }
                 if (Tail.compare_exchange_weak(currentTail, currentHead + 1)) {
                     TMPMCRingQueueStats::IncrementFailedReallyFastPops();
                     return std::nullopt;
                 }
+            }
+            
+            if (currentTail == currentHead + 1) {
+                TMPMCRingQueueStats::IncrementFailedReallyFastPops();
+                return std::nullopt;
             }
 
             TMPMCRingQueueStats::IncrementFailedReallyFastPopAttempts();

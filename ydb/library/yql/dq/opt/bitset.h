@@ -1,10 +1,8 @@
 #pragma once
 
-#include "dphyp_join_tree_node.h"
-
 #include <stdlib.h>
 
-namespace NYql::NDq::NDphyp {
+namespace NYql::NDq {
 
 template <typename TNodeSet>
 inline bool AreOverlaps(const TNodeSet& lhs, const TNodeSet& rhs) {

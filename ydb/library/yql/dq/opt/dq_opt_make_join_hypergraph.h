@@ -1,13 +1,13 @@
 #pragma once
 
-#include "dphyp_join_hypergraph.h"
-#include "dphyp_conflict_rules_collector.h"
+#include "dq_opt_join_hypergraph.h"
+#include "dq_opt_conflict_rules_collector.h"
 
 #include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
 
 #include <memory.h>
 
-namespace NYql::NDq::NDphyp {
+namespace NYql::NDq {
 
 inline TVector<TString> GetConditionUsedRelationNames(const std::shared_ptr<TJoinOptimizerNode>& joinNode) {
     TVector<TString> res;
@@ -24,7 +24,7 @@ inline TVector<TString> GetConditionUsedRelationNames(const std::shared_ptr<TJoi
 template <typename TNodeSet>
 TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
     const std::shared_ptr<TJoinOptimizerNode>& joinNode,
-    TNodeSet conditionUsedRels,
+    const TNodeSet& conditionUsedRels,
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet>& subtreeNodes
 ) {
     auto conflictRulesCollector = TConflictRulesCollector<TNodeSet>(joinNode, subtreeNodes);

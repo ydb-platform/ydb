@@ -281,5 +281,5 @@ message TTableServiceConfig {
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 1];
     optional bool OldLookupJoinBehaviour = 59 [default = false]; 
 
-    optional uint64 QueryReplayCacheUploadTTLSec = 60 [default = 86400];
+    optional uint64 QueryReplayCacheUploadTTLSec = 60 [default = 36000];
 };

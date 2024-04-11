@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
+#include <exception>
 #ifndef MKQL_DISABLE_CODEGEN
 #include <ydb/library/yql/providers/yt/codec/codegen/yt_codec_cg.h>
 #endif
@@ -156,7 +157,7 @@ public:
         CondFill_.Signal();
     }
 
-    bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex) override {
+    bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex, const std::exception_ptr& error) override {
         auto guard = Guard(Mutex_);
 
         // Clean all filled blocks
@@ -168,7 +169,7 @@ public:
             BufMan_.FreeBlocks_.push(block);
         }
 
-        if (!Source_.Retry(rangeIndex, rowIndex)) {
+        if (!Source_.Retry(rangeIndex, rowIndex, error)) {
             Shutdown_ = true;
             CondRestore_.Signal();
             return false;
@@ -265,9 +266,9 @@ public:
         Block_.Avail_ = 0;
     }
 
-    bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex) override {
+    bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex, const std::exception_ptr& error) override {
         Block_.Avail_ = 0;
-        return Source_.Retry(rangeIndex, rowIndex);
+        return Source_.Retry(rangeIndex, rowIndex, error);
     }
 
 private:
@@ -1498,10 +1499,10 @@ void TMkqlReaderImpl::Finish() {
     TimerRead_.Report(JobStats_);
 }
 
-void TMkqlReaderImpl::OnError(TStringBuf msg) {
+void TMkqlReaderImpl::OnError(const std::exception_ptr& error, TStringBuf msg) {
     YQL_LOG(ERROR) << "Reader error: " << msg;
     Buf_.Reset();
-    if (!Reader_->Retry(Decoder_->RangeIndex_, Decoder_->RowIndex_)) {
+    if (!Reader_->Retry(Decoder_->RangeIndex_, Decoder_->RowIndex_, error)) {
         ythrow yexception() << "Failed to read row, table index: " << Decoder_->TableIndex_ << ", row index: " <<
             (Decoder_->RowIndex_.Defined() ? ToString(*Decoder_->RowIndex_) : "?") << "\n" << msg;
     }
@@ -1573,9 +1574,9 @@ void TMkqlReaderImpl::Next() {
         } catch (const TTimeoutException&) {
             throw;
         } catch (const yexception& e) {
-            OnError(e.AsStrBuf());
+            OnError(std::current_exception(), e.AsStrBuf());
         } catch (...) {
-            OnError(CurrentExceptionMessage());
+            OnError(std::current_exception(), CurrentExceptionMessage());
         }
     }
 

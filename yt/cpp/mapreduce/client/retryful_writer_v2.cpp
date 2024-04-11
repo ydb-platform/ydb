@@ -60,7 +60,7 @@ public:
     }
 
 private:
-    std::shared_ptr<std::string> Buffer_ = nullptr;
+    std::shared_ptr<std::string> Buffer_ = std::make_shared<std::string>();
     ssize_t Size_ = 0;
     ssize_t Capacity_ = 0;
 };
@@ -246,7 +246,7 @@ private:
     struct TWriteTask
     {
         NThreading::TPromise<void> SendingComplete;
-        std::shared_ptr<std::string> Data;
+        std::shared_ptr<std::string> Data = std::make_shared<std::string>();
         ssize_t Size = 0;
         bool BufferComplete = false;
     };

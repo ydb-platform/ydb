@@ -7,6 +7,7 @@
 #include "mkql_block_func.h"
 #include "mkql_blocks.h"
 #include "mkql_block_agg.h"
+#include "mkql_block_removemember.h"
 #include "mkql_block_coalesce.h"
 #include "mkql_block_exists.h"
 #include "mkql_block_getelem.h"
@@ -298,6 +299,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"BlockJust", &WrapBlockJust},
         {"BlockCompress", &WrapBlockCompress},
         {"BlockAsTuple", &WrapBlockAsTuple},
+        {"BlockRemoveMember", &WrapBlockRemoveMember},
         {"BlockMember", &WrapBlockMember},
         {"BlockNth", &WrapBlockNth},
         {"BlockExpandChunked", &WrapBlockExpandChunked},

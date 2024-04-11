@@ -22,6 +22,7 @@ SET(ORIG_SOURCES
     mkql_block_logical.cpp
     mkql_block_compress.cpp
     mkql_block_func.cpp
+    mkql_block_removemember.cpp
     mkql_block_skiptake.cpp
     mkql_block_top.cpp
     mkql_block_tuple.cpp

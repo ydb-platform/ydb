@@ -16,8 +16,6 @@ using namespace NYdb::NScheme;
 Y_UNIT_TEST_SUITE(KqpSystemView) {
 
     Y_UNIT_TEST(Join) {
-        return; // nodes table is currently switched off
-
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
 
@@ -418,15 +416,13 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
     }
 
     Y_UNIT_TEST(NodesSimple) {
-        return; // nodes table is currenty switched off
-
         TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 3);
         auto client = kikimr.GetTableClient();
 
         ui32 offset = kikimr.GetTestServer().GetRuntime()->GetNodeId(0);
-
+Sleep(TDuration::Seconds(5));
         auto it = client.StreamExecuteScanQuery(R"(
-            SELECT NodeId, Host
+            SELECT *
             FROM `/Root/.sys/nodes`;
         )").GetValueSync();
 
@@ -438,12 +434,12 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             [[%du];["::1"]]
         ])", offset, offset + 1, offset + 2);
 
+Cerr << StreamResultToYson(it) << Endl; return;
+
         CompareYson(expected, StreamResultToYson(it));
     }
 
     Y_UNIT_TEST(NodesRange1) {
-        return; // nodes table is currenty switched off
-
         TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 5);
         auto client = kikimr.GetTableClient();
 
@@ -468,8 +464,6 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
     }
 
     Y_UNIT_TEST(NodesRange2) {
-        return; // nodes table is currenty switched off
-
         TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 5);
         auto client = kikimr.GetTableClient();
 

@@ -107,6 +107,8 @@ struct Schema : NIceDb::Schema {
         struct Port      : Column<4, NScheme::NTypeIds::Uint32> {};
         struct StartTime : Column<5, NScheme::NTypeIds::Timestamp> {};
         struct UpTime    : Column<6, NScheme::NTypeIds::Interval> {};
+        struct UserPoolUsage : Column<7, NScheme::NTypeIds::Double> {};
+        struct UserPoolThreads : Column<8, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<NodeId>;
         using TColumns = TableColumns<
@@ -115,7 +117,9 @@ struct Schema : NIceDb::Schema {
             Address,
             Port,
             StartTime,
-            UpTime>;
+            UpTime,
+            UserPoolUsage,
+            UserPoolThreads>;
     };
 
     struct QueryStats : Table<3> {

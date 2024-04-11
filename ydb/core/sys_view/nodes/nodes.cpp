@@ -120,6 +120,7 @@ private:
 
     void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         ui32 nodeId = ev.Get()->Cookie;
+// Cerr << ev.Get()->Get()->Record.DebugString() << Endl;
         WBSystemInfo[nodeId] = ev->Release();
         RequestDone();
     }
@@ -187,6 +188,28 @@ private:
                     }
                     auto interval = TInstant::Now().MicroSeconds() - *time * 1000;
                     return TCell::Make<i64>(interval > 0 ? interval : 0);
+                }});
+                insert({TSchema::UserPoolUsage::ColumnId, [] (const TNodeInfo&, const TWBInfo* wbInfo) {
+                    if (wbInfo && wbInfo->Record.SystemStateInfoSize() == 1) {
+                        const auto& systemState = wbInfo->Record.GetSystemStateInfo(0);
+                        for (const auto& poolStat : systemState.GetPoolStats()) {
+                            if (poolStat.GetName() == "User") {
+                                return TCell::Make<double>(poolStat.GetUsage());
+                            }
+                        }
+                    }
+                    return TCell();
+                }});
+                insert({TSchema::UserPoolThreads::ColumnId, [] (const TNodeInfo&, const TWBInfo* wbInfo) {
+                    if (wbInfo && wbInfo->Record.SystemStateInfoSize() == 1) {
+                        const auto& systemState = wbInfo->Record.GetSystemStateInfo(0);
+                        for (const auto& poolStat : systemState.GetPoolStats()) {
+                            if (poolStat.GetName() == "User") {
+                                return TCell::Make<ui32>(poolStat.GetThreads());
+                            }
+                        }
+                    }
+                    return TCell();
                 }});
             }
         };

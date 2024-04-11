@@ -221,7 +221,7 @@ TPortionInfoWithBlobs TPortionInfoWithBlobs::SyncPortion(TPortionInfoWithBlobs&&
     TGeneralSerializedSlice slice(entityChunksNew, schemaTo, counters);
     const NSplitter::TEntityGroups groups = to->GetIndexInfo().GetEntityGroupsByStorageId(targetTier, *storages);
     TPortionInfoWithBlobs result = TPortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), source.PortionInfo, storages);
-    result.GetPortionInfo().SetMinSnapshot(to->GetSnapshot());
+    result.GetPortionInfo().SetMinSnapshotDeprecated(to->GetSnapshot());
     result.GetPortionInfo().SetSchemaVersion(to->GetVersion());
     result.GetPortionInfo().MutableMeta().SetTierName(targetTier);
 

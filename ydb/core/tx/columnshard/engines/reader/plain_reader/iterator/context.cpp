@@ -102,11 +102,11 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             if (!i->IsFilterOnly()) {
                 break;
             }
-            TColumnsSet stepColumnIds(i->GetFilterOriginalColumnIds(), ReadMetadata->GetIndexInfo(), ReadMetadata->GetLoadSchema());
+            TColumnsSet stepColumnIds(i->GetFilterOriginalColumnIds(), ReadMetadata->GetIndexInfo(), ReadMetadata->GetResultSchema());
             {
                 auto intersectionIds = columnsFetch.Intersect(stepColumnIds);
                 if (intersectionIds.size()) {
-                    TColumnsSet intersection(intersectionIds, ReadMetadata->GetIndexInfo(), ReadMetadata->GetLoadSchema());
+                    TColumnsSet intersection(intersectionIds, ReadMetadata->GetIndexInfo(), ReadMetadata->GetResultSchema());
                     result->AddStep(std::make_shared<TOptionalAssemblerStep>(std::make_shared<TColumnsSet>(intersection), "EF"));
                     columnsFetch = columnsFetch - intersection;
                 }
@@ -140,11 +140,11 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             if (!i->IsFilterOnly()) {
                 break;
             }
-            TColumnsSet stepColumnIds(i->GetFilterOriginalColumnIds(), ReadMetadata->GetIndexInfo(), ReadMetadata->GetLoadSchema());
+            TColumnsSet stepColumnIds(i->GetFilterOriginalColumnIds(), ReadMetadata->GetIndexInfo(), ReadMetadata->GetResultSchema());
             {
                 auto intersectionIds = columnsFetchEF.Intersect(stepColumnIds);
                 if (intersectionIds.size()) {
-                    TColumnsSet intersection(intersectionIds, ReadMetadata->GetIndexInfo(), ReadMetadata->GetLoadSchema());
+                    TColumnsSet intersection(intersectionIds, ReadMetadata->GetIndexInfo(), ReadMetadata->GetResultSchema());
                     result->AddStep(std::make_shared<TOptionalAssemblerStep>(std::make_shared<TColumnsSet>(intersection), "EF"));
                     columnsFetchEF = columnsFetchEF - intersection;
                 }
@@ -168,7 +168,7 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     Y_ABORT_UNLESS(ReadMetadata);
     Y_ABORT_UNLESS(ReadMetadata->SelectInfo);
 
-    auto readSchema = ReadMetadata->GetSnapshotSchema(ReadMetadata->GetRequestSnapshot());
+    auto readSchema = ReadMetadata->GetResultSchema();
     SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSpecialColumnIdsSet(), ReadMetadata->GetIndexInfo(), readSchema);
     IndexChecker = ReadMetadata->GetProgram().GetIndexChecker();
     {

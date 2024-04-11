@@ -58,14 +58,7 @@ public:
         return *PKRangesFilter;
     }
 
-    ISnapshotSchema::TPtr GetSnapshotSchema(const TSnapshot& version) const {
-        if (version >= RequestSnapshot) {
-            return ResultIndexSchema;
-        }
-        return GetIndexVersions().GetSchema(version);
-    }
-
-    ISnapshotSchema::TPtr GetLoadSchema() const {
+    ISnapshotSchema::TPtr GetResultSchema() const {
         return ResultIndexSchema;
     }
 

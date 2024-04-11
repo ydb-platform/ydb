@@ -32,13 +32,13 @@ public:
     }
 
     virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
-        return GetLoadSchema()->GetIndexInfo().GetPrimaryKeyColumns();
+        return GetResultSchema()->GetIndexInfo().GetPrimaryKeyColumns();
     }
 
     TConclusionStatus Init(const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor);
 
     std::vector<std::string> GetColumnsOrder() const {
-        auto loadSchema = GetSnapshotSchema(GetRequestSnapshot());
+        auto loadSchema = GetResultSchema();
         std::vector<std::string> result;
         for (auto&& i : loadSchema->GetSchema()->fields()) {
             result.emplace_back(i->name());

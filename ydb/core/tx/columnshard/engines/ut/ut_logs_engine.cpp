@@ -98,7 +98,7 @@ public:
         } else {
             Y_ABORT_UNLESS(portion.GetPathId() == it->second.GetPathId() && portion.GetPortion() == it->second.GetPortion());
         }
-        it->second.SetMinSnapshot(portion.GetMinSnapshot());
+        it->second.SetMinSnapshotDeprecated(portion.GetMinSnapshotDeprecated());
         if (portion.HasRemoveSnapshot()) {
             it->second.SetRemoveSnapshot(portion.GetRemoveSnapshotVerified());
         } else {

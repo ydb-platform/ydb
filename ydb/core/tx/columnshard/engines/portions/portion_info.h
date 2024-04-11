@@ -419,8 +419,8 @@ public:
 
     bool Empty() const { return Records.empty(); }
     bool Produced() const { return Meta.GetProduced() != TPortionMeta::EProduced::UNSPECIFIED; }
-    bool Valid() const { return (MinSnapshotDeprecated.Valid() || SchemaVersion) && PathId && Portion && !Empty() && Produced() && Meta.IndexKeyStart && Meta.IndexKeyEnd; }
-    bool ValidSnapshotInfo() const { return  (MinSnapshotDeprecated.Valid() || SchemaVersion) && PathId && Portion; }
+    bool Valid() const { return ValidSnapshotInfo() && !Empty() && Produced() && Meta.IndexKeyStart && Meta.IndexKeyEnd; }
+    bool ValidSnapshotInfo() const { return MinSnapshotDeprecated.Valid() && PathId && Portion; }
     bool IsInserted() const { return Meta.GetProduced() == TPortionMeta::EProduced::INSERTED; }
     bool IsEvicted() const { return Meta.GetProduced() == TPortionMeta::EProduced::EVICTED; }
     bool CanHaveDups() const { return !Produced(); /* || IsInserted(); */ }
@@ -499,7 +499,7 @@ public:
         DeprecatedGranuleId = granuleId;
     }
 
-    const TSnapshot& GetMinSnapshot() const {
+    const TSnapshot& GetMinSnapshotDeprecated() const {
         return MinSnapshotDeprecated;
     }
 
@@ -517,10 +517,11 @@ public:
     }
 
     ui64 GetSchemaVersionVerified() const {
+        AFL_VERIFY(SchemaVersion);
         return SchemaVersion.value();
     }
 
-    void SetMinSnapshot(const TSnapshot& snap) {
+    void SetMinSnapshotDeprecated(const TSnapshot& snap) {
         Y_ABORT_UNLESS(snap.Valid());
         MinSnapshotDeprecated = snap;
     }
@@ -594,6 +595,25 @@ public:
         FillBlobIdsByStorage(result, indexInfo);
         return result;
     }
+
+    class TSchemaCoursor {
+        const NOlap::TVersionedIndex& VersionedIndex;
+        ISnapshotSchema::TPtr CurrentSchema;
+        TSnapshot LastSnapshot = TSnapshot::Zero();
+    public:
+        TSchemaCoursor(const NOlap::TVersionedIndex& versionedIndex)
+            : VersionedIndex(versionedIndex)
+        {}
+
+        ISnapshotSchema::TPtr GetSchema(const TPortionInfo& portion) {
+            bool acceptableSchema =  portion.SchemaVersion ? (*portion.SchemaVersion == CurrentSchema->GetVersion()) : portion.MinSnapshotDeprecated == LastSnapshot;
+            if (!CurrentSchema || !acceptableSchema) {
+                CurrentSchema = portion.GetSchema(VersionedIndex);
+                LastSnapshot = portion.GetMinSnapshotDeprecated();
+            }
+            return CurrentSchema;
+        }
+    };
 
     ISnapshotSchema::TPtr GetSchema(const TVersionedIndex& index) const;
 

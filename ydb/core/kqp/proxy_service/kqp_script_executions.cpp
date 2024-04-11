@@ -1808,18 +1808,18 @@ public:
                 .BeginList();
 
         auto row = FirstRow;
-        auto accumulatedSize = AccumulatedSize;
         for (const auto& rowValue : ResultSet.rows()) {
-            accumulatedSize += rowValue.ByteSizeLong();
+            auto rowValueSerialized = rowValue.SerializeAsString();
+            SavedSize += rowValueSerialized.size();
             param
                     .AddListItem()
                     .BeginStruct()
                         .AddMember("row_id")
                             .Int64(row++)
                         .AddMember("result_set")
-                            .String(rowValue.SerializeAsString())
+                            .String(std::move(rowValueSerialized))
                         .AddMember("accumulated_size")
-                            .Int64(accumulatedSize)
+                            .Int64(SavedSize - AccumulatedSize)
                     .EndStruct();
         }
         param
@@ -1835,9 +1835,9 @@ public:
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         if (status == Ydb::StatusIds::SUCCESS) {
-            Send(Owner, new TEvSaveScriptResultFinished(status));
+            Send(Owner, new TEvSaveScriptResultPartFinished(status, SavedSize));
         } else {
-            Send(Owner, new TEvSaveScriptResultFinished(status, std::move(issues)));
+            Send(Owner, new TEvSaveScriptResultPartFinished(status, SavedSize, std::move(issues)));
         }
     }
 
@@ -1849,6 +1849,7 @@ private:
     const i64 FirstRow;
     const i64 AccumulatedSize;
     const Ydb::ResultSet ResultSet;
+    i64 SavedSize = 0;
 };
 
 class TSaveScriptExecutionResultActor : public TActorBootstrapped<TSaveScriptExecutionResultActor> {
@@ -1877,14 +1878,9 @@ public:
         }
 
         i64 numberRows = ResultSets.back().rows_size();
-        i64 rowsSize = 0;
-        for (const auto& rowValue : ResultSets.back().rows()) {
-            rowsSize += rowValue.ByteSizeLong();
-        }
         Register(new TQueryRetryActor<TSaveScriptExecutionResultQuery, TEvSaveScriptResultFinished, TString, TString, i32, TMaybe<TInstant>, i64, i64, Ydb::ResultSet>(SelfId(), Database, ExecutionId, ResultSetId, ExpireAt, FirstRow, AccumulatedSize, ResultSets.back()));
 
         FirstRow += numberRows;
-        AccumulatedSize += rowsSize;
         ResultSets.pop_back();
     }
 
@@ -1903,14 +1899,16 @@ public:
     }
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvSaveScriptResultFinished, Handle);
+        hFunc(TEvSaveScriptResultPartFinished, Handle);
     )
 
-    void Handle(TEvSaveScriptResultFinished::TPtr& ev) {
+    void Handle(TEvSaveScriptResultPartFinished::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             Reply(ev->Get()->Status, std::move(ev->Get()->Issues));
             return;
         }
+
+        AccumulatedSize += ev->Get()->SavedSize;
 
         StartSaveResultQuery();
     }

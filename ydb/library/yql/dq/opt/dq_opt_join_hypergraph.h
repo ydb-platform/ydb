@@ -10,8 +10,9 @@
 namespace NYql::NDq {
 
 /* 
- * Hypergraph - a graph, whose edge connects two sets of nodes.
- * It represents relation between tables and ordering restriction. 
+ * JoinHypergraph - a graph, whose edge connects two sets of nodes.
+ * It represents relation between tables and ordering constraints.
+ * Graph is undirected, so it stores each edge twice (original and reversed) for DPHyp algorithm.
  */
 template <typename TNodeSet>
 class TJoinHypergraph {
@@ -45,6 +46,8 @@ public:
         std::set<std::pair<TJoinColumn, TJoinColumn>> JoinConditions;
         TVector<TString> LeftJoinKeys;
         TVector<TString> RightJoinKeys;
+
+        // JoinKind may not be commutative, so we need to know which edge is original and which is reversed.
         bool IsReversed;
         int64_t ReversedEdgeId;
 
@@ -83,9 +86,7 @@ public:
     };
 
 public:
-    /* 
-     * Return's ID of added node. It doesn't add anything, if node already exists in graph.
-     */
+    /* Return's ID of added node. It won't add anything, if node already exists in graph. */
     size_t AddNode(const std::shared_ptr<IBaseOptimizerNode>& relationNode) {
         Y_ASSERT(relationNode->Labels().size() == 1);
 
@@ -104,6 +105,7 @@ public:
         return nodeId;
     }
 
+    /* Adds an edge, and its reversed version. */
     void AddEdge(TEdge edge) {
         size_t edgeId = Edges_.size();
         size_t reversedEdgeId = edgeId + 1;
@@ -164,6 +166,7 @@ public:
     }
 
 private:
+    /* Attach edges to nodes */
     void AddEdgeImpl(TEdge edge) {
         Edges_.push_back(edge);
 

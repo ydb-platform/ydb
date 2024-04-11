@@ -1,3 +1,4 @@
+#include <unordered_map>
 #define MPMC_RING_QUEUE_COLLECT_STATISTICS
 
 #include "mpmc_ring_queue.h"
@@ -152,13 +153,18 @@ namespace { // Tests
         ui64 Written = 0;
     };
 
+    struct TConsumerInfo {
+        std::vector<std::optional<ui32>> ReadedItems;
+    };
+
     template <typename TQueue>
     class TConsumerWorker {
     public:
-        TConsumerWorker(TQueue *queue, std::optional<ui32> reads, bool countFailsAsReads=false)
+        TConsumerWorker(TQueue *queue, std::optional<ui32> reads, bool countFailsAsReads=false, TConsumerInfo *info=nullptr)
             : Queue(queue)
             , Reads(reads)
             , CountFailsAsReads(countFailsAsReads)
+            , Info(info)
         {}
 
         TThreadAction Do() {
@@ -169,6 +175,9 @@ namespace { // Tests
                 auto value = Queue->TryPop();
                 if (value || CountFailsAsReads) {
                     Readed++;
+                    if (Info) {
+                        Info->ReadedItems.emplace_back(std::move(value));
+                    }
                 }
             } else {
                 auto value = Queue->TryPop();
@@ -176,6 +185,9 @@ namespace { // Tests
                     return {.Action=EThreadAction::Kill};
                 }
                 Readed++;
+                if (Info) {
+                    Info->ReadedItems.emplace_back(std::move(value));
+                }
             }
             return {.Action=EThreadAction::Continue};
         }
@@ -184,11 +196,13 @@ namespace { // Tests
         std::optional<ui32> Reads;
         ui64 Readed = 0;
         bool CountFailsAsReads;
+        TConsumerInfo *Info;
     };
 
     struct TStatsCollector {
         TMutex Mutex;
         NActors::TMPMCRingQueueStats::TStats Stats;
+        std::vector<TConsumerInfo> ConsumerInfo;
 
         void AddStats(const NActors::TMPMCRingQueueStats::TStats &stats) {
             TGuard<TMutex> guard(Mutex);
@@ -340,6 +354,29 @@ namespace { // Tests
             return std::move(collector);
         }
 
+        template <template <ui32> typename TQueueAdaptor, ui32 ProducingThreadCount, ui32 ConsumingThreadCount, ui32 PushedItems, ui32 PoppedItems>
+        static TStatsCollector BasicProducingConsuming() {
+            TMPMCRingQueue<SizeBits> realQueue;
+            TVector<std::unique_ptr<IQueue>> adapters;
+            TVector<std::unique_ptr<ISimpleThread>> threads;
+            TStatsCollector collector;
+            for (ui32 threadIdx = 0; threadIdx < ProducingThreadCount; ++threadIdx) {
+                TQueueAdaptor<SizeBits> *adapter = new TQueueAdaptor<SizeBits>(&realQueue);
+                adapters.emplace_back(adapter);
+                TProducerWorker<std::decay_t<decltype(*adapter)>> worker(adapter, PushedItems);
+                threads.emplace_back(new TTestThread<decltype(worker)>(worker, &collector));
+            }
+            collector.ConsumerInfo.resize(ConsumingThreadCount);
+            for (ui32 threadIdx = 0; threadIdx < ConsumingThreadCount; ++threadIdx) {
+                TQueueAdaptor<SizeBits> *adapter = new TQueueAdaptor<SizeBits>(&realQueue);
+                adapters.emplace_back(adapter);
+                TConsumerWorker<std::decay_t<decltype(*adapter)>> worker(adapter, PoppedItems, false, &collector.ConsumerInfo[threadIdx]);
+                threads.emplace_back(new TTestThread<decltype(worker)>(worker, &collector));
+            }
+            RunThreads(threads);
+            return std::move(collector);
+        }
+
     };
 
 }
@@ -354,6 +391,8 @@ namespace { // Tests
         UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessSlowPushes, 0);                \
         UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedPushes, 0);                     \
         UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedSlowPushAttempts, 0);           \
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPops, 2);                      \
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedPops, 0);                       \
     }                                                                                  \
 // end BASIC_PUSH_POP_SINGLE_THREAD
 
@@ -406,7 +445,7 @@ namespace { // Tests
         constexpr ui32 SizeBits = 10;                                                                           \
         constexpr ui32 MaxSize = 1 << SizeBits;                                                                 \
         constexpr ui32 ThreadCount = 10;                                                                        \
-        TStatsCollector collector = TTestCases<10>::BasicProducing<QUEUE, ThreadCount>();                       \
+        TStatsCollector collector = TTestCases<SizeBits>::BasicProducing<QUEUE, ThreadCount>();                 \
         UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPushes, MaxSize);                                       \
         UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessFastPushes, MaxSize);                                   \
         UNIT_ASSERT_VALUES_EQUAL(collector.Stats.ChangesFastPushToSlowPush, ThreadCount);                       \
@@ -422,7 +461,7 @@ namespace { // Tests
         constexpr ui32 SizeBits = 10;                                                                           \
         constexpr ui32 MaxSize = 1 << SizeBits;                                                                 \
         constexpr ui32 ThreadCount = 10;                                                                        \
-        TStatsCollector collector = TTestCases<10>::BasicProducing<QUEUE, ThreadCount>();                       \
+        TStatsCollector collector = TTestCases<SizeBits>::BasicProducing<QUEUE, ThreadCount>();                 \
         UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPushes, MaxSize);                                       \
         UNIT_ASSERT_VALUES_EQUAL(collector.Stats.ChangesFastPushToSlowPush, 0);                                 \
         UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessFastPushes, 0);                                         \
@@ -437,7 +476,9 @@ namespace { // Tests
         constexpr ui32 SizeBits = 10;                                                                           \
         constexpr ui32 MaxSize = 1 << SizeBits;                                                                 \
         constexpr ui32 ThreadCount = 10;                                                                        \
-        TStatsCollector collector = TTestCases<10>::ConsumingEmptyQueue<QUEUE, ThreadCount, MaxSize>();         \
+        TStatsCollector collector = TTestCases<SizeBits>::ConsumingEmptyQueue<QUEUE, ThreadCount, MaxSize>();   \
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedPops, ThreadCount * MaxSize);                            \
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPops, 0);                                               \
     }                                                                                                           \
 // end BASIC_PUSH_POP_MUTLI_THREADS_SLOW
 
@@ -459,9 +500,243 @@ Y_UNIT_TEST_SUITE(MPMCRingQueueMultiThreadsTests) {
     BASIC_PRODUCING_SLOW(TSlowQueue)
     BASIC_PRODUCING_SLOW(TVerySlowQueue)
 
-    CONSUMING_EMPTY_QUEUE(TVeryFastQueue)
-    CONSUMING_EMPTY_QUEUE(TFastQueue)
-    CONSUMING_EMPTY_QUEUE(TSlowQueue)
-    CONSUMING_EMPTY_QUEUE(TVerySlowQueue)
+    Y_UNIT_TEST(ConsumingEmptyQueue_TVeryFastQueue) {
+        constexpr ui32 SizeBits = 10;
+        constexpr ui32 MaxSize = 1 << SizeBits;
+        constexpr ui32 ThreadCount = 10;
+        TStatsCollector collector = TTestCases<SizeBits>::ConsumingEmptyQueue<TVeryFastQueue, ThreadCount, MaxSize>();
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedPops, ThreadCount * MaxSize);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedReallyFastPops, ThreadCount * MaxSize);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPops, 0);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessReallyFastPops, 0);
+        UNIT_ASSERT_LT(collector.Stats.FailedReallyFastPopAttempts, MaxSize); // lower than 10%
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.InvalidatedSlotsInReallyFastPop, collector.Stats.FailedPops + collector.Stats.FailedReallyFastPopAttempts);
+    }
+
+    Y_UNIT_TEST(ConsumingEmptyQueue_TFastQueue) {
+        constexpr ui32 SizeBits = 10;
+        constexpr ui32 MaxSize = 1 << SizeBits;
+        constexpr ui32 ThreadCount = 10;
+        TStatsCollector collector = TTestCases<SizeBits>::ConsumingEmptyQueue<TFastQueue, ThreadCount, MaxSize>();
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedPops, ThreadCount * MaxSize);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedFastPops, ThreadCount * MaxSize);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPops, 0);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessFastPops, 0);
+        UNIT_ASSERT_LT(collector.Stats.FailedReallyFastPopAttempts, MaxSize); // lower than 10%
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.InvalidatedSlotsInFastPop, collector.Stats.FailedPops + collector.Stats.FailedFastPopAttempts);
+    }
+
+    Y_UNIT_TEST(ConsumingEmptyQueue_TSlowQueue) {
+        constexpr ui32 SizeBits = 10;
+        constexpr ui32 MaxSize = 1 << SizeBits;
+        constexpr ui32 ThreadCount = 10;
+        TStatsCollector collector = TTestCases<SizeBits>::ConsumingEmptyQueue<TSlowQueue, ThreadCount, MaxSize>();
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedPops, ThreadCount * MaxSize);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedSlowPops, ThreadCount * MaxSize);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.InvalidatedSlotsInSlowPop, 0);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPops, 0);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessSlowPops, 0);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedSlowPopAttempts, 0);
+    }
+
+    Y_UNIT_TEST(ConsumingEmptyQueue_TVerySlowQueue) {
+        constexpr ui32 SizeBits = 10;
+        constexpr ui32 MaxSize = 1 << SizeBits;
+        constexpr ui32 ThreadCount = 10;
+        TStatsCollector collector = TTestCases<SizeBits>::ConsumingEmptyQueue<TVerySlowQueue, ThreadCount, MaxSize>();
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedPops, ThreadCount * MaxSize);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedReallySlowPops, ThreadCount * MaxSize);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedSlowPops, 0);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.ChangesReallySlowPopToSlowPop, 0);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.InvalidatedSlotsInSlowPop, 0);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPops, 0);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessSlowPops, 0);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.FailedSlowPopAttempts, 0);
+    }
+
+    Y_UNIT_TEST(BasicProducingConsuming_TVeryFastQueue) {
+        constexpr ui32 SizeBits = 15;
+        constexpr ui32 ItemsPerThread = 1024;
+        constexpr ui32 ThreadCount = 10;
+        TStatsCollector collector = TTestCases<SizeBits>::BasicProducingConsuming<TVeryFastQueue, ThreadCount, ThreadCount, ItemsPerThread, ItemsPerThread>();
+
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPushes, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessFastPushes + collector.Stats.SuccessSlowPushes, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessSlowPushes + collector.Stats.FailedPushes, collector.Stats.ChangesFastPushToSlowPush);
+        UNIT_ASSERT_LT(collector.Stats.SuccessSlowPushes, collector.Stats.SuccessFastPushes);
+
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPops, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessReallyFastPops, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.InvalidatedSlotsInReallyFastPop, collector.Stats.FailedPops + collector.Stats.FailedReallyFastPopAttempts);
+        UNIT_ASSERT_LT(collector.Stats.InvalidatedSlotsInReallyFastPop, ItemsPerThread); // lower than 10%
+
+        std::unordered_map<ui32, ui32> itemsCounts;
+        for (auto &info : collector.ConsumerInfo) {
+            for (std::optional<ui32> item : info.ReadedItems) {
+                UNIT_ASSERT(item);
+                itemsCounts[*item]++;
+            }
+        }
+
+        for (auto &[item, count] : itemsCounts) {
+            UNIT_ASSERT_VALUES_EQUAL(count, 10);
+            UNIT_ASSERT_LE(0, item);
+            UNIT_ASSERT_LT(item, ItemsPerThread);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(itemsCounts.size(), ItemsPerThread);
+    }
+
+    Y_UNIT_TEST(BasicProducingConsuming_TFastQueue) {
+        constexpr ui32 SizeBits = 15;
+        constexpr ui32 ItemsPerThread = 1024;
+        constexpr ui32 ThreadCount = 10;
+        TStatsCollector collector = TTestCases<SizeBits>::BasicProducingConsuming<TFastQueue, ThreadCount, ThreadCount, ItemsPerThread, ItemsPerThread>();
+
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPushes, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessFastPushes + collector.Stats.SuccessSlowPushes, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessSlowPushes + collector.Stats.FailedPushes, collector.Stats.ChangesFastPushToSlowPush);
+        UNIT_ASSERT_LT(collector.Stats.SuccessSlowPushes, collector.Stats.SuccessFastPushes);
+
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPops, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessFastPops, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.InvalidatedSlotsInFastPop, collector.Stats.FailedPops + collector.Stats.FailedFastPopAttempts);
+        UNIT_ASSERT_LT(collector.Stats.InvalidatedSlotsInFastPop, ItemsPerThread); // lower than 10%
+
+        std::unordered_map<ui32, ui32> itemsCounts;
+        for (auto &info : collector.ConsumerInfo) {
+            for (std::optional<ui32> item : info.ReadedItems) {
+                UNIT_ASSERT(item);
+                itemsCounts[*item]++;
+            }
+        }
+
+        for (auto &[item, count] : itemsCounts) {
+            UNIT_ASSERT_VALUES_EQUAL(count, 10);
+            UNIT_ASSERT_LE(0, item);
+            UNIT_ASSERT_LT(item, ItemsPerThread);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(itemsCounts.size(), ItemsPerThread);
+    }
+
+    Y_UNIT_TEST(BasicProducingConsuming_TSlowQueue) {
+        constexpr ui32 SizeBits = 15;
+        constexpr ui32 ItemsPerThread = 1024;
+        constexpr ui32 ThreadCount = 10;
+        TStatsCollector collector = TTestCases<SizeBits>::BasicProducingConsuming<TSlowQueue, ThreadCount, ThreadCount, ItemsPerThread, ItemsPerThread>();
+
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPushes, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessFastPushes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessSlowPushes, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.ChangesFastPushToSlowPush, 0);
+
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPops, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessSlowPops, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.InvalidatedSlotsInSlowPop, 0);
+
+        std::unordered_map<ui32, ui32> itemsCounts;
+        for (auto &info : collector.ConsumerInfo) {
+            for (std::optional<ui32> item : info.ReadedItems) {
+                UNIT_ASSERT(item);
+                itemsCounts[*item]++;
+            }
+        }
+
+        for (auto &[item, count] : itemsCounts) {
+            UNIT_ASSERT_VALUES_EQUAL(count, 10);
+            UNIT_ASSERT_LE(0, item);
+            UNIT_ASSERT_LT(item, ItemsPerThread);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(itemsCounts.size(), ItemsPerThread);
+    }
+
+    Y_UNIT_TEST(BasicProducingConsuming_TVerySlowQueue) {
+        constexpr ui32 SizeBits = 15;
+        constexpr ui32 ItemsPerThread = 1024;
+        constexpr ui32 ThreadCount = 10;
+        TStatsCollector collector = TTestCases<SizeBits>::BasicProducingConsuming<TVerySlowQueue, ThreadCount, ThreadCount, ItemsPerThread, ItemsPerThread>();
+
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPushes, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessFastPushes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessSlowPushes, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.ChangesFastPushToSlowPush, 0);
+
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPops, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessSlowPops, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.InvalidatedSlotsInSlowPop, 0);
+
+        std::unordered_map<ui32, ui32> itemsCounts;
+        for (auto &info : collector.ConsumerInfo) {
+            for (std::optional<ui32> item : info.ReadedItems) {
+                UNIT_ASSERT(item);
+                itemsCounts[*item]++;
+            }
+        }
+
+        for (auto &[item, count] : itemsCounts) {
+            UNIT_ASSERT_VALUES_EQUAL(count, 10);
+            UNIT_ASSERT_LE(0, item);
+            UNIT_ASSERT_LT(item, ItemsPerThread);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(itemsCounts.size(), ItemsPerThread);
+    }
+
+    Y_UNIT_TEST(BasicProducingConsuming_TSingleQueue) {
+        constexpr ui32 SizeBits = 15;
+        constexpr ui32 ItemsPerThread = 1024;
+        constexpr ui32 ThreadCount = 10;
+        TStatsCollector collector = TTestCases<SizeBits>::BasicProducingConsuming<TSingleQueue, ThreadCount, 1, ItemsPerThread, ThreadCount * ItemsPerThread>();
+
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPushes, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessFastPushes + collector.Stats.SuccessSlowPushes, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessSlowPushes + collector.Stats.FailedPushes, collector.Stats.ChangesFastPushToSlowPush);
+        UNIT_ASSERT_LT(collector.Stats.SuccessSlowPushes, collector.Stats.SuccessFastPushes);
+
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPops, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessSingleConsumerPops, ThreadCount * ItemsPerThread);
+
+        std::unordered_map<ui32, ui32> itemsCounts;
+        for (auto &info : collector.ConsumerInfo) {
+            for (std::optional<ui32> item : info.ReadedItems) {
+                UNIT_ASSERT(item);
+                itemsCounts[*item]++;
+            }
+        }
+
+        for (auto &[item, count] : itemsCounts) {
+            UNIT_ASSERT_VALUES_EQUAL(count, 10);
+            UNIT_ASSERT_LE(0, item);
+            UNIT_ASSERT_LT(item, ItemsPerThread);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(itemsCounts.size(), ItemsPerThread);
+    }
+
+    Y_UNIT_TEST(BasicProducingConsuming_TAdaptiveQueue) {
+        constexpr ui32 SizeBits = 15;
+        constexpr ui32 ItemsPerThread = 1024;
+        constexpr ui32 ThreadCount = 10;
+        TStatsCollector collector = TTestCases<SizeBits>::BasicProducingConsuming<TAdaptiveQueue, ThreadCount, ThreadCount, ItemsPerThread, ItemsPerThread>();
+
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPushes, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessFastPushes + collector.Stats.SuccessSlowPushes, ThreadCount * ItemsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessSlowPushes + collector.Stats.FailedPushes, collector.Stats.ChangesFastPushToSlowPush);
+        UNIT_ASSERT_LT(collector.Stats.SuccessSlowPushes, collector.Stats.SuccessFastPushes);
+
+        UNIT_ASSERT_VALUES_EQUAL(collector.Stats.SuccessPops, ThreadCount * ItemsPerThread);
+
+        std::unordered_map<ui32, ui32> itemsCounts;
+        for (auto &info : collector.ConsumerInfo) {
+            for (std::optional<ui32> item : info.ReadedItems) {
+                UNIT_ASSERT(item);
+                itemsCounts[*item]++;
+            }
+        }
+
+        for (auto &[item, count] : itemsCounts) {
+            UNIT_ASSERT_VALUES_EQUAL(count, 10);
+            UNIT_ASSERT_LE(0, item);
+            UNIT_ASSERT_LT(item, ItemsPerThread);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(itemsCounts.size(), ItemsPerThread);
+    }
 
 }

@@ -261,6 +261,7 @@ Y_UNIT_TEST_SUITE(MPMCRingQueueSingleThreadTests) {
     BASIC_QUEUE_TEST_CASES(SizeBits, TSlowQueue);
     BASIC_QUEUE_TEST_CASES(SizeBits, TFastQueue);
     BASIC_QUEUE_TEST_CASES(SizeBits, TVeryFastQueue);
+    BASIC_QUEUE_TEST_CASES(SizeBits, TAdaptiveQueue);
 
     CHECK_SLOW_POPS(SizeBits, TSingleQueue);
     CHECK_SLOW_POPS(SizeBits, TVerySlowQueue);

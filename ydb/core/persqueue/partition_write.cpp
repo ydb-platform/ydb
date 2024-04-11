@@ -501,7 +501,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     }
     if (SplitMergeEnabled(Config)) {
         SplitMergeAvgWriteBytes->Update(WriteNewSize, now);
-        auto needScaling = NKikimrPQ::EScaleStatus::NEED_SPLIT; //CheckScaleStatus(ctx);
+        auto needScaling = CheckScaleStatus(ctx);
         ChangeScaleStatusIfNeeded(needScaling);
     }
 

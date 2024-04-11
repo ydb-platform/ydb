@@ -29,7 +29,7 @@ TYPED_TEST_SUITE(TRpcTest, TAllTransports);
 
 TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
 {
-    auto memoryUsageTracker = this->GetNodeMemoryUsageTracker();
+    auto memoryUsageTracker = this->GetMemoryUsageTracker();
     auto previousLimit = memoryUsageTracker->GetLimit();
     memoryUsageTracker->SetLimit(2_GB);
     static TMemoryTag testMemoryTag = 1 << 20;
@@ -79,7 +79,7 @@ TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
     }
 
     auto memoryUsageBefore = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTag, ToString(testMemoryTag));
-    EXPECT_LE(memoryUsageBefore, numberOfLoops * 1536_KB);
+    EXPECT_LE(memoryUsageBefore, numberOfLoops * 2048_KB);
 
     for (const auto& rsp : responses) {
         WaitFor(rsp).ValueOrThrow();

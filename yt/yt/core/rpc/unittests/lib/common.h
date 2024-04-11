@@ -59,56 +59,6 @@ namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTestServerHost
-{
-public:
-    void InitilizeAddress()
-    {
-        Port_ = NTesting::GetFreePort();
-        Address_ = Format("localhost:%v", Port_);
-    }
-
-    void InitializeServer(
-        IServerPtr server,
-        const IInvokerPtr& invoker,
-        bool secure,
-        TTestCreateChannelCallback createChannel)
-    {
-        Server_ = server;
-        TestService_ = CreateTestService(invoker, secure, createChannel);
-        NoBaggageService_ = CreateNoBaggageService(invoker);
-        Server_->RegisterService(TestService_);
-        Server_->RegisterService(NoBaggageService_);
-        Server_->Start();
-    }
-
-    void TearDown()
-    {
-        Server_->Stop().Get().ThrowOnError();
-        Server_.Reset();
-    }
-
-    const NTesting::TPortHolder& GetPort() const
-    {
-        return Port_;
-    }
-
-    TString GetAddress() const
-    {
-        return Address_;
-    }
-
-protected:
-    NTesting::TPortHolder Port_;
-    TString Address_;
-
-    ITestServicePtr TestService_;
-    IServicePtr NoBaggageService_;
-    IServerPtr Server_;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TTestNodeMemoryTracker
     : public IMemoryUsageTracker
 {
@@ -133,6 +83,35 @@ public:
         TSharedRef reference,
         bool keepHolder = false) override;
 private:
+    class TTestTrackedReferenceHolder
+        : public TSharedRangeHolder
+    {
+    public:
+        TTestTrackedReferenceHolder(
+            TSharedRef underlying,
+            TMemoryUsageTrackerGuard guard)
+            : Underlying_(std::move(underlying))
+            , Guard_(std::move(guard))
+        { }
+
+        TSharedRangeHolderPtr Clone(const TSharedRangeHolderCloneOptions& options) override
+        {
+            if (options.KeepMemoryReferenceTracking) {
+                return this;
+            }
+            return Underlying_.GetHolder()->Clone(options);
+        }
+
+        std::optional<size_t> GetTotalByteSize() const override
+        {
+            return Underlying_.GetHolder()->GetTotalByteSize();
+        }
+
+    private:
+        const TSharedRef Underlying_;
+        const TMemoryUsageTrackerGuard Guard_;
+    };
+
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
     i64 Usage_;
     i64 Limit_;
@@ -148,21 +127,86 @@ DEFINE_REFCOUNTED_TYPE(TTestNodeMemoryTracker)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TTestServerHost
+{
+public:
+    void InitilizeAddress()
+    {
+        Port_ = NTesting::GetFreePort();
+        Address_ = Format("localhost:%v", Port_);
+        MemoryUsageTracker_ = New<TTestNodeMemoryTracker>(32_MB);
+    }
+
+    void InitializeServer(
+        IServerPtr server,
+        const IInvokerPtr& invoker,
+        bool secure,
+        TTestCreateChannelCallback createChannel)
+    {
+        Server_ = server;
+        TestService_ = CreateTestService(invoker, secure, createChannel, MemoryUsageTracker_);
+        NoBaggageService_ = CreateNoBaggageService(invoker);
+        Server_->RegisterService(TestService_);
+        Server_->RegisterService(NoBaggageService_);
+        Server_->Start();
+    }
+
+    void TearDown()
+    {
+        Server_->Stop().Get().ThrowOnError();
+        Server_.Reset();
+    }
+
+    const NTesting::TPortHolder& GetPort() const
+    {
+        return Port_;
+    }
+
+    TTestNodeMemoryTrackerPtr GetMemoryUsageTracker()
+    {
+        return MemoryUsageTracker_;
+    }
+
+    TString GetAddress() const
+    {
+        return Address_;
+    }
+
+    ITestServicePtr GetTestService()
+    {
+        return TestService_;
+    }
+
+    IServerPtr GetServer()
+    {
+        return Server_;
+    }
+
+protected:
+    NTesting::TPortHolder Port_;
+    TString Address_;
+
+    ITestServicePtr TestService_;
+    IServicePtr NoBaggageService_;
+    IServerPtr Server_;
+    TTestNodeMemoryTrackerPtr MemoryUsageTracker_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class TImpl>
 class TTestBase
     : public ::testing::Test
-    , public TTestServerHost
 {
 public:
     void SetUp() final
     {
-        TTestServerHost::InitilizeAddress();
+        Host_.InitilizeAddress();
 
         WorkerPool_ = NConcurrency::CreateThreadPool(4, "Worker");
         bool secure = TImpl::Secure;
-        MemoryUsageTracker_ = New<TTestNodeMemoryTracker>(32_MB);
-        TTestServerHost::InitializeServer(
-            TImpl::CreateServer(Port_, MemoryUsageTracker_),
+        Host_.InitializeServer(
+            TImpl::CreateServer(Host_.GetPort(), Host_.GetMemoryUsageTracker()),
             WorkerPool_->GetInvoker(),
             secure,
             /*createChannel*/ {});
@@ -170,12 +214,7 @@ public:
 
     void TearDown() final
     {
-        TTestServerHost::TearDown();
-    }
-
-    TTestNodeMemoryTrackerPtr GetNodeMemoryUsageTracker()
-    {
-        return MemoryUsageTracker_;
+        Host_.TearDown();
     }
 
     IChannelPtr CreateChannel(
@@ -183,10 +222,25 @@ public:
         THashMap<TString, NYTree::INodePtr> grpcArguments = {})
     {
         if (address) {
-            return TImpl::CreateChannel(*address, Address_, std::move(grpcArguments));
+            return TImpl::CreateChannel(*address, Host_.GetAddress(), std::move(grpcArguments));
         } else {
-            return TImpl::CreateChannel(Address_, Address_, std::move(grpcArguments));
+            return TImpl::CreateChannel(Host_.GetAddress(), Host_.GetAddress(), std::move(grpcArguments));
         }
+    }
+
+    TTestNodeMemoryTrackerPtr GetMemoryUsageTracker()
+    {
+        return Host_.GetMemoryUsageTracker();
+    }
+
+    ITestServicePtr GetTestService()
+    {
+        return Host_.GetTestService();
+    }
+
+    IServerPtr GetServer()
+    {
+        return Host_.GetServer();
     }
 
     static bool CheckCancelCode(TErrorCode code)
@@ -213,7 +267,7 @@ public:
 
 private:
     NConcurrency::IThreadPoolPtr WorkerPool_;
-    TTestNodeMemoryTrackerPtr MemoryUsageTracker_;
+    TTestServerHost Host_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

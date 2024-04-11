@@ -108,11 +108,28 @@ i64 TTestNodeMemoryTracker::GetTotalUsage() const
     return TotalUsage_;
 }
 
-TSharedRef TTestNodeMemoryTracker::Track(
-    TSharedRef reference,
-    bool /*keepHolder*/)
+TSharedRef TTestNodeMemoryTracker::Track(TSharedRef reference, bool keepExistingTracking)
 {
-    return reference;
+    if (!reference) {
+        return reference;
+    }
+
+    auto rawReference = TRef(reference);
+    const auto& holder = reference.GetHolder();
+
+    // Reference could be without a holder, e.g. empty reference.
+    if (!holder) {
+        YT_VERIFY(reference.Begin() == TRef::MakeEmpty().Begin());
+        return reference;
+    }
+
+    auto guard = TMemoryUsageTrackerGuard::Acquire(this, reference.Size());
+
+    auto underlyingHolder = holder->Clone({.KeepMemoryReferenceTracking = keepExistingTracking});
+    auto underlyingReference = TSharedRef(rawReference, std::move(underlyingHolder));
+    return TSharedRef(
+        rawReference,
+        New<TTestTrackedReferenceHolder>(std::move(underlyingReference), std::move(guard)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -80,10 +80,6 @@ public:
         return IsFail();
     }
 
-    explicit operator bool() const {
-        return IsSuccess();
-    }
-
     operator TConclusionStatus() const {
         return GetError();
     }

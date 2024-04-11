@@ -615,7 +615,7 @@ namespace NKikimr::NYaml {
         const TString diskType;
         const TString diskPath;
 
-        if (ephemeralConfig.HostConfigsSize() && ephemeralConfig.GetHostConfigs(0).DriveSize()))
+        if (ephemeralConfig.HostConfigsSize() && ephemeralConfig.GetHostConfigs(0).DriveSize())
         {
             const auto& drive = ephemeralConfig.GetHostConfigs(0).GetDrive(0);
             diskType = drive.GetType();

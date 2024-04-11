@@ -793,7 +793,12 @@ bool UpdateStructMembers(TExprContext& ctx, const TExprNode::TPtr& node, const T
     return filtered;
 }
 
+// Expand RemoveMember over AsStruct.
+// (RemoveMember (AsStruct '('...) '('<member> <value>))) <member>) ==> (AsStruct '('...))
 TExprNode::TPtr ExpandRemoveMember(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (node->Child(0)->IsCallable("AsStruct")) {
+        return node;
+    }
     const bool force = node->Content() == "ForceRemoveMember";
     const auto& removeMemberName = node->Child(1)->Content();
     MemberUpdaterFunc removeFunc = [&removeMemberName](TString& memberName, const TTypeAnnotationNode*) {

@@ -2306,6 +2306,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableansilike") {
             Ctx.AnsiLike = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiLike");
+        } else if (normalizedPragma == "unorderedresult") {
+            Ctx.UnorderedResult = true;
+            Ctx.IncrementMonCounter("sql_pragma", "UnorderedResult");
+        } else if (normalizedPragma == "disableunorderedresult") {
+            Ctx.UnorderedResult = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableUnorderedResult");
         } else if (normalizedPragma == "featurer010") {
             if (values.size() == 1 && values[0].GetLiteral()) {
                 const auto& value = *values[0].GetLiteral();

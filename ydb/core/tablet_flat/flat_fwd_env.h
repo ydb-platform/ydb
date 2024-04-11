@@ -68,13 +68,9 @@ namespace NFwd {
         using TSlot = ui32;
         using TSlotVec = TSmallVec<TSlot>;
 
-        struct TEgg {
+        struct TPagesLogic {
             TAutoPtr<IPageLoadingLogic> PageLoadingLogic;
             TIntrusiveConstPtr<IPageCollection> PageCollection;
-        };
-
-        struct TSimpleEnv {
-            TMap<TPageId, NPageCollection::TLoadedPage> Pages;
         };
 
     public:
@@ -111,10 +107,6 @@ namespace NFwd {
             ui16 room = (groupId.Historic ? part->GroupsCount + 2 : 0) + groupId.Index;
             TSlot slot = GetQueueSlot(part, room);
 
-            if (auto type = part->GetPageType(ref, groupId); IsIndexPage(type)) {
-                return TryGetIndexPage(slot, ref, type);
-            }
-                
             return Handle(Queues.at(slot), ref).Page;
         }
 
@@ -157,17 +149,7 @@ namespace NFwd {
 
             Pending -= pages.size();
 
-            TVector<NPageCollection::TLoadedPage> queuePages(Reserve(pages.size()));
-            for (auto& page : pages) {
-                const auto &meta = pageCollection->Page(page.PageId);
-                if (IsIndexPage(NTable::EPage(meta.Type))) {
-                    IndexPages.at(part).Pages[page.PageId] = page;
-                } else {
-                    queuePages.push_back(page);
-                }
-            }
-
-            Queues.at(part)->Apply(queuePages);
+            Queues.at(part)->Apply(pages);
         }
 
         IPages* Reset() noexcept
@@ -185,7 +167,6 @@ namespace NFwd {
             Total = Stats();
             Parts.clear();
             Queues.clear();
-            IndexPages.clear();
             ColdParts.clear();
 
             for (auto &one : Subset.Flatten)
@@ -257,29 +238,6 @@ namespace NFwd {
         }
 
     private:
-        static bool IsIndexPage(EPage type) noexcept {
-            return type == EPage::FlatIndex || type == EPage::BTreeIndex;
-        }
-
-        const TSharedData* TryGetIndexPage(TSlot slot, TPageId pageId, EPage type) noexcept
-        {
-            Y_DEBUG_ABORT_UNLESS(IsIndexPage(type));
-
-            // TODO: count index pages in Stats later
-
-            auto &env = IndexPages.at(slot);
-            auto pageIt = env.Pages.find(pageId);
-
-            if (pageIt != env.Pages.end()) {
-                return &pageIt->second.Data;
-            } else {
-                auto &queue = Queues.at(slot);
-                queue.AddToQueue(pageId, type);
-                Queue.PushBack(&queue);
-                return nullptr;
-            }            
-        }
-
         TResult Handle(TPageLoadingQueue &q, TPageId ref) noexcept
         {
             auto got = q->Handle(&q, ref, Conf.AheadLo);
@@ -339,13 +297,12 @@ namespace NFwd {
             return Queues.at(GetQueueSlot(part, room));
         }
 
-        TSlot Settle(TEgg egg, ui32 slot) noexcept
+        TSlot Settle(TPagesLogic egg, ui32 slot) noexcept
         {
             if (egg.PageLoadingLogic || egg.PageCollection) {
                 const ui64 cookie = (ui64(Queues.size()) << 32) | ui32(Salt + Epoch);
 
                 Queues.emplace_back(slot, cookie, std::move(egg.PageCollection), egg.PageLoadingLogic);
-                IndexPages.emplace_back();
 
                 return Queues.size() - 1;
             } else {
@@ -353,7 +310,7 @@ namespace NFwd {
             }
         }
 
-        TEgg MakeCache(const TPart *part, NPage::TGroupId groupId, TIntrusiveConstPtr<TSlices> slices) noexcept
+        TPagesLogic MakeCache(const TPart *part, NPage::TGroupId groupId, TIntrusiveConstPtr<TSlices> slices) noexcept
         {
             auto *partStore = CheckedCast<const TPartStore*>(part);
 
@@ -361,11 +318,11 @@ namespace NFwd {
 
             auto& cache = partStore->PageCollections[groupId.Index];
             
-            auto* fwd = new NFwd::TCache(part, this, groupId, slices);
+            auto* fwd = new NFwd::TCache(part, groupId, slices);
             return { fwd, cache->PageCollection };
         }
 
-        TEgg MakeExtern(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept
+        TPagesLogic MakeExtern(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept
         {
             if (auto blobs = part->Blobs) {
                 /* Should always materialize key columns to values since
@@ -395,7 +352,7 @@ namespace NFwd {
             }
         }
 
-        TEgg MakeOuter(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept
+        TPagesLogic MakeOuter(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept
         {
             if (auto small = part->Small) {
                 auto *partStore = CheckedCast<const TPartStore*>(part);
@@ -419,7 +376,6 @@ namespace NFwd {
         const TVector<ui32> Keys; /* Tags to expand ELargeObj references */
 
         TDeque<TPageLoadingQueue> Queues;
-        TDeque<TSimpleEnv> IndexPages;
         THashMap<const TPart*, TSlotVec> Parts;
         THashSet<const TPart*> ColdParts;
         // Wrapper for memtable blobs

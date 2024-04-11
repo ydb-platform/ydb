@@ -162,7 +162,7 @@ namespace {
             , AheadLo(aLo)
             , AheadHi(aHi)
         {
-            Cache = new NFwd::TCache(Part.Get(), &Env, { }, Run);
+            Cache = new NFwd::TCache(Part.Get(), { }, Run);
         }
 
         TCacheWrap(TIntrusiveConstPtr<TPartStore> part, ui64 aLo, ui64 aHi)
@@ -170,16 +170,15 @@ namespace {
         {
         }
 
-        ui64 AddToQueue(ui32 pageId, EPage) noexcept override
+        ui64 AddToQueue(TPageId pageId, EPage) noexcept override
         {
             Queue.push_back(pageId);
 
             return Part->GetPageSize(pageId, { });
         }
 
-        TCacheWrap& Get(ui32 pageIndex, bool has, bool grow, bool need, NFwd::TStat stat)
+        TCacheWrap& Get(TPageId pageId, bool has, bool grow, bool need, NFwd::TStat stat)
         {
-            auto pageId = IndexTools::GetPageId(*Part, pageIndex);
             auto got = Cache->Handle(this, pageId, AheadLo);
 
             if (has != bool(got.Page) || grow != got.Grow || need != got.Need){
@@ -195,21 +194,17 @@ namespace {
 
             Grow = Grow || got.Grow;
 
-            UNIT_ASSERT_VALUES_EQUAL_C(RescaleStat(Cache->Stat), stat, CurrentStepStr());
+            UNIT_ASSERT_VALUES_EQUAL_C(Cache->Stat, stat, CurrentStepStr());
 
             return *this;
         }
 
-        TCacheWrap& Fill(const TVector<ui32>& pageIndexes, NFwd::TStat stat)
+        TCacheWrap& Fill(const TVector<TPageId>& pageIds, NFwd::TStat stat)
         {
             if (std::exchange(Grow, false)) {
                 Cache->Forward(this, AheadHi);
             }
 
-            TVector<TPageId> pageIds(::Reserve(pageIndexes.size()));
-            for (auto pageIndex : pageIndexes) {
-                pageIds.push_back(IndexTools::GetPageId(*Part, pageIndex));
-            }
             UNIT_ASSERT_VALUES_EQUAL_C(TVector<TPageId>(Queue.begin(), Queue.end()), pageIds, CurrentStepStr());
 
             TVector<NPageCollection::TLoadedPage> load;
@@ -222,7 +217,7 @@ namespace {
 
             Cache->Apply(load);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(RescaleStat(Cache->Stat), stat, CurrentStepStr());
+            UNIT_ASSERT_VALUES_EQUAL_C(Cache->Stat, stat, CurrentStepStr());
 
             return *this;
         }
@@ -239,7 +234,7 @@ namespace {
             }
             UNIT_ASSERT_VALUES_EQUAL_C(TVector<TPageId>(Queue.begin(), Queue.end()), pageIds, CurrentStepStr());
             
-            UNIT_ASSERT_VALUES_EQUAL_C(RescaleStat(Cache->Stat), stat, CurrentStepStr());
+            UNIT_ASSERT_VALUES_EQUAL_C(Cache->Stat, stat, CurrentStepStr());
 
             return *this;
         }
@@ -263,16 +258,6 @@ namespace {
         const ui64 AheadHi;
 
     private:
-        NFwd::TStat RescaleStat(NFwd::TStat stat) {
-            // 50 bytes per page
-            stat.Fetch /= 50;
-            stat.Saved /= 50;
-            stat.Usage /= 50;
-            stat.After /= 50;
-            stat.Before /= 50;
-            return stat;
-        }
-
         bool Grow = false;
         TAutoPtr<NFwd::IPageLoadingLogic> Cache;
         TDeque<TPageId> Queue;
@@ -536,10 +521,10 @@ Y_UNIT_TEST_SUITE(NFwd_TBlobs) {
 }
 
 Y_UNIT_TEST_SUITE(NFwd_TCache) {
-    TPartEggs CookPart() {
+    TPartEggs CookPart(bool bTreeIndex) {
         NPage::TConf conf;
 
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndex = bTreeIndex;
         conf.Group(0).PageRows = 2;
         conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
 
@@ -563,12 +548,49 @@ Y_UNIT_TEST_SUITE(NFwd_TCache) {
         return eggs;
     }
 
-    Y_UNIT_TEST(Basics)
+    Y_UNIT_TEST(Basics_FlatIndex)
     {
         // 20 pages, 50 bytes each
-        const auto eggs = CookPart();
+        const auto eggs = CookPart(false);
 
-        TCacheWrap wrap(eggs.Lone(), 200, 350);
+        TCacheWrap wrap(eggs.Lone(), 201, 350);
+        
+        // provide index page:
+        wrap.To(0).Get(20, false, false, true, 
+            {453, 0, 453, 0, 0});
+        wrap.To(1).Fill({20}, 
+            {453, 453, 453, 0, 0});
+        wrap.To(2).Get(20, true, false, true, 
+            {453, 453, 453, 0, 0});
+
+        wrap.To(3).Get(0, false, true, true, 
+            {503, 453, 503, 0, 0});
+        wrap.To(4).Fill({0, 1, 2, 3, 4, 5, 6}, 
+            {803, 803, 503, 0, 0});
+        wrap.To(5).Get(0, true, false, true, 
+            {803, 803, 503, 0, 0});
+
+        wrap.To(6).Get(1, true, false, true, 
+            {803, 803, 553, 0, 0});
+        wrap.To(7).Get(2, true, false, true, 
+            {803, 803, 603, 0, 0});
+        wrap.To(8).Get(3, true, false, true, 
+            {803, 803, 653, 0, 0});
+        wrap.To(9).Get(4, true, false, true, 
+            {803, 803, 703, 0, 0});
+        
+        wrap.To(10).Get(5, true, true, true, 
+            {803, 803, 753, 0, 0});
+        wrap.To(11).Fill({7, 8, 9},
+            {953, 953, 753, 0, 0});
+    }
+
+    Y_UNIT_TEST(Basics_BTreeIndex)
+    {
+        // 20 pages, 50 bytes each
+        const auto eggs = CookPart(true);
+
+        TCacheWrap wrap(eggs.Lone(), 201, 350);
         
         wrap.To(0).Get(0, false, true, true, 
             {1, 0, 1, 0, 0});
@@ -595,9 +617,9 @@ Y_UNIT_TEST_SUITE(NFwd_TCache) {
     Y_UNIT_TEST(Twice)
     {
         // 20 pages, 50 bytes each
-        const auto eggs = CookPart();
+        const auto eggs = CookPart(true);
 
-        TCacheWrap wrap(eggs.Lone(), 200, 350);
+        TCacheWrap wrap(eggs.Lone(), 201, 350);
         
         wrap.To(0).Get(5, false, true, true, 
             {1, 0, 1, 0, 0});
@@ -620,9 +642,9 @@ Y_UNIT_TEST_SUITE(NFwd_TCache) {
     Y_UNIT_TEST(Jump_Done)
     {
         // 20 pages, 50 bytes each
-        const auto eggs = CookPart();
+        const auto eggs = CookPart(true);
 
-        TCacheWrap wrap(eggs.Lone(), 200, 350);
+        TCacheWrap wrap(eggs.Lone(), 201, 350);
         
         wrap.To(0).Get(0, false, true, true, 
             {1, 0, 1, 0, 0});
@@ -638,9 +660,9 @@ Y_UNIT_TEST_SUITE(NFwd_TCache) {
     Y_UNIT_TEST(Jump_Keep)
     {
         // 20 pages, 50 bytes each
-        const auto eggs = CookPart();
+        const auto eggs = CookPart(true);
 
-        TCacheWrap wrap(eggs.Lone(), 200, 350);
+        TCacheWrap wrap(eggs.Lone(), 201, 350);
         
         wrap.To(0).Get(0, false, true, true, 
             {1, 0, 1, 0, 0});
@@ -656,9 +678,9 @@ Y_UNIT_TEST_SUITE(NFwd_TCache) {
     Y_UNIT_TEST(Jump_Wait)
     {
         // 20 pages, 50 bytes each
-        const auto eggs = CookPart();
+        const auto eggs = CookPart(true);
 
-        TCacheWrap wrap(eggs.Lone(), 200, 350);
+        TCacheWrap wrap(eggs.Lone(), 201, 350);
         
         wrap.To(0).Get(0, false, true, true, 
             {1, 0, 1, 0, 0});
@@ -682,9 +704,9 @@ Y_UNIT_TEST_SUITE(NFwd_TCache) {
     Y_UNIT_TEST(Trace)
     {
         // 20 pages, 50 bytes each
-        const auto eggs = CookPart();
+        const auto eggs = CookPart(true);
 
-        TCacheWrap wrap(eggs.Lone(), 200, 350);
+        TCacheWrap wrap(eggs.Lone(), 201, 350);
         
         wrap.To(0).Get(0, false, true, true, 
             {1, 0, 1, 0, 0});
@@ -723,9 +745,9 @@ Y_UNIT_TEST_SUITE(NFwd_TCache) {
     Y_UNIT_TEST(End)
     {
         // 20 pages, 50 bytes each
-        const auto eggs = CookPart();
+        const auto eggs = CookPart(true);
 
-        TCacheWrap wrap(eggs.Lone(), 200, 350);
+        TCacheWrap wrap(eggs.Lone(), 201, 350);
         
         wrap.To(0).Get(17, false, true, true, 
             {1, 0, 1, 0, 0});
@@ -742,7 +764,7 @@ Y_UNIT_TEST_SUITE(NFwd_TCache) {
     Y_UNIT_TEST(Slices)
     {
         // 20 pages, 50 bytes each
-        const auto eggs = CookPart();
+        const auto eggs = CookPart(true);
 
         TIntrusivePtr<TSlices> slices = new TSlices;
         // pages 5 - 7
@@ -780,9 +802,9 @@ Y_UNIT_TEST_SUITE(NFwd_TCache) {
     Y_UNIT_TEST(PageFaults_SyncIndex_Start)
     {
         // 20 pages, 50 bytes each
-        const auto eggs = CookPart();
+        const auto eggs = CookPart(true);
 
-        TCacheWrap wrap(eggs.Lone(), 200, 350);
+        TCacheWrap wrap(eggs.Lone(), 201, 350);
         wrap.UseFaultyEnv();
         
         for (ui32 attempt : xrange(3)) { // 3-leveled B-Tree
@@ -798,9 +820,9 @@ Y_UNIT_TEST_SUITE(NFwd_TCache) {
     Y_UNIT_TEST(PageFaults_SyncIndex_Next)
     {
         // 20 pages, 50 bytes each
-        const auto eggs = CookPart();
+        const auto eggs = CookPart(true);
 
-        TCacheWrap wrap(eggs.Lone(), 200, 200);
+        TCacheWrap wrap(eggs.Lone(), 201, 200);
         wrap.UseFaultyEnv();
         
         // Seek(0):
@@ -840,9 +862,9 @@ Y_UNIT_TEST_SUITE(NFwd_TCache) {
     Y_UNIT_TEST(PageFaults_SyncIndex_NextNext)
     {
         // 20 pages, 50 bytes each
-        const auto eggs = CookPart();
+        const auto eggs = CookPart(true);
 
-        TCacheWrap wrap(eggs.Lone(), 200, 350);
+        TCacheWrap wrap(eggs.Lone(), 201, 350);
         wrap.UseFaultyEnv();
         
         // Seek(0):
@@ -882,7 +904,7 @@ Y_UNIT_TEST_SUITE(NFwd_TCache) {
     Y_UNIT_TEST(PageFaults_SyncIndex_Forward)
     {
         // 20 pages, 50 bytes each
-        const auto eggs = CookPart();
+        const auto eggs = CookPart(true);
 
         TCacheWrap wrap(eggs.Lone(), 1000, 1000);
         wrap.UseFaultyEnv();
@@ -915,7 +937,7 @@ Y_UNIT_TEST_SUITE(NFwd_TCache) {
     Y_UNIT_TEST(PageFaults_Fill)
     {
         // 20 pages, 50 bytes each
-        const auto eggs = CookPart();
+        const auto eggs = CookPart(true);
 
         TCacheWrap wrap(eggs.Lone(), 500, 500);
         wrap.UseFaultyEnv();

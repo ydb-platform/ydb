@@ -120,8 +120,8 @@ namespace {
         auto label = index.Label();
 
         Out
-            << " + Index{" << (ui16)label.Type << " rev "
-            << label.Format << ", " << label.Size << "b}"
+            << " + Index{" << indexPageId << "}" 
+            << " Label{" << (ui16)label.Type << " rev " << label.Format << ", " << label.Size << "b}"
             << " " << index->Count + (index.GetLastKeyRecord() ? 1 : 0) << " rec" << Endl
             << " |  Page     Row    Bytes  (";
 
@@ -323,10 +323,8 @@ namespace {
 
         Out
             << intend
-            << " + BTreeIndex{"
-            << meta.ToString() << ", "
-            << (ui16)label.Type << " rev " << label.Format << ", " 
-            << label.Size << "b}"
+            << " + BTreeIndex{" << meta.ToString() << "}"
+            << " Label{" << (ui16)label.Type << " rev " << label.Format << ", " << label.Size << "b}"
             << Endl;
 
         dumpChild(node.GetChild(0));

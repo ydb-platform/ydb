@@ -2348,6 +2348,16 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto resultCreate = session.ExecuteQuery(queryCreate, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
         }
+
+        {
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto describeResult = session.DescribeTable(
+                "/Root/seq",
+                TDescribeTableSettings().WithTableStatistics(true).WithKeyShardBoundary(true)
+            ).GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+            UNIT_ASSERT(describeResult.GetEntry().Type == NYdb::NScheme::ESchemeEntryType::Sequence);
+        }
     }
 
     Y_UNIT_TEST(TempTablesSessionsIsolation) {

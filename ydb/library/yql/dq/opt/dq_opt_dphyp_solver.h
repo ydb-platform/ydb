@@ -1,23 +1,34 @@
 #pragma once
 
-#include "dphyp_join_hypergraph.h"
-#include "dphyp_join_tree_node.h"
-#include "dphyp_bitset.h"
+#include "dq_opt_join_hypergraph.h"
+#include "dq_opt_join_tree_node.h"
+#include "bitset.h"
 
-namespace NYql::NDq::NDphyp {
+namespace NYql::NDq {
 
-struct pair_hash {
-    template <class T1, class T2>
-    std::size_t operator () (const std::pair<T1,T2> &p) const {
-        auto h1 = std::hash<T1>{}(p.first);
-        auto h2 = std::hash<T2>{}(p.second);
+#ifdef DEBUG
+    struct pair_hash {
+        template <class T1, class T2>
+        std::size_t operator () (const std::pair<T1,T2> &p) const {
+            auto h1 = std::hash<T1>{}(p.first);
+            auto h2 = std::hash<T2>{}(p.second);
 
-        // Mainly for demonstration purposes, i.e. works but is overly simple
-        // In the real world, use sth. like boost.hash_combine
-        return h1 ^ h2;
-    }
-};
+            // Mainly for demonstration purposes, i.e. works but is overly simple
+            // In the real world, use sth. like boost.hash_combine
+            return h1 ^ h2;
+        }
+    };
+#endif
 
+/*
+ * DPHyp (Dynamic Programming with Hypergraph) is a graph-aware
+ * join eumeration algorithm that only considers CSGs (Connected Sub-Graphs) of
+ * the join graph and computes CMPs (Complement pairs) that are also connected
+ * subgraphs of the join graph. It enumerates CSGs in the order, such that subsets
+ * are enumerated first and no duplicates are ever enumerated. Then, for each emitted
+ * CSG it computes the complements with the same conditions - they much already be
+ * present in the dynamic programming table and no pair should be enumerated twice.
+ */
 template <typename TNodeSet>
 class TDPHypSolver {
 public:
@@ -43,17 +54,23 @@ private:
     void EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge);
 
 private:
+    // Create an exclusion set that contains all the nodes of the graph that are smaller or equal to
+    // the smallest node in the provided bitset
     inline TNodeSet MakeBiMin(const TNodeSet& s);
 
+    // Create an exclusion set that contains all the nodes of the bitset that are smaller or equal to
+    // the provided integer
     inline TNodeSet MakeB(const TNodeSet& s, size_t v);
 
+    // Compute the neighbors of a set of nodes, excluding the nodes in exclusion set
     TNodeSet Neighs(TNodeSet s, TNodeSet x);
 
+    // Compute the next subset of relations, given by the final bitset
     TNodeSet NextBitset(const TNodeSet& current, const TNodeSet& final);
 
-    std::shared_ptr<TJoinOptimizerNodeInternal>  PickBestJoin(
-        std::shared_ptr<IBaseOptimizerNode> left,
-        std::shared_ptr<IBaseOptimizerNode> right,
+    std::shared_ptr<TJoinOptimizerNodeInternal> PickBestJoin(
+        const std::shared_ptr<IBaseOptimizerNode>& left,
+        const std::shared_ptr<IBaseOptimizerNode>& right,
         EJoinKind joinKind,
         bool isCommutative,
         const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
@@ -66,9 +83,11 @@ private:
 private:
     TJoinHypergraph<TNodeSet>& Graph_;
     size_t NNodes_;
-    IProviderContext& Pctx_;
-    THashMap<std::pair<TNodeSet, TNodeSet>, bool, pair_hash> CheckTable;
-
+    IProviderContext& Pctx_;  // Provider specific contexts?
+    // FIXME: This is a temporary structure that needs to be extended to multiple providers.
+    #ifdef DEBUG
+        THashMap<std::pair<TNodeSet, TNodeSet>, bool, pair_hash> CheckTable_;
+    #endif
 private:
     THashMap<TNodeSet, std::shared_ptr<IBaseOptimizerNode>, std::hash<TNodeSet>> DpTable_;
 };
@@ -160,9 +179,15 @@ template<typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSo
     }
 
     Y_ASSERT(DpTable_.contains(allNodes));
+
     return std::static_pointer_cast<TJoinOptimizerNodeInternal>(DpTable_[allNodes]);
 }
 
+/*
+ * Enumerates connected subgraphs
+ * First it emits CSGs that are created by adding neighbors of S to S
+ * Then it recurses on the S fused with its neighbors.
+ */
 template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCsgRec(const TNodeSet& s1, const TNodeSet& x) {
     TNodeSet neighs =  Neighs(s1, x);
 
@@ -201,6 +226,11 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCsgRec(const 
     }
 }
 
+/*
+ * EmitCsg emits Connected SubGraphs
+ * First it iterates through neighbors of the initial set S and emits pairs
+ * (S,S2), where S2 is the neighbor of S. Then it recursively emits complement pairs
+ */
 template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsg(const TNodeSet& s1) {
     TNodeSet x = s1 | MakeBiMin(s1);
     TNodeSet neighs = Neighs(s1, x);
@@ -223,6 +253,12 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsg(const TNodeSet
     }
 }
 
+/*
+ * Enumerates complement pairs
+ * First it emits the pairs (S1,S2+next) where S2+next is the set of relation sets
+ * that are obtained by adding S2's neighbors to itself
+ * Then it recusrses into pairs (S1,S2+next)
+ */
 template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCmpRec(const TNodeSet& s1, const TNodeSet& s2, const TNodeSet& x) {
     TNodeSet neighs = Neighs(s2, x);
 
@@ -294,8 +330,8 @@ template <typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::MakeB(const TNodeS
  * Also considers commuting joins
 */
 template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSolver<TNodeSet>::PickBestJoin(
-    std::shared_ptr<IBaseOptimizerNode> left,
-    std::shared_ptr<IBaseOptimizerNode> right,
+    const std::shared_ptr<IBaseOptimizerNode>& left,
+    const std::shared_ptr<IBaseOptimizerNode>& right,
     EJoinKind joinKind,
     bool isCommutative,
     const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
@@ -372,10 +408,11 @@ template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeS
         DpTable_[joined] = bestJoin;
     }
 
-    auto pair = std::make_pair(s1, s2);
-    Y_ENSURE (!CheckTable.contains(pair), "Check table already contains pair S1|S2");
-
-    CheckTable[ std::pair<TNodeSet,TNodeSet>(s1, s2) ] = true;
+    #ifdef DEBUG
+        auto pair = std::make_pair(s1, s2);
+        Y_ENSURE (!CheckTable_.contains(pair), "Check table already contains pair S1|S2");
+        CheckTable_[ std::pair<TNodeSet,TNodeSet>(s1, s2) ] = true;
+    #endif
 }
 
 } // namespace NYql::NDq

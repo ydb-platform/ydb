@@ -1,6 +1,6 @@
-#include "dphyp_join_tree_node.h"
+#include "dq_opt_join_tree_node.h"
 
-namespace NYql::NDq::NDphyp {
+namespace NYql::NDq {
 
 std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
     std::shared_ptr<IBaseOptimizerNode> left,

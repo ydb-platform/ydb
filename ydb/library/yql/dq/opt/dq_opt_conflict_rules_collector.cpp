@@ -1,7 +1,7 @@
-#include "dphyp_conflict_rules_collector.h"
+#include "dq_opt_conflict_rules_collector.h"
 #include <util/generic/hash_set.h>
 
-namespace NYql::NDq::NDphyp {
+namespace NYql::NDq {
 
 bool OperatorIsCommut(EJoinKind joinKind) {
     switch (joinKind) {
@@ -16,7 +16,7 @@ bool OperatorIsCommut(EJoinKind joinKind) {
     Y_UNREACHABLE();
 }
 
-EJoinKind GetEquivalentbyOrderingJoin(EJoinKind joinKind) {
+EJoinKind GetEquivalentByOrderingJoin(EJoinKind joinKind) {
     switch (joinKind) {
         case EJoinKind::Exclusion:
             return EJoinKind::InnerJoin;
@@ -28,8 +28,8 @@ EJoinKind GetEquivalentbyOrderingJoin(EJoinKind joinKind) {
 }
 
 bool OperatorsAreAssoc(EJoinKind lhs, EJoinKind rhs) {
-    lhs = GetEquivalentbyOrderingJoin(lhs);
-    rhs = GetEquivalentbyOrderingJoin(rhs);
+    lhs = GetEquivalentByOrderingJoin(lhs);
+    rhs = GetEquivalentByOrderingJoin(rhs);
 
     static THashMap<EJoinKind, THashSet<EJoinKind>> ASSOC_TABLE = {
         {EJoinKind::Cross, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
@@ -46,8 +46,8 @@ bool OperatorsAreAssoc(EJoinKind lhs, EJoinKind rhs) {
 }
 
 bool OperatorsAreLeftAsscom(EJoinKind lhs, EJoinKind rhs) {
-    lhs = GetEquivalentbyOrderingJoin(lhs);
-    rhs = GetEquivalentbyOrderingJoin(rhs);
+    lhs = GetEquivalentByOrderingJoin(lhs);
+    rhs = GetEquivalentByOrderingJoin(rhs);
 
     static THashMap<EJoinKind, THashSet<EJoinKind>> LASSCOM_TABLE = {
         {EJoinKind::Cross, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
@@ -65,8 +65,8 @@ bool OperatorsAreLeftAsscom(EJoinKind lhs, EJoinKind rhs) {
 }
 
 bool OperatorsAreRightAsscom(EJoinKind lhs, EJoinKind rhs) {
-    lhs = GetEquivalentbyOrderingJoin(lhs);
-    rhs = GetEquivalentbyOrderingJoin(rhs);
+    lhs = GetEquivalentByOrderingJoin(lhs);
+    rhs = GetEquivalentByOrderingJoin(rhs);
 
     static THashMap<EJoinKind, THashSet<EJoinKind>> RASSCOM_TABLE = {
         {EJoinKind::Cross, {EJoinKind::Cross, EJoinKind::InnerJoin}},

@@ -324,6 +324,8 @@ private:
         // no TaskRunner => no outputChannel.Channel, nothing to Finish
         CA_LOG_I("Peer finished, channel: " << channelId);
         TOutputChannelInfo* outputChannel = OutputChannelsMap.FindPtr(channelId);
+        outputChannel->Finished = true;
+        outputChannel->EarlyFinish = true;
         TrySendAsyncChannelData(*outputChannel); // early finish (skip data)
         YQL_ENSURE(outputChannel, "task: " << Task.GetId() << ", output channelId: " << channelId);
 
@@ -616,16 +618,16 @@ private:
         // If the channel has finished, then the data received after drain is no longer needed
         const bool shouldSkipData = Channels->ShouldSkipData(outputChannel.ChannelId);
         if (!shouldSkipData && !Channels->CanSendChannelData(outputChannel.ChannelId)) { // When channel will be connected, they will call resume execution.
-            CA_LOG_T("TrySendAsyncChannelData return false because Channel can't send channel data");
+            CA_LOG_T("TrySendAsyncChannelData return false because Channel can't send channel data, channel: " << outputChannel.ChannelId);
             return false;
         }
-        if (!shouldSkipData && !Channels->HasFreeMemoryInChannel(outputChannel.ChannelId)) {
-            CA_LOG_T("TrySendAsyncChannelData return false because No free memory in channel");
+        if (!shouldSkipData && !outputChannel.EarlyFinish && !Channels->HasFreeMemoryInChannel(outputChannel.ChannelId)) {
+            CA_LOG_T("TrySendAsyncChannelData return false because No free memory in channel, channel: " << outputChannel.ChannelId);
             return false;
         }
 
         auto& asyncData = *outputChannel.AsyncData;
-        outputChannel.Finished = asyncData.Finished || shouldSkipData;
+        outputChannel.Finished = asyncData.Finished || shouldSkipData || outputChannel.EarlyFinish;
         if (outputChannel.Finished) {
             FinishedOutputChannels.insert(outputChannel.ChannelId);
         }

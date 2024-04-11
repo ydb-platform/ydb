@@ -612,8 +612,21 @@ namespace NKikimr::NYaml {
 
     void ApplySingleNodeDefaults(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
         const TString erasureName = "none";
-        const auto& drive = ephemeralConfig.GetHostConfigs(0).GetDrive(0);
-        const TString& diskType = drive.GetType();
+        const TString diskType;
+        const TString diskPath;
+
+        if (ephemeralConfig.HostConfigsSize() && ephemeralConfig.GetHostConfigs(0).DriveSize()))
+        {
+            const auto& drive = ephemeralConfig.GetHostConfigs(0).GetDrive(0);
+            diskType = drive.GetType();
+            diskPath = drive.GetPath();
+        }
+        else
+        {
+            // Do the correct fix in KIKIMR-21347 
+            diskType = "SSD";
+            diskPath = "/tmp/fake_ssd";
+        }
 
         NKikimrBlobStorage::EPDiskType dtEnum;
         Y_ENSURE_BT(TryFromString<NKikimrBlobStorage::EPDiskType>(diskType, dtEnum), "incorrect enum: " << diskType);
@@ -660,7 +673,7 @@ namespace NKikimr::NYaml {
             auto& vdiskLoc = ctx.CombinedDiskInfo[TCombinedDiskInfoKey{}];
 
             vdiskLoc.SetNodeID("1");
-            vdiskLoc.SetPath(drive.GetPath());
+            vdiskLoc.SetPath(diskPath);
             vdiskLoc.SetPDiskCategory(diskType);
         }
 

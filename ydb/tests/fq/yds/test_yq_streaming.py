@@ -327,3 +327,199 @@ class TestYqStreaming(TestYdsBase):
 
         client.abort_query(query_id)
         client.wait_query(query_id)
+
+    @yq_v1
+    def test_early_finish_case1(self, kikimr, client, yq_version):
+        self.init_topics(f"pq_test_early_finish_case1_{yq_version}")
+
+        sql = R'''
+            $a = SELECT JSON_VALUE(Cast(Data as Json), "$.key") as t1 FROM myyds.`{input_topic1}` limit 100;
+            $b = SELECT JSON_VALUE(Cast(Data as Json), "$.key") as t2 FROM myyds.`{input_topic2}` limit 3;
+            select * from $a as a
+            join $b as b ON a.t1 = b.t2 limit 1;
+            ''' \
+            .format(
+            input_topic1=self.input_topic,
+            input_topic2=self.output_topic,
+        )
+
+        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+
+        for i in range(10):
+            data = [
+                '{{"key": "{}"}}'.format(i)
+            ]
+            self.write_stream(data, self.output_topic)
+
+        for i in range(105):
+            data = [
+                '{{"key": "{}"}}'.format(i + 100)
+            ]
+            self.write_stream(data, self.input_topic)
+
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+    @yq_v1
+    def test_early_finish_case2(self, kikimr, client, yq_version):
+        self.init_topics(f"pq_test_early_finish_case2_{yq_version}")
+
+        sql = R'''
+            $a = SELECT JSON_VALUE(Cast(Data as Json), "$.key") as t1 FROM myyds.`{input_topic1}` limit 100;
+            $b = SELECT JSON_VALUE(Cast(Data as Json), "$.key") as t2 FROM myyds.`{input_topic2}` limit 3;
+            select * from $a as a
+            join $b as b ON a.t1 = b.t2;
+            ''' \
+            .format(
+            input_topic1=self.input_topic,
+            input_topic2=self.output_topic,
+        )
+
+        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+
+        for i in range(10):
+            data = [
+                '{{"key": "{}"}}'.format(i)
+            ]
+            self.write_stream(data, self.output_topic)
+
+        for i in range(105):
+            data = [
+                '{{"key": "{}"}}'.format(i + 100)
+            ]
+            self.write_stream(data, self.input_topic)
+
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+    @yq_v1
+    def test_early_finish_case3(self, kikimr, client, yq_version):
+        self.init_topics(f"pq_test_early_finish_case3_{yq_version}")
+
+        sql = R'''
+            $a = SELECT JSON_VALUE(Cast(Data as Json), "$.key") as t1 FROM myyds.`{input_topic1}` limit 3;
+            $b = SELECT JSON_VALUE(Cast(Data as Json), "$.key") as t2 FROM myyds.`{input_topic2}` limit 3;
+            select * from $a as a
+            join $b as b ON a.t1 = b.t2
+            limit 3;
+            ''' \
+            .format(
+            input_topic1=self.input_topic,
+            input_topic2=self.output_topic,
+        )
+
+        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+
+        for i in range(10):
+            data = [
+                '{{"key": "{}"}}'.format(i)
+            ]
+            self.write_stream(data, self.output_topic)
+
+        for i in range(10):
+            data = [
+                '{{"key": "{}"}}'.format(i)
+            ]
+            self.write_stream(data, self.input_topic)
+
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.rows) == 3
+
+    @yq_v1
+    def test_early_finish_case4(self, kikimr, client, yq_version):
+        self.init_topics(f"pq_test_early_finish_case4_{yq_version}")
+
+        sql = R'''
+            $a = SELECT JSON_VALUE(Cast(Data as Json), "$.key") as t1 FROM myyds.`{input_topic1}`;
+            $b = SELECT JSON_VALUE(Cast(Data as Json), "$.key") as t2 FROM myyds.`{input_topic2}` limit 10;
+            select * from $a as a
+            left join $b as b ON a.t1 = b.t2
+            limit 3;
+            ''' \
+            .format(
+            input_topic1=self.input_topic,
+            input_topic2=self.output_topic,
+        )
+
+        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+
+        for i in range(10):
+            data = [
+                '{{"key": "{}"}}'.format(i)
+            ]
+            self.write_stream(data, self.output_topic)
+
+        for i in range(10):
+            data = [
+                '{{"key": "{}"}}'.format(i)
+            ]
+            self.write_stream(data, self.input_topic)
+
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.rows) == 3
+
+
+    @yq_v1
+    def test_early_finish_case5(self, kikimr, client, yq_version):
+        self.init_topics(f"pq_test_early_finish_case5_{yq_version}")
+
+        sql = R'''
+            $a = SELECT JSON_VALUE(Cast(Data as Json), "$.key") as t1 FROM myyds.`{input_topic1}`;
+            $b = SELECT JSON_VALUE(Cast(Data as Json), "$.key") as t2 FROM myyds.`{input_topic2}` limit 10;
+            select * from $a as a
+            left join $b as b ON a.t1 = b.t2
+            limit 3;
+            ''' \
+            .format(
+            input_topic1=self.input_topic,
+            input_topic2=self.output_topic,
+        )
+
+        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+
+        for i in range(10):
+            data = [
+                '{{"key": "{}"}}'.format(i)
+            ]
+            self.write_stream(data, self.output_topic)
+
+        for i in range(20):
+            data = [
+                '{{"key": "{}"}}'.format(i + 20)
+            ]
+            self.write_stream(data, self.input_topic)
+            time.sleep(1)
+
+        for i in range(10):
+            data = [
+                '{{"key": "{}"}}'.format(i)
+            ]
+            self.write_stream(data, self.input_topic)
+
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.rows) == 3

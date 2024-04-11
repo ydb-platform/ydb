@@ -18,6 +18,8 @@ public:
 
     bool FetchScriptResults();
 
+    bool ForgetExecutionOperation();
+
     void PrintScriptResults() const;
 
 private:

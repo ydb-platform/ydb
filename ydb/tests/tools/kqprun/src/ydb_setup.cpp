@@ -217,6 +217,13 @@ public:
         return GetRuntime()->GrabEdgeEvent<NKikimr::NKqp::TEvKqp::TEvFetchScriptResultsResponse>(edgeActor);
     }
 
+    NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse::TPtr ForgetScriptExecutionOperationRequest(const TString& operation) const {
+        NKikimr::NOperationId::TOperationId operationId(operation);
+        auto event = MakeHolder<NKikimr::NKqp::TEvForgetScriptExecutionOperation>(Settings_.DomainName, operationId, TInstant::Max());
+
+        return RunKqpProxyRequest<NKikimr::NKqp::TEvForgetScriptExecutionOperation, NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse>(std::move(event));
+    }
+
     void StartTraceOpt() const {
         if (!Settings_.TraceOptEnabled) {
             ythrow yexception() << "Trace opt was disabled";
@@ -365,6 +372,12 @@ TRequestResult TYdbSetup::FetchScriptExecutionResultsRequest(const TString& oper
     NYql::IssuesFromMessage(scriptExecutionResults.GetIssues(), issues);
 
     return TRequestResult(scriptExecutionResults.GetStatus(), issues);
+}
+
+TRequestResult TYdbSetup::ForgetScriptExecutionOperationRequest(const TString& operation) const {
+    auto forgetScriptExecutionOperationResponse = Impl_->ForgetScriptExecutionOperationRequest(operation);
+
+    return TRequestResult(forgetScriptExecutionOperationResponse->Get()->Status, forgetScriptExecutionOperationResponse->Get()->Issues);
 }
 
 void TYdbSetup::StartTraceOpt() const {

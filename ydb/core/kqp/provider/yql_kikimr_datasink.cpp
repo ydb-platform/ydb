@@ -97,6 +97,12 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleCreateSequence(NNodes::TKiCreateSequence node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
     TStatus HandleModifyPermissions(TKiModifyPermissions node, TExprContext& ctx) override {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
             << "ModifyPermissions is not yet implemented for intent determination transformer"));
@@ -474,6 +480,10 @@ public:
             return true;
         }
 
+        if (node.IsCallable(TKiCreateSequence::CallableName())) {
+            return true;
+        }
+
         if (node.IsCallable(TKiCreateUser::CallableName())
             || node.IsCallable(TKiAlterUser::CallableName())
             || node.IsCallable(TKiDropUser::CallableName())
@@ -548,6 +558,41 @@ public:
                 .Build()
                 .Done()
                 .Ptr();
+    }
+
+    static TExprNode::TPtr MakeCreateSequence(const TExprNode::TPtr& node, const TKikimrKey& key, TExprContext& ctx)
+    {
+        NCommon::TWriteSequenceSettings settings = NCommon::ParseSequenceSettings(TExprList(node->Child(4)), ctx);
+        YQL_ENSURE(settings.Mode);
+        auto mode = settings.Mode.Cast();
+        if (node->Child(3)->Content() != "Void") {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating sequence with data is not supported."));
+            return nullptr;
+        }
+
+        auto valueType = settings.ValueType.IsValid()
+            ? settings.ValueType.Cast()
+            : Build<TCoAtom>(ctx, node->Pos()).Value("bigint").Done();
+
+        auto temporary = settings.Temporary.IsValid()
+            ? settings.Temporary.Cast()
+            : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
+
+        auto existringOk = (settings.Mode.Cast().Value() == "create_if_not_exists");
+
+        return Build<TKiCreateSequence>(ctx, node->Pos())
+            .World(node->Child(0))
+            .DataSink(node->Child(1))
+            .Sequence().Build(key.GetPGObjectId())
+            .ValueType(valueType)
+            .Temporary(temporary)
+            .ExistingOk<TCoAtom>()
+                .Value(existringOk)
+                .Build()
+            .SequenceSettings(settings.SequenceSettings.Cast())
+            .Settings(settings.Other)
+            .Done()
+            .Ptr();
     }
 
     bool RewriteIOExternal(const TKikimrKey& key, const TExprNode::TPtr& node, const TCoAtom& mode, TExprContext& ctx, TExprNode::TPtr& resultNode) {
@@ -1103,8 +1148,14 @@ public:
 
                 if (mode == "dropIndex") {
                     return MakePgDropObject(node, settings, key, ctx);
+                } else if (key.GetPGObjectType() == "pgSequence") {
+                    if (mode == "create" || mode == "create_if_not_exists") {
+                        return MakeCreateSequence(node, key, ctx);
+                    } else {
+                        YQL_ENSURE(false, "unknown Sequence mode \"" << TString(mode) << "\"");
+                    }
                 } else {
-                    YQL_ENSURE(false, "unknown PGObject mode \"" << TString(mode) << "\"");
+                    YQL_ENSURE(false, "unknown PGObject with type: \"" << key.GetPGObjectType() << "\"");
                 }
             }
         }
@@ -1275,6 +1326,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = callable.Maybe<TKiReturningList>()) {
         return HandleReturningList(node.Cast(), ctx);
+    }
+
+    if (auto node = callable.Maybe<TKiCreateSequence>()) {
+        return HandleCreateSequence(node.Cast(), ctx);
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "

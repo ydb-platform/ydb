@@ -2325,6 +2325,53 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
+    Y_UNIT_TEST(CreateSequence) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(
+            serverSettings.SetWithSampleTables(false));
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto client = kikimr.GetQueryClient();
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryCreate = R"(
+                --!syntax_pg
+                CREATE SEQUENCE IF NOT EXISTS seq
+                    AS bigint
+                    START WITH 10
+                    INCREMENT BY 2
+                    MINVALUE 1
+                    NO MAXVALUE
+                    CACHE 3
+                    CYCLE;
+            )";
+
+            auto resultCreate = session.ExecuteQuery(queryCreate, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+        }
+
+        {
+            auto runtime = kikimr.GetTestServer().GetRuntime();
+            TActorId sender = runtime->AllocateEdgeActor();
+            auto describeResult = DescribeTable(&kikimr.GetTestServer(), sender, "/Root/seq");
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetStatus(), NKikimrScheme::StatusSuccess);
+            auto& sequenceDescription = describeResult.GetPathDescription().GetSequenceDescription();
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetName(), "seq");
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMinValue(), 1);
+            UNIT_ASSERT(!sequenceDescription.HasMaxValue());
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetStartValue(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCache(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetIncrement(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCycle(), true);
+        }
+    }
+
     Y_UNIT_TEST(TempTablesSessionsIsolation) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);

@@ -2859,8 +2859,10 @@ public:
 
 
     TAstNode* BuildPgObjectExpression(const TStringBuf objectName, const TStringBuf objectType) {
+        bool noPrefix = (objectType == "pgIndex");
+        TString name = noPrefix ? TString(objectName) : TablePathPrefix + TString(objectName);
         return L(A("Key"), QL(QA("pgObject"),
-                              L(A("String"), QA(objectName)),
+                              L(A("String"), QAX(std::move(name))),
                               L(A("String"), QA(objectType))
                               ));
     }

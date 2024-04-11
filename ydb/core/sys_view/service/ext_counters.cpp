@@ -154,7 +154,8 @@ private:
                 ExecuteLatencyMsValues[n] = diff;
                 ExecuteLatencyMsPrevValues[n] = value;
                 if (ExecuteLatencyMsBounds[n] == 0) {
-                    ExecuteLatencyMsBounds[n] = std::min<double>(snapshot->UpperBound(n), Max<ui64>());
+                    NMonitoring::TBucketBound bound = snapshot->UpperBound(n);
+                    ExecuteLatencyMsBounds[n] = bound == Max<NMonitoring::TBucketBound>() ? Max<ui64>() : bound;
                 }
             }
             metrics->AddMetric("queries.requests", total);

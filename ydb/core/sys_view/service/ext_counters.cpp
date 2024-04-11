@@ -154,7 +154,7 @@ private:
                 ExecuteLatencyMsValues[n] = diff;
                 ExecuteLatencyMsPrevValues[n] = value;
                 if (ExecuteLatencyMsBounds[n] == 0) {
-                    ExecuteLatencyMsBounds[n] = snapshot->UpperBound(n);
+                    ExecuteLatencyMsBounds[n] = std::min<double>(snapshot->UpperBound(n), Max<ui64>());
                 }
             }
             metrics->AddMetric("queries.requests", total);
@@ -183,4 +183,3 @@ IActor* CreateExtCountersUpdater(TExtCountersConfig&& config) {
 
 }
 }
-

@@ -4,4 +4,5 @@ pragma UseBlocks;
 
 SELECT
     val.a as a,
+    RemoveMember(val, "x") as wox,
 FROM Input;

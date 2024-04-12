@@ -34,8 +34,9 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         NOlap::TBlobManagerDb blobsDb(txc.DB);
         changes->MutableBlobsAction().OnExecuteTxAfterAction(*Self, blobsDb, false);
         for (ui32 i = 0; i < changes->GetWritePortionsCount(); ++i) {
-            for (auto&& i : changes->GetWritePortionInfo(i)->GetPortionInfo().Records) {
-                LOG_S_WARN(TxPrefix() << "(" << changes->TypeString() << ":" << i.BlobRange << ") blob cannot apply changes: " << TxSuffix());
+            auto& portion = changes->GetWritePortionInfo(i)->GetPortionInfo();
+            for (auto&& i : portion.Records) {
+                LOG_S_WARN(TxPrefix() << "(" << changes->TypeString() << ":" << portion.RestoreBlobRange(i.BlobRange) << ") blob cannot apply changes: " << TxSuffix());
             }
         }
         NOlap::TChangesFinishContext context("cannot write index blobs");

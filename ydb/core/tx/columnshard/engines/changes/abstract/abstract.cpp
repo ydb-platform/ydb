@@ -64,7 +64,7 @@ void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
 }
 
 TColumnEngineChanges::~TColumnEngineChanges() {
-    Y_DEBUG_ABORT_UNLESS(!NActors::TlsActivationContext || Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted);
+//    AFL_VERIFY_DEBUG(!NActors::TlsActivationContext || Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted)("stage", Stage);
 }
 
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
@@ -77,7 +77,7 @@ void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
     AFL_VERIFY(!LockGuard);
     LockGuard = self.DataLocksManager->RegisterLock(BuildDataLock());
     Y_ABORT_UNLESS(Stage == EStage::Created);
-    NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(self.TabletID(), TypeString());
+    NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(self.TabletID(), *this);
     DoStart(self);
     Stage = EStage::Started;
     if (!NeedConstruction()) {

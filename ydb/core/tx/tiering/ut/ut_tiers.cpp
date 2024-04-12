@@ -639,9 +639,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             }
             UNIT_ASSERT(check);
         }
-#ifdef S3_TEST_USAGE
         Cerr << "storage initialized..." << Endl;
-#endif
 /*
         lHelper.DropTable("/Root/olapStore/olapTable");
         lHelper.StartDataRequest("DELETE FROM `/Root/olapStore/olapTable`");

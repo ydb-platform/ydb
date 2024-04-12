@@ -802,7 +802,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             ui32 i = 0;
             const ui32 rowsPack = 20;
             const TInstant start = Now();
-            while (!csController->HasCompactions() && Now() - start < TDuration::Seconds(100)) {
+            while (!csController->GetCompactionFinishedCounter().Val() && Now() - start < TDuration::Seconds(100)) {
                 WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * rowsPack, rowsPack);
                 ++i;
                 rowsCount += rowsPack;
@@ -2461,7 +2461,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             tableInserter.AddRow().Add(2).Add("test_res_2").Add("val2").AddNull();
             testHelper.BulkUpsert(testTable, tableInserter);
         }
-        while (csController->GetIndexations().Val() == 0) {
+        while (csController->GetInsertFinishedCounter().Val() == 0) {
             Cout << "Wait indexation..." << Endl;
             Sleep(TDuration::Seconds(2));
         }
@@ -2487,7 +2487,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             tableInserter.AddRow().Add(1).Add(10);
             testHelper.BulkUpsert(testTable, tableInserter);
         }
-        while (csController->GetIndexations().Val() < 1) {
+        while (csController->GetInsertFinishedCounter().Val() < 1) {
             Cout << "Wait indexation..." << Endl;
             Sleep(TDuration::Seconds(2));
         }
@@ -2498,7 +2498,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
         testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest` WHERE id = 1", "[[110]]");
-        while (csController->GetIndexations().Val() < 2) {
+        while (csController->GetInsertFinishedCounter().Val() < 2) {
             Cout << "Wait indexation..." << Endl;
             Sleep(TDuration::Seconds(2));
         }

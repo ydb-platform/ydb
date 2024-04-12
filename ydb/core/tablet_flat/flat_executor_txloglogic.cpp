@@ -107,10 +107,10 @@ bool TLogicRedo::CommitROTransaction(TAutoPtr<TSeat> seat, const TActorContext &
 void TLogicRedo::FlushBatchedLog()
 {
     if (TAutoPtr<TLogCommit> commit = Batch->Commit) {
-        if (Batch->Commit->TraceId) {
-            i64 batchSize = Batch->Bodies.size() + 1;
+        if (commit->TraceId) {
+            i64 batchSize = Batch->Bodies.size();
 
-            for (TSeat* curSeat = Batch->Commit->FirstTx; curSeat != nullptr; curSeat = curSeat->NextCommitTx) {
+            for (TSeat* curSeat = commit->FirstTx; curSeat != nullptr; curSeat = curSeat->NextCommitTx) {
                 // Update batch size of the transaction, whose TraceId the commit uses (first transaction in batch, that has TraceId).
                 if (curSeat->Self->TxSpan) {
                     curSeat->Self->TxSpan.Attribute("BatchSize", batchSize);

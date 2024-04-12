@@ -1251,7 +1251,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
     }
 
     auto& clientInfo = it->second;
-    ++clientInfo.Sessions;
     if (!groups.empty()) {
         ++clientInfo.SessionsWithGroup;
     }
@@ -1577,7 +1576,6 @@ void TPersQueueReadBalancer::UnregisterSession(const TActorId& pipe, const TActo
             groupInfo.ScheduleBalance(ctx);
         }
     }
-    --clientInfo.Sessions;
     if (pipeInfo.WithGroups() && --clientInfo.SessionsWithGroup == 0) {
         clientInfo.MergeGroups(ctx);
     }

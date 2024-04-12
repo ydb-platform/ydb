@@ -212,8 +212,6 @@ private:
         size_t Iteration = 0;
         ui64 Cookie = 0;
 
-        TActorId LastPipe;
-
         // Return true if the reading of the partition has been finished and children's partition are readable.
         bool IsFinished() const;
         // Return true if children's partitions can't be balance separately.
@@ -326,7 +324,6 @@ private:
         std::unordered_map<ui32, TClientGroupInfo> ClientGroupsInfo; //map from group to info
         std::unordered_map<ui32, TReadingPartitionStatus> ReadingPartitionStatus; // partitionId->status
 
-        size_t Sessions = 0;
         size_t SessionsWithGroup = 0;
 
         TString ClientId;

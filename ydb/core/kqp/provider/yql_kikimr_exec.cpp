@@ -699,7 +699,9 @@ public:
                     value = TString(configure.Arg(4).Cast<TCoAtom>().Value());
                 }
 
-                SessionCtx->Config().Dispatch(clusterName, name, value, NCommon::TSettingDispatcher::EStage::RUNTIME);
+                if (!SessionCtx->Config().Dispatch(clusterName, name, value, NCommon::TSettingDispatcher::EStage::RUNTIME, NCommon::TSettingDispatcher::GetErrorCallback(input->Pos(), ctx))) {
+                    return SyncError();
+                };
             }
 
             input->SetState(TExprNode::EState::ExecutionComplete);

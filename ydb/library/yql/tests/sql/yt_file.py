@@ -8,7 +8,7 @@ import yatest.common
 from yql_utils import execute, get_tables, get_files, get_http_files, \
     KSV_ATTR, yql_binary_path, is_xfail, is_canonize_peephole, is_canonize_lineage, \
     is_skip_forceblocks, get_param, normalize_source_code_path, replace_vals, get_gateway_cfg_suffix, \
-    do_custom_query_check
+    do_custom_query_check, stable_result_file, stable_table_file
 from yqlrun import YQLRun
 
 from utils import get_config, get_parameters_json, DATA_PATH
@@ -64,9 +64,11 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
                 return None
 
             if os.path.exists(res.results_file):
+                stable_result_file(res)
                 to_canonize.append(yatest.common.canonical_file(res.results_file))
             for table in tables_res:
                 if os.path.exists(tables_res[table].file):
+                    stable_table_file(tables_res[table])
                     to_canonize.append(yatest.common.canonical_file(tables_res[table].file))
                     to_canonize.append(yatest.common.canonical_file(tables_res[table].yqlrun_file + ".attr"))
         if res.std_err:

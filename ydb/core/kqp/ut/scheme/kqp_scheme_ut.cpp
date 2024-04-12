@@ -5718,6 +5718,64 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest`", "[[#];[#];[[200u]]]");
     }
 
+    Y_UNIT_TEST(ReplaceColumnWithStore) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Uint32)
+        };
+        TTestHelper::TColumnTableStore testTableStore;
+
+        testTableStore.SetName("/Root/ReplaceColumnWithStore").SetPrimaryKey({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTableStore);
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ReplaceColumnWithStore/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            for (int i = 0; i < 10; ++i) {
+                auto row = tableInserter.AddRow().Add(i);
+                if (i % 2) {
+                    row.Add(50 * i % 37);
+                } else {
+                    row.AddNull();
+                }
+            }
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        testHelper.ReadData("SELECT count(*) FROM `/Root/ReplaceColumnWithStore/ColumnTableTest`", "[[10u]]");
+
+        {
+            schema.back().SetName("not_level");
+            auto alterQuery = TStringBuilder() << "ALTER TABLESTORE `" << testTableStore.GetName() << "` ADD COLUMN not_level Uint32, DROP COLUMN level;";
+
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        testHelper.ReadData("SELECT count(*) FROM `/Root/ReplaceColumnWithStore/ColumnTableTest`", "[[10u]]");
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            for (int i = 10; i < 20; ++i) {
+                auto row = tableInserter.AddRow().Add(i);
+                if (i % 2) {
+                    row.Add(50 * i % 37);
+                } else {
+                    row.AddNull();
+                }
+            }
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        testHelper.ReadData("SELECT count(*) FROM `/Root/ReplaceColumnWithStore/ColumnTableTest`", "[[20u]]");
+    }
+
     Y_UNIT_TEST(AddPgColumnWithStore) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;

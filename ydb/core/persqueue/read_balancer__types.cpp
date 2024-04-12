@@ -35,14 +35,14 @@ bool TPersQueueReadBalancer::TReadingPartitionStatus::SetFinishedState(bool scal
 
     ScaleAwareSDK = scaleAwareSDK;
     StartedReadingFromEndOffset = startedReadingFromEndOffset;
-    if (!ReadingFinished) {
-        ++Iteration;
-        ++Cookie;
-    }
     ReadingFinished = true;
+    ++Cookie;
+
     bool currentStatus = IsFinished();
     if (currentStatus) {
         Iteration = 0;
+    } else {
+        ++Iteration;
     }
     return currentStatus && !previousStatus;
 }

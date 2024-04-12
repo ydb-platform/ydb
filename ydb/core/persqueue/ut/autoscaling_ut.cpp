@@ -226,7 +226,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
-        TTestReadSession readSession("session-0", client);
+        TTestReadSession readSession("session-0", client, Max<size_t>(), false);
 
         readSession.WaitAndAssertPartitions({0}, "Must read all exists partitions");
 
@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
-        TTestReadSession readSession("Session-0", client);
+        TTestReadSession readSession("Session-0", client, Max<size_t>(), false);
 
         auto writeSession = CreateWriteSession(client, "producer-1", 0);
 
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         ui64 txId = 1023;
         SplitPartition(setup, ++txId, 0, "a");
 
-        TTestReadSession readSession1("Session-0", client);
+        TTestReadSession readSession1("Session-0", client, Max<size_t>(), false);
         readSession1.Offsets[0] = 1;
         readSession1.WaitAndAssertPartitions({0, 1, 2}, "Must read all exists partitions because read the partition 0 from offset 1");
 

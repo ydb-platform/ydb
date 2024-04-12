@@ -118,6 +118,7 @@ std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& cl
     return client.CreateSimpleBlockingWriteSession(writeSettings);
 }
 
+
 TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount, bool autoCommit, std::optional<ui32> partition)
     : Name(name)
     , AutoCommit(autoCommit)

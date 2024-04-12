@@ -83,8 +83,11 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         Sleep(TDuration::Seconds(1)); // Wait read session events
 
         readSession.WaitAndAssertPartitions({0}, "We are reading only one partition because offset is not commited");
+        readSession.Run();
+        readSession.AutoCommit = true;
         readSession.Commit();
         readSession.WaitAndAssertPartitions({0, 1, 2}, "We are reading all partitions because offset is commited");
+        readSession.Run();
 
         readSession.WaitAllMessages();
 

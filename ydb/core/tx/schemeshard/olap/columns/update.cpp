@@ -95,7 +95,7 @@ namespace NKikimr::NSchemeShard {
             Serializer = serializer;
         } else if (columnSchema.HasCompression()) {
             NArrow::NSerialization::TSerializerContainer serializer;
-            AFL_VERIFY(serializer.DeserializeFromProto(columnSchema.GetCompression()));
+            serializer.DeserializeFromProto(columnSchema.GetCompression()).Validate();
             Serializer = serializer;
         }
         if (columnSchema.HasDictionaryEncoding()) {

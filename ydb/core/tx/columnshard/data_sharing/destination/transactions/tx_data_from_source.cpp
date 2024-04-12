@@ -29,7 +29,7 @@ bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc,
 }
 
 void TTxDataFromSource::DoComplete(const TActorContext& /*ctx*/) {
-    AFL_VERIFY(Session->DataReceived(std::move(PortionsByPathId), Self->TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>(), Self->GetStoragesManager()));
+    Session->DataReceived(std::move(PortionsByPathId), Self->TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>(), Self->GetStoragesManager()).Validate();
     Session->SendCurrentCursorAck(*Self, SourceTabletId);
 }
 

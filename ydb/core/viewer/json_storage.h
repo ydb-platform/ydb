@@ -125,6 +125,7 @@ public:
     }
 
     void Bootstrap() override {
+        Cerr << "iiiii Bootstrap" << Endl;
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         ui64 hiveId = domains->GetHive();
         if (hiveId != TDomainsInfo::BadTabletId) {

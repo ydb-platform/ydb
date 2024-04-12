@@ -263,6 +263,7 @@ public:
     }
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
+        Cerr << "iiiiiiiiii TEvNodesInfo 1" << Endl;
         ui32 maxAllowedNodeId = std::numeric_limits<ui32>::max();
         TIntrusivePtr<TDynamicNameserviceConfig> dynamicNameserviceConfig = AppData()->DynamicNameserviceConfig;
         if (dynamicNameserviceConfig) {
@@ -274,6 +275,7 @@ public:
                 SendNodeRequests(ni.NodeId);
             }
         }
+        Cerr << "iiiiiiiiii TEvNodesInfo 2" << Endl;
         RequestDone();
     }
 
@@ -312,6 +314,7 @@ public:
     }
 
     void Handle(TEvHive::TEvResponseHiveStorageStats::TPtr& ev) {
+        Cerr << "iiiii TEvResponseHiveStorageStats" << Endl;
         HiveStorageStats[ev->Cookie] = ev->Release();
         RequestDone();
     }
@@ -351,7 +354,9 @@ public:
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
+        Cerr << "iiiii TEvVDiskStateResponse" << Endl;
         ui64 nodeId = ev.Get()->Cookie;
+        Cerr << "iiiii nodeid" << nodeId << Endl;
         auto& vDiskInfo = VDiskInfo[nodeId] = std::move(ev->Get()->Record);
         for (auto& vDiskStateInfo : *(vDiskInfo.MutableVDiskStateInfo())) {
             vDiskStateInfo.SetNodeId(nodeId);
@@ -368,11 +373,13 @@ public:
 
     void Handle(TEvWhiteboard::TEvBSGroupStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
+        Cerr << "iiiiiiiiiiiii Cookie " << nodeId << Endl;
         for (const auto& info : ev->Get()->Record.GetBSGroupStateInfo()) {
             TString storagePoolName = info.GetStoragePoolName();
             if (storagePoolName.empty()) {
                 continue;
             }
+            Cerr << "iiiiiiiiiiiii nodeId " << info.GetNodeId() << Endl;
             if (FilterNodeIds.empty() || FilterNodeIds.contains(info.GetNodeId())) {
                 StoragePoolInfo[storagePoolName].Groups.emplace(ToString(info.GetGroupID()));
                 TString groupId(ToString(info.GetGroupID()));
@@ -381,6 +388,7 @@ public:
                 }
             }
             for (const auto& vDiskNodeId : info.GetVDiskNodeIds()) {
+                Cerr << "iiiiiiiiiiiii vDiskNodeId " << vDiskNodeId << Endl;
                 Group2NodeId[info.GetGroupID()].push_back(vDiskNodeId);
             }
         }

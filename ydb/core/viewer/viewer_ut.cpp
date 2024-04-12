@@ -274,6 +274,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         nodes.clear();
 
         for (int nodeId = 0; nodeId < nodesTotal; nodeId++) {
+            sample.NodeId = nodeId;
             nodes.emplace_back(sample);
         }
     }
@@ -1316,5 +1317,125 @@ Y_UNIT_TEST_SUITE(Viewer) {
             "id",
             "description",
         });
+    }
+
+    void ChangeBSGroupStateResponse(TEvWhiteboard::TEvBSGroupStateResponse::TPtr* ev) {
+        auto& pbRecord = (*ev)->Get()->Record;
+        // pbRecord.clear_bsgroupstateinfo();
+        // auto state = pbRecord.add_bsgroupstateinfo();
+        Cerr << pbRecord.ShortDebugString() << Endl;
+    }
+
+    void ChangePDiskStateResponse(TEvWhiteboard::TEvPDiskStateResponse::TPtr* ev) {
+        auto& pbRecord = (*ev)->Get()->Record;
+        // pbRecord.clear_pdiskstateinfo();
+        // auto state = pbRecord.add_pdiskstateinfo();
+        Cerr << pbRecord.ShortDebugString() << Endl;
+    }
+
+
+    void ChangeVDiskStateOn9NodeResponse(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev) {
+        ui64 nodeId = (*ev)->Cookie;
+        auto& pbRecord = (*ev)->Get()->Record;
+
+        auto sample = pbRecord.vdiskstateinfo(0);
+        pbRecord.clear_vdiskstateinfo();
+
+        for (int k = 1; k <= 8; k++) {
+            auto groupId = (nodeId + k) % 9;
+            ui32 pdisk = k <= 4 ? 0 : 1;
+            ui32 slotid = k % 4;
+            auto vdisk = 0;
+            auto state = pbRecord.add_vdiskstateinfo();
+            state->CopyFrom(sample);
+            state->set_pdiskid(pdisk);
+            state->set_vdiskslotid(slotid);
+            state->mutable_vdiskid()->set_vdisk(vdisk++);
+            state->mutable_vdiskid()->set_groupid(groupId);
+            state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::OK);
+            state->set_nodeid(nodeId);
+        }
+    }
+
+    void JsonStorage9NodesListingTest() {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("with", "all");
+        httpReq.CgiParameters.emplace("version", "v2");
+        // httpReq.CgiParameters.emplace("node_id", "1");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/storage", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            Y_UNUSED(ev);
+            switch (ev->GetTypeRewrite()) {
+                case TEvInterconnect::EvNodesInfo: {
+                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                    Cerr << "aaaa EvNodesInfo 1" << Endl;
+                    ChangeListNodes(x, 9);
+                    Cerr << "aaaa EvNodesInfo 2" << Endl;
+                    break;
+                }
+                case TEvWhiteboard::EvBSGroupStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev);
+                    Cerr << "aaaa EvBSGroupStateResponse 1" << Endl;
+                    ChangeBSGroupStateResponse(x);
+                    Cerr << "aaaa EvBSGroupStateResponse 2" << Endl;
+                    break;
+                }
+                case TEvWhiteboard::EvVDiskStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
+                    Cerr << "aaaa EvVDiskStateResponse 1" << Endl;
+                    ChangeVDiskStateOn9NodeResponse(x);
+                    Cerr << "aaaa EvVDiskStateResponse 2" << Endl;
+                    break;
+                }
+                case TEvWhiteboard::EvPDiskStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvPDiskStateResponse::TPtr*>(&ev);
+                    Cerr << "aaaa EvPDiskStateResponse 1" << Endl;
+                    ChangePDiskStateResponse(x);
+                    Cerr << "aaaa EvPDiskStateResponse 2" << Endl;
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        Cerr << "json result: " << jsonResult << Endl;
+        NJson::TJsonValue json;
+        try {
+            NJson::ReadJsonTree(jsonResult, &json, true);
+        }
+        catch (yexception ex) {
+            Ctest << ex.what() << Endl;
+        }
+        // UNIT_ASSERT_VALUES_EQUAL(json.GetMap().contains("StorageGroups"), isExpectingGroup);
+    }
+
+    Y_UNIT_TEST(JsonStorage9NodesListingV1NodeIdFilter) {
+        JsonStorage9NodesListingTest();
     }
 }

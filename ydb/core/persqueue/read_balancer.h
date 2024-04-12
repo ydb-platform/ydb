@@ -252,8 +252,6 @@ private:
         ui32 NumActive;
         ui32 NumInactive;
 
-        std::set<ui32> ActivePartitions;
-
         TString ClientNode;
         ui32 ProxyNodeId;
         TInstant Timestamp;
@@ -279,7 +277,7 @@ private:
 
         std::unordered_map<ui32, TPartitionInfo> PartitionsInfo; // partitionId -> info
         std::deque<ui32> FreePartitions;
-        std::unordered_map<std::pair<TActorId, ui64>, TSessionInfo> SessionsInfo; //map from ActorID and random value - need for reordering sessions in different topics
+        std::unordered_map<std::pair<TActorId, ui64>, TSessionInfo> SessionsInfo; //map from ActorID and random value - need for reordering sessions in different topics (groups?)
 
         std::pair<TActorId, ui64> SessionKey(const TActorId pipe) const;
         bool EraseSession(const TActorId pipe);
@@ -326,7 +324,7 @@ private:
         std::unordered_map<ui32, TClientGroupInfo> ClientGroupsInfo; //map from group to info
         std::unordered_map<ui32, TReadingPartitionStatus> ReadingPartitionStatus; // partitionId->status
 
-        ui32 SessionsWithGroup = 0;
+        size_t SessionsWithGroup = 0;
 
         TString ClientId;
         TString Topic;
@@ -344,7 +342,7 @@ private:
         void AddSession(const ui32 group, const std::unordered_map<ui32, TPartitionInfo>& partitionsInfo,
                         const TActorId& sender, const NKikimrPQ::TRegisterReadSession& record);
 
-        bool ProccessReadingFinished(ui32 partitionId);
+        bool ProccessReadingFinished(ui32 partitionId, const TActorContext& ctx);
 
         TStringBuilder GetPrefix() const;
 
@@ -363,11 +361,25 @@ private:
 
 private:
     struct TPipeInfo {
-        TString ClientId;
+        TPipeInfo()
+            : ServerActors(0)
+        {}
+
+        TString ClientId;         // The consumer name
         TString Session;
         TActorId Sender;
-        bool WithGroups;
-        ui32 ServerActors;
+        std::vector<ui32> Groups; // groups which are reading
+        ui32 ServerActors;        // the number of pipes connected from SessionActor to ReadBalancer
+
+        // true if client connected to read from concret partitions
+        bool WithGroups() { return !Groups.empty(); }
+
+        void Init(const TString& clientId, const TString& session, const TActorId& sender, const std::vector<ui32>& groups) {
+            ClientId = clientId;
+            Session = session;
+            Sender = sender;
+            Groups = groups;
+        }
     };
 
     std::unordered_map<TActorId, TPipeInfo> PipesInfo;

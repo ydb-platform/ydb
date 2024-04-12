@@ -508,7 +508,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     Owner->ActivateExecutor(OwnerCtx());
 
-    for (ui32 channel = 0; channel < Owner->Info()->Channels.size(); ++channel) {
+    for (auto channel : GcLogic->ListChannels()) {
         for (const auto& historyEntry : loadedState->HistoryCutter->GetHistoryToCut(channel)) {
             TAutoPtr<TEvTablet::TEvCutTabletHistory> ev(new TEvTablet::TEvCutTabletHistory);
             auto &record = ev->Record;

@@ -6,6 +6,7 @@
 #include <util/generic/set.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ranges>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -49,6 +50,11 @@ public:
     void ReleaseBarrier(ui32 step);
     ui32 GetActiveGcBarrier();
     void FollowersSyncComplete(bool isBoot);
+
+    auto ListChannels() const {
+        auto getKey = [](const std::pair<ui32, TChannelInfo>& p) { return p.first; };
+        return ChannelInfo | std::ranges::views::transform(getKey);
+    }
 
     struct TIntrospection {
         ui64 UncommitedEntries;

@@ -948,11 +948,11 @@ def stable_table_file(table):
     if not is_sorted:
         with open(path) as f:
             r = cyson.Reader(cyson.InputStream.from_file(f), mode='list_fragment')
-            l = sorted(list(r.list_fragments()))
+            lst = sorted(list(r.list_fragments()))
         with open(path, 'w') as f:
             writer = cyson.Writer(stream=cyson.OutputStream.from_file(f), format='pretty', mode='list_fragment')
             writer.begin_stream()
-            for r in l:
+            for r in lst:
                 writer.write(r)
             writer.end_stream()
     with open(path) as f:

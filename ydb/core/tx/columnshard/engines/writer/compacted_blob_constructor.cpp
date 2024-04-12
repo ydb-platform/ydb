@@ -41,4 +41,8 @@ const NKikimr::NOlap::TBlobsAction& TCompactedWriteController::GetBlobsAction() 
     return WriteIndexEv->IndexChanges->GetBlobsAction();
 }
 
+void TCompactedWriteController::DoAbort() {
+    WriteIndexEv->IndexChanges->AbortEmergency();
+}
+
 }

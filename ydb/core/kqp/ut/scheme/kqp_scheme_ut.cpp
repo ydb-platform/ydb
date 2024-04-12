@@ -5729,10 +5729,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         };
         TTestHelper::TColumnTableStore testTableStore;
 
-        testTableStore.SetName("/Root/ReplaceColumnWithStore").SetPrimaryKey({"id"}).SetSchema(schema);
+        testTableStore.SetName("/Root/ReplaceColumnWithStore").SetPrimaryKey({"id"}).SetSchema(schema).SetMinPartitionsCount(64);
         testHelper.CreateTable(testTableStore);
         TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ReplaceColumnWithStore/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testTable.SetName("/Root/ReplaceColumnWithStore/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema).SetMinPartitionsCount(64);
         testHelper.CreateTable(testTable);
 
         {

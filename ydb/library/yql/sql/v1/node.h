@@ -588,11 +588,15 @@ namespace NSQLTranslationV1 {
         bool IsColumnPossible(TContext& ctx, const TString& column);
     };
 
-    struct TSortSpecification: public TSimpleRefCount<TSortSpecification> {
-        TNodePtr OrderExpr;
-        bool Ascending;
+    class TSortSpecification: public TSimpleRefCount<TSortSpecification> {
+    public:
+        TSortSpecification(const TNodePtr& orderExpr, bool ascending);
+        const TNodePtr OrderExpr;
+        const bool Ascending;
         TIntrusivePtr<TSortSpecification> Clone() const;
         ~TSortSpecification() {}
+    private:
+        const TNodePtr CleanOrderExpr;
     };
     typedef TIntrusivePtr<TSortSpecification> TSortSpecificationPtr;
 

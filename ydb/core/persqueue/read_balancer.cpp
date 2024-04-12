@@ -1019,13 +1019,11 @@ void TPersQueueReadBalancer::GetACL(const TActorContext& ctx) {
 void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx)
 {
     const TActorId& sender = ev->Get()->ClientId;
-    auto it = PipesInfo.find(sender);
-    if (it == PipesInfo.end()) {
-        PipesInfo.insert({sender, {"", "", TActorId(), false, 1}});
-    } else {
-        it->second.ServerActors++;
-    }
-    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "pipe " << sender << " connected; active server actors: " << PipesInfo[sender].ServerActors);
+    auto& pipe = PipesInfo[sender];
+    ++pipe.ServerActors;
+
+    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            GetPrefix() << "pipe " << sender << " connected; active server actors: " << pipe.ServerActors);
 }
 
 TPersQueueReadBalancer::TClientGroupInfo& TPersQueueReadBalancer::TClientInfo::AddGroup(const ui32 group) {
@@ -1207,7 +1205,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
     const auto& record = ev->Get()->Record;
 
     TActorId pipe = ActorIdFromProto(record.GetPipeClient());
-    LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "client " << record.GetClientId() << " register session for pipe " << pipe << " session " << record.GetSession());
+    LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            "client " << record.GetClientId() << " register session for pipe " << pipe << " session " << record.GetSession());
 
     Y_ABORT_UNLESS(!record.GetSession().empty());
     Y_ABORT_UNLESS(!record.GetClientId().empty());
@@ -1218,7 +1217,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
 
     auto jt = PipesInfo.find(pipe);
     if (jt == PipesInfo.end()) {
-        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "client " << record.GetClientId() << " pipe " << pipe
+        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "client " << record.GetClientId() << " pipe " << pipe
                         << " is not connected and got register session request for session " << record.GetSession());
         return;
     }
@@ -1226,18 +1226,18 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
     std::vector<ui32> groups;
     groups.reserve(record.GroupsSize());
     for (auto& group : record.GetGroups()) {
-        groups.push_back(group);
-        if (groups.back() == 0 || groups.back() > TotalGroups) {
+        if (group == 0 || group > TotalGroups) {
             THolder<TEvPersQueue::TEvError> response(new TEvPersQueue::TEvError);
             response->Record.SetCode(NPersQueue::NErrorCode::BAD_REQUEST);
-            response->Record.SetDescription(TStringBuilder() << "no group " << groups.back() << " in topic " << Topic);
+            response->Record.SetDescription(TStringBuilder() << "no group " << group << " in topic " << Topic);
             ctx.Send(ev->Sender, response.Release());
             return;
         }
+        groups.push_back(group);
     }
 
     auto& pipeInfo = jt->second;
-    pipeInfo = {record.GetClientId(), record.GetSession(), ev->Sender, !groups.empty(), pipeInfo.ServerActors};
+    pipeInfo.Init(record.GetClientId(), record.GetSession(), ev->Sender, groups);
 
     auto cit = Consumers.find(record.GetClientId());
     NKikimrPQ::EConsumerScalingSupport scalingSupport = cit == Consumers.end() ? DefaultScalingSupport() : cit->second.ScalingSupport;
@@ -1256,6 +1256,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
     }
 
     auto& clientInfo = it->second;
+    ++clientInfo.Sessions;
     if (!groups.empty()) {
         ++clientInfo.SessionsWithGroup;
     }
@@ -1563,27 +1564,30 @@ void TPersQueueReadBalancer::UnregisterSession(const TActorId& pipe, const TActo
     //TODO : change structs for only this session
     auto it = PipesInfo.find(pipe);
     Y_ABORT_UNLESS(it != PipesInfo.end());
-    const TString& clientId = it->second.ClientId;
-    auto jt = ClientsInfo.find(clientId);
+    auto& pipeInfo = it->second;
+
+    auto jt = ClientsInfo.find(pipeInfo.ClientId);
     Y_ABORT_UNLESS(jt != ClientsInfo.end());
     TClientInfo& clientInfo = jt->second;
+
     for (auto& [groupKey, groupInfo] : clientInfo.ClientGroupsInfo) {
-        for (auto& [partitionNumber, partitionInfo] : groupInfo.PartitionsInfo) { //TODO: reverse map
+        for (auto& [partitionId, partitionInfo] : groupInfo.PartitionsInfo) { //TODO: reverse map
             if (partitionInfo.Session == pipe) {
                 partitionInfo.Unlock();
-                groupInfo.FreePartition(partitionNumber);
+                groupInfo.FreePartition(partitionId);
             }
         }
 
-        bool res = groupInfo.EraseSession(pipe);
-        if (res)
+        if (groupInfo.EraseSession(pipe)) {
             groupInfo.ScheduleBalance(ctx);
+        }
     }
-    if (it->second.WithGroups && --clientInfo.SessionsWithGroup == 0) {
+    --clientInfo.Sessions;
+    if (pipeInfo.WithGroups() && --clientInfo.SessionsWithGroup == 0) {
         clientInfo.MergeGroups(ctx);
     }
 
-    PipesInfo.erase(pipe);
+    PipesInfo.erase(it);
 }
 
 

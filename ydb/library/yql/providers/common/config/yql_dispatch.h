@@ -156,14 +156,14 @@ public:
                             return errorCallback(Warning_, false);
                         }
                     }
-                } catch (const std::exception& e) {
-                    return errorCallback(TStringBuilder() << "Bad " << Name_.Quote() << " setting for " << cluster.Quote() << " cluster: " << e.what(), true);
+                } catch (...) {
+                    return errorCallback(TStringBuilder() << "Bad " << Name_.Quote() << " setting for " << cluster.Quote() << " cluster: " << CurrentExceptionMessage(), true);
                 }
             } else if (!validateOnly) {
                 try {
                     Restore(cluster);
-                } catch (const std::exception& e) {
-                    return errorCallback(e.what(), true);
+                } catch (...) {
+                    return errorCallback(CurrentExceptionMessage(), true);
                 }
             }
             return true;

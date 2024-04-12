@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/defs.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap {
 
@@ -26,7 +27,7 @@ TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, T
 }
 
 void TCompactedWriteController::DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) {
-    WriteIndexEv->PutResult = putResult;
+    WriteIndexEv->PutResult = NYDBTest::TControllers::GetColumnShardController()->OverrideBlobPutResultOnCompaction(putResult, GetBlobActions());
     ctx.Send(DstActor, WriteIndexEv.Release());
 }
 
@@ -34,6 +35,10 @@ TCompactedWriteController::~TCompactedWriteController() {
     if (WriteIndexEv && WriteIndexEv->IndexChanges) {
         WriteIndexEv->IndexChanges->AbortEmergency();
     }
+}
+
+const NKikimr::NOlap::TBlobsAction& TCompactedWriteController::GetBlobsAction() {
+    return WriteIndexEv->IndexChanges->GetBlobsAction();
 }
 
 }

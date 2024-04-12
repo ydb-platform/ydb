@@ -118,8 +118,8 @@ void TBlobManagerDb::EraseBlobToDelete(const TUnifiedBlobId& blobId, const TTabl
 }
 
 bool TBlobManagerDb::LoadTierLists(const TString& storageId, TTabletsByBlob& blobsToDelete, std::deque<TUnifiedBlobId>& draftBlobsToDelete, const TTabletId selfTabletId) {
-    draftBlobsToDelete.clear();
     TTabletsByBlob localBlobsToDelete;
+    std::deque<TUnifiedBlobId> localDraftBlobsToDelete;
 
     NIceDb::TNiceDb db(Database);
 
@@ -176,7 +176,7 @@ bool TBlobManagerDb::LoadTierLists(const TString& storageId, TTabletsByBlob& blo
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, nullptr, error);
             AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
 
-            draftBlobsToDelete.emplace_back(std::move(unifiedBlobId));
+            localDraftBlobsToDelete.emplace_back(std::move(unifiedBlobId));
             if (!rowset.Next()) {
                 return false;
             }
@@ -184,6 +184,7 @@ bool TBlobManagerDb::LoadTierLists(const TString& storageId, TTabletsByBlob& blo
     }
     
     std::swap(localBlobsToDelete, blobsToDelete);
+    std::swap(localDraftBlobsToDelete, draftBlobsToDelete);
 
     return true;
 }

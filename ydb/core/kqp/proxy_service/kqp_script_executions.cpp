@@ -937,15 +937,18 @@ public:
             DECLARE $execution_id AS Text;
             DECLARE $result_set_id AS Int32;
             DECLARE $max_row_id AS Int64;
-            DECLARE $max_accumulated_size AS Int64;
+            DECLARE $max_rows_in_batch AS Int64;
+            DECLARE $min_accumulated_size AS Int64;
 
             DELETE
             FROM `.metadata/result_sets`
             WHERE database = $database
               AND execution_id = $execution_id
               AND result_set_id = $result_set_id
-              AND (accumulated_size > $max_accumulated_size OR accumulated_size IS NULL)
-              AND row_id > $max_row_id;
+              AND (row_id = $max_row_id OR (
+                   $max_row_id - row_id < $max_rows_in_batch
+                   AND (accumulated_size IS NULL OR accumulated_size - LEN(result_set) >= $min_accumulated_size)
+              ));
 
             SELECT MAX(row_id) AS max_row_id, MAX(accumulated_size) AS max_accumulated_size
             FROM `.metadata/result_sets`
@@ -966,9 +969,12 @@ public:
                 .Int32(resultSet.ResultSetId)
                 .Build()
             .AddParam("$max_row_id")
-                .Int64(resultSet.MaxRowId - MAX_NUMBER_ROWS_IN_BATCH)
+                .Int64(resultSet.MaxRowId)
                 .Build()
-            .AddParam("$max_accumulated_size")
+            .AddParam("$max_rows_in_batch")
+                .Int64(MAX_NUMBER_ROWS_IN_BATCH)
+                .Build()
+            .AddParam("$min_accumulated_size")
                 .Int64(resultSet.MaxAccumulatedSize - MAX_BATCH_SIZE)
                 .Build();
 
@@ -1878,7 +1884,7 @@ public:
         }
 
         i64 numberRows = ResultSets.back().rows_size();
-        Register(new TQueryRetryActor<TSaveScriptExecutionResultQuery, TEvSaveScriptResultFinished, TString, TString, i32, TMaybe<TInstant>, i64, i64, Ydb::ResultSet>(SelfId(), Database, ExecutionId, ResultSetId, ExpireAt, FirstRow, AccumulatedSize, ResultSets.back()));
+        Register(new TQueryRetryActor<TSaveScriptExecutionResultQuery, TEvSaveScriptResultPartFinished, TString, TString, i32, TMaybe<TInstant>, i64, i64, Ydb::ResultSet>(SelfId(), Database, ExecutionId, ResultSetId, ExpireAt, FirstRow, AccumulatedSize, ResultSets.back()));
 
         FirstRow += numberRows;
         ResultSets.pop_back();

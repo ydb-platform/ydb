@@ -197,7 +197,7 @@ TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, si
     });
 
     readSettings.EventHandlers_.SessionClosedHandler(
-                    [&]
+                    [Name=name]
             (const TSessionClosedEvent& ev) mutable {
                 Cerr << ">>>>> " << Name << " Received TSessionClosedEvent message " << ev.DebugString() << Endl;
     });

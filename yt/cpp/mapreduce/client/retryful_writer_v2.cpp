@@ -338,6 +338,11 @@ void TRetryfulWriterV2::Abort()
     }
 }
 
+size_t TRetryfulWriterV2::GetBufferMemoryUsage() const
+{
+    return BufferSize_ * 4;
+}
+
 void TRetryfulWriterV2::DoFinish()
 {
     if (Sender_) {

@@ -47,14 +47,14 @@ def _clear_logs(nodes):
     nodes.execute_async(cmd)
 
 
-def slice_format(components, nodes, cluster_details, walle_provider):
-    slice_stop(components, nodes, cluster_details), walle_provider
+def slice_format(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider):
+    slice_stop(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider)
     format_drivers(nodes)
-    slice_start(components, nodes, cluster_details, walle_provider)
+    slice_start(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider)
 
 
-def slice_clear(components, nodes, cluster_details, walle_provider):
-    slice_stop(components, nodes, cluster_details, walle_provider)
+def slice_clear(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider):
+    slice_stop(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider)
 
     if 'dynamic_slots' in components:
         for slot in cluster_details.dynamic_slots.values():
@@ -102,7 +102,7 @@ def _dynamic_configure(configurations):
 
 def slice_install(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider):
     _ensure_berkanavt_exists(nodes)
-    slice_stop(components, nodes, cluster_details, walle_provider)
+    slice_stop(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider)
 
     if 'dynamic_slots' in components or 'kikimr' in components:
         _stop_all_slots(nodes)
@@ -306,7 +306,7 @@ def _start_dynamic(components, nodes, cluster_details, walle_provider):
             logger.warning('{count} unused slots'.format(count=all_available_slots_count - len(slots_taken)))
 
 
-def slice_start(components, nodes, cluster_details, walle_provider):
+def slice_start(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider):
     if 'kikimr' in components:
         _start_static(nodes)
 
@@ -351,7 +351,7 @@ def _stop_dynamic(components, nodes, cluster_details):
         nodes._check_async_execution(tasks, False)
 
 
-def slice_stop(components, nodes, cluster_details, walle_provider):
+def slice_stop(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider):
     _stop_dynamic(components, nodes, cluster_details)
 
     if 'kikimr' in components:
@@ -414,7 +414,7 @@ def slice_update(components, nodes, cluster_details, configurator, do_clear_logs
         if 'bin' in components.get('kikimr', []):
             _update_kikimr(nodes, configurator.kikimr_bin, configurator.kikimr_compressed_bin)
 
-    slice_stop(components, nodes, cluster_details, walle_provider)
+    slice_stop(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider)
     if 'kikimr' in components:
         if 'cfg' in components.get('kikimr', []):
             static = configurator.create_static_cfg()
@@ -422,14 +422,14 @@ def slice_update(components, nodes, cluster_details, configurator, do_clear_logs
             _deploy_secrets(nodes, args.yav_version)
 
     _deploy_slot_configs(components, nodes, cluster_details, walle_provider)
-    slice_start(components, nodes, cluster_details, walle_provider)
+    slice_start(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider)
 
 
-def slice_update_raw_configs(components, nodes, cluster_details, config_path, walle_provider):
-    slice_stop(components, nodes, cluster_details, walle_provider)
+def slice_update_raw_configs(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider):
+    slice_stop(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider)
     if 'kikimr' in components:
         if 'cfg' in components.get('kikimr', []):
-            kikimr_cfg = os.path.join(config_path, 'kikimr-static')
+            kikimr_cfg = os.path.join(args.raw_cfg.config_path, 'kikimr-static')
             _update_cfg(nodes, kikimr_cfg)
 
-    slice_start(components, nodes, cluster_details, walle_provider)
+    slice_start(components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider)

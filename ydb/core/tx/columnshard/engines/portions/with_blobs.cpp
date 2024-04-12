@@ -103,16 +103,16 @@ std::vector<NKikimr::NOlap::TPortionInfoWithBlobs> TPortionInfoWithBlobs::Restor
     const TVersionedIndex& tables, const std::shared_ptr<IStoragesManager>& operators) {
     std::vector<TPortionInfoWithBlobs> result;
     for (auto&& i : portions) {
-        const auto schema = tables.GetSchema(i.GetMinSnapshot());
+        const auto schema = i.GetSchema(tables);
         result.emplace_back(RestorePortion(i, blobs, schema->GetIndexInfo(), operators));
     }
     return result;
 }
 
 NKikimr::NOlap::TPortionInfoWithBlobs TPortionInfoWithBlobs::BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
-    std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators)
+    std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const ui64 schemaVersion, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators)
 {
-    TPortionInfoWithBlobs result = BuildByBlobs(std::move(chunks), TPortionInfo(granule, 0, snapshot), operators);
+    TPortionInfoWithBlobs result = BuildByBlobs(std::move(chunks), TPortionInfo(granule, 0, schemaVersion, snapshot), operators);
     result.InitBatchCached(batch);
     return result;
 }
@@ -221,7 +221,8 @@ TPortionInfoWithBlobs TPortionInfoWithBlobs::SyncPortion(TPortionInfoWithBlobs&&
     TGeneralSerializedSlice slice(entityChunksNew, schemaTo, counters);
     const NSplitter::TEntityGroups groups = to->GetIndexInfo().GetEntityGroupsByStorageId(targetTier, *storages);
     TPortionInfoWithBlobs result = TPortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), source.PortionInfo, storages);
-    result.GetPortionInfo().SetMinSnapshot(to->GetSnapshot());
+    result.GetPortionInfo().SetMinSnapshotDeprecated(to->GetSnapshot());
+    result.GetPortionInfo().SetSchemaVersion(to->GetVersion());
     result.GetPortionInfo().MutableMeta().SetTierName(targetTier);
 
     NStatistics::TPortionStorage storage;

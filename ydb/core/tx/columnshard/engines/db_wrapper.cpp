@@ -50,7 +50,7 @@ void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRe
     using IndexColumns = NColumnShard::Schema::IndexColumns;
     auto removeSnapshot = portion.GetRemoveSnapshotOptional();
     db.Table<IndexColumns>().Key(0, portion.GetDeprecatedGranuleId(), row.ColumnId,
-        portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Update(
+        portion.GetMinSnapshotDeprecated().GetPlanStep(), portion.GetMinSnapshotDeprecated().GetTxId(), portion.GetPortion(), row.Chunk).Update(
             NIceDb::TUpdate<IndexColumns::XPlanStep>(removeSnapshot ? removeSnapshot->GetPlanStep() : 0),
             NIceDb::TUpdate<IndexColumns::XTxId>(removeSnapshot ? removeSnapshot->GetTxId() : 0),
             NIceDb::TUpdate<IndexColumns::Blob>(portion.GetBlobId(row.GetBlobRange().GetBlobIdxVerified()).SerializeBinary()),
@@ -65,7 +65,7 @@ void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRe
     NIceDb::TNiceDb db(Database);
     using IndexColumns = NColumnShard::Schema::IndexColumns;
     db.Table<IndexColumns>().Key(0, portion.GetDeprecatedGranuleId(), row.ColumnId,
-        portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Delete();
+        portion.GetMinSnapshotDeprecated().GetPlanStep(), portion.GetMinSnapshotDeprecated().GetTxId(), portion.GetPortion(), row.Chunk).Delete();
 }
 
 bool TDbWrapper::LoadColumns(const std::function<void(const NOlap::TPortionInfo&, const TColumnChunkLoadContext&)>& callback) {
@@ -79,7 +79,7 @@ bool TDbWrapper::LoadColumns(const std::function<void(const NOlap::TPortionInfo&
     while (!rowset.EndOfSet()) {
         NOlap::TPortionInfo portion = NOlap::TPortionInfo::BuildEmpty();
         portion.SetPathId(rowset.GetValue<IndexColumns::PathId>());
-        portion.SetMinSnapshot(rowset.GetValue<IndexColumns::PlanStep>(), rowset.GetValue<IndexColumns::TxId>());
+        portion.SetMinSnapshotDeprecated(NOlap::TSnapshot(rowset.GetValue<IndexColumns::PlanStep>(), rowset.GetValue<IndexColumns::TxId>()));
         portion.SetPortion(rowset.GetValue<IndexColumns::Portion>());
         portion.SetDeprecatedGranuleId(rowset.GetValue<IndexColumns::Granule>());
 

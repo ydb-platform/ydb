@@ -109,8 +109,9 @@ private:
     TPortionInfo() = default;
     ui64 PathId = 0;
     ui64 Portion = 0;   // Id of independent (overlayed by PK) portion of data in pathId
-    TSnapshot MinSnapshot = TSnapshot::Zero();  // {PlanStep, TxId} is min snapshot for {Granule, Portion}
+    TSnapshot MinSnapshotDeprecated = TSnapshot::Zero();  // {PlanStep, TxId} is min snapshot for {Granule, Portion}
     TSnapshot RemoveSnapshot = TSnapshot::Zero(); // {XPlanStep, XTxId} is snapshot where the blob has been removed (i.e. compacted into another one)
+    std::optional<ui64> SchemaVersion;
 
     TPortionMeta Meta;
     ui64 DeprecatedGranuleId = 0;
@@ -426,8 +427,8 @@ public:
 
     bool Empty() const { return Records.empty(); }
     bool Produced() const { return Meta.GetProduced() != TPortionMeta::EProduced::UNSPECIFIED; }
-    bool Valid() const { return MinSnapshot.Valid() && PathId && Portion && !Empty() && Produced() && Meta.IndexKeyStart && Meta.IndexKeyEnd; }
-    bool ValidSnapshotInfo() const { return MinSnapshot.Valid() && PathId && Portion; }
+    bool Valid() const { return ValidSnapshotInfo() && !Empty() && Produced() && Meta.IndexKeyStart && Meta.IndexKeyEnd; }
+    bool ValidSnapshotInfo() const { return MinSnapshotDeprecated.Valid() && PathId && Portion; }
     bool IsInserted() const { return Meta.GetProduced() == TPortionMeta::EProduced::INSERTED; }
     bool IsEvicted() const { return Meta.GetProduced() == TPortionMeta::EProduced::EVICTED; }
     bool CanHaveDups() const { return !Produced(); /* || IsInserted(); */ }
@@ -448,10 +449,11 @@ public:
         return TPortionInfo();
     }
 
-    TPortionInfo(const ui64 pathId, const ui64 portionId, const TSnapshot& minSnapshot)
+    TPortionInfo(const ui64 pathId, const ui64 portionId, const ui64 schemaVersion, const TSnapshot& minSnapshot)
         : PathId(pathId)
         , Portion(portionId)
-        , MinSnapshot(minSnapshot) {
+        , MinSnapshotDeprecated(minSnapshot)
+        , SchemaVersion(schemaVersion) {
     }
 
     TString DebugString(const bool withDetails = false) const;
@@ -505,8 +507,8 @@ public:
         DeprecatedGranuleId = granuleId;
     }
 
-    const TSnapshot& GetMinSnapshot() const {
-        return MinSnapshot;
+    const TSnapshot& GetMinSnapshotDeprecated() const {
+        return MinSnapshotDeprecated;
     }
 
     const TSnapshot& GetRemoveSnapshotVerified() const {
@@ -522,14 +524,19 @@ public:
         }
     }
 
-    void SetMinSnapshot(const TSnapshot& snap) {
-        Y_ABORT_UNLESS(snap.Valid());
-        MinSnapshot = snap;
+    ui64 GetSchemaVersionVerified() const {
+        AFL_VERIFY(SchemaVersion);
+        return SchemaVersion.value();
     }
 
-    void SetMinSnapshot(const ui64 planStep, const ui64 txId) {
-        MinSnapshot = TSnapshot(planStep, txId);
-        Y_ABORT_UNLESS(MinSnapshot.Valid());
+    void SetMinSnapshotDeprecated(const TSnapshot& snap) {
+        Y_ABORT_UNLESS(snap.Valid());
+        MinSnapshotDeprecated = snap;
+    }
+
+    void SetSchemaVersion(const ui64 version) {
+        AFL_VERIFY(version);
+        SchemaVersion = version;
     }
 
     void SetRemoveSnapshot(const TSnapshot& snap) {
@@ -549,7 +556,7 @@ public:
             return false;
         }
 
-        bool visible = (MinSnapshot <= snapshot);
+        bool visible = (Meta.RecordSnapshotMin <= snapshot);
         if (visible && RemoveSnapshot.Valid()) {
             visible = snapshot < RemoveSnapshot;
         }
@@ -597,6 +604,27 @@ public:
         FillBlobIdsByStorage(result, indexInfo);
         return result;
     }
+
+    class TSchemaCursor {
+        const NOlap::TVersionedIndex& VersionedIndex;
+        ISnapshotSchema::TPtr CurrentSchema;
+        TSnapshot LastSnapshot = TSnapshot::Zero();
+    public:
+        TSchemaCursor(const NOlap::TVersionedIndex& versionedIndex)
+            : VersionedIndex(versionedIndex)
+        {}
+
+        ISnapshotSchema::TPtr GetSchema(const TPortionInfo& portion) {
+            if (!CurrentSchema || portion.MinSnapshotDeprecated != LastSnapshot) {
+                CurrentSchema = portion.GetSchema(VersionedIndex);
+                LastSnapshot = portion.GetMinSnapshotDeprecated();
+            }
+            AFL_VERIFY(!!CurrentSchema)("portion", portion.DebugString());
+            return CurrentSchema;
+        }
+    };
+
+    ISnapshotSchema::TPtr GetSchema(const TVersionedIndex& index) const;
 
     void FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TIndexInfo& indexInfo) const;
     void FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TVersionedIndex& index) const;

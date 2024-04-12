@@ -172,10 +172,13 @@ class TConstructionContext: TNonCopyable {
 public:
     const TVersionedIndex& SchemaVersions;
     const NColumnShard::TIndexationCounters Counters;
+    const NOlap::TSnapshot LastCommittedTx;
 
-    TConstructionContext(const TVersionedIndex& schemaVersions, const NColumnShard::TIndexationCounters& counters)
+    TConstructionContext(const TVersionedIndex& schemaVersions, const NColumnShard::TIndexationCounters& counters, const NOlap::TSnapshot& lastCommittedTx)
         : SchemaVersions(schemaVersions)
-        , Counters(counters) {
+        , Counters(counters)
+        , LastCommittedTx(lastCommittedTx)
+    {
 
     }
 };

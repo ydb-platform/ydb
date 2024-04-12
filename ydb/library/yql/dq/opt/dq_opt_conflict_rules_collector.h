@@ -24,7 +24,7 @@ struct TConflictRule {
 };
 
 /* 
- * This class finds and collect conflicts between root of subtree and it's nodes.
+ * This class finds and collect conflicts between root of subtree and its nodes.
  * It traverses both sides of root and checks algebraic join properties (ASSOC, LASSCOM, RASSCOM).
  * The name of algorithm is "CD-C", and details are described in white papper -
  * - "On the Correct and Complete Enumeration of the Core Search Space" in section "5.4 Approach CD-C".

@@ -49,6 +49,13 @@ class TCompactColumnEngineChanges;
 class TInsertColumnEngineChanges;
 class TStoragesManager;
 
+namespace NReader {
+class TTxScan;
+namespace NPlain {
+class TIndexScannerConstructor;
+}
+}
+
 namespace NDataSharing {
 class TTxDataFromSource;
 class TTxDataAckToSource;
@@ -134,7 +141,6 @@ class TColumnShard
     friend class TTxWrite;
     friend class TTxReadBase;
     friend class TTxRead;
-    friend class TTxScan;
     friend class TTxWriteIndex;
     friend class TTxExportFinish;
     friend class TTxRunGC;
@@ -162,6 +168,9 @@ class TColumnShard
     friend class NOlap::NDataSharing::TTxFinishAckFromInitiator;
 
     friend class NOlap::TStoragesManager;
+
+    friend class NOlap::NReader::TTxScan;
+    friend class NOlap::NReader::NPlain::TIndexScannerConstructor;
 
     class TStoragesManager;
     friend class TTxController;
@@ -268,6 +277,7 @@ public:
         ShardWritesInFly /* "shard_writes" */,
         ShardWritesSizeInFly /* "shard_writes_size" */,
         InsertTable /* "insert_table" */,
+        OverloadMetadata /* "overload_metadata" */,
         Disk /* "disk" */,
         None /* "none" */
     };
@@ -486,7 +496,6 @@ private:
     NOlap::NResourceBroker::NSubscribe::TTaskContext InsertTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
-    const TScanCounters ReadCounters;
     const TScanCounters ScanCounters;
     const TIndexationCounters CompactionCounters = TIndexationCounters("GeneralCompaction");
     const TIndexationCounters IndexationCounters = TIndexationCounters("Indexation");
@@ -503,7 +512,6 @@ private:
     TBackgroundController BackgroundController;
     TSettings Settings;
     TLimits Limits;
-    TCompactionLimits CompactionLimits;
     NOlap::TNormalizationController NormalizerController;
     NDataShard::TSysLocks SysLocks;
 
@@ -516,6 +524,10 @@ private:
     NOlap::TSnapshot GetMaxReadVersion() const;
     ui64 GetMinReadStep() const;
     ui64 GetOutdatedStep() const;
+    TDuration GetTxCompleteLag() const {
+        ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;
+        return ProgressTxController->GetTxCompleteLag(mediatorTime);
+    }
 
     TWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId);
     TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId);
@@ -528,7 +540,7 @@ private:
     TWriteId BuildNextWriteId(NIceDb::TNiceDb& db);
 
     void EnqueueProgressTx(const TActorContext& ctx);
-    void EnqueueBackgroundActivities(bool periodic = false, TBackgroundActivity activity = TBackgroundActivity::All());
+    void EnqueueBackgroundActivities(const bool periodic = false);
     virtual void Enqueue(STFUNC_SIG) override;
 
     void UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc);
@@ -570,6 +582,10 @@ public:
     template <class T>
     const T& GetIndexAs() const {
         return TablesManager.GetPrimaryIndexAsVerified<T>();
+    }
+
+    const NOlap::IColumnEngine* GetIndexOptional() const {
+        return TablesManager.GetPrimaryIndex() ? TablesManager.GetPrimaryIndex().get() : nullptr;
     }
 
     template <class T>

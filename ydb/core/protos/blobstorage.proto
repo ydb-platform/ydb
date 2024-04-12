@@ -74,6 +74,7 @@ message TMsgQoS {
         uint32 ReplVDiskId = 11; // set when client is replication actor from specific vdisk
         uint64 VDiskLoadId = 13; // set when client is load test with specific tag
         uint32 VPatchVDiskId = 14; // set when client is vpatch actor from specific vdisk
+        uint32 BalancingVDiskId = 17; // set when client is balancing actor from specific vdisk
     }
     optional TExecTimeStats ExecTimeStats = 12;
     optional NActorsProto.TActorId SenderActorId = 15;

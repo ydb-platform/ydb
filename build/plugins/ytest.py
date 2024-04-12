@@ -43,10 +43,18 @@ def ontest_data(unit, *args):
     ymake.report_configure_error("TEST_DATA is removed in favour of DATA")
 
 
-def prepare_recipes(data):
+def format_recipes(data: str | None) -> str:
+    if not data:
+        return ""
+
     data = data.replace('"USE_RECIPE_DELIM"', "\n")
     data = data.replace("$TEST_RECIPES_VALUE", "")
-    return base64.b64encode(six.ensure_binary(data or ""))
+    return data
+
+
+def prepare_recipes(data: str | None) -> str:
+    formatted = format_recipes(data)
+    return base64.b64encode(six.ensure_binary(formatted))
 
 
 def prepare_env(data):
@@ -626,9 +634,6 @@ def onadd_check(unit, *args):
     check_type = flat_args[0]
 
     if check_type in ("check.data", "check.resource") and unit.get('VALIDATE_DATA') == "no":
-        return
-
-    if check_type == "check.external" and (len(flat_args) == 1 or not flat_args[1]):
         return
 
     test_dir = _common.get_norm_unit_path(unit)

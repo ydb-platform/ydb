@@ -38,8 +38,11 @@ public:
             case NScheme::NTypeIds::Uint64:
             case NScheme::NTypeIds::Timestamp:
             case NScheme::NTypeIds::Double:
+            case NScheme::NTypeIds::Float:
             case NScheme::NTypeIds::Datetime:
             case NScheme::NTypeIds::Date:
+            case NScheme::NTypeIds::Timestamp64:
+            case NScheme::NTypeIds::Interval64:
                 return true;
             default:
                 break;

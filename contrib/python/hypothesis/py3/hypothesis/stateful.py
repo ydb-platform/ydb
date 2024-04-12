@@ -15,7 +15,7 @@ a single value.
 Notably, the set of steps available at any point may depend on the
 execution to date.
 """
-
+import collections
 import inspect
 from copy import copy
 from functools import lru_cache
@@ -49,6 +49,7 @@ from hypothesis.core import TestFunc, given
 from hypothesis.errors import InvalidArgument, InvalidDefinition
 from hypothesis.internal.compat import add_note
 from hypothesis.internal.conjecture import utils as cu
+from hypothesis.internal.conjecture.engine import BUFFER_SIZE
 from hypothesis.internal.healthcheck import fail_health_check
 from hypothesis.internal.observability import TESTCASE_CALLBACKS
 from hypothesis.internal.reflection import (
@@ -151,6 +152,10 @@ def run_state_machine_as_test(state_machine_factory, *, settings=None, _min_step
                     must_stop = True
                 elif steps_run <= _min_steps:
                     must_stop = False
+                elif cd._bytes_drawn > (0.8 * BUFFER_SIZE):
+                    # Better to stop after fewer steps, than always overrun and retry.
+                    # See https://github.com/HypothesisWorks/hypothesis/issues/3618
+                    must_stop = True
 
                 start_draw = perf_counter()
                 if cd.draw_boolean(p=2**-16, forced=must_stop):
@@ -268,7 +273,8 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
         if not self.rules():
             raise InvalidDefinition(f"Type {type(self).__name__} defines no rules")
         self.bundles: Dict[str, list] = {}
-        self.name_counter = 1
+        self.names_counters: collections.Counter = collections.Counter()
+        self.names_list: list[str] = []
         self.names_to_values: Dict[str, Any] = {}
         self.__stream = StringIO()
         self.__printer = RepresentationPrinter(
@@ -301,15 +307,16 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
     def __repr__(self):
         return f"{type(self).__name__}({nicerepr(self.bundles)})"
 
-    def _new_name(self):
-        result = f"v{self.name_counter}"
-        self.name_counter += 1
+    def _new_name(self, target):
+        result = f"{target}_{self.names_counters[target]}"
+        self.names_counters[target] += 1
+        self.names_list.append(result)
         return result
 
     def _last_names(self, n):
-        assert self.name_counter > n
-        count = self.name_counter
-        return [f"v{i}" for i in range(count - n, count)]
+        len_ = len(self.names_list)
+        assert len_ >= n
+        return self.names_list[len_ - n :]
 
     def bundle(self, name):
         return self.bundles.setdefault(name, [])
@@ -364,7 +371,8 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
                 if len(result.values) == 1:
                     output_assignment = f"({self._last_names(1)[0]},) = "
                 elif result.values:
-                    output_names = self._last_names(len(result.values))
+                    number_of_last_names = len(rule.targets) * len(result.values)
+                    output_names = self._last_names(number_of_last_names)
                     output_assignment = ", ".join(output_names) + " = "
             else:
                 output_assignment = self._last_names(1)[0] + " = "
@@ -372,12 +380,14 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
         return f"{output_assignment}state.{rule.function.__name__}({args})"
 
     def _add_result_to_targets(self, targets, result):
-        name = self._new_name()
-        self.__printer.singleton_pprinters.setdefault(
-            id(result), lambda obj, p, cycle: p.text(name)
-        )
-        self.names_to_values[name] = result
         for target in targets:
+            name = self._new_name(target)
+
+            def printer(obj, p, cycle, name=name):
+                return p.text(name)
+
+            self.__printer.singleton_pprinters.setdefault(id(result), printer)
+            self.names_to_values[name] = result
             self.bundles.setdefault(target, []).append(VarReference(name))
 
     def check_invariants(self, settings, output, runtimes):

@@ -246,11 +246,16 @@ public:
         auto *reflection = CurrentConfig.GetReflection();
         for (auto kind : rec.GetAffectedKinds()) {
             auto *field = desc1->FindFieldByNumber(kind);
-            if (field && reflection->HasField(CurrentConfig, field))
+            if (field && reflection->HasField(CurrentConfig, field)) {
                 reflection->ClearField(&CurrentConfig, field);
+            }
+            if (field && reflection->HasField(CurrentDynConfig, field)) {
+                reflection->ClearField(&CurrentDynConfig, field);
+            }
         }
 
         CurrentConfig.MergeFrom(rec.GetConfig());
+        CurrentDynConfig.MergeFrom(rec.GetConfig());
         if (newVersion.GetItems().empty())
             CurrentConfig.ClearVersion();
         else
@@ -259,7 +264,13 @@ public:
         notChanged &= changes.empty();
 
         if (!notChanged || !FirstUpdateSent) {
-            Send(OwnerId, new TEvConsole::TEvConfigSubscriptionNotification(Generation, CurrentConfig, changes, YamlConfig, VolatileYamlConfigs),
+            Send(OwnerId, new TEvConsole::TEvConfigSubscriptionNotification(
+                     Generation,
+                     CurrentConfig,
+                     changes,
+                     YamlConfig,
+                     VolatileYamlConfigs,
+                     CurrentDynConfig),
                 IEventHandle::FlagTrackDelivery, Cookie);
 
             FirstUpdateSent = true;
@@ -383,6 +394,7 @@ private:
     ui64 LastOrder;
 
     NKikimrConfig::TAppConfig CurrentConfig;
+    NKikimrConfig::TAppConfig CurrentDynConfig;
 
     bool ServeYaml = false;
     ui64 Version;

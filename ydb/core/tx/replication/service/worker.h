@@ -45,6 +45,8 @@ struct TEvWorker {
 
     struct TEvGone: public TEventLocal<TEvGone, EvGone> {
         enum EStatus {
+            DONE,
+            S3_ERROR,
             SCHEME_ERROR,
             UNAVAILABLE,
         };

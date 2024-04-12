@@ -27,7 +27,7 @@ protected:
         for (auto&& portionInfo : Portions) {
             auto blobSchema = Schemas->FindPtr(portionInfo->GetPortionId());
             THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo> blobsDataAssemble;
-            for (auto&& i : portionInfo->Records) {
+            for (auto&& i : portionInfo->GetRecords()) {
                 auto blobData = Blobs.Extract((*blobSchema)->GetIndexInfo().GetColumnStorageId(i.GetColumnId(), portionInfo->GetMeta().GetTierName()), portionInfo->RestoreBlobRange(i.BlobRange));
                 blobsDataAssemble.emplace(i.GetAddress(), blobData);
             }
@@ -65,7 +65,7 @@ public:
     }
 
     static ui64 GetMemSize(const std::shared_ptr<TPortionInfo>& portion) {
-        return portion->GetRawBytes();
+        return portion->GetTotalRawBytes();
     }
 
     static bool CheckPortion(const TPortionInfo& portionInfo) {

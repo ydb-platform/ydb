@@ -1,3 +1,4 @@
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NSchemeShardUT_Private;
@@ -138,6 +139,19 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         }
     }
 
+    Y_UNIT_TEST(Describe) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication")); // default with user & password
+        env.TestWaitNotification(runtime, txId);
+
+        const auto desc = DescribePath(runtime, "/MyRoot/Replication");
+        const auto& params = desc.GetPathDescription().GetReplicationDescription().GetConfig().GetSrcConnectionParams();
+        UNIT_ASSERT(!params.GetStaticCredentials().HasPassword());
+    }
+
     void CreateReplicatedTable(NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode mode) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -154,10 +168,9 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         )", NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode_Name(mode).c_str()));
         env.TestWaitNotification(runtime, txId);
 
-        const auto desc = DescribePath(runtime, "/MyRoot/Table");
-        const auto& table = desc.GetPathDescription().GetTable();
-        UNIT_ASSERT(table.HasReplicationConfig());
-        UNIT_ASSERT_EQUAL(table.GetReplicationConfig().GetMode(), mode);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::ReplicationMode(mode)});
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::ReplicationMode(mode)});
     }
 
     Y_UNIT_TEST(CreateReplicatedTable) {

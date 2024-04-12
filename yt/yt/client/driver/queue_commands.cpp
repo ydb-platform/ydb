@@ -147,7 +147,7 @@ void TPullQueueCommand::DoExecute(ICommandContextPtr context)
     auto output = context->Request().OutputStream;
     auto writer = CreateSchemafulWriterForFormat(format, result->GetSchema(), output);
 
-    writer->Write(result->GetRows());
+    Y_UNUSED(writer->Write(result->GetRows()));
 
     WaitFor(writer->Close())
         .ThrowOnError();
@@ -211,7 +211,7 @@ void TPullConsumerCommand::DoExecute(ICommandContextPtr context)
     auto output = context->Request().OutputStream;
     auto writer = CreateSchemafulWriterForFormat(format, result->GetSchema(), output);
 
-    writer->Write(result->GetRows());
+    Y_UNUSED(writer->Write(result->GetRows()));
 
     WaitFor(writer->Close())
         .ThrowOnError();

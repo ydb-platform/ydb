@@ -29,7 +29,7 @@ namespace NKikimr::NStorage {
             };
             STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Starting config collection", (Scepter, Scepter->Id),
                 (AllBoundNodes, makeAllBoundNodes()));
-            RootState = ERootState::COLLECT_CONFIG;
+            RootState = ERootState::IN_PROGRESS;
             TEvScatter task;
             task.MutableCollectConfigs();
             IssueScatterTask(TActorId(), std::move(task));
@@ -43,6 +43,7 @@ namespace NKikimr::NStorage {
         Scepter.reset();
         RootState = ERootState::ERROR_TIMEOUT;
         ErrorReason = reason;
+        CurrentProposedStorageConfig.reset();
         const TDuration timeout = TDuration::FromValue(ErrorTimeout.GetValue() * (25 + RandomNumber(51u)) / 50);
         TActivationContext::Schedule(timeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
     }
@@ -64,14 +65,15 @@ namespace NKikimr::NStorage {
 
         switch (res->GetResponseCase()) {
             case TEvGather::kCollectConfigs:
-                return RootState == ERootState::COLLECT_CONFIG
-                    ? ProcessCollectConfigs(res->MutableCollectConfigs())
-                    : SwitchToError("unexpected CollectConfigs response");
+                return ProcessCollectConfigs(res->MutableCollectConfigs());
 
             case TEvGather::kProposeStorageConfig:
-                return RootState == ERootState::PROPOSE_NEW_STORAGE_CONFIG
-                    ? ProcessProposeStorageConfig(res->MutableProposeStorageConfig())
-                    : SwitchToError("unexpected ProposeStorageConfig response");
+                if (auto error = ProcessProposeStorageConfig(res->MutableProposeStorageConfig())) {
+                    SwitchToError(*error);
+                } else {
+                    RootState = ERootState::RELAX;
+                }
+                return;
 
             case TEvGather::RESPONSE_NOT_SET:
                 return SwitchToError("response not set");
@@ -229,18 +231,31 @@ namespace NKikimr::NStorage {
             }
             UpdateFingerprint(configToPropose);
 
+            if (propositionBase) {
+                if (auto error = ValidateConfig(*propositionBase)) {
+                    return SwitchToError(TStringBuilder() << "failed to propose configuration, base config contains errors: " << *error);
+                }
+                if (auto error = ValidateConfigUpdate(*propositionBase, *configToPropose)) {
+                    Y_FAIL_S("incorrect config proposed: " << *error);
+                }
+            } else {
+                if (auto error = ValidateConfig(*configToPropose)) {
+                    Y_FAIL_S("incorrect config proposed: " << *error);
+                }
+            }
+
             TEvScatter task;
             auto *propose = task.MutableProposeStorageConfig();
-            CurrentProposedStorageConfig.CopyFrom(*configToPropose);
+            Y_ABORT_UNLESS(!CurrentProposedStorageConfig);
+            CurrentProposedStorageConfig.emplace(*configToPropose);
             propose->MutableConfig()->Swap(configToPropose);
             IssueScatterTask(TActorId(), std::move(task));
-            RootState = ERootState::PROPOSE_NEW_STORAGE_CONFIG;
         } else {
             RootState = ERootState::RELAX; // nothing to do right now, just relax
         }
     }
 
-    void TDistributedConfigKeeper::ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res) {
+    std::optional<TString> TDistributedConfigKeeper::ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res) {
         auto generateSuccessful = [&](auto&& callback) {
             for (const auto& item : res->GetStatus()) {
                 const TNodeIdentifier node(item.GetNodeId());
@@ -250,18 +265,21 @@ namespace NKikimr::NStorage {
             }
         };
 
-        if (HasConfigQuorum(CurrentProposedStorageConfig, generateSuccessful, *Cfg)) {
+        if (!CurrentProposedStorageConfig) {
+            return "no currently proposed StorageConfig";
+        } else if (HasConfigQuorum(*CurrentProposedStorageConfig, generateSuccessful, *Cfg)) {
             // apply configuration and spread it
-            ApplyStorageConfig(CurrentProposedStorageConfig);
+            ApplyStorageConfig(*CurrentProposedStorageConfig);
             for (const auto& [nodeId, info] : DirectBoundNodes) {
                 SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), &StorageConfig.value()));
             }
-            CurrentProposedStorageConfig.Clear();
-            RootState = ERootState::RELAX;
+            CurrentProposedStorageConfig.reset();
         } else {
-            CurrentProposedStorageConfig.Clear();
-            SwitchToError("no quorum for ProposedStorageConfig");
+            CurrentProposedStorageConfig.reset();
+            return "no quorum for ProposedStorageConfig";
         }
+
+        return {};
     }
 
     void TDistributedConfigKeeper::PrepareScatterTask(ui64 cookie, TScatterTask& task) {
@@ -280,27 +298,45 @@ namespace NKikimr::NStorage {
                 drives.erase(std::unique(drives.begin(), drives.end()), drives.end());
                 auto query = std::bind(&TThis::ReadConfig, TActivationContext::ActorSystem(), SelfId(), drives, Cfg, cookie);
                 Send(MakeIoDispatcherActorId(), new TEvInvokeQuery(std::move(query)));
-                task.AsyncOperationsPending = true;
+                ++task.AsyncOperationsPending;
                 break;
             }
 
             case TEvScatter::kProposeStorageConfig:
-                if (ProposedStorageConfigCookie) {
+                if (ProposedStorageConfigCookieUsage) {
                     auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
                     SelfNode.Serialize(status->MutableNodeId());
                     status->SetStatus(TEvGather::TProposeStorageConfig::RACE);
                 } else {
-                    ProposedStorageConfigCookie.emplace(cookie);
+                    ProposedStorageConfigCookie = cookie;
                     ProposedStorageConfig.emplace(task.Request.GetProposeStorageConfig().GetConfig());
 
+                    // TODO(alexvru): check if this is valid
+                    Y_VERIFY_DEBUG_S(StorageConfig->GetGeneration() < ProposedStorageConfig->GetGeneration() || (
+                        StorageConfig->GetGeneration() == ProposedStorageConfig->GetGeneration() &&
+                        StorageConfig->GetFingerprint() == ProposedStorageConfig->GetFingerprint()),
+                        "StorageConfig.Generation# " << StorageConfig->GetGeneration()
+                        << " ProposedStorageConfig.Generation# " << ProposedStorageConfig->GetGeneration());
+
+                    // issue notification to node warden
+                    if (StorageConfig && StorageConfig->GetGeneration() &&
+                            StorageConfig->GetGeneration() < ProposedStorageConfig->GetGeneration()) {
+                        const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+                        auto ev = std::make_unique<TEvNodeWardenStorageConfig>(*StorageConfig, &ProposedStorageConfig.value());
+                        Send(wardenId, ev.release(), 0, cookie);
+                        ++task.AsyncOperationsPending;
+                        ++ProposedStorageConfigCookieUsage;
+                    }
+
                     PersistConfig([this, cookie](TEvPrivate::TEvStorageConfigStored& msg) {
-                        Y_ABORT_UNLESS(ProposedStorageConfigCookie);
+                        STLOG(PRI_DEBUG, BS_NODE, NWDC45, "ProposeStorageConfig TEvStorageConfigStored", (Cookie, cookie));
+
+                        Y_ABORT_UNLESS(ProposedStorageConfigCookieUsage);
                         Y_ABORT_UNLESS(cookie == ProposedStorageConfigCookie);
-                        ProposedStorageConfigCookie.reset();
+                        --ProposedStorageConfigCookieUsage;
 
                         if (auto it = ScatterTasks.find(cookie); it != ScatterTasks.end()) {
                             TScatterTask& task = it->second;
-
                             auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
                             SelfNode.Serialize(status->MutableNodeId());
                             status->SetStatus(TEvGather::TProposeStorageConfig::ACCEPTED);
@@ -313,28 +349,13 @@ namespace NKikimr::NStorage {
                                     }
                                 }
                             }
-
-                            if (StorageConfig && StorageConfig->GetGeneration()) {
-                                Y_ABORT_UNLESS(ProposedStorageConfig);
-                                
-                                // TODO(alexvru): check if this is valid
-                                Y_DEBUG_ABORT_UNLESS(StorageConfig->GetGeneration() < ProposedStorageConfig->GetGeneration() || (
-                                    StorageConfig->GetGeneration() == ProposedStorageConfig->GetGeneration() &&
-                                    StorageConfig->GetFingerprint() == ProposedStorageConfig->GetFingerprint()));
-
-                                const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-                                auto ev = std::make_unique<TEvNodeWardenStorageConfig>(*StorageConfig,
-                                    StorageConfig->GetGeneration() < ProposedStorageConfig->GetGeneration()
-                                        ? &ProposedStorageConfig.value()
-                                        : nullptr);
-                                Send(wardenId, ev.release(), 0, cookie);
-                            } else {
-                                FinishAsyncOperation(cookie);
-                            }
                         }
+
+                        FinishAsyncOperation(cookie);
                     });
 
-                    task.AsyncOperationsPending = true;
+                    ++task.AsyncOperationsPending;
+                    ++ProposedStorageConfigCookieUsage;
                 }
                 break;
 

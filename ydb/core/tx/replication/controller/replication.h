@@ -73,6 +73,9 @@ public:
 
         virtual void Progress(TReplication::TPtr replication, const TActorContext& ctx) = 0;
         virtual void Shutdown(const TActorContext& ctx) = 0;
+
+    protected:
+        virtual IActor* CreateWorkerRegistar(TReplication::TPtr replication, const TActorContext& ctx) const = 0;
     };
 
     struct TDropOp {
@@ -98,6 +101,7 @@ public:
     const TPathId& GetPathId() const;
     const TActorId& GetYdbProxy() const;
     ui64 GetSchemeShardId() const;
+    const NKikimrReplication::TReplicationConfig& GetConfig() const;
     void SetState(EState state, TString issue = {});
     EState GetState() const;
     const TString& GetIssue() const;

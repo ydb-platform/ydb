@@ -88,7 +88,13 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
                 Y_ABORT_UNLESS(proto.SerializeToString(&txBody));
                 ProposeTransaction(TTxController::TBasicTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, operation->GetLockId()), txBody, writeMeta.GetSource(), operation->GetCookie(), txc);
             } else {
-                Results.emplace_back(NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId()));
+                NKikimrDataEvents::TLock lock;
+                lock.SetLockId(operation->GetLockId());
+                lock.SetDataShard(Self->TabletID());
+                lock.SetGeneration(1);
+                lock.SetCounter(1);
+
+                Results.emplace_back(NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock));
             }
         } else {
             Y_ABORT_UNLESS(aggr->GetWriteIds().size() == 1);

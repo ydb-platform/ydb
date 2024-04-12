@@ -81,10 +81,10 @@ TFuture<void> TSuspendableSingleQueueSchedulerThread<TQueueImpl>::Suspend(bool i
 template <class TQueueImpl>
 void TSuspendableSingleQueueSchedulerThread<TQueueImpl>::Resume()
 {
-    YT_VERIFY(Suspending_);
     YT_VERIFY(SuspendedPromise_.IsSet());
 
     auto guard = Guard(Lock_);
+    YT_VERIFY(Suspending_);
 
     Suspending_ = false;
     SuspendImmediately_ = false;
@@ -118,7 +118,6 @@ TClosure TSuspendableSingleQueueSchedulerThread<TQueueImpl>::BeginExecute()
             SuspendedPromise_.Set();
             resumeEvent = ResumeEvent_;
         }
-
         resumeEvent->Wait();
     }
 

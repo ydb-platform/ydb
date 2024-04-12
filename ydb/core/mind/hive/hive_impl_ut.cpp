@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         for (ui64 i = 0; i < NUM_TABLETS; ++i) {
             TLeaderTabletInfo& tablet = tablets.emplace(std::piecewise_construct, std::tuple<TTabletId>(i), std::tuple<TTabletId, THive&>(i, hive)).first->second;
             tablet.Weight = RandomNumber<double>();
-            bootQueue.AddToBootQueue(tablet);
+            bootQueue.EmplaceToBootQueue(tablet);
         }
 
         double passed = timer.Get().SecondsFloat();
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             auto record = bootQueue.PopFromBootQueue();
             UNIT_ASSERT(record.Priority <= maxP);
             maxP = record.Priority;
-            auto itTablet = tablets.find(record.TabletId.first);
+            auto itTablet = tablets.find(record.TabletId);
             if (itTablet != tablets.end()) {
                 bootQueue.AddToWaitQueue(itTablet->second);
             }

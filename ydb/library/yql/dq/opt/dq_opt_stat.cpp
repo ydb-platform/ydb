@@ -162,7 +162,7 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
     }
 
     typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(
-                                      ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, MapJoin, ctx)));
+                                      ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, EJoinAlgoType::MapJoin, ctx)));
 }
 
 /**
@@ -194,7 +194,7 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
     }
 
     typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(
-                                      ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, GraceJoin, ctx)));
+                                      ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, EJoinAlgoType::GraceJoin, ctx)));
 }
 
 /**

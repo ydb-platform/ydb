@@ -30,7 +30,7 @@ using namespace NSchemeShard;
 using namespace NTabletFlatExecutor;
 
 // NOTE: We really want to batch log records by default in datashards!
-// But in unittests we want to test both scenarios
+// But in unit tests we want to test both scenarios
 bool gAllowLogBatchingDefaultValue = true;
 
 TDuration gDbStatsReportInterval = TDuration::Seconds(10);
@@ -2174,6 +2174,12 @@ TDataShard::TPromotePostExecuteEdges TDataShard::PromoteImmediatePostExecuteEdge
                 << " promoting UnprotectedReadEdge to " << version);
             SnapshotManager.PromoteUnprotectedReadEdge(version);
 
+            // Make sure pending distributed transactions are marked incomplete,
+            // since we just protected up to and including version from writes,
+            // we need to make sure new immediate conflicting writes are blocked
+            // and don't perform writes with out-of-order versions.
+            res.HadWrites |= Pipeline.MarkPlannedLogicallyIncompleteUpTo(version, txc);
+
             // We want to promote the complete edge when protected reads are
             // used or when we're already writing something anyway.
             if (res.HadWrites) {
@@ -2379,6 +2385,31 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorCo
     EmitHeartbeats();
 }
 
+class TDataShard::TTxMediatorStateRestored : public TTransactionBase<TDataShard> {
+public:
+    TTxMediatorStateRestored(TDataShard* self, ui64 readStep, ui64 observedStep)
+        : TTransactionBase(self)
+        , ReadStep(readStep)
+        , ObservedStep(observedStep)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        Y_ABORT_UNLESS(Self->MediatorStateRestoreTxPending);
+        Self->MediatorStateRestoreTxPending = false;
+
+        Self->FinishMediatorStateRestore(txc, ReadStep, ObservedStep);
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        // nothing
+    }
+
+private:
+    const ui64 ReadStep;
+    const ui64 ObservedStep;
+};
+
 void TDataShard::CheckMediatorStateRestored() {
     if (!MediatorStateWaiting ||
         !RegistrationSended ||
@@ -2386,16 +2417,11 @@ void TDataShard::CheckMediatorStateRestored() {
         CoordinatorSubscriptionsPending > 0 && CoordinatorPrevReadStepMax == Max<ui64>())
     {
         // We are not waiting or not ready to make a decision
-        if (MediatorStateWaiting &&
-            MediatorTimeCastEntry &&
-            CoordinatorPrevReadStepMax == Max<ui64>() &&
-            !MediatorStateBackupInitiated)
-        {
-            // It is possible we don't have coordinators with new protocol support
-            // Use a backup plan of acquiring a read snapshot for restoring the read step
-            Schedule(TDuration::MilliSeconds(50), new TEvPrivate::TEvMediatorRestoreBackup);
-            MediatorStateBackupInitiated = true;
-        }
+        return;
+    }
+
+    if (MediatorStateRestoreTxPending) {
+        // We already made a decision and are waiting for transaction to execute
         return;
     }
 
@@ -2433,6 +2459,13 @@ void TDataShard::CheckMediatorStateRestored() {
         return;
     }
 
+    MediatorStateRestoreTxPending = true;
+    Execute(new TTxMediatorStateRestored(this, readStep, observedStep));
+}
+
+void TDataShard::FinishMediatorStateRestore(TTransactionContext& txc, ui64 readStep, ui64 observedStep) {
+    Y_ABORT_UNLESS(MediatorStateWaiting);
+
     // Using the inferred last read step we restore the pessimistic unprotected
     // read edge. Note we only need to do so if there have actually been any
     // unprotected reads in this datashard history. We also need to make sure
@@ -2447,6 +2480,8 @@ void TDataShard::CheckMediatorStateRestored() {
         const TRowVersion edge = Max(lastReadEdge, preImmediateWriteEdge);
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "CheckMediatorStateRestored at " << TabletID()
             << " promoting UnprotectedReadEdge to " << edge);
+        Pipeline.MarkPlannedLogicallyCompleteUpTo(edge, txc);
+        Pipeline.MarkPlannedLogicallyIncompleteUpTo(edge, txc);
         SnapshotManager.PromoteUnprotectedReadEdge(edge);
     }
 
@@ -3363,10 +3398,7 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const 
 }
 
 void TDataShard::Handle(TEvPrivate::TEvMediatorRestoreBackup::TPtr&, const TActorContext&) {
-    if (MediatorStateWaiting && CoordinatorPrevReadStepMax == Max<ui64>()) {
-        // We are still waiting for new protol coordinator state
-        // TODO: send an old snapshot request to coordinators
-    }
+    Y_ABORT("This code path was always no-op and no longer used");
 }
 
 bool TDataShard::WaitPlanStep(ui64 step) {

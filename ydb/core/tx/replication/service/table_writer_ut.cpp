@@ -65,6 +65,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
                 {.Name = "utf8_value", .Type = "Utf8"},
                 {.Name = "json_value", .Type = "Json"},
                 {.Name = "jsondoc_value", .Type = "JsonDocument"},
+                {.Name = "uuid_value", .Type = "Uuid"}
             },
         }));
 
@@ -91,6 +92,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             TRecord(16, R"({"key":[16], "update":{"utf8_value":"lorem ipsum"}})"),
             TRecord(17, R"({"key":[17], "update":{"json_value":{"key": "value"}}})"),
             TRecord(18, R"({"key":[18], "update":{"jsondoc_value":{"key": "value"}}})"),
+            TRecord(19, R"({"key":[19], "update":{"uuid_value":"65df1ec1-a97d-47b2-ae56-3c023da6ee8c"}})"),
         }));
     }
 }

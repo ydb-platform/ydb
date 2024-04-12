@@ -343,7 +343,7 @@ TFuture<void> TWritingValueConsumer::Flush()
                     .ThrowOnError();
             }
 
-            writer->Write(rows);
+            Y_UNUSED(writer->Write(rows));
             rowBuffer->Clear();
             return writer->GetReadyEvent();
         })

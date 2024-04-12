@@ -276,6 +276,11 @@ void TSolomonRegistry::SetWindowSize(int windowSize)
     WindowSize_ = windowSize;
 }
 
+void TSolomonRegistry::SetProducerCollectionBatchSize(int batchSize)
+{
+    Producers_.SetCollectionBatchSize(batchSize);
+}
+
 int TSolomonRegistry::GetWindowSize() const
 {
     if (!WindowSize_) {

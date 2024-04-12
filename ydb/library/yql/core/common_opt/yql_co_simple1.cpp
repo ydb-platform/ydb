@@ -70,6 +70,43 @@ TExprNode::TPtr ExpandPgNot(const TExprNode::TPtr& input, TExprContext& ctx) {
         .Build();
 }
 
+TExprNode::TPtr ExpandPgIsTorF(const TExprNode::TPtr& input, bool value, TExprContext& ctx) {
+    return ctx.Builder(input->Pos())
+        .Callable("ToPg")
+            .Callable(0, "Coalesce")
+                .Callable(0, "FromPg")
+                    .Callable(0, "PgOp")
+                        .Atom(0, "=")
+                        .Add(1, input->ChildPtr(0))
+                        .Add(2, MakePgBool(input->Pos(), value, ctx))
+                    .Seal()
+                .Seal()
+            .Add(1, MakeBool<false>(input->Pos(), ctx))
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr ExpandPgIsTrue(const TExprNode::TPtr& input, TExprContext& ctx) {
+    return ExpandPgIsTorF(input, true, ctx);
+}
+
+TExprNode::TPtr ExpandPgIsFalse(const TExprNode::TPtr& input, TExprContext& ctx) {
+    return ExpandPgIsTorF(input, false, ctx);
+}
+
+TExprNode::TPtr ExpandPgIsUnknown(const TExprNode::TPtr& input, TExprContext& ctx) {
+    return ctx.Builder(input->Pos())
+        .Callable("ToPg")
+            .Callable(0,"Not")
+                .Callable(0, "Exists")
+                    .Add(0, input->ChildPtr(0))
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr OptimizePgCastOverPgConst(const TExprNode::TPtr& input, TExprContext& ctx) {
     if (input->ChildrenSize() != 2) {
         return input;
@@ -2083,6 +2120,27 @@ TExprNode::TPtr SimpleFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TO
         const auto& inputToCheck = SkipCallables(node->Head(), SkippableCallables);
         if (IsEmptyContainer(inputToCheck) || IsEmpty(inputToCheck, *optCtx.Types)) {
             YQL_CLOG(DEBUG, Core) << "Empty " << node->Content() << " over " << inputToCheck.Content();
+            const auto typeAnn = node->GetTypeAnn();
+            const auto kind = typeAnn->GetKind();
+            if (kind == ETypeAnnotationKind::Flow || kind == ETypeAnnotationKind::Stream) {
+                const auto scope = node->GetDependencyScope();
+                const auto outer = scope->first;
+                if (outer != nullptr) {
+                    auto res = ctx.Builder(node->Pos())
+                            .Callable(GetEmptyCollectionName(typeAnn))
+                                .Add(0, ExpandType(node->Pos(), *typeAnn, ctx))
+                                .Do(
+                                    [&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                        for (ui32 i = 0; i < outer->Child(0)->ChildrenSize(); ++i) {
+                                            parent.Callable(i+1, "DependsOn").Add(0, outer->Child(0)->Child(i)).Seal();
+                                        }
+                                        return parent;
+                                    }
+                                )
+                            .Seal().Build();
+                    return KeepConstraints(res, *node, ctx);
+                }
+            }
             auto res = ctx.NewCallable(inputToCheck.Pos(), GetEmptyCollectionName(node->GetTypeAnn()), {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
             return KeepConstraints(res, *node, ctx);
         }
@@ -2416,7 +2474,10 @@ TExprNode::TPtr DropReorder(const TExprNode::TPtr& node, TExprContext& ctx) {
 template <bool IsTop, bool IsSort>
 TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) {
     const ui32 ascIndex = node->ChildrenSize() - 2U;
-    if ((IsSort || IsTop) && 1U == node->Head().ChildrenSize() && node->Head().IsCallable(GetEmptyCollectionName(node->Head().GetTypeAnn()))) {
+    if ((IsSort || IsTop) && (
+                                1U == node->Head().ChildrenSize() && node->Head().IsCallable(GetEmptyCollectionName(node->Head().GetTypeAnn()))
+                                || node->Head().IsCallable("EmptyIterator")
+                            )) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
         return IsSort ?
             ctx.Builder(node->Pos())
@@ -4066,7 +4127,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["FromFlow"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         if (node->Head().IsCallable("EmptyIterator")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-            return ctx.ChangeChildren(node->Head(), {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
+            return ctx.ChangeChild(node->Head(), 0, ExpandType(node->Pos(), *node->GetTypeAnn(), ctx));
         }
 
         return node;
@@ -6264,6 +6325,9 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["PgAnd"] = std::bind(&ExpandPgAnd, _1, _2);
     map["PgOr"] = std::bind(&ExpandPgOr, _1, _2);
     map["PgNot"] = std::bind(&ExpandPgNot, _1, _2);
+    map["PgIsTrue"] = std::bind(&ExpandPgIsTrue, _1, _2);
+    map["PgIsFalse"] = std::bind(&ExpandPgIsFalse, _1, _2);
+    map["PgIsUnknown"] = std::bind(&ExpandPgIsUnknown, _1, _2);
     map["PgCast"] = std::bind(&OptimizePgCastOverPgConst, _1, _2);
 
     map["Ensure"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) {
@@ -6284,6 +6348,10 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["PartitionsByKeys"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (IsEmpty(node->Head(), *optCtx.Types)) {
+            if (FindNode(&node->Tail(),
+                    [](const TExprNode::TPtr& child) { return child->IsCallable("EmptyIterator") && child->ChildrenSize() > 1;})) {
+                return node;
+            }
             YQL_CLOG(DEBUG, Core) << node->Content() << " over empty input.";
 
             TExprNode::TPtr sequence = KeepConstraints(node->HeadPtr(), node->Tail().Head().Head(), ctx);

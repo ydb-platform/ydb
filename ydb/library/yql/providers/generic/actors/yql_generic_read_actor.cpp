@@ -24,6 +24,7 @@ namespace NYql::NDq {
     using namespace NActors;
 
     namespace {
+
         template <typename T>
         T ExtractFromConstFuture(const NThreading::TFuture<T>& f) {
             //We want to avoid making a copy of data stored in a future.

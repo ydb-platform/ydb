@@ -23,11 +23,11 @@ extern const char GetMicrosecondOfSecondName[] = "GetMicrosecondOfSecond";
 
 extern const char TMResourceName[] = "DateTime2.TM";
 
-const ui64 UsecondsInDay = 86400000000ll;
-const ui64 UsecondsInHour = 3600000000ll;
-const ui64 UsecondsInMinute = 60000000ll;
-const ui64 UsecondsInSecond = 1000000ll;
-const ui64 UsecondsInMilliseconds = 1000ll;
+const auto UsecondsInDay = 86400000000ll;
+const auto UsecondsInHour = 3600000000ll;
+const auto UsecondsInMinute = 60000000ll;
+const auto UsecondsInSecond = 1000000ll;
+const auto UsecondsInMilliseconds = 1000ll;
 
 template <const char* TFuncName, typename TResult, ui32 ScaleAfterSeconds>
 class TToUnits {
@@ -961,7 +961,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return TUnboxedValuePod(i32(args[0].Get<i64>() / UsecondsInDay));
     }
     END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TToDays, 
-    (UnaryPreallocatedExecImpl<i32, i32, [] (i32 arg) { return i32(arg / UsecondsInDay); }>),
+    (UnaryPreallocatedExecImpl<i64, i32, [] (i64 arg) { return i32(arg / UsecondsInDay); }>),
     arrow::compute::NullHandling::INTERSECTION);
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TToHours, i32(TAutoMap<TInterval>)) {
@@ -969,7 +969,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return TUnboxedValuePod(i32(args[0].Get<i64>() / UsecondsInHour));
     }
     END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TToHours, 
-    (UnaryPreallocatedExecImpl<i32, i32, [] (i32 arg) { return i32(arg / UsecondsInHour); }>),
+    (UnaryPreallocatedExecImpl<i64, i32, [] (i64 arg) { return i32(arg / UsecondsInHour); }>),
     arrow::compute::NullHandling::INTERSECTION);
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TToMinutes, i32(TAutoMap<TInterval>)) {
@@ -977,7 +977,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         return TUnboxedValuePod(i32(args[0].Get<i64>() / UsecondsInMinute));
     }
     END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TToMinutes, 
-    (UnaryPreallocatedExecImpl<i32, i32, [] (i32 arg) { return i32(arg / UsecondsInMinute); }>),
+    (UnaryPreallocatedExecImpl<i64, i32, [] (i64 arg) { return i32(arg / UsecondsInMinute); }>),
     arrow::compute::NullHandling::INTERSECTION);
 
     // StartOf*

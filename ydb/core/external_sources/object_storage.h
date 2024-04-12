@@ -14,4 +14,6 @@ NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuer
 
 NYql::TIssues ValidateDateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting, bool matchAllSettings = false);
 
+NYql::TIssues ValidateRawFormat(const TString& format, const FederatedQuery::Schema& schema, const google::protobuf::RepeatedPtrField<TString>& partitionedBy);
+
 }

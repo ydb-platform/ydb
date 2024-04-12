@@ -2,7 +2,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
 
 #include <library/cpp/logger/stream.h>
 
@@ -10,18 +10,33 @@
 
 namespace NYdb::NTopic::NTests {
 
+const auto TEST_MESSAGE_GROUP_ID_1 = TEST_MESSAGE_GROUP_ID + "_1";
+const auto TEST_MESSAGE_GROUP_ID_2 = TEST_MESSAGE_GROUP_ID + "_2";
+
 Y_UNIT_TEST_SUITE(TxUsage) {
 
 class TFixture : public NUnitTest::TBaseFixture {
 protected:
-    void SetUp(NUnitTest::TTestContext&) override;
-
-    NTable::TSession CreateSession();
-    NTable::TTransaction BeginTx(NTable::TSession& session);
-    void CommitTx(NTable::TTransaction& tx, EStatus status);
-
     using TTopicReadSession = NTopic::IReadSession;
     using TTopicReadSessionPtr = std::shared_ptr<TTopicReadSession>;
+    using TTopicWriteSession = NTopic::IWriteSession;
+    using TTopicWriteSessionPtr = std::shared_ptr<TTopicWriteSession>;
+
+    struct TTopicWriteSessionContext {
+        TTopicWriteSessionPtr Session;
+        TMaybe<NTopic::TContinuationToken> ContinuationToken;
+        size_t WriteCount = 0;
+        size_t AckCount = 0;
+
+        void WaitForContinuationToken();
+        void Write(const TString& message, NTable::TTransaction* tx = nullptr);
+    };
+
+    void SetUp(NUnitTest::TTestContext&) override;
+
+    NTable::TSession CreateTableSession();
+    NTable::TTransaction BeginTx(NTable::TSession& session);
+    void CommitTx(NTable::TTransaction& tx, EStatus status = EStatus::SUCCESS);
 
     TTopicReadSessionPtr CreateReader();
 
@@ -42,6 +57,26 @@ protected:
 
     void WriteToTopicWithInvalidTxId(bool invalidTxId);
 
+    TTopicWriteSessionPtr CreateTopicWriteSession(const TString& topicPath,
+                                                  const TString& messageGroupId);
+    TTopicWriteSessionContext& GetTopicWriteSession(const TString& topicPath,
+                                                    const TString& messageGroupId);
+
+    TTopicReadSessionPtr CreateTopicReadSession(const TString& topicPath,
+                                                const TString& consumerName);
+    TTopicReadSessionPtr GetTopicReadSession(const TString& topicPath,
+                                             const TString& consumerName);
+
+    void WriteToTopic(const TString& topicPath,
+                      const TString& messageGroupId,
+                      const TString& message,
+                      NTable::TTransaction* tx = nullptr);
+    TVector<TString> ReadFromTopic(const TString& topicPath,
+                                   const TString& consumerName,
+                                   const TDuration& duration);
+    void WaitForAcks(const TString& topicPath,
+                     const TString& messageGroupId);
+
 protected:
     const TDriver& GetDriver() const;
 
@@ -53,6 +88,9 @@ private:
 
     std::unique_ptr<TTopicSdkTestSetup> Setup;
     std::unique_ptr<TDriver> Driver;
+
+    THashMap<std::pair<TString, TString>, TTopicWriteSessionContext> TopicWriteSessions;
+    THashMap<TString, TTopicReadSessionPtr> TopicReadSessions;
 };
 
 void TFixture::SetUp(NUnitTest::TTestContext&)
@@ -64,7 +102,7 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
     Driver = std::make_unique<TDriver>(Setup->MakeDriver());
 }
 
-NTable::TSession TFixture::CreateSession()
+NTable::TSession TFixture::CreateTableSession()
 {
     NTable::TTableClient client(GetDriver());
     auto result = client.CreateSession().ExtractValueSync();
@@ -189,7 +227,7 @@ const TDriver& TFixture::GetDriver() const
 
 void TFixture::WriteToTopicWithInvalidTxId(bool invalidTxId)
 {
-    auto tableSession = CreateSession();
+    auto tableSession = CreateTableSession();
     auto tx = BeginTx(tableSession);
 
     NTopic::TWriteSessionSettings options;
@@ -232,7 +270,7 @@ Y_UNIT_TEST_F(SessionAbort, TFixture)
 {
     {
         auto reader = CreateReader();
-        auto session = CreateSession();
+        auto session = CreateTableSession();
         auto tx = BeginTx(session);
 
         StartPartitionSession(reader, tx, 0);
@@ -245,7 +283,7 @@ Y_UNIT_TEST_F(SessionAbort, TFixture)
     }
 
     {
-        auto session = CreateSession();
+        auto session = CreateTableSession();
         auto tx = BeginTx(session);
         auto reader = CreateReader();
 
@@ -267,7 +305,7 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
 {
     WriteMessage("message #0");
 
-    auto session1 = CreateSession();
+    auto session1 = CreateTableSession();
     auto tx1 = BeginTx(session1);
 
     {
@@ -278,7 +316,7 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
         ReadMessage(reader, tx1, 0);
     }
 
-    auto session2 = CreateSession();
+    auto session2 = CreateTableSession();
     auto tx2 = BeginTx(session2);
 
     {
@@ -291,24 +329,6 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
 
     CommitTx(tx2, EStatus::SUCCESS);
     CommitTx(tx1, EStatus::ABORTED);
-}
-
-Y_UNIT_TEST_F(WriteToTopic, TFixture)
-{
-    TString topic[2] = {
-        TEST_TOPIC,
-        TEST_TOPIC + "_2"
-    };
-
-    CreateTopic(topic[1]);
-
-    auto session = CreateSession();
-    auto tx = BeginTx(session);
-
-    WriteMessages({"#1", "#2", "#3"}, topic[0], TEST_MESSAGE_GROUP_ID, tx);
-    WriteMessages({"#4", "#5"}, topic[1], TEST_MESSAGE_GROUP_ID, tx);
-
-    CommitTx(tx, EStatus::ABORTED);
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Invalid_Session, TFixture)
@@ -349,7 +369,7 @@ Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession, TFixture)
         ws->Write(std::move(token), std::move(params));
     };
 
-    auto tableSession = CreateSession();
+    auto tableSession = CreateTableSession();
     auto tx = BeginTx(tableSession);
 
     NTopic::TTopicClient client(GetDriver());
@@ -383,6 +403,402 @@ Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession, TFixture)
     }
 
     UNIT_ASSERT_VALUES_EQUAL(acks, 2);
+}
+
+auto TFixture::CreateTopicWriteSession(const TString& topicPath,
+                                       const TString& messageGroupId) -> TTopicWriteSessionPtr
+{
+    NTopic::TTopicClient client(GetDriver());
+    NTopic::TWriteSessionSettings options;
+    options.Path(topicPath);
+    options.ProducerId(messageGroupId);
+    options.MessageGroupId(messageGroupId);
+    return client.CreateWriteSession(options);
+}
+
+auto TFixture::GetTopicWriteSession(const TString& topicPath,
+                                    const TString& messageGroupId) -> TTopicWriteSessionContext&
+{
+    std::pair<TString, TString> key(topicPath, messageGroupId);
+    auto i = TopicWriteSessions.find(key);
+
+    if (i == TopicWriteSessions.end()) {
+        TTopicWriteSessionContext context;
+        context.Session = CreateTopicWriteSession(topicPath, messageGroupId);
+
+        TopicWriteSessions.emplace(key, std::move(context));
+
+        i = TopicWriteSessions.find(key);
+    }
+
+    return i->second;
+}
+
+auto TFixture::CreateTopicReadSession(const TString& topicPath,
+                                      const TString& consumerName) -> TTopicReadSessionPtr
+{
+    NTopic::TTopicClient client(GetDriver());
+    NTopic::TReadSessionSettings options;
+    options.AppendTopics(topicPath);
+    options.ConsumerName(consumerName);
+    return client.CreateReadSession(options);
+}
+
+auto TFixture::GetTopicReadSession(const TString& topicPath,
+                                   const TString& consumerName) -> TTopicReadSessionPtr
+{
+    TTopicReadSessionPtr session;
+
+    if (auto i = TopicReadSessions.find(topicPath); i == TopicReadSessions.end()) {
+        session = CreateTopicReadSession(topicPath, consumerName);
+        auto event = ReadEvent<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(session);
+        event.Confirm();
+        TopicReadSessions.emplace(topicPath, session);
+    } else {
+        session = i->second;
+    }
+
+    return session;
+}
+
+void TFixture::TTopicWriteSessionContext::WaitForContinuationToken()
+{
+    while (!ContinuationToken.Defined()) {
+        Session->WaitEvent().Wait();
+        for (auto& event : Session->GetEvents()) {
+            if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
+                ContinuationToken = std::move(e->ContinuationToken);
+            } else if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
+                for (auto& ack : e->Acks) {
+                    if (ack.State == NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN) {
+                        ++AckCount;
+                    }
+                }
+            } else if (auto* e = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+                UNIT_FAIL("");
+            }
+        }
+    }
+}
+
+void TFixture::TTopicWriteSessionContext::Write(const TString& message, NTable::TTransaction* tx)
+{
+    NTopic::TWriteMessage params(message);
+
+    if (tx) {
+        params.Tx(*tx);
+    }
+
+    Session->Write(std::move(*ContinuationToken),
+                   std::move(params));
+
+    ++WriteCount;
+    ContinuationToken = Nothing();
+}
+
+void TFixture::WriteToTopic(const TString& topicPath,
+                            const TString& messageGroupId,
+                            const TString& message,
+                            NTable::TTransaction* tx)
+{
+    TTopicWriteSessionContext& context = GetTopicWriteSession(topicPath, messageGroupId);
+
+    context.WaitForContinuationToken();
+    UNIT_ASSERT(context.ContinuationToken.Defined());
+    context.Write(message, tx);
+}
+
+TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
+                                         const TString& consumerName,
+                                         const TDuration& duration)
+{
+    TVector<TString> messages;
+
+    TInstant end = TInstant::Now() + duration;
+    TDuration remain = duration;
+
+    auto session = GetTopicReadSession(topicPath, consumerName);
+
+    while (TInstant::Now() < end) {
+        if (!session->WaitEvent().Wait(remain)) {
+            return messages;
+        }
+
+        for (auto& event : session->GetEvents()) {
+            if (auto* e = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
+                for (auto& m : e->GetMessages()) {
+                    messages.push_back(m.GetData());
+                }
+                e->Commit();
+            }
+        }
+
+        remain = end - TInstant::Now();
+    }
+
+    return messages;
+}
+
+void TFixture::WaitForAcks(const TString& topicPath, const TString& messageGroupId)
+{
+    std::pair<TString, TString> key(topicPath, messageGroupId);
+    auto i = TopicWriteSessions.find(key);
+    UNIT_ASSERT(i != TopicWriteSessions.end());
+
+    auto& context = i->second;
+
+    UNIT_ASSERT(context.AckCount <= context.WriteCount);
+
+    while (context.AckCount < context.WriteCount) {
+        context.Session->WaitEvent().Wait();
+        for (auto& event : context.Session->GetEvents()) {
+            if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
+                context.ContinuationToken = std::move(e->ContinuationToken);
+            } else if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
+                for (auto& ack : e->Acks) {
+                    if (ack.State == NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN) {
+                        ++context.AckCount;
+                    }
+                }
+            } else if (auto* e = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+                UNIT_FAIL("");
+            }
+        }
+    }
+
+    UNIT_ASSERT(context.AckCount == context.WriteCount);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_1, TFixture)
+{
+    CreateTopic("topic_A");
+    CreateTopic("topic_B");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #3", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #4", &tx);
+
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #5", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #6", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #7", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #8", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #9", &tx);
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID);
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
+    }
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+        UNIT_ASSERT_VALUES_EQUAL(messages[3], "message #4");
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #5");
+        UNIT_ASSERT_VALUES_EQUAL(messages[4], "message #9");
+    }
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_2, TFixture)
+{
+    CreateTopic("topic_A");
+    CreateTopic("topic_B");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #1", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #2", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #3", &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #4", &tx);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, "message #5");
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_2, "message #6");
+
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_1, "message #7", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_1, "message #8", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_1, "message #9", &tx);
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
+    WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID_1);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_2);
+    WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID_2);
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #5");
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #6");
+    }
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+        UNIT_ASSERT_VALUES_EQUAL(messages[3], "message #4");
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #7");
+        UNIT_ASSERT_VALUES_EQUAL(messages[2], "message #9");
+    }
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_3, TFixture)
+{
+    CreateTopic("topic_A");
+    CreateTopic("topic_B");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #3");
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID);
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #3");
+    }
+
+    CommitTx(tx, EStatus::ABORTED);
+
+    tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID);
+
+    CommitTx(tx, EStatus::SUCCESS);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_4, TFixture)
+{
+    CreateTopic("topic_A");
+    CreateTopic("topic_B");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx_1 = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx_1);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", &tx_1);
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID);
+
+    NTable::TTransaction tx_2 = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #3", &tx_2);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #4", &tx_2);
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID);
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
+    }
+
+    CommitTx(tx_2, EStatus::SUCCESS);
+    CommitTx(tx_1, EStatus::ABORTED);
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #3");
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #4");
+    }
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_5, TFixture)
+{
+    CreateTopic("topic_A");
+    CreateTopic("topic_B");
+
+    NTable::TSession tableSession = CreateTableSession();
+
+    {
+        NTable::TTransaction tx_1 = BeginTx(tableSession);
+
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx_1);
+        WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", &tx_1);
+
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+        WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID);
+
+        CommitTx(tx_1, EStatus::SUCCESS);
+    }
+
+    {
+        NTable::TTransaction tx_2 = BeginTx(tableSession);
+
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #3", &tx_2);
+        WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #4", &tx_2);
+
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+        WaitForAcks("topic_B", TEST_MESSAGE_GROUP_ID);
+
+        CommitTx(tx_2, EStatus::SUCCESS);
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+        UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #3");
+    }
+
+    {
+        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #2");
+        UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #4");
+    }
 }
 
 }

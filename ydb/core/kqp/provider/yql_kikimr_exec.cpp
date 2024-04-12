@@ -199,15 +199,20 @@ namespace {
             auto columnType = typeNode.Ref().GetTypeAnn();
             YQL_ENSURE(columnType && columnType->GetKind() == ETypeAnnotationKind::Type);
 
-            auto type = columnType->Cast<TTypeExprType>()->GetType();
-            auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
-            auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
-            auto dataType = actualType->Cast<TDataExprType>();
-
+            const auto type = columnType->Cast<TTypeExprType>()->GetType();
             TKikimrColumnMetadata columnMeta;
             columnMeta.Name = columnName;
-            columnMeta.Type = dataType->GetName();
-            columnMeta.NotNull = notNull;
+            if (ETypeAnnotationKind::Pg == type->GetKind()) {
+                const auto pgType = type->Cast<TPgExprType>();
+                columnMeta.Type = TString("pg") += pgType->GetName();
+                columnMeta.NotNull = false;
+            } else {
+                const auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
+                const auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
+                const auto dataType = actualType->Cast<TDataExprType>();
+                columnMeta.Type = dataType->GetName();
+                columnMeta.NotNull = notNull;
+            }
 
             out.ColumnOrder.push_back(columnName);
             out.Columns.insert(std::make_pair(columnName, columnMeta));
@@ -278,6 +283,31 @@ namespace {
         return TAlterColumnTableSettings{
             .Table = TString(alter.Table())
         };
+    }
+
+    TCreateSequenceSettings ParseCreateSequenceSettings(TKiCreateSequence createSequence) {
+        TCreateSequenceSettings createSequenceSettings;
+        createSequenceSettings.Name = TString(createSequence.Sequence());
+        createSequenceSettings.Temporary = TString(createSequence.Temporary()) == "true" ? true : false;
+        for (const auto& setting: createSequence.SequenceSettings()) {
+            auto name = setting.Name().Value();
+            auto value = TString(setting.Value().template Cast<TCoAtom>().Value());
+            if (name == "start") {
+                createSequenceSettings.SequenceSettings.StartValue = FromString<i64>(value);
+            } else if (name == "maxvalue") {
+                createSequenceSettings.SequenceSettings.MaxValue = FromString<i64>(value);
+            } else if (name == "minvalue") {
+                createSequenceSettings.SequenceSettings.MinValue = FromString<i64>(value);
+            } else if (name == "cache") {
+                createSequenceSettings.SequenceSettings.Cache = FromString<ui64>(value);
+            } else if (name == "cycle") {
+                createSequenceSettings.SequenceSettings.Cycle = value == "1" ? true : false;
+            } else if (name == "increment") {
+                createSequenceSettings.SequenceSettings.Increment = FromString<i64>(value);
+            }
+        }
+
+        return createSequenceSettings;
     }
 
     [[nodiscard]] TString AddConsumerToTopicRequest(
@@ -1636,6 +1666,27 @@ public:
                                   return resultNode;
                               }, "Executing CREATE TOPIC");
         }
+
+        if (auto maybeCreateSequence = TMaybeNode<TKiCreateSequence>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeCreateSequence.Cast().DataSink().Cluster());
+            TCreateSequenceSettings createSequenceSettings = ParseCreateSequenceSettings(maybeCreateSequence.Cast());
+            bool existingOk = (maybeCreateSequence.ExistingOk().Cast().Value() == "1");
+
+            auto future = Gateway->CreateSequence(cluster, createSequenceSettings, existingOk);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing CREATE SEQUENCE");
+        }
+
         if (auto maybeAlter = TMaybeNode<TKiAlterTopic>(input)) {
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {

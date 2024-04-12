@@ -2842,6 +2842,10 @@ struct TListJobsOptions
     /// @brief Return only jobs whose fail context has been saved.
     FLUENT_FIELD_OPTION(bool, WithFailContext);
 
+    ///
+    /// @brief Return only jobs with monitoring descriptor.
+    FLUENT_FIELD_OPTION(bool, WithMonitoringDescriptor);
+
     /// @}
 
     ///

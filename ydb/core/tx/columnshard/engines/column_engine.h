@@ -159,7 +159,6 @@ public:
 
     i64 Tables{};
     i64 ColumnRecords{};
-    i64 ColumnMetadataBytes{};
     THashMap<TPortionMeta::EProduced, TPortionsStats> StatsByType;
 
     std::vector<ui32> GetKinds() const {
@@ -293,6 +292,9 @@ class IColumnEngine {
 protected:
     virtual void DoRegisterTable(const ui64 pathId) = 0;
 public:
+
+    static ui64 GetMetadataLimit();
+
     virtual ~IColumnEngine() = default;
 
     virtual const TVersionedIndex& GetVersionedIndex() const = 0;
@@ -305,10 +307,11 @@ public:
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "RegisterTable")("path_id", pathId);
         return DoRegisterTable(pathId);
     }
+    virtual bool IsOverloadedByMetadata(const ui64 limit) const = 0;
     virtual std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                                 const TPKRangesFilter& pkRangesFilter) const = 0;
     virtual std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept = 0;
-    virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(const TCompactionLimits& limits, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
+    virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot, const THashSet<ui64>& pathsToDrop,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(THashSet<ui64>& pathsToDrop) noexcept = 0;
@@ -316,6 +319,7 @@ public:
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept = 0;
     virtual bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
+    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) = 0;
     virtual const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const = 0;
     virtual const TColumnEngineStats& GetTotalStats() = 0;
     virtual ui64 MemoryUsage() const { return 0; }

@@ -1674,7 +1674,7 @@ void TServiceBase::HandleRequest(
 {
     SetActive();
 
-    const auto& method = header->method();
+    auto method = FromProto<TString>(header->method());
     auto requestId = FromProto<TRequestId>(header->request_id());
 
     auto replyError = [&] (TError error) {
@@ -1788,7 +1788,6 @@ void TServiceBase::HandleRequest(
             NYT::NRpc::EErrorCode::AuthenticationError,
             "Request is missing credentials"));
     }
-
 }
 
 void TServiceBase::ReplyError(
@@ -2697,6 +2696,9 @@ bool TServiceBase::IsUp(const TCtxDiscoverPtr& /*context*/)
     return true;
 }
 
+void TServiceBase::EnrichDiscoverResponse(TRspDiscover* /*response*/)
+{ }
+
 std::vector<TString> TServiceBase::SuggestAddresses()
 {
     VERIFY_THREAD_AFFINITY_ANY();
@@ -2714,6 +2716,7 @@ DEFINE_RPC_SERVICE_METHOD(TServiceBase, Discover)
         replyDelay);
 
     auto isUp = IsUp(context);
+    EnrichDiscoverResponse(response);
 
     // Fast path.
     if (replyDelay == TDuration::Zero() || isUp) {

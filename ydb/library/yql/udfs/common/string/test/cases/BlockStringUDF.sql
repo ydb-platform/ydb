@@ -14,4 +14,5 @@ SELECT
     String::CgiUnescape(value) as cgunesc,
     String::Collapse(value) as clps,
     String::Strip(value) as strp,
+    String::CollapseText(value, 9) as clpst,
 FROM Input

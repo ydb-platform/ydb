@@ -48,7 +48,7 @@ public:
         for (bool historic : {false, true}) {
             for (ui32 groupIndex : xrange(historic ? Part->HistoricGroupsCount : Part->GroupsCount)) {
                 ui64 groupRowCountResolution, groupDataSizeResolution;
-                if (groupIndex == 0 && Part->GroupsCount > 1) {
+                if (groupIndex == 0 && (Part->GroupsCount > 1 || Small || Large)) {
                     // make steps as small as possible because they will affect groups resolution
                     groupRowCountResolution = groupDataSizeResolution = 0;
                 } else {

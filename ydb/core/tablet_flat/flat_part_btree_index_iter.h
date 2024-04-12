@@ -113,8 +113,8 @@ public:
         : Part(part)
         , Env(env)
         , GroupId(groupId)
-        , GroupInfo(part->Scheme->GetLayout(groupId))
-        , Meta(groupId.IsHistoric() ? part->IndexPages.BTreeHistoric[groupId.Index] : part->IndexPages.BTreeGroups[groupId.Index])
+        , GroupInfo(Part->Scheme->GetLayout(GroupId))
+        , Meta(Part->IndexPages.GetBTree(GroupId))
         , State(Reserve(Meta.LevelCount + 1))
     {
         const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns());

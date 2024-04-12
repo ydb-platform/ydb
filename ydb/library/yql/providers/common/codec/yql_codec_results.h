@@ -83,6 +83,9 @@ public:
     void OnEndAttributes() {
         Writer.OnEndAttributes();
     }
+    void OnRaw(TStringBuf ysonNode, NYT::NYson::EYsonType type) {
+        Writer.OnRaw(ysonNode, type);
+    }
 
 private:
     template <typename T>

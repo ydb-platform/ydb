@@ -45,8 +45,7 @@
     - complex.h:     contrib/libs/libm/include/complex.h
     - math.h:        contrib/libs/libm/include/math.h
 
-# Some more sysincl/addincl clashes.
-- source_filter: "^contrib/tools/bison/(bison|gnulib|m4)/src"
+- source_filter: "^contrib/tools/bison/"
   includes:
     - error.h:       contrib/tools/bison/gnulib/src/error.h
     - fcntl.h:       contrib/tools/bison/gnulib/platform/posix/fcntl.h
@@ -55,6 +54,13 @@
     - regex.h:       contrib/tools/bison/gnulib/src/regex.h
     - system.h
     - unlocked-io.h: contrib/tools/bison/gnulib/src/unlocked-io.h
+    # ucrt headers are included by bison/gnulib in a very specific way
+    - ../ucrt/fcntl.h
+    - ../ucrt/locale.h
+    - ../ucrt/math.h
+    - ../ucrt/signal.h
+    - ../ucrt/sys/stat.h
+
 - source_filter: "^contrib/tools/make"
   includes:
     - fnmatch.h:     contrib/tools/make/glob/fnmatch.h
@@ -509,13 +515,9 @@
   includes:
     - position.hh
 
-- source_filter: "^contrib/libs/fp16/include/fp16/psimd.h"
-  includes:
-    - psimd.h
-
 - source_filter: "^vendor/github.com/NVIDIA"
   includes:
-    - nvml.h: 
+    - nvml.h:
       - vendor/github.com/NVIDIA/go-dcgm/pkg/dcgm/nvml.h
       - vendor/github.com/NVIDIA/go-nvml/gen/nvml/nvml.h
       - vendor/github.com/NVIDIA/go-nvml/pkg/nvml/nvml.h

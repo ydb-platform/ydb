@@ -123,11 +123,15 @@ namespace NActors {
 
         virtual void SetRealTimeMode() const {}
 
-        virtual i16 GetThreadCount() const {
+        virtual float GetThreadCount() const {
             return 1;
         }
 
-        virtual void SetThreadCount(i16 threads) {
+        virtual i16 GetFullThreadCount() const {
+            return 1;
+        }
+
+        virtual void SetFullThreadCount(i16 threads) {
             Y_UNUSED(threads);
         }
 
@@ -139,15 +143,28 @@ namespace NActors {
             return 0;
         }
 
-        virtual i16 GetDefaultThreadCount() const {
+        virtual float GetDefaultThreadCount() const {
             return 1;
         }
 
-        virtual i16 GetMinThreadCount() const {
+        virtual i16 GetDefaultFullThreadCount() const {
             return 1;
         }
 
-        virtual i16 GetMaxThreadCount() const {
+        virtual float GetMinThreadCount() const {
+            return 1;
+        }
+
+
+        virtual i16 GetMinFullThreadCount() const {
+            return 1;
+        }
+
+        virtual float GetMaxThreadCount() const {
+            return 1;
+        }
+
+        virtual i16 GetMaxFullThreadCount() const {
             return 1;
         }
 

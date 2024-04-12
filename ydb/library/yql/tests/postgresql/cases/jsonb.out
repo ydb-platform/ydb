@@ -1306,6 +1306,80 @@ select jsonb_object('{a,b,"","d e f"}','{1,2,3,"a b c"}');
  {"": "3", "a": "1", "b": "2", "d e f": "a b c"}
 (1 row)
 
+-- extract_path, extract_path_as_text
+SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
+ jsonb_extract_path 
+--------------------
+ "stringy"
+(1 row)
+
+SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
+ jsonb_extract_path 
+--------------------
+ {"f3": 1}
+(1 row)
+
+SELECT jsonb_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
+ jsonb_extract_path 
+--------------------
+ "f3"
+(1 row)
+
+SELECT jsonb_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
+ jsonb_extract_path 
+--------------------
+ 1
+(1 row)
+
+SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
+ jsonb_extract_path_text 
+-------------------------
+ stringy
+(1 row)
+
+SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
+ jsonb_extract_path_text 
+-------------------------
+ {"f3": 1}
+(1 row)
+
+SELECT jsonb_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
+ jsonb_extract_path_text 
+-------------------------
+ f3
+(1 row)
+
+SELECT jsonb_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
+ jsonb_extract_path_text 
+-------------------------
+ 1
+(1 row)
+
+-- extract_path nulls
+SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') IS NULL AS expect_false;
+ expect_false 
+--------------
+ f
+(1 row)
+
+SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') IS NULL AS expect_true;
+ expect_true 
+-------------
+ t
+(1 row)
+
+SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') IS NULL AS expect_false;
+ expect_false 
+--------------
+ f
+(1 row)
+
+SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') IS NULL AS expect_true;
+ expect_true 
+-------------
+ t
+(1 row)
+
 SELECT * FROM jsonb_array_elements('[1,true,[1,[2,3]],null,{"f1":1,"f2":[7,8,9]},false]') q;
            value            
 ----------------------------

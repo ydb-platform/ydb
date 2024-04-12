@@ -719,6 +719,7 @@ public:
     const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetSpecialDependencies() const { return SpecialDependencies; }
     const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetPlannedConflicts() const { return PlannedConflicts; }
     const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetImmediateConflicts() const { return ImmediateConflicts; }
+    const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetRepeatableReadConflicts() const { return RepeatableReadConflicts; }
     const absl::flat_hash_set<ui64> &GetVolatileDependencies() const { return VolatileDependencies; }
     bool HasVolatileDependencies() const { return !VolatileDependencies.empty(); }
     bool GetVolatileDependenciesAborted() const { return VolatileDependenciesAborted; }
@@ -735,6 +736,10 @@ public:
     void ClearImmediateConflicts();
     void ClearSpecialDependents();
     void ClearSpecialDependencies();
+
+    void AddRepeatableReadConflict(const TOperation::TPtr &op);
+    void PromoteRepeatableReadConflicts();
+    void ClearRepeatableReadConflicts();
 
     void AddVolatileDependency(ui64 txId);
     void RemoveVolatileDependency(ui64 txId, bool success);
@@ -864,6 +869,16 @@ public:
      */
     virtual bool OnStopping(TDataShard& self, const TActorContext& ctx);
 
+    /**
+     * Called when operation is aborted on cleanup
+     *
+     * Distributed transaction is cleaned up when deadline is reached, and
+     * it hasn't been planned yet. Additionally volatile transactions are
+     * cleaned when shard is waiting for transaction queue to drain, and
+     * the given operation wasn't planned yet.
+     */
+    virtual void OnCleanup(TDataShard& self, std::vector<std::unique_ptr<IEventHandle>>& replies);
+
 protected:
     TOperation()
         : TOperation(TBasicOpInfo())
@@ -925,6 +940,7 @@ private:
     absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> SpecialDependencies;
     absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> PlannedConflicts;
     absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> ImmediateConflicts;
+    absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> RepeatableReadConflicts;
     absl::flat_hash_set<ui64> VolatileDependencies;
     bool VolatileDependenciesAborted = false;
     TVector<EExecutionUnitKind> ExecutionPlan;

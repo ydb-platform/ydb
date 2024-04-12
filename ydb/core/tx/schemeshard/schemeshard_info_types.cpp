@@ -19,6 +19,40 @@
 
 #include <util/generic/algorithm.h>
 
+namespace {
+
+using TDiskSpaceQuotas = NKikimr::NSchemeShard::TSubDomainInfo::TDiskSpaceQuotas;
+using TQuotasPair = TDiskSpaceQuotas::TQuotasPair;
+using TStoragePoolUsage = NKikimr::NSchemeShard::TSubDomainInfo::TDiskSpaceUsage::TStoragePoolUsage;
+
+enum class EDiskUsageStatus {
+    AboveHardQuota,
+    InBetween,
+    BelowSoftQuota,
+};
+
+EDiskUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsage>& storagePoolsUsage,
+                                         const THashMap<TString, TQuotasPair>& storagePoolsQuotas
+) {
+    bool softQuotaExceeded = false;
+    for (const auto& [poolKind, usage] : storagePoolsUsage) {
+        if (const auto* quota = storagePoolsQuotas.FindPtr(poolKind)) {
+            const auto totalSize = usage.DataSize + usage.IndexSize;
+            if (quota->HardQuota && totalSize > quota->HardQuota) {
+                return EDiskUsageStatus::AboveHardQuota;
+            }
+            if (quota->SoftQuota && totalSize >= quota->SoftQuota) {
+                softQuotaExceeded = true;
+            }
+        }
+    }
+    return softQuotaExceeded
+            ? EDiskUsageStatus::InBetween
+            : EDiskUsageStatus::BelowSoftQuota;
+}
+
+}
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -44,6 +78,117 @@ void TSubDomainInfo::ApplyAuditSettings(const TSubDomainInfo::TMaybeAuditSetting
             AuditSettings = input;
         }
     }
+}
+
+TDiskSpaceQuotas TSubDomainInfo::GetDiskSpaceQuotas() const {
+    if (!DatabaseQuotas) {
+        return {};
+    }
+
+    ui64 hardQuota = DatabaseQuotas->data_size_hard_quota();
+    ui64 softQuota = DatabaseQuotas->data_size_soft_quota();
+
+    if (!softQuota) {
+        softQuota = hardQuota;
+    } else if (!hardQuota) {
+        hardQuota = softQuota;
+    }
+
+    THashMap<TString, TQuotasPair> storagePoolsQuotas;
+    for (const auto& storageQuota : DatabaseQuotas->storage_quotas()) {
+        ui64 unitHardQuota = storageQuota.data_size_hard_quota();
+        ui64 unitSoftQuota = storageQuota.data_size_soft_quota();
+
+        if (!unitSoftQuota) {
+            unitSoftQuota = unitHardQuota;
+        } else if (!unitHardQuota) {
+            unitHardQuota = unitSoftQuota;
+        }
+
+        storagePoolsQuotas.emplace(storageQuota.unit_kind(), TQuotasPair{
+                .HardQuota = unitHardQuota,
+                .SoftQuota = unitSoftQuota
+            }
+        );
+    }
+
+    return TDiskSpaceQuotas{hardQuota, softQuota, std::move(storagePoolsQuotas)};
+}
+
+bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
+    const auto changeSubdomainState = [&](EDiskUsageStatus diskUsage) {
+        if (diskUsage == EDiskUsageStatus::AboveHardQuota && !DiskQuotaExceeded) {
+            counters->ChangeDiskSpaceQuotaExceeded(+1);
+            DiskQuotaExceeded = true;
+            ++DomainStateVersion;
+            return true;
+        }
+        if (diskUsage == EDiskUsageStatus::BelowSoftQuota && DiskQuotaExceeded) {
+            counters->ChangeDiskSpaceQuotaExceeded(-1);
+            DiskQuotaExceeded = false;
+            ++DomainStateVersion;
+            return true;
+        }
+        return false;
+    };
+
+    auto quotas = GetDiskSpaceQuotas();
+    if (!quotas) {
+        return changeSubdomainState(EDiskUsageStatus::BelowSoftQuota);
+    }
+
+    ui64 totalUsage = TotalDiskSpaceUsage();
+    const auto storagePoolsUsageStatus = CheckStoragePoolsQuotas(DiskSpaceUsage.StoragePoolsUsage, quotas.StoragePoolsQuotas);
+
+    // Quota being equal to zero is treated as if there is no limit set on disk space usage.
+    const bool overallHardQuotaIsExceeded = quotas.HardQuota && totalUsage > quotas.HardQuota;
+    const bool someStoragePoolHardQuotaIsExceeded = !quotas.StoragePoolsQuotas.empty()
+                                                        && storagePoolsUsageStatus == EDiskUsageStatus::AboveHardQuota;
+    if (overallHardQuotaIsExceeded || someStoragePoolHardQuotaIsExceeded) {
+        return changeSubdomainState(EDiskUsageStatus::AboveHardQuota);
+    }
+
+    const bool totalUsageIsBelowOverallSoftQuota = !quotas.SoftQuota || totalUsage < quotas.SoftQuota;
+    const bool allStoragePoolsUsageIsBelowSoftQuota = quotas.StoragePoolsQuotas.empty()
+                                                          || storagePoolsUsageStatus == EDiskUsageStatus::BelowSoftQuota;
+    if (totalUsageIsBelowOverallSoftQuota && allStoragePoolsUsageIsBelowSoftQuota) {
+        return changeSubdomainState(EDiskUsageStatus::BelowSoftQuota);
+    }
+
+    return false;
+}
+
+void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr) {
+    DiskSpaceUsage.Tables.DataSize += (newAggr.DataSize - oldAggr.DataSize);
+    counters->ChangeDiskSpaceTablesDataBytes(newAggr.DataSize - oldAggr.DataSize);
+
+    DiskSpaceUsage.Tables.IndexSize += (newAggr.IndexSize - oldAggr.IndexSize);
+    counters->ChangeDiskSpaceTablesIndexBytes(newAggr.IndexSize - oldAggr.IndexSize);
+
+    i64 oldTotalBytes = DiskSpaceUsage.Tables.TotalSize;
+    DiskSpaceUsage.Tables.TotalSize = DiskSpaceUsage.Tables.DataSize + DiskSpaceUsage.Tables.IndexSize;
+    i64 newTotalBytes = DiskSpaceUsage.Tables.TotalSize;
+    counters->ChangeDiskSpaceTablesTotalBytes(newTotalBytes - oldTotalBytes);
+
+    for (const auto& [poolKind, newStoragePoolStats] : newAggr.StoragePoolsStats) {
+        const auto* oldStats = oldAggr.StoragePoolsStats.FindPtr(poolKind);
+        auto& storagePoolUsage = DiskSpaceUsage.StoragePoolsUsage[poolKind];
+        storagePoolUsage.DataSize += newStoragePoolStats.DataSize - (oldStats ? oldStats->DataSize : 0u);
+        storagePoolUsage.IndexSize += newStoragePoolStats.IndexSize - (oldStats ? oldStats->IndexSize : 0u);
+    }
+    for (const auto& [poolKind, oldStoragePoolStats] : oldAggr.StoragePoolsStats) {
+        if (const auto* newStats = newAggr.StoragePoolsStats.FindPtr(poolKind); !newStats) {
+            auto& storagePoolUsage = DiskSpaceUsage.StoragePoolsUsage[poolKind];
+            storagePoolUsage.DataSize -= oldStoragePoolStats.DataSize;
+            storagePoolUsage.IndexSize -= oldStoragePoolStats.IndexSize;
+        }
+    }
+}
+
+void TSubDomainInfo::AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr) {
+    auto& topics = DiskSpaceUsage.Topics;
+    topics.DataSize += (newAggr.DataSize - oldAggr.DataSize);
+    topics.UsedReserveSize += (newAggr.UsedReserveSize - oldAggr.UsedReserveSize);
 }
 
 TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
@@ -1356,6 +1501,11 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
         newAggregatedStats.RowCount += newStats.RowCount;
         newAggregatedStats.DataSize += newStats.DataSize;
         newAggregatedStats.IndexSize += newStats.IndexSize;
+        for (const auto& [poolKind, newStoragePoolStats] : newStats.StoragePoolsStats) {
+            auto& aggregatedStoragePoolStats = newAggregatedStats.StoragePoolsStats[poolKind];
+            aggregatedStoragePoolStats.DataSize += newStoragePoolStats.DataSize;
+            aggregatedStoragePoolStats.IndexSize += newStoragePoolStats.IndexSize;
+        }
         newAggregatedStats.InFlightTxCount += newStats.InFlightTxCount;
         cpuTotal += newStats.GetCurrentRawCpuUsage();
         newAggregatedStats.Memory += newStats.Memory;
@@ -1436,6 +1586,30 @@ void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartition
     Aggregated.RowCount += (newStats.RowCount - oldStats.RowCount);
     Aggregated.DataSize += (newStats.DataSize - oldStats.DataSize);
     Aggregated.IndexSize += (newStats.IndexSize - oldStats.IndexSize);
+    for (const auto& [poolKind, newStoragePoolStats] : newStats.StoragePoolsStats) {
+        auto* aggregatedStoragePoolStats = Aggregated.StoragePoolsStats.FindPtr(poolKind);
+        if (aggregatedStoragePoolStats) {
+            const auto* oldStoragePoolStats = oldStats.StoragePoolsStats.FindPtr(poolKind);
+
+            // Missing old stats for a particular storage pool are interpreted as if this data
+            // has just been written to the datashard and we need to increment the aggregate by the entire new stats' sizes.
+            aggregatedStoragePoolStats->DataSize += newStoragePoolStats.DataSize - (oldStoragePoolStats ? oldStoragePoolStats->DataSize : 0u);
+            aggregatedStoragePoolStats->IndexSize += newStoragePoolStats.IndexSize - (oldStoragePoolStats ? oldStoragePoolStats->IndexSize : 0u);
+        } else {
+            Aggregated.StoragePoolsStats.emplace(poolKind, newStoragePoolStats);
+        }
+    }
+    for (const auto& [poolKind, oldStoragePoolStats] : oldStats.StoragePoolsStats) {
+        if (const auto* newStoragePoolStats = newStats.StoragePoolsStats.FindPtr(poolKind); !newStoragePoolStats) {
+            auto* aggregatedStoragePoolStats = Aggregated.StoragePoolsStats.FindPtr(poolKind);
+            Y_ABORT_UNLESS(aggregatedStoragePoolStats, "Old stats are present, but they haven't been aggregated.");
+
+            // Missing new stats for a particular storage pool are interpreted as if this data
+            // has been removed from the datashard and we need to subtract the old stats' sizes from the aggregate.
+            aggregatedStoragePoolStats->DataSize -= oldStoragePoolStats.DataSize;
+            aggregatedStoragePoolStats->IndexSize -= oldStoragePoolStats.IndexSize;
+        }
+    }
     Aggregated.LastAccessTime = Max(Aggregated.LastAccessTime, newStats.LastAccessTime);
     Aggregated.LastUpdateTime = Max(Aggregated.LastUpdateTime, newStats.LastUpdateTime);
     Aggregated.ImmediateTxCompleted += (newStats.ImmediateTxCompleted - oldStats.ImmediateTxCompleted);
@@ -2252,7 +2426,7 @@ bool TOlapStoreInfo::ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescrip
         preset.SetProtoIndex(protoIndex++);
 
         TOlapSchemaUpdate schemaDiff;
-        if (!schemaDiff.Parse(presetProto.GetSchema(), errors, true)) {
+        if (!schemaDiff.Parse(presetProto.GetSchema(), errors)) {
             return false;
         }
 

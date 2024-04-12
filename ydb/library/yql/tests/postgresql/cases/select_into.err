@@ -1,7 +1,7 @@
 Registering pre-existing tables
-	onek
 	onek2
 	int8_tbl
+	onek
 <sql-statement>
 --
 -- SELECT_INTO

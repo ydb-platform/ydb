@@ -1,13 +1,19 @@
 #pragma once
-#include <util/system/types.h>
-#include <util/generic/string.h>
+#include "xx_hash.h"
+#include <ydb/core/formats/arrow/common/adapter.h>
+#include <ydb/core/formats/arrow/common/validation.h>
+#include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 
+#include <util/system/types.h>
+#include <util/string/join.h>
+#include <util/generic/string.h>
+
 #include <vector>
 #include <optional>
-#include "xx_hash.h"
 
 namespace NKikimr::NArrow::NHash {
 
@@ -23,7 +29,31 @@ private:
     const std::vector<TString> ColumnNames;
     const ENoColumnPolicy NoColumnPolicy;
 
-    std::vector<std::shared_ptr<arrow::Array>> GetColumns(const std::shared_ptr<arrow::RecordBatch>& batch) const;
+    template <class TDataContainer>
+    std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> GetColumns(const std::shared_ptr<TDataContainer>& batch) const {
+        std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> columns;
+        columns.reserve(ColumnNames.size());
+        for (auto& colName : ColumnNames) {
+            auto array = batch->GetColumnByName(colName);
+            if (!array) {
+                switch (NoColumnPolicy) {
+                    case ENoColumnPolicy::Ignore:
+                        break;
+                    case ENoColumnPolicy::Verify:
+                        AFL_VERIFY(false)("reason", "no_column")("column_name", colName);
+                    case ENoColumnPolicy::ReturnEmpty:
+                        return {};
+                }
+            } else {
+                columns.emplace_back(array);
+            }
+        }
+        if (columns.empty()) {
+            AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "cannot_read_all_columns")("reason", "fields_not_found")
+                ("field_names", JoinSeq(",", ColumnNames))("batch_fields", JoinSeq(",", batch->schema()->field_names()));
+        }
+        return columns;
+    }
 
 public:
     TXX64(const std::vector<TString>& columnNames, const ENoColumnPolicy noColumnPolicy, const ui64 seed = 0);
@@ -33,7 +63,37 @@ public:
     static void AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer& hashCalcer);
     static ui64 CalcHash(const std::shared_ptr<arrow::Scalar>& scalar);
     std::optional<std::vector<ui64>> Execute(const std::shared_ptr<arrow::RecordBatch>& batch) const;
-    std::shared_ptr<arrow::Array> ExecuteToArray(const std::shared_ptr<arrow::RecordBatch>& batch, const std::string& hashFieldName) const;
+
+    template <class TDataContainer>
+    std::shared_ptr<arrow::Array> ExecuteToArray(const std::shared_ptr<TDataContainer>& batch, const std::string& hashFieldName) const {
+        std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> columns = GetColumns(batch);
+        if (columns.empty()) {
+            return nullptr;
+        }
+
+        std::vector<NAccessor::IChunkedArray::TReader> columnScanners;
+        for (auto&& i : columns) {
+            columnScanners.emplace_back(NAccessor::IChunkedArray::TReader(std::make_shared<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TAccessor>(i)));
+        }
+
+
+        auto builder = NArrow::MakeBuilder(std::make_shared<arrow::Field>(hashFieldName, arrow::TypeTraits<arrow::UInt64Type>::type_singleton()));
+        auto& intBuilder = static_cast<arrow::UInt64Builder&>(*builder);
+        TStatusValidator::Validate(intBuilder.Reserve(batch->num_rows()));
+        {
+            NXX64::TStreamStringHashCalcer hashCalcer(Seed);
+            for (int row = 0; row < batch->num_rows(); ++row) {
+                hashCalcer.Start();
+                for (auto& column : columnScanners) {
+                    auto address = column.GetReadChunk(row);
+                    AppendField(address.GetArray(), address.GetPosition(), hashCalcer);
+                }
+                intBuilder.UnsafeAppend(hashCalcer.Finish());
+            }
+        }
+        return NArrow::TStatusValidator::GetValid(builder->Finish());
+    }
+
 };
 
 }

@@ -10,6 +10,8 @@ PEERDIR(
     library/cpp/monlib/encode/buffered
 )
 
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(prometheus.h)
+
 END()
 
 RECURSE(

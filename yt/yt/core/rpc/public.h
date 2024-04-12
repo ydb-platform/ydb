@@ -78,6 +78,7 @@ DECLARE_REFCOUNTED_CLASS(TAttachmentsInputStream)
 DECLARE_REFCOUNTED_CLASS(TAttachmentsOutputStream)
 
 DECLARE_REFCOUNTED_STRUCT(IViablePeerRegistry)
+DECLARE_REFCOUNTED_STRUCT(IDiscoverRequestHook)
 DECLARE_REFCOUNTED_STRUCT(IPeerDiscovery)
 DECLARE_REFCOUNTED_CLASS(TDynamicChannelPool)
 
@@ -147,8 +148,6 @@ constexpr int TypicalMessagePartCount = 8;
 
 using TFeatureIdFormatter = const std::function<std::optional<TStringBuf>(int featureId)>*;
 
-using TDiscoverRequestHook = TCallback<void(NProto::TReqDiscover*)>;
-
 ////////////////////////////////////////////////////////////////////////////////
 
 extern const TString RequestIdAnnotation;
@@ -185,6 +184,7 @@ YT_DEFINE_ERROR_ENUM(
                                            // The client should try to reduce their request rate until the server has had a chance to recover.
     ((SslError)                     (static_cast<int>(NBus::EErrorCode::SslError)))
     ((MemoryOverflow)               (120))
+    ((GlobalDiscoveryError)         (121)) // Single peer discovery interrupts discovery session.
 );
 
 DEFINE_ENUM(EMessageFormat,

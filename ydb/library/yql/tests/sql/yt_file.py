@@ -68,6 +68,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
             for table in tables_res:
                 if os.path.exists(tables_res[table].file):
                     to_canonize.append(yatest.common.canonical_file(tables_res[table].file))
+                    to_canonize.append(yatest.common.canonical_file(tables_res[table].yqlrun_file + ".attr"))
         if res.std_err:
             to_canonize.append(normalize_source_code_path(res.std_err))
 

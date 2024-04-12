@@ -39,4 +39,35 @@ Y_UNIT_TEST_SUITE(FormatTimes) {
         UNIT_ASSERT_EQUAL(NFq::FormatDurationMs(6'000'000'000), "1666h");
         UNIT_ASSERT_EQUAL(NFq::FormatDurationMs(1'000'000'000'000), "277777h");
     }
+
+    Y_UNIT_TEST(ParseDuration) {
+        UNIT_ASSERT_EQUAL(NFq::ParseDuration("41us"), TDuration::MicroSeconds(41));
+        UNIT_ASSERT_EQUAL(NFq::ParseDuration("0us"), TDuration::MicroSeconds(0));
+        UNIT_ASSERT_EQUAL(NFq::ParseDuration("1ms"), TDuration::MilliSeconds(1));
+        UNIT_ASSERT_EQUAL(NFq::ParseDuration("33ms"), TDuration::MilliSeconds(33));
+        UNIT_ASSERT_EQUAL(NFq::ParseDuration("1s"), TDuration::Seconds(1));
+        UNIT_ASSERT_EQUAL(NFq::ParseDuration("1.00s"), TDuration::Seconds(1));
+        UNIT_ASSERT_EQUAL(NFq::ParseDuration("0.11s"), TDuration::MilliSeconds(110));
+        UNIT_ASSERT_EQUAL(NFq::ParseDuration("31.02s"), TDuration::Seconds(31) + TDuration::MilliSeconds(20));
+        UNIT_ASSERT_EQUAL(NFq::ParseDuration("1h 02m 3.45s"), TDuration::Hours(1) + TDuration::Minutes(2) + TDuration::MilliSeconds(3450));
+        UNIT_ASSERT_EQUAL(NFq::ParseDuration("3000h"), TDuration::Hours(3000));
+    }
+}
+
+Y_UNIT_TEST_SUITE(StatsFormat) {
+    Y_UNIT_TEST(FullStat) {
+        auto stats = NFq::GetV1StatFromV2Plan(NResource::Find("plan.json"));
+        stats = NFq::GetPrettyStatistics(stats);
+        UNIT_ASSERT_EQUAL(stats, NResource::Find("stat.json"));
+    }
+
+    Y_UNIT_TEST(AggregateStat) {
+        auto res = NFq::AggregateStats(NResource::Find("plan.json"));
+        UNIT_ASSERT_EQUAL(res["IngressBytes"], 6333256);
+        UNIT_ASSERT_EQUAL(res["EgressBytes"], 0);
+        UNIT_ASSERT_EQUAL(res["InputBytes"], 1044);
+        UNIT_ASSERT_EQUAL(res["OutputBytes"], 2088);
+        UNIT_ASSERT_EQUAL(res["CpuTimeUs"], 3493);
+        UNIT_ASSERT_EQUAL(res["S3Source"], 6333256);
+    }
 }

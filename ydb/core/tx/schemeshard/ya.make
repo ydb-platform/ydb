@@ -102,6 +102,7 @@ SRCS(
     schemeshard__operation_common_external_table.cpp
     schemeshard__operation_common_subdomain.h
     schemeshard__operation_consistent_copy_tables.cpp
+    schemeshard__operation_copy_sequence.cpp
     schemeshard__operation_copy_table.cpp
     schemeshard__operation_create_backup.cpp
     schemeshard__operation_create_bsv.cpp
@@ -269,6 +270,7 @@ PEERDIR(
     ydb/library/aclib/protos
     ydb/library/login
     ydb/library/login/protos
+    ydb/library/protobuf_printer
     ydb/library/yql/minikql
     ydb/services/bg_tasks
 )

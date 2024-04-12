@@ -86,7 +86,10 @@ void TTargetBase::Progress(TReplication::TPtr replication, const TActorContext& 
     case EDstState::Syncing:
         break; // TODO
     case EDstState::Ready:
-        break; // TODO
+        if (!WorkerRegistar) {
+            WorkerRegistar = ctx.Register(CreateWorkerRegistar(replication, ctx));
+        }
+        break;
     case EDstState::Removing:
         if (!DstRemover) {
             DstRemover = ctx.Register(CreateDstRemover(replication, Id, ctx));
@@ -98,7 +101,7 @@ void TTargetBase::Progress(TReplication::TPtr replication, const TActorContext& 
 }
 
 void TTargetBase::Shutdown(const TActorContext& ctx) {
-    for (auto* x : TVector<TActorId*>{&DstCreator, &DstRemover}) {
+    for (auto* x : TVector<TActorId*>{&DstCreator, &DstRemover, &WorkerRegistar}) {
         if (auto actorId = std::exchange(*x, {})) {
             ctx.Send(actorId, new TEvents::TEvPoison());
         }

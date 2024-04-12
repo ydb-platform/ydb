@@ -15,9 +15,6 @@
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/tiering/manager.h>
 
-#include <ydb/core/formats/arrow/one_batch_input_stream.h>
-#include <ydb/core/formats/arrow/merging_sorted_input_stream.h>
-
 #include <ydb/library/conclusion/status.h>
 
 #include <library/cpp/time_provider/time_provider.h>
@@ -27,23 +24,27 @@
 
 namespace NKikimr::NOlap {
 
-TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits, const std::shared_ptr<IStoragesManager>& storagesManager)
-    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, limits, storagesManager))
+TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
+    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema)
+    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
     , LastGranule(0)
 {
     ActualizationController = std::make_shared<NActualizer::TController>();
+    RegisterSchemaVersion(snapshot, schema);
 }
 
-ui64 TColumnEngineForLogs::MemoryUsage() const {
-    auto numPortions = Counters.GetPortionsCount();
-
-    return Counters.Tables * (sizeof(TGranuleMeta) + sizeof(ui64)) +
-        numPortions * (sizeof(TPortionInfo) + sizeof(ui64)) +
-        Counters.ColumnRecords * sizeof(TColumnRecord) +
-        Counters.ColumnMetadataBytes;
+TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
+    const TSnapshot& snapshot, TIndexInfo&& schema)
+    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
+    , StoragesManager(storagesManager)
+    , TabletId(tabletId)
+    , LastPortion(0)
+    , LastGranule(0) {
+    ActualizationController = std::make_shared<NActualizer::TController>();
+    RegisterSchemaVersion(snapshot, std::move(schema));
 }
 
 const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& TColumnEngineForLogs::GetStats() const {
@@ -51,8 +52,7 @@ const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& TColumnEngineForLogs::Get
 }
 
 const TColumnEngineStats& TColumnEngineForLogs::GetTotalStats() {
-    Counters.Tables = Tables.size();
-
+    Counters.Tables = GranulesStorage->GetTables().size();
     return Counters;
 }
 
@@ -70,17 +70,16 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
     UpdatePortionStats(*PathStats[pathId], portionInfo, updateType, exPortionInfo);
 }
 
-TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo, ui64& metadataBytes) {
+TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo) {
     TColumnEngineStats::TPortionsStats deltaStats;
     deltaStats.Bytes = 0;
     for (auto& rec : portionInfo.Records) {
-        metadataBytes += rec.GetMeta().GetMetadataSize();
-        deltaStats.Bytes += rec.GetBlobRange().GetSize();
         deltaStats.BytesByColumn[rec.ColumnId] += rec.BlobRange.Size;
-        deltaStats.RawBytesByColumn[rec.ColumnId] += rec.GetMeta().GetRawBytes().value_or(0);
+        deltaStats.RawBytesByColumn[rec.ColumnId] += rec.GetMeta().GetRawBytes();
     }
     deltaStats.Rows = portionInfo.NumRows();
-    deltaStats.RawBytes = portionInfo.RawBytesSum();
+    deltaStats.Bytes = portionInfo.GetTotalBlobBytes();
+    deltaStats.RawBytes = portionInfo.GetTotalRawBytes();
     deltaStats.Blobs = portionInfo.GetBlobIdsCount();
     deltaStats.Portions = 1;
     return deltaStats;
@@ -90,8 +89,7 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
                                               EStatsUpdateType updateType,
                                               const TPortionInfo* exPortionInfo) const {
     ui64 columnRecords = portionInfo.Records.size();
-    ui64 metadataBytes = 0;
-    TColumnEngineStats::TPortionsStats deltaStats = DeltaStats(portionInfo, metadataBytes);
+    TColumnEngineStats::TPortionsStats deltaStats = DeltaStats(portionInfo);
 
     Y_ABORT_UNLESS(!exPortionInfo || exPortionInfo->GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
     Y_ABORT_UNLESS(portionInfo.GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
@@ -110,23 +108,19 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
 
     if (isErase) { // PortionsToDrop
         engineStats.ColumnRecords -= columnRecords;
-        engineStats.ColumnMetadataBytes -= metadataBytes;
 
         stats -= deltaStats;
     } else if (isAdd) { // Load || AppendedPortions
         engineStats.ColumnRecords += columnRecords;
-        engineStats.ColumnMetadataBytes += metadataBytes;
 
         stats += deltaStats;
     } else if (&srcStats != &stats || exPortionInfo) { // SwitchedPortions || PortionsToEvict
         stats += deltaStats;
 
         if (exPortionInfo) {
-            ui64 rmMetadataBytes = 0;
-            srcStats -= DeltaStats(*exPortionInfo, rmMetadataBytes);
+            srcStats -= DeltaStats(*exPortionInfo);
 
             engineStats.ColumnRecords += columnRecords - exPortionInfo->Records.size();
-            engineStats.ColumnMetadataBytes += metadataBytes - rmMetadataBytes;
         } else {
             srcStats -= deltaStats;
         }
@@ -141,10 +135,24 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
     const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
     VersionedIndex.AddIndex(snapshot, std::move(indexInfo));
     if (isCriticalScheme) {
-        for (auto&& i : Tables) {
+        if (!ActualizationStarted) {
+            ActualizationStarted = true;
+            for (auto&& i : GranulesStorage->GetTables()) {
+                i.second->StartActualizationIndex();
+            }
+        }
+        for (auto&& i : GranulesStorage->GetTables()) {
             i.second->RefreshScheme();
         }
     }
+}
+
+void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) {
+    std::optional<NOlap::TIndexInfo> indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema, StoragesManager);
+    AFL_VERIFY(indexInfoOptional);
+    NOlap::TIndexInfo indexInfo = std::move(*indexInfoOptional);
+    indexInfo.SetAllKeys(StoragesManager);
+    RegisterSchemaVersion(snapshot, std::move(indexInfo));
 }
 
 bool TColumnEngineForLogs::Load(IDbWrapper& db) {
@@ -153,7 +161,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
     THashMap<ui64, ui64> granuleToPathIdDecoder;
     {
         TMemoryProfileGuard g("TTxInit/LoadColumns");
-        auto guard = GranulesStorage->StartPackModification();
+        auto guard = GranulesStorage->GetStats()->StartPackModification();
         if (!LoadColumns(db)) {
             return false;
         }
@@ -162,7 +170,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
         }
     }
 
-    for (const auto& [pathId, spg] : Tables) {
+    for (const auto& [pathId, spg] : GranulesStorage->GetTables()) {
         for (const auto& [_, portionInfo] : spg->GetPortions()) {
             UpdatePortionStats(*portionInfo, EStatsUpdateType::ADD);
             if (portionInfo->CheckForCleanup()) {
@@ -192,7 +200,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     }
 
     if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
-        auto portion = GetGranulePtrVerified(pathId)->GetPortionPtr(portionId);
+        auto portion = GetGranulePtrVerified(pathId)->GetPortionOptional(portionId);
         AFL_VERIFY(portion);
         const auto linkBlobId = portion->RegisterBlobId(loadContext.GetBlobRange().GetBlobId());
         portion->AddIndex(loadContext.BuildIndexChunk(linkBlobId));
@@ -200,7 +208,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         return false;
     };
 
-    for (auto&& i : Tables) {
+    for (auto&& i : GranulesStorage->GetTables()) {
         i.second->OnAfterPortionsLoad();
     }
     return true;
@@ -231,7 +239,7 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
     Y_ABORT_UNLESS(dataToIndex.size());
 
     TSaverContext saverContext(StoragesManager);
-    auto changes = std::make_shared<TInsertColumnEngineChanges>(std::move(dataToIndex), TSplitSettings(), saverContext);
+    auto changes = std::make_shared<TInsertColumnEngineChanges>(std::move(dataToIndex), saverContext);
     auto pkSchema = VersionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey();
 
     for (const auto& data : changes->GetDataToIndex()) {
@@ -246,15 +254,15 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
     return changes;
 }
 
-std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(const TCompactionLimits& limits, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
+std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
     AFL_VERIFY(dataLocksManager);
-    auto granule = GranulesStorage->GetGranuleForCompaction(Tables, dataLocksManager);
+    auto granule = GranulesStorage->GetGranuleForCompaction(dataLocksManager);
     if (!granule) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no granules for start compaction");
         return nullptr;
     }
     granule->OnStartCompaction();
-    auto changes = granule->GetOptimizationTask(limits, granule, dataLocksManager);
+    auto changes = granule->GetOptimizationTask(granule, dataLocksManager);
     NYDBTest::TControllers::GetColumnShardController()->OnStartCompaction(changes);
     if (!changes) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build optimization task for granule that need compaction")("weight", granule->GetCompactionPriority().DebugString());
@@ -302,12 +310,12 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     ui32 portionsFromDrop = 0;
     bool limitExceeded = false;
     for (ui64 pathId : pathsToDrop) {
-        auto itTable = Tables.find(pathId);
-        if (itTable == Tables.end()) {
+        auto g = GranulesStorage->GetGranuleOptional(pathId);
+        if (!g) {
             continue;
         }
 
-        for (auto& [portion, info] : itTable->second->GetPortions()) {
+        for (auto& [portion, info] : g->GetPortions()) {
             if (dataLocksManager->IsLocked(*info)) {
                 ++skipLocked;
                 continue;
@@ -376,7 +384,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
     for (auto&& i : pathEviction) {
         auto g = GetGranuleOptional(i.first);
         if (g) {
-            if (!TiersInitialized) {
+            if (!ActualizationStarted) {
                 g->StartActualizationIndex();
             }
             g->RefreshTiering(i.second);
@@ -384,9 +392,9 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
         }
     }
 
-    if (TiersInitialized) {
+    if (ActualizationStarted) {
         TLogContextGuard lGuard(TLogContextBuilder::Build()("queue", "ttl")("external_count", pathEviction.size()));
-        for (auto&& i : Tables) {
+        for (auto&& i : GranulesStorage->GetTables()) {
             if (pathEviction.contains(i.first)) {
                 continue;
             }
@@ -422,10 +430,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
 }
 
 void TColumnEngineForLogs::EraseTable(const ui64 pathId) {
-    auto it = Tables.find(pathId);
-    Y_ABORT_UNLESS(it != Tables.end());
-    Y_ABORT_UNLESS(it->second->IsErasable());
-    Tables.erase(it);
+    GranulesStorage->EraseTable(pathId);
 }
 
 void TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, const TPortionInfo* exInfo) {
@@ -443,7 +448,7 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
     const ui64 portion = portionInfo.GetPortion();
     auto spg = GetGranulePtrVerified(portionInfo.GetPathId());
     Y_ABORT_UNLESS(spg);
-    auto p = spg->GetPortionPtr(portion);
+    auto p = spg->GetPortionOptional(portion);
 
     if (!p) {
         LOG_S_WARN("Portion erased already " << portionInfo << " at tablet " << TabletId);
@@ -460,12 +465,11 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
 std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot snapshot,
     const TPKRangesFilter& pkRangesFilter) const {
     auto out = std::make_shared<TSelectInfo>();
-    auto itTable = Tables.find(pathId);
-    if (itTable == Tables.end()) {
+    auto spg = GranulesStorage->GetGranuleOptional(pathId);
+    if (!spg) {
         return out;
     }
 
-    auto spg = itTable->second;
     for (const auto& [indexKey, keyPortions] : spg->GroupOrderedPortionsByPK()) {
         for (auto&& [_, portionInfo] : keyPortions) {
             if (!portionInfo->IsVisible(snapshot)) {
@@ -486,13 +490,13 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
 }
 
 void TColumnEngineForLogs::OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) {
-    if (!TiersInitialized) {
-        for (auto&& i : Tables) {
+    if (!ActualizationStarted) {
+        for (auto&& i : GranulesStorage->GetTables()) {
             i.second->StartActualizationIndex();
         }
     }
 
-    TiersInitialized = true;
+    ActualizationStarted = true;
     AFL_VERIFY(manager);
     THashMap<ui64, TTiering> tierings = manager->GetTiering();
     ttl.AddTtls(tierings);
@@ -504,32 +508,30 @@ void TColumnEngineForLogs::OnTieringModified(const std::shared_ptr<NColumnShard:
 
 
     if (pathId) {
-        auto itGranule = Tables.find(*pathId);
-        AFL_VERIFY(itGranule != Tables.end());
+        auto g = GetGranulePtrVerified(*pathId);
         auto it = tierings.find(*pathId);
         if (it == tierings.end()) {
-            itGranule->second->RefreshTiering({});
+            g->RefreshTiering({});
         } else {
-            itGranule->second->RefreshTiering(it->second);
+            g->RefreshTiering(it->second);
         }
     } else {
-        for (auto&& g : Tables) {
-            auto it = tierings.find(g.first);
+        for (auto&& [gPathId, g] : GranulesStorage->GetTables()) {
+            auto it = tierings.find(gPathId);
             if (it == tierings.end()) {
-                g.second->RefreshTiering({});
+                g->RefreshTiering({});
             } else {
-                g.second->RefreshTiering(it->second);
+                g->RefreshTiering(it->second);
             }
         }
     }
 }
 
 void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
-    AFL_VERIFY(Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, GranulesStorage, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex)).second);
-    if (TiersInitialized) {
-        auto it = Tables.find(pathId);
-        AFL_VERIFY(it != Tables.end());
-        it->second->StartActualizationIndex();
+    std::shared_ptr<TGranuleMeta> g = GranulesStorage->RegisterTable(pathId, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex);
+    if (ActualizationStarted) {
+        g->StartActualizationIndex();
+        g->RefreshScheme();
     }
 }
 

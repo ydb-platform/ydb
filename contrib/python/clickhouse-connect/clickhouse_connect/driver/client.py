@@ -19,7 +19,7 @@ from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.models import ColumnDef, SettingDef, SettingStatus
-from clickhouse_connect.driver.query import QueryResult, to_arrow, QueryContext, arrow_buffer
+from clickhouse_connect.driver.query import QueryResult, to_arrow, QueryContext, arrow_buffer, quote_identifier
 
 io.DEFAULT_BUFFER_SIZE = 1024 * 256
 logger = logging.getLogger(__name__)
@@ -157,7 +157,7 @@ class Client(ABC):
 
     # pylint: disable=too-many-arguments,unused-argument,too-many-locals
     def query(self,
-              query: str = None,
+              query: Optional[str] = None,
               parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
               settings: Optional[Dict[str, Any]] = None,
               query_formats: Optional[Dict[str, str]] = None,
@@ -193,7 +193,7 @@ class Client(ABC):
         return self._query_with_context(query_context)
 
     def query_column_block_stream(self,
-                                  query: str = None,
+                                  query: Optional[str] = None,
                                   parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                                   settings: Optional[Dict[str, Any]] = None,
                                   query_formats: Optional[Dict[str, str]] = None,
@@ -212,7 +212,7 @@ class Client(ABC):
         return self._context_query(locals(), use_numpy=False, streaming=True).column_block_stream
 
     def query_row_block_stream(self,
-                               query: str = None,
+                               query: Optional[str] = None,
                                parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                                settings: Optional[Dict[str, Any]] = None,
                                query_formats: Optional[Dict[str, str]] = None,
@@ -231,7 +231,7 @@ class Client(ABC):
         return self._context_query(locals(), use_numpy=False, streaming=True).row_block_stream
 
     def query_rows_stream(self,
-                          query: str = None,
+                          query: Optional[str] = None,
                           parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                           settings: Optional[Dict[str, Any]] = None,
                           query_formats: Optional[Dict[str, str]] = None,
@@ -270,7 +270,7 @@ class Client(ABC):
 
     # pylint: disable=duplicate-code,too-many-arguments,unused-argument
     def query_np(self,
-                 query: str = None,
+                 query: Optional[str] = None,
                  parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                  settings: Optional[Dict[str, Any]] = None,
                  query_formats: Optional[Dict[str, str]] = None,
@@ -289,7 +289,7 @@ class Client(ABC):
 
     # pylint: disable=duplicate-code,too-many-arguments,unused-argument
     def query_np_stream(self,
-                        query: str = None,
+                        query: Optional[str] = None,
                         parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                         settings: Optional[Dict[str, Any]] = None,
                         query_formats: Optional[Dict[str, str]] = None,
@@ -308,7 +308,7 @@ class Client(ABC):
 
     # pylint: disable=duplicate-code,too-many-arguments,unused-argument
     def query_df(self,
-                 query: str = None,
+                 query: Optional[str] = None,
                  parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                  settings: Optional[Dict[str, Any]] = None,
                  query_formats: Optional[Dict[str, str]] = None,
@@ -331,7 +331,7 @@ class Client(ABC):
 
     # pylint: disable=duplicate-code,too-many-arguments,unused-argument
     def query_df_stream(self,
-                        query: str = None,
+                        query: Optional[str] = None,
                         parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                         settings: Optional[Dict[str, Any]] = None,
                         query_formats: Optional[Dict[str, str]] = None,
@@ -355,7 +355,7 @@ class Client(ABC):
                                    streaming=True).df_stream
 
     def create_query_context(self,
-                             query: str = None,
+                             query: Optional[str] = None,
                              parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                              settings: Optional[Dict[str, Any]] = None,
                              query_formats: Optional[Dict[str, str]] = None,
@@ -629,7 +629,12 @@ class Client(ABC):
         :param data: Initial dataset for insert
         :return Reusable insert context
         """
-        full_table = table if '.' in table or not database else f'{database}.{table}'
+        full_table = table
+        if '.' not in table:
+            if database:
+                full_table = f'{quote_identifier(database)}.{quote_identifier(table)}'
+            else:
+                full_table = quote_identifier(table)
         column_defs = []
         if column_types is None and column_type_names is None:
             describe_result = self.query(f'DESCRIBE TABLE {full_table}')

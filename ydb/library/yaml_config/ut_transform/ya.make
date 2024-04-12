@@ -16,9 +16,11 @@ DEPENDS(
 
 DATA(
     arcadia/ydb/library/yaml_config/ut_transform/configs
+    arcadia/ydb/library/yaml_config/ut_transform/simplified_configs
 )
 
 PEERDIR(
+    contrib/python/pytest
     ydb/public/sdk/python/enable_v3_new_behavior
     ydb/tests/library
     ydb/tests/oss/canonical

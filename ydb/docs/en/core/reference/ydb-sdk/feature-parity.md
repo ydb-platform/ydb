@@ -22,7 +22,7 @@
 | Load balancing across all nodes of all local DCs | \+ | \+ | \+ | ? | \- | \- | \- |
 | **Credentials providers** |
 | Anonymous (default) | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
-| Static (user - password) | \+ | \+ | \+ | \+ | \- | \- | \- | \- |
+| Static (user - password) | \+ | \+ | \+ | \+ | \- | \- | \+ | \- |
 | Token: IAM, OAuth | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
 | Service account (Yandex.Cloud specific) | \+ | \+ | \+ | \+ | \+ | \+ | \- | \+ |
 | Metadata (Yandex.Cloud specific) | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
@@ -124,12 +124,12 @@
 | in OpenTracing | \- | ? | \+ | \- | \- | \- | \- | \- |
 | **Examples** |
 | Auth |
-| \* token | ? | ? | \+ | \+ | \+ | \+ |  | \+ |
+| \* token | ? | ? | \+ | \+ | \+ | \+ | \+ | \+ |
 | \* anonymous | ? | ? | \+ | \+ | \+ | \+ |  | \+ |
 | \* environ | ? | ? | \+ | \+ | \+ | \- |  | \+ |
 | \* metadata | ? | ? | \+ | \+ | \+ | \+ |  | \+ |
 | \* service_account | ? | ? | \+ | \+ | \+ | \- |  | \+ |
-| \* static (username \+ password) | ? | ? | \+ | \+ | \+ | \+ |  | \- |
+| \* static (username \+ password) | ? | ? | \+ | \+ | \+ | \+ | \+ | \- |
 | Basic (series) | \+ | ? | \+ | \+ | \+ | \+ | \+ | \+ |
 | Bulk Upsert | \+/- | ? | \+ | \+ | \+ | \- |  | \- |
 | Containers (Struct,Variant,List,Tuple) | \- | ? | \+ | \- | \- | \- |  | \- |

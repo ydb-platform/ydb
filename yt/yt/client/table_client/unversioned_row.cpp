@@ -1233,8 +1233,7 @@ bool ValidateNonKeyColumnsAgainstLock(
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
     const TNameTablePtr& nameTable,
-    const std::vector<int>& columnIndexToLockIndex,
-    bool allowSharedWriteLocks)
+    const std::vector<int>& columnIndexToLockIndex)
 {
     bool hasNonKeyColumns = false;
     for (const auto& value : row) {
@@ -1257,10 +1256,6 @@ bool ValidateNonKeyColumnsAgainstLock(
         }
 
         auto lockType = locks.Get(lockIndex);
-
-        if (lockType == ELockType::SharedWrite && !allowSharedWriteLocks) {
-            THROW_ERROR_EXCEPTION("Shared write locks are not allowed for the table");
-        }
 
         if (mappedId >= schema.GetKeyColumnCount()) {
             hasNonKeyColumns = true;

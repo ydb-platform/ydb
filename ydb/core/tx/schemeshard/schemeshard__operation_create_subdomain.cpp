@@ -295,6 +295,12 @@ public:
         }
 
         if (settings.HasDatabaseQuotas()) {
+            if (!requestedStoragePools.empty()
+                    && !CheckStorageQuotasKinds(settings.GetDatabaseQuotas(), requestedStoragePools, dstPath.PathString(), errStr)
+            ) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                return result;
+            }
             alter->SetDatabaseQuotas(settings.GetDatabaseQuotas());
         }
 

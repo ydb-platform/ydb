@@ -42,7 +42,8 @@ enum EDataTypeFeatures : ui32 {
     DateType = 1u << 26,
     TzDateType = 1u << 27,
     DecimalType = 1u << 28,
-    TimeIntervalType = 1u << 29
+    TimeIntervalType = 1u << 29,
+    BigDateType = 1u << 30,
 };
 
 template <typename T>
@@ -194,10 +195,10 @@ constexpr i32 MAX_YEAR32 = 148108; // non-inclusive
     XX(Decimal, NYql::NProto::Decimal, TDecimal, CommonType | DecimalType, TDecimal, 2) \
     XX(DyNumber, NYql::NProto::DyNumber, TDyNumber, CommonType, TDyNumber, 0) \
     XX(JsonDocument, NYql::NProto::JsonDocument, TJsonDocument, PayloadType, TJsonDocument, 0) \
-    XX(Date32, NYql::NProto::Date32, TDate32, CommonType | DateType, i32, 0) \
-    XX(Datetime64, NYql::NProto::Datetime64, TDatetime64, CommonType | DateType, i64, 0) \
-    XX(Timestamp64, NYql::NProto::Timestamp64, TTimestamp64, CommonType | DateType, i64, 0) \
-    XX(Interval64, NYql::NProto::Interval64, TInterval64, CommonType | TimeIntervalType, i64, 0) \
+    XX(Date32, NYql::NProto::Date32, TDate32, CommonType | DateType | BigDateType, i32, 0) \
+    XX(Datetime64, NYql::NProto::Datetime64, TDatetime64, CommonType | DateType | BigDateType, i64, 0) \
+    XX(Timestamp64, NYql::NProto::Timestamp64, TTimestamp64, CommonType | DateType | BigDateType, i64, 0) \
+    XX(Interval64, NYql::NProto::Interval64, TInterval64, CommonType | TimeIntervalType | BigDateType, i64, 0) \
 
 #define UDF_TYPE_ID(xName, xTypeId, xType, xFeatures, xLayoutType, xParamsCount)                 \
     template <>                                                                                  \

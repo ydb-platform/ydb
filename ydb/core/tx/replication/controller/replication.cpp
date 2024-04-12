@@ -235,6 +235,10 @@ ui64 TReplication::GetSchemeShardId() const {
     return GetPathId().OwnerId;
 }
 
+const NKikimrReplication::TReplicationConfig& TReplication::GetConfig() const {
+    return Impl->Config;
+}
+
 void TReplication::SetState(EState state, TString issue) {
     Impl->SetState(state, issue);
 }

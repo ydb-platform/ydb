@@ -479,7 +479,7 @@ void THttpInput::SetPort(int port)
 TSharedRef THttpInput::DoRead()
 {
     if (Parser_.GetState() == EParserState::MessageFinished) {
-        return TSharedRef::MakeEmpty();
+        return TSharedRef{};
     }
 
     Connection_->SetReadDeadline(TInstant::Now() + Config_->BodyReadIdleTimeout);
@@ -504,7 +504,7 @@ TSharedRef THttpInput::DoRead()
             FinishMessage();
 
             Connection_->SetReadDeadline(std::nullopt);
-            return TSharedRef::MakeEmpty();
+            return TSharedRef{};
         }
 
         // EOF must be handled by HTTP parser.

@@ -20,8 +20,10 @@ public:
             if (item.IsFinish()) {
                 return list.Release();
             }
-            MKQL_ENSURE(!item.IsYield(), "Unexpected flow status!");
-            list = ctx.HolderFactory.Append(list.Release(), item.Release());
+
+            if (!item.IsYield()) {
+                list = ctx.HolderFactory.Append(list.Release(), item.Release());
+            }
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN

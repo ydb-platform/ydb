@@ -478,10 +478,7 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 
 private:
-    TMap<TString, TString> Labels;
-    NKikimrConfig::TAppConfig InitialCmsConfig;
-    NKikimrConfig::TAppConfig InitialCmsYamlConfig;
-    THashMap<ui32, TConfigItemInfo> ConfigInitInfo;
+    NConfig::TConfigsDispatcherInitInfo ConfigsDispatcherInitInfo;
 };
 
 class TConfigsCacheInitializer : public IKikimrServicesInitializer {

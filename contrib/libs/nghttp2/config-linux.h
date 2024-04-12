@@ -73,6 +73,9 @@
 /* Define to 1 if you have `libbpf` library. */
 /* #undef HAVE_LIBBPF */
 
+/* Define to 1 if you have `libbrotlienc` and `libbrotlidec` libraries. */
+/* #undef HAVE_LIBBROTLI */
+
 /* Define to 1 if you have `libev` library. */
 #define HAVE_LIBEV 1
 
@@ -260,7 +263,7 @@
 #define PACKAGE_NAME "nghttp2"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "nghttp2 1.59.0"
+#define PACKAGE_STRING "nghttp2 1.60.0"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "nghttp2"
@@ -269,7 +272,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.59.0"
+#define PACKAGE_VERSION "1.60.0"
 
 /* Define to 1 if all of the C90 standard headers exist (not just the ones
    required in a freestanding environment). This macro is provided for
@@ -368,7 +371,7 @@
 
 
 /* Version number of package */
-#define VERSION "1.59.0"
+#define VERSION "1.60.0"
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */

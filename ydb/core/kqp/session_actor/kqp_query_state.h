@@ -176,6 +176,10 @@ public:
         return RequestEv->GetUsePublicResponseDataFormat();
     }
 
+    ui64 GetOutputChunkMaxSize() const {
+        return RequestEv->GetOutputChunkMaxSize();
+    }
+
     void UpdateTempTablesState(const TKqpTempTablesState& tempTablesState) {
         TempTablesState = std::make_shared<const TKqpTempTablesState>(tempTablesState);
     }
@@ -298,6 +302,11 @@ public:
             return true;
         }
 
+        if (HasSinkInTx(tx)) {
+            // At current time sinks require separate tnx with commit.
+            return false;
+        }
+
         if (TxCtx->HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
             YQL_ENSURE(TxCtx->EnableImmediateEffects);
 
@@ -355,7 +364,8 @@ public:
         auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
 
         if (TxCtx->CanDeferEffects()) {
-            while (tx && tx->GetHasEffects()) {
+            // At current time sinks require separate tnx with commit.
+            while (tx && tx->GetHasEffects() && !HasSinkInTx(tx)) {
                 QueryData->CreateKqpValueMap(tx);
                 bool success = TxCtx->AddDeferredEffect(tx, QueryData);
                 YQL_ENSURE(success);
@@ -367,8 +377,18 @@ public:
                 }
             }
         }
+        TxCtx->HasImmediateEffects |= tx && tx->GetHasEffects();
 
         return tx;
+    }
+
+    bool HasSinkInTx(const TKqpPhyTxHolder::TConstPtr& tx) const {
+        for (const auto& stage : tx->GetStages()) {
+            if (!stage.GetSinks().empty()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     bool HasTxControl() const {
@@ -430,13 +450,13 @@ public:
     bool SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev);
     bool SaveAndCheckSplitResult(TEvKqp::TEvSplitResponse* ev);
     // build the compilation request.
-    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie);
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr);
     // TODO(gvit): get rid of code duplication in these requests,
     // use only one of these requests.
-    std::unique_ptr<TEvKqp::TEvRecompileRequest> BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie);
+    std::unique_ptr<TEvKqp::TEvRecompileRequest> BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr);
 
-    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie);
-    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie);
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr);
+    std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr);
 
     bool PrepareNextStatementPart();
 

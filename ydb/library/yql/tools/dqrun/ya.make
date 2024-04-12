@@ -34,6 +34,7 @@ ENDIF()
         ydb/library/yql/core/services
         ydb/library/yql/core/services/mounts
         ydb/library/yql/dq/comp_nodes
+        ydb/library/yql/dq/actors/input_transforms
         ydb/library/yql/dq/integration/transform
         ydb/library/yql/dq/transform
         ydb/library/yql/minikql/comp_nodes/llvm14

@@ -14,6 +14,7 @@ void EnableKikimrBacktraceFormat();
 namespace NYql {
 
 namespace NBacktrace {
+const int Limit = 400;
 
 void RegisterKikimrFatalActions();
 void AddAfterFatalCallback(const std::function<void(int)>& after);

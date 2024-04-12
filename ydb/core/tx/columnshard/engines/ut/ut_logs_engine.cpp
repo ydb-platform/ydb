@@ -265,14 +265,6 @@ void AddIdsToBlobs(std::vector<TPortionInfoWithBlobs>& portions, NBlobOperations
     }
 }
 
-TCompactionLimits TestLimits() {
-    TCompactionLimits limits;
-    limits.GranuleBlobSplitSize = 1024;
-    limits.GranuleSizeForOverloadPrevent = 400 * 1024;
-    limits.GranuleOverloadSize = 800 * 1024;
-    return limits;
-}
-
 bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
             std::vector<TInsertedData>&& dataToIndex, NBlobOperations::NRead::TCompositeReadBlobs& blobs, ui32& step) {
 
@@ -305,8 +297,7 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
 
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
-    NColumnShard::TBackgroundActivity triggered;
-    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), triggered, engine);
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     changes->AbortEmergency();
     return result;
@@ -320,7 +311,7 @@ struct TExpected {
 
 bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, NBlobOperations::NRead::TCompositeReadBlobs&& blobs, ui32& step,
              const TExpected& /*expected*/, THashMap<TBlobRange, TString>* blobsPool = nullptr) {
-    std::shared_ptr<TCompactColumnEngineChanges> changes = dynamic_pointer_cast<TCompactColumnEngineChanges>(engine.StartCompaction(TestLimits(), EmptyDataLocksManager));
+    std::shared_ptr<TCompactColumnEngineChanges> changes = dynamic_pointer_cast<TCompactColumnEngineChanges>(engine.StartCompaction(EmptyDataLocksManager));
     UNIT_ASSERT(changes);
     //    UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
     changes->Blobs = std::move(blobs);
@@ -336,8 +327,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
     const bool result = engine.ApplyChanges(db, changes, snap);
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
-    NColumnShard::TBackgroundActivity triggered;
-    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), triggered, engine);
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     if (blobsPool) {
         for (auto&& i : changes->AppendedPortions) {
@@ -364,8 +354,7 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
     const bool result = engine.ApplyChanges(db, changes, snap);
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
-    NColumnShard::TBackgroundActivity triggered;
-    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), triggered, engine);
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     changes->AbortEmergency();
     return result;
@@ -383,8 +372,7 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
     const bool result = engine.ApplyChanges(db, changes, TSnapshot(1,1));
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
-    NColumnShard::TBackgroundActivity triggered;
-    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), triggered, engine);
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     changes->AbortEmergency();
     return result;
@@ -409,14 +397,7 @@ std::shared_ptr<TPredicate> MakeStrPredicate(const std::string& key, NArrow::EOp
 } // namespace
 
 std::shared_ptr<NKikimr::NOlap::IStoragesManager> InitializeStorageManager() {
-    static auto result = std::make_shared<NKikimr::NOlap::TTestStoragesManager>();
-    static TMutex mutex;
-    static bool initialized = false;
-    TGuard<TMutex> g(mutex);
-    if (!initialized) {
-        result->Initialize();
-    }
-    return result;
+    return NKikimr::NOlap::TTestStoragesManager::GetInstance();
 }
 
 std::shared_ptr<NKikimr::NOlap::IStoragesManager> CommonStoragesManager = InitializeStorageManager();
@@ -437,9 +418,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
         // load
-        TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
         TSnapshot indexSnaphot(1, 1);
-        engine.RegisterSchemaVersion(indexSnaphot, TIndexInfo(tableInfo));
+        TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnaphot, TIndexInfo(tableInfo));
         for (auto&& i : paths) {
             engine.RegisterTable(i);
         }
@@ -527,8 +507,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         ui32 step = 1000;
 
         TSnapshot indexSnapshot(1, 1);
-        TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
-        engine.RegisterSchemaVersion(indexSnapshot, TIndexInfo(tableInfo));
+        TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
         engine.RegisterTable(pathId);
         engine.Load(db);
 
@@ -627,9 +606,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // inserts
         ui64 planStep = 1;
 
-        TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
         TSnapshot indexSnapshot(1, 1);
-        engine.RegisterSchemaVersion(indexSnapshot, TIndexInfo(tableInfo));
+        TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
         engine.RegisterTable(pathId);
         engine.Load(db);
 
@@ -653,8 +631,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
 
         { // check it's overloaded after reload
-            TColumnEngineForLogs tmpEngine(0, TestLimits(), CommonStoragesManager);
-            tmpEngine.RegisterSchemaVersion(TSnapshot::Zero(), TIndexInfo(tableInfo));
+            TColumnEngineForLogs tmpEngine(0, CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo));
             tmpEngine.RegisterTable(pathId);
             tmpEngine.Load(db);
         }
@@ -684,8 +661,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
 
         { // check it's not overloaded after reload
-            TColumnEngineForLogs tmpEngine(0, TestLimits(), CommonStoragesManager);
-            tmpEngine.RegisterSchemaVersion(TSnapshot::Zero(), TIndexInfo(tableInfo));
+            TColumnEngineForLogs tmpEngine(0, CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo));
             tmpEngine.RegisterTable(pathId);
             tmpEngine.Load(db);
         }
@@ -702,8 +678,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         ui64 planStep = 1;
         TSnapshot indexSnapshot(1, 1);
         {
-            TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
-            engine.RegisterSchemaVersion(indexSnapshot, TIndexInfo(tableInfo));
+            TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
             engine.RegisterTable(pathId);
             engine.Load(db);
 
@@ -770,8 +745,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
         {
             // load
-            TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
-            engine.RegisterSchemaVersion(indexSnapshot, TIndexInfo(tableInfo));
+            TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
             engine.RegisterTable(pathId);
             engine.Load(db);
 

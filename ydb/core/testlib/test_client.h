@@ -311,6 +311,7 @@ namespace Tests {
         }
         void SetupDynamicLocalService(ui32 nodeIdx, const TString &tenantName);
         void DestroyDynamicLocalService(ui32 nodeIdx);
+        void WaitFinalization();
 
     protected:
         const TServerSettings::TConstPtr Settings;

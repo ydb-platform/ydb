@@ -17,6 +17,8 @@ items:
     items:
     - name: Обзор
       href: overview-grpc-api.md
+    - name: Заголовки gRPC
+      href: grpc-headers.md
     - name: Health Check API
       href: health-check-api.md
   - name: Рецепты кода

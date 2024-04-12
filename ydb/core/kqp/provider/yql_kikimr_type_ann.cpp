@@ -574,6 +574,9 @@ private:
         if (auto status = DoHandleReturningList<TKiUpdateTable>(node, ctx)) {
             return *status;
         }
+        if (auto status = DoHandleReturningList<TKiDeleteTable>(node, ctx)) {
+            return *status;
+        }
         return TStatus::Error;
     }
 
@@ -650,13 +653,6 @@ private:
             }
         }
 
-
-
-        if (!node.ReturningColumns().Empty()) {
-            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "It is not allowed to use returning"));
-            return IGraphTransformer::TStatus::Error;
-        }
 
         auto updateBody = node.Update().Body().Ptr();
         auto status = ConvertTableRowType(updateBody, *table, ctx);
@@ -887,6 +883,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
                         columnMeta.DefaultFromSequence = "_serial_column_" + columnMeta.Name;
                         columnMeta.SetDefaultFromSequence();
+                        columnMeta.NotNull = true;
                     } else if (constraint.Name().Value() == "not_null") {
                         columnMeta.NotNull = true;
                     }
@@ -1488,6 +1485,20 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         return true;
     }
 
+    static bool CheckCreateSequenceSettings(const TCoNameValueTupleList& settings, TExprContext& ctx) {
+        const static std::unordered_set<TString> sequenceSettingNames =
+            {"start", "increment", "cache", "minvalue", "maxvalue", "cycle"};
+        for (const auto& setting : settings) {
+            auto name = setting.Name().Value();
+            if (!sequenceSettingNames.contains(TString(name))) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                                    TStringBuilder() << "unsupported setting with name: " << name));
+                return false;
+            }
+        }
+        return true;
+    }
+
     virtual TStatus HandleCreateTopic(TKiCreateTopic node, TExprContext& ctx) override {
         if (!CheckTopicSettings(node.Settings(), ctx)) {
             return TStatus::Error;
@@ -1498,6 +1509,34 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 return TStatus::Error;
             }
         }
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleCreateSequence(TKiCreateSequence node, TExprContext& ctx) override {
+        if(!CheckCreateSequenceSettings(node.SequenceSettings(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!node.Settings().Empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "Unsupported sequence settings"));
+            return TStatus::Error;
+        }
+
+        TString valueType = TString(node.ValueType());
+        if (valueType != "int8") {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "Unsupported value type: " << valueType));
+            return TStatus::Error;
+        }
+
+        if (TString(node.Temporary()) == "true") {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "Temporary sequences is currently not supported"));
+            return TStatus::Error;
+        }
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

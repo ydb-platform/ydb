@@ -86,6 +86,9 @@ message TEvLoadTestRequest {
             optional THardRateDispatcherInfo ReadHardRateDispatcher = 16;
 
             optional TInitialBlobAllocation InitialAllocation = 17;
+
+            optional uint32 TracingThrottlerRate = 18 [default = 0];
+            optional uint32 TracingThrottlerBurst = 19 [default = 0];
         };
         optional uint64 Tag = 1;
         optional uint32 DurationSeconds = 2;

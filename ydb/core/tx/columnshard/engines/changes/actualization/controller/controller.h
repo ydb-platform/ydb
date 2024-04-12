@@ -11,7 +11,7 @@ private:
 
 public:
     void StartActualization(const NActualizer::TRWAddress& address) {
-        ++ActualizationsInProgress[address];
+        AFL_VERIFY(++ActualizationsInProgress[address] <= (i32)GetLimitForAddress(address));
     }
 
     void FinishActualization(const NActualizer::TRWAddress& address) {
@@ -23,7 +23,7 @@ public:
         if (it == ActualizationsInProgress.end()) {
             return readyTemporaryTasks < GetLimitForAddress(address);
         } else {
-            return readyTemporaryTasks < GetLimitForAddress(address) + it->second;
+            return it->second + readyTemporaryTasks < GetLimitForAddress(address);
         }
     }
 };

@@ -38,4 +38,16 @@ namespace NKikimr {
     };
 
     struct TEvStartBalancing : TEventLocal<TEvStartBalancing, TEvBlobStorage::EvStartBalancing> {};
+
+namespace NBalancing {
+
+    struct TPartInfo {
+        TLogoBlobID Key;
+        NMatrix::TVectorType PartsMask;
+        std::variant<TDiskPart, TRope> PartData;
+    };
+
+    constexpr ui32 SENDER_ID = 0;
+    constexpr ui32 DELETER_ID = 1;
+} // NBalancing
 } // NKikimr

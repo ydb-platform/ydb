@@ -119,7 +119,7 @@ val prepareProto = tasks.register<Copy>("prepareProto") {
 {%- endfor %}
 {# Mining proto-deps sources directories #}
 {%- for library in target.consumer if library.prebuilt -%}
-{%-     if library.type == "library" %}      
+{%-     if library.type == "library" %}
 {%-         set proto_rep = library.classpath|replace('project(":','') %}
 {%-         set proto_rep = proto_rep|replace('")','') %}
 {%-         set proto_rep = proto_rep|replace(':','/') %}
@@ -135,4 +135,4 @@ afterEvaluate {
     tasks.getByName("extractProto").dependsOn(prepareProto)
 }
 
-{{ dump }}
+{%- include "[generator]/debug.jinja" ignore missing -%}

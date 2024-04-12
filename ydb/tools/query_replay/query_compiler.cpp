@@ -261,7 +261,10 @@ public:
             settings,
             !queryParameterTypes.empty()
                 ? std::make_shared<std::map<TString, Ydb::Type>>(std::move(queryParameterTypes))
-                : nullptr);
+                : nullptr,
+            GUCSettings ? *GUCSettings : TGUCSettings());
+
+        GUCSettings->ImportFromJson(ReplayDetails);
 
         Config->Init(KqpSettings.DefaultSettings.GetDefaultSettings(), ReplayDetails["query_cluster"].GetStringSafe(), KqpSettings.Settings, false);
         if (!Query->Database.empty()) {
@@ -289,7 +292,7 @@ public:
             TlsActivationContext->ExecutorThread.ActorSystem, SelfId().NodeId(), counters);
         auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr});
         KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
-            federatedQuerySetup, nullptr, Nothing(), FunctionRegistry, false);
+            federatedQuerySetup, nullptr, GUCSettings, Nothing(), FunctionRegistry, false);
 
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = false;
@@ -594,6 +597,7 @@ private:
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TString Uid;
     std::unique_ptr<TKqpQueryId> Query;
+    TGUCSettings::TPtr GUCSettings = std::make_shared<TGUCSettings>();
     TKqpSettings KqpSettings;
     TKikimrConfiguration::TPtr Config;
     TIntrusivePtr<IKqpGateway> Gateway;

@@ -117,6 +117,15 @@ struct TMessage {
     DEFINE_CHECKER_GETTER(SplitMessageGroup, 4)
 
     #undef DEFINE_CHECKER_GETTER
+
+    size_t GetWriteSize() const {
+        if (IsWrite()) {
+            auto& w = GetWrite();
+            return w.Msg.SourceId.size() + w.Msg.Data.size();
+        } else {
+            return 0;
+        }
+    }
 };
 
 

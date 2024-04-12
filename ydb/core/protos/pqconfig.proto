@@ -1,6 +1,8 @@
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/public/api/protos/draft/persqueue_common.proto";
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
+
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/node_limits.proto";
@@ -15,10 +17,21 @@ package NKikimrPQ;
 option java_package = "ru.yandex.kikimr.proto";
 
 
+message TPartitionCounterData {
+    optional uint64 MessagesWrittenTotal = 1;
+    optional uint64 MessagesWrittenGrpc = 2;
+    optional uint64 BytesWrittenTotal = 3;
+    optional uint64 BytesWrittenGrpc = 4;
+    optional uint64 BytesWrittenUncompressed = 5;
+    repeated uint64 MessagesSizes = 6;
+    //ToDo: !! InputLag = 7
+}
+
 message TPartitionMeta {
     optional uint64 StartOffset = 1;
     optional uint64 EndOffset = 2;
     optional bool SubDomainOutOfSpace = 3 [default = false];
+    optional TPartitionCounterData CounterData = 4;
 }
 
 message TPartitionTxMeta {
@@ -208,11 +221,11 @@ message TMirrorPartitionConfig {
     message TCredentials {
         message IamCredentials {
             optional string Endpoint = 1;
-            optional string ServiceAccountKey = 2;
+            optional string ServiceAccountKey = 2 [(Ydb.sensitive) = true];
         }
         oneof Credentials {
-            string OauthToken = 1;
-            string JwtParams = 2;
+            string OauthToken = 1 [(Ydb.sensitive) = true];
+            string JwtParams = 2 [(Ydb.sensitive) = true];
             IamCredentials Iam = 3;
         }
     }
@@ -607,6 +620,7 @@ message TReleasePartition {
     optional NActorsProto.TActorId PipeClient = 6;
     optional uint32 Group = 7;
     optional string Path = 8;
+    repeated uint32 Partition = 9;
 }
 
 message TPartitionReleased {
@@ -811,6 +825,7 @@ message THasDataInfoResponse { //signal
     optional uint64 Cookie = 2;
     optional uint64 SizeLag = 3;
     optional uint64 WriteTimestampEstimateMS = 4;
+    optional bool ReadingFinished = 5;
 }
 
 message TBatchHeader {
@@ -972,8 +987,22 @@ message TEvCheckPartitionStatusResponse {
     optional uint64 SeqNo = 2;
 };
 
-// The consumer's reading of the partition is finished
+// The consumer's reading of the partition is finished  (from the partition)
 message TEvReadingPartitionStatusRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+};
+
+// The consumer's reading of the partition is finished (from ReadSession)
+message TEvReadingPartitionFinishedRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+    optional bool ScaleAwareSDK = 3;
+    optional bool StartedReadingFromEndOffset = 4;
+};
+
+// The consumer's reading of the partition is started (from ReadSession)
+message TEvReadingPartitionStartedRequest {
     optional string Consumer = 1;
     optional uint32 PartitionId = 2;
 };

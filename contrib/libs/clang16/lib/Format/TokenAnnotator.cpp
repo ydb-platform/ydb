@@ -3847,14 +3847,14 @@ bool TokenAnnotator::spaceRequiredBefore(const AnnotatedLine &Line,
   if (Right.is(tok::colon)) {
     auto n = Right.Next;
 
-    if (n && n->isOneOf(tok::kw_public, tok::kw_private, tok::kw_protected)) {
-      return false;
+    if (n && n->isOneOf(tok::kw_public, tok::kw_private, tok::kw_protected, tok::kw_virtual)) {
+      return Style.SpaceBeforeInheritanceColon;
     }
 
     auto p = Left.Previous;
 
     if (p && p->isOneOf(tok::kw_class, tok::kw_struct, tok::kw_enum)) {
-      return false;
+      return Style.SpaceBeforeInheritanceColon;
     }
   }
 

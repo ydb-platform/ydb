@@ -1469,7 +1469,7 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
     THashSet<NScheme::TTypeId> intTypes = {
         NTypeIds::Int8, NTypeIds::Int16, NTypeIds::Int32, NTypeIds::Int64,
         NTypeIds::Uint8, NTypeIds::Uint16, NTypeIds::Uint32, NTypeIds::Uint64,
-        NTypeIds::Timestamp
+        NTypeIds::Timestamp, NTypeIds::Timestamp64, NTypeIds::Interval64
     };
     THashSet<NScheme::TTypeId> strTypes = {
         NTypeIds::Utf8, NTypeIds::String
@@ -1724,7 +1724,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
             TString blobData = NArrow::SerializeBatchNoCompression(batch);
             UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
-            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
             evWrite->SetLockId(lockId, 1);
 
             ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
@@ -1751,7 +1751,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
             TString blobData = NArrow::SerializeBatchNoCompression(batch);
             UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
-            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
             evWrite->SetLockId(lockId, 1);
 
             ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
@@ -1774,9 +1774,10 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         }
         {
             auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-            evWrite->SetLockId(lockId, 1);
             evWrite->SetTxId(txId);
             evWrite->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            auto* lock = evWrite->Record.MutableLocks()->AddLocks();
+            lock->SetLockId(lockId);
 
             TActorId sender = runtime.AllocateEdgeActor();
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
@@ -2288,13 +2289,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 ui32 resultLimit = 1024 * 1024;
                 runtime.Send(new IEventHandle(scanActorId, sender, new NKqp::TEvKqpCompute::TEvScanDataAck(resultLimit, 0, 1)));
                 auto scan = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanData>(handle);
-                auto batchStats = scan->ArrowBatch;
                 if (scan->Finished) {
                     AFL_VERIFY(!scan->ArrowBatch || !scan->ArrowBatch->num_rows());
                     break;
                 }
-                UNIT_ASSERT(batchStats);
-//                Cerr << batchStats->ToString() << Endl;
+                UNIT_ASSERT(scan->ArrowBatch);
+                auto batchStats = NArrow::ToBatch(scan->ArrowBatch, true);
+                //                Cerr << batchStats->ToString() << Endl;
 
                 for (ui32 i = 0; i < batchStats->num_rows(); ++i) {
                     auto paths = batchStats->GetColumnByName("PathId");

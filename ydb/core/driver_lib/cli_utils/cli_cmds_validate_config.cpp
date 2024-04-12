@@ -48,11 +48,8 @@ NKikimrConfig::TAppConfig TransformConfig(const std::vector<TString>& args) {
     TKikimrScopeId scopeId;
     TString tenantName;
     TBasicKikimrServicesMask servicesMask;
-    TMap<TString, TString> labels;
     TString clusterName;
-    NKikimrConfig::TAppConfig initialCmsConfig;
-    NKikimrConfig::TAppConfig initialCmsYamlConfig;
-    THashMap<ui32, TConfigItemInfo> configInitInfo;
+    NConfig::TConfigsDispatcherInitInfo configsDispatcherInitInfo;
 
     initCfg->Apply(
         appConfig,
@@ -60,11 +57,8 @@ NKikimrConfig::TAppConfig TransformConfig(const std::vector<TString>& args) {
         scopeId,
         tenantName,
         servicesMask,
-        labels,
         clusterName,
-        initialCmsConfig,
-        initialCmsYamlConfig,
-        configInitInfo);
+        configsDispatcherInitInfo);
 
     return appConfig;
 }

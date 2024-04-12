@@ -78,9 +78,9 @@ private:
             Owner_->OnRequestCompleted();
         }
 
-        void HandleError(const TError& error) override
+        void HandleError(TError error) override
         {
-            UnderlyingHandler_->HandleError(error);
+            UnderlyingHandler_->HandleError(std::move(error));
             Owner_->OnRequestCompleted();
         }
 

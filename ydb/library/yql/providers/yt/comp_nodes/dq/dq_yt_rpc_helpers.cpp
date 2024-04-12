@@ -15,7 +15,6 @@ NYT::NYPath::TRichYPath ConvertYPathFromOld(const NYT::TRichYPath& richYPath) {
 std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString& token, const TString& clusterName, const ui64 timeout, bool unordered, const TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>& tables, NYT::TNode samplingSpec) {
     auto connectionConfig = NYT::New<NYT::NApi::NRpcProxy::TConnectionConfig>();
     connectionConfig->ClusterUrl = clusterName;
-    connectionConfig->DefaultTotalStreamingTimeout = TDuration::MilliSeconds(timeout);
     connectionConfig->EnableRetries = true;
     connectionConfig->DefaultPingPeriod = TDuration::MilliSeconds(5000);
 
@@ -91,6 +90,7 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
         Cerr << "YT RPC Reader exception:\n";
     }
     result.ValueOrThrow().swap(rawInputs);
+
     return std::make_unique<TSettingsHolder>(std::move(connection), std::move(client), std::move(rawInputs), std::move(originalIndexes));
 }
 

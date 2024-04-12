@@ -20,7 +20,7 @@ protected:
         return Data;
     }
     virtual ui32 DoGetRecordsCountImpl() const override {
-        return Record.GetMeta().GetNumRowsVerified();
+        return Record.GetMeta().GetNumRows();
     }
     virtual TString DoDebugString() const override {
         return "";
@@ -35,7 +35,9 @@ protected:
         return Last;
     }
     virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(TString&& data, const TSimpleColumnInfo& columnInfo) const override {
-        return std::make_shared<TChunkPreparation>(std::move(data), Record, columnInfo);
+        TColumnRecord cRecord = Record;
+        cRecord.ResetBlobRange();
+        return std::make_shared<TChunkPreparation>(std::move(data), cRecord, columnInfo);
     }
 
 public:
@@ -48,7 +50,7 @@ public:
         , Data(data)
         , Record(columnChunk)
         , ColumnInfo(columnInfo) {
-        Y_ABORT_UNLESS(Data.size() == Record.BlobRange.Size || columnChunk.BlobRange.Size == 0);
+        AFL_VERIFY(Data.size() == Record.BlobRange.Size || Record.BlobRange.Size == 0)("data", Data.size())("record", Record.BlobRange.Size);
     }
 
     TChunkPreparation(const TString& data, const std::shared_ptr<arrow::Array>& column, const TChunkAddress& address, const TSimpleColumnInfo& columnInfo)

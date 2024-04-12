@@ -4,6 +4,7 @@
 #include "node_warden.h"
 #include "node_warden_events.h"
 
+#include <ydb/core/base/statestorage.h>
 #include <ydb/core/blobstorage/dsproxy/group_sessions.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
@@ -142,6 +143,12 @@ namespace NKikimr::NStorage {
             AvailDomainId = 1;
             for (const auto& domain : Cfg->BlobStorageConfig.GetServiceSet().GetAvailabilityDomains()) {
                 AvailDomainId = domain;
+            }
+            if (Cfg->DomainsConfig) {
+                for (const auto& ssconf : Cfg->DomainsConfig->GetStateStorage()) {
+                    BuildStateStorageInfos(ssconf, StateStorageInfo, BoardInfo, SchemeBoardInfo);
+                    StateStorageProxyConfigured = true;
+                }
             }
         }
 
@@ -482,18 +489,27 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         TActorId DistributedConfigKeeperId;
+        bool StateStorageProxyConfigured = false;
+        TIntrusivePtr<TStateStorageInfo> StateStorageInfo;
+        TIntrusivePtr<TStateStorageInfo> BoardInfo;
+        TIntrusivePtr<TStateStorageInfo> SchemeBoardInfo;
+        THashSet<TActorId> ReplicaStartPending;
 
         void StartDistributedConfigKeeper();
         void ForwardToDistributedConfigKeeper(STATEFN_SIG);
 
         NKikimrBlobStorage::TStorageConfig StorageConfig;
         THashSet<TActorId> StorageConfigSubscribers;
+        ui64 NextGoneCookie = 1;
+        std::unordered_map<ui64, std::function<void()>> GoneCallbacks;
 
         void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev);
         void Handle(TEvNodeWardenStorageConfig::TPtr ev);
         void HandleUnsubscribe(STATEFN_SIG);
         void ApplyStorageConfig(const NKikimrBlobStorage::TNodeWardenServiceSet& current,
                 const NKikimrBlobStorage::TNodeWardenServiceSet *proposed);
+        void ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConfig *proposed);
+        void HandleGone(STATEFN_SIG);
         void ApplyStaticServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& ss);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -579,6 +595,8 @@ namespace NKikimr::NStorage {
                 fFunc(TEvBlobStorage::EvNodeConfigScatter, ForwardToDistributedConfigKeeper);
                 fFunc(TEvBlobStorage::EvNodeConfigGather, ForwardToDistributedConfigKeeper);
                 fFunc(TEvBlobStorage::EvNodeConfigInvokeOnRoot, ForwardToDistributedConfigKeeper);
+
+                fFunc(TEvents::TSystem::Gone, HandleGone);
 
                 default:
                     EnqueuePendingMessage(ev);

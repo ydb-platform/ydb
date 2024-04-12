@@ -62,20 +62,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         }
     }
     auto queryType = request.content().type();
-    ui64 executionLimitMills = 0;
-    if (event.Quotas) {
-        if (queryType == FederatedQuery::QueryContent::ANALYTICS) {
-            auto execTtlIt = event.Quotas->find(QUOTA_ANALYTICS_DURATION_LIMIT);
-            if (execTtlIt != event.Quotas->end()) {
-                executionLimitMills = execTtlIt->second.Limit.Value * 60 * 1000;
-            }
-        } else if (queryType == FederatedQuery::QueryContent::STREAMING) {
-            auto execTtlIt = event.Quotas->find(QUOTA_STREAMING_DURATION_LIMIT);
-            if (execTtlIt != event.Quotas->end()) {
-                executionLimitMills = execTtlIt->second.Limit.Value * 60 * 1000;
-            }
-        }
-    }
+    ui64 executionLimitMills = GetExecutionLimitMills(queryType, event.Quotas);
     const TString scope = event.Scope;
     TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_CREATE_QUERY, RTC_CREATE_QUERY);
     requestCounters.IncInFly();
@@ -401,7 +388,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
         TVector<TString> filters;
         if (request.filter().name()) {
             queryBuilder.AddString("filter_name", request.filter().name());
-            filters.push_back("`" NAME_COLUMN_NAME "` ILIKE '%' || $filter_name || '%'");
+            filters.push_back("Re2::Grep($filter_name, Re2::Options(false AS CaseSensitive, true as Literal))(`" NAME_COLUMN_NAME "`)");
         }
 
         if (request.filter().query_type() != FederatedQuery::QueryContent::QUERY_TYPE_UNSPECIFIED) {
@@ -780,6 +767,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         return;
     }
 
+    ui64 executionLimitMills = GetExecutionLimitMills(request.content().type(), event.Quotas);
+
     const TString idempotencyKey = request.idempotency_key();
 
     std::shared_ptr<std::pair<FederatedQuery::ModifyQueryResult, TAuditDetails<FederatedQuery::Query>>> response =
@@ -835,6 +824,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             commonCounters->ParseProtobufError->Inc();
             ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
         }
+        *internal.mutable_execution_ttl() = NProtoInterop::CastToProto(TDuration::MilliSeconds(executionLimitMills));
 
         const TString resultId = request.execute_mode() == FederatedQuery::SAVE ? parser.ColumnParser(RESULT_ID_COLUMN_NAME).GetOptionalString().GetOrElse("") : "";
 
@@ -1007,7 +997,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             "$to_delete = (\n"
                 "SELECT * FROM `" JOBS_TABLE_NAME "`\n"
                 "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id\n"
-                "ORDER BY `" JOB_ID_COLUMN_NAME "`\n"
+                "ORDER BY `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME  "`, `" JOB_ID_COLUMN_NAME "`\n"
                 "LIMIT $max_count_jobs, 1\n"
             ");\n"
         );
@@ -1837,6 +1827,24 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
             TDuration delta = TInstant::Now() - startTime;
             LWPROBE(DescribeJobRequest, scope, user, jobId, delta, byteSize, future.GetValue());
         });
+}
+
+ui64 TYdbControlPlaneStorageActor::GetExecutionLimitMills(
+    FederatedQuery::QueryContent_QueryType queryType,
+    const TMaybe<TQuotaMap>& quotas) {
+
+    if (!quotas) {
+        return 0;
+    }
+    auto key = queryType == FederatedQuery::QueryContent::ANALYTICS
+        ? QUOTA_ANALYTICS_DURATION_LIMIT
+        : QUOTA_STREAMING_DURATION_LIMIT;
+
+    auto execTtlIt = quotas->find(key);
+    if (execTtlIt == quotas->end()) {
+        return 0;
+    }
+    return execTtlIt->second.Limit.Value * 60 * 1000;
 }
 
 } // NFq

@@ -217,7 +217,7 @@ void TJoinOptimizerNodeInternal::Print(std::stringstream& stream, int ntabs) {
         stream << "\t";
     }
 
-    stream << "Join: (" << JoinType << "," << int(JoinAlgo) << ") ";
+    stream << "Join: (" << JoinType << "," << ToString(JoinAlgo) << ") ";
     for (auto c : JoinConditions){
         stream << c.first.RelName << "." << c.first.AttributeName
             << "=" << c.second.RelName << "."
@@ -1027,7 +1027,7 @@ TExprBase BuildTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
         .List()
             .List(0)
                 .Atom(0, "join_algo")
-                .Atom(1, std::to_string(reorderResult->JoinAlgo))
+                .Atom(1, ToString(reorderResult->JoinAlgo))
             .Seal()
         .Seal()
         .Build();

@@ -181,6 +181,39 @@ IGraphTransformer::TStatus BlockCompressWrapper(const TExprNode::TPtr& input, TE
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus BlockExistsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureBlockOrScalarType(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool isScalar;
+    const TTypeAnnotationNode* blockItemType = GetBlockItemType(*input->Head().GetTypeAnn(), isScalar);
+
+    // At this point BlockItem type should be either an Optional or a Pg one.
+    // All other cases should be handled in the previous transform phases.
+    if (blockItemType->GetKind() != ETypeAnnotationKind::Optional &&
+        blockItemType->GetKind() != ETypeAnnotationKind::Pg)
+    {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() <<
+            "Expecting Optional or Pg type as an argument, but got: " << *blockItemType));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* resultType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool);
+    if (isScalar) {
+        resultType = ctx.Expr.MakeType<TScalarExprType>(resultType);
+    } else {
+        resultType = ctx.Expr.MakeType<TBlockExprType>(resultType);
+    }
+    input->SetTypeAnn(resultType);
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus BlockExpandChunkedWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     if (!EnsureArgsCount(*input, 1U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
@@ -839,10 +872,6 @@ IGraphTransformer::TStatus WideToBlocksWrapper(const TExprNode::TPtr& input, TEx
     for (const auto& type : multiType->GetItems()) {
         if (type->IsBlockOrScalar()) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Input type should not be a block or scalar"));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (!EnsurePersistableType(input->Pos(), *type, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 

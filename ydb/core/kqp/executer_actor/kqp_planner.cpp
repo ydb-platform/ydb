@@ -57,34 +57,28 @@ bool TKqpPlanner::UseMockEmptyPlanner = false;
 constexpr ui32 MEMORY_ESTIMATION_OVERFLOW = 2;
 constexpr ui32 MAX_NON_PARALLEL_TASKS_EXECUTION_LIMIT = 4;
 
-TKqpPlanner::TKqpPlanner(TKqpTasksGraph& graph, ui64 txId, const TActorId& executer, const IKqpGateway::TKqpSnapshot& snapshot,
-    const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
-    const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool withSpilling,
-    const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
-    TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot,
-    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-    bool useDataQueryPool, bool localComputeTasks, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-    bool allowSinglePartitionOpt, const TIntrusivePtr<TUserRequestContext>& userRequestContext, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
-    : TxId(txId)
-    , ExecuterId(executer)
-    , Snapshot(snapshot)
-    , Database(database)
-    , UserToken(userToken)
-    , Deadline(deadline)
-    , StatsMode(statsMode)
-    , WithSpilling(withSpilling)
-    , RlPath(rlPath)
-    , ResourcesSnapshot(std::move(resourcesSnapshot))
-    , ExecuterSpan(executerSpan)
-    , ExecuterRetriesConfig(executerRetriesConfig)
-    , TasksGraph(graph)
-    , UseDataQueryPool(useDataQueryPool)
-    , LocalComputeTasks(localComputeTasks)
-    , MkqlMemoryLimit(mkqlMemoryLimit)
-    , AsyncIoFactory(asyncIoFactory)
-    , AllowSinglePartitionOpt(allowSinglePartitionOpt)
-    , UserRequestContext(userRequestContext)
-    , FederatedQuerySetup(federatedQuerySetup)
+TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
+    : TxId(args.TxId)
+    , ExecuterId(args.Executer)
+    , Snapshot(args.Snapshot)
+    , Database(args.Database)
+    , UserToken(args.UserToken)
+    , Deadline(args.Deadline)
+    , StatsMode(args.StatsMode)
+    , WithSpilling(args.WithSpilling)
+    , RlPath(args.RlPath)
+    , ResourcesSnapshot(std::move(args.ResourcesSnapshot))
+    , ExecuterSpan(args.ExecuterSpan)
+    , ExecuterRetriesConfig(args.ExecuterRetriesConfig)
+    , TasksGraph(args.TasksGraph)
+    , UseDataQueryPool(args.UseDataQueryPool)
+    , LocalComputeTasks(args.LocalComputeTasks)
+    , MkqlMemoryLimit(args.MkqlMemoryLimit)
+    , AsyncIoFactory(args.AsyncIoFactory)
+    , AllowSinglePartitionOpt(args.AllowSinglePartitionOpt)
+    , UserRequestContext(args.UserRequestContext)
+    , FederatedQuerySetup(args.FederatedQuerySetup)
+    , OutputChunkMaxSize(args.OutputChunkMaxSize)
 {
     if (!Database) {
         // a piece of magic for tests
@@ -203,6 +197,10 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     if (Snapshot.IsValid()) {
         request.MutableSnapshot()->SetTxId(Snapshot.TxId);
         request.MutableSnapshot()->SetStep(Snapshot.Step);
+    }
+
+    if (OutputChunkMaxSize) {
+        request.SetOutputChunkMaxSize(OutputChunkMaxSize);
     }
 
     return result;
@@ -339,6 +337,7 @@ void TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, bool shareMailbox, bool op
 
     NYql::NDq::TComputeMemoryLimits limits;
     limits.ChannelBufferSize = 32_MB;  // Depends on NYql::NDq::TDqOutputChannelSettings::ChunkSizeLimit (now 48 MB) with a ratio of 1.5
+    limits.OutputChunkMaxSize = OutputChunkMaxSize;
     limits.MkqlLightProgramMemoryLimit = MkqlMemoryLimit > 0 ? std::min(500_MB, MkqlMemoryLimit) : 500_MB;
     limits.MkqlHeavyProgramMemoryLimit = MkqlMemoryLimit > 0 ? std::min(2_GB, MkqlMemoryLimit) : 2_GB;
 
@@ -516,19 +515,8 @@ ui32 TKqpPlanner::CalcSendMessageFlagsForNode(ui32 nodeId) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<TKqpPlanner> CreateKqpPlanner(TKqpTasksGraph& tasksGraph, ui64 txId, const TActorId& executer,
-    const IKqpGateway::TKqpSnapshot& snapshot,
-    const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
-    const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool withSpilling,
-    const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
-    TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-    bool useDataQueryPool, bool localComputeTasks, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
-{
-    return std::make_unique<TKqpPlanner>(tasksGraph, txId, executer, snapshot,
-        database, userToken, deadline, statsMode, withSpilling, rlPath, executerSpan,
-        std::move(resourcesSnapshot), executerRetriesConfig, useDataQueryPool,
-        localComputeTasks, mkqlMemoryLimit, asyncIoFactory, doOptimization, userRequestContext, federatedQuerySetup);
+std::unique_ptr<TKqpPlanner> CreateKqpPlanner(TKqpPlanner::TArgs args) {
+    return std::make_unique<TKqpPlanner>(std::move(args));
 }
 
 } // namespace NKikimr::NKqp

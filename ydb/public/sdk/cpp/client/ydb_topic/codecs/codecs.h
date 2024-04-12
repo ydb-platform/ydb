@@ -8,10 +8,19 @@
 #include "util/stream/str.h"
 #include <util/stream/zlib.h>
 #include <util/stream/output.h>
+#include <util/system/spinlock.h>
 
-#define CODECS_ALREADY_DEFINED
+#include <unordered_map>
 
 namespace NYdb::NTopic {
+
+enum class ECodec : ui32 {
+    RAW = 1,
+    GZIP = 2,
+    LZOP = 3,
+    ZSTD = 4,
+    CUSTOM = 10000,
+};
 
 class ICodec {
 public:
@@ -77,5 +86,43 @@ class TUnsupportedCodec final : public ICodec {
         throw yexception() << "use of unsupported codec";
     }
 };
+
+class TCodecMap {
+public:
+    static TCodecMap& GetTheCodecMap() {
+        static TCodecMap instance;
+        return instance;
+    }
+
+    void Set(ui32 codecId, THolder<ICodec>&& codecImpl) {
+        with_lock(Lock) {
+            Codecs[codecId] = std::move(codecImpl);
+        }
+    }
+
+    const ICodec* GetOrThrow(ui32 codecId) const {
+        with_lock(Lock) {
+            if (!Codecs.contains(codecId)) {
+                throw yexception() << "codec with id " << ui32(codecId) << " not provided";
+            }
+            return Codecs.at(codecId).Get();
+        }
+    }
+
+
+    TCodecMap(const TCodecMap&) = delete;
+    TCodecMap(TCodecMap&&) = delete;
+    TCodecMap& operator=(const TCodecMap&) = delete;
+    TCodecMap& operator=(TCodecMap&&) = delete;
+
+private:
+    TCodecMap() = default;
+
+private:
+    std::unordered_map<ui32, THolder<ICodec>> Codecs;
+    TAdaptiveLock Lock;
+};
+
+#define CODEC_MAP_ALREADY_PROVIDED
 
 } // namespace NYdb::NTopic

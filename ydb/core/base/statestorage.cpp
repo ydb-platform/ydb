@@ -1,5 +1,6 @@
 #include "statestorage.h"
 #include "tabletid.h"
+#include <ydb/core/blobstorage/base/utility.h>
 #include <util/generic/xrange.h>
 #include <util/generic/mem_copy.h>
 #include <util/generic/algorithm.h>
@@ -131,6 +132,32 @@ ui32 TStateStorageInfo::ContentHash() const {
         RelaxedStore<ui64>(&Hash, static_cast<ui32>(hash));
     }
     return static_cast<ui32>(hash);
+}
+
+TString TStateStorageInfo::ToString() const {
+    TStringStream s;
+    s << '{';
+    s << "NToSelect# " << NToSelect;
+    s << " Rings# [";
+    for (size_t ring = 0; ring < Rings.size(); ++ring) {
+        if (ring) {
+            s << ' ';
+        }
+        s << ring << ":{";
+        const auto& r = Rings[ring];
+        s << FormatList(r.Replicas);
+        if (r.IsDisabled) {
+            s << " Disabled";
+        }
+        if (r.UseRingSpecificNodeSelection) {
+            s << " UseRingSpecificNodeSelection";
+        }
+        s << '}';
+    }
+    s << "] StateStorageVersion# " << StateStorageVersion;
+    s << " CompatibleVersions# " << FormatList(CompatibleVersions);
+    s << '}';
+    return s.Str();
 }
 
 void TStateStorageInfo::TSelection::MergeReply(EStatus status, EStatus *owner, ui64 targetCookie, bool resetOld) {

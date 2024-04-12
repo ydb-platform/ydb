@@ -39,6 +39,7 @@ __pycache__/
 
 .idea/
 .vscode/
+.clangd
 
 # KDevelop IDE
 *.kdev4

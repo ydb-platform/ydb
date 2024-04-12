@@ -491,7 +491,7 @@ static void SetupServices(TTestActorRuntime &runtime, const TTestEnvOpts &option
             runtime.GetNodeId(0)),
             TActorSetupCmd(
                 CreateConfigsDispatcher(
-                    NKikimr::NConsole::TConfigsDispatcherInitInfo {
+                    NKikimr::NConfig::TConfigsDispatcherInitInfo {
                         .InitialConfig = appConfig,
                     }),
                 TMailboxType::Simple,

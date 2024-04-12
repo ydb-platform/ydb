@@ -184,12 +184,10 @@ TYtConfiguration::TYtConfiguration()
         .Lower(Now())
         .ValueSetter([this] (const TString& cluster, TInstant value) {
             ExpirationDeadline[cluster] = value;
-            ExpirationInterval.Clear();
         });
     REGISTER_SETTING(*this, ExpirationInterval)
         .ValueSetter([this] (const TString& cluster, TDuration value) {
             ExpirationInterval[cluster] = value;
-            ExpirationDeadline.Clear();
         });
     REGISTER_SETTING(*this, ScriptCpu).Lower(1.0).GlobalOnly();
     REGISTER_SETTING(*this, PythonCpu).Lower(1.0).GlobalOnly();
@@ -281,6 +279,11 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, LayerPaths).NonEmpty()
         .ValueSetter([this](const TString& cluster, const TVector<TString>& value) {
             LayerPaths[cluster] = value;
+            HybridDqExecution = false;
+        });
+    REGISTER_SETTING(*this, DockerImage).NonEmpty()
+        .ValueSetter([this](const TString& cluster, const TString& value) {
+            DockerImage[cluster] = value;
             HybridDqExecution = false;
         });
     REGISTER_SETTING(*this, _EnableDq);
@@ -380,6 +383,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, MaxSpeculativeJobCountPerTask);
     REGISTER_SETTING(*this, LLVMMemSize);
     REGISTER_SETTING(*this, LLVMPerNodeMemSize);
+    REGISTER_SETTING(*this, LLVMNodeCountLimit);
     REGISTER_SETTING(*this, SamplingIoBlockSize);
     REGISTER_SETTING(*this, BinaryTmpFolder);
     REGISTER_SETTING(*this, BinaryExpirationInterval);
@@ -442,6 +446,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, _ImpersonationUser);
     REGISTER_SETTING(*this, InferSchemaMode).Parser([](const TString& v) { return FromString<EInferSchemaMode>(v); });
     REGISTER_SETTING(*this, BatchListFolderConcurrency).Lower(1); // Upper bound on concurrent batch folder list requests https://yt.yandex-team.ru/docs/api/commands#execute_batch 
+    REGISTER_SETTING(*this, ForceTmpSecurity);
     REGISTER_SETTING(*this, JoinCommonUseMapMultiOut);
     REGISTER_SETTING(*this, _EnableYtPartitioning);
     REGISTER_SETTING(*this, UseAggPhases);

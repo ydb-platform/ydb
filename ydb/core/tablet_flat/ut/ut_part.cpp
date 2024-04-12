@@ -184,9 +184,14 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         const auto part = (*wrap).Eggs.Lone();
         UNIT_ASSERT_VALUES_EQUAL(IndexTools::GetEndRowId(*part), 2u);
-        const NPage::TCompare<NPage::TIndex::TRecord> cmp(part->Scheme->Groups[0].ColsKeyIdx, *(*lay).Keys);
-        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetRecord(*part, 0), TRowTool(*lay).KeyCells(foo)), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetLastRecord(*part), TRowTool(*lay).KeyCells(bar)), 0);
+        if (part->IndexPages.HasFlat()) {
+            const NPage::TCompare<NPage::TIndex::TRecord> cmp(part->Scheme->Groups[0].ColsKeyIdx, *(*lay).Keys);
+            UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatRecord(*part, 0), TRowTool(*lay).KeyCells(foo)), 0);
+            UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatLastRecord(*part), TRowTool(*lay).KeyCells(bar)), 0);
+        }
+        if (part->IndexPages.HasBTree()) {
+            UNIT_ASSERT_VALUES_EQUAL(part->IndexPages.GetBTree({}).LevelCount, 0); // no index keys
+        }
 
         DumpPart(*(*wrap).Eggs.Lone(), 10);
     }
@@ -402,7 +407,10 @@ Y_UNIT_TEST_SUITE(TPart) {
         /*_ Ensure that produced part has enough pages for code coverage and
             index grow algorithm in data pages writer has been triggered. */
 
-        UNIT_ASSERT(pages > 100 && part.GetPageSize(part.IndexPages.Groups[0], { }) >= minIndex);
+        UNIT_ASSERT(pages > 100);
+        if (part.IndexPages.HasFlat()) {
+             UNIT_ASSERT(part.GetPageSize(part.IndexPages.GetFlat({}), { }) >= minIndex);
+        }
 
         { /*_ Ensure that part has some external blobs written to room 1 */
             auto one = Eggs0().Lone()->Blobs->Total();
@@ -430,7 +438,9 @@ Y_UNIT_TEST_SUITE(TPart) {
             UNIT_ASSERT_VALUES_EQUAL(IndexTools::GetEndRowId(part), Mass0().Saved.Size());
             const NPage::TCompare<NPage::TIndex::TRecord> cmp(part.Scheme->Groups[0].ColsKeyIdx, *Eggs0().Scheme->Keys);
             auto lastKey = TRowTool(*Eggs0().Scheme).KeyCells(Mass0().Saved[Mass0().Saved.Size()-1]);
-            UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetLastRecord(part), lastKey), 0);
+            if (part.IndexPages.HasFlat()) {
+                UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatLastRecord(part), lastKey), 0);
+            }
         }
 
         { /*_  Ensure that part has correct number of slices */
@@ -707,12 +717,23 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         const auto part = (*wrap).Eggs.Lone();
 
-        const NPage::TCompare<NPage::TIndex::TRecord> cmp(part->Scheme->Groups[0].ColsKeyIdx, *(*lay).Keys);
-        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetRecord(*part, 0), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, prefix + "aaa"))), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetRecord(*part, 1), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, prefix + "b"))), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetRecord(*part, 2), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, nullptr))), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetRecord(*part, 3), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, prefix + "ccx"))), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetLastRecord(*part), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, prefix + "cxz"))), 0);
+        if (part->IndexPages.HasFlat()) {
+            const NPage::TCompare<NPage::TIndex::TRecord> cmp(part->Scheme->Groups[0].ColsKeyIdx, *(*lay).Keys);
+            UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatRecord(*part, 0), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, prefix + "aaa"))), 0);
+            UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatRecord(*part, 1), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, prefix + "b"))), 0);
+            UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatRecord(*part, 2), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, nullptr))), 0);
+            UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatRecord(*part, 3), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, prefix + "ccx"))), 0);
+            UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatLastRecord(*part), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, prefix + "cxz"))), 0);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*part, 0)), 
+            TSerializedCellVec::Serialize(part->IndexPages.HasBTree() ? TVector<TCell>() : TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, prefix + "aaa"))));
+        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*part, 1)), 
+            TSerializedCellVec::Serialize(TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, prefix + "b"))));
+        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*part, 2)), 
+            TSerializedCellVec::Serialize(TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, nullptr))));
+        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*part, 3)), 
+            TSerializedCellVec::Serialize(TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, prefix + "ccx"))));
     }
 
     Y_UNIT_TEST(CutKeys_Seek)
@@ -768,12 +789,23 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         UNIT_ASSERT_GT(fullPart->IndexesRawSize, cutPart->IndexesRawSize);
         
-        const NPage::TCompare<NPage::TIndex::TRecord> cmp(cutPart->Scheme->Groups[0].ColsKeyIdx, *(*lay).Keys);
-        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetRecord(*cutPart, 0), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, "aaa"))), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetRecord(*cutPart, 1), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, "b"))), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetRecord(*cutPart, 2), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, nullptr))), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetRecord(*cutPart, 3), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, "ccx"))), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetLastRecord(*cutPart), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, "cxz"))), 0);
+        if (cutPart->IndexPages.HasFlat()) {
+            const NPage::TCompare<NPage::TIndex::TRecord> cmp(cutPart->Scheme->Groups[0].ColsKeyIdx, *(*lay).Keys);
+            UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatRecord(*cutPart, 0), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, "aaa"))), 0);
+            UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatRecord(*cutPart, 1), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, "b"))), 0);
+            UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatRecord(*cutPart, 2), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, nullptr))), 0);
+            UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatRecord(*cutPart, 3), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, "ccx"))), 0);
+            UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatLastRecord(*cutPart), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, "cxz"))), 0);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*cutPart, 0)), 
+            TSerializedCellVec::Serialize(cutPart->IndexPages.HasBTree() ? TVector<TCell>() : TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, "aaa"))));
+        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*cutPart, 1)), 
+            TSerializedCellVec::Serialize(TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, "b"))));
+        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*cutPart, 2)), 
+            TSerializedCellVec::Serialize(TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, nullptr))));
+        UNIT_ASSERT_VALUES_EQUAL(TSerializedCellVec::Serialize(IndexTools::GetKey(*cutPart, 3)), 
+            TSerializedCellVec::Serialize(TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, "ccx"))));
 
         for (auto r : fullRows) {
             cutWrap.Has(*TSchemedCookRow(*lay).Col(r.first, r.second));
@@ -944,27 +976,11 @@ Y_UNIT_TEST_SUITE(TPart) {
         TCheckIt cutWrapTmp(cutCookTmp.Finish(), { });
         auto cutPartTmp = (*cutWrapTmp).Eggs.Lone();
 
-        auto getKey = [cutPartTmp] (const NPage::TIndex::TRecord* record) {
-            TSmallVec<TCell> key;
-            for (const auto& info : cutPartTmp->Scheme->Groups[0].ColsKeyIdx) {
-                key.push_back(record->Cell(info));
-            }
-            return TSerializedCellVec(key);
-        };
-
         TSlices slices;
         for (size_t rowId = 0; rowId < fullRows.size();) {
-            TSlice slice;
-            slice.FirstInclusive = true;
-            slice.FirstRowId = rowId;
-            if (rowId > 0)
-                slice.FirstKey = getKey(IndexTools::GetRecord(*cutPartTmp, slice.FirstRowId));
-            slice.LastInclusive = false;
-            slice.LastRowId = rowId + RandomNumber<ui32>(2) + 1;
-            if (slice.LastRowId < fullRows.size())
-                slice.LastKey = getKey(IndexTools::GetRecord(*cutPartTmp, slice.LastRowId));
-            slices.push_back(slice);
-            rowId = slice.LastRowId;
+            auto lastRowId = Min(fullRows.size(), rowId + RandomNumber<ui32>(2) + 1);
+            slices.push_back(IndexTools::MakeSlice(*cutPartTmp, rowId, lastRowId));
+            rowId = lastRowId;
         }
 
         Cerr << "======= SLICES =======" << Endl;
@@ -996,9 +1012,10 @@ Y_UNIT_TEST_SUITE(TPart) {
         UNIT_ASSERT_GT(cutPart->Slices->size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(fullPart->Slices->size(), 1);
         
-        for (auto r : fullRows) {
-            cutWrap.Has(*TSchemedCookRow(*lay).Col(r.first, r.second));
-            fullWrap.Has(*TSchemedCookRow(*lay).Col(r.first, r.second));
+        for (auto i : xrange(fullRows.size())) {
+            auto &r = fullRows[i];
+            fullWrap.To(100 + i).Has(*TSchemedCookRow(*lay).Col(r.first, r.second));
+            cutWrap.To(200 + i).Has(*TSchemedCookRow(*lay).Col(r.first, r.second));
         }
 
         for (size_t rowId = 0; rowId < fullRows.size(); rowId++)
@@ -1061,7 +1078,7 @@ Y_UNIT_TEST_SUITE(TPart) {
 
             Cerr << DumpPart(*part, 2) << Endl;
 
-            TString actual(IndexTools::GetRecord(*part, 1)->Cell(part->Scheme->Groups[0].ColsKeyIdx[0]).AsBuf());
+            TString actual(IndexTools::GetKey(*part, 1)[0].AsBuf());
             UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, testId << ": '" << a << "', '" << b << "'");
         };
 
@@ -1168,7 +1185,7 @@ Y_UNIT_TEST_SUITE(TPart) {
 
             Cerr << DumpPart(*part, 2) << Endl;
 
-            TString actual(IndexTools::GetRecord(*part, 1)->Cell(part->Scheme->Groups[0].ColsKeyIdx[0]).AsBuf());
+            TString actual(IndexTools::GetKey(*part, 1)[0].AsBuf());
             UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, testId << ": '" << a << "', '" << b << "'");
         };
 

@@ -141,6 +141,9 @@ message TConfigItem {
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;
+
+        // synthetic kind for audit purposes only
+        YamlConfigChangeItem = 32768;
     }
 
     enum EMergeStrategy {
@@ -484,6 +487,7 @@ message TConfigSubscriptionNotification {
     optional string YamlConfig = 5;
     optional bool YamlConfigNotChanged = 6;
     repeated TVolatileYamlConfig VolatileConfigs = 7;
+    optional NKikimrConfig.TAppConfig RawConsoleConfig = 103; // Used for correct next startup config prediction
 }
 
 message TSubscription {

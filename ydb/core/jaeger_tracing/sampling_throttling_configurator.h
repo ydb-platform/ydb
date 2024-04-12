@@ -18,11 +18,11 @@ namespace NKikimr::NJaegerTracing {
 // Used to represent shared limits in throttlers and samplers
 template<class T>
 struct TWithTag {
-    T value;
-    size_t tag;
+    T Value;
+    size_t Tag;
 };
 
-class TSamplingThrottlingConfigurator {
+class TSamplingThrottlingConfigurator: private TMoveOnly {
 public:
     TSamplingThrottlingConfigurator(TIntrusivePtr<ITimeProvider> timeProvider,
                                     TIntrusivePtr<IRandomProvider>& randomProvider);

@@ -47,7 +47,7 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     while (!rowset.EndOfSet()) {
         const ui64 txId = rowset.GetValue<Schema::TxInfo::TxId>();
         const NKikimrTxColumnShard::ETransactionKind txKind = rowset.GetValue<Schema::TxInfo::TxKind>();
-        
+
         auto txInfoIt = BasicTxInfo.emplace(txId, TTxInfo(txKind, txId)).first;
         auto& txInfo = txInfoIt->second;
         txInfo.MaxStep = rowset.GetValue<Schema::TxInfo::MaxStep>();
@@ -238,6 +238,19 @@ size_t TTxController::CleanExpiredTxs(NTabletFlatExecutor::TTransactionContext& 
         }
     }
     return removedCount;
+}
+
+TDuration TTxController::GetTxCompleteLag(ui64 timecastStep) const {
+    if (PlanQueue.empty()) {
+        return TDuration::Zero();
+    }
+
+    ui64 currentStep = PlanQueue.begin()->Step;
+    if (timecastStep > currentStep) {
+        return TDuration::MilliSeconds(timecastStep - currentStep);
+    }
+
+    return TDuration::Zero();
 }
 
 TTxController::EPlanResult TTxController::PlanTx(const ui64 planStep, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {

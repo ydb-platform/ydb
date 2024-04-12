@@ -850,6 +850,14 @@ protected:
     virtual bool IsUp(const TCtxDiscoverPtr& context);
 
     //! Used by peer discovery.
+    //! Fills response message extensions with additional info.
+    /*!
+     *  \note
+     *  Thread affinity: any
+     */
+    virtual void EnrichDiscoverResponse(TRspDiscover* response);
+
+    //! Used by peer discovery.
     //! Returns addresses of neighboring peers to be suggested to the client.
     /*!
      *  \note

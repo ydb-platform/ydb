@@ -737,7 +737,7 @@ namespace Tests {
                 initial.MutableImmediateControlsConfig()->CopyFrom(Settings->Controls);
             }
             auto *dispatcher = NConsole::CreateConfigsDispatcher(
-                    NKikimr::NConsole::TConfigsDispatcherInitInfo {
+                    NKikimr::NConfig::TConfigsDispatcherInitInfo {
                         .InitialConfig = initial,
                     });
             auto aid = Runtime->Register(dispatcher, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
@@ -838,38 +838,45 @@ namespace Tests {
                     new NYql::NLog::TTlsLogBackend(new TNullLogBackend()));
             }
 
-            std::shared_ptr<NKikimr::NKqp::IKqpFederatedQuerySetupFactory> federatedQuerySetupFactory = Settings->FederatedQuerySetupFactory;
+            NKikimr::NKqp::IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory = Settings->FederatedQuerySetupFactory;
             if (Settings->InitializeFederatedQuerySetupFactory) {
                 const auto& queryServiceConfig = Settings->AppConfig->GetQueryServiceConfig();
 
-                auto httpProxyActorId = NFq::MakeYqlAnalyticsHttpProxyId();
-                Runtime->RegisterService(
-                    httpProxyActorId,
-                    Runtime->Register(NHttp::CreateHttpProxy(), nodeIdx),
-                    nodeIdx
-                );
+                NYql::NConnector::IClient::TPtr connectorClient;
+                NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver;
+                if (queryServiceConfig.HasGeneric()) {
+                    const auto& genericGatewayConfig = queryServiceConfig.GetGeneric();
 
-                auto databaseResolverActorId = NFq::MakeDatabaseResolverActorId();
-                Runtime->RegisterService(
-                    databaseResolverActorId,
-                    Runtime->Register(NFq::CreateDatabaseResolver(httpProxyActorId, Settings->CredentialsFactory), nodeIdx),
-                    nodeIdx
-                );
+                    connectorClient = NYql::NConnector::MakeClientGRPC(genericGatewayConfig.GetConnector());
 
-                std::shared_ptr<NFq::TDatabaseAsyncResolverImpl> databaseAsyncResolver;
-                if (queryServiceConfig.GetGeneric().HasMdbGateway() || queryServiceConfig.GetGeneric().HasYdbMvpEndpoint()) {
-                    databaseAsyncResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
-                        Runtime->GetActorSystem(nodeIdx),
-                        databaseResolverActorId,
-                        queryServiceConfig.GetGeneric().GetYdbMvpEndpoint(),
-                        queryServiceConfig.GetGeneric().GetMdbGateway(),
-                        NFq::MakeMdbEndpointGeneratorGeneric(queryServiceConfig.GetMdbTransformHost())
+                    auto httpProxyActorId = NFq::MakeYqlAnalyticsHttpProxyId();
+                    Runtime->RegisterService(
+                        httpProxyActorId,
+                        Runtime->Register(NHttp::CreateHttpProxy(), nodeIdx),
+                        nodeIdx
                     );
+
+                    auto databaseResolverActorId = NFq::MakeDatabaseResolverActorId();
+                    Runtime->RegisterService(
+                        databaseResolverActorId,
+                        Runtime->Register(NFq::CreateDatabaseResolver(httpProxyActorId, Settings->CredentialsFactory), nodeIdx),
+                        nodeIdx
+                    );
+
+                    if (genericGatewayConfig.HasMdbGateway() || genericGatewayConfig.HasYdbMvpEndpoint()) {
+                        databaseAsyncResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
+                            Runtime->GetActorSystem(nodeIdx),
+                            databaseResolverActorId,
+                            genericGatewayConfig.GetYdbMvpEndpoint(),
+                            genericGatewayConfig.GetMdbGateway(),
+                            NFq::MakeMdbEndpointGeneratorGeneric(queryServiceConfig.GetMdbTransformHost())
+                        );
+                    }
                 }
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
-                    NYql::IHTTPGateway::Make(&queryServiceConfig.GetHttpGateway()),
-                    NYql::NConnector::MakeClientGRPC(queryServiceConfig.GetGeneric().GetConnector()),
+                    NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
+                    connectorClient,
                     Settings->CredentialsFactory,
                     databaseAsyncResolver,
                     queryServiceConfig.GetS3(),
@@ -1206,6 +1213,14 @@ namespace Tests {
         return *GRpcServer;
     }
 
+    void TServer::WaitFinalization() {
+        for (ui32 nodeIdx = 0; nodeIdx < StaticNodes(); ++nodeIdx) {
+            if (!NKqp::WaitHttpGatewayFinalization(Runtime->GetAppData(nodeIdx).Counters)) {
+                Cerr << "Http gateway finalization timeout on node " << nodeIdx << "\n";
+            }
+        }
+    }
+
     TServer::~TServer() {
         if (GRpcServer) {
             GRpcServer->Stop();
@@ -1216,6 +1231,7 @@ namespace Tests {
         }
 
         if (Runtime) {
+            WaitFinalization();
             Runtime.Destroy();
         }
 

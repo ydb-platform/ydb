@@ -732,7 +732,7 @@ TActorId CmdCreateSession(const TPQCmdSettings& settings, TTestContext& tc) {
             auto req = request->Record.MutablePartitionRequest();
 
             ActorIdToProto(tabletPipe, req->MutablePipeClient());
-            Cerr << "Set pipe for create session: " << tabletPipe.ToString();
+            Cerr << "Set pipe for create session: " << tabletPipe.ToString() << Endl;
 
             req->SetPartition(settings.Partition);
             auto off = req->MutableCmdCreateSession();
@@ -742,7 +742,11 @@ TActorId CmdCreateSession(const TPQCmdSettings& settings, TTestContext& tc) {
             off->SetStep(settings.Step);
             off->SetPartitionSessionId(settings.PartitionSessionId);
 
-            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            if (settings.KeepPipe) {
+                tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries(), tabletPipe);
+            } else {
+                tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            }
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);

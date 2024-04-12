@@ -117,6 +117,7 @@ namespace NLs {
         NKikimrSchemeOp::TTTLSettings::EUnit columnUnit = NKikimrSchemeOp::TTTLSettings::UNIT_AUTO);
     TCheckFunc HasTtlDisabled();
     TCheckFunc IsBackupTable(bool value);
+    TCheckFunc ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode mode);
 
     TCheckFunc HasColumnTableSchemaPreset(const TString& presetName);
     TCheckFunc HasColumnTableSchemaVersion(ui64 schemaVersion);

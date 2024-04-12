@@ -2772,7 +2772,7 @@ bool TYtPathInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected " << TYtPath::CallableName()));
         return false;
     }
-    if (!EnsureArgsCount(node, 4, ctx)) {
+    if (!EnsureArgsCount(node, 5, ctx)) {
         return false;
     }
 
@@ -2805,6 +2805,12 @@ bool TYtPathInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         return false;
     }
 
+    if (!node.Child(TYtPath::idx_Timestamp)->IsCallable(NNodes::TCoUint64::CallableName())) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Child(TYtPath::idx_Timestamp)->Pos()), TStringBuilder()
+            << "Expected " << TCoUint64::CallableName()));
+        return false;
+    }
+
     return true;
 }
 
@@ -2824,6 +2830,10 @@ void TYtPathInfo::Parse(TExprBase node) {
 
     if (path.Stat().Maybe<TYtStat>()) {
         Stat = MakeIntrusive<TYtTableStatInfo>(path.Stat().Ptr());
+    }
+    Timestamp = FromString<ui64>(path.Timestamp().Cast<TCoUint64>().Literal().Value());
+    if (!*Timestamp) {
+        Timestamp = Nothing();
     }
 }
 
@@ -2845,6 +2855,11 @@ TExprBase TYtPathInfo::ToExprNode(TExprContext& ctx, const TPositionHandle& pos,
     } else {
         pathBuilder.Stat<TCoVoid>().Build();
     }
+    pathBuilder.Timestamp<TCoUint64>()
+        .Literal()
+            .Value(ToString(Timestamp.GetOrElse(ui64(0))))
+        .Build()
+    .Build();
 
     return pathBuilder.Done();
 }
@@ -2863,6 +2878,9 @@ void TYtPathInfo::FillRichYPath(NYT::TRichYPath& path) const {
         YQL_ENSURE(Table);
         YQL_ENSURE(Table->RowSpec);
         Ranges->FillRichYPath(path, Table->RowSpec->SortedBy.size());
+    }
+    if (Timestamp) {
+        path.Timestamp(static_cast<i64>(*Timestamp));
     }
 }
 

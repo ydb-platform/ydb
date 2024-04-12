@@ -211,7 +211,8 @@ IYtGateway::TCanonizedPath CanonizedPath(const TString& path) {
     return {
         richYPath.Path_,
         richYPath.Columns_.Defined() ? richYPath.Columns_->Parts_ : TMaybe<TVector<TString>>(),
-        richYPath.GetRanges()
+        richYPath.GetRanges(),
+        richYPath.Timestamp_
     };
 };
 

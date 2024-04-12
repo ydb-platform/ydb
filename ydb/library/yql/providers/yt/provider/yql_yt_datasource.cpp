@@ -652,6 +652,7 @@ private:
                 .Columns(needRewrite ? Build<TCoVoid>(ctx, path.Columns().Pos()).Done() : origColumnList)
                 .Ranges(path.Ranges())
                 .Stat(path.Stat())
+                .Timestamp(path.Timestamp())
                 .Done();
 
             bool tableSysColumns = useSysColumns && !tableDesc.View && (view.empty() || view == "raw");

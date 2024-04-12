@@ -1403,6 +1403,7 @@ private:
                             res.Data[idx].Columns.ConstructInPlace(normalizedPath.Columns_->Parts_);
                         }
                         res.Data[idx].Ranges = normalizedPath.GetRanges();
+                        res.Data[idx].Timestamp = normalizedPath.Timestamp_;
                     }));
 
                 }
@@ -1963,6 +1964,7 @@ private:
                                 canonPath.Columns.ConstructInPlace(normalizedPath.Columns_->Parts_);
                             }
                             canonPath.Ranges = normalizedPath.GetRanges();
+                            canonPath.Timestamp = normalizedPath.Timestamp_;
                             batchExistsRes.push_back(batchExists->Exists(canonPath.Path)
                                 .Apply([canonPath = std::move(canonPath), normalizedPath = std::move(normalizedPath), &rangeRes, &cached] (const NThreading::TFuture<bool>& f) {
                                     if (f.GetValue()) {
@@ -1985,7 +1987,7 @@ private:
             }
             for (auto& name: names) {
                 auto fullName = prefix + name;
-                rangeRes.Tables.push_back(TCanonizedPath{fullName, Nothing(), {}});
+                rangeRes.Tables.push_back(TCanonizedPath{fullName, Nothing(), {}, Nothing()});
                 cached.push_back(NYT::TRichYPath(fullName));
             }
         }

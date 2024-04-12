@@ -17,7 +17,6 @@ public:
 
     bool ExtractForGC(std::deque<TUnifiedBlobId>& deleteDraftBlobIds, TTabletsByBlob& deleteBlobIds, const ui32 blobsCountLimit) {
         if (DraftBlobIdsToRemove.empty() && BlobsToDelete.IsEmpty()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "extract_for_gc_skip")("reason", "no_data");
             return false;
         }
         ui32 count = 0;

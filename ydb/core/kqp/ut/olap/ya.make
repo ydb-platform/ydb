@@ -21,7 +21,6 @@ SRCS(
     statistics_ut.cpp
     clickbench_ut.cpp
     aggregations_ut.cpp
-    write_ut.cpp
 )
 
 PEERDIR(

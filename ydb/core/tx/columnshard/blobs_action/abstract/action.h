@@ -143,19 +143,13 @@ public:
         return result;
     }
 
-    [[nodiscard]] TConclusion<bool> NeedDraftWritingTransaction() const {
-        bool hasWriting = false;
+    bool NeedDraftWritingTransaction() const {
         for (auto&& i : GetWritingActions()) {
             if (i->NeedDraftTransaction()) {
                 return true;
             }
-            hasWriting = true;
         }
-        if (hasWriting) {
-            return false;
-        } else {
-            return TConclusionStatus::Fail("has not writings");
-        }
+        return false;
     }
 
     void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {

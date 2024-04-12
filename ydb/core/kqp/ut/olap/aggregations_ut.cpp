@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
         }
-        while (csController->GetInsertFinishedCounter().Val() == 0) {
+        while (csController->GetIndexations().Val() == 0) {
             Cout << "Wait indexation..." << Endl;
             Sleep(TDuration::Seconds(2));
         }

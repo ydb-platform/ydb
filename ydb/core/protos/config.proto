@@ -1408,7 +1408,6 @@ message TColumnShardConfig {
     }
 
     optional TIndexMetadataMemoryLimit IndexMetadataMemoryLimit = 12;
-    optional bool CleanupEnabled = 13 [default = true];
 }
 
 message TSchemeShardConfig {

@@ -4,7 +4,6 @@
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/indexation.h>
-#include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
@@ -17,17 +16,9 @@ bool TController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordB
     return true;
 }
 
-bool TController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& shard) {
-    if (change.TypeString() == NOlap::TTTLColumnEngineChanges::StaticTypeName()) {
-        TTLFinishedCounter.Inc();
-    }
-    if (change.TypeString() == NOlap::TInsertColumnEngineChanges::StaticTypeName()) {
-        InsertFinishedCounter.Inc();
-    }
-    if (change.TypeString() == NOlap::TCompactColumnEngineChanges::StaticTypeName()) {
-        CompactionFinishedCounter.Inc();
-    }
+bool TController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& /*changes*/, const ::NKikimr::NColumnShard::TColumnShard& shard) {
     TGuard<TMutex> g(Mutex);
+    Indexations.Inc();
     if (SharingIds.empty()) {
         TCheckContext context;
         CheckInvariants(shard, context);
@@ -35,16 +26,10 @@ bool TController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& chan
     return true;
 }
 
-bool TController::DoOnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) {
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", change.TypeString())("tablet_id", tabletId);
-    if (change.TypeString() == NOlap::TTTLColumnEngineChanges::StaticTypeName()) {
-        TTLStartedCounter.Inc();
-    }
-    if (change.TypeString() == NOlap::TInsertColumnEngineChanges::StaticTypeName()) {
-        InsertStartedCounter.Inc();
-    }
-    if (change.TypeString() == NOlap::TCompactColumnEngineChanges::StaticTypeName()) {
-        CompactionStartedCounter.Inc();
+bool TController::DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
+    TGuard<TMutex> g(Mutex);
+    if (auto compaction = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(changes)) {
+        Compactions.Inc();
     }
     return true;
 }
@@ -149,26 +134,6 @@ bool TController::IsTrivialLinks() const {
         }
     }
     return true;
-}
-
-::NKikimr::NColumnShard::TBlobPutResult::TPtr TController::OverrideBlobPutResultOnCompaction(const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const {
-    if (IndexWriteControllerEnabled) {
-        return original;
-    }
-    bool found = false;
-    for (auto&& i : actions) {
-        if (i.first != NOlap::NBlobOperations::TGlobal::DefaultStorageId) {
-            found = true;
-            break;
-        }
-    }
-    if (!found) {
-        return original;
-    }
-    IndexWriteControllerBrokeCount.Inc();
-    ::NKikimr::NColumnShard::TBlobPutResult::TPtr result = std::make_shared<::NKikimr::NColumnShard::TBlobPutResult>(*original);
-    result->SetPutStatus(NKikimrProto::EReplyStatus::ERROR);
-    return result;
 }
 
 }

@@ -17,22 +17,7 @@ class TFakeBucketStorage {
 private:
     mutable TMutex Mutex;
     TMap<TString, TString> Data;
-    static inline TAtomicCounter WritesCount;
-    static inline TAtomicCounter DeletesCount;
 public:
-    static i64 GetWritesCount() {
-        return WritesCount.Val();
-    }
-
-    static i64 GetDeletesCount() {
-        return DeletesCount.Val();
-    }
-
-    static void ResetWriteCounters() {
-        WritesCount = 0;
-        DeletesCount = 0;
-    }
-
     TMap<TString, TString>::const_iterator begin() const {
         return Data.begin();
     }
@@ -43,7 +28,6 @@ public:
         return Data.size();
     }
     void PutObject(const TString& objectId, const TString& data) {
-        WritesCount.Inc();
         TGuard<TMutex> g(Mutex);
         Data[objectId] = data;
     }
@@ -56,7 +40,6 @@ public:
         return it->second;
     }
     void Remove(const TString& objectId) {
-        DeletesCount.Inc();
         TGuard<TMutex> g(Mutex);
         Data.erase(objectId);
     }
@@ -75,19 +58,6 @@ private:
     }
 public:
     TFakeExternalStorage() = default;
-
-    static i64 GetWritesCount() {
-        return TFakeBucketStorage::GetWritesCount();
-    }
-
-    static i64 GetDeletesCount() {
-        return TFakeBucketStorage::GetDeletesCount();
-    }
-
-    static void ResetWriteCounters() {
-        return TFakeBucketStorage::ResetWriteCounters();
-    }
-
     const TFakeBucketStorage& GetBucket(const TString& bucketId) const {
         TGuard<TMutex> g(Mutex);
         auto it = BucketStorages.find(bucketId);

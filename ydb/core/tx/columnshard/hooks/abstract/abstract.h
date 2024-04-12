@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
-#include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 
 #include <ydb/services/metadata/abstract/fetcher.h>
 #include <ydb/core/tx/tiering/snapshot.h>
@@ -47,14 +46,6 @@ public:
 };
 
 class ICSController {
-public:
-    enum class EBackground {
-        Indexation,
-        Compaction,
-        TTL,
-        Cleanup,
-        GC
-    };
 protected:
     virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
         return;
@@ -65,10 +56,13 @@ protected:
     virtual bool DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& /*batch*/) {
         return true;
     }
+    virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& /*changes*/) {
+        return true;
+    }
     virtual bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& /*changes*/, const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
         return true;
     }
-    virtual bool DoOnWriteIndexStart(const ui64 /*tabletId*/, NOlap::TColumnEngineChanges& /*change*/) {
+    virtual bool DoOnWriteIndexStart(const ui64 /*tabletId*/, const TString& /*changeClassName*/) {
         return true;
     }
     virtual void DoOnAfterSharingSessionsManagerStart(const NColumnShard::TColumnShard& /*shard*/) {
@@ -81,17 +75,11 @@ protected:
     }
 
 public:
-    virtual bool IsBackgroundEnabled(const EBackground /*id*/) const {
-        return true;
-    }
-
     using TPtr = std::shared_ptr<ICSController>;
     virtual ~ICSController() = default;
-
-    virtual NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(const NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& /*actions*/) const {
-        return original;
+    virtual bool IsTTLEnabled() const {
+        return true;
     }
-
     virtual ui64 GetReduceMemoryIntervalLimit(const ui64 def) const {
         return def;
     }
@@ -157,8 +145,11 @@ public:
     void OnAfterSharingSessionsManagerStart(const NColumnShard::TColumnShard& shard) {
         return DoOnAfterSharingSessionsManagerStart(shard);
     }
-    bool OnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) {
-        return DoOnWriteIndexStart(tabletId, change);
+    bool OnWriteIndexStart(const ui64 tabletId, const TString& changeClassName) {
+        return DoOnWriteIndexStart(tabletId, changeClassName);
+    }
+    bool OnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
+        return DoOnStartCompaction(changes);
     }
     virtual void OnIndexSelectProcessed(const std::optional<bool> /*result*/) {
     }

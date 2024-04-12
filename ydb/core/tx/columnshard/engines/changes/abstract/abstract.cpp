@@ -77,7 +77,7 @@ void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
     AFL_VERIFY(!LockGuard);
     LockGuard = self.DataLocksManager->RegisterLock(BuildDataLock());
     Y_ABORT_UNLESS(Stage == EStage::Created);
-    NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(self.TabletID(), *this);
+    NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(self.TabletID(), TypeString());
     DoStart(self);
     Stage = EStage::Started;
     if (!NeedConstruction()) {

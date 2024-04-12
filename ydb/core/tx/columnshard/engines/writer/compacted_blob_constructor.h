@@ -6,7 +6,6 @@
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
-#include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
 
 namespace NKikimr::NOlap {
 
@@ -17,8 +16,6 @@ private:
 protected:
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override;
 public:
-    const TBlobsAction& GetBlobsAction();
-
     TCompactedWriteController(const TActorId& dstActor, TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> writeEv);
     ~TCompactedWriteController();
 };

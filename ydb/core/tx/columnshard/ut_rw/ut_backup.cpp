@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             PlanCommit(runtime, sender, ++planStep, txId);
         }
 
-        const ui32 start = csControllerGuard->GetInsertStartedCounter();
+        const ui32 start = csControllerGuard->GetInsertStartedCounter().Val();
         TestWaitCondition(runtime, "insert compacted",
             [&]() {
             ++writeId;
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             WriteData(runtime, sender, writeId, tableId, MakeTestBlob({writeId * 100, (writeId + 1) * 100}, schema), schema, true, &writeIds);
             ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, ++planStep, txId);
-            return csControllerGuard->GetInsertStartedCounter() > start + 1;
+            return csControllerGuard->GetInsertStartedCounter().Val() > start + 1;
         }, TDuration::Seconds(1000));
 
         NKikimrTxColumnShard::TBackupTxBody txBody;

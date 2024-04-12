@@ -102,10 +102,13 @@ public:
         return result;
     }
     bool StartGC() {
+        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("storage_id", GetStorageId())("tablet_id", GetSelfTabletId());
         if (CurrentGCAction && CurrentGCAction->IsInProgress()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "gc_in_progress");
             return false;
         }
         if (Stopped) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "stopped_on_gc");
             return false;
         }
         auto task = StartGCAction(Counters->GetConsumerCounter(NBlobOperations::EConsumer::GC)->GetRemoveGCCounters());

@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <util/generic/string.h>
 #include <unordered_map>
 #include <list>
@@ -30,34 +30,15 @@ class TUnboxedKeyValueLruCacheWithTtl {
     };
     using TUsageList = std::list<TEntry>;
 
-    class TUnboxedValueHash {
-    public:
-        TUnboxedValueHash(const NKikimr::NMiniKQL::TType* type)
-            : HashImpl(NKikimr::NMiniKQL::MakeHashImpl(type))
-        {}
-        ui64 operator()(NUdf::TUnboxedValuePod v) const {
-            return HashImpl->Hash(v);
-        }
-    private:
-        NUdf::IHash::TPtr HashImpl;
-    };
-
-    class TUnboxedValueEquate {
-    public:
-        TUnboxedValueEquate(const NKikimr::NMiniKQL::TType* type)
-            : EquateImpl(NKikimr::NMiniKQL::MakeEquateImpl(type))
-        {}
-        ui64 operator()(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const {
-            return EquateImpl->Equals(lhs, rhs);
-        }
-    private:
-        NUdf::IEquate::TPtr EquateImpl;
-    };
-
 public:
     TUnboxedKeyValueLruCacheWithTtl(size_t maxSize, const NKikimr::NMiniKQL::TType* keyType)
         : MaxSize(maxSize)
-        , Map(1000, TUnboxedValueHash(keyType), TUnboxedValueEquate(keyType))
+        , KeyTypeHelpers(GetKeyTypeHelpers(keyType))
+        , Map(
+            1000,
+            TValueHasher(KeyTypeHelpers.KeyTypes, KeyTypeHelpers.IsTuple, KeyTypeHelpers.Hash.Get()),
+            TValueEqual(KeyTypeHelpers.KeyTypes, KeyTypeHelpers.IsTuple, KeyTypeHelpers.Equate.Get())
+        )
     {
         Y_ABORT_UNLESS(MaxSize > 0);
     }
@@ -109,6 +90,24 @@ public:
         return Map.size();
     }
 private:
+    struct TKeyTypeHelpers {
+            TKeyTypes KeyTypes;
+            bool IsTuple;
+            NUdf::IHash::TPtr Hash;
+            NUdf::IEquate::TPtr Equate;
+    };
+
+    TKeyTypeHelpers GetKeyTypeHelpers(const TType* type) {
+        TKeyTypeHelpers helpers;
+        bool encoded;
+        bool useIHash;
+        GetDictionaryKeyTypes(type, helpers.KeyTypes, helpers.IsTuple, encoded, useIHash);
+        if (useIHash) {
+            helpers.Hash = MakeHashImpl(type);
+            helpers.Equate = MakeEquateImpl(type);;
+        }
+        return helpers;
+    }
     void Touch(TUsageList::iterator it) {
         UsageList.splice(UsageList.end(), UsageList, it); //move accessed element to the end of Usage list
     }
@@ -119,11 +118,12 @@ private:
 private:
     const size_t MaxSize;
     TUsageList UsageList;
+    const TKeyTypeHelpers KeyTypeHelpers;
     std::unordered_map<
         NUdf::TUnboxedValue, 
         TUsageList::iterator,
-        TUnboxedValueHash,
-        TUnboxedValueEquate,
+        TValueHasher,
+        TValueEqual,
         NKikimr::NMiniKQL::TMKQLAllocator<std::pair<const NUdf::TUnboxedValue, TUsageList::iterator>>
     > Map;
 

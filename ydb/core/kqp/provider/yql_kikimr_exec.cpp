@@ -563,6 +563,8 @@ private:
         TStringStream ysonStream;
         NYson::TYsonWriter writer(&ysonStream, NYson::EYsonFormat::Binary);
         NYql::IDataProvider::TFillSettings fillSettings;
+        fillSettings.AllResultsBytesLimit = Nothing();
+        fillSettings.RowsLimitPerWrite = Nothing();
         KikimrResultToYson(ysonStream, writer, result, {}, fillSettings, truncated);
 
         TStringStream out;

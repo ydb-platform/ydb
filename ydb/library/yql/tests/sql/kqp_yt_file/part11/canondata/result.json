@@ -59,6 +59,11 @@
         "size": 193,
         "uri": "https://{canondata_backend}/1777230/10431cfd4809f2dab96d3983c9e18060aefc7156/resource.tar.gz#test.test_blocks-filter_direct_col-_/results.txt"
     },
+    "test.test[blocks-pg_to_dates-]": {
+        "checksum": "1392005626550755b152b17493d781c3",
+        "size": 388,
+        "uri": "https://{canondata_backend}/1871182/f911ee70e6e4547273e1d8d849d0520afae63f98/resource.tar.gz#test.test_blocks-pg_to_dates-_/results.txt"
+    },
     "test.test[blocks-sort_two_mix-]": {
         "checksum": "b09531a9bf6ba95b501b2657cf1f7ef4",
         "size": 374,

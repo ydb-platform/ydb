@@ -85,9 +85,9 @@
         "uri": "https://{canondata_backend}/1903280/6bda6b28ffaef676bb24ae8476908a849886b81e/resource.tar.gz#test.test_csee-same_free_closure_size2-default.txt_/results.txt"
     },
     "test.test[datetime-all_timezones-default.txt]": {
-        "checksum": "5198db0361e84b3ed123993c9755e532",
-        "size": 20836,
-        "uri": "https://{canondata_backend}/1903280/6bda6b28ffaef676bb24ae8476908a849886b81e/resource.tar.gz#test.test_datetime-all_timezones-default.txt_/results.txt"
+        "checksum": "997a874dcb1f618b2b83c0242d22c870",
+        "size": 20945,
+        "uri": "https://{canondata_backend}/1130705/0f9110d177dc81b3d4937c51af996bead4f994e7/resource.tar.gz#test.test_datetime-all_timezones-default.txt_/results.txt"
     },
     "test.test[datetime-date_scale-default.txt]": {
         "checksum": "883eb95757f07f89d9696753320dc0d0",

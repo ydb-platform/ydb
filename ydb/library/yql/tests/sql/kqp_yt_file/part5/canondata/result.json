@@ -69,6 +69,11 @@
         "size": 126,
         "uri": "https://{canondata_backend}/1777230/10e53c6f03823a03946c8d95a3bc9c7473a9dd03/resource.tar.gz#test.test_blocks-combine_hashed_avg-_/results.txt"
     },
+    "test.test[blocks-exists-]": {
+        "checksum": "e90ca0cde9d49856c74e995b49507659",
+        "size": 680,
+        "uri": "https://{canondata_backend}/1916746/d14deecd468a537b13c37ba8119b44873dd4c753/resource.tar.gz#test.test_blocks-exists-_/results.txt"
+    },
     "test.test[blocks-mul_uint64_opt2-]": {
         "checksum": "f4fd2a5790f30f856c1049c6b9c8d1d1",
         "size": 225,

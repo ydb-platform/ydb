@@ -10,6 +10,7 @@ from utils import DATA_PATH, get_config
 from yql_utils import KSV_ATTR, do_custom_query_check, get_tables, is_xfail, yql_binary_path
 
 EXCLUDED_SUITES = [
+    'bigdate',  # Many unsupported types
     'match_recognize',  # MATCH_RECOGNIZE is disabled
     'params',  # Params is not supported in KqpRun
     'pg',  # Not fully supported
@@ -34,6 +35,8 @@ EXCLUDED_TESTS = [
     'action/eval_result_label',  # ATOM evaluation is not supported in YDB queries
     'action/eval_taggedtype',  # ATOM evaluation is not supported in YDB queries
     'action/runtime_for_select',  # INTERNAL_ERROR
+
+    'blocks/pg_from_dates',  # Unsupported primitive type: Date32
 
     'expr/as_dict_implicit_cast',  # Unsupported type kind: Void
     'expr/as_table_emptylist2',  # Expected list type, but got: EmptyList
@@ -164,6 +167,9 @@ def validate_sql(sql_query):
 
     if 'costbasedoptimizer' in sql_query.lower():
         pytest.skip('Pragma CostBasedOptimizer is not supported in KQP')
+
+    if 'pragma dq.' in sql_query.lower():
+        pytest.skip('DQ pragmas is not supported in KQP')
 
     # Unsupported types
     if 'date32' in sql_query.lower():

@@ -54,6 +54,11 @@
         "size": 238,
         "uri": "https://{canondata_backend}/1917492/e8a582ce795724f177c2cd4954c52ee3ceab1ba7/resource.tar.gz#test.test_aggregate-group_by_ru_join_star-default.txt_/results.txt"
     },
+    "test.test[aggregate-group_by_ru_with_window_func-]": {
+        "checksum": "570b3ff881c62deeff70cb06352ebd9f",
+        "size": 496,
+        "uri": "https://{canondata_backend}/1871182/a313e6dc9c73923682be115e90e6b0d1aeb7c3b5/resource.tar.gz#test.test_aggregate-group_by_ru_with_window_func-_/results.txt"
+    },
     "test.test[aggregate-group_by_session_only_distinct-]": {
         "checksum": "1f8d947071e946d6526b84ec5add850e",
         "size": 66,

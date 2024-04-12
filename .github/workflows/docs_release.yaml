@@ -3,7 +3,6 @@ name: Release documentation
 on:
   push:
     branches:
-      - 'main'
       - 'stable-**'
     paths: 
       - 'ydb/docs/**'

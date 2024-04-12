@@ -1030,7 +1030,7 @@ inline bool TComputationContext::CheckAdjustedMemLimit(ui64 memLimit, ui64 initM
     return currentMemUsage * UsageAdjustor >= initMemUsage + memLimit;
 }
 
-void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash, bool expandTuple = true);
+void GetDictionaryKeyTypes(const TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash, bool expandTuple = true);
 
 class TPlainContainerCache {
 public:

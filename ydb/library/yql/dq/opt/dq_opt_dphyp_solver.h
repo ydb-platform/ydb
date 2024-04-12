@@ -28,6 +28,7 @@ namespace NYql::NDq {
  * are enumerated first and no duplicates are ever enumerated. Then, for each emitted
  * CSG it computes the complements with the same conditions - they much already be
  * present in the dynamic programming table and no pair should be enumerated twice.
+ * Details are described in white papper - "Dynamic Programming Strikes Back".
  */
 template <typename TNodeSet>
 class TDPHypSolver {
@@ -37,12 +38,14 @@ public:
         IProviderContext& ctx
     ) 
         : Graph_(graph) 
-        , NNodes_(graph.GetNodeCount())
+        , NNodes_(graph.GetNodes().size())
         , Pctx_(ctx)
     {}
 
     std::shared_ptr<TJoinOptimizerNodeInternal> Solve();
 
+    // Calculate the size of a dynamic programming table with a budget
+    ui32 CountCC(ui32 budget);
 
 private:
     void EnumerateCsgRec(const TNodeSet& s1, const TNodeSet& x);
@@ -68,6 +71,8 @@ private:
     // Compute the next subset of relations, given by the final bitset
     TNodeSet NextBitset(const TNodeSet& current, const TNodeSet& final);
 
+    // Iterate over all join algorithms and pick the best join that is applicable.
+    // Also considers commuting joins
     std::shared_ptr<TJoinOptimizerNodeInternal> PickBestJoin(
         const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
@@ -80,6 +85,9 @@ private:
         IProviderContext& ctx
     );
 
+    // Count the size of the dynamic programming table recursively
+    ui32 CountCCRec(const TNodeSet&, const TNodeSet&, ui32, ui32);
+
 private:
     TJoinHypergraph<TNodeSet>& Graph_;
     size_t NNodes_;
@@ -91,6 +99,57 @@ private:
 private:
     THashMap<TNodeSet, std::shared_ptr<IBaseOptimizerNode>, std::hash<TNodeSet>> DpTable_;
 };
+
+/*
+ * Count the number of items in the DP table of DPHyp
+ */
+template <typename TNodeSet> ui32 TDPHypSolver<TNodeSet>::CountCC(ui32 budget) {
+    TNodeSet allNodes;
+    allNodes.set();
+    ui32 cost = 0;
+
+    for (int i = NNodes_ - 1; i >= 0; --i) {
+        ++cost;
+        if (cost > budget) {
+            return cost;
+        }
+        TNodeSet s;
+        s[i] = 1;
+        TNodeSet x = MakeB(allNodes,i);
+        cost = CountCCRec(s, x, cost, budget);
+    }
+
+    return cost;
+}
+
+/**
+ * Recursively count the nuber of items in the DP table of DPccp
+*/
+template <typename TNodeSet> ui32 TDPHypSolver<TNodeSet>::CountCCRec(const TNodeSet& s, const TNodeSet& x, ui32 cost, ui32 budget) {
+    TNodeSet neighs = Neighs(s, x);
+
+    if (neighs == TNodeSet{}) {
+        return cost;
+    }
+
+    TNodeSet prev;
+    TNodeSet next;
+
+    while(true) {
+        next = NextBitset(prev, neighs);
+        cost += 1;
+        if (cost > budget) {
+            return cost;
+        }
+        cost = CountCCRec(s | next, x | neighs, cost, budget);
+        if (next == neighs) {
+            break;
+        }
+        prev = next;
+    }
+
+    return cost;
+}
 
 template<typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::Neighs(TNodeSet s, TNodeSet x) {
     TNodeSet neighs{};
@@ -325,10 +384,6 @@ template <typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::MakeB(const TNodeS
     return res;
 }
 
-/**
- * Iterate over all join algorithms and pick the best join that is applicable.
- * Also considers commuting joins
-*/
 template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSolver<TNodeSet>::PickBestJoin(
     const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
@@ -347,7 +402,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     for (auto joinAlgo : AllJoinAlgos) {
         if (ctx.IsJoinApplicable(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinAlgo)){
             auto cost = ComputeJoinStats(*left->Stats, *right->Stats, leftJoinKeys, rightJoinKeys, joinAlgo, ctx).Cost;
-            if (cost < bestCost){
+            if (cost < bestCost) {
                 bestCost = cost;
                 bestAlgo = joinAlgo;
                 bestJoinIsReversed = false;
@@ -357,7 +412,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
         if (isCommutative) {
             if (ctx.IsJoinApplicable(right, left, reversedJoinConditions, rightJoinKeys, leftJoinKeys, joinAlgo)){
                 auto cost = ComputeJoinStats(*right->Stats, *left->Stats,  rightJoinKeys, leftJoinKeys, joinAlgo, ctx).Cost;
-                if (cost < bestCost){
+                if (cost < bestCost) {
                     bestCost = cost;
                     bestAlgo = joinAlgo;
                     bestJoinIsReversed = true;
@@ -377,7 +432,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
 
 /* 
  * Emit a single CSG + CMP pair
-*/
+ */
 template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge) {
     // Here we actually build the join and choose and compare the
     // new plan to what's in the dpTable, if it there

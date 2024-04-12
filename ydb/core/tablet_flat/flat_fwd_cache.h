@@ -335,13 +335,16 @@ namespace NFwd {
             auto type = Part->GetPageType(pageId);
 
             switch (type) {
-                case EPage::BTreeIndex:
+                case EPage::BTreeIndex: {
+                    auto level = BTreeNodePageLevel.FindPtr(pageId);
+                    Y_ABORT_UNLESS(level, "Unknown page");
                     Y_ABORT();
                     break;
+                }
                 case EPage::Index:
                     return CacheLines[0].Get(head, pageId, lower);
                 case EPage::DataPage:
-                    return CacheLines[1].Get(head, pageId, lower);
+                    return CacheLines.back().Get(head, pageId, lower);
                 default:
                     Y_ABORT("Unknown page type");
             }
@@ -358,17 +361,19 @@ namespace NFwd {
         {
             for (auto &page: loaded) {
                 auto type = Part->GetPageType(page.PageId);
-
+                
                 switch (type) {
-                    case EPage::BTreeIndex:
-                        Y_ABORT();
+                    case EPage::BTreeIndex: {
+                        auto level = BTreeNodePageLevel.FindPtr(page.PageId);
+                        Y_ABORT_UNLESS(level, "Unknown page");
                         break;
+                    }
                     case EPage::Index:
                         CacheLines[1].UseQueue(MakeHolder<TFlatIndexDataCacheLineQueue>(page.Data, BeginRowId, EndRowId));
                         CacheLines[0].Fill(page);
                         break;
                     case EPage::DataPage:
-                        CacheLines[1].Fill(page);
+                        CacheLines.back().Fill(page);
                         break;
                     default:
                         Y_ABORT("Unknown page type");
@@ -381,6 +386,7 @@ namespace NFwd {
         TRowId BeginRowId, EndRowId;
 
         TDeque<TCacheLine> CacheLines;
+        TMap<TPageId, ui32> BTreeNodePageLevel;
     };
 }
 }

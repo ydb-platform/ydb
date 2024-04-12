@@ -26,17 +26,25 @@ bool TPersQueueReadBalancer::TReadingPartitionStatus::StopReading() {
 }
 
 bool TPersQueueReadBalancer::TReadingPartitionStatus::SetCommittedState() {
+    Iteration = 0;
     return !std::exchange(Commited, true);
 }
 
 bool TPersQueueReadBalancer::TReadingPartitionStatus::SetFinishedState(bool scaleAwareSDK, bool startedReadingFromEndOffset) {
+    bool previousStatus = IsFinished();
+
     ScaleAwareSDK = scaleAwareSDK;
     StartedReadingFromEndOffset = startedReadingFromEndOffset;
     if (!ReadingFinished) {
         ++Iteration;
         ++Cookie;
     }
-    return !std::exchange(ReadingFinished, true);
+    ReadingFinished = true;
+    bool currentStatus = IsFinished();
+    if (currentStatus) {
+        Iteration = 0;
+    }
+    return currentStatus && !previousStatus;
 }
 
 bool TPersQueueReadBalancer::TReadingPartitionStatus::Reset() {

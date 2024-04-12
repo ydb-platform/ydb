@@ -1,5 +1,6 @@
 #include "yql_dq_exectransformer.h"
 
+#include <ydb/library/yql/udfs/common/module/yql_modules.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_state.h>
 
@@ -696,17 +697,23 @@ private:
                             uploadList->emplace(f);
                         }
 
-                        if (moduleName == TStringBuf("Geo")) {
-                            TString fileName = "/home/geodata6.bin";
-                            auto block = TUserDataStorage::FindUserDataBlock(files, fileName);
-                            MKQL_ENSURE(block, "File not found: " << fileName);
-                            auto f = IDqGateway::TFileResource();
-                            f.SetLocalPath(block->FrozenFile->GetPath().GetPath());
-                            f.SetName(fileName);
-                            f.SetObjectId(block->FrozenFile->GetMd5());
-                            f.SetObjectType(IDqGateway::TFileResource::EUSER_FILE);
-                            f.SetSize(block->FrozenFile->GetSize());
-                            uploadList->emplace(f);
+                        if (const auto& filesList = TYqlExternalModuleProcessor::GetUsedFilenamePaths(TString(moduleName)); !filesList.empty()) {
+                            for (const auto& [fullPath, isRequired] : filesList) {
+                                auto datafileProcessing = [&](const TString& filename, bool throwIfNotExist = false) -> void {
+                                    if (auto block = TUserDataStorage::FindUserDataBlock(files, filename)) {
+                                        auto f = IDqGateway::TFileResource();
+                                        f.SetLocalPath(block->FrozenFile->GetPath().GetPath());
+                                        f.SetName(filename);
+                                        f.SetObjectId(block->FrozenFile->GetMd5());
+                                        f.SetObjectType(IDqGateway::TFileResource::EUSER_FILE);
+                                        f.SetSize(block->FrozenFile->GetSize());
+                                        uploadList->emplace(f);
+                                    } else if (throwIfNotExist) {
+                                        THROW yexception() << "File not found: " << filename;
+                                    }
+                                };
+                                datafileProcessing(fullPath, isRequired);
+                            }
                         }
                     }
                 }

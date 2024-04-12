@@ -16,6 +16,7 @@
 #include <ydb/library/yql/core/type_ann/type_ann_expr.h>
 #include <ydb/library/yql/core/yql_execution.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <ydb/library/yql/udfs/common/module/yql_modules.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/ast/yql_ast.h>
 
@@ -220,10 +221,8 @@ private:
 
         const auto settings = State_->Configuration->GetSettingsForNode(*input);
         TUserDataTable crutches = State_->Types->UserDataStorageCrutches;
-        if (const auto& defaultGeobase = settings->GeobaseDownloadUrl.Get(cluster)) {
-            auto& userDataBlock = (crutches[TUserDataKey::File(TStringBuf("/home/geodata6.bin"))] = TUserDataBlock{EUserDataType::URL, {}, *defaultGeobase, {}, {}});
-            userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
-        }
+
+        TYqlExternalModuleProcessor::PragmaProcessing(settings, cluster, crutches);
 
         bool hasNonDeterministicFunctions = false;
         if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx); status.Level != TStatus::Ok) {
@@ -613,12 +612,9 @@ private:
         const TYtDqProcessWrite op(input);
         const auto cluster = op.DataSink().Cluster().StringValue();
         const auto config = State_->Configuration->GetSettingsForNode(*input);
-
         TUserDataTable crutches = State_->Types->UserDataStorageCrutches;
-        if (const auto& defaultGeobase = config->GeobaseDownloadUrl.Get(cluster)) {
-            auto& userDataBlock = (crutches[TUserDataKey::File(TStringBuf("/home/geodata6.bin"))] = TUserDataBlock{EUserDataType::URL, {}, *defaultGeobase, {}, {}});
-            userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
-        }
+
+        TYqlExternalModuleProcessor::PragmaProcessing(config, cluster, crutches);
 
         bool hasNonDeterministicFunctions = false;
         if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx); status.Level != TStatus::Ok) {

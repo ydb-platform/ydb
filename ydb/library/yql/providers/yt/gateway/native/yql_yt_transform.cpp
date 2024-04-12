@@ -8,6 +8,7 @@
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
 
+#include <ydb/library/yql/udfs/common/module/yql_modules.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -328,9 +329,12 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName name) {
                     AddFile(udfPath, *fileInfo, FindUdfPrefix(moduleName));
                 }
 
-                if (moduleName == TStringBuf("Geo")) {
-                    if (const auto fileInfo = ExecCtx_.UserFiles_->GetFile("/home/geodata6.bin")) {
-                        AddFile("./geodata6.bin", *fileInfo);
+                if (const auto& filesList = TYqlExternalModuleProcessor::GetUsedFilenamePaths(moduleName); !filesList.empty()) {
+                    for (const auto& [fullPath, isRequired] : filesList) {
+                        if (const auto fileInfo = ExecCtx_.UserFiles_->GetFile(fullPath)) {
+                            const auto& relPath = TString::Join("./", TFsPath(fullPath).GetName());
+                            AddFile(relPath, *fileInfo);
+                        }
                     }
                 }
 

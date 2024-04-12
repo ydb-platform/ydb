@@ -3,6 +3,7 @@
 #include "yql_yt_optimize.h"
 #include "yql_yt_op_hash.h"
 
+#include <ydb/library/yql/udfs/common/module/yql_modules.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <ydb/library/yql/providers/yt/lib/hash/yql_hash_builder.h>
@@ -129,10 +130,8 @@ protected:
 
         const auto settings = State_->Configuration->GetSettingsForNode(*input);
         TUserDataTable crutches = State_->Types->UserDataStorageCrutches;
-        if (const auto& defaultGeobase = settings->GeobaseDownloadUrl.Get(usedCluster)) {
-            auto& userDataBlock = (crutches[TUserDataKey::File(TStringBuf("/home/geodata6.bin"))] = TUserDataBlock{EUserDataType::URL, {}, *defaultGeobase, {}, {}});
-            userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
-        }
+
+        TYqlExternalModuleProcessor::PragmaProcessing(settings, usedCluster, crutches);
 
         bool hasNonDeterministicFunctions = false;
         if (const auto status = PeepHoleOptimizeBeforeExec(optimizedInput, optimizedInput, State_, hasNonDeterministicFunctions, ctx); status.Level != IGraphTransformer::TStatus::Ok) {

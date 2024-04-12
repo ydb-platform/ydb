@@ -545,11 +545,12 @@ private:
     const ui64 TabletId;
     const TActorId ParentActorId;
     TString ClassId;
+    NOlap::TSnapshot LastCompletedTx;
 protected:
     virtual bool DoExecute() override {
         NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
         {
-            NOlap::TConstructionContext context(*TxEvent->IndexInfo, Counters);
+            NOlap::TConstructionContext context(*TxEvent->IndexInfo, Counters, LastCompletedTx);
             Y_ABORT_UNLESS(TxEvent->IndexChanges->ConstructBlobs(context).Ok());
             if (!TxEvent->IndexChanges->GetWritePortionsCount()) {
                 TxEvent->SetPutStatus(NKikimrProto::OK);
@@ -563,11 +564,12 @@ public:
         return ClassId;
     }
 
-    TChangesTask(std::unique_ptr<TEvPrivate::TEvWriteIndex>&& txEvent, const TIndexationCounters& counters, const ui64 tabletId, const TActorId parentActorId)
+    TChangesTask(std::unique_ptr<TEvPrivate::TEvWriteIndex>&& txEvent, const TIndexationCounters& counters, const ui64 tabletId, const TActorId parentActorId, NOlap::TSnapshot lastCompletedTx)
         : TxEvent(std::move(txEvent))
         , Counters(counters)
         , TabletId(tabletId)
         , ParentActorId(parentActorId)
+        , LastCompletedTx(lastCompletedTx)
     {
         Y_ABORT_UNLESS(TxEvent);
         Y_ABORT_UNLESS(TxEvent->IndexChanges);
@@ -582,12 +584,13 @@ private:
     const ui64 TabletId;
     std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
     TIndexationCounters Counters;
+    NOlap::TSnapshot LastCompletedTx;
 protected:
     virtual void DoOnDataReady(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override {
         TxEvent->IndexChanges->Blobs = ExtractBlobsData();
         TxEvent->IndexChanges->ResourcesGuard = resourcesGuard;
         const bool isInsert = !!dynamic_pointer_cast<NOlap::TInsertColumnEngineChanges>(TxEvent->IndexChanges);
-        std::shared_ptr<NConveyor::ITask> task = std::make_shared<TChangesTask>(std::move(TxEvent), Counters, TabletId, ParentActorId);
+        std::shared_ptr<NConveyor::ITask> task = std::make_shared<TChangesTask>(std::move(TxEvent), Counters, TabletId, ParentActorId, LastCompletedTx);
         if (isInsert) {
             NConveyor::TInsertServiceOperator::SendTaskToExecute(task);
         } else {
@@ -604,12 +607,13 @@ protected:
         return false;
     }
 public:
-    TChangesReadTask(std::unique_ptr<TEvPrivate::TEvWriteIndex>&& event, const TActorId parentActorId, const ui64 tabletId, const TIndexationCounters& counters)
+    TChangesReadTask(std::unique_ptr<TEvPrivate::TEvWriteIndex>&& event, const TActorId parentActorId, const ui64 tabletId, const TIndexationCounters& counters, NOlap::TSnapshot lastCompletedTx)
         : TBase(event->IndexChanges->GetReadingActions(), event->IndexChanges->TypeString(), event->IndexChanges->GetTaskIdentifier())
         , ParentActorId(parentActorId)
         , TabletId(tabletId)
         , TxEvent(std::move(event))
         , Counters(counters)
+        , LastCompletedTx(lastCompletedTx)
     {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start_changes")("type", TxEvent->IndexChanges->TypeString())("task_id", TxEvent->IndexChanges->GetTaskIdentifier());
     }
@@ -659,7 +663,7 @@ void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dat
 
     NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
         ResourceSubscribeActor, std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
-                                std::make_shared<TInsertChangesReadTask>(std::move(ev), SelfId(), TabletID(), IndexationCounters), 0, indexChanges->CalcMemoryForUsage(), externalTaskId, InsertTaskSubscription));
+                                std::make_shared<TInsertChangesReadTask>(std::move(ev), SelfId(), TabletID(), IndexationCounters, GetLastCompletedTx()), 0, indexChanges->CalcMemoryForUsage(), externalTaskId, InsertTaskSubscription));
 }
 
 void TColumnShard::SetupIndexation() {
@@ -739,7 +743,7 @@ void TColumnShard::SetupCompaction() {
 
         NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
             ResourceSubscribeActor, std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
-                std::make_shared<TCompactChangesReadTask>(std::move(ev), SelfId(), TabletID(), CompactionCounters), 0, indexChanges->CalcMemoryForUsage(), externalTaskId, CompactTaskSubscription));
+                std::make_shared<TCompactChangesReadTask>(std::move(ev), SelfId(), TabletID(), CompactionCounters, GetLastCompletedTx()), 0, indexChanges->CalcMemoryForUsage(), externalTaskId, CompactTaskSubscription));
     }
 
     LOG_S_DEBUG("ActiveCompactions: " << BackgroundController.GetCompactionsCount() << " at tablet " << TabletID());
@@ -773,7 +777,7 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls) {
         if (needWrites) {
             NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
                 ResourceSubscribeActor, std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
-                    std::make_shared<TTTLChangesReadTask>(std::move(ev), SelfId(), TabletID(), CompactionCounters), 0, i->CalcMemoryForUsage(), externalTaskId, TTLTaskSubscription));
+                    std::make_shared<TTTLChangesReadTask>(std::move(ev), SelfId(), TabletID(), CompactionCounters, GetLastCompletedTx()), 0, i->CalcMemoryForUsage(), externalTaskId, TTLTaskSubscription));
         } else {
             ev->SetPutStatus(NKikimrProto::OK);
             ActorContext().Send(SelfId(), std::move(ev));

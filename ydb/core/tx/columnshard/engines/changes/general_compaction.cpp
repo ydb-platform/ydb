@@ -25,7 +25,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(TCon
         auto resultDataSchema = resultSchema->GetIndexInfo().ArrowSchemaWithSpecials();
         NArrow::NMerger::TMergePartialStream mergeStream(resultSchema->GetIndexInfo().GetReplaceKey(), resultDataSchema, false, IIndexInfo::GetSpecialColumnNames());
         for (auto&& i : portions) {
-            auto dataSchema = context.SchemaVersions.GetSchema(i.GetPortionInfo().GetMinSnapshot());
+            auto dataSchema = i.GetPortionInfo().GetSchema(context.SchemaVersions);
             auto batch = i.GetBatch(dataSchema, *resultSchema);
             batch = resultSchema->NormalizeBatch(*dataSchema, batch);
             Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, resultSchema->GetIndexInfo().GetReplaceKey()));
@@ -69,7 +69,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
         NArrow::NMerger::TMergePartialStream mergeStream(resultSchema->GetIndexInfo().GetReplaceKey(), dataSchema, false, IIndexInfo::GetSpecialColumnNames());
         ui32 idx = 0;
         for (auto&& i : portions) {
-            auto dataSchema = context.SchemaVersions.GetSchema(i.GetPortionInfo().GetMinSnapshot());
+            auto dataSchema = i.GetPortionInfo().GetSchema(context.SchemaVersions);
             auto batch = i.GetBatch(dataSchema, *resultSchema, pkFieldNamesSet);
             {
                 NArrow::NConstruction::IArrayBuilder::TPtr column = std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntConstFiller<arrow::UInt16Type>>>(portionIdFieldName, idx++);
@@ -100,7 +100,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
 
         std::vector<TPortionColumnCursor> cursors;
         for (auto&& p : portions) {
-            auto dataSchema = context.SchemaVersions.GetSchema(p.GetPortionInfo().GetMinSnapshot());
+            auto dataSchema = p.GetPortionInfo().GetSchema(context.SchemaVersions);
             auto loader = dataSchema->GetColumnLoaderOptional(columnId);
             std::vector<const TColumnRecord*> records;
             std::vector<std::shared_ptr<IPortionDataChunk>> chunks;
@@ -194,8 +194,8 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
         for (auto&& i : packs) {
             TGeneralSerializedSlice slice(std::move(i));
             auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());
-            AppendedPortions.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), nullptr, GranuleMeta->GetPathId(), 
-                resultSchema->GetSnapshot(), SaverContext.GetStoragesManager()));
+            AppendedPortions.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), nullptr, GranuleMeta->GetPathId(),
+                resultSchema->GetVersion(), resultSchema->GetSnapshot(), SaverContext.GetStoragesManager()));
             AppendedPortions.back().FillStatistics(resultSchema->GetIndexInfo());
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());

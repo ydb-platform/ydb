@@ -177,7 +177,7 @@ void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& in
 }
 
 void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) {
-    auto blobSchema = GetContext()->GetReadMetadata()->GetLoadSchema(Portion->GetMinSnapshot());
+    auto blobSchema = GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*Portion);
     if (SequentialEntityIds.empty()) {
         MutableStageData().AddBatch(Portion->PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs()).AssembleTable());
     } else {

@@ -75,7 +75,7 @@ TExprNode::TPtr OptimizePgCastOverPgConst(const TExprNode::TPtr& input, TExprCon
         return input;
     }
     auto val = input->Child(0);
-    if (!val->IsCallable("PgConst")) { 
+    if (!val->IsCallable("PgConst")) {
         return input;
     }
 
@@ -85,7 +85,7 @@ TExprNode::TPtr OptimizePgCastOverPgConst(const TExprNode::TPtr& input, TExprCon
         YQL_CLOG(DEBUG, Core) << "Remove PgCast unknown->text over PgConst";
         return ctx.ChangeChild(*val, 1, castToType);
     }
-    
+
     return input;
 }
 
@@ -6282,17 +6282,33 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["ShuffleByKeys"] = map["PartitionsByKeys"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    map["PartitionsByKeys"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (IsEmpty(node->Head(), *optCtx.Types)) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over empty input.";
-            auto lambdaResult = ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, KeepConstraints(node->HeadPtr(), node->Tail().Head().Head(), ctx)).Seal().Build();
-            if (node->IsCallable("ShuffleByKeys")) {
-                auto lambdaType = node->Tail().GetTypeAnn();
-                if (lambdaType->GetKind() == ETypeAnnotationKind::Optional) {
-                    lambdaResult = ctx.NewCallable(lambdaResult->Pos(), "ToList", { lambdaResult });
-                } else if (lambdaType->GetKind() == ETypeAnnotationKind::Stream) {
-                    lambdaResult = ctx.NewCallable(lambdaResult->Pos(), "ForwardList", { lambdaResult });
-                }
+
+            TExprNode::TPtr sequence = KeepConstraints(node->HeadPtr(), node->Tail().Head().Head(), ctx);
+            auto lambdaResult = ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, sequence).Seal().Build();
+            return lambdaResult;
+        }
+        return node;
+    };
+
+    map["ShuffleByKeys"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (IsEmpty(node->Head(), *optCtx.Types)) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over empty input.";
+
+            auto& lambdaArg = node->Tail().Head().Head();
+
+            TExprNode::TPtr sequence = node->HeadPtr(); // param (list)
+            sequence = ctx.NewCallable(sequence->Pos(), "ToStream", { sequence }); // lambda accepts stream, but we have list type
+            sequence = KeepConstraints(sequence, lambdaArg, ctx);
+
+            auto lambdaResult = ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, sequence).Seal().Build();
+            auto lambdaType = node->Tail().GetTypeAnn();
+            if (lambdaType->GetKind() == ETypeAnnotationKind::Optional) {
+                lambdaResult = ctx.NewCallable(lambdaResult->Pos(), "ToList", { lambdaResult });
+            } else if (lambdaType->GetKind() == ETypeAnnotationKind::Stream || lambdaType->GetKind() == ETypeAnnotationKind::Flow) {
+                lambdaResult = ctx.NewCallable(lambdaResult->Pos(), "ForwardList", { lambdaResult });
             }
             return lambdaResult;
         }

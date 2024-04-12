@@ -2491,7 +2491,9 @@ private:
                     for (const auto& tag : attrs[SecurityTagsName].AsList()) {
                         securityTags.push_back(tag.AsString());
                     }
-                    metaInfo->Attrs[SecurityTagsName] = JoinSeq(',', securityTags);
+                    if (!securityTags.empty()) {
+                        metaInfo->Attrs[SecurityTagsName] = JoinSeq(';', securityTags);
+                    }
                 }
 
                 NYT::TNode schemaAttrs;

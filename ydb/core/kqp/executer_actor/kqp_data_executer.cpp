@@ -2328,6 +2328,21 @@ private:
                     }
                 }
 
+                for (auto& [shardId, tx] : evWriteTxs) {
+                    if (tx->HasLocks()) {
+                        // Locks may be broken so shards with locks need to send readsets
+                        sendingShardsSet.insert(shardId);
+                    }
+                    if (ShardsWithEffects.contains(shardId)) {
+                        // Volatile transactions may abort effects, so they send readsets
+                        if (VolatileTx) {
+                            sendingShardsSet.insert(shardId);
+                        }
+                        // Effects are only applied when all locks are valid
+                        receivingShardsSet.insert(shardId);
+                    }
+                }
+
                 if (auto tabletIds = Request.TopicOperations.GetSendingTabletIds()) {
                     sendingShardsSet.insert(tabletIds.begin(), tabletIds.end());
                     receivingShardsSet.insert(tabletIds.begin(), tabletIds.end());

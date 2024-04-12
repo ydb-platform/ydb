@@ -592,26 +592,34 @@ Y_UNIT_TEST_SUITE(NFwd_TCache) {
 
         TCacheWrap wrap(eggs.Lone(), 201, 350);
         
-        wrap.To(0).Get(0, false, true, true, 
-            {1, 0, 1, 0, 0});
-        wrap.To(1).Fill({0, 1, 2, 3, 4, 5, 6}, 
-            {7, 7, 1, 0, 0});
-        wrap.To(2).Get(0, true, false, true, 
-            {7, 7, 1, 0, 0});
-        
-        // page 0 goes to trace:
-        wrap.To(3).Get(1, true, false, true, 
-            {7, 7, 2, 0, 0});
+        // provide index page:
+        wrap.To(0).Get(20, false, false, true, 
+            {453, 0, 453, 0, 0});
+        wrap.To(1).Fill({20}, 
+            {453, 453, 453, 0, 0});
+        wrap.To(2).Get(20, true, false, true, 
+            {453, 453, 453, 0, 0});
 
-        // page 1 goes to trace, pages 2, 3 dropped as unused:
-        wrap.To(4).Get(4, true, false, true, 
-            {7, 7, 3, 2, 0});
+        wrap.To(3).Get(0, false, true, true, 
+            {503, 453, 503, 0, 0});
+        wrap.To(4).Fill({0, 1, 2, 3, 4, 5, 6}, 
+            {803, 803, 503, 0, 0});
+        wrap.To(5).Get(0, true, false, true, 
+            {803, 803, 503, 0, 0});
+
+        wrap.To(6).Get(1, true, false, true, 
+            {803, 803, 553, 0, 0});
+        wrap.To(7).Get(2, true, false, true, 
+            {803, 803, 603, 0, 0});
+        wrap.To(8).Get(3, true, false, true, 
+            {803, 803, 653, 0, 0});
+        wrap.To(9).Get(4, true, false, true, 
+            {803, 803, 703, 0, 0});
         
-        // have less than 4 pages, grow:
-        wrap.To(5).Get(5, true, true, true, 
-            {7, 7, 4, 2, 0});
-        wrap.To(6).Fill({7, 8, 9}, 
-            {10, 10, 4, 2, 0});
+        wrap.To(10).Get(5, true, true, true, 
+            {803, 803, 753, 0, 0});
+        wrap.To(11).Fill({7, 8, 9},
+            {953, 953, 753, 0, 0});
     }
 
     Y_UNIT_TEST(Twice)

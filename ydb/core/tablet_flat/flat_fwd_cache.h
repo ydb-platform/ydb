@@ -53,9 +53,21 @@ namespace NFwd {
     };
 
     struct ICacheLineQueue {
+        /**
+         * @brief Skips all pages before and including given @param pageId
+         */
         virtual void Advance(TPageId pageId) = 0;
+
+        /**
+         * @brief Checks whether the forward load process should be performed or continued
+         */
         virtual bool Grow(ui64 onHold, ui64 onFetch, ui64 limit) = 0;
+
+        /**
+         * @brief Returns next to load page id
+         */
         virtual TPageId Next() = 0;
+        
         virtual ~ICacheLineQueue() = default;
     };
 
@@ -149,10 +161,9 @@ namespace NFwd {
         }
 
         TPageId Next() override {
-            Y_ABORT_UNLESS(Iter);
-            auto result = Iter->GetPageId();
-            Iter++;
-            return result;
+            Y_DEBUG_ABORT_UNLESS(Iter && Iter->GetRowId() < EndRowId);
+
+            return (Iter++)->GetPageId();
         }
 
     private:

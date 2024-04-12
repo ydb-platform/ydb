@@ -31,7 +31,7 @@ struct TChunkMeta: public TSimpleChunkMeta {
 private:
     using TBase = TSimpleChunkMeta;
     TChunkMeta() = default;
-    TConclusionStatus DeserializeFromProto(const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TSimpleColumnInfo& columnInfo);
+    [[nodiscard]] TConclusionStatus DeserializeFromProto(const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TSimpleColumnInfo& columnInfo);
     friend class TColumnRecord;
 public:
     TChunkMeta(TSimpleChunkMeta&& baseMeta)
@@ -40,7 +40,7 @@ public:
 
     }
 
-    static TConclusion<TChunkMeta> BuildFromProto(const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TSimpleColumnInfo& columnInfo) {
+    [[nodiscard]] static TConclusion<TChunkMeta> BuildFromProto(const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TSimpleColumnInfo& columnInfo) {
         TChunkMeta result;
         auto parse = result.DeserializeFromProto(address, proto, columnInfo);
         if (!parse) {

@@ -25,7 +25,7 @@ TConclusionStatus TChunkMeta::DeserializeFromProto(const TChunkAddress& address,
 }
 
 TChunkMeta::TChunkMeta(const TColumnChunkLoadContext& context, const TSimpleColumnInfo& columnInfo) {
-    AFL_VERIFY(DeserializeFromProto(context.GetAddress(), context.GetMetaProto(), columnInfo));
+    DeserializeFromProto(context.GetAddress(), context.GetMetaProto(), columnInfo).Validate();
 }
 
 TChunkMeta::TChunkMeta(const std::shared_ptr<arrow::Array>& column, const TSimpleColumnInfo& columnInfo)

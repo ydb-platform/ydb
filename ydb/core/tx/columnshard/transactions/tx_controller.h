@@ -124,6 +124,7 @@ public:
     NEvents::TDataEvents::TCoordinatorInfo GetCoordinatorInfo(const ui64 txId) const;
 
     size_t CleanExpiredTxs(NTabletFlatExecutor::TTransactionContext& txc);
+    TDuration GetTxCompleteLag(ui64 timecastStep) const;
 
     enum class EPlanResult {
         Skipped,

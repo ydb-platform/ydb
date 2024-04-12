@@ -489,6 +489,10 @@ private:
     NOlap::TSnapshot GetMaxReadVersion() const;
     ui64 GetMinReadStep() const;
     ui64 GetOutdatedStep() const;
+    TDuration GetTxCompleteLag() const {
+        ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;
+        return ProgressTxController->GetTxCompleteLag(mediatorTime);
+    }
 
     TWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId);
     TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId);

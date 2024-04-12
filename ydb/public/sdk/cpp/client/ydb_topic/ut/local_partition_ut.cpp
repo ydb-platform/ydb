@@ -673,6 +673,8 @@ namespace NYdb::NTopic::NTests {
             };
             auto const events = tracingBackend->GetEvents();
             UNIT_ASSERT(expected.Matches(events));
+
+            ReadSession.Close();
         }
     }
 }

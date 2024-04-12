@@ -264,6 +264,7 @@ void TTestReadSession::Run() {
 void TTestReadSession::Close() {
     Run();
     Session->Close();
+    Session.reset();
 }
 
 void TTestReadSession::Modify(std::function<void (std::set<size_t>&)> modifier) {

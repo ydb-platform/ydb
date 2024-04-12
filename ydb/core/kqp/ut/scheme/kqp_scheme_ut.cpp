@@ -5319,7 +5319,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
 
-        while (csController->GetInsertFinishedCounter().Val() == 0) {
+        while (csController->GetIndexations().Val() == 0) {
             Cout << "Wait indexation..." << Endl;
             Sleep(TDuration::Seconds(2));
         }

@@ -1,13 +1,3 @@
-#include "rpc_common/rpc_common.h"
-#include "rpc_deferrable.h"
-
-#include <ydb/core/grpc_services/base/base.h>
-#include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/tablet/tablet_pipe_client_cache.h>
-#include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/tx/sharding/sharding.h>
-#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/data_events/shard_writer.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -19,7 +9,7 @@
 
 namespace NKikimr {
 
-namespace NGRpcService {
+namespace NTxProxy {
 using namespace NActors;
 using namespace NLongTxService;
 

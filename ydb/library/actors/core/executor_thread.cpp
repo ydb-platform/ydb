@@ -505,7 +505,7 @@ namespace NActors {
         TlsThreadCtx.WorkerCtx = &Ctx;
         TlsThreadCtx.ActorSystemIndex = ActorSystemIndex;
         TlsThreadCtx.ElapsingActorActivity = ActorSystemIndex;
-        TlsThreadCtx.StartOfElapsingTime = GetCycleCountFast()
+        TlsThreadCtx.StartOfElapsingTime = GetCycleCountFast();
         TlsThreadContext = &TlsThreadCtx;
         if (ThreadName) {
             ::SetCurrentThreadName(ThreadName);
@@ -541,7 +541,7 @@ namespace NActors {
         TlsThreadCtx.WorkerCtx = &Ctx;
         TlsThreadCtx.ActorSystemIndex = ActorSystemIndex;
         TlsThreadCtx.ElapsingActorActivity = ActorSystemIndex;
-        TlsThreadCtx.StartOfElapsingTime = GetCycleCountFast()
+        TlsThreadCtx.StartOfElapsingTime = GetCycleCountFast();
         TlsThreadContext = &TlsThreadCtx;
         if (ThreadName) {
             ::SetCurrentThreadName(ThreadName);

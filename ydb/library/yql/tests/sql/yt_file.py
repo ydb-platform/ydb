@@ -142,13 +142,19 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
             return None
 
         if os.path.exists(res.results_file):
-            assert res.results == blocks_res.results, 'RESULTS_DIFFER\nBlocks result:\n %s\n\nScalar result:\n %s\n' % (blocks_res.results, res.results)
+            assert os.path.exists(blocks_res.results_file)
+            scalar_res = stable_result_file(res)
+            block_res = stable_result_file(blocks_res)
+            assert scalar_res == block_res, 'RESULTS_DIFFER\nBlocks result:\n %s\n\nScalar result:\n %s\n' % (block_res, scalar_res)
 
         for table in tables_res:
             if os.path.exists(tables_res[table].file):
-                assert tables_res[table].content == blocks_tables_res[table].content, \
+                assert os.path.exists(blocks_tables_res[table].file)
+                scalar_content = stable_table_file(tables_res[table])
+                block_content = stable_table_file(blocks_tables_res[table])
+                assert scalar_content == block_content, \
                        'RESULTS_DIFFER FOR TABLE %s\nBlocks result:\n %s\n\nScalar result:\n %s\n' % \
-                       (table, blocks_tables_res[table].content, tables_res[table].content)
+                       (table, block_content, scalar_content)
 
         return None
 

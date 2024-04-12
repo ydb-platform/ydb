@@ -4,7 +4,6 @@
 
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
-#include <ydb/core/grpc_services/rpc_long_tx.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/io_formats/arrow/csv_arrow.h>
@@ -120,6 +119,12 @@ private:
 }
 
 namespace NTxProxy {
+
+TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
+    const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
+    const TString& databaseName, const TString& path,
+    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult,
+    std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NYql::TIssues> issues);
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -855,7 +860,7 @@ private:
         TBase::Become(&TThis::StateWaitWriteBatchResult);
         ui32 batchNo = 0;
         TString dedupId = ToString(batchNo);
-        NGRpcService::DoLongTxWriteSameMailbox(ctx, ctx.SelfID, LongTxId, dedupId,
+        DoLongTxWriteSameMailbox(ctx, ctx.SelfID, LongTxId, dedupId,
             GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues);
     }
 

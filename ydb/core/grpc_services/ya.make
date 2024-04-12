@@ -54,7 +54,6 @@ SRCS(
     rpc_login.cpp
     rpc_load_rows.cpp
     rpc_log_store.cpp
-    rpc_long_tx.cpp
     rpc_node_registration.cpp
     rpc_maintenance.cpp
     rpc_make_directory.cpp
@@ -119,7 +118,6 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/datashard
     ydb/core/tx/sharding
-    ydb/core/tx/long_tx_service/public
     ydb/core/tx/data_events
     ydb/core/util
     ydb/core/ydb_convert

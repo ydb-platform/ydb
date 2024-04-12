@@ -1349,7 +1349,7 @@ class GnuToolchain(Toolchain):
 
     def setup_apple_arcadia_sdk(self, target):
         if target.is_ios:
-            self.setup_xcode_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
+            self.setup_xcode_sdk(project='build/internal/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
             self.platform_projects.append('build/internal/platform/macos_system_stl')
         if target.is_macos:
             self.setup_xcode_sdk(project='build/internal/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')

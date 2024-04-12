@@ -38,8 +38,13 @@ public:
         std::optional<ui32> activation;
         if (IsMPSC) {
             activation = ActivationQueue.TryPopSingleConsumer();
-        } else {
+        } else if (TlsThreadContext) {
             activation = ActivationQueue.TryPop(TlsThreadContext->ActivationPopMode);
+        } else {
+            // must be for destruction of actorsystem outside of actorsystem threads
+            using EPopMode = decltype(ActivationQueue)::EPopMode;
+            EPopMode popMode = EPopMode::ReallySlow;
+            activation = ActivationQueue.TryPop(popMode);
         }
         if (activation) {
             return *activation;

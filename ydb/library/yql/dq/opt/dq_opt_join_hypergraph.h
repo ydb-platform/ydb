@@ -49,7 +49,7 @@ public:
 
         // JoinKind may not be commutative, so we need to know which edge is original and which is reversed.
         bool IsReversed;
-        int64_t ReversedEdgeId;
+        int64_t ReversedEdgeId = -1;
 
         void BuildCondVectors() {
             LeftJoinKeys.clear();
@@ -135,10 +135,6 @@ public:
         }
 
         return nodeSet;
-    }
-
-    inline size_t GetNodeCount() {
-        return Nodes_.size();
     }
 
     TEdge& GetEdge(size_t edgeId) {

@@ -67,7 +67,7 @@ NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructi
 
     for (auto&& info : PortionsToEvict) {
         if (auto pwb = UpdateEvictedPortion(info, Blobs, context)) {
-            info.MutablePortionInfo().SetRemoveSnapshot(info.GetPortionInfo().RecordSnapshotMax());
+            info.MutablePortionInfo().SetRemoveSnapshot(context.LastCommittedTx);
             AFL_VERIFY(PortionsToRemove.emplace(info.GetPortionInfo().GetAddress(), info.GetPortionInfo()).second);
             AppendedPortions.emplace_back(std::move(*pwb));
         }

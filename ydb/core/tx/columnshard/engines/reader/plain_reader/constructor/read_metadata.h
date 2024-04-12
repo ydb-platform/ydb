@@ -38,9 +38,9 @@ public:
     TConclusionStatus Init(const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor);
 
     std::vector<std::string> GetColumnsOrder() const {
-        auto loadSchema = GetResultSchema();
+        auto schema = GetResultSchema();
         std::vector<std::string> result;
-        for (auto&& i : loadSchema->GetSchema()->fields()) {
+        for (auto&& i : schema->GetSchema()->fields()) {
             result.emplace_back(i->name());
         }
         return result;

@@ -514,9 +514,7 @@ void TPortionInfo::ReorderChunks() {
 void TPortionInfo::FullValidation() const {
     AFL_VERIFY(PathId);
     AFL_VERIFY(Portion);
-    if (!SchemaVersion) {
-        AFL_VERIFY(MinSnapshotDeprecated.Valid());
-    }
+    AFL_VERIFY(MinSnapshotDeprecated.Valid());
     std::set<ui32> blobIdxs;
     for (auto&& i : Records) {
         blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());

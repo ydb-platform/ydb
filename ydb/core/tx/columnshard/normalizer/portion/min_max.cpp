@@ -143,7 +143,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizer::Init(const 
             return TConclusionStatus::Fail("Not ready");
         }
 
-        TPortionInfo::TSchemaCoursor schema(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex());
+        TPortionInfo::TSchemaCursor schema(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex());
         auto initPortionCB = [&](const TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
             auto currentSchema = schema.GetSchema(portion);
 

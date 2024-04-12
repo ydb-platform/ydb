@@ -185,7 +185,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
 }
 
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
-    TPortionInfo::TSchemaCoursor schema(VersionedIndex);
+    TPortionInfo::TSchemaCursor schema(VersionedIndex);
     if (!db.LoadColumns([&](const TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
         auto currentSchema = schema.GetSchema(portion);
         AFL_VERIFY(portion.ValidSnapshotInfo())("details", portion.DebugString());

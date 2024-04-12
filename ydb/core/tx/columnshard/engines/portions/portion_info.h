@@ -527,6 +527,7 @@ public:
     }
 
     void SetSchemaVersion(const ui64 version) {
+        AFL_VERIFY(version);
         SchemaVersion = version;
     }
 
@@ -596,21 +597,21 @@ public:
         return result;
     }
 
-    class TSchemaCoursor {
+    class TSchemaCursor {
         const NOlap::TVersionedIndex& VersionedIndex;
         ISnapshotSchema::TPtr CurrentSchema;
         TSnapshot LastSnapshot = TSnapshot::Zero();
     public:
-        TSchemaCoursor(const NOlap::TVersionedIndex& versionedIndex)
+        TSchemaCursor(const NOlap::TVersionedIndex& versionedIndex)
             : VersionedIndex(versionedIndex)
         {}
 
         ISnapshotSchema::TPtr GetSchema(const TPortionInfo& portion) {
-            bool acceptableSchema =  portion.SchemaVersion ? (*portion.SchemaVersion == CurrentSchema->GetVersion()) : portion.MinSnapshotDeprecated == LastSnapshot;
-            if (!CurrentSchema || !acceptableSchema) {
+            if (!CurrentSchema || portion.MinSnapshotDeprecated != LastSnapshot) {
                 CurrentSchema = portion.GetSchema(VersionedIndex);
                 LastSnapshot = portion.GetMinSnapshotDeprecated();
             }
+            AFL_VERIFY(!!CurrentSchema)("portion", portion.DebugString());
             return CurrentSchema;
         }
     };

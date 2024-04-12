@@ -297,9 +297,8 @@ public:
         const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish)
         : TBase(sourceIdx, context, start, finish, portion->RecordSnapshotMax(), portion->GetRecordsCount())
         , Portion(portion)
-        , Schema(GetContext()->GetReadMetadata()->GetLoadSchema(*Portion))
+        , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*Portion))
     {
-        AFL_VERIFY(Schema);
     }
 };
 

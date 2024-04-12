@@ -627,7 +627,7 @@ namespace NYdb::NTopic::NTests {
                                 .MessageGroupId(TEST_MESSAGE_GROUP_ID)
                                 .DirectWriteToPartition(true);
             auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
-            TTestReadSession ReadSession(client, 2);
+            TTestReadSession ReadSession("Session-0", client, 2);
 
             UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 2)));
 

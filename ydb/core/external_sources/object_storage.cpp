@@ -119,6 +119,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
     static NYql::TIssues Validate(const TScheme& schema, const TObjectStorage& objectStorage, size_t pathsLimit = 50000) {
         NYql::TIssues issues;
         issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting()));
+        issues.AddIssues(ValidateRawFormat(objectStorage.format(), schema, objectStorage.partitioned_by()));
         if (objectStorage.projection_size() || objectStorage.partitioned_by_size()) {
             try {
                 TVector<TString> partitionedBy{objectStorage.partitioned_by().begin(), objectStorage.partitioned_by().end()};
@@ -218,6 +219,37 @@ struct TObjectStorageExternalSource : public IExternalSource {
             if (matchAllSettings) {
                 issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "unknown format setting " + key));
             }
+        }
+        return issues;
+    }
+
+    template<typename TScheme>
+    static NYql::TIssues ValidateRawFormat(const TString& format, const TScheme& schema, const google::protobuf::RepeatedPtrField<TString>& partitionedBy) {
+        NYql::TIssues issues;
+        if (format != "raw"sv) {
+            return issues;
+        }
+
+        ui64 realSchemaColumnsCount = 0;
+        Ydb::Column lastColumn;
+        TSet<TString> partitionedBySet{partitionedBy.begin(), partitionedBy.end()};
+
+        for (const auto& column: schema.column()) {
+            if (partitionedBySet.contains(column.name())) {
+                continue;
+            }
+            if (!ValidateStringType(column.type())) {
+                issues.AddIssue(MakeErrorIssue(
+                    Ydb::StatusIds::BAD_REQUEST,
+                    TStringBuilder{} << TStringBuilder() << "Only string type column in schema supported in raw format (you have '" 
+                        << column.name() << " " << NYdb::TType(column.type()).ToString() << "' field)"));
+            }
+            ++realSchemaColumnsCount;
+        }
+
+        if (realSchemaColumnsCount > 1) {
+            issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder{} << TStringBuilder() << "Only one column in schema supported in raw format (you have " 
+                << realSchemaColumnsCount << " fields)"));
         }
         return issues;
     }
@@ -415,6 +447,29 @@ private:
         return dataSlotColumns;
     }
 
+    static std::vector<NYdb::TType> GetStringTypes() {
+        NYdb::TType stringType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::String).Build();
+        NYdb::TType utf8Type = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Utf8).Build();
+        NYdb::TType ysonType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Yson).Build();
+        NYdb::TType jsonType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Json).Build();
+        const std::vector<NYdb::TType> result {
+            stringType,
+            utf8Type,
+            ysonType,
+            jsonType,
+            NYdb::TTypeBuilder{}.Optional(stringType).Build(),
+            NYdb::TTypeBuilder{}.Optional(utf8Type).Build(),
+            NYdb::TTypeBuilder{}.Optional(ysonType).Build(),
+            NYdb::TTypeBuilder{}.Optional(jsonType).Build()
+        };
+        return result;
+    }
+
+    static bool ValidateStringType(const NYdb::TType& columnType) {
+        static const std::vector<NYdb::TType> availableTypes = GetStringTypes();
+        return FindIf(availableTypes, [&columnType](const auto& availableType) { return NYdb::TypesEqual(availableType, columnType); }) != availableTypes.end();
+    }
+
 private:
     const std::vector<TRegExMatch> HostnamePatterns;
 };
@@ -431,6 +486,10 @@ NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuer
 
 NYql::TIssues ValidateDateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting, bool matchAllSettings) {
     return TObjectStorageExternalSource::ValidateDateFormatSetting(formatSetting, matchAllSettings);
+}
+
+NYql::TIssues ValidateRawFormat(const TString& format, const FederatedQuery::Schema& schema, const google::protobuf::RepeatedPtrField<TString>& partitionedBy) {
+    return TObjectStorageExternalSource::ValidateRawFormat(format, schema, partitionedBy);
 }
 
 }

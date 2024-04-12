@@ -58,7 +58,7 @@ namespace NFwd {
     public:
         const ui64 Cookie = Max<ui64>();
         const TIntrusiveConstPtr<IPageCollection> PageCollection;
-        const TAutoPtr<IPageLoadingLogic> PageLoadingLogic;
+        const THolder<IPageLoadingLogic> PageLoadingLogic;
         const ui32 Slot = Max<ui32>();
         bool Grow = false;  /* Should call Forward(...) for preloading */
         TAutoPtr<TFetch> Fetch;
@@ -69,7 +69,7 @@ namespace NFwd {
         using TSlotVec = TSmallVec<TSlot>;
 
         struct TPagesLogic {
-            TAutoPtr<IPageLoadingLogic> PageLoadingLogic;
+            THolder<IPageLoadingLogic> PageLoadingLogic;
             TIntrusiveConstPtr<IPageCollection> PageCollection;
         };
 
@@ -318,8 +318,7 @@ namespace NFwd {
 
             auto& cache = partStore->PageCollections[groupId.Index];
             
-            auto* fwd = new NFwd::TCache(part, groupId, slices);
-            return { fwd, cache->PageCollection };
+            return {CreateCache(part, groupId, slices), cache->PageCollection};
         }
 
         TPagesLogic MakeExtern(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept
@@ -345,10 +344,9 @@ namespace NFwd {
 
                 bool trace = Conf.Trace && !ColdParts.contains(part);
 
-                return
-                    { new NFwd::TBlobs(part->Large, std::move(bounds), edge, trace), blobs};
+                return {MakeHolder<TBlobs>(part->Large, std::move(bounds), edge, trace), blobs};
             } else {
-                return { nullptr, nullptr };
+                return {nullptr, nullptr};
             }
         }
 
@@ -361,10 +359,9 @@ namespace NFwd {
 
                 auto pageCollection = partStore->PageCollections.at(partStore->GroupsCount)->PageCollection;
 
-                return
-                    { new NFwd::TBlobs(small, std::move(bounds), edge, false), pageCollection };
+                return {MakeHolder<TBlobs>(small, std::move(bounds), edge, false), pageCollection};
             } else {
-                return { nullptr, nullptr };
+                return {nullptr, nullptr};
             }
         }
 

@@ -164,12 +164,11 @@ namespace NTest {
         using TSlotVec = TSmallVec<TSlot>;
 
         struct TPageLoadingQueue : private NFwd::IPageLoadingQueue {
-            TPageLoadingQueue(TIntrusiveConstPtr<TStore> store, ui32 room, TAutoPtr<NFwd::IPageLoadingLogic> line)
+            TPageLoadingQueue(TIntrusiveConstPtr<TStore> store, ui32 room, THolder<NFwd::IPageLoadingLogic> line)
                 : Room(room)
                 , Store(std::move(store))
-                , PageLoadingLogic(line)
+                , PageLoadingLogic(std::move(line))
             {
-
             }
 
             TResult DoLoad(ui32 page, ui64 lower, ui64 upper) noexcept
@@ -204,7 +203,7 @@ namespace NTest {
             const ui32 Room = Max<ui32>();
             TVector<TPageId> Fetch;
             TIntrusiveConstPtr<TStore> Store;
-            TAutoPtr<NFwd::IPageLoadingLogic> PageLoadingLogic;
+            THolder<NFwd::IPageLoadingLogic> PageLoadingLogic;
             bool Grow = false;
         };
 
@@ -275,8 +274,7 @@ namespace NTest {
                 for (ui32 room : xrange(partStore->Store->GetRoomCount())) {
                     if (room < partStore->Store->GetGroupCount()) {
                         NPage::TGroupId groupId(room);
-                        auto *cache = new NFwd::TCache(part, groupId);
-                        slots.push_back(Settle(partStore, room, cache));
+                        slots.push_back(Settle(partStore, room, NFwd::CreateCache(part, groupId)));
                     } else if (room == partStore->Store->GetOuterRoom()) {
                         slots.push_back(Settle(partStore, room, MakeOuter(partStore)));
                     } else if (room == partStore->Store->GetExternRoom()) {
@@ -287,8 +285,7 @@ namespace NTest {
                 }
                 for (ui32 group : xrange(part->HistoricGroupsCount)) {
                     NPage::TGroupId groupId(group, true);
-                    auto *cache = new NFwd::TCache(part, groupId);
-                    slots.push_back(Settle(partStore, group, cache));
+                    slots.push_back(Settle(partStore, group, NFwd::CreateCache(part, groupId)));
                 }
             }
 
@@ -297,10 +294,10 @@ namespace NTest {
             return Queues.at(slots[room]);
         }
 
-        TSlot Settle(const TPartStore *part, ui16 room, NFwd::IPageLoadingLogic *line)
+        TSlot Settle(const TPartStore *part, ui16 room, THolder<NFwd::IPageLoadingLogic> line)
         {
             if (line) {
-                Queues.emplace_back(part->Store, room, line);
+                Queues.emplace_back(part->Store, room, std::move(line));
 
                 return Queues.size() - 1;
             } else {
@@ -308,24 +305,24 @@ namespace NTest {
             }
         }
 
-        NFwd::IPageLoadingLogic* MakeExtern(const TPartStore *part) const noexcept
+        THolder<NFwd::IPageLoadingLogic> MakeExtern(const TPartStore *part) const noexcept
         {
             if (auto &large = part->Large) {
                 Y_ABORT_UNLESS(part->Blobs, "Part has frames but not blobs");
 
                 TVector<ui32> edges(large->Stats().Tags.size(), Edge);
 
-                return new NFwd::TBlobs(large, TSlices::All(), edges, false);
+                return MakeHolder<NFwd::TBlobs>(large, TSlices::All(), edges, false);
             } else
                 return nullptr;
         }
 
-        NFwd::IPageLoadingLogic* MakeOuter(const TPart *part) const noexcept
+        THolder<NFwd::IPageLoadingLogic> MakeOuter(const TPart *part) const noexcept
         {
             if (auto &small = part->Small) {
                 TVector<ui32> edge(small->Stats().Tags.size(), Max<ui32>());
 
-                return new NFwd::TBlobs(small, TSlices::All(), edge, false);
+                return MakeHolder<NFwd::TBlobs>(small, TSlices::All(), edge, false);
             } else
                 return nullptr;
         }

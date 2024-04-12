@@ -241,14 +241,13 @@ namespace NActors {
                     if (activityType != prevActivityType) {
                         prevActivityType = activityType;
                         NProfiling::TMemoryTagScope::Reset(activityType);
+                        TlsThreadContext->ElapsingActorActivity.store(activityType, std::memory_order_release);
                     }
 
-                    TlsThreadContext->ElapsingActorActivity.store(activityType, std::memory_order_release);
                     actor->Receive(ev);
 
                     hpnow = GetCycleCountFast();
                     hpprev = TlsThreadContext->StartOfElapsingTime.exchange(hpnow, std::memory_order_acq_rel);
-                    TlsThreadContext->ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
 
                     mailbox->ProcessEvents(mailbox);
                     actor->OnDequeueEvent();
@@ -367,6 +366,7 @@ namespace NActors {
                 break; // empty queue, leave
             }
         }
+        TlsThreadContext->ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
 
         NProfiling::TMemoryTagScope::Reset(0);
         TlsActivationContext = nullptr;
@@ -504,6 +504,8 @@ namespace NActors {
 
         TlsThreadCtx.WorkerCtx = &Ctx;
         TlsThreadCtx.ActorSystemIndex = ActorSystemIndex;
+        TlsThreadCtx.ElapsingActorActivity = ActorSystemIndex;
+        TlsThreadCtx.StartOfElapsingTime = GetCycleCountFast()
         TlsThreadContext = &TlsThreadCtx;
         if (ThreadName) {
             ::SetCurrentThreadName(ThreadName);
@@ -538,6 +540,8 @@ namespace NActors {
 
         TlsThreadCtx.WorkerCtx = &Ctx;
         TlsThreadCtx.ActorSystemIndex = ActorSystemIndex;
+        TlsThreadCtx.ElapsingActorActivity = ActorSystemIndex;
+        TlsThreadCtx.StartOfElapsingTime = GetCycleCountFast()
         TlsThreadContext = &TlsThreadCtx;
         if (ThreadName) {
             ::SetCurrentThreadName(ThreadName);

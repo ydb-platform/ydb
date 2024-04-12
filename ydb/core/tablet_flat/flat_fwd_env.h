@@ -68,7 +68,7 @@ namespace NFwd {
         using TSlot = ui32;
         using TSlotVec = TSmallVec<TSlot>;
 
-        struct TPagesLogic {
+        struct TPages {
             THolder<IPageLoadingLogic> PageLoadingLogic;
             TIntrusiveConstPtr<IPageCollection> PageCollection;
         };
@@ -297,12 +297,12 @@ namespace NFwd {
             return Queues.at(GetQueueSlot(part, room));
         }
 
-        TSlot Settle(TPagesLogic egg, ui32 slot) noexcept
+        TSlot Settle(TPages pages, ui32 slot) noexcept
         {
-            if (egg.PageLoadingLogic || egg.PageCollection) {
+            if (pages.PageLoadingLogic || pages.PageCollection) {
                 const ui64 cookie = (ui64(Queues.size()) << 32) | ui32(Salt + Epoch);
 
-                Queues.emplace_back(slot, cookie, std::move(egg.PageCollection), egg.PageLoadingLogic);
+                Queues.emplace_back(slot, cookie, std::move(pages.PageCollection), pages.PageLoadingLogic);
 
                 return Queues.size() - 1;
             } else {
@@ -310,7 +310,7 @@ namespace NFwd {
             }
         }
 
-        TPagesLogic MakeCache(const TPart *part, NPage::TGroupId groupId, TIntrusiveConstPtr<TSlices> slices) noexcept
+        TPages MakeCache(const TPart *part, NPage::TGroupId groupId, TIntrusiveConstPtr<TSlices> slices) noexcept
         {
             auto *partStore = CheckedCast<const TPartStore*>(part);
 
@@ -321,7 +321,7 @@ namespace NFwd {
             return {CreateCache(part, groupId, slices), cache->PageCollection};
         }
 
-        TPagesLogic MakeExtern(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept
+        TPages MakeExtern(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept
         {
             if (auto blobs = part->Blobs) {
                 /* Should always materialize key columns to values since
@@ -350,7 +350,7 @@ namespace NFwd {
             }
         }
 
-        TPagesLogic MakeOuter(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept
+        TPages MakeOuter(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept
         {
             if (auto small = part->Small) {
                 auto *partStore = CheckedCast<const TPartStore*>(part);

@@ -36,7 +36,6 @@
     </style>
     <script>
         function copyTestNameToClipboard(text) {
-            console.log('got %o', text);
             const full_name = text.trim();
             const pieces = /(.+)\/([^$]+)$/.exec(full_name);
 
@@ -48,7 +47,7 @@
 
             const namePieces = testName.split('.');
 
-            if (namePieces.length == 2) {
+            if (namePieces.length === 2) {
                 testName = namePieces[0] + '::' + namePieces[1];
             } else {
                 testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
@@ -64,17 +63,22 @@
                 }
             );
         }
+        function copyOnPress(event) {
+            // ctrl or cmd
+            if (!event.ctrlKey && !event.metaKey) {
+                return;
+            }
+            if (event.target.matches("td") && event.target.cellIndex === 0) {
+                event.preventDefault();
+                copyTestNameToClipboard(event.target.textContent)
+            }
+        }
+
         document.addEventListener("DOMContentLoaded", function() {
-            document.getElementById('result-table').addEventListener('click', (event) => {
-                // ctrl or cmd
-                if (!event.ctrlKey && !event.metaKey) {
-                    return;
-                }
-                if (event.target.matches("td") && event.target.cellIndex == 0) {
-                    event.preventDefault();
-                    copyTestNameToClipboard(event.target.textContent)
-                }
-            });
+            const els = document.getElementsByClassName("result-table");
+            for (let i = 0; i < els.length; i++) {
+                els[i].addEventListener('click', copyOnPress);
+            }
         });
     </script>
 </head>
@@ -84,7 +88,7 @@
 <p>
     To copy the test name to the clipboard, simply click on the test name while holding down the cmd or ctrl key.
 </p>
-<table style="width:100%;" border="1">
+<table style="width:100%;" border="1" class="result-table">
     <thead>
     <tr>
         <th>test name</th>

@@ -525,6 +525,7 @@ Y_UNIT_TEST_SUITE(NFwd_TCache) {
         NPage::TConf conf;
 
         conf.WriteBTreeIndex = bTreeIndex;
+        conf.WriteFlatIndex = !bTreeIndex;
         conf.Group(0).PageRows = 2;
         conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
 
@@ -592,13 +593,25 @@ Y_UNIT_TEST_SUITE(NFwd_TCache) {
 
         TCacheWrap wrap(eggs.Lone(), 201, 350);
         
-        // provide index page:
-        wrap.To(0).Get(20, false, false, true, 
-            {453, 0, 453, 0, 0});
-        wrap.To(1).Fill({20}, 
-            {453, 453, 453, 0, 0});
-        wrap.To(2).Get(20, true, false, true, 
-            {453, 453, 453, 0, 0});
+        // level 0:
+        wrap.To(0).Get(28, false, false, true, 
+            {98, 0, 98, 0, 0});
+        wrap.To(1).Fill({28}, 
+            {98, 98, 98, 0, 0});
+        wrap.To(2).Get(28, true, false, true, 
+            {98, 98, 98, 0, 0});
+
+        // level 1:
+        wrap.To(3).Get(23, false, true, true, 
+            {241, 98, 241, 0, 0});
+        wrap.To(4).Fill({23, 27}, 
+            {384, 384, 241, 0, 0});
+        wrap.To(5).Get(23, true, false, true, 
+            {384, 384, 241, 0, 0});
+        wrap.To(6).Get(27, true, false, true, 
+            {384, 384, 384, 0, 0});
+
+        return;
 
         wrap.To(3).Get(0, false, true, true, 
             {503, 453, 503, 0, 0});

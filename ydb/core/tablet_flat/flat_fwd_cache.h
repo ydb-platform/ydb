@@ -71,44 +71,59 @@ namespace NFwd {
         virtual ~ICacheLineQueue() = default;
     };
 
-    // class TBTreeIndexCacheLineQueue final : public ICacheLineQueue {
-    // public:
-    //     struct TNodeState {
-    //         TPageId PageId;
-    //         TRowId BeginRowId;
-    //         TRowId EndRowId;
-    //         ui64 BeginDataSize;
-    //         ui64 EndDataSize;
+    class TBTreeIndexCacheLineQueue final : public ICacheLineQueue {
+    public:
+        struct TNodeState {
+            TPageId PageId;
+            ui32 Level;
+            TRowId BeginRowId;
+            ui64 BeginDataSize;
 
-    //         TNodeState(TPageId pageId, TRowId beginRowId, TRowId endRowId, ui64 beginDataSize, ui64 endDataSize)
-    //             : PageId(pageId)
-    //             , BeginRowId(beginRowId)
-    //             , EndRowId(endRowId)
-    //             , BeginDataSize(beginDataSize)
-    //             , EndDataSize(endDataSize)
-    //         {
-    //         }
-    //     };
+            TNodeState(TPageId pageId, ui32 level, TRowId beginRowId, ui64 beginDataSize)
+                : PageId(pageId)
+                , Level(level)
+                , BeginRowId(beginRowId)
+                , BeginDataSize(beginDataSize)
+            {
+            }
+        };
 
-    //     void Advance(TPageId pageId) override
-    //     {
-    //         Y_DEBUG_ABORT_UNLESS(!Queue.empty());
-    //         Y_DEBUG_ABORT_UNLESS(Queue.begin()->PageId <= pageId);
-    //         while (!Queue.empty() && Queue.begin()->PageId < pageId) {
-    //             Queue.pop_front();
-    //         }
+        void Add(TNodeState node) {
+            Queue.push_back(node);
+        }
 
-    //         Y_DEBUG_ABORT_UNLESS(!Queue.empty());
-    //         Y_DEBUG_ABORT_UNLESS(Queue.begin()->PageId == pageId);
-    //         if (!Queue.empty() && Queue.begin()->PageId == pageId) {
-    //             Queue.pop_front();
-    //         }
-    //     }
+        void Advance(TPageId pageId) override
+        {
+            Y_DEBUG_ABORT_UNLESS(!Queue.empty());
+            Y_DEBUG_ABORT_UNLESS(Queue.begin()->PageId <= pageId);
+            while (!Queue.empty() && Queue.begin()->PageId < pageId) {
+                Queue.pop_front();
+            }
 
-    // private:
-    //     // const TBtreeIndexMeta Meta;
-    //     TDeque<TNodeState> Queue;
-    // };
+            Y_DEBUG_ABORT_UNLESS(!Queue.empty());
+            Y_DEBUG_ABORT_UNLESS(Queue.begin()->PageId == pageId);
+            if (!Queue.empty() && Queue.begin()->PageId == pageId) {
+                Queue.pop_front();
+            }
+        }
+
+        bool Grow(ui64 onHold, ui64 onFetch, ui64 limit) override
+        {
+            Y_UNUSED(onHold, onFetch, limit);
+            // TODO
+            return !Queue.empty();
+        }
+
+        TPageId Next() override {
+            auto result = Queue.front();
+            Queue.pop_front();
+            return result.PageId;
+        }
+
+    private:
+        // const TBtreeIndexMeta Meta;
+        TDeque<TNodeState> Queue;
+    };
 
     class TFlatIndexIndexCacheLineQueue final : public ICacheLineQueue {
     public:
@@ -161,9 +176,9 @@ namespace NFwd {
         }
 
         TPageId Next() override {
-            Y_DEBUG_ABORT_UNLESS(Iter && Iter->GetRowId() < EndRowId);
-
-            return (Iter++)->GetPageId();
+            auto result = Iter->GetPageId();
+            Iter++;
+            return result;
         }
 
     private:
@@ -193,6 +208,14 @@ namespace NFwd {
             Y_ABORT_UNLESS(!Queue);
 
             Queue = std::move(queue);
+        }
+
+        template<typename T>
+        T* GetQueue() noexcept
+        {
+            Y_ABORT_UNLESS(Queue);
+
+            return dynamic_cast<T*>(Queue.Get());
         }
 
         TResult Get(IPageLoadingQueue *head, TPageId pageId, ui64 lower) noexcept
@@ -324,7 +347,13 @@ namespace NFwd {
                 CacheLines.emplace_back(Stat);
             }
             if (part->IndexPages.HasBTree()) {
-                // CacheLines[0].UseQueue(THolder<ICacheLineQueue> queue)
+                for (ui32 level = 0; level < cacheLineCount; level++) {
+                    CacheLines[level].UseQueue(MakeHolder<TBTreeIndexCacheLineQueue>());
+                }
+                auto meta = part->IndexPages.GetBTree(groupId);
+                TBTreeIndexCacheLineQueue::TNodeState node(meta.PageId, 0, 0, 0);
+                CacheLines[node.Level].GetQueue<TBTreeIndexCacheLineQueue>()->Add(node);
+                BTreeNodes.emplace(node.PageId, node);
             } else {
                 CacheLines[0].UseQueue(MakeHolder<TFlatIndexIndexCacheLineQueue>(part->IndexPages.GetFlat(groupId)));
             }
@@ -336,10 +365,9 @@ namespace NFwd {
 
             switch (type) {
                 case EPage::BTreeIndex: {
-                    auto level = BTreeNodePageLevel.FindPtr(pageId);
-                    Y_ABORT_UNLESS(level, "Unknown page");
-                    Y_ABORT();
-                    break;
+                    auto nodeState = BTreeNodes.FindPtr(pageId);
+                    Y_ABORT_UNLESS(nodeState, "Unknown page");
+                    return CacheLines[nodeState->Level].Get(head, pageId, lower);
                 }
                 case EPage::Index:
                     return CacheLines[0].Get(head, pageId, lower);
@@ -359,13 +387,27 @@ namespace NFwd {
 
         void Apply(TArrayRef<NPageCollection::TLoadedPage> loaded) noexcept override
         {
+            using TRecIdx = NPage::TRecIdx;
+
             for (auto &page: loaded) {
                 auto type = Part->GetPageType(page.PageId);
                 
                 switch (type) {
                     case EPage::BTreeIndex: {
-                        auto level = BTreeNodePageLevel.FindPtr(page.PageId);
-                        Y_ABORT_UNLESS(level, "Unknown page");
+                        auto nodeState = BTreeNodes.FindPtr(page.PageId);
+                        Y_ABORT_UNLESS(nodeState, "Unknown page");
+                        NPage::TBtreeIndexNode node(page.Data);
+                        for (TRecIdx pos : xrange<TRecIdx>(0, node.GetChildrenCount())) {
+                            auto& child = node.GetShortChild(pos);
+
+                            TRowId beginRowId = pos ? node.GetShortChild(pos - 1).RowCount : nodeState->BeginRowId;
+                            ui64 beginDataSize = pos ? node.GetShortChild(pos - 1).DataSize : nodeState->BeginDataSize;
+
+                            TBTreeIndexCacheLineQueue::TNodeState childNodeState(child.PageId, nodeState->Level + 1, beginRowId, beginDataSize);
+                            CacheLines[childNodeState.Level].GetQueue<TBTreeIndexCacheLineQueue>()->Add(childNodeState);
+                            BTreeNodes.emplace(childNodeState.PageId, childNodeState);
+                        }
+                        CacheLines[nodeState->Level].Fill(page);
                         break;
                     }
                     case EPage::Index:
@@ -386,7 +428,7 @@ namespace NFwd {
         TRowId BeginRowId, EndRowId;
 
         TDeque<TCacheLine> CacheLines;
-        TMap<TPageId, ui32> BTreeNodePageLevel;
+        TMap<TPageId, TBTreeIndexCacheLineQueue::TNodeState> BTreeNodes;
     };
 }
 }

@@ -412,7 +412,7 @@ def format_query_value(value: Any, server_tz: tzinfo = pytz.UTC):
         return format_query_value(value.value, server_tz)
     if isinstance(value, (uuid.UUID, ipaddress.IPv4Address, ipaddress.IPv6Address)):
         return f"'{value}'"
-    return str(value)
+    return value
 
 
 # pylint: disable=too-many-branches

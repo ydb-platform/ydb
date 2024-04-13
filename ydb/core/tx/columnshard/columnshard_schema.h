@@ -461,7 +461,7 @@ struct Schema : NIceDb::Schema {
         struct Metadata: Column<6, NScheme::NTypeIds::String> {}; // NKikimrTxColumnShard.TIndexColumnMeta
 
         using TKey = TableKey<PathId, PortionId>;
-        using TColumns = TableColumns<PathId, PortionId, XPlanStep, XTxId, Metadata>;
+        using TColumns = TableColumns<PathId, PortionId, SchemaVersion, XPlanStep, XTxId, Metadata>;
     };
 
     using TTables = SchemaTables<

@@ -537,7 +537,7 @@ public:
         CanonizeFuture_ = {};
         CanonizationRangesFoldersFuture_ = {};
 
-        if (!PendingWalkFolders_.empty()) {
+        if (status == TStatus::Ok && !PendingWalkFolders_.empty()) {
             const auto walkFoldersStatus = RewriteWalkFoldersOnAsyncOrEvalChanges(output, ctx);
             if (walkFoldersStatus != TStatus::Ok) {
                 return walkFoldersStatus;

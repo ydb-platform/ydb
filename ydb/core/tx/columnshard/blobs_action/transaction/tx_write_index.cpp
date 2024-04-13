@@ -8,6 +8,7 @@ namespace NKikimr::NColumnShard {
 
 bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     auto changes = Ev->Get()->IndexChanges;
+    TMemoryProfileGuard mpg("TTxWriteIndex::Execute::" + changes->TypeString());
     TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("external_task_id", changes->GetTaskIdentifier());
     Y_ABORT_UNLESS(Self->InsertTable);
     Y_ABORT_UNLESS(Self->TablesManager.HasPrimaryIndex());
@@ -52,6 +53,7 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID()));
     CompleteReady = true;
     auto changes = Ev->Get()->IndexChanges;
+    TMemoryProfileGuard mpg("TTxWriteIndex::Complete::" + changes->TypeString());
     ACFL_DEBUG("event", "TTxWriteIndex::Complete")("change_type", changes->TypeString())("details", changes->DebugString());
 
     const ui64 blobsWritten = changes->GetBlobsAction().GetWritingBlobsCount();

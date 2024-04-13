@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: requests-mock
-Version: 1.12.0
+Version: 1.12.1
 Summary: Mock out responses from the requests package
 Home-page: https://requests-mock.readthedocs.io/
 Author: Jamie Lennox
@@ -22,6 +22,7 @@ Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Software Development :: Testing
+Requires-Python: >=3.5
 License-File: LICENSE
 Requires-Dist: requests <3,>=2.22
 Provides-Extra: fixture

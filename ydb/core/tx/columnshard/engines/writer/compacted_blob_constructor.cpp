@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/defs.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap {
@@ -18,7 +19,7 @@ TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, T
         }
         auto* pInfo = changes.GetWritePortionInfo(i);
         Y_ABORT_UNLESS(pInfo);
-        TPortionInfoWithBlobs& portionWithBlobs = *pInfo;
+        TWritePortionInfoWithBlobs& portionWithBlobs = *pInfo;
         for (auto&& b : portionWithBlobs.GetBlobs()) {
             auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetBlob(), changes.MutableBlobsAction().GetWriting(b.GetOperator()->GetStorageId())));
             b.RegisterBlobId(portionWithBlobs, task.GetBlobId());

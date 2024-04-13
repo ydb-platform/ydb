@@ -669,11 +669,6 @@ public:
             return true;
         }
 
-        if (tableDesc.Metadata->Kind == EKikimrTableKind::Datashard && mode != "replace" && mode != "drop" && mode != "drop_if_exists") {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for oltp tables."));
-            return true;
-        }
-
         return false;
     }
 

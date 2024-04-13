@@ -44,7 +44,6 @@ void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const std:
 
 void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const NArrow::TFirstLastSpecialKeys& primaryKeys, const NArrow::TMinMaxSpecialKeys& snapshotKeys, const TString& tierName) {
     const auto& indexInfo = snapshotSchema.GetIndexInfo();
-    Meta.FirstPkColumn = indexInfo.GetPKFirstColumnId();
     Meta.FillBatchInfo(primaryKeys, snapshotKeys, indexInfo);
     Meta.SetTierName(tierName);
 }
@@ -131,12 +130,15 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
     return sb << ")";
 }
 
+void TPortionInfo::LoadMetadata(const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo) {
+    AFL_VERIFY(Meta.DeserializeFromProto(portionMeta, indexInfo));
+}
+
 void TPortionInfo::AddRecord(const TIndexInfo& indexInfo, const TColumnRecord& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta) {
     Records.push_back(rec);
 
     if (portionMeta) {
-        Meta.FirstPkColumn = indexInfo.GetPKFirstColumnId();
-        Y_ABORT_UNLESS(Meta.DeserializeFromProto(*portionMeta, indexInfo));
+        AFL_VERIFY(Meta.DeserializeFromProto(*portionMeta, indexInfo));
     }
 }
 
@@ -157,6 +159,16 @@ bool TPortionInfo::IsEqualWithSnapshots(const TPortionInfo& item) const {
         && Portion == item.Portion && RemoveSnapshot == item.RemoveSnapshot;
 }
 
+bool TPortionInfo::TakeSnapshots(const TPortionInfo& item) {
+    if (MinSnapshotDeprecated.Valid()) {
+        return PathId == item.PathId && MinSnapshotDeprecated == item.MinSnapshotDeprecated
+            && Portion == item.Portion && RemoveSnapshot == item.RemoveSnapshot;
+    } else {
+        MinSnapshotDeprecated = item.MinSnapshotDeprecated;
+        return PathId == item.PathId && Portion == item.Portion && RemoveSnapshot == item.RemoveSnapshot;
+    }
+}
+
 void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
     for (auto& record : Records) {
         db.EraseColumn(*this, record);
@@ -166,14 +178,18 @@ void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
     }
 }
 
-void TPortionInfo::SaveToDatabase(IDbWrapper& db) const {
+void TPortionInfo::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool /*saveOnlyMeta*/) const {
     FullValidation();
-    for (auto& record : Records) {
-        db.WriteColumn(*this, record);
-    }
-    for (auto& record : Indexes) {
-        db.WriteIndex(*this, record);
-    }
+    db.WritePortion(*this);
+//    if (saveOnlyMeta) {
+//    } else {
+        for (auto& record : Records) {
+            db.WriteColumn(*this, record, firstPKColumnId);
+        }
+        for (auto& record : Indexes) {
+            db.WriteIndex(*this, record);
+        }
+//    }
 }
 
 std::vector<NKikimr::NOlap::TPortionInfo::TPage> TPortionInfo::BuildPages() const {
@@ -535,6 +551,8 @@ void TPortionInfo::ReorderChunks() {
 }
 
 void TPortionInfo::FullValidation() const {
+    CheckChunksOrder(Records);
+    CheckChunksOrder(Indexes);
     AFL_VERIFY(PathId);
     AFL_VERIFY(Portion);
     AFL_VERIFY(MinSnapshotDeprecated.Valid());

@@ -40,12 +40,11 @@ bool TDbWrapper::Load(TInsertTableAccessor& insertTable,
     return NColumnShard::Schema::InsertTable_Load(db, DsGroupSelector, insertTable, loadTime);
 }
 
-void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
+void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) {
     NIceDb::TNiceDb db(Database);
-    auto proto = portion.GetMeta().SerializeToProto(row.ColumnId, row.Chunk);
     auto rowProto = row.GetMeta().SerializeToProto();
-    if (proto) {
-        *rowProto.MutablePortionMeta() = std::move(*proto);
+    if (row.GetChunkIdx() == 0 && row.GetColumnId() == firstPKColumnId) {
+        *rowProto.MutablePortionMeta() = portion.GetMeta().SerializeToProto();
     }
     using IndexColumns = NColumnShard::Schema::IndexColumns;
     auto removeSnapshot = portion.GetRemoveSnapshotOptional();
@@ -59,6 +58,24 @@ void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRe
             NIceDb::TUpdate<IndexColumns::Size>(row.BlobRange.Size),
             NIceDb::TUpdate<IndexColumns::PathId>(portion.GetPathId())
         );
+}
+
+void TDbWrapper::WritePortion(const NOlap::TPortionInfo& portion) {
+    NIceDb::TNiceDb db(Database);
+    auto metaProto = portion.GetMeta().SerializeToProto();
+    using IndexPortions = NColumnShard::Schema::IndexPortions;
+    auto removeSnapshot = portion.GetRemoveSnapshotOptional();
+    db.Table<IndexPortions>().Key(portion.GetPathId(), portion.GetPortion()).Update(
+        NIceDb::TUpdate<IndexPortions::SchemaVersion>(portion.GetSchemaVersionVerified()),
+        NIceDb::TUpdate<IndexPortions::XPlanStep>(removeSnapshot ? removeSnapshot->GetPlanStep() : 0),
+        NIceDb::TUpdate<IndexPortions::XTxId>(removeSnapshot ? removeSnapshot->GetTxId() : 0),
+        NIceDb::TUpdate<IndexPortions::Metadata>(metaProto.SerializeAsString()));
+}
+
+void TDbWrapper::ErasePortion(const NOlap::TPortionInfo& portion) {
+    NIceDb::TNiceDb db(Database);
+    using IndexPortions = NColumnShard::Schema::IndexPortions;
+    db.Table<IndexPortions>().Key(portion.GetPathId(), portion.GetPortion()).Delete();
 }
 
 void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
@@ -79,8 +96,8 @@ bool TDbWrapper::LoadColumns(const std::function<void(const NOlap::TPortionInfo&
     while (!rowset.EndOfSet()) {
         NOlap::TPortionInfo portion = NOlap::TPortionInfo::BuildEmpty();
         portion.SetPathId(rowset.GetValue<IndexColumns::PathId>());
-        portion.SetMinSnapshotDeprecated(NOlap::TSnapshot(rowset.GetValue<IndexColumns::PlanStep>(), rowset.GetValue<IndexColumns::TxId>()));
         portion.SetPortion(rowset.GetValue<IndexColumns::Portion>());
+        portion.SetMinSnapshotDeprecated(NOlap::TSnapshot(rowset.GetValue<IndexColumns::PlanStep>(), rowset.GetValue<IndexColumns::TxId>()));
         portion.SetDeprecatedGranuleId(rowset.GetValue<IndexColumns::Granule>());
 
         NOlap::TColumnChunkLoadContext chunkLoadContext(rowset, DsGroupSelector);
@@ -88,6 +105,33 @@ bool TDbWrapper::LoadColumns(const std::function<void(const NOlap::TPortionInfo&
         portion.SetRemoveSnapshot(rowset.GetValue<IndexColumns::XPlanStep>(), rowset.GetValue<IndexColumns::XTxId>());
 
         callback(portion, chunkLoadContext);
+
+        if (!rowset.Next()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TDbWrapper::LoadPortions(const std::function<void(NOlap::TPortionInfo&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) {
+    NIceDb::TNiceDb db(Database);
+    using IndexPortions = NColumnShard::Schema::IndexPortions;
+    auto rowset = db.Table<IndexPortions>().Select();
+    if (!rowset.IsReady()) {
+        return false;
+    }
+
+    while (!rowset.EndOfSet()) {
+        NOlap::TPortionInfo portion = NOlap::TPortionInfo::BuildEmpty();
+        portion.SetPathId(rowset.GetValue<IndexPortions::PathId>());
+        portion.SetPortion(rowset.GetValue<IndexPortions::PortionId>());
+        portion.SetSchemaVersion(rowset.GetValue<IndexPortions::SchemaVersion>());
+        portion.SetRemoveSnapshot(rowset.GetValue<IndexPortions::XPlanStep>(), rowset.GetValue<IndexPortions::XTxId>());
+
+        NKikimrTxColumnShard::TIndexPortionMeta metaProto;
+        const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexPortions::Metadata>();
+        AFL_VERIFY(metaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
+        callback(std::move(portion), metaProto);
 
         if (!rowset.Next()) {
             return false;

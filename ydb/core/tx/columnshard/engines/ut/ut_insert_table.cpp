@@ -28,7 +28,17 @@ public:
         return true;
     }
 
-    void WriteColumn(const TPortionInfo&, const TColumnRecord&) override {}
+    virtual void WritePortion(const NOlap::TPortionInfo& /*portion*/) override {
+
+    }
+    virtual void ErasePortion(const NOlap::TPortionInfo& /*portion*/) override {
+
+    }
+    virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfo&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
+        return true;
+    }
+
+    void WriteColumn(const TPortionInfo&, const TColumnRecord&, const ui32 /*firstPKColumnId*/) override {}
     void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {}
     bool LoadColumns(const std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)>&) override { return true; }
 

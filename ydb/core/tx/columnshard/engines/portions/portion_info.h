@@ -297,7 +297,7 @@ public:
 
     void RemoveFromDatabase(IDbWrapper& db) const;
 
-    void SaveToDatabase(IDbWrapper& db) const;
+    void SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const;
 
     void AddIndex(const TIndexChunk& chunk) {
         ui32 chunkIdx = 0;
@@ -444,6 +444,7 @@ public:
     }
 
     bool IsEqualWithSnapshots(const TPortionInfo& item) const;
+    bool TakeSnapshots(const TPortionInfo& item);
 
     static TPortionInfo BuildEmpty() {
         return TPortionInfo();
@@ -571,6 +572,7 @@ public:
 
     void AddRecord(const TIndexInfo& indexInfo, const TColumnRecord& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta);
 
+    void LoadMetadata(const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo);
     void AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch,
         const TString& tierName);
     void AddMetadata(const ISnapshotSchema& snapshotSchema, const NArrow::TFirstLastSpecialKeys& primaryKeys, const NArrow::TMinMaxSpecialKeys& snapshotKeys,

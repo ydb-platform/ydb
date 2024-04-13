@@ -169,7 +169,7 @@ std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(const TPortionIn
         auto portionNew = std::make_shared<TPortionInfo>(portion);
         it = Portions.emplace(portion.GetPortion(), portionNew).first;
     } else {
-        AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
+        AFL_VERIFY(it->second->TakeSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
     }
     return it->second;
 }

@@ -24,15 +24,24 @@ protected:
         auto pkColumnIds = Schemas->begin()->second->GetPkColumnsIds();
         pkColumnIds.insert(TIndexInfo::GetSpecialColumnIds().begin(), TIndexInfo::GetSpecialColumnIds().end());
 
+        THashMap<ui64, ui32> firstPKColumnIdByPathId;
         for (auto&& portionInfo : Portions) {
             auto blobSchema = Schemas->FindPtr(portionInfo->GetPortionId());
+            AFL_VERIFY(!!blobSchema)("details", portionInfo->DebugString());
+            {
+                auto it = firstPKColumnIdByPathId.find(portionInfo->GetPathId());
+                if (it == firstPKColumnIdByPathId.end()) {
+                    firstPKColumnIdByPathId.emplace(portionInfo->GetPathId(), (*blobSchema)->GetIndexInfo().GetPKFirstColumnId());
+                } else {
+                    AFL_VERIFY(it->second == (*blobSchema)->GetIndexInfo().GetPKFirstColumnId());
+                }
+            }
             THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo> blobsDataAssemble;
             for (auto&& i : portionInfo->GetRecords()) {
                 auto blobData = Blobs.Extract((*blobSchema)->GetIndexInfo().GetColumnStorageId(i.GetColumnId(), portionInfo->GetMeta().GetTierName()), portionInfo->RestoreBlobRange(i.BlobRange));
                 blobsDataAssemble.emplace(i.GetAddress(), blobData);
             }
 
-            AFL_VERIFY(!!blobSchema)("details", portionInfo->DebugString());
             auto filteredSchema = std::make_shared<TFilteredSnapshotSchema>(*blobSchema, pkColumnIds);
             auto preparedBatch = portionInfo->PrepareForAssemble(**blobSchema, *filteredSchema, blobsDataAssemble);
             auto batch = preparedBatch.Assemble();
@@ -40,13 +49,14 @@ protected:
             portionInfo->AddMetadata(**blobSchema, batch, portionInfo->GetMeta().GetTierName());
         }
 
-        auto changes = std::make_shared<TPortionsNormalizer::TNormalizerResult>(std::move(Portions));
+        auto changes = std::make_shared<TPortionsNormalizer::TNormalizerResult>(std::move(Portions), std::move(firstPKColumnIdByPathId));
         TActorContext::AsActorContext().Send(NormContext.GetColumnshardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(changes));
         return true;
     }
 
 public:
-    TMinMaxSnapshotChangesTask(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TNormalizationContext& nCtx, TDataContainer&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
+    TMinMaxSnapshotChangesTask(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TNormalizationContext& nCtx, TDataContainer&& portions, 
+        std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
         : Blobs(std::move(blobs))
         , Portions(std::move(portions))
         , Schemas(schemas)
@@ -83,9 +93,11 @@ public:
 
 class TPortionsNormalizer::TNormalizerResult : public INormalizerChanges {
     TMinMaxSnapshotChangesTask::TDataContainer Portions;
+    THashMap<ui64, ui32> FirstPKColumnIdByPathId;
 public:
-    TNormalizerResult(TMinMaxSnapshotChangesTask::TDataContainer&& portions)
+    TNormalizerResult(TMinMaxSnapshotChangesTask::TDataContainer&& portions, THashMap<ui64, ui32>&& firstPKColumnIdByPathId)
         : Portions(std::move(portions))
+        , FirstPKColumnIdByPathId(std::move(firstPKColumnIdByPathId))
     {}
 
     bool Apply(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
@@ -93,13 +105,14 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         for (auto&& portionInfo : Portions) {
+            auto it = FirstPKColumnIdByPathId.find(portionInfo->GetPathId());
+            AFL_VERIFY(it != FirstPKColumnIdByPathId.end());
             for (auto&& chunk : portionInfo->Records) {
-                auto proto = portionInfo->GetMeta().SerializeToProto(chunk.ColumnId, chunk.Chunk);
-                if (!proto) {
+                if (chunk.GetChunkIdx() || chunk.GetColumnId() != it->second) {
                     continue;
                 }
                 auto rowProto = chunk.GetMeta().SerializeToProto();
-                *rowProto.MutablePortionMeta() = std::move(*proto);
+                *rowProto.MutablePortionMeta() = portionInfo->GetMeta().SerializeToProto();
 
                 db.Table<Schema::IndexColumns>().Key(0, portionInfo->GetDeprecatedGranuleId(), chunk.ColumnId,
                     portionInfo->GetMinSnapshotDeprecated().GetPlanStep(), portionInfo->GetMinSnapshotDeprecated().GetTxId(), portionInfo->GetPortion(), chunk.Chunk).Update(

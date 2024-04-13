@@ -919,6 +919,29 @@ def normalize_result(res, sort):
     return res
 
 
+def stable_write(writer, node):
+    if hasattr(node, 'attributes'):
+        writer.begin_attributes()
+        for k in sorted(node.attributes.keys()):
+            writer.key(k)
+            stable_write(writer, node.attributes[k])
+        writer.end_attributes()
+    if isinstance(node, list):
+        writer.begin_list()
+        for r in node:
+            stable_write(writer, r)
+        writer.end_list()
+        return
+    if isinstance(node, dict):
+        writer.begin_map()
+        for k in sorted(node.keys()):
+            writer.key(k)
+            stable_write(writer, node[k])
+        writer.end_map()
+        return
+    writer.write(node)
+
+
 def stable_result_file(res):
     path = res.results_file
     assert os.path.exists(path)
@@ -931,7 +954,10 @@ def stable_result_file(res):
             if 'Unordered' in r and 'Data' in data:
                 data['Data'] = sorted(data['Data'])
     with open(path, 'w') as f:
-        f.write(cyson.dumps(res, format='pretty'))
+        writer = cyson.Writer(stream=cyson.OutputStream.from_file(f), format='pretty', mode='node')
+        writer.begin_stream()
+        stable_write(writer, res)
+        writer.end_stream()
     with open(path) as f:
         return f.read()
 
@@ -953,7 +979,7 @@ def stable_table_file(table):
             writer = cyson.Writer(stream=cyson.OutputStream.from_file(f), format='pretty', mode='list_fragment')
             writer.begin_stream()
             for r in lst:
-                writer.write(r)
+                stable_write(writer, r)
             writer.end_stream()
     with open(path) as f:
         return f.read()

@@ -3,7 +3,9 @@ LIBRARY()
 SRCS(
     portion_info.cpp
     column_record.cpp
-    with_blobs.cpp
+    base_with_blobs.cpp
+    read_with_blobs.cpp
+    write_with_blobs.cpp
     meta.cpp
     common.cpp
     index_chunk.cpp

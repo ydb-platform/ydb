@@ -1,4 +1,5 @@
 #pragma once
+#include "base_with_blobs.h"
 #include "portion_info.h"
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/splitter/blob_info.h>
@@ -10,9 +11,7 @@
 
 namespace NKikimr::NOlap {
 
-class TVersionedIndex;
-
-class TPortionInfoWithBlobs {
+class TWritePortionInfoWithBlobs: public TBasePortionInfoWithBlobs {
 public:
     class TBlobInfo {
     private:
@@ -22,8 +21,7 @@ public:
         YDB_READONLY_DEF(std::shared_ptr<IBlobsStorageOperator>, Operator);
         std::vector<std::shared_ptr<IPortionDataChunk>> ChunksOrdered;
         mutable std::optional<TString> ResultBlob;
-        void AddChunk(TPortionInfoWithBlobs& owner, const std::shared_ptr<IPortionDataChunk>& chunk);
-        void RestoreChunk(const TPortionInfoWithBlobs& owner, const std::shared_ptr<IPortionDataChunk>& chunk);
+        void AddChunk(TWritePortionInfoWithBlobs& owner, const std::shared_ptr<IPortionDataChunk>& chunk);
 
     public:
         TBlobInfo(const std::shared_ptr<IBlobsStorageOperator>& bOperator)
@@ -35,9 +33,9 @@ public:
         class TBuilder {
         private:
             TBlobInfo* OwnerBlob;
-            TPortionInfoWithBlobs* OwnerPortion;
+            TWritePortionInfoWithBlobs* OwnerPortion;
         public:
-            TBuilder(TBlobInfo& blob, TPortionInfoWithBlobs& portion)
+            TBuilder(TBlobInfo& blob, TWritePortionInfoWithBlobs& portion)
                 : OwnerBlob(&blob)
                 , OwnerPortion(&portion) {
             }
@@ -47,9 +45,6 @@ public:
 
             void AddChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
                 return OwnerBlob->AddChunk(*OwnerPortion, chunk);
-            }
-            void RestoreChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
-                OwnerBlob->RestoreChunk(*OwnerPortion, chunk);
             }
         };
 
@@ -65,26 +60,18 @@ public:
             return *ResultBlob;
         }
 
-        void RegisterBlobId(TPortionInfoWithBlobs& owner, const TUnifiedBlobId& blobId);
-        void ExtractEntityChunks(const ui32 entityId, std::map<TChunkAddress, std::shared_ptr<IPortionDataChunk>>& resultMap);
+        void RegisterBlobId(TWritePortionInfoWithBlobs& owner, const TUnifiedBlobId& blobId);
     };
 private:
     TPortionInfo PortionInfo;
     YDB_READONLY_DEF(std::vector<TBlobInfo>, Blobs);
-    mutable std::optional<std::shared_ptr<arrow::RecordBatch>> CachedBatch;
 
-    explicit TPortionInfoWithBlobs(TPortionInfo&& portionInfo, std::optional<std::shared_ptr<arrow::RecordBatch>> batch = {})
-        : PortionInfo(std::move(portionInfo))
-        , CachedBatch(batch) {
+    explicit TWritePortionInfoWithBlobs(TPortionInfo&& portionInfo)
+        : PortionInfo(std::move(portionInfo)) {
     }
 
-    explicit TPortionInfoWithBlobs(const TPortionInfo& portionInfo, std::optional<std::shared_ptr<arrow::RecordBatch>> batch = {})
-        : PortionInfo(portionInfo)
-        , CachedBatch(batch) {
-    }
-
-    void SetPortionInfo(const TPortionInfo& portionInfo) {
-        PortionInfo = portionInfo;
+    explicit TWritePortionInfoWithBlobs(const TPortionInfo& portionInfo)
+        : PortionInfo(portionInfo) {
     }
 
     TBlobInfo::TBuilder StartBlob(const std::shared_ptr<IBlobsStorageOperator>& bOperator) {
@@ -93,33 +80,18 @@ private:
     }
 
 public:
-    void InitBatchCached(const std::shared_ptr<arrow::RecordBatch>& batch) {
-        if (!batch) {
-            return;
-        }
-        CachedBatch = batch;
+    TPortionInfo& MutablePortionInfo() {
+        return PortionInfo;
     }
-
-    static std::vector<TPortionInfoWithBlobs> RestorePortions(const std::vector<TPortionInfo>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
-        const TVersionedIndex& tables, const std::shared_ptr<IStoragesManager>& operators);
-    static TPortionInfoWithBlobs RestorePortion(const TPortionInfo& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
-        const TIndexInfo& indexInfo, const std::shared_ptr<IStoragesManager>& operators);
-
-    std::shared_ptr<arrow::RecordBatch> GetBatch(const ISnapshotSchema::TPtr& data, const ISnapshotSchema& result, const std::set<std::string>& columnNames = {}) const;
-    static TPortionInfoWithBlobs SyncPortion(TPortionInfoWithBlobs&& source,
-        const ISnapshotSchema::TPtr& from, const ISnapshotSchema::TPtr& to, const TString& targetTier, const std::shared_ptr<IStoragesManager>& storages,
-        std::shared_ptr<NColumnShard::TSplitterCounters> counters);
 
     std::vector<std::shared_ptr<IPortionDataChunk>> GetEntityChunks(const ui32 entityId) const;
 
-    bool ExtractColumnChunks(const ui32 columnId, std::vector<const TColumnRecord*>& records, std::vector<std::shared_ptr<IPortionDataChunk>>& chunks);
-
     void FillStatistics(const TIndexInfo& index);
 
-    static TPortionInfoWithBlobs BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
-        std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const ui64 schemaVersion, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators);
+    static TWritePortionInfoWithBlobs BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
+        const ui64 granule, const ui64 schemaVersion, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators);
 
-    static TPortionInfoWithBlobs BuildByBlobs(std::vector<TSplittedBlob>&& chunks, const TPortionInfo& basePortion,
+    static TWritePortionInfoWithBlobs BuildByBlobs(std::vector<TSplittedBlob>&& chunks, const TPortionInfo& basePortion,
         const std::shared_ptr<IStoragesManager>& operators);
 
     const TString& GetBlobByRangeVerified(const ui32 columnId, const ui32 chunkId) const {
@@ -162,7 +134,7 @@ public:
         return PortionInfo;
     }
 
-    friend IOutputStream& operator << (IOutputStream& out, const TPortionInfoWithBlobs& info) {
+    friend IOutputStream& operator << (IOutputStream& out, const TWritePortionInfoWithBlobs& info) {
         out << info.DebugString();
         return out;
     }

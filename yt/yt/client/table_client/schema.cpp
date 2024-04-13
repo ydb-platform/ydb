@@ -749,6 +749,14 @@ bool TTableSchema::IsEmpty() const
     return Columns().empty();
 }
 
+bool TTableSchema::IsCGCompatarorApplicable() const
+{
+    auto keyTypes = GetKeyColumnTypes();
+    return std::none_of(keyTypes.begin(), keyTypes.end(), [] (auto type) {
+        return type == EValueType::Any;
+    });
+}
+
 std::optional<int> TTableSchema::GetTtlColumnIndex() const
 {
     auto* column = FindColumn(TtlColumnName);
@@ -1297,18 +1305,19 @@ TTableSchemaPtr TTableSchema::ToModifiedSchema(ETableSchemaModification schemaMo
     }
 }
 
-TComparator TTableSchema::ToComparator() const
+TComparator TTableSchema::ToComparator(TCallback<TUUComparerSignature> CGComparator) const
 {
-    if (!ColumnInfo_) {
-        return TComparator(std::vector<ESortOrder>());
+    std::vector<ESortOrder> sortOrders;
+    if (ColumnInfo_) {
+        const auto& info = *ColumnInfo_;
+        sortOrders.resize(KeyColumnCount_);
+        for (int index = 0; index < KeyColumnCount_; ++index) {
+            YT_VERIFY(info.Columns[index].SortOrder());
+            sortOrders[index] = *info.Columns[index].SortOrder();
+        }
     }
-    const auto& info = *ColumnInfo_;
-    std::vector<ESortOrder> sortOrders(KeyColumnCount_);
-    for (int index = 0; index < KeyColumnCount_; ++index) {
-        YT_VERIFY(info.Columns[index].SortOrder());
-        sortOrders[index] = *info.Columns[index].SortOrder();
-    }
-    return TComparator(std::move(sortOrders));
+
+    return TComparator(std::move(sortOrders), std::move(CGComparator));
 }
 
 void TTableSchema::Save(TStreamSaveContext& context) const

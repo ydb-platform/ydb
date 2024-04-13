@@ -1,5 +1,6 @@
 /* postgres can not */
 /* multirun can not */
+/* hybridfile can not YQL-18225 */
 /* syntax version 1 */
 USE plato;
 

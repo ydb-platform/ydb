@@ -159,6 +159,16 @@ bool TPortionInfo::IsEqualWithSnapshots(const TPortionInfo& item) const {
         && Portion == item.Portion && RemoveSnapshot == item.RemoveSnapshot;
 }
 
+bool TPortionInfo::TakeSnapshots(const TPortionInfo& item) {
+    if (MinSnapshotDeprecated.Valid()) {
+        return PathId == item.PathId && MinSnapshotDeprecated == item.MinSnapshotDeprecated
+            && Portion == item.Portion && RemoveSnapshot == item.RemoveSnapshot;
+    } else {
+        MinSnapshotDeprecated = item.MinSnapshotDeprecated;
+        return PathId == item.PathId && Portion == item.Portion && RemoveSnapshot == item.RemoveSnapshot;
+    }
+}
+
 void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
     for (auto& record : Records) {
         db.EraseColumn(*this, record);

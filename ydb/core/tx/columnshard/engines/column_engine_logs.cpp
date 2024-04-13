@@ -188,7 +188,6 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     {
         if (!db.LoadPortions([&](TPortionInfo&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
             const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
-            AFL_VERIFY(portion.ValidSnapshotInfo())("details", portion.DebugString());
             portion.LoadMetadata(metaProto, indexInfo);
             GetGranulePtrVerified(portion.GetPathId())->UpsertPortionOnLoad(std::move(portion));
         })) {

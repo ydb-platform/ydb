@@ -444,6 +444,7 @@ public:
     }
 
     bool IsEqualWithSnapshots(const TPortionInfo& item) const;
+    bool TakeSnapshots(const TPortionInfo& item);
 
     static TPortionInfo BuildEmpty() {
         return TPortionInfo();

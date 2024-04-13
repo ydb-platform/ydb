@@ -455,14 +455,12 @@ struct Schema : NIceDb::Schema {
     struct IndexPortions: NIceDb::Schema::Table<PortionsTableId> {
         struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
         struct PortionId: Column<2, NScheme::NTypeIds::Uint64> {};
-        struct PlanStep: Column<3, NScheme::NTypeIds::Uint64> {};
-        struct TxId: Column<4, NScheme::NTypeIds::Uint64> {};
-        struct XPlanStep: Column<5, NScheme::NTypeIds::Uint64> {};
-        struct XTxId: Column<6, NScheme::NTypeIds::Uint64> {};
-        struct Metadata: Column<7, NScheme::NTypeIds::String> {}; // NKikimrTxColumnShard.TIndexColumnMeta
+        struct XPlanStep: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct XTxId: Column<4, NScheme::NTypeIds::Uint64> {};
+        struct Metadata: Column<5, NScheme::NTypeIds::String> {}; // NKikimrTxColumnShard.TIndexColumnMeta
 
         using TKey = TableKey<PathId, PortionId>;
-        using TColumns = TableColumns<PathId, PortionId, PlanStep, TxId, XPlanStep, XTxId, Metadata>;
+        using TColumns = TableColumns<PathId, PortionId, XPlanStep, XTxId, Metadata>;
     };
 
     using TTables = SchemaTables<

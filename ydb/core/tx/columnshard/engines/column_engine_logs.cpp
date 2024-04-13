@@ -187,10 +187,9 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     {
         if (!db.LoadPortions([&](TPortionInfo&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
-            const TIndexInfo& indexInfo = VersionedIndex.GetSchema(portion.GetMinSnapshot())->GetIndexInfo();
+            const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
             AFL_VERIFY(portion.ValidSnapshotInfo())("details", portion.DebugString());
             portion.LoadMetadata(metaProto, indexInfo);
-            // Locate granule and append the record.
             GetGranulePtrVerified(portion.GetPathId())->UpsertPortionOnLoad(std::move(portion));
         })) {
             return false;
@@ -198,16 +197,12 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     }
 
     {
-        const TIndexInfo* currentIndexInfo = nullptr;
-        TSnapshot lastSnapshot(0, 0);
+        TPortionInfo::TSchemaCursor schema(VersionedIndex);
         if (!db.LoadColumns([&](const TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
-            if (!currentIndexInfo || lastSnapshot != portion.GetMinSnapshot()) {
-                currentIndexInfo = &VersionedIndex.GetSchema(portion.GetMinSnapshot())->GetIndexInfo();
-                lastSnapshot = portion.GetMinSnapshot();
-            }
+            auto currentSchema = schema.GetSchema(portion);
             AFL_VERIFY(portion.ValidSnapshotInfo())("details", portion.DebugString());
             // Locate granule and append the record.
-            GetGranulePtrVerified(portion.GetPathId())->AddColumnRecordOnLoad(*currentIndexInfo, portion, loadContext, loadContext.GetPortionMeta());
+            GetGranulePtrVerified(portion.GetPathId())->AddColumnRecordOnLoad(currentSchema->GetIndexInfo(), portion, loadContext, loadContext.GetPortionMeta());
         })) {
             return false;
         }

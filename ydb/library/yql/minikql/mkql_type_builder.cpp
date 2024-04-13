@@ -2442,6 +2442,12 @@ size_t CalcMaxBlockItemSize(const TType* type) {
         case NUdf::EDataSlot::Json:
             // size of offset part
             return sizeof(arrow::StringType::offset_type);
+        case NUdf::EDataSlot::TzDate:
+            return sizeof(typename NUdf::TDataType<NUdf::TTzDate>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
+        case NUdf::EDataSlot::TzDatetime:
+            return sizeof(typename NUdf::TDataType<NUdf::TTzDatetime>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
+        case NUdf::EDataSlot::TzTimestamp:
+            return sizeof(typename NUdf::TDataType<NUdf::TTzTimestamp>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
         default:
             MKQL_ENSURE(false, "Unsupported data slot: " << slot);
         }

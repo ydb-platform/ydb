@@ -13,6 +13,8 @@ namespace NUdf {
 
 using TDataTypeId = ui16;
 
+using TTimezoneId = ui16;
+
 enum EDataTypeFeatures : ui32 {
     CanCompare = 1u << 0,
     HasDeterministicCompare = 1u << 1,

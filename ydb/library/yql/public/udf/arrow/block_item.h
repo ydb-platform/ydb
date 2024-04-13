@@ -189,7 +189,7 @@ private:
             union {
                 ui64 FullMeta;
                 struct {
-                    ui16 TimezoneId;
+                    TTimezoneId TimezoneId;
                     ui8 Reserved[5];
                     ui8 Meta;
                 };

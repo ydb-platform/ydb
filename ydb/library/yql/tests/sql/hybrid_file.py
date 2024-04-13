@@ -6,7 +6,7 @@ import re
 import yatest.common
 
 from yql_utils import replace_vals, yql_binary_path, is_xfail, get_param, \
-    get_gateway_cfg_suffix, normalize_result
+    get_gateway_cfg_suffix, normalize_result, stable_result_file
 
 from utils import get_config, DATA_PATH
 from file_common import run_file, run_file_no_cache
@@ -42,14 +42,16 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
         hybrid_result_name = 'HYBRIDFILE'
         yqlrun_result_name = 'YQLRUN'
 
-        sort = not 'order' in sql_query.lower()
-        hybrid_res_yson = normalize_result(res.results, sort)
-        yqlrun_res_yson = normalize_result(yqlrun_res.results, sort)
+        if os.path.exists(yqlrun_res.results_file):
+            assert os.path.exists(res.results_file)
 
-        # Compare results
-        assert hybrid_res_yson == yqlrun_res_yson, 'RESULTS_DIFFER\n' \
-            '%(hybrid_result_name)s result:\n %(hybrid_res_yson)s\n\n' \
-            '%(yqlrun_result_name)s result:\n %(yqlrun_res_yson)s\n' % locals()
+            hybrid_res_yson = normalize_result(stable_result_file(res), False)
+            yqlrun_res_yson = normalize_result(stable_result_file(yqlrun_res), False)
+
+            # Compare results
+            assert hybrid_res_yson == yqlrun_res_yson, 'RESULTS_DIFFER\n' \
+                '%(hybrid_result_name)s result:\n %(hybrid_res_yson)s\n\n' \
+                '%(yqlrun_result_name)s result:\n %(yqlrun_res_yson)s\n' % locals()
         return
     
     if what == 'Plan':

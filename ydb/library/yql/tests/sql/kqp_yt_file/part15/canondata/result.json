@@ -279,6 +279,11 @@
         "size": 616,
         "uri": "https://{canondata_backend}/1917492/e8a582ce795724f177c2cd4954c52ee3ceab1ba7/resource.tar.gz#test.test_window-win_func_rank_by_opt_all-_/results.txt"
     },
+    "test.test[window-win_func_rank_with_order_by_aggr_key-]": {
+        "checksum": "c804fd77090d562b4d06f42ac250e0b5",
+        "size": 208,
+        "uri": "https://{canondata_backend}/1784826/4d1abcd601f07b99d1e39e07f21c4543148e8b4b/resource.tar.gz#test.test_window-win_func_rank_with_order_by_aggr_key-_/results.txt"
+    },
     "test.test[window-yql-14179-default.txt]": {
         "checksum": "59f6074f54fa24ade4f5dc6b30e87090",
         "size": 54,

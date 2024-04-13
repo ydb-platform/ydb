@@ -79,6 +79,11 @@
         "size": 504,
         "uri": "https://{canondata_backend}/1773845/8e361901a2d283c29f5ef3e88e46dcde26d48cf5/resource.tar.gz#test.test_blocks-string_with-_/results.txt"
     },
+    "test.test[blocks-struct_type-]": {
+        "checksum": "672bb26159ccde8fe0505eb998a11c51",
+        "size": 418,
+        "uri": "https://{canondata_backend}/1784826/8bc5c009067b5c2a27fa2d682842f58ff560d372/resource.tar.gz#test.test_blocks-struct_type-_/results.txt"
+    },
     "test.test[column_order-join-]": {
         "checksum": "e33b13bf3a051770456409370ba46f2e",
         "size": 232,

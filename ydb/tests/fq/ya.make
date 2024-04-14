@@ -5,6 +5,7 @@ RECURSE_FOR_TESTS(
     mem_alloc
     multi_plane
     plans
+    pq_async_io
     restarts
     s3
     yds

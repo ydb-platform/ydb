@@ -20,6 +20,7 @@ bool OperatorIsCommut(EJoinKind joinKind) {
     switch (joinKind) {
         case EJoinKind::InnerJoin:
         case EJoinKind::OuterJoin:
+        case EJoinKind::Cross:
             return true;
         default:
             return false;

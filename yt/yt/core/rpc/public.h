@@ -185,8 +185,6 @@ YT_DEFINE_ERROR_ENUM(
     ((SslError)                     (static_cast<int>(NBus::EErrorCode::SslError)))
     ((MemoryOverflow)               (120))
     ((GlobalDiscoveryError)         (121)) // Single peer discovery interrupts discovery session.
-    ((UnknownClockClusterTag)       (122))
-    ((ClockClusterTagMismatch)      (123))
 );
 
 DEFINE_ENUM(EMessageFormat,

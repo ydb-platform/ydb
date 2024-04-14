@@ -96,6 +96,10 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
 
     BackgroundCleaningTxs[primaryTxId] = {pathId, std::move(traverseResult.Dirs), std::move(traverseResult.Tables)};
 
+    if (traverseResult.Tables.empty()) {
+        ContinueBackgroundCleaning(primaryTxId);
+    }
+
     return NOperationQueue::EStartStatus::EOperationRunning;
 }
 

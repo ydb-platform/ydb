@@ -35,7 +35,7 @@ private:
     std::map<TPortionAddress, std::map<TChunkAddress, TColumnChunkLoadContext>> LoadContexts;
 public:
     struct TIndex {
-        THashMap<ui64, THashMap<ui64, TPortionInfo>> Columns; // pathId -> portions
+        THashMap<ui64, THashMap<ui64, TPortionInfoConstructor>> Columns; // pathId -> portions
         THashMap<ui32, ui64> Counters;
     };
 
@@ -86,7 +86,7 @@ public:
     virtual void ErasePortion(const NOlap::TPortionInfo& /*portion*/) override {
 
     }
-    virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfo&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
+    virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
         return true;
     }
 
@@ -104,19 +104,21 @@ public:
         }
         auto it = data.find(portion.GetPortion());
         if (it == data.end()) {
-            it = data.emplace(portion.GetPortion(), portion.CopyBeforeChunksRebuild()).first;
+            it = data.emplace(portion.GetPortion(), TPortionInfoConstructor(portion, false, true)).first;
         } else {
-            Y_ABORT_UNLESS(portion.GetPathId() == it->second.GetPathId() && portion.GetPortion() == it->second.GetPortion());
+            Y_ABORT_UNLESS(portion.GetPathId() == it->second.GetPathId() && portion.GetPortion() == it->second.GetPortionIdVerified());
         }
         it->second.SetMinSnapshotDeprecated(portion.GetMinSnapshotDeprecated());
         if (portion.HasRemoveSnapshot()) {
-            it->second.SetRemoveSnapshot(portion.GetRemoveSnapshotVerified());
+            if (!it->second.HasRemoveSnapshot()) {
+                it->second.SetRemoveSnapshot(portion.GetRemoveSnapshotVerified());
+            }
         } else {
             AFL_VERIFY(!it->second.HasRemoveSnapshot());
         }
 
         bool replaced = false;
-        for (auto& rec : it->second.Records) {
+        for (auto& rec : it->second.MutableRecords()) {
             if (rec.IsEqualTest(row)) {
                 rec = row;
                 replaced = true;
@@ -124,7 +126,7 @@ public:
             }
         }
         if (!replaced) {
-            it->second.Records.push_back(row);
+            it->second.MutableRecords().emplace_back(row);
         }
     }
 
@@ -135,26 +137,26 @@ public:
         auto& portionLocal = it->second;
 
         std::vector<TColumnRecord> filtered;
-        for (auto& rec : portionLocal.Records) {
+        for (auto& rec : portionLocal.GetRecords()) {
             if (!rec.IsEqualTest(row)) {
                 filtered.push_back(rec);
             }
         }
-        portionLocal.Records.swap(filtered);
+        portionLocal.MutableRecords().swap(filtered);
     }
 
-    bool LoadColumns(const std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)>& callback) override {
+    bool LoadColumns(const std::function<void(NOlap::TPortionInfoConstructor&&, const TColumnChunkLoadContext&)>& callback) override {
         auto& columns = Indices[0].Columns;
         for (auto& [pathId, portions] : columns) {
             for (auto& [portionId, portionLocal] : portions) {
                 auto copy = portionLocal;
-                copy.ResetMeta();
-                copy.Records.clear();
-                for (const auto& rec : portionLocal.Records) {
+                copy.MutableRecords().clear();
+                for (const auto& rec : portionLocal.GetRecords()) {
                     auto itContextLoader = LoadContexts[copy.GetAddress()].find(rec.GetAddress());
                     Y_ABORT_UNLESS(itContextLoader != LoadContexts[copy.GetAddress()].end());
-                    callback(copy, itContextLoader->second);
-                    LoadContexts[copy.GetAddress()].erase(itContextLoader);
+                    auto address = copy.GetAddress();
+                    callback(std::move(copy), itContextLoader->second);
+                    LoadContexts[address].erase(itContextLoader);
                 }
             }
         }
@@ -267,8 +269,8 @@ TString MakeTestBlob(i64 start = 0, i64 end = 100) {
 
 void AddIdsToBlobs(std::vector<TWritePortionInfoWithBlobs>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs, ui32& step) {
     for (auto& portion : portions) {
-        for (auto& rec : portion.GetPortionInfo().Records) {
-            rec.BlobRange.BlobIdx = portion.GetPortionInfo().RegisterBlobId(MakeUnifiedBlobId(++step, portion.GetBlobFullSizeVerified(rec.ColumnId, rec.Chunk)));
+        for (auto& rec : portion.MutablePortionInfo().MutableRecords()) {
+            rec.BlobRange.BlobIdx = portion.MutablePortionInfo().RegisterBlobId(MakeUnifiedBlobId(++step, portion.GetBlobFullSizeVerified(rec.ColumnId, rec.Chunk)));
             TString data = portion.GetBlobByRangeVerified(rec.ColumnId, rec.Chunk);
             blobs.Add(IStoragesManager::DefaultStorageId, portion.GetPortionInfo().RestoreBlobRange(rec.BlobRange), std::move(data));
         }
@@ -341,7 +343,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     if (blobsPool) {
         for (auto&& i : changes->AppendedPortions) {
-            for (auto&& r : i.GetPortionInfo().Records) {
+            for (auto&& r : i.GetPortionInfo().GetRecords()) {
                 Y_ABORT_UNLESS(blobsPool->emplace(i.GetPortionInfo().RestoreBlobRange(r.BlobRange), i.GetBlobByRangeVerified(r.ColumnId, r.Chunk)).second);
             }
         }

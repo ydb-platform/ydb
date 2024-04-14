@@ -218,7 +218,6 @@ public:
     void OnAfterPortionsLoad() {
         auto g = OptimizerPlanner->StartModificationGuard();
         for (auto&& i : Portions) {
-            i.second->OnAfterLoad();
             OnAfterChangePortion(i.second, &g);
         }
     }
@@ -272,9 +271,7 @@ public:
             ;
     }
 
-    std::shared_ptr<TPortionInfo> UpsertPortionOnLoad(const TPortionInfo& portion);
-
-    void AddColumnRecordOnLoad(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnChunkLoadContext& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta);
+    std::shared_ptr<TPortionInfo> UpsertPortionOnLoad(TPortionInfo&& portion);
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;

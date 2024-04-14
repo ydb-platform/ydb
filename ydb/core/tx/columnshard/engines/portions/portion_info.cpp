@@ -1,4 +1,5 @@
 #include "portion_info.h"
+#include "constructor.h"
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
@@ -13,40 +14,6 @@
 #include <util/system/tls.h>
 
 namespace NKikimr::NOlap {
-
-const TColumnRecord& TPortionInfo::AppendOneChunkColumn(TColumnRecord&& record) {
-    Y_ABORT_UNLESS(record.ColumnId);
-    std::optional<ui32> maxChunk;
-    for (auto&& i : Records) {
-        if (i.ColumnId == record.ColumnId) {
-            if (!maxChunk) {
-                maxChunk = i.Chunk;
-            } else {
-                Y_ABORT_UNLESS(*maxChunk + 1 == i.Chunk);
-                maxChunk = i.Chunk;
-            }
-        }
-    }
-    if (maxChunk) {
-        AFL_VERIFY(*maxChunk + 1 == record.Chunk)("max", *maxChunk)("record", record.Chunk);
-    } else {
-        AFL_VERIFY(0 == record.Chunk)("record", record.Chunk);
-    }
-    Records.emplace_back(std::move(record));
-    return Records.back();
-}
-
-void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch, const TString& tierName) {
-    Y_ABORT_UNLESS(batch->num_rows() == NumRows());
-    AddMetadata(snapshotSchema, NArrow::TFirstLastSpecialKeys(NArrow::ExtractColumns(batch, snapshotSchema.GetIndexInfo().GetReplaceKey())),
-        NArrow::TMinMaxSpecialKeys(batch, TIndexInfo::ArrowSchemaSnapshot()), tierName);
-}
-
-void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const NArrow::TFirstLastSpecialKeys& primaryKeys, const NArrow::TMinMaxSpecialKeys& snapshotKeys, const TString& tierName) {
-    const auto& indexInfo = snapshotSchema.GetIndexInfo();
-    Meta.FillBatchInfo(primaryKeys, snapshotKeys, indexInfo);
-    Meta.SetTierName(tierName);
-}
 
 std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
     std::shared_ptr<arrow::Scalar> result;
@@ -130,18 +97,6 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
     return sb << ")";
 }
 
-void TPortionInfo::LoadMetadata(const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo) {
-    AFL_VERIFY(Meta.DeserializeFromProto(portionMeta, indexInfo));
-}
-
-void TPortionInfo::AddRecord(const TIndexInfo& indexInfo, const TColumnRecord& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta) {
-    Records.push_back(rec);
-
-    if (portionMeta) {
-        AFL_VERIFY(Meta.DeserializeFromProto(*portionMeta, indexInfo));
-    }
-}
-
 std::vector<const NKikimr::NOlap::TColumnRecord*> TPortionInfo::GetColumnChunksPointers(const ui32 columnId) const {
     std::vector<const TColumnRecord*> result;
     for (auto&& c : Records) {
@@ -152,21 +107,6 @@ std::vector<const NKikimr::NOlap::TColumnRecord*> TPortionInfo::GetColumnChunksP
         }
     }
     return result;
-}
-
-bool TPortionInfo::IsEqualWithSnapshots(const TPortionInfo& item) const {
-    return PathId == item.PathId && MinSnapshotDeprecated == item.MinSnapshotDeprecated
-        && Portion == item.Portion && RemoveSnapshot == item.RemoveSnapshot;
-}
-
-bool TPortionInfo::TakeSnapshots(const TPortionInfo& item) {
-    if (MinSnapshotDeprecated.Valid()) {
-        return PathId == item.PathId && MinSnapshotDeprecated == item.MinSnapshotDeprecated
-            && Portion == item.Portion && RemoveSnapshot == item.RemoveSnapshot;
-    } else {
-        MinSnapshotDeprecated = item.MinSnapshotDeprecated;
-        return PathId == item.PathId && Portion == item.Portion && RemoveSnapshot == item.RemoveSnapshot;
-    }
 }
 
 void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
@@ -316,9 +256,6 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
             return parse;
         }
     }
-    if (!Meta.DeserializeFromProto(proto.GetMeta(), info)) {
-        return TConclusionStatus::Fail("cannot parse meta");
-    }
     for (auto&& i : proto.GetRecords()) {
         auto parse = TColumnRecord::BuildFromProto(i, info.GetColumnFeaturesVerified(i.GetColumnId()));
         if (!parse) {
@@ -337,7 +274,11 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
 }
 
 TConclusion<TPortionInfo> TPortionInfo::BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info) {
-    TPortionInfo result;
+    TPortionMetaConstructor constructor;
+    if (!constructor.LoadMetadata(proto.GetMeta(), info)) {
+        return TConclusionStatus::Fail("cannot parse meta");
+    }
+    TPortionInfo result(constructor.Build());
     auto parse = result.DeserializeFromProto(proto, info);
     if (!parse) {
         return parse;
@@ -464,19 +405,6 @@ void TPortionInfo::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobI
 void TPortionInfo::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TVersionedIndex& index) const {
     auto schema = GetSchema(index);
     return FillBlobIdsByStorage(result, schema->GetIndexInfo());
-}
-
-TBlobRangeLink16::TLinkId TPortionInfo::RegisterBlobId(const TUnifiedBlobId& blobId) {
-    AFL_VERIFY(blobId.IsValid());
-    TBlobRangeLink16::TLinkId idx = 0;
-    for (auto&& i : BlobIds) {
-        if (i == blobId) {
-            return idx;
-        }
-        ++idx;
-    }
-    BlobIds.emplace_back(blobId);
-    return idx;
 }
 
 THashMap<TString, THashMap<TUnifiedBlobId, std::vector<std::shared_ptr<IPortionDataChunk>>>> TPortionInfo::RestoreEntityChunks(NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const {
@@ -717,6 +645,15 @@ public:
         return Chunks[idx].GetArrayVerified(Loader);
     }
 };
+}
+
+ISnapshotSchema::TPtr TPortionInfo::TSchemaCursor::GetSchema(const TPortionInfoConstructor& portion) {
+    if (!CurrentSchema || portion.GetMinSnapshotDeprecatedVerified() != LastSnapshot) {
+        CurrentSchema = portion.GetSchema(VersionedIndex);
+        LastSnapshot = portion.GetMinSnapshotDeprecatedVerified();
+    }
+    AFL_VERIFY(!!CurrentSchema);
+    return CurrentSchema;
 }
 
 NArrow::NAccessor::IChunkedArray::TCurrentChunkAddress TDeserializeChunkedArray::DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const {

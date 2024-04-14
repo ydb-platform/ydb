@@ -23,7 +23,7 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
 
     const TPortionMeta::EProduced producedClassResultCompaction = GetResultProducedClass();
     for (auto& portionInfo : AppendedPortions) {
-        portionInfo.GetPortionInfo().UpdateRecordsMeta(producedClassResultCompaction);
+        portionInfo.GetPortionInfo().MutableMeta().UpdateRecordsMeta(producedClassResultCompaction);
     }
 }
 

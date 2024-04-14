@@ -91,7 +91,7 @@ public:
     }
 
     void RegisterBlobIdx(const ui16 blobIdx) {
-//        AFL_VERIFY(!BlobRange.BlobId.GetTabletId())("original", BlobRange.BlobId.ToStringNew())("new", blobId.ToStringNew());
+        AFL_VERIFY(!BlobRange.BlobIdx)("original", BlobRange.BlobIdx)("new", blobIdx);
         BlobRange.BlobIdx = blobIdx;
     }
 

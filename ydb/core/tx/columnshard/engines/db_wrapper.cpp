@@ -1,5 +1,6 @@
 #include "defs.h"
 #include "db_wrapper.h"
+#include "portions/constructor.h"
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
 namespace NKikimr::NOlap {
@@ -48,7 +49,7 @@ void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRe
     }
     using IndexColumns = NColumnShard::Schema::IndexColumns;
     auto removeSnapshot = portion.GetRemoveSnapshotOptional();
-    db.Table<IndexColumns>().Key(0, portion.GetDeprecatedGranuleId(), row.ColumnId,
+    db.Table<IndexColumns>().Key(0, portion.GetPathId(), row.ColumnId,
         portion.GetMinSnapshotDeprecated().GetPlanStep(), portion.GetMinSnapshotDeprecated().GetTxId(), portion.GetPortion(), row.Chunk).Update(
             NIceDb::TUpdate<IndexColumns::XPlanStep>(removeSnapshot ? removeSnapshot->GetPlanStep() : 0),
             NIceDb::TUpdate<IndexColumns::XTxId>(removeSnapshot ? removeSnapshot->GetTxId() : 0),
@@ -81,11 +82,11 @@ void TDbWrapper::ErasePortion(const NOlap::TPortionInfo& portion) {
 void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
     NIceDb::TNiceDb db(Database);
     using IndexColumns = NColumnShard::Schema::IndexColumns;
-    db.Table<IndexColumns>().Key(0, portion.GetDeprecatedGranuleId(), row.ColumnId,
+    db.Table<IndexColumns>().Key(0, portion.GetPathId(), row.ColumnId,
         portion.GetMinSnapshotDeprecated().GetPlanStep(), portion.GetMinSnapshotDeprecated().GetTxId(), portion.GetPortion(), row.Chunk).Delete();
 }
 
-bool TDbWrapper::LoadColumns(const std::function<void(const NOlap::TPortionInfo&, const TColumnChunkLoadContext&)>& callback) {
+bool TDbWrapper::LoadColumns(const std::function<void(NOlap::TPortionInfoConstructor&&, const TColumnChunkLoadContext&)>& callback) {
     NIceDb::TNiceDb db(Database);
     using IndexColumns = NColumnShard::Schema::IndexColumns;
     auto rowset = db.Table<IndexColumns>().Prefix(0).Select();
@@ -94,17 +95,15 @@ bool TDbWrapper::LoadColumns(const std::function<void(const NOlap::TPortionInfo&
     }
 
     while (!rowset.EndOfSet()) {
-        NOlap::TPortionInfo portion = NOlap::TPortionInfo::BuildEmpty();
-        portion.SetPathId(rowset.GetValue<IndexColumns::PathId>());
-        portion.SetPortion(rowset.GetValue<IndexColumns::Portion>());
-        portion.SetMinSnapshotDeprecated(NOlap::TSnapshot(rowset.GetValue<IndexColumns::PlanStep>(), rowset.GetValue<IndexColumns::TxId>()));
-        portion.SetDeprecatedGranuleId(rowset.GetValue<IndexColumns::Granule>());
+        NOlap::TSnapshot minSnapshot(rowset.GetValue<IndexColumns::PlanStep>(), rowset.GetValue<IndexColumns::TxId>());
+        NOlap::TSnapshot removeSnapshot(rowset.GetValue<IndexColumns::XPlanStep>(), rowset.GetValue<IndexColumns::XTxId>());
+
+        NOlap::TPortionInfoConstructor constructor(rowset.GetValue<IndexColumns::PathId>(), rowset.GetValue<IndexColumns::Portion>());
+        constructor.SetMinSnapshotDeprecated(minSnapshot);
+        constructor.SetRemoveSnapshot(removeSnapshot);
 
         NOlap::TColumnChunkLoadContext chunkLoadContext(rowset, DsGroupSelector);
-
-        portion.SetRemoveSnapshot(rowset.GetValue<IndexColumns::XPlanStep>(), rowset.GetValue<IndexColumns::XTxId>());
-
-        callback(portion, chunkLoadContext);
+        callback(std::move(constructor), chunkLoadContext);
 
         if (!rowset.Next()) {
             return false;
@@ -113,7 +112,7 @@ bool TDbWrapper::LoadColumns(const std::function<void(const NOlap::TPortionInfo&
     return true;
 }
 
-bool TDbWrapper::LoadPortions(const std::function<void(NOlap::TPortionInfo&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) {
+bool TDbWrapper::LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) {
     NIceDb::TNiceDb db(Database);
     using IndexPortions = NColumnShard::Schema::IndexPortions;
     auto rowset = db.Table<IndexPortions>().Select();
@@ -122,9 +121,7 @@ bool TDbWrapper::LoadPortions(const std::function<void(NOlap::TPortionInfo&&, co
     }
 
     while (!rowset.EndOfSet()) {
-        NOlap::TPortionInfo portion = NOlap::TPortionInfo::BuildEmpty();
-        portion.SetPathId(rowset.GetValue<IndexPortions::PathId>());
-        portion.SetPortion(rowset.GetValue<IndexPortions::PortionId>());
+        NOlap::TPortionInfoConstructor portion(rowset.GetValue<IndexPortions::PathId>(), rowset.GetValue<IndexPortions::PortionId>());
         portion.SetSchemaVersion(rowset.GetValue<IndexPortions::SchemaVersion>());
         portion.SetRemoveSnapshot(rowset.GetValue<IndexPortions::XPlanStep>(), rowset.GetValue<IndexPortions::XTxId>());
 

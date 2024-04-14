@@ -32,12 +32,14 @@ void TWritePortionInfoWithBlobs::TBlobInfo::RegisterBlobId(TWritePortionInfoWith
 TWritePortionInfoWithBlobs TWritePortionInfoWithBlobs::BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
     const ui64 granule, const ui64 schemaVersion, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators)
 {
-    return BuildByBlobs(std::move(chunks), TPortionInfo(granule, 0, schemaVersion, snapshot), operators);
+    TPortionInfoConstructor constructor(granule);
+    constructor.SetMinSnapshotDeprecated(snapshot);
+    constructor.SetSchemaVersion(schemaVersion);
+    return BuildByBlobs(std::move(chunks), std::move(constructor), operators);
 }
 
-TWritePortionInfoWithBlobs TWritePortionInfoWithBlobs::BuildByBlobs(std::vector<TSplittedBlob>&& chunks, const TPortionInfo& basePortion,
-    const std::shared_ptr<IStoragesManager>& operators) {
-    TWritePortionInfoWithBlobs result(basePortion.CopyBeforeChunksRebuild());
+TWritePortionInfoWithBlobs TWritePortionInfoWithBlobs::BuildByBlobs(std::vector<TSplittedBlob>&& chunks, TPortionInfoConstructor&& constructor, const std::shared_ptr<IStoragesManager>& operators) {
+    TWritePortionInfoWithBlobs result(std::move(constructor));
     for (auto&& blob : chunks) {
         auto storage = operators->GetOperatorVerified(blob.GetGroupName());
         auto blobInfo = result.StartBlob(storage);
@@ -75,7 +77,7 @@ void TWritePortionInfoWithBlobs::FillStatistics(const TIndexInfo& index) {
         }
         i.second->FillStatisticsData(data, storage, index);
     }
-    PortionInfo.SetStatisticsStorage(std::move(storage));
+    PortionInfo.MutableMeta().SetStatisticsStorage(std::move(storage));
 }
 
 }

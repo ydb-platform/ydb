@@ -27,17 +27,20 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
     };
     AppendedPortions.erase(std::remove_if(AppendedPortions.begin(), AppendedPortions.end(), predRemoveDroppedTable), AppendedPortions.end());
     for (auto& portionInfoWithBlobs : AppendedPortions) {
-        auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
-        Y_ABORT_UNLESS(!portionInfo.Empty());
+        auto portionInfo = portionInfoWithBlobs.GetPortionInfo().Build(true);
         AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
         portionInfo.SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
     }
 }
 
 void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+    std::vector<TPortionInfo> portions;
+    for (auto& portionInfo : AppendedPortions) {
+        portions.emplace_back(portionInfo.GetPortionInfo().Build(true));
+    };
     if (self) {
-        for (auto& portionInfo : AppendedPortions) {
-            switch (portionInfo.GetPortionInfo().GetMeta().Produced) {
+        for (auto& portionInfo : portions) {
+            switch (portionInfo.GetMeta().Produced) {
                 case NOlap::TPortionMeta::EProduced::UNSPECIFIED:
                     Y_ABORT_UNLESS(false); // unexpected
                 case NOlap::TPortionMeta::EProduced::INSERTED:
@@ -79,8 +82,7 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
             const TPortionInfo& oldInfo = context.EngineLogs.GetGranuleVerified(portionInfo.GetPathId()).GetPortionVerified(portionInfo.GetPortion());
             context.EngineLogs.UpsertPortion(portionInfo, &oldInfo);
         }
-        for (auto& portionInfoWithBlobs : AppendedPortions) {
-            auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
+        for (auto& portionInfo : portions) {
             context.EngineLogs.UpsertPortion(portionInfo);
         }
     }
@@ -88,13 +90,12 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
 
 void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
     for (auto&& i : AppendedPortions) {
-        i.GetPortionInfo().SetPortion(context.NextPortionId());
-        i.GetPortionInfo().UpdateRecordsMeta(TPortionMeta::EProduced::INSERTED);
+        i.GetPortionInfo().SetPortionId(context.NextPortionId());
+        i.GetPortionInfo().MutableMeta().UpdateRecordsMeta(TPortionMeta::EProduced::INSERTED);
     }
     for (auto& [_, portionInfo] : PortionsToRemove) {
-        if (!portionInfo.HasRemoveSnapshot()) {
-            portionInfo.SetRemoveSnapshot(context.GetSnapshot());
-        }
+        AFL_VERIFY(!portionInfo.HasRemoveSnapshot());
+        portionInfo.SetRemoveSnapshot(context.GetSnapshot());
     }
 }
 
@@ -134,7 +135,8 @@ std::vector<TWritePortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions
             out.back().FillStatistics(resultSchema->GetIndexInfo());
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
-            out.back().GetPortionInfo().AddMetadata(*resultSchema, primaryKeys, snapshotKeys, IStoragesManager::DefaultStorageId);
+            out.back().MutablePortionInfo().AddMetadata(*resultSchema, b);
+            out.back().MutablePortionInfo().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
             recordIdx += slice.GetRecordsCount();
         }
     }

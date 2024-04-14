@@ -1,5 +1,6 @@
 #pragma once
 #include "base_with_blobs.h"
+#include "constructor.h"
 #include "portion_info.h"
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/splitter/blob_info.h>
@@ -63,15 +64,11 @@ public:
         void RegisterBlobId(TWritePortionInfoWithBlobs& owner, const TUnifiedBlobId& blobId);
     };
 private:
-    TPortionInfo PortionInfo;
+    TPortionInfoConstructor PortionInfo;
     YDB_READONLY_DEF(std::vector<TBlobInfo>, Blobs);
 
-    explicit TWritePortionInfoWithBlobs(TPortionInfo&& portionInfo)
+    explicit TWritePortionInfoWithBlobs(TPortionInfoConstructor&& portionInfo)
         : PortionInfo(std::move(portionInfo)) {
-    }
-
-    explicit TWritePortionInfoWithBlobs(const TPortionInfo& portionInfo)
-        : PortionInfo(portionInfo) {
     }
 
     TBlobInfo::TBuilder StartBlob(const std::shared_ptr<IBlobsStorageOperator>& bOperator) {
@@ -80,7 +77,7 @@ private:
     }
 
 public:
-    TPortionInfo& MutablePortionInfo() {
+    TPortionInfoConstructor& MutablePortionInfo() {
         return PortionInfo;
     }
 
@@ -91,8 +88,8 @@ public:
     static TWritePortionInfoWithBlobs BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
         const ui64 granule, const ui64 schemaVersion, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators);
 
-    static TWritePortionInfoWithBlobs BuildByBlobs(std::vector<TSplittedBlob>&& chunks, const TPortionInfo& basePortion,
-        const std::shared_ptr<IStoragesManager>& operators);
+    static TWritePortionInfoWithBlobs BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
+        TPortionInfoConstructor&& constructor, const std::shared_ptr<IStoragesManager>& operators);
 
     const TString& GetBlobByRangeVerified(const ui32 columnId, const ui32 chunkId) const {
         for (auto&& b : Blobs) {
@@ -123,14 +120,14 @@ public:
     }
 
     TString DebugString() const {
-        return TStringBuilder() << PortionInfo.DebugString() << ";blobs_count=" << Blobs.size() << ";";
+        return TStringBuilder() << "blobs_count=" << Blobs.size() << ";";
     }
 
-    const TPortionInfo& GetPortionInfo() const {
+    const TPortionInfoConstructor& GetPortionInfo() const {
         return PortionInfo;
     }
 
-    TPortionInfo& GetPortionInfo() {
+    TPortionInfoConstructor& GetPortionInfo() {
         return PortionInfo;
     }
 

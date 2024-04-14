@@ -1676,6 +1676,109 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             UNIT_ASSERT(!sum);
         }
     }
+
+    void ExecuteSelectQuery(const TString& bucket, size_t fileSize, size_t numberRows) {
+        using namespace fmt::literals;
+
+        // Create test file
+        TString content = "id,data\n";
+        const TString rowContent(fileSize / numberRows, 'a');
+        for (size_t i = 0; i < numberRows; ++i) {
+            content += TStringBuilder() << ToString(i) << "," << rowContent << "\n";
+        }
+
+        // Upload test file
+        CreateBucketWithObject(bucket, "test_object", content);
+
+        // Create external data source
+        const TString externalDataSourceName = "/Root/external_data_source";
+
+        auto kikimr = MakeKikimrRunner(true);
+        auto tableClient = kikimr->GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        const TString schemeQuery = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            ))",
+            "external_source"_a = externalDataSourceName,
+            "location"_a = GetBucketLocation(bucket)
+        );
+
+        const auto schemeResult = session.ExecuteSchemeQuery(schemeQuery).GetValueSync();
+        UNIT_ASSERT_C(schemeResult.GetStatus() == NYdb::EStatus::SUCCESS, schemeResult.GetIssues().ToString());
+
+        // Execute test query
+        auto queryClient = kikimr->GetQueryClient();
+        const TString query = fmt::format(R"(
+            SELECT * FROM `{external_source}`.`/` WITH (
+                FORMAT="csv_with_names",
+                SCHEMA (
+                    id Uint64 NOT NULL,
+                    data String NOT NULL
+                )
+            ))",
+            "external_source"_a=externalDataSourceName
+        );
+
+        auto scriptExecutionOperation = queryClient.ExecuteScript(query).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
+
+        // Validate query results
+        const size_t fetchLimit = std::min(1000ul, 10_MB / rowContent.size());
+
+        TFetchScriptResultsSettings settings;
+        settings.RowsLimit(fetchLimit);
+        size_t rowsFetched = 0;
+        while (true) {
+            TFetchScriptResultsResult results = queryClient.FetchScriptResults(scriptExecutionOperation.Id(), 0, settings).ExtractValueSync();
+            UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+
+            TResultSetParser resultSet(results.ExtractResultSet());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
+
+            while (resultSet.TryNextRow()) {
+                UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("id").GetUint64(), rowsFetched++);
+                UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("data").GetString(), rowContent);
+            }
+
+            if (!results.GetNextFetchToken()) {
+                break;
+            }
+
+            settings.FetchToken(results.GetNextFetchToken());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), fetchLimit);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(rowsFetched, numberRows);
+
+        // Test forget operation
+        NYdb::NOperation::TOperationClient operationClient(kikimr->GetDriver());
+        while (true) {
+            auto status = operationClient.Forget(scriptExecutionOperation.Id()).ExtractValueSync();
+            if (status.GetStatus() == NYdb::EStatus::SUCCESS || status.GetStatus() == NYdb::EStatus::NOT_FOUND) {
+                break;
+            }
+
+            UNIT_ASSERT_C(status.GetStatus() == NYdb::EStatus::TIMEOUT || status.GetStatus() == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED, status.GetIssues().ToString());
+
+            if (status.GetStatus() == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED) {
+                // Wait until last forget is not finished
+                Sleep(TDuration::Seconds(1));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ExecuteScriptWithLargeStrings) {
+        ExecuteSelectQuery("test_bucket_execute_script_with_large_strings", 100_MB, 100);
+    }
+
+    Y_UNIT_TEST(ExecuteScriptWithLargeFile) {
+        ExecuteSelectQuery("test_bucket_execute_script_with_large_file", 5_MB, 500000);
+    }
 }
 
 } // namespace NKikimr::NKqp

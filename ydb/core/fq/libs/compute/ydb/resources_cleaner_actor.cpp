@@ -87,7 +87,7 @@ public:
 
     void Handle(const TEvYdbCompute::TEvForgetOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
-        if (response.Status == NYdb::EStatus::ABORTED || response.Status == NYdb::EStatus::TIMEOUT || response.Status == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED) {
+        if (response.Status == NYdb::EStatus::TIMEOUT || response.Status == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED) {
             LOG_I("Operation partly forgotten, will be retired: " << response.Status);
             SendForgetOperation(TDuration::MilliSeconds(BackoffTimer.NextBackoffMs()));
             return;

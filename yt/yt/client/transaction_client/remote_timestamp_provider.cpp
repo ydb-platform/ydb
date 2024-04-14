@@ -92,6 +92,7 @@ private:
             auto responseClockClusterTag = rsp->has_clock_cluster_tag()
                 ? FromProto<TCellTag>(rsp->clock_cluster_tag())
                 : InvalidCellTag;
+            auto responseTimestamp = FromProto<TTimestamp>(rsp->timestamp());
 
             if (clockClusterTag != InvalidCellTag && responseClockClusterTag != InvalidCellTag &&
                 clockClusterTag != responseClockClusterTag)
@@ -101,8 +102,8 @@ private:
                     << TErrorAttribute("response_clock_cluster_tag", responseClockClusterTag);
             }
 
-                return static_cast<TTimestamp>(rsp->timestamp());
-            }));
+            return responseTimestamp;
+        }));
     }
 };
 

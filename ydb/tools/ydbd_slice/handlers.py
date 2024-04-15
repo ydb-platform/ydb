@@ -20,12 +20,6 @@ class CalledProcessError(subprocess.CalledProcessError):
         )
 
 
-def format_drivers(nodes):
-    cmd = r"sudo find /dev/disk/ -path '*/by-partlabel/kikimr_*' " \
-          r"-exec dd if=/dev/zero of={} bs=1M count=1 status=none \;"
-    nodes.execute_async(cmd)
-
-
 class Slice:
     def __init__(self, components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider):
         self.slice_kikimr_path = '/Berkanavt/kikimr/bin/kikimr'
@@ -56,9 +50,30 @@ class Slice:
             "sudo service rsyslog start;"
         self.nodes.execute_async(cmd)
 
+    def _get_all_drives(self):
+        result = []
+        for host in self.cluster_details.hosts:
+            for drive in host.drives:
+                result.append((host.hostname, drive.path))
+        return result
+
+    def _format_drives(self):
+        tasks = []
+        for (host_name, drive_path) in self._get_all_drives():
+            cmd = "dd if=/dev/zero of={} bs=1M count=1 status=none conv=notrunc".format(drive_path)
+            tasks.extend(self.nodes.execute_async_ret(cmd, nodes=[host_name]))
+        self.nodes._check_async_execution(tasks)
+
+    def _check_drives_exist(self):
+        tasks = []
+        for (host_name, drive_path) in self._get_all_drives():
+            cmd = "echo 'Check existance of drive' && test -f {}".format(drive_path)
+            tasks.extend(self.nodes.execute_async_ret(cmd, nodes=[host_name]))
+        self.nodes._check_async_execution(tasks)
+
     def slice_format(self):
         self.slice_stop()
-        format_drivers(self.nodes)
+        self._format_drives()
         self.slice_start()
 
     def slice_clear(self):
@@ -69,7 +84,7 @@ class Slice:
                 self._clear_slot(slot)
 
         if 'kikimr' in self.components:
-            format_drivers(self.nodes)
+            self._format_drives()
 
     def _invoke_scripts(self, dynamic_cfg_path, scripts):
         for script_name in scripts:
@@ -117,7 +132,8 @@ class Slice:
             self._clear_logs()
 
         if 'kikimr' in self.components:
-            format_drivers(self.nodes)
+            self._check_drives_exist()
+            self._format_drives()
 
             if 'bin' in self.components.get('kikimr', []):
                 self._update_kikimr(self.nodes, self.configurator.kikimr_bin, self.configurator.kikimr_compressed_bin)

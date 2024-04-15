@@ -124,6 +124,7 @@ protected:
         } else {
             s = socket(AF = af, SOCK_STREAM, 0);
         }
+        SetSockOpt(s, IPPROTO_TCP, TCP_NODELAY, (int)true);
         if (AF == AF_INET6) {
             SetSockOpt(s, SOL_SOCKET, IPV6_V6ONLY, (int)false);
         }

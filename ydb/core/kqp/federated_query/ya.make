@@ -15,6 +15,7 @@ PEERDIR(
     ydb/library/yql/providers/yt/comp_nodes/dq
     ydb/library/yql/providers/yt/gateway/native
     ydb/library/yql/providers/yt/lib/yt_download
+    ydb/services/metadata/secret
 )
 
 YQL_LAST_ABI_VERSION()

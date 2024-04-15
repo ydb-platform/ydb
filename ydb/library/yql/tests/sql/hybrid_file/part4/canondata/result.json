@@ -363,6 +363,20 @@
             "uri": "https://{canondata_backend}/1931696/8382830b676a61af36d1344910d51cd1bf39f3ef/resource.tar.gz#test.test_aggregate-percentile_interval-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[bigdate-round-default.txt-Debug]": [
+        {
+            "checksum": "60a2f9c8940e099170d73d6d511e3518",
+            "size": 10162,
+            "uri": "https://{canondata_backend}/1871182/0b81d4e80c80fb4df981caded22cf7246cf56ec0/resource.tar.gz#test.test_bigdate-round-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[bigdate-round-default.txt-Plan]": [
+        {
+            "checksum": "55515ae638f317612d048052be489bfd",
+            "size": 1740,
+            "uri": "https://{canondata_backend}/1871182/0b81d4e80c80fb4df981caded22cf7246cf56ec0/resource.tar.gz#test.test_bigdate-round-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[binding-table_range_binding-default.txt-Debug]": [
         {
             "checksum": "d976c5f5187919ead7472259c20189cb",

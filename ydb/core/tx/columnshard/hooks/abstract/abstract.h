@@ -92,6 +92,10 @@ public:
         return original;
     }
 
+    virtual TDuration GetRemovedPortionLivetime(const TDuration def) const {
+        return def;
+    }
+
     virtual ui64 GetReduceMemoryIntervalLimit(const ui64 def) const {
         return def;
     }

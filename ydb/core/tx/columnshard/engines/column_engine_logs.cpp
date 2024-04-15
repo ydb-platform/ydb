@@ -549,7 +549,7 @@ TDuration TColumnEngineForLogs::GetRemovedPortionLivetime() {
     if (HasAppData() && AppDataVerified().ColumnShardConfig.HasRemovedPortionLivetimeSeconds()) {
         result = TDuration::Seconds(AppDataVerified().ColumnShardConfig.GetRemovedPortionLivetimeSeconds());
     }
-    return NYDBTest::TControllers::GetColumnShardController().GetRemovedPortionLivetime(result);
+    return NYDBTest::TControllers::GetColumnShardController()->GetRemovedPortionLivetime(result);
 }
 
 } // namespace NKikimr::NOlap

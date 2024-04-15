@@ -1,4 +1,4 @@
-#include "mkql_block_tuple.h"
+#include "mkql_block_container.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
 
@@ -15,9 +15,9 @@ namespace NMiniKQL {
 
 namespace {
 
-class TBlockAsTupleExec {
+class TBlockAsContainerExec {
 public:
-    TBlockAsTupleExec(const TVector<TType*>& argTypes, const std::shared_ptr<arrow::DataType>& returnArrowType)
+    TBlockAsContainerExec(const TVector<TType*>& argTypes, const std::shared_ptr<arrow::DataType>& returnArrowType)
         : ArgTypes(argTypes)
         , ReturnArrowType(returnArrowType)
     {}
@@ -66,10 +66,10 @@ private:
     const std::shared_ptr<arrow::DataType> ReturnArrowType;
 };
 
-std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockAsTupleKernel(const TVector<TType*>& argTypes, TType* resultType) {
+std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockAsContainerKernel(const TVector<TType*>& argTypes, TType* resultType) {
     std::shared_ptr<arrow::DataType> returnArrowType;
     MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
-    auto exec = std::make_shared<TBlockAsTupleExec>(argTypes, returnArrowType);
+    auto exec = std::make_shared<TBlockAsContainerExec>(argTypes, returnArrowType);
     auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
         [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         return exec->Exec(ctx, batch, res);
@@ -81,7 +81,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockAsTupleKernel(const TVect
 
 } // namespace
 
-IComputationNode* WrapBlockAsTuple(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapBlockAsContainer(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     TComputationNodePtrVector argsNodes;
     TVector<TType*> argsTypes;
     for (ui32 i = 0; i < callable.GetInputsCount(); ++i) {
@@ -89,9 +89,9 @@ IComputationNode* WrapBlockAsTuple(TCallable& callable, const TComputationNodeFa
         argsTypes.push_back(callable.GetInput(i).GetStaticType());
     }
 
-    auto kernel = MakeBlockAsTupleKernel(argsTypes, callable.GetType()->GetReturnType());
+    auto kernel = MakeBlockAsContainerKernel(argsTypes, callable.GetType()->GetReturnType());
     return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), std::move(argsNodes), argsTypes, *kernel, kernel);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

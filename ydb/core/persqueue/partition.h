@@ -334,7 +334,7 @@ private:
                                                 const TActorContext& ctx);
 
     void Initialize(const TActorContext& ctx);
-
+    void InitSplitMergeSlidingWindow();
     template <typename T>
     void EmplacePendingRequest(T&& body, const TActorContext& ctx) {
         const auto now = ctx.Now();

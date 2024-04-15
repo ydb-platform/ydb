@@ -788,11 +788,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         }
     }
 
-    if (SplitMergeEnabled(TabletConfig)) {
-        result.SetScaleStatus(ScaleStatus);
-    } else {
-        result.SetScaleStatus(NKikimrPQ::EScaleStatus::NORMAL);
-    }
+    result.SetScaleStatus(SplitMergeEnabled(TabletConfig) ? ScaleStatus :NKikimrPQ::EScaleStatus::NORMAL);
 
     ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionStatusResponse(result, Partition));
 }
@@ -2079,7 +2075,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     Y_ABORT_UNLESS(Config.GetPartitionConfig().GetTotalPartitions() > 0);
 
     if (Config.GetPartitionStrategy().GetScaleThresholdSeconds() != SplitMergeAvgWriteBytes->GetDuration().Seconds()) {
-        SplitMergeAvgWriteBytes = std::make_unique<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>>(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), 1000);
+        InitSplitMergeSlidingWindow();
     }
 
     Send(ReadQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));

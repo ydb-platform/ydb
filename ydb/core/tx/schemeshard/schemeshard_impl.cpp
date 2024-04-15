@@ -4022,7 +4022,7 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
             case NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup:
                 Y_ABORT_UNLESS(Topics.contains(pathId));
                 result.SetPQVersion(Topics.at(pathId)->AlterVersion);
-                generalVersion += result.GetPQVersion(); //тут уже единичка
+                generalVersion += result.GetPQVersion();
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypeBlockStoreVolume:
                 Y_ABORT_UNLESS(BlockStoreVolumes.contains(pathId));
@@ -4151,7 +4151,7 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
     generalVersion += result.GetChildrenVersion();
 
     result.SetUserAttrsVersion(pathEl->UserAttrs->AlterVersion);
-    generalVersion += result.GetUserAttrsVersion(); //тут инкременится второй раз
+    generalVersion += result.GetUserAttrsVersion();
 
     result.SetACLVersion(pathEl->ACLVersion); // do not add ACL version to the generalVersion here
     result.SetEffectiveACLVersion(path.GetEffectiveACLVersion()); // ACL version is added to generalVersion here

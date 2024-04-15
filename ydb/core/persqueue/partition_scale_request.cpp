@@ -3,8 +3,24 @@
 namespace NKikimr {
 namespace NPQ {
 
-TPartitionScaleRequest::TPartitionScaleRequest(TString topicName, TString databasePath, ui64 pathId, ui64 pathVersion, std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit> splits, const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge> merges, NActors::TActorId parentActorId)
-: Topic(topicName), DatabasePath(databasePath), PathId(pathId), PathVersion(pathVersion), Splits(splits), Merges(merges), ParentActorId(parentActorId) {}
+TPartitionScaleRequest::TPartitionScaleRequest(
+    TString topicName, 
+    TString databasePath, 
+    ui64 pathId, 
+    ui64 pathVersion, 
+    std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit> splits, 
+    const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge> merges, 
+    NActors::TActorId parentActorId
+)
+    : Topic(topicName)
+    , DatabasePath(databasePath)
+    , PathId(pathId)
+    , PathVersion(pathVersion)
+    , Splits(splits)
+    , Merges(merges)
+    , ParentActorId(parentActorId) {
+        
+    }
 
 void TPartitionScaleRequest::Bootstrap(const NActors::TActorContext &ctx) {
     SendProposeRequest(ctx);

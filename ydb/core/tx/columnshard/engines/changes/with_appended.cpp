@@ -94,8 +94,9 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
         i.GetPortionInfo().MutableMeta().UpdateRecordsMeta(TPortionMeta::EProduced::INSERTED);
     }
     for (auto& [_, portionInfo] : PortionsToRemove) {
-        AFL_VERIFY(!portionInfo.HasRemoveSnapshot());
-        portionInfo.SetRemoveSnapshot(context.GetSnapshot());
+        if (!portionInfo.HasRemoveSnapshot()) {
+            portionInfo.SetRemoveSnapshot(context.GetSnapshot());
+        }
     }
 }
 

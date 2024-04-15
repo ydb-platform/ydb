@@ -2042,6 +2042,39 @@
             "uri": "https://{canondata_backend}/1942671/16dadc5efa6409ed0db8e990b156998dc83d37b7/resource.tar.gz#test.test_lineage-window_one-default.txt-Results_/Output.yqlrun.txt.attr"
         }
     ],
+    "test.test[lineage-with_inline-default.txt-Debug]": [
+        {
+            "checksum": "da397e9eaeb7740ee8066e97c3d61b10",
+            "size": 1520,
+            "uri": "https://{canondata_backend}/1942173/b0453c583923cb1a0769e5eb0a73b18ab81a0e6e/resource.tar.gz#test.test_lineage-with_inline-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[lineage-with_inline-default.txt-Lineage]": [
+        {
+            "checksum": "f601bba1b5e448bc9f7a48f11b836656",
+            "size": 1319,
+            "uri": "https://{canondata_backend}/1942173/b0453c583923cb1a0769e5eb0a73b18ab81a0e6e/resource.tar.gz#test.test_lineage-with_inline-default.txt-Lineage_/results.txt"
+        }
+    ],
+    "test.test[lineage-with_inline-default.txt-Plan]": [
+        {
+            "checksum": "568564c136e9094e20ffe2bbbbcaaa9f",
+            "size": 3740,
+            "uri": "https://{canondata_backend}/1942173/b0453c583923cb1a0769e5eb0a73b18ab81a0e6e/resource.tar.gz#test.test_lineage-with_inline-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[lineage-with_inline-default.txt-Results]": [
+        {
+            "checksum": "5f635ad49389f4b8a3fdd5e0bd1637b7",
+            "size": 274,
+            "uri": "https://{canondata_backend}/1942173/b0453c583923cb1a0769e5eb0a73b18ab81a0e6e/resource.tar.gz#test.test_lineage-with_inline-default.txt-Results_/Output.txt"
+        },
+        {
+            "checksum": "99a23a80241cdd0057583910f9155f61",
+            "size": 600,
+            "uri": "https://{canondata_backend}/1942173/b0453c583923cb1a0769e5eb0a73b18ab81a0e6e/resource.tar.gz#test.test_lineage-with_inline-default.txt-Results_/Output.yqlrun.txt.attr"
+        }
+    ],
     "test.test[optimizers-sort_over_sorted_same_keys-default.txt-Debug]": [
         {
             "checksum": "2d83862f556f952ba091148905d3c655",

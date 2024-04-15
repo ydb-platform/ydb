@@ -943,7 +943,7 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
 
             sourceId.Update(THeartbeat{*hbVersion, p.Msg.Data});
 
-            return EProcessResult::Continue;
+            return EProcessResult::Reply;
         }
 
         if (poffset < curOffset) { //too small offset

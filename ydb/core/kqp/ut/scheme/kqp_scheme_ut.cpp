@@ -5319,7 +5319,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
 
-        while (csController->GetIndexations().Val() == 0) {
+        while (csController->GetInsertFinishedCounter().Val() == 0) {
             Cout << "Wait indexation..." << Endl;
             Sleep(TDuration::Seconds(2));
         }
@@ -5586,6 +5586,45 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;[123];[-456]]]");
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2", "[[2;[-789];#]]");
+    }
+
+    Y_UNIT_TEST(UseTimestamp64AsPrimaryKey) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("timestamp").SetType(NScheme::NTypeIds::Timestamp64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("interval").SetType(NScheme::NTypeIds::Interval64)
+        };
+
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
+        TTestHelper::TColumnTable testTable;
+
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"timestamp"}).SetSharding({"timestamp"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(-7000000).Add(3000001);
+            tableInserter.AddRow().Add(-3000000).Add(-1000002);
+            tableInserter.AddRow().Add(0).AddNull();
+            tableInserter.AddRow().Add(4000000).Add(-2000003);
+            tableInserter.AddRow().Add(9000000).Add(5000004);
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `timestamp` = Timestamp64('1970-01-01T00:00:00Z')", "[[#;0]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `timestamp` < Timestamp64('1970-01-01T00:00:00Z')",
+            "[[[3000001];-7000000];[[-1000002];-3000000]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `timestamp` > Timestamp64('1970-01-01T00:00:00Z')",
+            "[[[-2000003];4000000];[[5000004];9000000]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `timestamp` <= Timestamp64('1970-01-01T00:00:00Z')",
+            "[[[3000001];-7000000];[[-1000002];-3000000];[#;0]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `timestamp` >= Timestamp64('1970-01-01T00:00:00Z')",
+            "[[#;0];[[-2000003];4000000];[[5000004];9000000]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `timestamp` != Timestamp64('1970-01-01T00:00:00Z')",
+            "[[[3000001];-7000000];[[-1000002];-3000000];[[-2000003];4000000];[[5000004];9000000]]");
     }
 /*
     Y_UNIT_TEST(AddColumnOnSchemeChange) {

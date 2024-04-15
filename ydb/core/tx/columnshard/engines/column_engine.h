@@ -1,9 +1,9 @@
 #pragma once
 #include "db_wrapper.h"
-#include "scheme/snapshot_scheme.h"
-#include "predicate/filter.h"
 #include "changes/abstract/settings.h"
 #include "changes/abstract/compaction_info.h"
+#include "predicate/filter.h"
+#include "scheme/snapshot_scheme.h"
 #include "scheme/versions/versioned_index.h"
 
 #include <ydb/core/tx/columnshard/common/reverse_accessor.h>
@@ -49,39 +49,11 @@ struct TSelectInfo {
         return NColumnShard::TContainerAccessorWithDirection<std::vector<std::shared_ptr<TPortionInfo>>>(PortionsOrderedPK, reverse);
     }
 
-    size_t NumChunks() const {
-        size_t records = 0;
-        for (auto& portionInfo : PortionsOrderedPK) {
-            records += portionInfo->NumChunks();
-        }
-        return records;
-    }
+    size_t NumChunks() const;
 
-    TStats Stats() const {
-        TStats out;
-        out.Portions = PortionsOrderedPK.size();
+    TStats Stats() const;
 
-        THashSet<TUnifiedBlobId> uniqBlob;
-        for (auto& portionInfo : PortionsOrderedPK) {
-            out.Records += portionInfo->NumChunks();
-            out.Rows += portionInfo->NumRows();
-            for (auto& rec : portionInfo->Records) {
-                out.Bytes += rec.BlobRange.Size;
-            }
-            out.Blobs += portionInfo->GetBlobIdsCount();
-        }
-        return out;
-    }
-
-    friend IOutputStream& operator << (IOutputStream& out, const TSelectInfo& info) {
-        if (info.PortionsOrderedPK.size()) {
-            out << "portions:";
-            for (auto& portionInfo : info.PortionsOrderedPK) {
-                out << portionInfo->DebugString();
-            }
-        }
-        return out;
-    }
+    void DebugStream(IOutputStream& out);
 };
 
 class TColumnEngineStats {
@@ -159,7 +131,6 @@ public:
 
     i64 Tables{};
     i64 ColumnRecords{};
-    i64 ColumnMetadataBytes{};
     THashMap<TPortionMeta::EProduced, TPortionsStats> StatsByType;
 
     std::vector<ui32> GetKinds() const {
@@ -318,7 +289,8 @@ public:
     virtual std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(THashSet<ui64>& pathsToDrop) noexcept = 0;
     virtual std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept = 0;
-    virtual bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
+    virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
+    virtual bool ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) = 0;
     virtual const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const = 0;

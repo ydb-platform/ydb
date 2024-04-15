@@ -8,7 +8,7 @@ import yatest.common
 from yql_utils import execute, get_tables, get_files, get_http_files, \
     KSV_ATTR, yql_binary_path, is_xfail, is_canonize_peephole, is_canonize_lineage, \
     is_skip_forceblocks, get_param, normalize_source_code_path, replace_vals, get_gateway_cfg_suffix, \
-    do_custom_query_check
+    do_custom_query_check, stable_result_file, stable_table_file
 from yqlrun import YQLRun
 
 from utils import get_config, get_parameters_json, DATA_PATH
@@ -64,10 +64,13 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
                 return None
 
             if os.path.exists(res.results_file):
+                stable_result_file(res)
                 to_canonize.append(yatest.common.canonical_file(res.results_file))
             for table in tables_res:
                 if os.path.exists(tables_res[table].file):
+                    stable_table_file(tables_res[table])
                     to_canonize.append(yatest.common.canonical_file(tables_res[table].file))
+                    to_canonize.append(yatest.common.canonical_file(tables_res[table].yqlrun_file + ".attr"))
         if res.std_err:
             to_canonize.append(normalize_source_code_path(res.std_err))
 
@@ -139,13 +142,19 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
             return None
 
         if os.path.exists(res.results_file):
-            assert res.results == blocks_res.results, 'RESULTS_DIFFER\nBlocks result:\n %s\n\nScalar result:\n %s\n' % (blocks_res.results, res.results)
+            assert os.path.exists(blocks_res.results_file)
+            scalar_res = stable_result_file(res)
+            block_res = stable_result_file(blocks_res)
+            assert scalar_res == block_res, 'RESULTS_DIFFER\nBlocks result:\n %s\n\nScalar result:\n %s\n' % (block_res, scalar_res)
 
         for table in tables_res:
             if os.path.exists(tables_res[table].file):
-                assert tables_res[table].content == blocks_tables_res[table].content, \
+                assert os.path.exists(blocks_tables_res[table].file)
+                scalar_content = stable_table_file(tables_res[table])
+                block_content = stable_table_file(blocks_tables_res[table])
+                assert scalar_content == block_content, \
                        'RESULTS_DIFFER FOR TABLE %s\nBlocks result:\n %s\n\nScalar result:\n %s\n' % \
-                       (table, blocks_tables_res[table].content, tables_res[table].content)
+                       (table, block_content, scalar_content)
 
         return None
 

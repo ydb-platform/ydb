@@ -9,12 +9,12 @@
 
 #include <ydb/core/base/cputime.h>
 #include <ydb/library/wilson_ids/wilson.h>
-#include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
+#include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
-#include <ydb/core/kqp/session_actor/kqp_tx.h>
+#include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/simple/temp_tables.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 

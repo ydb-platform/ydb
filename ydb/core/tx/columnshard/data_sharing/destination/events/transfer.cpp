@@ -9,7 +9,7 @@ THashMap<NKikimr::NOlap::TTabletId, NKikimr::NOlap::NDataSharing::TTaskForTablet
     const std::shared_ptr<TSharedBlobsManager>& sharedBlobs, const TTabletId selfTabletId, const TTransferContext& context, const TVersionedIndex& index) {
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
     for (auto&& i : Portions) {
-        auto schema = index.GetSchema(i.GetMinSnapshot());
+        auto schema = i.GetSchema(index);
         i.FillBlobIdsByStorage(blobIds, schema->GetIndexInfo());
     }
 

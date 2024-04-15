@@ -1908,15 +1908,15 @@ private:
     bool ConvertLength = false;
 };
 
-const i32 PgDateShift = 10957;
-const i64 PgTimestampShift = 946684800000000ll;
+const i32 PgDateShift = UNIX_EPOCH_JDATE - POSTGRES_EPOCH_JDATE;
+const i64 PgTimestampShift = USECS_PER_DAY * (UNIX_EPOCH_JDATE - POSTGRES_EPOCH_JDATE);
 
-inline i32 Date2Pg(ui16 value) {
-    return i32(value) - PgDateShift;
+inline i32 Date2Pg(i32 value) {
+    return value + PgDateShift;
 }
 
-inline i64 Timestamp2Pg(ui64 value) {
-    return i64(value) - PgTimestampShift;
+inline i64 Timestamp2Pg(i64 value) {
+    return value + PgTimestampShift;
 }
 
 inline Interval* Interval2Pg(i64 value) {
@@ -1957,6 +1957,8 @@ NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUd
         return ScalarDatumToPod(Int64GetDatum(value.Get<i64>()));
     case NUdf::EDataSlot::Uint64:
         return PointerDatumToPod(NumericGetDatum(Uint64ToPgNumeric(value.Get<ui64>())));
+    case NUdf::EDataSlot::DyNumber:
+        return PointerDatumToPod(NumericGetDatum(DyNumberToPgNumeric(value)));
     case NUdf::EDataSlot::Float:
         return ScalarDatumToPod(Float4GetDatum(value.Get<float>()));
     case NUdf::EDataSlot::Double:
@@ -1979,9 +1981,22 @@ NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUd
         auto res = Timestamp2Pg(value.Get<ui64>());
         return ScalarDatumToPod(res);
     }
-    case NUdf::EDataSlot::Interval: {
+    case NUdf::EDataSlot::Interval: 
+    case NUdf::EDataSlot::Interval64: {
         auto res = Interval2Pg(value.Get<i64>());
         return PointerDatumToPod(PointerGetDatum(res));
+    }
+    case NUdf::EDataSlot::Date32: {
+        auto res = Date2Pg(value.Get<i32>());
+        return ScalarDatumToPod(res);
+    }
+    case NUdf::EDataSlot::Datetime64: {
+        auto res = Timestamp2Pg(value.Get<i64>() * 1000000ull);
+        return ScalarDatumToPod(res);
+    }
+    case NUdf::EDataSlot::Timestamp64: {
+        auto res = Timestamp2Pg(value.Get<i64>());
+        return ScalarDatumToPod(res);
     }
     case NUdf::EDataSlot::Json: {
         auto input = MakeCString(value.AsStringRef());
@@ -2049,6 +2064,29 @@ NUdf::TUnboxedValuePod ConvertFromPgValue(NUdf::TUnboxedValuePod value, TMaybe<N
             auto x = (const text*)PointerDatumFromPod(value);
             return MakeString(GetVarBuf(x));
         }
+    case NUdf::EDataSlot::Date32: {
+        auto res = (i32)DatumGetInt32(ScalarDatumFromPod(value)) - PgDateShift;
+        if (res < NUdf::MIN_DATE32 || res > NUdf::MAX_DATE32) {
+            return NUdf::TUnboxedValuePod();
+        }
+
+        return NUdf::TUnboxedValuePod(res);
+    }
+    case NUdf::EDataSlot::Timestamp64: {
+        auto res = (i64)DatumGetInt64(ScalarDatumFromPod(value)) - PgTimestampShift;
+        if (res < NUdf::MIN_TIMESTAMP64 || res > NUdf::MAX_TIMESTAMP64) {
+            return NUdf::TUnboxedValuePod();
+        }
+
+        return NUdf::TUnboxedValuePod(res);
+    }
+    case NUdf::EDataSlot::Uuid: {
+        auto str = (char*)DirectFunctionCall1Coll(uuid_out, DEFAULT_COLLATION_OID, PointerDatumFromPod(value));
+        auto res = ParseUuid(NUdf::TStringRef(TStringBuf(str)));
+        pfree(str);
+        return res;
+    }
+
     default:
         ythrow yexception() << "Unexpected data slot in ConvertFromPgValue: " << Slot;
     }
@@ -2169,9 +2207,10 @@ template <NUdf::EDataSlot Slot>
 class TToPg : public TMutableComputationNode<TToPg<Slot>> {
     typedef TMutableComputationNode<TToPg<Slot>> TBaseComputation;
 public:
-    TToPg(TComputationMutables& mutables, IComputationNode* arg)
+    TToPg(TComputationMutables& mutables, IComputationNode* arg, TDataType* argType)
         : TBaseComputation(mutables)
         , Arg(arg)
+        , ArgType(argType)
     {
     }
 
@@ -2181,7 +2220,13 @@ public:
             return value.Release();
         }
 
-        return ConvertToPgValue<Slot>(value);
+        if constexpr (Slot == NUdf::EDataSlot::Decimal) {
+            auto decimalType = static_cast<TDataDecimalType*>(ArgType);
+            return PointerDatumToPod(NumericGetDatum(DecimalToPgNumeric(value, 
+                decimalType->GetParams().first, decimalType->GetParams().second)));
+        } else {
+            return ConvertToPgValue<Slot>(value);
+        }
     }
 
 private:
@@ -2190,6 +2235,7 @@ private:
     }
 
     IComputationNode* const Arg;
+    TDataType* ArgType;
 };
 
 class TPgArray : public TMutableComputationNode<TPgArray> {
@@ -2584,6 +2630,50 @@ struct TFromPgExec {
             *res = builder.Build(true);
             break;
         }
+        case DATEOID: {
+            NUdf::TFixedSizeBlockReader<ui64, true> reader;
+            NUdf::TFixedSizeArrayBuilder<i32, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::int32(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                auto res = (i32)DatumGetInt32((Datum)item.Get<ui64>()) - PgDateShift;
+                if (res < NUdf::MIN_DATE32 || res > NUdf::MAX_DATE32) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                builder.Add(NUdf::TBlockItem(res));
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
+        case TIMESTAMPOID: {
+            NUdf::TFixedSizeBlockReader<ui64, true> reader;
+            NUdf::TFixedSizeArrayBuilder<i64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::int64(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                auto res = (i64)DatumGetInt64((Datum)item.Get<ui64>()) - PgTimestampShift;
+                if (res < NUdf::MIN_TIMESTAMP64 || res > NUdf::MAX_TIMESTAMP64) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                builder.Add(NUdf::TBlockItem(res));
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
         default:
             ythrow yexception() << "Unsupported type: " << NPg::LookupType(SourceId).Name;
         }
@@ -2617,6 +2707,8 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeFromPgKernel(TType* inputType,
     case VARCHAROID:
     case BYTEAOID:
     case CSTRINGOID:
+    case DATEOID:
+    case TIMESTAMPOID:
         kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
         break;
     default:
@@ -2781,7 +2873,32 @@ struct TToPgExec {
             }
             break;
         }
-        case NUdf::EDataSlot::Interval: {
+        case NUdf::EDataSlot::Date32: {
+            auto inputPtr = array.GetValues<i32>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int32GetDatum(Date2Pg(inputPtr[i]));
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Datetime64: {
+            auto inputPtr = array.GetValues<i64>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int64GetDatum(Timestamp2Pg(inputPtr[i] * 1000000ull));
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Timestamp64: {
+            auto inputPtr = array.GetValues<i64>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int64GetDatum(Timestamp2Pg(inputPtr[i]));
+            }
+            break;
+        }
+        case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Interval64: {
             NUdf::TFixedSizeBlockReader<i64, true> reader;
             NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
             for (size_t i = 0; i < length; ++i) {
@@ -2881,10 +2998,14 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, T
     case NUdf::EDataSlot::Date:
     case NUdf::EDataSlot::Datetime:
     case NUdf::EDataSlot::Timestamp:
+    case NUdf::EDataSlot::Date32:
+    case NUdf::EDataSlot::Datetime64:
+    case NUdf::EDataSlot::Timestamp64:
         break;
     case NUdf::EDataSlot::String:
     case NUdf::EDataSlot::Utf8:
     case NUdf::EDataSlot::Interval:
+    case NUdf::EDataSlot::Interval64:
     case NUdf::EDataSlot::Uint64:
     case NUdf::EDataSlot::Yson:
     case NUdf::EDataSlot::Json:
@@ -3095,6 +3216,12 @@ TComputationNodeFactory GetPgFactory() {
                     return new TFromPg<NUdf::EDataSlot::String, false>(ctx.Mutables, arg);
                 case CSTRINGOID:
                     return new TFromPg<NUdf::EDataSlot::Utf8, true>(ctx.Mutables, arg);
+                case DATEOID:
+                    return new TFromPg<NUdf::EDataSlot::Date32, true>(ctx.Mutables, arg);
+                case TIMESTAMPOID:
+                    return new TFromPg<NUdf::EDataSlot::Timestamp64, true>(ctx.Mutables, arg);
+                case UUIDOID:
+                    return new TFromPg<NUdf::EDataSlot::Uuid, true>(ctx.Mutables, arg);
                 default:
                     ythrow yexception() << "Unsupported type: " << NPg::LookupType(sourceId).Name;
                 }
@@ -3117,56 +3244,69 @@ TComputationNodeFactory GetPgFactory() {
                     argType = AS_TYPE(TOptionalType, argType)->GetItemType();
                 }
 
-                auto sourceDataSlot = AS_TYPE(TDataType, argType)->GetDataSlot();
+                auto dataType = AS_TYPE(TDataType, argType);
+                auto sourceDataSlot = dataType->GetDataSlot();
                 switch (*sourceDataSlot) {
                 case NUdf::EDataSlot::Bool:
-                    return new TToPg<NUdf::EDataSlot::Bool>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::Bool>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Int8:
-                    return new TToPg<NUdf::EDataSlot::Int8>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::Int8>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Uint8:
-                    return new TToPg<NUdf::EDataSlot::Uint8>(ctx.Mutables, arg);                    
+                    return new TToPg<NUdf::EDataSlot::Uint8>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Int16:
-                    return new TToPg<NUdf::EDataSlot::Int16>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::Int16>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Uint16:
-                    return new TToPg<NUdf::EDataSlot::Uint16>(ctx.Mutables, arg);                    
+                    return new TToPg<NUdf::EDataSlot::Uint16>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Int32:
-                    return new TToPg<NUdf::EDataSlot::Int32>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::Int32>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Uint32:
-                    return new TToPg<NUdf::EDataSlot::Uint32>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::Uint32>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Int64:
-                    return new TToPg<NUdf::EDataSlot::Int64>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::Int64>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Uint64:
-                    return new TToPg<NUdf::EDataSlot::Uint64>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::Uint64>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Float:
-                    return new TToPg<NUdf::EDataSlot::Float>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::Float>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Double:
-                    return new TToPg<NUdf::EDataSlot::Double>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::Double>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Utf8:
-                    return new TToPg<NUdf::EDataSlot::Utf8>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::Utf8>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::String:
-                    return new TToPg<NUdf::EDataSlot::String>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::String>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Date:
-                    return new TToPg<NUdf::EDataSlot::Date>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::Date>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Datetime:
-                    return new TToPg<NUdf::EDataSlot::Datetime>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::Datetime>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Timestamp:
-                    return new TToPg<NUdf::EDataSlot::Timestamp>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::Timestamp>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Interval:
-                    return new TToPg<NUdf::EDataSlot::Interval>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::Interval>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::TzDate:
-                    return new TToPg<NUdf::EDataSlot::TzDate>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::TzDate>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::TzDatetime:
-                    return new TToPg<NUdf::EDataSlot::TzDatetime>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::TzDatetime>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::TzTimestamp:
-                    return new TToPg<NUdf::EDataSlot::TzTimestamp>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::TzTimestamp>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Date32:
+                    return new TToPg<NUdf::EDataSlot::Date32>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Datetime64:
+                    return new TToPg<NUdf::EDataSlot::Datetime64>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Timestamp64:
+                    return new TToPg<NUdf::EDataSlot::Timestamp64>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Interval64:
+                    return new TToPg<NUdf::EDataSlot::Interval64>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Uuid:
-                    return new TToPg<NUdf::EDataSlot::Uuid>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::Uuid>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Yson:
-                    return new TToPg<NUdf::EDataSlot::Yson>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::Yson>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::Json:
-                    return new TToPg<NUdf::EDataSlot::Json>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::Json>(ctx.Mutables, arg, dataType);
                 case NUdf::EDataSlot::JsonDocument:
-                    return new TToPg<NUdf::EDataSlot::JsonDocument>(ctx.Mutables, arg);
+                    return new TToPg<NUdf::EDataSlot::JsonDocument>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::Decimal:
+                    return new TToPg<NUdf::EDataSlot::Decimal>(ctx.Mutables, arg, dataType);
+                case NUdf::EDataSlot::DyNumber:
+                    return new TToPg<NUdf::EDataSlot::DyNumber>(ctx.Mutables, arg, dataType);
                 default:
                     ythrow yexception() << "Unsupported type: " << NUdf::GetDataTypeInfo(*sourceDataSlot).Name;
                 }

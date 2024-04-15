@@ -55,6 +55,16 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
         return arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, arrowType));
     }
 
+    if (type->IsStruct()) {
+        auto structType = AS_TYPE(TStructType, type);
+        std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;
+        for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+            arrowValue.emplace_back(DoConvertScalar(structType->GetMemberType(i), value.GetElement(i), pool).scalar());
+        }
+
+        return arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, arrowType));
+    }
+
     if (type->IsTuple()) {
         auto tupleType = AS_TYPE(TTupleType, type);
         std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;

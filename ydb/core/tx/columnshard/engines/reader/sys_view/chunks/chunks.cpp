@@ -5,7 +5,7 @@
 namespace NKikimr::NOlap::NReader::NSysView::NChunks {
 
 void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo& portion) const {
-    auto portionSchema = ReadMetadata->GetLoadSchema(portion.GetMinSnapshot());
+    auto portionSchema = ReadMetadata->GetLoadSchemaVerified(portion);
     const std::string prod = ::ToString(portion.GetMeta().Produced);
     const bool activity = !portion.IsRemovedFor(ReadMetadata->GetRequestSnapshot());
     {
@@ -81,7 +81,7 @@ std::shared_ptr<NKikimr::NOlap::NReader::NSysView::NAbstract::TReadStatsMetadata
     auto* index = self->GetIndexOptional();
     return std::make_shared<TReadStatsMetadata>(index ? index->CopyVersionedIndexPtr() : nullptr, self->TabletID(),
         IsReverse ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC,
-        read.GetProgram(), index ? index->GetVersionedIndex().GetSchema(read.GetSnapshot()) : nullptr, read.GetSnapshot());
+        read.GetProgram(), index ? index->GetVersionedIndex().GetLastSchema() : nullptr, read.GetSnapshot());
 }
 
 bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const {

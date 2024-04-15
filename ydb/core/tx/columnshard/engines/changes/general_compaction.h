@@ -1,6 +1,7 @@
 #pragma once
 #include "compaction.h"
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
@@ -9,8 +10,8 @@ private:
     using TBase = TCompactColumnEngineChanges;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     std::map<NArrow::NMerger::TSortableBatchPosition, bool> CheckPoints;
-    void BuildAppendedPortionsByFullBatches(TConstructionContext& context, std::vector<TPortionInfoWithBlobs>&& portions) noexcept;
-    void BuildAppendedPortionsByChunks(TConstructionContext& context, std::vector<TPortionInfoWithBlobs>&& portions) noexcept;
+    void BuildAppendedPortionsByFullBatches(TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept;
+    void BuildAppendedPortionsByChunks(TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept;
 protected:
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;
     virtual TPortionMeta::EProduced GetResultProducedClass() const override {

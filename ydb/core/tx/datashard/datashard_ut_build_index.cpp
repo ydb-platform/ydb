@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
-        // runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
 
         // Allow manipulating shadow data using normal schemeshard operations
         runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true;

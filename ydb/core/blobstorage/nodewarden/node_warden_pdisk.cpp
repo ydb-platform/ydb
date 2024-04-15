@@ -255,34 +255,94 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TNodeWarden::ApplyServiceSetPDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet) {
-        for (const auto& pdisk : serviceSet.GetPDisks()) {
+    void TNodeWarden::MergeServiceSetPDisks(NProtoBuf::RepeatedPtrField<TServiceSetPDisk> *to,
+            const NProtoBuf::RepeatedPtrField<TServiceSetPDisk>& from) {
+        THashMap<TPDiskKey, TServiceSetPDisk*> pdiskMap;
+        for (int i = 0; i < to->size(); ++i) {
+            TServiceSetPDisk *pdisk = to->Mutable(i);
+            const auto [it, inserted] = pdiskMap.try_emplace(TPDiskKey(*pdisk), pdisk);
+            Y_DEBUG_ABORT_UNLESS(inserted); // entries must be unique
+        }
+
+        for (const TServiceSetPDisk& pdisk : from) {
             if (!pdisk.HasNodeID() || !pdisk.HasPDiskID() || !pdisk.HasPath() || !pdisk.HasPDiskGuid() ||
                     pdisk.GetNodeID() != LocalNodeId) {
                 continue;
             }
 
-            auto entityStatus = pdisk.HasEntityStatus()
+            const NKikimrBlobStorage::EEntityStatus entityStatus = pdisk.HasEntityStatus()
                 ? pdisk.GetEntityStatus()
                 : NKikimrBlobStorage::INITIAL;
 
+            const TPDiskKey key(pdisk);
+
             switch (entityStatus) {
                 case NKikimrBlobStorage::INITIAL:
-                case NKikimrBlobStorage::CREATE:
-                    StartLocalPDisk(pdisk);
+                case NKikimrBlobStorage::CREATE: {
+                    const auto [it, inserted] = pdiskMap.try_emplace(key, nullptr);
+                    if (inserted) {
+                        it->second = to->Add();
+                    }
+                    it->second->CopyFrom(pdisk);
+                    it->second->ClearEntityStatus();
                     break;
+                }
 
                 case NKikimrBlobStorage::DESTROY:
-                    DestroyLocalPDisk(pdisk.GetPDiskID());
+                    if (const auto it = pdiskMap.find(key); it != pdiskMap.end()) {
+                        pdiskMap.erase(it);
+                    }
                     break;
 
                 case NKikimrBlobStorage::RESTART:
                     if (auto it = LocalPDisks.find({pdisk.GetNodeID(), pdisk.GetPDiskID()}); it != LocalPDisks.end()) {
                         it->second.Record = pdisk;
                     }
+                    if (auto it = pdiskMap.find(key); it != pdiskMap.end()) {
+                        it->second->CopyFrom(pdisk);
+                        it->second->ClearEntityStatus();
+                    }
                     RestartLocalPDiskStart(pdisk.GetPDiskID(), CreatePDiskConfig(pdisk));
                     break;
             }
+        }
+
+        for (int i = 0; i < to->size(); ++i) {
+            if (const TServiceSetPDisk& pdisk = to->Get(i); !pdiskMap.contains(pdisk)) {
+                to->SwapElements(i, to->size() - 1);
+                to->RemoveLast();
+                --i;
+            }
+        }
+    }
+
+    void TNodeWarden::ApplyServiceSetPDisks() {
+        THashSet<TPDiskKey> pdiskToDelete;
+        for (const auto& [key, value] : LocalPDisks) {
+            pdiskToDelete.insert(key);
+        }
+
+        auto processDisk = [&](const TServiceSetPDisk& pdisk) {
+            const TPDiskKey key(pdisk);
+            if (!LocalPDisks.contains(key)) {
+                StartLocalPDisk(pdisk);
+            }
+            pdiskToDelete.erase(key);
+        };
+
+        for (const auto& pdisk : StaticServices.GetPDisks()) {
+            processDisk(pdisk);
+        }
+        for (const auto& pdisk : DynamicServices.GetPDisks()) {
+            processDisk(pdisk);
+        }
+
+        for (const auto& [key, value] : LocalVDisks) {
+            pdiskToDelete.erase({key.NodeId, key.PDiskId});
+        }
+
+        for (const TPDiskKey& key : pdiskToDelete) {
+            DestroyLocalPDisk(key.PDiskId);
         }
     }
 

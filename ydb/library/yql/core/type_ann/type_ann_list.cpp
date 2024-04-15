@@ -2173,7 +2173,10 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (const auto stepSlot = IsDataTypeDateOrTzDateOrInterval(slot) ? EDataSlot::Interval : MakeSigned(slot); stepItemType) {
+        const auto stepSlot = IsDataTypeDateOrTzDateOrInterval(slot)
+            ? (IsDataTypeBigDate(slot) ? EDataSlot::Interval64 : EDataSlot::Interval)
+            : MakeSigned(slot);
+        if (stepItemType) {
             if (const auto requredStepType = slot == stepSlot ? commonItemType : ctx.Expr.MakeType<TDataExprType>(stepSlot); !IsSameAnnotation(*stepItemType, *requredStepType)) {
                 if (const auto status = TrySilentConvertTo(input->ChildRef(2U), *requredStepType, ctx.Expr); status == IGraphTransformer::TStatus::Repeat)
                     return status;

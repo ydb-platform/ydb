@@ -77,9 +77,8 @@ public:
 class TStartMergeTask: public TBaseMergeTask {
 private:
     using TBase = TBaseMergeTask;
-    std::map<ui32, std::shared_ptr<IDataSource>> Sources;
-
-    bool EmptyFiltersOnly() const;
+    bool OnlyEmptySources = true;
+    THashMap<ui32, std::shared_ptr<IDataSource>> Sources;
 protected:
     virtual bool DoExecute() override;
 public:
@@ -88,7 +87,7 @@ public:
     }
 
     TStartMergeTask(const std::shared_ptr<TMergingContext>& mergingContext,
-        const std::shared_ptr<TSpecialReadContext>& readContext, std::map<ui32, std::shared_ptr<IDataSource>>&& sources);
+        const std::shared_ptr<TSpecialReadContext>& readContext, THashMap<ui32, std::shared_ptr<IDataSource>>&& sources);
 };
 
 class TContinueMergeTask: public TBaseMergeTask {

@@ -214,6 +214,7 @@ private:
             "Unordered", 
             "UnorderedSubquery", 
             "Right!", 
+            "YtTableContent",
             "Skip", 
             "Take", 
             "Sort", 

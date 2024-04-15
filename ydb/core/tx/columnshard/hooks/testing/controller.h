@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
+#include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <util/string/join.h>
 
@@ -9,9 +10,14 @@ namespace NKikimr::NYDBTest::NColumnShard {
 
 class TController: public ICSController {
 private:
+    YDB_READONLY(TAtomicCounter, TTLFinishedCounter, 0);
+    YDB_READONLY(TAtomicCounter, TTLStartedCounter, 0);
+    YDB_READONLY(TAtomicCounter, InsertFinishedCounter, 0);
+    YDB_READONLY(TAtomicCounter, InsertStartedCounter, 0);
+    YDB_READONLY(TAtomicCounter, CompactionFinishedCounter, 0);
+    YDB_READONLY(TAtomicCounter, CompactionStartedCounter, 0);
+
     YDB_READONLY(TAtomicCounter, FilteredRecordsCount, 0);
-    YDB_READONLY(TAtomicCounter, Compactions, 0);
-    YDB_READONLY(TAtomicCounter, Indexations, 0);
     YDB_READONLY(TAtomicCounter, IndexesSkippingOnSelect, 0);
     YDB_READONLY(TAtomicCounter, IndexesApprovedOnSelect, 0);
     YDB_READONLY(TAtomicCounter, IndexesSkippedNoData, 0);
@@ -39,6 +45,10 @@ private:
     THashMap<ui64, const ::NKikimr::NColumnShard::TColumnShard*> ShardActuals;
     THashMap<TString, THashMap<NOlap::TUnifiedBlobId, THashSet<NOlap::TTabletId>>> RemovedBlobIds;
     TMutex Mutex;
+
+    YDB_ACCESSOR(bool, IndexWriteControllerEnabled, true);
+    mutable TAtomicCounter IndexWriteControllerBrokeCount;
+    std::set<EBackground> DisabledBackgrounds;
 
     class TBlobInfo {
     private:
@@ -129,8 +139,14 @@ private:
 
     THashSet<TString> SharingIds;
 protected:
+    virtual ::NKikimr::NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const override;
     virtual TDuration GetLagForCompactionBeforeTierings(const TDuration def) const override {
         return LagForCompactionBeforeTierings.value_or(def);
+    }
+
+    virtual bool IsBackgroundEnabled(const EBackground id) const override {
+        TGuard<TMutex> g(Mutex);
+        return !DisabledBackgrounds.contains(id);
     }
 
     virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) override {
@@ -146,8 +162,8 @@ protected:
     virtual void DoOnTabletStopped(const ::NKikimr::NColumnShard::TColumnShard& shard) override;
     virtual void DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& shard, const NOlap::IBlobsGCAction& action) override;
 
+    virtual bool DoOnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) override;
     virtual bool DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) override;
-    virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) override;
     virtual bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& changes, const ::NKikimr::NColumnShard::TColumnShard& shard) override;
     virtual TDuration GetGuaranteeIndexationInterval(const TDuration defaultValue) const override {
         return GuaranteeIndexationInterval.value_or(defaultValue);
@@ -190,6 +206,9 @@ protected:
     }
 
 public:
+    const TAtomicCounter& GetIndexWriteControllerBrokeCount() const {
+        return IndexWriteControllerBrokeCount;
+    }
     virtual ui64 GetReduceMemoryIntervalLimit(const ui64 def) const override {
         return OverrideReduceMemoryIntervalLimit.value_or(def);
     }
@@ -206,6 +225,16 @@ public:
 
     virtual void AddPortionForActualizer(const i32 portionsCount) override {
         NeedActualizationCount.Add(portionsCount);
+    }
+
+    void DisableBackground(const EBackground id) {
+        TGuard<TMutex> g(Mutex);
+        DisabledBackgrounds.emplace(id);
+    }
+
+    void EnableBackground(const EBackground id) {
+        TGuard<TMutex> g(Mutex);
+        DisabledBackgrounds.erase(id);
     }
 
     void WaitActualization(const TDuration d) const {
@@ -248,9 +277,6 @@ public:
     }
 
     bool HasPKSortingOnly() const;
-    bool HasCompactions() const {
-        return Compactions.Val();
-    }
 };
 
 }

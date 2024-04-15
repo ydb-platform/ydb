@@ -3418,10 +3418,7 @@ bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TV
     } else {
         Ctx.IncrementMonCounter("sql_features", "OrderByDefault");
     }
-    auto sortSpecPtr = MakeIntrusive<TSortSpecification>();
-    sortSpecPtr->OrderExpr = exprNode;
-    sortSpecPtr->Ascending = asc;
-    sortSpecs.emplace_back(sortSpecPtr);
+    sortSpecs.emplace_back(MakeIntrusive<TSortSpecification>(exprNode, asc));
     return true;
 }
 

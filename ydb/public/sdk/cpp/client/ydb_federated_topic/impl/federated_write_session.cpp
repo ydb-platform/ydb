@@ -27,13 +27,13 @@ NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& 
 TFederatedWriteSessionImpl::TFederatedWriteSessionImpl(
     const TFederatedWriteSessionSettings& settings,
     std::shared_ptr<TGRpcConnectionsImpl> connections,
-    const TFederatedTopicClientSettings& clientSetttings,
+    const TFederatedTopicClientSettings& clientSettings,
     std::shared_ptr<TFederatedDbObserver> observer,
     std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs
 )
     : Settings(settings)
     , Connections(std::move(connections))
-    , SubClientSetttings(FromFederated(clientSetttings))
+    , SubclientSettings(FromFederated(clientSettings))
     , ProvidedCodecs(std::move(codecs))
     , Observer(std::move(observer))
     , AsyncInit(Observer->WaitForFirstState())
@@ -41,40 +41,76 @@ TFederatedWriteSessionImpl::TFederatedWriteSessionImpl(
     , Log(Connections->GetLog())
     , ClientEventsQueue(std::make_shared<NTopic::TWriteSessionEventsQueue>(Settings))
     , BufferFreeSpace(Settings.MaxMemoryUsage_)
+    , HasBeenClosed(NThreading::NewPromise())
 {
 }
 
-TStringBuilder TFederatedWriteSessionImpl::GetLogPrefix() const {
-     return TStringBuilder() << GetDatabaseLogPrefix(SubClientSetttings.Database_.GetOrElse("")) << "[" << SessionId << "] ";
+TStringBuilder TFederatedWriteSessionImpl::GetLogPrefixImpl() const {
+     return TStringBuilder() << GetDatabaseLogPrefix(SubclientSettings.Database_.GetOrElse("")) << "[" << SessionId << "] ";
+}
+
+
+bool TFederatedWriteSessionImpl::MessageQueuesAreEmptyImpl() const {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+    return OriginalMessagesToGetAck.empty() && OriginalMessagesToPassDown.empty();
+}
+
+void TFederatedWriteSessionImpl::IssueTokenIfAllowed() {
+    // The session should not issue tokens after it has transitioned to CLOSING or CLOSE state.
+    // A user may have one spare token, so at most one additional message
+    // could be written to the internal queue after the transition.
+    bool issue = false;
+    with_lock(Lock) {
+        if (BufferFreeSpace > 0 && !ClientHasToken && SessionState < State::CLOSING) {
+            ClientHasToken = true;
+            issue = true;
+        }
+    }
+    if (issue) {
+        ClientEventsQueue->PushEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
+    }
+}
+
+void TFederatedWriteSessionImpl::UpdateFederationStateImpl() {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+    // Even after the user has called the Close method, transitioning the session to the CLOSING state,
+    // we keep updating the federation state, as the session may still have some messages to send in its queues,
+    // and for that we need to know the current state of the federation.
+    if (SessionState < State::CLOSED) {
+        FederationState = Observer->GetState();
+        OnFederationStateUpdateImpl();
+    }
 }
 
 void TFederatedWriteSessionImpl::Start() {
     // TODO validate settings?
-    Settings.EventHandlers_.HandlersExecutor_->Start();
     with_lock(Lock) {
-        ClientEventsQueue->PushEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
-        ClientHasToken = true;
+        if (SessionState != State::CREATED) {
+            return;
+        }
+        SessionState = State::WORKING;
+        Settings.EventHandlers_.HandlersExecutor_->Start();
     }
 
-    AsyncInit.Subscribe([selfCtx = SelfContext](const auto& f){
+    IssueTokenIfAllowed();
+
+    AsyncInit.Subscribe([selfCtx = SelfContext](const auto& f) {
         Y_UNUSED(f);
         if (auto self = selfCtx->LockShared()) {
             with_lock(self->Lock) {
-                if (!self->Closing) {
-                    self->FederationState = self->Observer->GetState();
-                    self->OnFederatedStateUpdateImpl();
-                }
+                self->UpdateFederationStateImpl();
             }
         }
     });
 }
 
-void TFederatedWriteSessionImpl::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db) {
+void TFederatedWriteSessionImpl::OpenSubsessionImpl(std::shared_ptr<TDbInfo> db) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
     if (Subsession) {
         PendingToken.Clear();
         Subsession->Close(TDuration::Zero());
     }
-    NTopic::TTopicClientSettings clientSettings = SubClientSetttings;
+    auto clientSettings = SubclientSettings;
     clientSettings
         .Database(db->path())
         .DiscoveryEndpoint(db->endpoint());
@@ -89,7 +125,7 @@ void TFederatedWriteSessionImpl::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db)
                 with_lock(self->Lock) {
                     Y_ABORT_UNLESS(self->PendingToken.Empty());
                     self->PendingToken = std::move(ev.ContinuationToken);
-                    self->PrepareDeferredWrite(deferred);
+                    self->PrepareDeferredWriteImpl(deferred);
                 }
                 deferred.DoWrite();
             }
@@ -98,24 +134,25 @@ void TFederatedWriteSessionImpl::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db)
             if (auto self = selfCtx->LockShared()) {
                 with_lock(self->Lock) {
                     Y_ABORT_UNLESS(ev.Acks.size() <= self->OriginalMessagesToGetAck.size());
+
                     for (size_t i = 0; i < ev.Acks.size(); ++i) {
                         self->BufferFreeSpace += self->OriginalMessagesToGetAck.front().Data.size();
                         self->OriginalMessagesToGetAck.pop_front();
                     }
-                    self->ClientEventsQueue->PushEvent(std::move(ev));
-                    if (self->BufferFreeSpace > 0 && !self->ClientHasToken) {
-                        self->ClientEventsQueue->PushEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
-                        self->ClientHasToken = true;
+
+                    if (self->MessageQueuesAreEmptyImpl() && self->MessageQueuesHaveBeenEmptied.Initialized() && !self->MessageQueuesHaveBeenEmptied.HasValue()) {
+                        self->MessageQueuesHaveBeenEmptied.SetValue();
                     }
                 }
+
+                self->ClientEventsQueue->PushEvent(std::move(ev));
+                self->IssueTokenIfAllowed();
             }
         })
         .SessionClosedHandler([selfCtx = SelfContext](const NTopic::TSessionClosedEvent & ev) {
             if (auto self = selfCtx->LockShared()) {
                 with_lock(self->Lock) {
-                    if (!self->Closing) {
-                        self->CloseImpl(ev);
-                    }
+                    self->CloseImpl(ev);
                 }
             }
         });
@@ -129,88 +166,136 @@ void TFederatedWriteSessionImpl::OpenSubSessionImpl(std::shared_ptr<TDbInfo> db)
     CurrentDatabase = db;
 }
 
-std::shared_ptr<TDbInfo> TFederatedWriteSessionImpl::SelectDatabaseImpl() {
-    std::vector<std::shared_ptr<TDbInfo>> availableDatabases;
+std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseByHashImpl(
+    NTopic::TFederatedWriteSessionSettings const& settings,
+    std::vector<std::shared_ptr<TDbInfo>> const& dbInfos
+) {
     ui64 totalWeight = 0;
+    std::vector<std::shared_ptr<TDbInfo>> available;
 
-    for (const auto& db : FederationState->DbInfos) {
-        if (db->status() != TDbInfo::Status::DatabaseInfo_Status_AVAILABLE) {
-            continue;
-        }
-
-        if (Settings.PreferredDatabase_ && (AsciiEqualsIgnoreCase(db->name(), *Settings.PreferredDatabase_) ||
-                                            AsciiEqualsIgnoreCase(db->id(), *Settings.PreferredDatabase_))) {
-            return db;
-        } else if (AsciiEqualsIgnoreCase(FederationState->SelfLocation, db->location())) {
-            return db;
-        } else {
-            availableDatabases.push_back(db);
+    for (const auto& db : dbInfos) {
+        if (db->status() == TDbInfo::Status::DatabaseInfo_Status_AVAILABLE) {
+            available.push_back(db);
             totalWeight += db->weight();
         }
     }
 
-    if (availableDatabases.empty() || totalWeight == 0) {
-        // close session, return error
-        return nullptr;
+    if (available.empty() || totalWeight == 0) {
+        return {nullptr, EStatus::NOT_FOUND};
     }
 
-    std::sort(availableDatabases.begin(), availableDatabases.end(), [](const std::shared_ptr<TDbInfo>& lhs, const std::shared_ptr<TDbInfo>& rhs){
-        return lhs->weight() > rhs->weight()
-               || lhs->weight() == rhs->weight() && lhs->name() < rhs->name();
-    });
+    std::sort(available.begin(), available.end(), [](auto const& lhs, auto const& rhs) { return lhs->name() < rhs->name(); });
 
-    ui64 hashValue = THash<TString>()(Settings.Path_);
-    hashValue = CombineHashes(hashValue, THash<TString>()(Settings.ProducerId_));
+    ui64 hashValue = THash<TString>()(settings.Path_);
+    hashValue = CombineHashes(hashValue, THash<TString>()(settings.ProducerId_));
     hashValue %= totalWeight;
 
     ui64 borderWeight = 0;
-    for (const auto& db : availableDatabases) {
+    for (auto const& db : available) {
         borderWeight += db->weight();
         if (hashValue < borderWeight) {
-            return db;
+            return {db, EStatus::SUCCESS};
         }
     }
     Y_UNREACHABLE();
 }
 
-void TFederatedWriteSessionImpl::OnFederatedStateUpdateImpl() {
+std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseImpl(
+    NTopic::TFederatedWriteSessionSettings const& settings,
+    std::vector<std::shared_ptr<TDbInfo>> const& dbInfos, TString const& selfLocation
+) {
+    /* Logic of the function should follow this table:
+
+    | PreferredDb | Preferred state | Local state | AllowFallback | Return      |
+    |-------------+-----------------+-------------+---------------+-------------|
+    | set         | not found       | -           | any           | NOT_FOUND   |
+    | set         | available       | -           | any           | preferred   |
+    | set         | unavailable     | -           | false         | UNAVAILABLE |
+    | set         | unavailable     | -           | true          | by hash     |
+    | unset       | -               | not found   | false         | NOT_FOUND   |
+    | unset       | -               | not found   | true          | by hash     |
+    | unset       | -               | available   | any           | local       |
+    | unset       | -               | unavailable | false         | UNAVAILABLE |
+    | unset       | -               | unavailable | true          | by hash     |
+    */
+
+    decltype(begin(dbInfos)) it;
+    if (settings.PreferredDatabase_) {
+        it = std::find_if(begin(dbInfos), end(dbInfos), [&preferred = settings.PreferredDatabase_](auto const& db) {
+            return AsciiEqualsIgnoreCase(*preferred, db->name()) || AsciiEqualsIgnoreCase(*preferred, db->id());
+        });
+        if (it == end(dbInfos)) {
+            return {nullptr, EStatus::NOT_FOUND};
+        }
+    } else {
+        it = std::find_if(begin(dbInfos), end(dbInfos), [&selfLocation](auto const& db) {
+            return AsciiEqualsIgnoreCase(selfLocation, db->location());
+        });
+        if (it == end(dbInfos)) {
+            if (!settings.AllowFallback_) {
+                return {nullptr, EStatus::NOT_FOUND};
+            }
+            return SelectDatabaseByHashImpl(settings, dbInfos);
+        }
+    }
+
+    auto db = *it;
+    if (db->status() == TDbInfo::Status::DatabaseInfo_Status_AVAILABLE) {
+        return {db, EStatus::SUCCESS};
+    }
+    if (!settings.AllowFallback_) {
+        return {nullptr, EStatus::UNAVAILABLE};
+    }
+    return SelectDatabaseByHashImpl(settings, dbInfos);
+}
+
+void TFederatedWriteSessionImpl::OnFederationStateUpdateImpl() {
+    Y_ABORT_UNLESS(Lock.IsLocked());
     if (!FederationState->Status.IsSuccess()) {
+        // The observer became stale, it won't try to get federation state anymore due to retry policy,
+        // so there's no reason to keep the write session alive.
         CloseImpl(FederationState->Status.GetStatus(), NYql::TIssues(FederationState->Status.GetIssues()));
         return;
     }
 
     Y_ABORT_UNLESS(!FederationState->DbInfos.empty());
 
-    auto preferrableDb = SelectDatabaseImpl();
+    auto [preferrableDb, status] = SelectDatabaseImpl(Settings, FederationState->DbInfos, FederationState->SelfLocation);
 
     if (!preferrableDb) {
-        CloseImpl(EStatus::UNAVAILABLE,
-                  NYql::TIssues{NYql::TIssue("Fail to select database: no available database with positive weight")});
+        if (!RetryState) {
+            RetryState = Settings.RetryPolicy_->CreateRetryState();
+        }
+        if (auto delay = RetryState->GetNextRetryDelay(status)) {
+            LOG_LAZY(Log, TLOG_NOTICE, GetLogPrefixImpl() << "Retry to update federation state in " << delay);
+            ScheduleFederationStateUpdateImpl(*delay);
+        } else {
+            TString message = "Failed to select database: no available database";
+            LOG_LAZY(Log, TLOG_ERR, GetLogPrefixImpl() << message << ". Status: " << status);
+            CloseImpl(status, NYql::TIssues{NYql::TIssue(message)});
+        }
         return;
     }
+    RetryState.reset();
 
     if (!DatabasesAreSame(preferrableDb, CurrentDatabase)) {
-        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix()
+        LOG_LAZY(Log, TLOG_INFO, GetLogPrefixImpl()
             << "Start federated write session to database '" << preferrableDb->name()
             << "' (previous was " << (CurrentDatabase ? CurrentDatabase->name() : "<empty>") << ")"
             << " FederationState: " << *FederationState);
-        OpenSubSessionImpl(preferrableDb);
+        OpenSubsessionImpl(preferrableDb);
     }
 
-    ScheduleFederatedStateUpdateImpl(UPDATE_FEDERATION_STATE_DELAY);
+    ScheduleFederationStateUpdateImpl(UPDATE_FEDERATION_STATE_DELAY);
 }
 
-void TFederatedWriteSessionImpl::ScheduleFederatedStateUpdateImpl(TDuration delay) {
+void TFederatedWriteSessionImpl::ScheduleFederationStateUpdateImpl(TDuration delay) {
     Y_ABORT_UNLESS(Lock.IsLocked());
     auto cb = [selfCtx = SelfContext](bool ok) {
         if (ok) {
             if (auto self = selfCtx->LockShared()) {
                 with_lock(self->Lock) {
-                    if (self->Closing) {
-                        return;
-                    }
-                    self->FederationState = self->Observer->GetState();
-                    self->OnFederatedStateUpdateImpl();
+                    self->UpdateFederationStateImpl();
                 }
             }
         }
@@ -218,7 +303,7 @@ void TFederatedWriteSessionImpl::ScheduleFederatedStateUpdateImpl(TDuration dela
 
     UpdateStateDelayContext = Connections->CreateContext();
     if (!UpdateStateDelayContext) {
-        Closing = true;
+        CloseImpl(EStatus::TRANSPORT_UNAVAILABLE, NYql::TIssues{NYql::TIssue("Could not update federation state")});
         // TODO log DRIVER_IS_STOPPING_DESCRIPTION
         return;
     }
@@ -273,28 +358,25 @@ void TFederatedWriteSessionImpl::WriteEncoded(NTopic::TContinuationToken&& token
 }
 
 void TFederatedWriteSessionImpl::WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& wrapped) {
-    ClientHasToken = false;
-    if (!wrapped.Message.CreateTimestamp_.Defined()) {
-        wrapped.Message.CreateTimestamp_ = TInstant::Now();
-    }
+    TDeferredWrite deferred(Subsession);
 
-    {
-        TDeferredWrite deferred(Subsession);
-        with_lock(Lock) {
-            BufferFreeSpace -= wrapped.Message.Data.size();
-            OriginalMessagesToPassDown.emplace_back(std::move(wrapped));
-
-            PrepareDeferredWrite(deferred);
+    with_lock(Lock) {
+        ClientHasToken = false;
+        if (!wrapped.Message.CreateTimestamp_.Defined()) {
+            wrapped.Message.CreateTimestamp_ = TInstant::Now();
         }
-        deferred.DoWrite();
+        BufferFreeSpace -= wrapped.Message.Data.size();
+        OriginalMessagesToPassDown.emplace_back(std::move(wrapped));
+        PrepareDeferredWriteImpl(deferred);
     }
-    if (BufferFreeSpace > 0) {
-        ClientEventsQueue->PushEvent(NTopic::TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
-        ClientHasToken = true;
-    }
+
+    deferred.DoWrite();
+
+    IssueTokenIfAllowed();
 }
 
-bool TFederatedWriteSessionImpl::PrepareDeferredWrite(TDeferredWrite& deferred) {
+bool TFederatedWriteSessionImpl::PrepareDeferredWriteImpl(TDeferredWrite& deferred) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
     if (PendingToken.Empty()) {
         return false;
     }
@@ -309,27 +391,47 @@ bool TFederatedWriteSessionImpl::PrepareDeferredWrite(TDeferredWrite& deferred) 
     return true;
 }
 
-void TFederatedWriteSessionImpl::CloseImpl(EStatus statusCode, NYql::TIssues&& issues, TDuration timeout) {
-    CloseImpl(TPlainStatus(statusCode, std::move(issues)), timeout);
+void TFederatedWriteSessionImpl::CloseImpl(EStatus statusCode, NYql::TIssues&& issues) {
+    CloseImpl(TPlainStatus(statusCode, std::move(issues)));
 }
 
-void TFederatedWriteSessionImpl::CloseImpl(NTopic::TSessionClosedEvent const& ev, TDuration timeout) {
-    if (Closing) {
+void TFederatedWriteSessionImpl::CloseImpl(NTopic::TSessionClosedEvent const& ev) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+    if (SessionState == State::CLOSED) {
         return;
     }
-    Closing = true;
-    if (Subsession) {
-        Subsession->Close(timeout);
-    }
-    ClientEventsQueue->Close(ev);
+    SessionState = State::CLOSED;
     NTopic::Cancel(UpdateStateDelayContext);
+    if (!HasBeenClosed.HasValue()) {
+        HasBeenClosed.SetValue();
+    }
+    {
+        auto unguard = Unguard(Lock);
+        ClientEventsQueue->Close(ev);
+    }
 }
 
 bool TFederatedWriteSessionImpl::Close(TDuration timeout) {
-    with_lock (Lock) {
-        CloseImpl(EStatus::SUCCESS, {}, timeout);
+    with_lock(Lock) {
+        if (SessionState == State::CLOSED) {
+            return MessageQueuesAreEmptyImpl();
+        }
+        SessionState = State::CLOSING;
+        if (!MessageQueuesHaveBeenEmptied.Initialized()) {
+            MessageQueuesHaveBeenEmptied = NThreading::NewPromise();
+            if (MessageQueuesAreEmptyImpl()) {
+                MessageQueuesHaveBeenEmptied.SetValue();
+            }
+        }
     }
-    return true;
+
+    TVector<NThreading::TFuture<void>> futures{MessageQueuesHaveBeenEmptied.GetFuture(), HasBeenClosed.GetFuture()};
+    NThreading::WaitAny(futures).Wait(timeout);
+
+    with_lock(Lock) {
+        CloseImpl(EStatus::SUCCESS, NYql::TIssues{});
+        return MessageQueuesAreEmptyImpl();
+    }
 }
 
 }  // namespace NYdb::NFederatedTopic

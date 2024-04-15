@@ -38,6 +38,13 @@ def credentials_from_env_variables(tracer=None):
 
             return ydb.iam.ServiceAccountCredentials.from_file(service_account_key_file)
 
+        nebius_service_account_key_file = os.getenv("YDB_NEBIUS_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS")
+        if nebius_service_account_key_file is not None:
+            ctx.trace({"credentials.nebius_service_account_key_file": True})
+            import ydb.iam
+
+            return ydb.iam.NebiusServiceAccountCredentials.from_file(nebius_service_account_key_file)
+
         anonymous_credetials = os.getenv("YDB_ANONYMOUS_CREDENTIALS", "0") == "1"
         if anonymous_credetials:
             ctx.trace({"credentials.anonymous": True})

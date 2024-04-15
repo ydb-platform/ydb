@@ -365,7 +365,6 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
       }
     }
   }
-  not_null: false
   from_literal {
     type {
       optional_type {
@@ -390,7 +389,6 @@ columns {
       }
     }
   }
-  not_null: false
   from_literal {
     type {
       optional_type {

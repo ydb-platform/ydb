@@ -386,6 +386,12 @@ const TTypeAnnotationNode* FromPgImpl(TPositionHandle pos, const TTypeAnnotation
         dataType = ctx.MakeType<TDataExprType>(EDataSlot::String);
     } else if (name == "unknown") {
         return ctx.MakeType<TNullExprType>();
+    } else if (name == "date") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Date32);
+    } else if (name == "timestamp") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Timestamp64);
+    } else if (name == "uuid") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Uuid);
     } else {
         ctx.AddError(TIssue(ctx.GetPosition(pos),
             TStringBuilder() << "Unsupported type: " << name));
@@ -449,6 +455,8 @@ const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNo
         pgType = "int8";
         break;
     case NUdf::EDataSlot::Uint64:
+    case NUdf::EDataSlot::Decimal:
+    case NUdf::EDataSlot::DyNumber:
         pgType = "numeric";
         break;
     case NUdf::EDataSlot::Float:
@@ -468,13 +476,17 @@ const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNo
         pgType = "text";
         break;
     case NUdf::EDataSlot::Date:
+    case NUdf::EDataSlot::Date32:
         pgType = "date";
         break;
     case NUdf::EDataSlot::Datetime:
+    case NUdf::EDataSlot::Datetime64:
     case NUdf::EDataSlot::Timestamp:
+    case NUdf::EDataSlot::Timestamp64:
         pgType = "timestamp";
         break;
     case NUdf::EDataSlot::Interval:
+    case NUdf::EDataSlot::Interval64:
         pgType = "interval";
         break;
     case NUdf::EDataSlot::Json:

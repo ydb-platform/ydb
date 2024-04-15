@@ -43,13 +43,6 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
     return true;
 }
 
-void TGranuleMeta::AddColumnRecordOnLoad(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnChunkLoadContext& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta) {
-    std::shared_ptr<TPortionInfo> pInfo = UpsertPortionOnLoad(portion);
-    TColumnRecord cRecord(pInfo->RegisterBlobId(rec.GetBlobRange().GetBlobId()), rec, indexInfo.GetColumnFeaturesVerified(rec.GetAddress().GetColumnId()));
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "AddColumnRecordOnLoad")("portion_info", portion.DebugString())("record", cRecord.DebugString());
-    pInfo->AddRecord(indexInfo, cRecord, portionMeta);
-}
-
 void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard) {
     if (portionAfter) {
         AFL_VERIFY(PortionsByPK[portionAfter->IndexKeyStart()].emplace(portionAfter->GetPortion(), portionAfter).second);
@@ -161,17 +154,11 @@ bool TGranuleMeta::InCompaction() const {
     return Activity.contains(EActivity::GeneralCompaction);
 }
 
-std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(const TPortionInfo& portion) {
-    auto it = Portions.find(portion.GetPortion());
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "UpsertPortionOnLoad")("portion_info", portion.DebugString());
-    if (it == Portions.end()) {
-        Y_ABORT_UNLESS(portion.Records.empty());
-        auto portionNew = std::make_shared<TPortionInfo>(portion);
-        it = Portions.emplace(portion.GetPortion(), portionNew).first;
-    } else {
-        AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
-    }
-    return it->second;
+std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& portion) {
+    auto portionId = portion.GetPortionId();
+    auto emplaceInfo = Portions.emplace(portionId, std::make_shared<TPortionInfo>(std::move(portion)));
+    AFL_VERIFY(emplaceInfo.second);
+    return emplaceInfo.first->second;
 }
 
 } // namespace NKikimr::NOlap

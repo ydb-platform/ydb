@@ -535,6 +535,18 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         }
     }
 
+    Y_UNIT_TEST(WarnCrossJoinStrategyHint) {
+        NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a CROSS JOIN /*+ merge() */ plato.Input AS b;");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:32: Warning: Non-default join strategy will not be used for CROSS JOIN, code: 4534\n");
+    }
+
+    Y_UNIT_TEST(WarnUnknownJoinStrategyHint) {
+        NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ xmerge() */ plato.Input AS b USING (key);");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:41: Warning: Unsupported join strategy: xmerge, code: 4534\n");
+    }
+
     Y_UNIT_TEST(ReverseLabels) {
         NYql::TAstParseResult res = SqlToYql("select in.key as subkey, subkey as key from plato.Input as in;");
         UNIT_ASSERT(res.Root);
@@ -2482,7 +2494,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
         ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL WITH (a=b, c=d, e=f) ON (col)",
-            "<main>:1:40: Error: local: alternative is not implemented yet: 719:7: local_index\n");
+            "<main>:1:40: Error: local: alternative is not implemented yet: 720:7: local_index\n");
     }
 
     Y_UNIT_TEST(OptionalAliases) {
@@ -2566,6 +2578,35 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("localhost:2135"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("DATABASE"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("/MyDatabase"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(AlterAsyncReplicationParseCorrect) {
+        auto req = R"(
+            USE plato;
+            ALTER ASYNC REPLICATION MyReplication
+            SET (
+                STATE = "DONE",
+                FAILOVER_MODE = "FORCE"
+            );
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("alterAsyncReplication"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("STATE"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("DONE"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("FAILOVER_MODE"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("FORCE"));
             }
         };
 

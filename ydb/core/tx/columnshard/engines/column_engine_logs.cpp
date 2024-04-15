@@ -7,6 +7,7 @@
 #include "changes/cleanup_portions.h"
 #include "changes/cleanup_tables.h"
 #include "changes/ttl.h"
+#include "portions/constructor.h"
 
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -70,11 +71,10 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
     UpdatePortionStats(*PathStats[pathId], portionInfo, updateType, exPortionInfo);
 }
 
-TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo, ui64& metadataBytes) {
+TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo) {
     TColumnEngineStats::TPortionsStats deltaStats;
     deltaStats.Bytes = 0;
     for (auto& rec : portionInfo.Records) {
-        metadataBytes += rec.GetMeta().GetMetadataSize();
         deltaStats.BytesByColumn[rec.ColumnId] += rec.BlobRange.Size;
         deltaStats.RawBytesByColumn[rec.ColumnId] += rec.GetMeta().GetRawBytes();
     }
@@ -90,8 +90,7 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
                                               EStatsUpdateType updateType,
                                               const TPortionInfo* exPortionInfo) const {
     ui64 columnRecords = portionInfo.Records.size();
-    ui64 metadataBytes = 0;
-    TColumnEngineStats::TPortionsStats deltaStats = DeltaStats(portionInfo, metadataBytes);
+    TColumnEngineStats::TPortionsStats deltaStats = DeltaStats(portionInfo);
 
     Y_ABORT_UNLESS(!exPortionInfo || exPortionInfo->GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
     Y_ABORT_UNLESS(portionInfo.GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
@@ -110,23 +109,19 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
 
     if (isErase) { // PortionsToDrop
         engineStats.ColumnRecords -= columnRecords;
-        engineStats.ColumnMetadataBytes -= metadataBytes;
 
         stats -= deltaStats;
     } else if (isAdd) { // Load || AppendedPortions
         engineStats.ColumnRecords += columnRecords;
-        engineStats.ColumnMetadataBytes += metadataBytes;
 
         stats += deltaStats;
     } else if (&srcStats != &stats || exPortionInfo) { // SwitchedPortions || PortionsToEvict
         stats += deltaStats;
 
         if (exPortionInfo) {
-            ui64 rmMetadataBytes = 0;
-            srcStats -= DeltaStats(*exPortionInfo, rmMetadataBytes);
+            srcStats -= DeltaStats(*exPortionInfo);
 
             engineStats.ColumnRecords += columnRecords - exPortionInfo->Records.size();
-            engineStats.ColumnMetadataBytes += metadataBytes - rmMetadataBytes;
         } else {
             srcStats -= deltaStats;
         }
@@ -191,29 +186,41 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
 }
 
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
-    TSnapshot lastSnapshot(0, 0);
-    const TIndexInfo* currentIndexInfo = nullptr;
-    if (!db.LoadColumns([&](const TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
-        if (!currentIndexInfo || lastSnapshot != portion.GetMinSnapshot()) {
-            currentIndexInfo = &VersionedIndex.GetSchema(portion.GetMinSnapshot())->GetIndexInfo();
-            lastSnapshot = portion.GetMinSnapshot();
+    TPortionConstructors constructors;
+    {
+        if (!db.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+            const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
+            AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
+            AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
+        })) {
+            return false;
         }
-        AFL_VERIFY(portion.ValidSnapshotInfo())("details", portion.DebugString());
-        // Locate granule and append the record.
-        GetGranulePtrVerified(portion.GetPathId())->AddColumnRecordOnLoad(*currentIndexInfo, portion, loadContext, loadContext.GetPortionMeta());
-    })) {
-        return false;
     }
 
-    if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
-        auto portion = GetGranulePtrVerified(pathId)->GetPortionOptional(portionId);
-        AFL_VERIFY(portion);
-        const auto linkBlobId = portion->RegisterBlobId(loadContext.GetBlobRange().GetBlobId());
-        portion->AddIndex(loadContext.BuildIndexChunk(linkBlobId));
-    })) {
-        return false;
-    };
-
+    {
+        TPortionInfo::TSchemaCursor schema(VersionedIndex);
+        if (!db.LoadColumns([&](TPortionInfoConstructor&& portion, const TColumnChunkLoadContext& loadContext) {
+            auto* constructor = constructors.MergeConstructor(std::move(portion));
+            auto currentSchema = schema.GetSchema(portion);
+            constructor->LoadRecord(currentSchema->GetIndexInfo(), loadContext);
+        })) {
+            return false;
+        }
+    }
+    {
+        if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
+            auto* constructor = constructors.GetConstructorVerified(pathId, portionId);
+            constructor->LoadIndex(loadContext);
+        })) {
+            return false;
+        };
+    }
+    for (auto&& [granuleId, pathConstructors] : constructors) {
+        auto g = GetGranulePtrVerified(granuleId);
+        for (auto&& [portionId, constructor] : pathConstructors) {
+            g->UpsertPortionOnLoad(constructor.Build(false));
+        }
+    }
     for (auto&& i : GranulesStorage->GetTables()) {
         i.second->OnAfterPortionsLoad();
     }
@@ -269,7 +276,6 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(cons
     }
     granule->OnStartCompaction();
     auto changes = granule->GetOptimizationTask(granule, dataLocksManager);
-    NYDBTest::TControllers::GetColumnShardController()->OnStartCompaction(changes);
     if (!changes) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build optimization task for granule that need compaction")("weight", granule->GetCompactionPriority().DebugString());
     }
@@ -412,18 +418,20 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> result;
     for (auto&& i : context.GetTasks()) {
         for (auto&& t : i.second) {
-            SignalCounters.OnActualizationTask(t.GetTask()->GetPortionsToEvictCount(), t.GetTask()->PortionsToRemove.size());
+            SignalCounters.OnActualizationTask(t.GetTask()->GetPortionsToEvictCount(), t.GetTask()->GetPortionsToRemoveSize());
             result.emplace_back(t.GetTask());
         }
     }
     return result;
 }
 
-bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept {
-    {
-        TFinalizationContext context(LastGranule, LastPortion, snapshot);
-        indexChanges->Compile(context);
-    }
+bool TColumnEngineForLogs::ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept {
+    TFinalizationContext context(LastGranule, LastPortion, snapshot);
+    indexChanges->Compile(context);
+    return true;
+}
+
+bool TColumnEngineForLogs::ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> /*indexChanges*/, const TSnapshot& snapshot) noexcept {
     db.WriteCounter(LAST_PORTION, LastPortion);
     db.WriteCounter(LAST_GRANULE, LastGranule);
 

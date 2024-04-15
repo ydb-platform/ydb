@@ -3,5 +3,8 @@
         ["a";["DataType";"Date"]];
         ["b";["DataType";"Datetime"]];
         ["c";["DataType";"Timestamp"]];
+        ["d";["DataType";"Date32"]];
+        ["e";["DataType";"Datetime64"]];
+        ["f";["DataType";"Timestamp64"]];
     ]];
 }}

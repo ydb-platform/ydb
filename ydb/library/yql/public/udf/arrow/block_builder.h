@@ -1180,6 +1180,18 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
         type = typeOpt.GetItemType();
     }
 
+    TStructTypeInspector typeStruct(typeInfoHelper, type);
+    if (typeStruct) {
+        TVector<std::unique_ptr<TArrayBuilderBase>> members;
+        for (ui32 i = 0; i < typeStruct.GetMembersCount(); i++) {
+            const TType* memberType = typeStruct.GetMemberType(i);
+            auto memberBuilder = MakeArrayBuilderBase(typeInfoHelper, memberType, pool, maxLen, pgBuilder);
+            members.push_back(std::move(memberBuilder));
+        }
+        // XXX: Use Tuple array builder for Struct.
+        return std::make_unique<TTupleArrayBuilder<Nullable>>(typeInfoHelper, type, pool, maxLen, std::move(members));
+    }
+
     TTupleTypeInspector typeTuple(typeInfoHelper, type);
     if (typeTuple) {
         TVector<std::unique_ptr<TArrayBuilderBase>> children;

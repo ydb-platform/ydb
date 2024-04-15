@@ -7242,7 +7242,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
                 cached.FunctionType = description.CallableType;
                 cached.RunConfigType = description.RunConfigType ? description.RunConfigType : ctx.Expr.MakeType<TVoidExprType>();
-                cached.NormalizedUserType = description.UserType ? description.NormalizedUserType : ctx.Expr.MakeType<TVoidExprType>();
+                cached.NormalizedUserType = description.NormalizedUserType ? description.NormalizedUserType : ctx.Expr.MakeType<TVoidExprType>();
                 cached.SupportsBlocks = description.SupportsBlocks;
                 cached.IsStrict = description.IsStrict;
             }
@@ -12239,6 +12239,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockIf"] = &BlockIfWrapper;
         Functions["BlockJust"] = &BlockJustWrapper;
         Functions["BlockAsTuple"] = &BlockAsTupleWrapper;
+        Functions["BlockMember"] = &BlockMemberWrapper;
         Functions["BlockNth"] = &BlockNthWrapper;
         Functions["BlockToPg"] = &BlockToPgWrapper;
         Functions["BlockFromPg"] = &BlockFromPgWrapper;

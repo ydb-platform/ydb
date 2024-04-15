@@ -1,0 +1,77 @@
+{
+  "get": {
+    "consumes": [
+      "application/json"
+    ],
+    "description": "list datastreams in folder or database",
+    "parameters": [
+      {
+        "description": "database location",
+        "in": "path",
+        "name": "location",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "id of database to list streams inside",
+        "in": "query",
+        "name": "databaseId",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "id of folder to list streams inside all databases in this folder",
+        "in": "query",
+        "name": "folderId",
+        "required": false,
+        "type": "string"
+      }
+    ],
+    "produces": [
+      "application/json"
+    ],
+    "responses": {
+      "200": {
+        "description": "successfull operation",
+        "properties": {
+          "owner": {
+            "type": "string"
+          },
+          "storageLimitMb": {
+            "type": "number"
+          },
+          "totalWriteQuotaKbPerSec": {
+            "description": "returned only for memory-limited datastreams",
+            "type": "number"
+          },
+          "streamCreationTimestamp": {
+            "type": "number"
+          },
+          "retentionPeriodHours": {
+            "type": "number"
+          },
+          "shards": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "writeQuotaKbPerSec": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "503": {
+        "description": "service unavailable (some errors occurred)"
+      }
+    },
+    "summary": "list datastreams in specified location(folder or concrete database)",
+    "tags": [
+      "YDBC"
+    ]
+  }
+}

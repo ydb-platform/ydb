@@ -6328,7 +6328,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr
         return Execute(CreateTxProgressImport(ev), ctx);
     } else if (TxIdToIndexBuilds.contains(txId)) {
         return Execute(CreateTxReply(ev), ctx);
-    } else if (BackgroundCleaningTxToPrimaryTx.contains(txId)) {
+    } else if (BackgroundCleaningTxToDirPathId.contains(txId)) {
         return HandleBackgroundCleaningTransactionResult(ev);
     }
 
@@ -6384,7 +6384,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
         Execute(CreateTxReply(txId), ctx);
         executed = true;
     }
-    if (BackgroundCleaningTxToPrimaryTx.contains(txId)) {
+    if (BackgroundCleaningTxToDirPathId.contains(txId)) {
         HandleBackgroundCleaningCompletionResult(txId);
         executed = true;
     }

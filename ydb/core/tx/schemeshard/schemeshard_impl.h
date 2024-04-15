@@ -295,13 +295,12 @@ public:
     TBackgroundCleaningQueue* BackgroundCleaningQueue = nullptr;
 
     struct TBackgroundCleaningState {
-        TPathId PathId;
-
+        THashSet<TTxId> TxIds;
         TVector<NKikimr::TPathId> DirsToRemove;
         TVector<NKikimr::TPathId> TablesToDrop;
     };
-    THashMap<TTxId, TBackgroundCleaningState> BackgroundCleaningTxs;
-    THashMap<TTxId, TTxId> BackgroundCleaningTxToPrimaryTx;
+    THashMap<TPathId, TBackgroundCleaningState> BackgroundCleaningState;
+    THashMap<TTxId, TPathId> BackgroundCleaningTxToDirPathId;
     NKikimrConfig::TBackgroundCleaningConfig::TRetrySettings BackgroundCleaningRetrySettings;
 
     // shardIdx -> clientId
@@ -893,7 +892,7 @@ public:
     void UpdateBorrowedCompactionQueueMetrics();
 
     NOperationQueue::EStartStatus StartBackgroundCleaning(const TPathId& pathId);
-    bool ContinueBackgroundCleaning(const TTxId& txId);
+    bool ContinueBackgroundCleaning(const TPathId& pathId);
     void OnBackgroundCleaningTimeout(const TPathId& pathId);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
     bool CheckOwnerUndelivered(TEvents::TEvUndelivered::TPtr& ev);
@@ -902,6 +901,7 @@ public:
     void HandleBackgroundCleaningTransactionResult(
         TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& result);
     void HandleBackgroundCleaningCompletionResult(const TTxId& txId);
+    void CleanBackgroundCleaningState(const TPathId& pathId);
     void ClearTempDirsState();
 
     struct TTxCleanDroppedSubDomains;

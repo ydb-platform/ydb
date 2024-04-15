@@ -134,7 +134,7 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
 
     switch (ev->Get()->Tag) {
         case TPartitionScaleManager::TRY_SCALE_REQUEST_WAKE_UP_TAG: {
-            if (PartitionsScaleManager) {
+            if (PartitionsScaleManager && SplitMergeEnabled(TabletConfig)) {
                 PartitionsScaleManager->TrySendScaleRequest(ctx);
             }
         }
@@ -447,8 +447,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     MaxPartsPerTablet = record.GetPartitionPerTablet();
     PathId = record.GetPathId();
     Topic = std::move(record.GetTopicName());
-    Path = std::move(record.GetPath());
-    Cerr << "\n Path: " << Path << " \n";
+    Path = std::move(record.GetPath()); //savnik fix path
     TxId = record.GetTxId();
     TabletConfig = std::move(record.GetTabletConfig());
     Migrate(TabletConfig);
@@ -477,14 +476,12 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     }
 
     PartitionGraph = MakePartitionGraph(record);
-
-    if (!PartitionsScaleManager) {
-        auto path = SplitPath(Path);
-        path.pop_back();
-        auto dbPath = CanonizePath(path);
-        PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Topic, dbPath, record);
-    } else {
-        PartitionsScaleManager->UpdateBalancerConfig(record);
+    if (SplitMergeEnabled(TabletConfig)) {
+        if (!PartitionsScaleManager) {
+            PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Topic, DatabasePath, record);
+        } else {
+            PartitionsScaleManager->UpdateBalancerConfig(record);
+        }
     }
 
     TVector<TPartInfo> newPartitions;
@@ -523,8 +520,10 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         if (it == PartitionsInfo.end()) {
             Y_ABORT_UNLESS(group <= TotalGroups && group > prevGroups || TotalGroups == 0);
             Y_ABORT_UNLESS(p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId || NextPartitionId == 0);
-            partitionsInfo[p.GetPartition()] = {p.GetTabletId(), EPS_FREE, TActorId(), group, {}}; //savnik: check keyrange
-            partitionsInfo[p.GetPartition()].KeyRange.DeserializeFromProto(p.GetKeyRange());
+            partitionsInfo[p.GetPartition()] = {p.GetTabletId(), EPS_FREE, TActorId(), group, {}};
+            if(SplitMergeEnabled(TabletConfig)) {
+                partitionsInfo[p.GetPartition()].KeyRange.DeserializeFromProto(p.GetKeyRange());
+            }
 
             newPartitions.push_back(TPartInfo{p.GetPartition(), p.GetTabletId(), group, partitionsInfo[p.GetPartition()].KeyRange});
 
@@ -736,7 +735,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
             continue;
         }
         ui32 partitionId = partRes.GetPartition();
-        if (PartitionsScaleManager) {
+        if (SplitMergeEnabled(TabletConfig) && PartitionsScaleManager) {
             TPartitionScaleManager::TPartitionInfo scalePartitionInfo = {
                 .Id = partitionId,
                 .KeyRange = PartitionsInfo[partRes.GetPartition()].KeyRange
@@ -1801,6 +1800,10 @@ void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated
         }
     }
 
+    if (PartitionsScaleManager) {
+        PartitionsScaleManager->UpdateDatabasePath(DatabasePath);
+    }
+
     if (SubDomainPathId && msg->PathId == *SubDomainPathId) {
         const bool outOfSpace = msg->Result->GetPathDescription()
             .GetDomainDescription()
@@ -1842,6 +1845,9 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPt
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx) {
+    if (!SplitMergeEnabled(TabletConfig)) {
+        return;
+    }
     auto& record = ev->Get()->Record;
     auto partitionInfoIt = PartitionsInfo.find(record.GetPartitionId());
     if (partitionInfoIt.IsEnd()) {
@@ -1858,6 +1864,9 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr&
 }
 
 void TPersQueueReadBalancer::Handle(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx) {
+    if (!SplitMergeEnabled(TabletConfig)) {
+        return;
+    }
     if (PartitionsScaleManager) {
         PartitionsScaleManager->HandleScaleRequestResult(ev, ctx);
     }

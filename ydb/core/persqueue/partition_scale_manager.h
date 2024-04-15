@@ -57,6 +57,7 @@ public:
     void HandleScaleRequestResult(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
     void TrySendScaleRequest(const TActorContext& ctx);
     void UpdateBalancerConfig(NKikimrPQ::TUpdateBalancerConfig& config);
+    void UpdateDatabasePath(const TString& dbPath);
     void Die(const TActorContext& ctx);
     
     static TString GetRangeMid(const TString& from, const TString& to);
@@ -75,7 +76,7 @@ private:
     static const ui32 MAX_SCALE_REQUEST_REPEAT_SECONDS_TIMEOUT = 1000;
     
     const TString TopicName;
-    const TString DatabasePath;
+    TString DatabasePath;
     TActorId CurrentScaleRequest;
     TDuration RequestTimeout = TDuration::MilliSeconds(0);
     TInstant LastResponseTime = TInstant::Zero();

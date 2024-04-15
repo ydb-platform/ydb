@@ -594,7 +594,7 @@ void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) 
     if (scaleStatus == ScaleStatus || LastScaleRequestTime + TDuration::Seconds(SCALE_REQUEST_REPEAT_MIN_SECONDS) > TInstant::Now()) {
         return;
     }
-    Send(Tablet, new TEvPQ::TEvPartitionScaleStatusChanged(scaleStatus, Partition.OriginalPartitionId));
+    Send(Tablet, new TEvPQ::TEvPartitionScaleStatusChanged(Partition.OriginalPartitionId, scaleStatus));
     LastScaleRequestTime = TInstant::Now();
     ScaleStatus = scaleStatus;
 }

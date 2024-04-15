@@ -4,8 +4,16 @@ namespace NKikimr {
 namespace NPQ {
 
 
-TPartitionScaleManager::TPartitionScaleManager(const TString& topicName, const TString& databasePath, NKikimrPQ::TUpdateBalancerConfig& balancerConfig)
-: TopicName(topicName), DatabasePath(databasePath), BalancerConfig(balancerConfig) {}
+TPartitionScaleManager::TPartitionScaleManager(
+    const TString& topicName, 
+    const TString& databasePath, 
+    NKikimrPQ::TUpdateBalancerConfig& balancerConfig
+)
+    : TopicName(topicName)
+    , DatabasePath(databasePath)
+    , BalancerConfig(balancerConfig) {
+
+    }
 
 void TPartitionScaleManager::HandleScaleStatusChange(const TPartitionInfo& partition, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx) {
     if (scaleStatus == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
@@ -17,7 +25,8 @@ void TPartitionScaleManager::HandleScaleStatusChange(const TPartitionInfo& parti
 }
 
 void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
-    if (RequestInflight || (LastResponseTime + RequestTimeout > ctx.Now())) {
+    TInstant delayDeadline = LastResponseTime + RequestTimeout;
+    if (!DatabasePath || RequestInflight || delayDeadline > ctx.Now()) {
         return;
     }
 
@@ -90,6 +99,10 @@ void TPartitionScaleManager::Die(const TActorContext& ctx) {
 
 void TPartitionScaleManager::UpdateBalancerConfig(NKikimrPQ::TUpdateBalancerConfig& config) {
     BalancerConfig = TBalancerConfig(config);
+}
+
+void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath) {
+    DatabasePath = dbPath;
 }
 
 TString TPartitionScaleManager::GetRangeMid(const TString& from, const TString& to) {

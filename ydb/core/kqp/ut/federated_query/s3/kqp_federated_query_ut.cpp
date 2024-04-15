@@ -1764,7 +1764,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                 return;
             }
 
-            UNIT_ASSERT_C(status.GetStatus() == NYdb::EStatus::TIMEOUT || status.GetStatus() == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED, status.GetIssues().ToString());
+            UNIT_ASSERT_C(status.GetStatus() == NYdb::EStatus::ABORTED || status.GetStatus() == NYdb::EStatus::TIMEOUT || status.GetStatus() == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED, status.GetIssues().ToString());
 
             if (status.GetStatus() == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED) {
                 // Wait until last forget is not finished

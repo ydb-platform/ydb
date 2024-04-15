@@ -7,6 +7,7 @@ SRCS(
     read_with_blobs.cpp
     write_with_blobs.cpp
     constructor.cpp
+    constructor_meta.cpp
     meta.cpp
     common.cpp
     index_chunk.cpp

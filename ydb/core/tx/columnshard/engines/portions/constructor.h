@@ -1,143 +1,16 @@
 #pragma once
-#include "index_chunk.h"
+#include "constructor_meta.h"
 #include "column_record.h"
-#include "meta.h"
+#include "index_chunk.h"
+#include "portion_info.h"
 
-#include <ydb/core/tx/columnshard/common/blob.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
-#include <ydb/core/tx/columnshard/columnshard_schema.h>
-
-#include <ydb/core/formats/arrow/special_keys.h>
+#include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
 class TVersionedIndex;
 class ISnapshotSchema;
-class TPortionInfoConstructor;
-
-class TPortionMetaConstructor {
-private:
-    std::optional<NArrow::TFirstLastSpecialKeys> FirstAndLastPK;
-    std::optional<TString> TierName;
-    std::optional<NStatistics::TPortionStorage> StatisticsStorage;
-    std::optional<TSnapshot> RecordSnapshotMin;
-    std::optional<TSnapshot> RecordSnapshotMax;
-    std::optional<NPortion::EProduced> Produced;
-    friend class TPortionInfoConstructor;
-    void FillMetaInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const NArrow::TMinMaxSpecialKeys& snapshotKeys, const TIndexInfo& indexInfo) {
-        AFL_VERIFY(!FirstAndLastPK);
-        FirstAndLastPK = *primaryKeys.BuildAccordingToSchemaVerified(indexInfo.GetReplaceKey());
-        AFL_VERIFY(!RecordSnapshotMin);
-        AFL_VERIFY(!RecordSnapshotMax);
-        {
-            auto cPlanStep = snapshotKeys.GetBatch()->GetColumnByName(TIndexInfo::SPEC_COL_PLAN_STEP);
-            auto cTxId = snapshotKeys.GetBatch()->GetColumnByName(TIndexInfo::SPEC_COL_TX_ID);
-            Y_ABORT_UNLESS(cPlanStep && cTxId);
-            Y_ABORT_UNLESS(cPlanStep->type_id() == arrow::UInt64Type::type_id);
-            Y_ABORT_UNLESS(cTxId->type_id() == arrow::UInt64Type::type_id);
-            const arrow::UInt64Array& cPlanStepArray = static_cast<const arrow::UInt64Array&>(*cPlanStep);
-            const arrow::UInt64Array& cTxIdArray = static_cast<const arrow::UInt64Array&>(*cTxId);
-            RecordSnapshotMin = TSnapshot(cPlanStepArray.GetView(0), cTxIdArray.GetView(0));
-            RecordSnapshotMax = TSnapshot(cPlanStepArray.GetView(snapshotKeys.GetBatch()->num_rows() - 1), cTxIdArray.GetView(snapshotKeys.GetBatch()->num_rows() - 1));
-        }
-    }
-
-public:
-    TPortionMetaConstructor() = default;
-    TPortionMetaConstructor(const TPortionMeta& meta) {
-        FirstAndLastPK = meta.ReplaceKeyEdges;
-        RecordSnapshotMin = meta.RecordSnapshotMin;
-        RecordSnapshotMax = meta.RecordSnapshotMax;
-        TierName = meta.GetTierNameOptional();
-        if (!meta.StatisticsStorage.IsEmpty()) {
-            StatisticsStorage = meta.StatisticsStorage;
-        }
-        if (meta.Produced != NPortion::EProduced::UNSPECIFIED) {
-            Produced = meta.Produced;
-        }
-    }
-
-    void SetTierName(const TString& tierName) {
-        AFL_VERIFY(!TierName);
-        if (!tierName || tierName == IStoragesManager::DefaultStorageId) {
-            TierName.reset();
-        } else {
-            TierName = tierName;
-        }
-    }
-
-    void SetStatisticsStorage(NStatistics::TPortionStorage&& storage) {
-        AFL_VERIFY(!StatisticsStorage);
-        StatisticsStorage = std::move(storage);
-    }
-
-    void ResetStatisticsStorage(NStatistics::TPortionStorage&& storage) {
-        StatisticsStorage = std::move(storage);
-    }
-
-    void UpdateRecordsMeta(const NPortion::EProduced prod) {
-        Produced = prod;
-    }
-
-    TPortionMeta Build() {
-        AFL_VERIFY(FirstAndLastPK);
-        AFL_VERIFY(RecordSnapshotMin);
-        AFL_VERIFY(RecordSnapshotMax);
-        TPortionMeta result(*FirstAndLastPK, *RecordSnapshotMin, *RecordSnapshotMax);
-        if (TierName) {
-            result.TierName = *TierName;
-        }
-        AFL_VERIFY(Produced);
-        result.Produced = *Produced;
-        if (StatisticsStorage) {
-            result.StatisticsStorage = *StatisticsStorage;
-        }
-        return result;
-    }
-
-    [[nodiscard]] bool LoadMetadata(const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo) {
-        if (!!Produced) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", "parsing duplication");
-            return true;
-        }
-        if (portionMeta.HasStatisticsStorage()) {
-            auto parsed = NStatistics::TPortionStorage::BuildFromProto(portionMeta.GetStatisticsStorage());
-            if (!parsed) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", parsed.GetErrorMessage());
-                return false;
-            }
-            StatisticsStorage = parsed.DetachResult();
-            if (StatisticsStorage->IsEmpty()) {
-                StatisticsStorage.reset();
-            }
-        }
-        if (portionMeta.GetTierName()) {
-            TierName = portionMeta.GetTierName();
-        }
-        if (portionMeta.GetIsInserted()) {
-            Produced = TPortionMeta::EProduced::INSERTED;
-        } else if (portionMeta.GetIsCompacted()) {
-            Produced = TPortionMeta::EProduced::COMPACTED;
-        } else if (portionMeta.GetIsSplitCompacted()) {
-            Produced = TPortionMeta::EProduced::SPLIT_COMPACTED;
-        } else if (portionMeta.GetIsEvicted()) {
-            Produced = TPortionMeta::EProduced::EVICTED;
-        } else {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", "incorrect portion meta")("meta", portionMeta.DebugString());
-            return false;
-        }
-        AFL_VERIFY(Produced != TPortionMeta::EProduced::UNSPECIFIED);
-        AFL_VERIFY(portionMeta.HasPrimaryKeyBorders());
-        FirstAndLastPK = NArrow::TFirstLastSpecialKeys(portionMeta.GetPrimaryKeyBorders(), indexInfo.GetReplaceKey());
-
-        AFL_VERIFY(portionMeta.HasRecordSnapshotMin());
-        RecordSnapshotMin = TSnapshot(portionMeta.GetRecordSnapshotMin().GetPlanStep(), portionMeta.GetRecordSnapshotMin().GetTxId());
-        AFL_VERIFY(portionMeta.HasRecordSnapshotMax());
-        RecordSnapshotMax = TSnapshot(portionMeta.GetRecordSnapshotMax().GetPlanStep(), portionMeta.GetRecordSnapshotMax().GetTxId());
-        return true;
-    }
-
-};
+class TIndexChunkLoadContext;
 
 class TPortionInfoConstructor {
 private:
@@ -159,11 +32,7 @@ public:
         PortionId = value;
     }
 
-    void AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch) {
-        Y_ABORT_UNLESS(batch->num_rows() == GetRecordsCount());
-        MetaConstructor.FillMetaInfo(NArrow::TFirstLastSpecialKeys(batch),
-            NArrow::TMinMaxSpecialKeys(batch, TIndexInfo::ArrowSchemaSnapshot()), snapshotSchema.GetIndexInfo());
-    }
+    void AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch);
 
     void AddMetadata(const ISnapshotSchema& snapshotSchema, const NArrow::TFirstLastSpecialKeys& firstLastRecords, const NArrow::TMinMaxSpecialKeys& minMaxSpecial) {
         MetaConstructor.FillMetaInfo(firstLastRecords, minMaxSpecial, snapshotSchema.GetIndexInfo());

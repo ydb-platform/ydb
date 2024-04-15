@@ -1,7 +1,8 @@
 #include "constructor.h"
-#include "portion_info.h"
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 
 namespace NKikimr::NOlap {
 
@@ -76,6 +77,12 @@ const NKikimr::NOlap::TColumnRecord& TPortionInfoConstructor::AppendOneChunkColu
     }
     Records.emplace_back(std::move(record));
     return Records.back();
+}
+
+void TPortionInfoConstructor::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch) {
+    Y_ABORT_UNLESS(batch->num_rows() == GetRecordsCount());
+    MetaConstructor.FillMetaInfo(NArrow::TFirstLastSpecialKeys(batch),
+        NArrow::TMinMaxSpecialKeys(batch, TIndexInfo::ArrowSchemaSnapshot()), snapshotSchema.GetIndexInfo());
 }
 
 }

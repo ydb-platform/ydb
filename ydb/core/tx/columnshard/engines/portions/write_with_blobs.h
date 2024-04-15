@@ -1,14 +1,11 @@
 #pragma once
 #include "base_with_blobs.h"
 #include "constructor.h"
-#include "portion_info.h"
-#include <ydb/core/tx/columnshard/blob.h>
-#include <ydb/core/tx/columnshard/splitter/blob_info.h>
-#include <ydb/core/tx/columnshard/splitter/chunks.h>
-#include <ydb/core/tx/columnshard/engines/scheme/statistics/abstract/common.h>
-#include <ydb/core/tx/columnshard/engines/scheme/statistics/abstract/operator.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/splitter/blob_info.h>
 
 namespace NKikimr::NOlap {
 
@@ -131,10 +128,6 @@ public:
         return PortionInfo;
     }
 
-    friend IOutputStream& operator << (IOutputStream& out, const TWritePortionInfoWithBlobs& info) {
-        out << info.DebugString();
-        return out;
-    }
 };
 
 } // namespace NKikimr::NOlap

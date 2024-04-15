@@ -163,6 +163,7 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore41: // upsert object
         case TRule_sql_stmt_core::kAltSqlStmtCore42: // create view
         case TRule_sql_stmt_core::kAltSqlStmtCore43: // drop view
+        case TRule_sql_stmt_core::kAltSqlStmtCore44: // alter replication
             return false;
     }
 }

@@ -329,20 +329,21 @@ private:
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
 
-        TResumeNotificationManager resumeNotificator(*this);
-        for (auto& [shardId, batches] : Serializer->FlushBatches()) {
-            for (auto& batch : batches) {
-                ShardsInfo.GetShard(shardId).PushBatch(std::move(batch));
-            }
-        }
-        resumeNotificator.CheckMemory();
-        YQL_ENSURE(!Finished || Serializer->IsFinished());
-
         if (Finished) {
+            TResumeNotificationManager resumeNotificator(*this);
+            for (auto& [shardId, batches] : Serializer->FlushBatchesForce()) {
+                for (auto& batch : batches) {
+                    ShardsInfo.GetShard(shardId).PushBatch(std::move(batch));
+                }
+            }
+            resumeNotificator.CheckMemory();
+
             for (auto& [shardId, shardInfo] : ShardsInfo.GetShards()) {
                 shardInfo.Close();
             }
         }
+
+        YQL_ENSURE(!Finished || Serializer->IsFinished());
 
         ProcessBatches();
     }

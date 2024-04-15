@@ -1987,7 +1987,8 @@ private:
         // Single-shard transactions are always immediate
         ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) <= 1
                     && !UnknownAffectedShardCount
-                    && evWriteTxs.empty();
+                    && evWriteTxs.empty()
+                    && !HasOlapTable;
 
         switch (Request.IsolationLevel) {
             // OnlineRO with AllowInconsistentReads = true

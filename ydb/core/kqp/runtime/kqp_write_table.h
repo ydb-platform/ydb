@@ -23,7 +23,10 @@ public:
 
     using TBatches = THashMap<ui64, std::deque<TString>>;
 
-    virtual TBatches FlushBatches(const bool force = false) = 0;
+    virtual TBatches FlushBatchesForce() = 0;
+
+    virtual TString FlushBatch(ui64 shardId) = 0;
+    virtual const THashSet<ui64>& ShardIds() const = 0; // TODO: do something better
 
     virtual i64 GetMemory() = 0;
 };

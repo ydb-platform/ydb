@@ -226,8 +226,7 @@ public:
         return IsClosed() && IsEmpty();
     }
 
-    TBatches FlushBatches(const bool force) override {
-        Y_UNUSED(force);
+    TBatches FlushBatchesForce() override {
         TBatches newBatches;
         std::swap(Batches, newBatches);
         Memory = 0;
@@ -304,6 +303,7 @@ public:
                     row.GetElement(index),
                     TypeEnv,
                     /* copy */ true);
+                Memory += cells[WriteIndex[index]].Size();
             }
 
             auto it = std::lower_bound(
@@ -321,6 +321,7 @@ public:
             for (auto& cell : cells) {
                 Batches[it->ShardId].emplace_back(std::move(cell));
             }
+            ShardIds.insert(it->ShardId);
         });
     }
 
@@ -348,15 +349,33 @@ public:
         return IsClosed() && IsEmpty();
     }
 
-    TBatches FlushBatches(const bool force) override {
-        Y_UNUSED(force);
+    TBatches FlushBatchesForce() override {
         TBatches result;
         for (auto& [shardId, batch] : Batches) {
             TSerializedCellMatrix matrix(batch, batch.size() / Columns.size(), Columns.size());
             result[shardId].push_back(matrix.ReleaseBuffer());
         }
         Batches.clear();
+        Memory = 0;
         return result;
+    }
+
+    TString FlushBatch(ui64 shardId) override {
+        auto batch = Batches.at(shardId);
+        if (batch.empty()) {
+            return {};
+        }
+
+        for (const auto& cell : batch) {
+            Memory -= cell.Size();
+        }
+
+        TSerializedCellMatrix matrix(batch, batch.size() / Columns.size(), Columns.size());
+        return matrix.ReleaseBuffer();
+    }
+
+    const THashSet<ui64>& ShardIds() override {
+        return ShardIds;
     }
 
 private:
@@ -374,6 +393,7 @@ private:
     const TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
     THashMap<ui64, TVector<TCell>> Batches;
+    THashSet<ui64> ShardIds;
 
     i64 Memory = 0;
 

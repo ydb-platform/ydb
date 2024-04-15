@@ -13,6 +13,7 @@
 #include <ydb/core/client/minikql_compile/db_key_resolver.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
+#include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
@@ -1464,6 +1465,7 @@ private:
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         auto getShardTask = [&](ui64 shardId) -> TTask& {
+            YQL_ENSURE(!UseEvWrite);
             auto it  = shardTasks.find(shardId);
             if (it != shardTasks.end()) {
                 return TasksGraph.GetTask(it->second);
@@ -1824,14 +1826,8 @@ private:
         return false;
     }
 
-    bool HasOlapSink(const NKqpProto::TKqpPhyStage& stage) {
-        for (const auto& sink : stage.GetSinks()) {
-            if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink) {
-                return true;
-            }
-        }
-
-        return false;
+    bool HasOlapSink(const NKqpProto::TKqpPhyStage& stage, const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyTable>& tables) {
+        return NKqp::HasOlapTableWriteInStage(stage, tables);
     }
 
     void Execute() {
@@ -1863,7 +1859,7 @@ private:
                     }
                 }
 
-                const bool hasOlapSink = HasOlapSink(stage);
+                const bool hasOlapSink = HasOlapSink(stage, tx.Body->GetTables());
                 if ((stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage))
                     || (!EnableOlapSink && hasOlapSink)) {
                     auto error = TStringBuilder() << "Data manipulation queries do not support column shard tables.";
@@ -2314,6 +2310,21 @@ private:
             // Gather shards that need to send/receive readsets (shards with effects)
             if (needCommit) {
                 for (auto& [shardId, tx] : datashardTxs) {
+                    if (tx->HasLocks()) {
+                        // Locks may be broken so shards with locks need to send readsets
+                        sendingShardsSet.insert(shardId);
+                    }
+                    if (ShardsWithEffects.contains(shardId)) {
+                        // Volatile transactions may abort effects, so they send readsets
+                        if (VolatileTx) {
+                            sendingShardsSet.insert(shardId);
+                        }
+                        // Effects are only applied when all locks are valid
+                        receivingShardsSet.insert(shardId);
+                    }
+                }
+
+                for (auto& [shardId, tx] : evWriteTxs) {
                     if (tx->HasLocks()) {
                         // Locks may be broken so shards with locks need to send readsets
                         sendingShardsSet.insert(shardId);

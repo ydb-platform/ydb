@@ -33,11 +33,11 @@ class TUnboxedKeyValueLruCacheWithTtl {
 public:
     TUnboxedKeyValueLruCacheWithTtl(size_t maxSize, const NKikimr::NMiniKQL::TType* keyType)
         : MaxSize(maxSize)
-        , KeyTypeHelpers(GetKeyTypeHelpers(keyType))
+        , KeyTypeHelper(keyType)
         , Map(
             1000,
-            TValueHasher(KeyTypeHelpers.KeyTypes, KeyTypeHelpers.IsTuple, KeyTypeHelpers.Hash.Get()),
-            TValueEqual(KeyTypeHelpers.KeyTypes, KeyTypeHelpers.IsTuple, KeyTypeHelpers.Equate.Get())
+            KeyTypeHelper.GetValueHash(),
+            KeyTypeHelper.GetValueEqual()
         )
     {
         Y_ABORT_UNLESS(MaxSize > 0);
@@ -97,17 +97,6 @@ private:
             NUdf::IEquate::TPtr Equate;
     };
 
-    TKeyTypeHelpers GetKeyTypeHelpers(const TType* type) {
-        TKeyTypeHelpers helpers;
-        bool encoded;
-        bool useIHash;
-        GetDictionaryKeyTypes(type, helpers.KeyTypes, helpers.IsTuple, encoded, useIHash);
-        if (useIHash) {
-            helpers.Hash = MakeHashImpl(type);
-            helpers.Equate = MakeEquateImpl(type);;
-        }
-        return helpers;
-    }
     void Touch(TUsageList::iterator it) {
         UsageList.splice(UsageList.end(), UsageList, it); //move accessed element to the end of Usage list
     }
@@ -118,7 +107,7 @@ private:
 private:
     const size_t MaxSize;
     TUsageList UsageList;
-    const TKeyTypeHelpers KeyTypeHelpers;
+    const TKeyTypeContanerHelper<true, true, false> KeyTypeHelper;
     std::unordered_map<
         NUdf::TUnboxedValue, 
         TUsageList::iterator,

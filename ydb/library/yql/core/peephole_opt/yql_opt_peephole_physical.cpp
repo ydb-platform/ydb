@@ -6633,6 +6633,36 @@ TExprNode::TPtr AggrEqualOpt(const TExprNode& node, TExprContext& ctx) {
 }
 
 template <bool Asc, bool Equals>
+TExprNode::TPtr AggrComparePg(const TExprNode& node, TExprContext& ctx) {
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand '" << node.Content() << "' over Pg.";
+    auto op = Asc ? ( Equals ? "<=" : "<") : ( Equals ? ">=" : ">");
+    auto finalPart = (Equals == Asc) ? MakeBool<true>(node.Pos(), ctx) : 
+        ctx.NewCallable(node.Pos(), "Exists", { node.TailPtr() });
+    if (!Asc) {
+        finalPart = ctx.NewCallable(node.Pos(), "Not", { finalPart });
+    }
+
+    return ctx.Builder(node.Pos())
+        .Callable("If")
+            .Callable(0, "Exists")
+                .Add(0, node.HeadPtr())
+            .Seal()
+            .Callable(1, "Coalesce")
+                .Callable(0, "FromPg")
+                    .Callable(0, "PgOp")
+                        .Atom(0, op)
+                        .Add(1, node.HeadPtr())
+                        .Add(2, node.TailPtr())
+                    .Seal()
+                .Seal()
+                .Add(1, MakeBool<!Asc>(node.Pos(), ctx))
+            .Seal()
+            .Add(2, finalPart)
+        .Seal()
+        .Build();
+}
+
+template <bool Asc, bool Equals>
 TExprNode::TPtr AggrCompareOpt(const TExprNode& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand '" << node.Content() << "' with optional args.";
     constexpr bool order = Asc == Equals;
@@ -7753,6 +7783,8 @@ TExprNode::TPtr ExpandAggrCompare(const TExprNode::TPtr& node, TExprContext& ctx
             return AggrCompareVariants<false, Asc>(*node, ctx);
         case ETypeAnnotationKind::Tagged:
             return CompareTagged(*node, ctx);
+        case ETypeAnnotationKind::Pg:
+            return AggrComparePg<Asc, Equals>(*node, ctx);
         case ETypeAnnotationKind::Optional:
             if (type->Cast<TOptionalExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Data)
                 return AggrCompareOpt<Asc, Equals>(*node, ctx);

@@ -57,7 +57,8 @@ namespace NFwd {
         using TGroupId = NPage::TGroupId;
 
         TFlatIndexCache(const TPart* part, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices = nullptr)
-            : IndexPage(part->IndexPages.GetFlat(groupId), part->GetPageSize(part->IndexPages.GetFlat(groupId)), 0, Max<TPageId>())
+            : Part(part)
+            , IndexPage(Part->IndexPages.GetFlat(groupId), Part->GetPageSize(Part->IndexPages.GetFlat(groupId)), 0, Max<TPageId>())
         { 
             if (slices && !slices->empty()) {
                 BeginRowId = slices->front().BeginRowId();
@@ -86,6 +87,8 @@ namespace NFwd {
                 return {IndexPage.Touch(pageId, Stat), false, true};
             }
 
+            Y_DEBUG_ABORT_UNLESS(Part->GetPageType(pageId) == EPage::DataPage);
+
             if (auto *page = Trace.Get(pageId)) {
                 return {page, false, true};
             }
@@ -206,6 +209,7 @@ namespace NFwd {
         }
 
     private:
+        const TPart* Part;
         TRowId BeginRowId, EndRowId;
         
         TPage IndexPage;
@@ -225,7 +229,8 @@ namespace NFwd {
         using TGroupId = NPage::TGroupId;
 
         TBTreeIndexCache(const TPart* part, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices = nullptr)
-            : IndexPage(part->IndexPages.GetFlat(groupId), part->GetPageSize(part->IndexPages.GetFlat(groupId)), 0, Max<TPageId>())
+            : Part(part)
+            , IndexPage(Part->IndexPages.GetFlat(groupId), Part->GetPageSize(Part->IndexPages.GetFlat(groupId)), 0, Max<TPageId>())
         { 
             if (slices && !slices->empty()) {
                 BeginRowId = slices->front().BeginRowId();
@@ -254,6 +259,8 @@ namespace NFwd {
                 return {IndexPage.Touch(pageId, Stat), false, true};
             }
 
+            Y_DEBUG_ABORT_UNLESS(Part->GetPageType(pageId) == EPage::DataPage);
+
             if (auto *page = Trace.Get(pageId)) {
                 return {page, false, true};
             }
@@ -374,6 +381,7 @@ namespace NFwd {
         }
 
     private:
+        const TPart* Part;
         TRowId BeginRowId, EndRowId;
         
         TPage IndexPage;

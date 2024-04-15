@@ -6,7 +6,7 @@
 
 namespace NKikimr {
 
-void LogOOSStatus(ui32 flags, const TLogoBlobID& blobId, const TString& vDiskLogPrefix, std::atomic<ui32>& curFlags);
+void LogOOSStatus(ui32 flags, const TLogoBlobID& blobId, const TString& vDiskLogPrefix, std::atomic<NKikimrBlobStorage::TPDiskSpaceColor::E>& curColor);
 void UpdateMonOOSStatus(ui32 flags, const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup);
 
 void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEventBase *ev, ui64 cookie, const TIntrusivePtr<TVDiskContext>& vCtx) {
@@ -22,7 +22,7 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
         switch(ev->Type()) {
             case TEvBlobStorage::TEvVPutResult::EventType: {
                 TEvBlobStorage::TEvVPutResult* event = static_cast<TEvBlobStorage::TEvVPutResult *>(ev);
-                LogOOSStatus(event->Record.GetStatusFlags(), LogoBlobIDFromLogoBlobID(event->Record.GetBlobID()), vCtx->VDiskLogPrefix, vCtx->CurrentOOSStatusFlag);
+                LogOOSStatus(event->Record.GetStatusFlags(), LogoBlobIDFromLogoBlobID(event->Record.GetBlobID()), vCtx->VDiskLogPrefix, vCtx->CurrentOOSStatusColor);
                 UpdateMonOOSStatus(event->Record.GetStatusFlags(), vCtx->OOSMonGroup);
                 break;
             }
@@ -30,7 +30,7 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
                 TEvBlobStorage::TEvVMultiPutResult *event = static_cast<TEvBlobStorage::TEvVMultiPutResult *>(ev);
                 for (ui64 i = 0; i < event->Record.ItemsSize(); ++i) {
                     const auto& item = event->Record.GetItems(i);
-                    LogOOSStatus(item.GetStatusFlags(), LogoBlobIDFromLogoBlobID(item.GetBlobID()), vCtx->VDiskLogPrefix, vCtx->CurrentOOSStatusFlag);
+                    LogOOSStatus(item.GetStatusFlags(), LogoBlobIDFromLogoBlobID(item.GetBlobID()), vCtx->VDiskLogPrefix, vCtx->CurrentOOSStatusColor);
                     UpdateMonOOSStatus(item.GetStatusFlags(), vCtx->OOSMonGroup);
                 }
             }
@@ -68,19 +68,22 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
     }
 }
 
-void LogOOSStatus(ui32 flags, const TLogoBlobID& blobId, const TString& vDiskLogPrefix, std::atomic<ui32>& curFlags) {
+void LogOOSStatus(ui32 flags, const TLogoBlobID& blobId, const TString& vDiskLogPrefix, std::atomic<NKikimrBlobStorage::TPDiskSpaceColor::E>& curColor) {
     if (!TlsActivationContext) {
         return;
     }
 
-    ui32 prevFlags = curFlags.exchange(flags, std::memory_order_relaxed);
-    if (prevFlags == flags) {
+    NKikimrBlobStorage::TPDiskSpaceColor::E newColor = StatusFlagToSpaceColor(flags);
+
+    NKikimrBlobStorage::TPDiskSpaceColor::E prevColor = curColor.exchange(newColor, std::memory_order_relaxed);
+    if (prevColor == newColor) {
         return;
     }
 
     LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_VDISK_CHUNKS,
-        vDiskLogPrefix << "Disk space status changed to " <<
-        TPDiskSpaceColor_Name(StatusFlagToSpaceColor(flags)) << " on blob " << blobId.ToString());
+        vDiskLogPrefix << "Disk space status changed "
+        << TPDiskSpaceColor_Name(prevColor) << " -> " << TPDiskSpaceColor_Name(newColor)
+        << " on blob " << blobId.ToString());
 }
 
 void UpdateMonOOSStatus(ui32 flags, const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup) {

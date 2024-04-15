@@ -71,7 +71,7 @@ namespace NKikimr {
         std::shared_ptr<TBsCostTracker> CostTracker;
 
         // oos logging
-        std::atomic<ui32> CurrentOOSStatusFlag = NKikimrBlobStorage::StatusIsValid;
+        std::atomic<NKikimrBlobStorage::TPDiskSpaceColor::E> CurrentOOSStatusColor = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
         std::shared_ptr<NMonGroup::TOutOfSpaceGroup> OOSMonGroup;
 
     private:

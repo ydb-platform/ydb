@@ -69,6 +69,11 @@ static bool AsyncReplicationTarget(std::vector<std::pair<TString, TString>>& out
     return true;
 }
 
+static bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings, const TRule_alter_replication_action& in, TTranslation& ctx) {
+    // TODO(ilnaz): support other actions
+    return AsyncReplicationSettings(settings, in.GetRule_alter_replication_set_setting1().GetRule_replication_settings3(), ctx);
+}
+
 bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core) {
     TString internalStatementName;
     TString humanStatementName;
@@ -1180,6 +1185,31 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                                                           false,
                                                           {},
                                                           context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore44: {
+            // alter_replication_stmt: ALTER ASYNC REPLICATION
+            auto& node = core.GetAlt_sql_stmt_core44().GetRule_alter_replication_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref4().HasBlock1()) {
+                const auto& cluster = node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1();
+                if (!ClusterExpr(cluster, false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            std::map<TString, TNodePtr> settings;
+            if (!AsyncReplicationAlterAction(settings, node.GetRule_alter_replication_action5(), *this)) {
+                return false;
+            }
+            for (auto& block : node.GetBlock6()) {
+                if (!AsyncReplicationAlterAction(settings, block.GetRule_alter_replication_action2(), *this)) {
+                    return false;
+                }
+            }
+
+            const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
+            AddStatementToBlocks(blocks, BuildAlterAsyncReplication(Ctx.Pos(), id, std::move(settings), context));
             break;
         }
         case TRule_sql_stmt_core::ALT_NOT_SET:

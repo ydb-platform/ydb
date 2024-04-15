@@ -62,6 +62,7 @@ sql_stmt_core:
   | upsert_object_stmt
   | create_view_stmt
   | drop_view_stmt
+  | alter_replication_stmt
 ;
 
 expr:
@@ -797,6 +798,13 @@ create_replication_stmt: CREATE ASYNC REPLICATION object_ref
 replication_target: object_ref AS object_ref;
 replication_settings: replication_settings_entry (COMMA replication_settings_entry)*;
 replication_settings_entry: an_id EQUALS STRING_VALUE;
+
+alter_replication_stmt: ALTER ASYNC REPLICATION object_ref alter_replication_action (COMMA alter_replication_action)*;
+alter_replication_action:
+    alter_replication_set_setting
+;
+
+alter_replication_set_setting: SET LPAREN replication_settings RPAREN;
 
 drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE?;
 

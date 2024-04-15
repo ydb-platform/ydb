@@ -2402,6 +2402,45 @@ TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascad
     return new TDropAsyncReplication(pos, id, cascade, context);
 }
 
+class TAlterAsyncReplication final: public TAsyncReplication {
+public:
+    explicit TAlterAsyncReplication(TPosition pos, const TString& id,
+            std::map<TString, TNodePtr>&& settings,
+            const TObjectOperatorContext& context)
+        : TAsyncReplication(pos, id, "alterAsyncReplication", context)
+        , Settings(std::move(settings))
+    {
+    }
+
+protected:
+    INode::TPtr FillOptions(INode::TPtr options) const override {
+        if (!Settings.empty()) {
+            auto settings = Y();
+            for (auto&& [k, v] : Settings) {
+                if (v) {
+                    settings = L(settings, Q(Y(BuildQuotedAtom(Pos, k), v)));
+                } else {
+                    settings = L(settings, Q(Y(BuildQuotedAtom(Pos, k))));
+                }
+            }
+            options = L(options, Q(Y(Q("settings"), Q(settings))));
+        }
+
+        return options;
+    }
+
+private:
+    std::map<TString, TNodePtr> Settings;
+
+}; // TAlterAsyncReplication
+
+TNodePtr BuildAlterAsyncReplication(TPosition pos, const TString& id,
+        std::map<TString, TNodePtr>&& settings,
+        const TObjectOperatorContext& context)
+{
+    return new TAlterAsyncReplication(pos, id, std::move(settings), context);
+}
+
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR {
     {EWriteColumnMode::Default, ""},
     {EWriteColumnMode::Insert, "append"},

@@ -529,7 +529,7 @@ TYPED_TEST(TNotGrpcTest, TrackedRegularAttachments)
     // header + body = 110 bytes.
     // attachments = 22 bytes.
     // sum is 4228 bytes.
-    EXPECT_TRUE(4228 + 32768 <= memoryUsageTracker->GetTotalUsage());
+    EXPECT_GE(memoryUsageTracker->GetTotalUsage(), 4228 + 32768);
     EXPECT_EQ(3u, attachments.size());
     EXPECT_EQ("Hello_",     StringFromSharedRef(attachments[0]));
     EXPECT_EQ("from_",      StringFromSharedRef(attachments[1]));
@@ -595,9 +595,9 @@ TYPED_TEST(TNotGrpcTest, Compression)
     // attachmentStrings[1].size() = 36 * 2 bytes from decoder.
     // attachmentStrings[2].size() = 90 * 2 bytes from decoder.
     // sum is 4591 bytes.
-    EXPECT_TRUE(4591 + 32768 <= memoryUsageTracker->GetTotalUsage());
+    EXPECT_GE(memoryUsageTracker->GetTotalUsage(), 4591 + 32768);
     EXPECT_TRUE(rsp->message() == message);
-    EXPECT_TRUE(rsp->GetResponseMessage().Size() >= 2);
+    EXPECT_GE(rsp->GetResponseMessage().Size(), static_cast<size_t>(2));
     const auto& serializedResponseBody = SerializeProtoToRefWithCompression(*rsp, responseCodecId);
     const auto& compressedResponseBody = rsp->GetResponseMessage()[1];
     EXPECT_TRUE(TRef::AreBitwiseEqual(compressedResponseBody, serializedResponseBody));
@@ -846,7 +846,7 @@ TYPED_TEST(TNotGrpcTest, MemoryTracking)
 
         // 1261568 = 32768 + 1228800 = 32768 + 4096 * 300 + 300 * 110 (header + body).
         // 32768 - socket buffers, 4096 - default size per request.
-        EXPECT_TRUE(rpcUsage >= 1294568);
+        EXPECT_GE(rpcUsage, 1294568);
     }
 }
 
@@ -866,7 +866,7 @@ TYPED_TEST(TNotGrpcTest, MemoryTrackingMultipleConnections)
         // 11059200 / 300 = 36974 = 32768 + 4096 + 110 (header + body).
         // 4 KB - stub for request.
         // See NYT::NBus::TPacketDecoder::TChunkedMemoryTrackingAllocator::Allocate.
-        EXPECT_TRUE(11092200 <= memoryUsageTracker->GetTotalUsage());
+        EXPECT_GE(memoryUsageTracker->GetTotalUsage(), 11092200);
     }
 }
 
@@ -922,7 +922,7 @@ TYPED_TEST(TNotGrpcTest, MemoryOvercommit)
         // default stub = 4096.
         // header + body = 110 bytes.
         // attachments = 6_KB  kbytes.
-        EXPECT_TRUE(rpcUsage >= 32768 + 4096 + 6144 + 110);
+        EXPECT_GE(rpcUsage, 32768 + 4096 + 6144 + 110);
     }
 }
 

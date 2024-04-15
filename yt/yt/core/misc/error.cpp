@@ -942,35 +942,30 @@ void TError::Load(TStreamLoadContext& context)
 
 std::optional<TError> TError::FindMatching(TErrorCode code) const
 {
-    if (!Impl_) {
-        return {};
-    }
-
-    if (GetCode() == code) {
-        return *this;
-    }
-
-    for (const auto& innerError : InnerErrors()) {
-        if (auto innerResult = innerError.FindMatching(code)) {
-            return innerResult;
-        }
-    }
-
-    return {};
+    return FindMatching([&] (TErrorCode errorCode) {
+        return code == errorCode;
+    });
 }
 
 std::optional<TError> TError::FindMatching(const THashSet<TErrorCode>& codes) const
+{
+    return FindMatching([&] (TErrorCode code) {
+        return codes.contains(code);
+    });
+}
+
+std::optional<TError> TError::FindMatching(std::function<bool(TErrorCode)> filter) const
 {
     if (!Impl_) {
         return {};
     }
 
-    if (codes.contains(GetCode())) {
+    if (filter(GetCode())) {
         return *this;
     }
 
     for (const auto& innerError : InnerErrors()) {
-        if (auto innerResult = innerError.FindMatching(codes)) {
+        if (auto innerResult = innerError.FindMatching(filter)) {
             return innerResult;
         }
     }

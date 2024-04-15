@@ -11,7 +11,7 @@ TKqpTempTablesState::FindInfo(const std::string_view& path, bool withSessionId) 
     }
 
     const auto temporaryStoragePrefix = CanonizePath(
-        JoinPath({Database, ".tmp", "sessions", SessionId}));
+        JoinPath({Database, ".tmp", "sessions", SessionId})) + "/";
 
     if (path.size() < temporaryStoragePrefix.size()) {
         return TempTables.end();

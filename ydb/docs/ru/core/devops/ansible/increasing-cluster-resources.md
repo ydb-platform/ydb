@@ -56,9 +56,9 @@
 * `--payload` – ссылка на bash-скрипт, который будет исполняться на нодах.
 
 
-## Увеличение объёма дискового пространства кластера
+## Увеличение объёма дискового пространства кластера {#extension-value-cluster}
 
-При использование готовых [Terraform-сценариев](https://github.com/ydb-platform/ydb-terraform) ВМ для нод кластера создаются с одним дополнительным диском (200 GB) и возможностью подключения второго дополнительного диска.
+При использовании готовых [Terraform-сценариев](https://github.com/ydb-platform/ydb-terraform) ВМ для нод кластера создаются с одним дополнительным диском (200 GB) и возможностью подключения второго дополнительного диска.
 
 Переменные, регулирующие размер дополнительных дисков и опцию подключения второго дополнительного диска, находятся в файле `<cloud_provider>/variables.tf`:
 * `instance_first_attached_disk_size` – размер первого дополнительного диска. Значение по умолчанию: 200 GB.
@@ -71,11 +71,11 @@
 
 {% endnote %}
 
-### Увеличение размера первого присоединённого диска
+### Увеличение размера первого присоединённого диска {#extension-first-disk-cluster}
 
 Для увелечения размера первого присоединённого диска нужно выполнить последовательность следующих действий:
 * Изменить значение переменной `instance_first_attached_disk_size`. 
-* Выполнить команду `terraform plan` для просмотра изменений инфраструктуры. В терминал будет выведена информация о изменение размера первого присоединенного диска (вывод в терминал на примере Yandex Cloud):
+* Выполнить команду `terraform plan` для просмотра изменений инфраструктуры. В терминал будет выведена информация об изменение размера первого присоединенного диска (вывод в терминал на примере Yandex Cloud):
     ```txt
     # module.storage.yandex_compute_disk.first-attached-disk[8] will be updated in-place
     ~ resource "yandex_compute_disk" "first-attached-disk" {
@@ -88,7 +88,7 @@
         }
     ```
 * Выполните команду `terraform apply` для применения новой конфигурации инфраструктуры. Увидеть, что дисковое пространство было увеличено можно в web-консоле облачного провайдера.    
-* Запустить утилиту `ydbops` с ключом `--payload`, где указан путь к bash скрипту со следующим содержимом:
+* Запустить утилиту `ydbops` с ключом `--payload`, где указан путь к bash скрипту со следующим содержимым:
     ```bash
     #!/usr/bin/env bash
 
@@ -115,43 +115,57 @@
 
 Когда цвет индикаторов всех `VDisks` станет зеленым – работу утилиты `ydbops` можно прекратить сочетанием клавиш `Ctr + C`.
 
-### Подключение второго дополнительного диска к ВМ
+### Подключение второго дополнительного диска к ВМ {#add-sex-disk-to-cluster}
 
 В процессе подключения второго дополнительного диска задействованы Terraform, Ansible и `ydbops`. Для присоединения второго дополнительного диска к ВМ выполните следующие действия:
 1. Измените значение следующих переменных в файле `<cloud_provider>/variables.tf`:
     * `sec_instance_attached_disk` – установить `true`. Значение по умолчанию: `false`.
     * `instance_sec_attached_disk_size` – установить желаемый стартовый размер второго дополнительного диска. Значение по умолчанию: 50 GB.
-2. Выполните команды `terraform plan` и `terraform apply` для создания и прикрепления вторых дополнительных дисков к ВМ. Дискам будут присвоены следующие имена: `/dev/vdc` для Yandex Cloud и `/dev/nvme1n2` для AWS. 
-3. Отредактируйте следующие части конфигурационного файла {{ ydb-short-name }} (`ydb-ansible-examples/<ansible_example>/files/config.yaml`):
-    * Добавьте 
+1. Выполните команды `terraform plan` и `terraform apply` для создания и прикрепления вторых дополнительных дисков к ВМ. Дискам будут присвоены следующие имена: `/dev/vdc` для Yandex Cloud и `/dev/nvme1n2` для AWS. 
+1. Укажите новое значение переменной `ydb_disks` в инвентаризационном файле `/ydb-ansible-examples/9<ansible_example>/inventory/50-inventory.yaml`. Например, для Yandex Cloud значение будет таким:
     ```yaml
-
+    ydb_disks:
+      - name: /dev/vdc
+        label: ydb_disk_2
     ```
-
-
-
-## Увеличение вычислительных ресурсов кластера
-
-Увеличение вычислительных ресурсов кластера производится через добавление новых нод. В процессе расширения кластера новыми нодами участвуют Terraform и Ansible. Выполните следующие действия для добавления новых нод в кластер:
-1. Измените значение переменной `instance_count` в файле `<cloud_provider>/variables.tf` с текущего количества нод на желаемое. 
-1. Выполнить команды `terraform plan` и `terraform apply` для создания новых ВМ.
-1. Добавить `fqdn` новых нод в файл `/ydb-ansible-examples/TLS/ydb-ca-nodes.txt` и запустить скрипт генерации TLS-сертификатов `/ydb-ansible-examples/TLS/ydb-ca-update.sh`.
-1. Отредактировать инвентаризационный файл `ydb-ansible-examples/<ansible_example>/inventory/50-inventory.yaml`:
-    * Добавить в раздел `hosts` `fqdn` новых нод.
-    * Указать актуальное значение переменной `ydb_tls_dir`.
-1. Отредактировать следующие разделы конфигурационного файла {{ ydb-short-name }}:
-    * Добавить новые ноды в раздел `hosts`.
-    * Изменить значение переменных `state_storage.ring.node` и `nto_select` на актуальные.
-    * Добавить новые ноды в раздел `fail_domains`
-1. Запустить повторное исполнение Ansible-плейбука – `/ydb-ansible-examples/<ansible_example>/setup_playbook.yaml`.
-1. Добавить `fqdn` новых нод в `know_hosts` командой:
+1. Отредактируйте следующие части конфигурационного файла {{ ydb-short-name }} (`ydb-ansible-examples/<ansible_example>/files/config.yaml`):
+    * Измените значение поля `storage_config_generation` с 0 на 1. 
+    * Добавьте в раздел `host_configs` новую секцию c идентификатором `host_config_id` равным 2:
+        ```yaml
+        - drive:  
+          - path: /dev/disk/by-partlabel/ydb_disk_2
+            type: SSD
+          host_config_id: 2
+        ```
+    * Укажите `host_config_id: 2` у существующих нод в разделе `hosts`.
+1. Запустите Ansible-плейбук `/ydb-ansible-examples/<ansible_example>/setup_playbook.yaml` для обновления конфигурационных файлов на текущих нодах.
+1. Запустите утилиту `ydbops` с ключом `--payload`, где указан путь к bash скрипту со следующим содержимым:
     ```bash
-    for x in $(seq <number_of_first_new_node> <number_of_last_new_node>); \
-    do echo $x; \
-    ssh -i ~/yandex -o ProxyJump=ubuntu@<public_ip_jumphost> <ssh_user>@<node_name_prefix>$x.<cluster_domain> whoami;  \
-    done
+    #!/usr/bin/env bash
+
+    JUMPHOST_IP=<jumphost_ip>
+    DISK_NAME=<disk_name>
+    SSH_PRIVATE_KEY_PATH=<ssh_private_key_path>
+
+    ssh ubuntu@$HOSTNAME -o=ProxyJump=ubuntu@${JUMPHOST_IP} -i ${SSH_PRIVATE_KEY_PATH} \
+    "sudo systemctl stop ydbd-storage && \
+    sudo LD_LIBRARY_PATH=/opt/ydb/lib \
+    admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml && \
+    sudo systemctl start ydbd-storage"
+
+    echo "SUCCESS $HOSTNAME"
     ```
-1. Запустить утилиту `ydbops` со следующими параметрами: 
+
+Новые диски отобразятся во вкладке **Storage**, в web-консоли мониторинга {{ ydb-short-name }}.
+
+## Увеличение вычислительных ресурсов кластера {#extension-cluster-comp-resources}
+
+Увеличение вычислительных ресурсов кластера производится в два шага с помощью Terraform, Ansible и утилиты `ydbops`. 
+
+**На первом шаге** обновляется текущий конфигурационный файл нод, который будет учитывать будущее добавление новых нод в кластер. Для обновления текущего конфигурационного файла:
+1. Внесите `fqdn` новых нод в конфигурационный файл `/ydb-ansible-examples/<ansible_example>/files/config.yaml` в раздел `hosts`, а также измените значения `state_storage.ring.node` и `nto_select` на актуальные.
+1. Выполните команду `/ydb-ansible-examples/<ansible_example>/setup_playbook.yaml` для обновления конфигурационных файлов на текущих нодах.
+1. Запустить утилиту `ydbops` со следующими параметрами для перезагрузки нод: 
     ```bash
     ./ydbops restart  \
     -e grpcs://static-node-1 \
@@ -159,3 +173,14 @@
     --user root \
     --ca-file /Users/pseudolukian/Pseudolukian_yandex/Ansible/ydb-ansible-examples/TLS/CA/certs/ca.crt  \
     ```
+
+**На втором шаге** добавляются новые ВМ в инфраструктуру и на них устанавливается {{ ydb-short-name }}. Для добавления новых нод в кластер:
+1. Измените значение переменной `instance_count` в файле `<cloud_provider>/variables.tf` с текущего количества нод на желаемое. 
+1. Выполните команды `terraform plan` и `terraform apply` для создания новых ВМ.
+1. Добавьте `fqdn` новых нод в файл `/ydb-ansible-examples/TLS/ydb-ca-nodes.txt` и запустите скрипт генерации TLS-сертификатов `/ydb-ansible-examples/TLS/ydb-ca-update.sh`.
+1. Отредактируйте инвентаризационный файл `ydb-ansible-examples/<ansible_example>/inventory/50-inventory.yaml`:
+    * Добавьте в раздел `hosts` `fqdn` новых нод.
+    * Указать актуальное значение переменной `ydb_tls_dir`.
+1. Запустите повторно исполнение Ansible-плейбука – `/ydb-ansible-examples/<ansible_example>/setup_playbook.yaml`.
+
+Обновите web-консоль мониторинга {{ ydb-short-name }} для отображения новых нод кластера.

@@ -8,7 +8,6 @@
 #include "changes/cleanup_tables.h"
 #include "changes/ttl.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/columnshard_ttl.h>
@@ -175,7 +174,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
         for (const auto& [_, portionInfo] : spg->GetPortions()) {
             UpdatePortionStats(*portionInfo, EStatsUpdateType::ADD);
             if (portionInfo->CheckForCleanup()) {
-                AddCleanupPortion(*portionInfo);
+                CleanupPortions[portionInfo->GetRemoveSnapshotVerified()].emplace_back(*portionInfo);
             }
         }
     }
@@ -541,14 +540,6 @@ void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
         g->StartActualizationIndex();
         g->RefreshScheme();
     }
-}
-
-TDuration TColumnEngineForLogs::GetRemovedPortionLivetime() {
-    TDuration result = TDuration::Minutes(10);
-    if (HasAppData() && AppDataVerified().ColumnShardConfig.HasRemovedPortionLivetimeSeconds()) {
-        result = TDuration::Seconds(AppDataVerified().ColumnShardConfig.GetRemovedPortionLivetimeSeconds());
-    }
-    return NYDBTest::TControllers::GetColumnShardController().GetRemovedPortionLivetime(result);
 }
 
 } // namespace NKikimr::NOlap

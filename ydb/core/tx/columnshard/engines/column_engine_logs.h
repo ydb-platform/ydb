@@ -53,9 +53,6 @@ private:
 
     std::shared_ptr<NActualizer::TController> ActualizationController;
 
-    static TDuration GetRemovedPortionLivetime();
-
-    const TDuration RemovedPortionLivetime = GetRemovedPortionLivetime();
 public:
     const std::shared_ptr<NActualizer::TController>& GetActualizationController() const {
         return ActualizationController;
@@ -159,10 +156,6 @@ public:
 
     ui64 GetTabletId() const {
         return TabletId;
-    }
-
-    void AddCleanupPortion(const TPortionInfo& info) {
-        CleanupPortions[portionInfo.GetRemoveSnapshotVerified() + RemovedPortionLivetime].emplace_back(portionInfo)
     }
 
 private:

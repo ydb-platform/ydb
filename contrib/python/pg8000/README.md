@@ -1,31 +1,3 @@
-Metadata-Version: 2.1
-Name: pg8000
-Version: 1.31.0
-Summary: PostgreSQL interface library
-License: BSD 3-Clause License
-Project-URL: Homepage, https://github.com/tlocke/pg8000
-Keywords: postgresql,dbapi
-Classifier: Development Status :: 5 - Production/Stable
-Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: BSD License
-Classifier: Programming Language :: Python
-Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.8
-Classifier: Programming Language :: Python :: 3.9
-Classifier: Programming Language :: Python :: 3.10
-Classifier: Programming Language :: Python :: 3.11
-Classifier: Programming Language :: Python :: Implementation
-Classifier: Programming Language :: Python :: Implementation :: CPython
-Classifier: Programming Language :: Python :: Implementation :: PyPy
-Classifier: Operating System :: OS Independent
-Classifier: Topic :: Database :: Front-Ends
-Classifier: Topic :: Software Development :: Libraries :: Python Modules
-Requires-Python: >=3.8
-Description-Content-Type: text/markdown
-License-File: LICENSE
-Requires-Dist: scramp >=1.4.4
-Requires-Dist: python-dateutil >=2.8.2
-
 # pg8000
 
 pg8000 is a pure-[Python](https://www.python.org/)

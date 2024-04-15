@@ -373,7 +373,10 @@ TColumnConverter ArrowTimestampAsYqlTimestamp(const std::shared_ptr<arrow::DataT
     };
 }
 
-TColumnConverter ArrowDate32AsYqlDate(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional) {
+TColumnConverter ArrowDate32AsYqlDate(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::DateUnit unit) {
+    if (unit == arrow::DateUnit::MILLI) {
+        throw parquet::ParquetException(TStringBuilder() << "millisecond accuracy does not fit into the date");
+    }
     return [targetType, isOptional](const std::shared_ptr<arrow::Array>& value) {
         return isOptional 
                 ? ArrowDate32AsYqlDate<true>(targetType, value)

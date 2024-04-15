@@ -413,9 +413,9 @@
     ],
     "test.test[bigdate-misc-default.txt-Debug]": [
         {
-            "checksum": "ff9a6965152fa5bd489b1b5e209792fc",
-            "size": 2973,
-            "uri": "https://{canondata_backend}/1777230/1db1903a6e0dabe5575aead91fb71d857f3f9a30/resource.tar.gz#test.test_bigdate-misc-default.txt-Debug_/opt.yql_patched"
+            "checksum": "e8ff2a8373735c4e3bb30d96fe5addd5",
+            "size": 2987,
+            "uri": "https://{canondata_backend}/1925821/97ab382df374f58dbf4509c69cb8d6f0df937287/resource.tar.gz#test.test_bigdate-misc-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[bigdate-misc-default.txt-Plan]": [

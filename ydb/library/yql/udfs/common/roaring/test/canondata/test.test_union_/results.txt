@@ -1,0 +1,28 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "UnionList";
+                                [
+                                    "DataType";
+                                    "Uint32"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "3"
+                    ]
+                ]
+            }
+        ]
+    }
+]

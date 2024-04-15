@@ -1,0 +1,33 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "IntersectList";
+                                [
+                                    "ListType";
+                                    [
+                                        "DataType";
+                                        "Uint32"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "1"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

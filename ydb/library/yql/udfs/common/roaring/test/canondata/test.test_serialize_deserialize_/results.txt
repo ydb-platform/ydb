@@ -1,0 +1,60 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "DeserializedList";
+                                [
+                                    "ListType";
+                                    [
+                                        "DataType";
+                                        "Uint32"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "10";
+                            "567"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "Serialized";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        ":0\0\0\1\0\0\0\0\0\1\0\x10\0\0\0\n\0007\2"
+                    ]
+                ]
+            }
+        ]
+    }
+]

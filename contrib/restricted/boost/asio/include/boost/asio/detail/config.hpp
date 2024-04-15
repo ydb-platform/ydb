@@ -314,6 +314,46 @@
 # endif // !defined(BOOST_ASIO_DISABLE_ALIAS_TEMPLATES)
 #endif // !defined(BOOST_ASIO_HAS_ALIAS_TEMPLATES)
 
+// Support return type deduction on compilers known to allow it.
+#if !defined(BOOST_ASIO_HAS_RETURN_TYPE_DEDUCTION)
+# if !defined(BOOST_ASIO_DISABLE_RETURN_TYPE_DEDUCTION)
+#  if defined(__clang__)
+#   if __has_feature(__cxx_return_type_deduction__)
+#    define BOOST_ASIO_HAS_RETURN_TYPE_DEDUCTION 1
+#   endif // __has_feature(__cxx_alias_templates__)
+#  elif (__cplusplus >= 201402)
+#   define BOOST_ASIO_HAS_RETURN_TYPE_DEDUCTION 1
+#  elif defined(__cpp_return_type_deduction)
+#   if (__cpp_return_type_deduction >= 201304)
+#    define BOOST_ASIO_HAS_RETURN_TYPE_DEDUCTION 1
+#   endif // (__cpp_return_type_deduction >= 201304)
+#  endif // defined(__cpp_return_type_deduction)
+# endif // !defined(BOOST_ASIO_DISABLE_RETURN_TYPE_DEDUCTION)
+#endif // !defined(BOOST_ASIO_HAS_RETURN_TYPE_DEDUCTION)
+
+// Support default function template arguments on compilers known to allow it.
+#if !defined(BOOST_ASIO_HAS_DEFAULT_FUNCTION_TEMPLATE_ARGUMENTS)
+# if !defined(BOOST_ASIO_DISABLE_DEFAULT_FUNCTION_TEMPLATE_ARGUMENTS)
+#  if (__cplusplus >= 201103)
+#   define BOOST_ASIO_HAS_DEFAULT_FUNCTION_TEMPLATE_ARGUMENTS 1
+#  endif // (__cplusplus >= 201103)
+# endif // !defined(BOOST_ASIO_DISABLE_DEFAULT_FUNCTION_TEMPLATE_ARGUMENTS)
+#endif // !defined(BOOST_ASIO_HAS_DEFAULT_FUNCTION_TEMPLATE_ARGUMENTS)
+
+// Support concepts on compilers known to allow them.
+#if !defined(BOOST_ASIO_HAS_CONCEPTS)
+# if !defined(BOOST_ASIO_DISABLE_CONCEPTS)
+#  if defined(__cpp_concepts)
+#   define BOOST_ASIO_HAS_CONCEPTS 1
+#   if (__cpp_concepts >= 201707)
+#    define BOOST_ASIO_CONCEPT concept
+#   else // (__cpp_concepts >= 201707)
+#    define BOOST_ASIO_CONCEPT concept bool
+#   endif // (__cpp_concepts >= 201707)
+#  endif // defined(__cpp_concepts)
+# endif // !defined(BOOST_ASIO_DISABLE_CONCEPTS)
+#endif // !defined(BOOST_ASIO_HAS_CONCEPTS)
+
 // Standard library support for system errors.
 # if !defined(BOOST_ASIO_DISABLE_STD_SYSTEM_ERROR)
 #  if defined(__clang__)

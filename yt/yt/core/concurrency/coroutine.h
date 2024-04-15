@@ -20,12 +20,6 @@ namespace NYT::NConcurrency {
 
 namespace NDetail {
 
-DEFINE_ENUM(ECoroState,
-    ((Running)               (0))
-    ((Abandoned)             (1))
-    ((Completed)             (2))
-);
-
 ////////////////////////////////////////////////////////////////////////////////
 
 class TCoroutineBase
@@ -46,6 +40,12 @@ protected:
     void Suspend();
 
 private:
+    enum class ECoroState {
+        Running,
+        Abandoned,
+        Completed,
+    };
+
     std::shared_ptr<TExecutionStack> CoroutineStack_;
 
     TExceptionSafeContext CallerContext_;

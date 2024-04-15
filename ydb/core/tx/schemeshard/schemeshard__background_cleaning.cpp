@@ -116,7 +116,7 @@ bool TSchemeShard::ContinueBackgroundCleaning(const TPathId& pathId) {
 
         const auto txId = GetCachedTxId(ctx);
         BackgroundCleaningTxToDirPathId[txId] = pathId;
-        BackgroundCleaningState.at(pathId).TxIds.insert(txId);
+        state.TxIds.insert(txId);
 
         const auto nextDirPathId = state.DirsToRemove.back();
         state.DirsToRemove.pop_back();
@@ -156,7 +156,7 @@ bool TSchemeShard::ContinueBackgroundCleaning(const TPathId& pathId) {
 void TSchemeShard::HandleBackgroundCleaningCompletionResult(const TTxId& txId) {
     const auto pathId = BackgroundCleaningTxToDirPathId.at(txId);
     if (auto stateIter = BackgroundCleaningState.find(pathId);
-            stateIter == std::end(BackgroundCleaningState) || !stateIter->second.TxIds.contains(txId)) {
+        stateIter == std::end(BackgroundCleaningState) || !stateIter->second.TxIds.contains(txId)) {
         return;
     }
 
@@ -338,7 +338,7 @@ void TSchemeShard::HandleBackgroundCleaningTransactionResult(
     const auto pathId = BackgroundCleaningTxToDirPathId.at(txId);
 
     if (auto stateIter = BackgroundCleaningState.find(pathId);
-            stateIter == std::end(BackgroundCleaningState) || !stateIter->second.TxIds.contains(txId)) {
+        stateIter == std::end(BackgroundCleaningState) || !stateIter->second.TxIds.contains(txId)) {
         return;
     }
 

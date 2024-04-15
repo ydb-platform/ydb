@@ -181,7 +181,7 @@ TString TPersQueueReadBalancer::GenerateStat() {
         TAG(TH3) {str << "Topic: " << Topic;}
         TAG(TH3) {str << "Generation: " << Generation;}
         TAG(TH3) {str << "Inited: " << Inited;}
-        TAG(TH3) {str << "ActivePipes: " << PipesInfo.size();}
+        TAG(TH3) {str << "ActivePipes: " << ReadingSessions.size();}
         if (Inited) {
             TAG(TH3) {str << "Active partitions: " << NumActiveParts;}
             TAG(TH3) {str << "[Total/Max/Avg]WriteSpeedSec: " << metrics.TotalAvgWriteSpeedPerSec << "/" << metrics.MaxAvgWriteSpeedPerSec << "/" << metrics.TotalAvgWriteSpeedPerSec / NumActiveParts;}
@@ -592,12 +592,12 @@ TStringBuilder TPersQueueReadBalancer::TClientInfo::GetPrefix() const {
 
 void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx)
 {
-    auto it = PipesInfo.find(ev->Get()->ClientId);
+    auto it = ReadingSessions.find(ev->Get()->ClientId);
 
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "pipe " << ev->Get()->ClientId << " disconnected; active server actors: "
-                        << (it != PipesInfo.end() ? it->second.ServerActors : -1));
+                        << (it != ReadingSessions.end() ? it->second.ServerActors : -1));
 
-    if (it != PipesInfo.end()) {
+    if (it != ReadingSessions.end()) {
         if (--(it->second.ServerActors) > 0)
             return;
         if (!it->second.Session.empty()) {
@@ -605,7 +605,7 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& 
             UnregisterSession(it->first, ctx);
         } else {
             LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "pipe " << ev->Get()->ClientId << " disconnected no session");
-            PipesInfo.erase(it);
+            ReadingSessions.erase(it);
         }
     }
 }
@@ -1015,7 +1015,7 @@ void TPersQueueReadBalancer::GetACL(const TActorContext& ctx) {
 void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx)
 {
     const TActorId& sender = ev->Get()->ClientId;
-    auto& pipe = PipesInfo[sender];
+    auto& pipe = ReadingSessions[sender];
     ++pipe.ServerActors;
 
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
@@ -1212,8 +1212,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
 
     //TODO: check here that pipe with clientPipe=sender is still connected
 
-    auto jt = PipesInfo.find(pipe);
-    if (jt == PipesInfo.end()) {
+    auto jt = ReadingSessions.find(pipe);
+    if (jt == ReadingSessions.end()) {
         LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 GetPrefix() << "client " << record.GetClientId() << " pipe " << pipe
                         << " is not connected and got register session request for session " << record.GetSession());
@@ -1546,8 +1546,8 @@ void TPersQueueReadBalancer::RebuildStructs() {
 void TPersQueueReadBalancer::RegisterSession(const TActorId& pipe, const TActorContext& ctx)
 {
     //TODO : change structs for only this session, not all client
-    auto it = PipesInfo.find(pipe);
-    Y_ABORT_UNLESS(it != PipesInfo.end());
+    auto it = ReadingSessions.find(pipe);
+    Y_ABORT_UNLESS(it != ReadingSessions.end());
     auto jt = ClientsInfo.find(it->second.ClientId);
     Y_ABORT_UNLESS(jt != ClientsInfo.end());
     for (auto& c : jt->second.ClientGroupsInfo) {
@@ -1558,8 +1558,8 @@ void TPersQueueReadBalancer::RegisterSession(const TActorId& pipe, const TActorC
 void TPersQueueReadBalancer::UnregisterSession(const TActorId& pipe, const TActorContext& ctx)
 {
     //TODO : change structs for only this session
-    auto it = PipesInfo.find(pipe);
-    Y_ABORT_UNLESS(it != PipesInfo.end());
+    auto it = ReadingSessions.find(pipe);
+    Y_ABORT_UNLESS(it != ReadingSessions.end());
     auto& pipeInfo = it->second;
 
     auto jt = ClientsInfo.find(pipeInfo.ClientId);
@@ -1582,7 +1582,7 @@ void TPersQueueReadBalancer::UnregisterSession(const TActorId& pipe, const TActo
         clientInfo.MergeGroups(ctx);
     }
 
-    PipesInfo.erase(it);
+    ReadingSessions.erase(it);
 }
 
 

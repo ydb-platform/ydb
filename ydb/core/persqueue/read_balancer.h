@@ -367,9 +367,11 @@ private:
     std::unordered_map<TString, TClientInfo> ClientsInfo; //map from userId -> to info
 
 private:
-    struct TPipeInfo {
-        TPipeInfo()
+    struct TReadingSession {
+        TReadingSession()
             : ServerActors(0)
+            , ActivePartitionCount(0)
+            , InactivePartitionCount(0)
         {}
 
         TString ClientId;         // The consumer name
@@ -377,6 +379,9 @@ private:
         TActorId Sender;
         std::vector<ui32> Groups; // groups which are reading
         ui32 ServerActors;        // the number of pipes connected from SessionActor to ReadBalancer
+
+        size_t ActivePartitionCount;
+        size_t InactivePartitionCount;
 
         // true if client connected to read from concret partitions
         bool WithGroups() { return !Groups.empty(); }
@@ -389,7 +394,7 @@ private:
         }
     };
 
-    std::unordered_map<TActorId, TPipeInfo> PipesInfo;
+    std::unordered_map<TActorId, TReadingSession> ReadingSessions;
 
     NMetrics::TResourceMetrics *ResourceMetrics;
 

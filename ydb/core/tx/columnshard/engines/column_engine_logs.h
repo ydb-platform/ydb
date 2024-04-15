@@ -162,14 +162,14 @@ public:
     }
 
     void AddCleanupPortion(const TPortionInfo& info) {
-        CleanupPortions[info.GetRemoveSnapshotVerified() + RemovedPortionLivetime].emplace_back(info)
+        CleanupPortions[info.GetRemoveSnapshotVerified().GetPlanInstant() + RemovedPortionLivetime].emplace_back(info);
     }
 
 private:
     TVersionedIndex VersionedIndex;
     ui64 TabletId;
     TMap<ui64, std::shared_ptr<TColumnEngineStats>> PathStats; // per path_id stats sorted by path_id
-    std::map<TSnapshot, std::vector<TPortionInfo>> CleanupPortions;
+    std::map<TInstant, std::vector<TPortionInfo>> CleanupPortions;
     TColumnEngineStats Counters;
     ui64 LastPortion;
     ui64 LastGranule;

@@ -564,7 +564,8 @@ def dispatch_run(func, args, walle_provider):
     )
 
     v = vars(args)
-    func(components, nodes, cluster_details, configurator, v.get('clear_logs'), args, walle_provider)
+    slice = handlers.Slice(components, nodes, cluster_details, configurator, v.get('clear_logs'), args, walle_provider)
+    func(slice)
 
     if clear_tmp:
         logger.debug("remove temp dirs '%s'", temp_dir)
@@ -573,7 +574,7 @@ def dispatch_run(func, args, walle_provider):
 
 def add_install_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.slice_install, args, walle_provider)
+        dispatch_run(handlers.Slice.slice_install, args, walle_provider)
 
     mode = modes.add_parser(
         "install",
@@ -587,7 +588,7 @@ def add_install_mode(modes, walle_provider):
 
 def add_update_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.slice_update, args, walle_provider)
+        dispatch_run(handlers.Slice.slice_update, args, walle_provider)
 
     mode = modes.add_parser(
         "update",
@@ -602,7 +603,7 @@ def add_update_mode(modes, walle_provider):
 
 def add_update_raw_configs(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.slice_update_raw_configs, args, walle_provider)
+        dispatch_run(handlers.Slice.slice_update_raw_configs, args, walle_provider)
 
     mode = modes.add_parser(
         "update-raw-cfg",
@@ -621,7 +622,7 @@ def add_update_raw_configs(modes, walle_provider):
 
 def add_stop_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.slice_stop, args, walle_provider)
+        dispatch_run(handlers.Slice.slice_stop, args, walle_provider)
 
     mode = modes.add_parser(
         "stop",
@@ -635,7 +636,7 @@ def add_stop_mode(modes, walle_provider):
 
 def add_start_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.slice_start, args, walle_provider)
+        dispatch_run(handlers.Slice.slice_start, args, walle_provider)
 
     mode = modes.add_parser(
         "start",
@@ -650,7 +651,7 @@ def add_start_mode(modes, walle_provider):
 
 def add_clear_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.slice_clear, args, walle_provider)
+        dispatch_run(handlers.Slice.slice_clear, args, walle_provider)
 
     mode = modes.add_parser(
         "clear",
@@ -664,7 +665,7 @@ def add_clear_mode(modes, walle_provider):
 
 def add_format_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.slice_format, args, walle_provider)
+        dispatch_run(handlers.Slice.slice_format, args, walle_provider)
 
     mode = modes.add_parser(
         "format",

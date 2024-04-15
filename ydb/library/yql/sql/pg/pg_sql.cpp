@@ -2078,6 +2078,9 @@ public:
             case OBJECT_INDEX: {
                 return ParseDropIndexStmt(value, nameListNodes);
             }
+            case OBJECT_SEQUENCE: {
+                return ParseDropSequenceStmt(value, nameListNodes);
+            }
             default: {
                 AddError("Not supported object type for DROP");
                 return nullptr;
@@ -2186,6 +2189,46 @@ public:
                     QL(
                         QL(QA("mode"), QA("dropIndex")),
                         QL(QA("ifExists"), QA(missingOk))
+                    )
+                )
+            ));
+        }
+
+        return State.Statements.back();
+    }
+
+    TAstNode* ParseDropSequenceStmt(const DropStmt* value, const TVector<const List*>& names) {
+        if (value->behavior == DROP_CASCADE) {
+            AddError("CASCADE is not implemented");
+            return nullptr;
+        }
+
+        if (names.size() != 1) {
+            AddError("DROP SEQUENCE requires exactly one sequence");
+            return nullptr;
+        }
+
+        for (const auto& nameList : names) {
+            const auto [clusterName, indexName] = getSchemaAndObjectName(nameList);
+            const auto [sink, key] = ParseQualifiedPgObjectName(
+                /* catalogName */ "",
+                clusterName,
+                indexName,
+                "pgSequence"
+            );
+
+            TString mode = (value->missing_ok) ? "drop_if_exists" : "drop";
+            State.Statements.push_back(L(
+                A("let"),
+                A("world"),
+                L(
+                    A("Write!"),
+                    A("world"),
+                    sink,
+                    key,
+                    L(A("Void")),
+                    QL(
+                        QL(QA("mode"), QA(mode))
                     )
                 )
             ));

@@ -3,6 +3,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ydb-platform/ydb/blob/main/LICENSE)
 [![Release](https://img.shields.io/github/v/release/ydb-platform/ydb.svg?style=flat-square)](https://github.com/ydb-platform/ydb/releases)
 [![Discord](https://img.shields.io/discord/1158573985894772827?logo=discord&logoColor=%23fff)](https://discord.gg/R5MvZTESWc)
+[![Docker](https://github.com/ydb-platform/ydb/actions/workflows/docker_publish.yml/badge.svg?branch=main)](https://github.com/ydb-platform/ydb/actions/workflows/docker_publish.yml)
 
 ## YDB
 

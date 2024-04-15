@@ -7,6 +7,7 @@ $timestamp_max = unwrap(cast($date_max_value*86400*1000000 - 1 as timestamp));
 
 $date32_min = unwrap(cast(-53375809 as date32));
 $date32_max = unwrap(cast(53375807 as date32));
+$date32_plus1 = unwrap(cast(1 as date32));
 $datetime64_min = unwrap(cast(-4611669897600 as datetime64));
 $datetime64_max = unwrap(cast(4611669811199 as datetime64));
 $timestamp64_min = unwrap(cast(-4611669897600000000 as timestamp64));
@@ -101,6 +102,10 @@ select -1, Yql::RoundDown($datetime64_minus1, date), Yql::RoundUp($datetime64_mi
 , 5, Yql::RoundDown($datetime64_max, date), Yql::RoundUp($datetime64_max, date)
 , Yql::RoundDown($timestamp64_max, date), Yql::RoundUp($timestamp64_max, date)
 , Yql::RoundDown($timestamp64_max, datetime), Yql::RoundUp($timestamp64_max, datetime)
+
+, 6, Yql::RoundDown($date32_plus1, date), Yql::RoundUp($date32_plus1, date)
+, Yql::RoundDown($date32_plus1, datetime), Yql::RoundUp($date32_plus1, datetime)
+, Yql::RoundDown($date32_plus1, timestamp), Yql::RoundUp($date32_plus1, timestamp)
 ;
 
 -- from narrowdate

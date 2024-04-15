@@ -101,9 +101,11 @@ public:
             us = usInSec * Source->GetValue(ctx).Get<i64>();
         } else if (From == EDataSlot::Timestamp) {
             us = static_cast<i64>(Source->GetValue(ctx).Get<ui64>());
-        } else {
-            Y_ENSURE(From == EDataSlot::Datetime);
+        } else if (From == EDataSlot::Datetime) {
             us = usInSec * static_cast<i64>(Source->GetValue(ctx).Get<ui32>());
+        } else {
+            Y_ENSURE(From == EDataSlot::Date32);
+            us = usInDay * static_cast<i64>(Source->GetValue(ctx).Get<i32>());
         }
 
         if (To == EDataSlot::Date || To == EDataSlot::Date32) {
@@ -120,8 +122,7 @@ public:
             } else if (To == EDataSlot::Date && rounded >= 0 && rounded < MAX_DATE) {
                 return TUnboxedValuePod(static_cast<ui16>(rounded));
             }
-        } else {
-            Y_ENSURE(To == EDataSlot::Datetime || To == EDataSlot::Datetime64);
+        } else if (To == EDataSlot::Datetime || To == EDataSlot::Datetime64) {
             i64 rounded = us / usInSec;
             i64 rem = us % usInSec;
             if (rem > 0 && !Down) {
@@ -134,6 +135,11 @@ public:
                 return TUnboxedValuePod(rounded);
             } else if (To == EDataSlot::Datetime && rounded >= 0 && rounded < MAX_DATETIME) {
                 return TUnboxedValuePod(static_cast<ui32>(rounded));
+            }
+        } else {
+            Y_ENSURE(To == EDataSlot::Timestamp);
+            if (0 <= us && us < static_cast<i64>(MAX_TIMESTAMP)) {
+                return TUnboxedValuePod(static_cast<ui64>(us));
             }
         }
         return {};
@@ -228,6 +234,7 @@ IComputationNode* WrapRound(TCallable& callable, const TComputationNodeFactoryCo
         case EDataSlot::Uint64: return FromIntegral<ui64>(ctx.Mutables, source, down, to);
         case EDataSlot::Datetime:
         case EDataSlot::Timestamp:
+        case EDataSlot::Date32: // From Date cases are covered in NYql::NTypeAnnImpl::RoundWrapper
         case EDataSlot::Datetime64:
         case EDataSlot::Timestamp64:
             Y_ENSURE(GetDataTypeInfo(to).Features & DateType);

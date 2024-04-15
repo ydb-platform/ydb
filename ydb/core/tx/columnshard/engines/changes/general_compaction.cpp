@@ -200,7 +200,8 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
             AppendedPortions.back().FillStatistics(resultSchema->GetIndexInfo());
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
-            AppendedPortions.back().GetPortionInfo().AddMetadata(*resultSchema, primaryKeys, snapshotKeys, IStoragesManager::DefaultStorageId);
+            AppendedPortions.back().GetPortionConstructor().AddMetadata(*resultSchema, primaryKeys, snapshotKeys);
+            AppendedPortions.back().GetPortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
             recordIdx += slice.GetRecordsCount();
         }
     }
@@ -245,7 +246,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
 
         TStringBuilder sbAppended;
         for (auto&& p : AppendedPortions) {
-            sbAppended << p.GetPortionInfo().DebugString() << ";";
+            sbAppended << p.GetPortionConstructor().DebugString() << ";";
         }
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "blobs_created_diff")("appended", sbAppended)("switched", sbSwitched);
     }

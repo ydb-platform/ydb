@@ -9,10 +9,11 @@ namespace NKikimr::NOlap {
 class TChangesWithAppend: public TColumnEngineChanges {
 private:
     using TBase = TColumnEngineChanges;
-
+    THashMap<TPortionAddress, TPortionInfo> PortionsToRemove;
 protected:
     TSaverContext SaverContext;
     virtual void DoCompile(TFinalizationContext& context) override;
+    virtual void DoOnAfterCompile() override;
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
@@ -35,7 +36,6 @@ protected:
             return selfLock;
         }
     }
-
 public:
     TChangesWithAppend(const TSaverContext& saverContext, const NBlobOperations::EConsumer consumerId)
         : TBase(saverContext.GetStoragesManager(), consumerId)
@@ -44,7 +44,23 @@ public:
 
     }
 
-    THashMap<TPortionAddress, TPortionInfo> PortionsToRemove;
+    const THashMap<TPortionAddress, TPortionInfo>& GetPortionsToRemove() const {
+        return PortionsToRemove;
+    }
+
+    ui32 GetPortionsToRemoveSize() const {
+        return PortionsToRemove.size();
+    }
+
+    bool HasPortionsToRemove() const {
+        return PortionsToRemove.size();
+    }
+
+    void AddPortionToRemove(const TPortionInfo& info) {
+        AFL_VERIFY(!info.HasRemoveSnapshot());
+        AFL_VERIFY(PortionsToRemove.emplace(info.GetAddress(), info).second);
+    }
+
     std::vector<TWritePortionInfoWithBlobs> AppendedPortions;
     virtual ui32 GetWritePortionsCount() const override {
         return AppendedPortions.size();

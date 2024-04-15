@@ -201,6 +201,7 @@ private:
 protected:
     virtual void DoDebugString(TStringOutput& out) const = 0;
     virtual void DoCompile(TFinalizationContext& context) = 0;
+    virtual void DoOnAfterCompile() {}
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) = 0;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) = 0;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) = 0;

@@ -14,56 +14,42 @@ struct TIndexInfo;
 
 struct TPortionMeta {
 private:
-    std::shared_ptr<NArrow::TFirstLastSpecialKeys> ReplaceKeyEdges; // first and last PK rows
-    YDB_ACCESSOR_DEF(TString, TierName);
+    NArrow::TFirstLastSpecialKeys ReplaceKeyEdges; // first and last PK rows
+    YDB_READONLY_DEF(TString, TierName);
     YDB_READONLY_DEF(NStatistics::TPortionStorage, StatisticsStorage);
+    friend class TPortionMetaConstructor;
+    TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max)
+        : ReplaceKeyEdges(pk)
+        , IndexKeyStart(pk.GetFirst())
+        , IndexKeyEnd(pk.GetLast())
+        , RecordSnapshotMin(min)
+        , RecordSnapshotMax(max)
+    {
+        AFL_VERIFY(IndexKeyStart <= IndexKeyEnd)("start", IndexKeyStart.DebugString())("end", IndexKeyEnd.DebugString());
+    }
 public:
     using EProduced = NPortion::EProduced;
 
-    std::optional<NArrow::TReplaceKey> IndexKeyStart;
-    std::optional<NArrow::TReplaceKey> IndexKeyEnd;
+    NArrow::TReplaceKey IndexKeyStart;
+    NArrow::TReplaceKey IndexKeyEnd;
 
-    std::optional<TSnapshot> RecordSnapshotMin;
-    std::optional<TSnapshot> RecordSnapshotMax;
-    EProduced Produced{EProduced::UNSPECIFIED};
+    TSnapshot RecordSnapshotMin;
+    TSnapshot RecordSnapshotMax;
+    EProduced Produced = EProduced::UNSPECIFIED;
+
+    std::optional<TString> GetTierNameOptional() const;
 
     ui64 GetMetadataMemorySize() const {
-        return sizeof(TPortionMeta) + ReplaceKeyEdges->GetMemorySize();
+        return sizeof(TPortionMeta) + ReplaceKeyEdges.GetMemorySize();
     }
-
-    void SetStatisticsStorage(NStatistics::TPortionStorage&& storage) {
-        AFL_VERIFY(StatisticsStorage.IsEmpty());
-        StatisticsStorage = std::move(storage);
-    }
-
-    void ResetStatisticsStorage(NStatistics::TPortionStorage&& storage) {
-        StatisticsStorage = std::move(storage);
-    }
-
-    bool DeserializeFromProto(const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo);
 
     NKikimrTxColumnShard::TIndexPortionMeta SerializeToProto() const;
-
-    void FillBatchInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const NArrow::TMinMaxSpecialKeys& snapshotKeys, const TIndexInfo& indexInfo);
 
     EProduced GetProduced() const {
         return Produced;
     }
 
     TString DebugString() const;
-
-    friend IOutputStream& operator << (IOutputStream& out, const TPortionMeta& info) {
-        out << info.DebugString();
-        return out;
-    }
-
-    bool HasSnapshotMinMax() const {
-        return !!RecordSnapshotMax && !!RecordSnapshotMin;
-    }
-
-    bool HasPrimaryKeyBorders() const {
-        return !!IndexKeyStart && !!IndexKeyEnd;
-    }
 };
 
 class TPortionAddress {

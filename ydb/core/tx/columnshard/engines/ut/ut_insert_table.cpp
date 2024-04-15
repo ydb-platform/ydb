@@ -34,13 +34,13 @@ public:
     virtual void ErasePortion(const NOlap::TPortionInfo& /*portion*/) override {
 
     }
-    virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfo&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
+    virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
         return true;
     }
 
     void WriteColumn(const TPortionInfo&, const TColumnRecord&, const ui32 /*firstPKColumnId*/) override {}
     void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {}
-    bool LoadColumns(const std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)>&) override { return true; }
+    bool LoadColumns(const std::function<void(NOlap::TPortionInfoConstructor&&, const TColumnChunkLoadContext&)>&) override { return true; }
 
     virtual void WriteIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {}
     virtual void EraseIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {}

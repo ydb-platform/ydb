@@ -1,11 +1,9 @@
 #include "read_with_blobs.h"
 #include "write_with_blobs.h"
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
-#include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
-#include <ydb/core/tx/columnshard/engines/column_engine.h>
-#include <ydb/core/tx/columnshard/blobs_reader/task.h>
-#include <ydb/core/tx/columnshard/splitter/batch_slice.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
 namespace NKikimr::NOlap {
 
@@ -151,10 +149,10 @@ std::optional<TWritePortionInfoWithBlobs> TReadPortionInfoWithBlobs::SyncPortion
     auto schemaTo = std::make_shared<TDefaultSchemaDetails>(to, std::make_shared<TSerializationStats>());
     TGeneralSerializedSlice slice(entityChunksNew, schemaTo, counters);
     const NSplitter::TEntityGroups groups = to->GetIndexInfo().GetEntityGroupsByStorageId(targetTier, *storages);
-    TWritePortionInfoWithBlobs result = TWritePortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), source.PortionInfo, storages);
-    result.GetPortionInfo().SetMinSnapshotDeprecated(to->GetSnapshot());
-    result.GetPortionInfo().SetSchemaVersion(to->GetVersion());
-    result.GetPortionInfo().MutableMeta().SetTierName(targetTier);
+    TPortionInfoConstructor constructor(source.PortionInfo, false, true);
+    constructor.SetMinSnapshotDeprecated(to->GetSnapshot());
+    constructor.SetSchemaVersion(to->GetVersion());
+    constructor.MutableMeta().ResetTierName(targetTier);
 
     NStatistics::TPortionStorage storage;
     for (auto&& i : to->GetIndexInfo().GetStatisticsByName()) {
@@ -165,7 +163,9 @@ std::optional<TWritePortionInfoWithBlobs> TReadPortionInfoWithBlobs::SyncPortion
             i.second->FillStatisticsData(entityChunksNew, storage, to->GetIndexInfo());
         }
     }
-    result.MutablePortionInfo().MutableMeta().ResetStatisticsStorage(std::move(storage));
+    constructor.MutableMeta().ResetStatisticsStorage(std::move(storage));
+
+    TWritePortionInfoWithBlobs result = TWritePortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), std::move(constructor), storages);
     return result;
 }
 

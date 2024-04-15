@@ -74,7 +74,8 @@ public:
             << " at snapshot: " << GetRequestSnapshot().DebugString();
         TBase::Dump(out);
         if (SelectInfo) {
-            out << ", " << *SelectInfo;
+            out << ", ";
+            SelectInfo->DebugStream(out);
         }
     }
 

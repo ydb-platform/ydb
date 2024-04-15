@@ -1,13 +1,13 @@
 #pragma once
 #include "base_with_blobs.h"
+#include "common.h"
 #include "portion_info.h"
-#include <ydb/core/tx/columnshard/blob.h>
-#include <ydb/core/tx/columnshard/splitter/blob_info.h>
-#include <ydb/core/tx/columnshard/splitter/chunks.h>
-#include <ydb/core/tx/columnshard/engines/scheme/statistics/abstract/common.h>
-#include <ydb/core/tx/columnshard/engines/scheme/statistics/abstract/operator.h>
+
+#include <ydb/core/tx/columnshard/splitter/abstract/chunks.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <map>
 
 namespace NKikimr::NOlap {
 

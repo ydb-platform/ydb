@@ -1,10 +1,5 @@
 #include "write_with_blobs.h"
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
-#include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
-#include <ydb/core/tx/columnshard/engines/column_engine.h>
-#include <ydb/core/tx/columnshard/blobs_reader/task.h>
-#include <ydb/core/tx/columnshard/splitter/batch_slice.h>
-#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap {
 
@@ -19,25 +14,27 @@ void TWritePortionInfoWithBlobs::TBlobInfo::AddChunk(TWritePortionInfoWithBlobs&
     Y_ABORT_UNLESS(Chunks.emplace(chunk->GetChunkAddressVerified(), chunk).second);
     ChunksOrdered.emplace_back(chunk);
 
-    chunk->AddIntoPortionBeforeBlob(bRange, owner.PortionInfo);
+    chunk->AddIntoPortionBeforeBlob(bRange, owner.GetPortionConstructor());
 }
 
 void TWritePortionInfoWithBlobs::TBlobInfo::RegisterBlobId(TWritePortionInfoWithBlobs& owner, const TUnifiedBlobId& blobId) {
-    const TBlobRangeLink16::TLinkId idx = owner.PortionInfo.RegisterBlobId(blobId);
+    const TBlobRangeLink16::TLinkId idx = owner.GetPortionConstructor().RegisterBlobId(blobId);
     for (auto&& i : Chunks) {
-        owner.PortionInfo.RegisterBlobIdx(i.first, idx);
+        owner.GetPortionConstructor().RegisterBlobIdx(i.first, idx);
     }
 }
 
 TWritePortionInfoWithBlobs TWritePortionInfoWithBlobs::BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
     const ui64 granule, const ui64 schemaVersion, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators)
 {
-    return BuildByBlobs(std::move(chunks), TPortionInfo(granule, 0, schemaVersion, snapshot), operators);
+    TPortionInfoConstructor constructor(granule);
+    constructor.SetMinSnapshotDeprecated(snapshot);
+    constructor.SetSchemaVersion(schemaVersion);
+    return BuildByBlobs(std::move(chunks), std::move(constructor), operators);
 }
 
-TWritePortionInfoWithBlobs TWritePortionInfoWithBlobs::BuildByBlobs(std::vector<TSplittedBlob>&& chunks, const TPortionInfo& basePortion,
-    const std::shared_ptr<IStoragesManager>& operators) {
-    TWritePortionInfoWithBlobs result(basePortion.CopyBeforeChunksRebuild());
+TWritePortionInfoWithBlobs TWritePortionInfoWithBlobs::BuildByBlobs(std::vector<TSplittedBlob>&& chunks, TPortionInfoConstructor&& constructor, const std::shared_ptr<IStoragesManager>& operators) {
+    TWritePortionInfoWithBlobs result(std::move(constructor));
     for (auto&& blob : chunks) {
         auto storage = operators->GetOperatorVerified(blob.GetGroupName());
         auto blobInfo = result.StartBlob(storage);
@@ -45,7 +42,6 @@ TWritePortionInfoWithBlobs TWritePortionInfoWithBlobs::BuildByBlobs(std::vector<
             blobInfo.AddChunk(chunk);
         }
     }
-    result.GetPortionInfo().ReorderChunks();
     return result;
 }
 
@@ -75,7 +71,7 @@ void TWritePortionInfoWithBlobs::FillStatistics(const TIndexInfo& index) {
         }
         i.second->FillStatisticsData(data, storage, index);
     }
-    PortionInfo.SetStatisticsStorage(std::move(storage));
+    GetPortionConstructor().MutableMeta().SetStatisticsStorage(std::move(storage));
 }
 
 }

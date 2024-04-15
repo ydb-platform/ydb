@@ -2513,9 +2513,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     Y_ABORT_UNLESS(append->AppendedPortions.size());
                     Cerr << "Added portions:";
                     for (const auto& portion : append->AppendedPortions) {
+                        Y_UNUSED(portion);
                         ++addedPortions;
-                        ui64 portionId = addedPortions;
-                        Cerr << " " << portionId << "(" << portion.GetPortionInfo().GetPortion() << ")";
+                        Cerr << " " << addedPortions;
                     }
                     Cerr << Endl;
                 }

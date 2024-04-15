@@ -7,6 +7,7 @@
 #include "changes/cleanup_portions.h"
 #include "changes/cleanup_tables.h"
 #include "changes/ttl.h"
+#include "portions/constructor.h"
 
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -185,11 +186,12 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
 }
 
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
+    TPortionConstructors constructors;
     {
-        if (!db.LoadPortions([&](TPortionInfo&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+        if (!db.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
             const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
-            portion.LoadMetadata(metaProto, indexInfo);
-            GetGranulePtrVerified(portion.GetPathId())->UpsertPortionOnLoad(std::move(portion));
+            AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
+            AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
         })) {
             return false;
         }
@@ -197,25 +199,28 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
 
     {
         TPortionInfo::TSchemaCursor schema(VersionedIndex);
-        if (!db.LoadColumns([&](const TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
+        if (!db.LoadColumns([&](TPortionInfoConstructor&& portion, const TColumnChunkLoadContext& loadContext) {
+            auto* constructor = constructors.MergeConstructor(std::move(portion));
             auto currentSchema = schema.GetSchema(portion);
-            AFL_VERIFY(portion.ValidSnapshotInfo())("details", portion.DebugString());
-            // Locate granule and append the record.
-            GetGranulePtrVerified(portion.GetPathId())->AddColumnRecordOnLoad(currentSchema->GetIndexInfo(), portion, loadContext, loadContext.GetPortionMeta());
+            constructor->LoadRecord(currentSchema->GetIndexInfo(), loadContext);
         })) {
             return false;
         }
     }
-
-    if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
-        auto portion = GetGranulePtrVerified(pathId)->GetPortionOptional(portionId);
-        AFL_VERIFY(portion);
-        const auto linkBlobId = portion->RegisterBlobId(loadContext.GetBlobRange().GetBlobId());
-        portion->AddIndex(loadContext.BuildIndexChunk(linkBlobId));
-    })) {
-        return false;
-    };
-
+    {
+        if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
+            auto* constructor = constructors.GetConstructorVerified(pathId, portionId);
+            constructor->LoadIndex(loadContext);
+        })) {
+            return false;
+        };
+    }
+    for (auto&& [granuleId, pathConstructors] : constructors) {
+        auto g = GetGranulePtrVerified(granuleId);
+        for (auto&& [portionId, constructor] : pathConstructors) {
+            g->UpsertPortionOnLoad(constructor.Build(false));
+        }
+    }
     for (auto&& i : GranulesStorage->GetTables()) {
         i.second->OnAfterPortionsLoad();
     }
@@ -413,18 +418,20 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> result;
     for (auto&& i : context.GetTasks()) {
         for (auto&& t : i.second) {
-            SignalCounters.OnActualizationTask(t.GetTask()->GetPortionsToEvictCount(), t.GetTask()->PortionsToRemove.size());
+            SignalCounters.OnActualizationTask(t.GetTask()->GetPortionsToEvictCount(), t.GetTask()->GetPortionsToRemoveSize());
             result.emplace_back(t.GetTask());
         }
     }
     return result;
 }
 
-bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept {
-    {
-        TFinalizationContext context(LastGranule, LastPortion, snapshot);
-        indexChanges->Compile(context);
-    }
+bool TColumnEngineForLogs::ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept {
+    TFinalizationContext context(LastGranule, LastPortion, snapshot);
+    indexChanges->Compile(context);
+    return true;
+}
+
+bool TColumnEngineForLogs::ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> /*indexChanges*/, const TSnapshot& snapshot) noexcept {
     db.WriteCounter(LAST_PORTION, LastPortion);
     db.WriteCounter(LAST_GRANULE, LastGranule);
 

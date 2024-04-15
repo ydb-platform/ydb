@@ -14,7 +14,7 @@ void TTTLColumnEngineChanges::DoDebugString(TStringOutput& out) const {
 }
 
 void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
-    Y_ABORT_UNLESS(PortionsToEvict.size() || PortionsToRemove.size());
+    Y_ABORT_UNLESS(PortionsToEvict.size() || HasPortionsToRemove());
     THashMap<TString, THashSet<TBlobRange>> blobRanges;
     auto& engine = self.MutableIndexAs<TColumnEngineForLogs>();
     auto& index = engine.GetVersionedIndex();
@@ -39,7 +39,7 @@ void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChan
         for (auto&& i : PortionsToEvict) {
             AFL_VERIFY(restoreIndexAddresses[i.GetPortionInfo().GetPathId()].emplace(i.GetPortionInfo().GetPortionId()).second);
         }
-        for (auto&& i : PortionsToRemove) {
+        for (auto&& i : GetPortionsToRemove()) {
             AFL_VERIFY(restoreIndexAddresses[i.first.GetPathId()].emplace(i.first.GetPortionId()).second);
         }
         engine.ReturnToIndexes(restoreIndexAddresses);
@@ -66,8 +66,7 @@ NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructi
 
     for (auto&& info : PortionsToEvict) {
         if (auto pwb = UpdateEvictedPortion(info, Blobs, context)) {
-            info.MutablePortionInfo().SetRemoveSnapshot(context.LastCommittedTx);
-            AFL_VERIFY(PortionsToRemove.emplace(info.GetPortionInfo().GetAddress(), info.GetPortionInfo()).second);
+            AddPortionToRemove(info.GetPortionInfo());
             AppendedPortions.emplace_back(std::move(*pwb));
         }
     }

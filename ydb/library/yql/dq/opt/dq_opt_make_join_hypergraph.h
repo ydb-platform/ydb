@@ -7,6 +7,15 @@
 
 #include <memory.h>
 
+/* 
+ * This header contains MakeJoinHypergraph function to construct the hypergraph from inner optimizer nodes.
+ * Pipeline works as follows:
+ *      1) MakeJoinHypergraph calls MakeJoinHypergraphRec recursively.
+ *      2) MakeJoinHypergraphRec calls MakeHyperedge for each join node.
+ *      3) MakeHyperedge finds conflicts with TConflictRulesCollector and collect them into TES.
+ * If join has conflicts or complex predicate, then MakeHyperedge will create a complex edge.
+ */
+
 namespace NYql::NDq {
 
 inline TVector<TString> GetConditionUsedRelationNames(const std::shared_ptr<TJoinOptimizerNode>& joinNode) {
@@ -35,7 +44,7 @@ TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
     TNodeSet left = TES & subtreeNodes[joinNode->LeftArg];
     TNodeSet right = TES & subtreeNodes[joinNode->RightArg];
     
-    return typename TJoinHypergraph<TNodeSet>::TEdge(left, right, joinNode->JoinType, OperatorIsCommut(joinNode->JoinType), joinNode->JoinConditions);
+    return typename TJoinHypergraph<TNodeSet>::TEdge(left, right, joinNode->JoinType, OperatorIsCommutative(joinNode->JoinType), joinNode->JoinConditions);
 }
 
 template<typename TNodeSet>

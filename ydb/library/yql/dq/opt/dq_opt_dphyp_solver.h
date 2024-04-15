@@ -29,6 +29,9 @@ namespace NYql::NDq {
  * CSG it computes the complements with the same conditions - they much already be
  * present in the dynamic programming table and no pair should be enumerated twice.
  * Details are described in white papper - "Dynamic Programming Strikes Back".
+ *
+ * This class is templated by std::bitset with the largest number of joins we can process
+ * or std::bitset<64>, which has a more efficient implementation of enumerating subsets of set.
  */
 template <typename TNodeSet>
 class TDPHypSolver {
@@ -42,6 +45,7 @@ public:
         , Pctx_(ctx)
     {}
 
+    // Run DPHyp algorithm and produce the join tree in CBO's internal representation
     std::shared_ptr<TJoinOptimizerNodeInternal> Solve();
 
     // Calculate the size of a dynamic programming table with a budget
@@ -166,9 +170,9 @@ template<typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::Neighs(TNodeSet s, 
             auto& edge = Graph_.GetEdge(edgeId);
             if (
                 IsSubset(edge.Left, s) &&
-                !AreOverlaps(edge.Right, x) &&
-                !AreOverlaps(edge.Right, s) && 
-                !AreOverlaps(edge.Right, neighs)
+                !Overlaps(edge.Right, x) &&
+                !Overlaps(edge.Right, s) && 
+                !Overlaps(edge.Right, neighs)
             ) {
                 neighs[GetLowestSetBit(edge.Right)] = 1;
             }

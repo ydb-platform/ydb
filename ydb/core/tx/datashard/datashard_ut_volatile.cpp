@@ -2397,6 +2397,129 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         }
     }
 
+    Y_UNIT_TEST(VolatileTxAbortedOnSplit) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(1000)
+            .SetEnableDataShardVolatileTransactions(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        // Insert initial values
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 20);"));
+
+        // Block propose to coordinator
+        std::vector<TEvTxProxy::TEvProposeTransaction::TPtr> coordinatorProposes;
+        auto blockCoordinatorProposes = runtime.AddObserver<TEvTxProxy::TEvProposeTransaction>(
+            [&](TEvTxProxy::TEvProposeTransaction::TPtr& ev) {
+                Cerr << "... blocked propose to coordinator" << Endl;
+                coordinatorProposes.emplace_back(ev.Release());
+            });
+
+        auto upsertStartTs = runtime.GetCurrentTime();
+        auto upsertFuture = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 30);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 40);
+        )");
+
+        WaitFor(runtime, [&]{ return coordinatorProposes.size() > 0; }, "coordinator propose");
+        UNIT_ASSERT_VALUES_EQUAL(coordinatorProposes.size(), 1u);
+        blockCoordinatorProposes.Remove();
+        coordinatorProposes.clear();
+
+        auto splitStartTs = runtime.GetCurrentTime();
+        Cerr << "... splitting table" << Endl;
+        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+        auto shards1before = GetTableShards(server, sender, "/Root/table-1");
+        ui64 txId = AsyncSplitTable(server, sender, "/Root/table-1", shards1before.at(0), 3);
+        Cerr << "... split txId# " << txId << " started" << Endl;
+        WaitTxNotification(server, sender, txId);
+        auto splitLatency = runtime.GetCurrentTime() - splitStartTs;
+        Cerr << "... split finished in " << splitLatency << Endl;
+        UNIT_ASSERT_C(splitLatency < TDuration::Seconds(5), "split latency: " << splitLatency);
+
+        Cerr << "... waiting for upsert result" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(upsertFuture))),
+            "ERROR: ABORTED");
+        auto upsertLatency = runtime.GetCurrentTime() - upsertStartTs;
+        Cerr << "... upsert finished in " << upsertLatency << Endl;
+        UNIT_ASSERT_C(upsertLatency < TDuration::Seconds(5), "upsert latency: " << upsertLatency);
+    }
+
+    Y_UNIT_TEST(VolatileTxAbortedOnDrop) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(1000)
+            .SetEnableDataShardVolatileTransactions(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        // Insert initial values
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 20);"));
+
+        // Block propose to coordinator
+        std::vector<TEvTxProxy::TEvProposeTransaction::TPtr> coordinatorProposes;
+        auto blockCoordinatorProposes = runtime.AddObserver<TEvTxProxy::TEvProposeTransaction>(
+            [&](TEvTxProxy::TEvProposeTransaction::TPtr& ev) {
+                Cerr << "... blocked propose to coordinator" << Endl;
+                coordinatorProposes.emplace_back(ev.Release());
+            });
+
+        auto upsertStartTs = runtime.GetCurrentTime();
+        auto upsertFuture = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 30);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 40);
+        )");
+
+        WaitFor(runtime, [&]{ return coordinatorProposes.size() > 0; }, "coordinator propose");
+        UNIT_ASSERT_VALUES_EQUAL(coordinatorProposes.size(), 1u);
+        blockCoordinatorProposes.Remove();
+        coordinatorProposes.clear();
+
+        auto dropStartTs = runtime.GetCurrentTime();
+        Cerr << "... dropping table" << Endl;
+        ui64 txId = AsyncDropTable(server, sender, "/Root", "table-1");
+        WaitTxNotification(server, sender, txId);
+        auto dropLatency = runtime.GetCurrentTime() - dropStartTs;
+        Cerr << "... drop finished in " << dropLatency << Endl;
+        UNIT_ASSERT_C(dropLatency < TDuration::Seconds(5), "drop latency: " << dropLatency);
+
+        Cerr << "... waiting for upsert result" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(upsertFuture))),
+            "ERROR: ABORTED");
+        auto upsertLatency = runtime.GetCurrentTime() - upsertStartTs;
+        Cerr << "... upsert finished in " << upsertLatency << Endl;
+        UNIT_ASSERT_C(upsertLatency < TDuration::Seconds(5), "upsert latency: " << upsertLatency);
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardVolatile)
 
 } // namespace NKikimr

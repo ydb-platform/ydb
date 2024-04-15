@@ -298,6 +298,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"BlockJust", &WrapBlockJust},
         {"BlockCompress", &WrapBlockCompress},
         {"BlockAsTuple", &WrapBlockAsContainer},
+        {"BlockAsStruct", &WrapBlockAsContainer},
         {"BlockMember", &WrapBlockMember},
         {"BlockNth", &WrapBlockNth},
         {"BlockExpandChunked", &WrapBlockExpandChunked},

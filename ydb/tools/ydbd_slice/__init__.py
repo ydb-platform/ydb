@@ -564,7 +564,17 @@ def dispatch_run(func, args, walle_provider):
     )
 
     v = vars(args)
-    slice = handlers.Slice(components, nodes, cluster_details, configurator, v.get('clear_logs'), args, walle_provider)
+    clear_logs = v.get('clear_logs')
+    yav_version = v.get('yav_version')
+    slice = handlers.Slice(
+        components,
+        nodes,
+        cluster_details,
+        configurator,
+        clear_logs,
+        yav_version,
+        walle_provider
+    )
     func(slice)
 
     if clear_tmp:
@@ -603,12 +613,13 @@ def add_update_mode(modes, walle_provider):
 
 def add_update_raw_configs(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.Slice.slice_update_raw_configs, args, walle_provider)
+
+        dispatch_run(lambda self: handlers.Slice.slice_update_raw_configs(self, args.raw_cfg), args, walle_provider)
 
     mode = modes.add_parser(
         "update-raw-cfg",
         conflict_handler='resolve',
-        parents=[direct_nodes_args(), cluster_description_args(), component_args()],
+        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args()],
         description=""
     )
     mode.add_argument(
@@ -655,7 +666,7 @@ def add_clear_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "clear",
-        parents=[direct_nodes_args(), cluster_description_args(), component_args()],
+        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args()],
         description="Stop all kikimr instances at the nodes, format all kikimr drivers, shutdown dynamic slots. "
                     "And don't start nodes afrer it. "
                     "Use --hosts to specify particular hosts."
@@ -669,7 +680,7 @@ def add_format_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "format",
-        parents=[direct_nodes_args(), cluster_description_args(), component_args()],
+        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args()],
         description="Stop all kikimr instances at the nodes, format all kikimr drivers at the nodes, start the instances. "
                     "If you call format for all cluster, you will spoil it. "
                     "Additional dynamic configuration will required after it. "

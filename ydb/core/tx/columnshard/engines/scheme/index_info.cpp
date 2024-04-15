@@ -320,6 +320,7 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
 
     {
         SchemeNeedActualization = schema.GetOptions().GetSchemeNeedActualization();
+        ExternalGuaranteeExclusivePK = schema.GetOptions().GetExternalGuaranteeExclusivePK();
     }
 
     if (schema.HasDefaultCompression()) {

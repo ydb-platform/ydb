@@ -215,7 +215,7 @@ void TNodeWarden::Bootstrap() {
     if (Cfg->BlobStorageConfig.HasServiceSet()) {
         const auto& serviceSet = Cfg->BlobStorageConfig.GetServiceSet();
         if (serviceSet.GroupsSize()) {
-            ApplyServiceSet(Cfg->BlobStorageConfig.GetServiceSet(), true, false, false);
+            ApplyServiceSet(Cfg->BlobStorageConfig.GetServiceSet(), true, false, false, "initial");
         } else {
             Groups.try_emplace(0); // group is gonna be configured soon by DistributedConfigKeeper
         }
@@ -272,7 +272,7 @@ void TNodeWarden::HandleReadCache() {
                     InstanceId.emplace(proto.GetInstanceId());
                 }
 
-                ApplyServiceSet(proto.GetServiceSet(), false, false, false);
+                ApplyServiceSet(proto.GetServiceSet(), false, false, false, "cache");
             } catch (...) {
                 STLOG(PRI_INFO, BS_NODE, NW16, "Bootstrap failed to fetch cache", (Error, CurrentExceptionMessage()));
                 // ignore exception
@@ -360,7 +360,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
         const bool comprehensive = record.GetComprehensive();
         IgnoreCache |= comprehensive;
         STLOG(PRI_DEBUG, BS_NODE, NW17, "Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate)", (Msg, record));
-        ApplyServiceSet(record.GetServiceSet(), false, comprehensive, true);
+        ApplyServiceSet(record.GetServiceSet(), false, comprehensive, true, "controller");
     }
 
     for (const auto& item : record.GetGroupMetadata()) {

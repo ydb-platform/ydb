@@ -39,6 +39,10 @@ namespace NKikimr::NStorage {
             , PDiskId(pdisk.GetPDiskID())
         {}
 
+        size_t Hash() const {
+            return MultiHash(NodeId, PDiskId);
+        }
+
         friend bool operator <(const TPDiskKey& x, const TPDiskKey& y) {
             return std::make_tuple(x.NodeId, x.PDiskId) < std::make_tuple(y.NodeId, y.PDiskId);
         }
@@ -88,6 +92,9 @@ namespace NKikimr::NStorage {
 
         ui32 LocalNodeId; // NodeId for local node
         TActorId WhiteboardId;
+
+        NKikimrBlobStorage::TNodeWardenServiceSet StaticServices; // these are obtained on start
+        NKikimrBlobStorage::TNodeWardenServiceSet DynamicServices; // these are controlled by BSC
 
         std::map<TPDiskKey, TPDiskRecord> LocalPDisks;
         TIntrusiveList<TPDiskRecord, TUnreportedMetricTag> PDisksWithUnreportedMetrics;
@@ -165,11 +172,18 @@ namespace NKikimr::NStorage {
 
         void ApplyServiceSetPDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet);
 
+        using TServiceSetPDisk = NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk;
+
+        void MergeServiceSetPDisks(NProtoBuf::RepeatedPtrField<TServiceSetPDisk> *to,
+            const NProtoBuf::RepeatedPtrField<TServiceSetPDisk>& from);
+
+        void ApplyServiceSetPDisks();
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // VDisks
 
         void ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet &serviceSet,
-            bool isStatic, bool comprehensive, bool updateCache);
+            bool isStatic, bool comprehensive, bool updateCache, const char *origin);
 
         void ConfigureLocalProxy(TIntrusivePtr<TBlobStorageGroupInfo> bsInfo);
         TActorId StartEjectedProxy(ui32 groupId);
@@ -611,3 +625,8 @@ template<>
 inline void Out<NKikimr::NStorage::TNodeWarden::TVSlotId>(IOutputStream& o, const NKikimr::NStorage::TNodeWarden::TVSlotId& x) {
     o << x.NodeId << ":" << x.PDiskId << ":" << x.VDiskSlotId;
 }
+
+template<>
+struct THash<NKikimr::NStorage::TPDiskKey> {
+    size_t operator ()(const NKikimr::NStorage::TPDiskKey& x) const { return x.Hash(); }
+};

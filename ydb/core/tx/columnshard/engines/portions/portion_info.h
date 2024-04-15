@@ -173,15 +173,12 @@ public:
     ui64 GetMinMemoryForReadColumns(const std::optional<std::set<ui32>>& columnIds) const;
 
     void SetRemoveSnapshot(const TSnapshot& snap) {
-        const bool wasValid = RemoveSnapshot.Valid();
-        Y_ABORT_UNLESS(!wasValid || snap.Valid());
+        AFL_VERIFY(!RemoveSnapshot.Valid());
         RemoveSnapshot = snap;
     }
 
     void SetRemoveSnapshot(const ui64 planStep, const ui64 txId) {
-        const bool wasValid = RemoveSnapshot.Valid();
-        RemoveSnapshot = TSnapshot(planStep, txId);
-        Y_ABORT_UNLESS(!wasValid || RemoveSnapshot.Valid());
+        SetRemoveSnapshot(TSnapshot(planStep, txId));
     }
 
     void InitRuntimeFeature(const ERuntimeFeature feature, const bool activity) {

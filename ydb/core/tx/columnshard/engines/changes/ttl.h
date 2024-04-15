@@ -94,7 +94,6 @@ public:
     ui32 GetPortionsToEvictCount() const {
         return PortionsToEvict.size();
     }
-
     void AddPortionToEvict(const TPortionInfo& info, TPortionEvictionFeatures&& features) {
         Y_ABORT_UNLESS(!info.Empty());
         Y_ABORT_UNLESS(!info.HasRemoveSnapshot());

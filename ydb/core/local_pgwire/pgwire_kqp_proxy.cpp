@@ -281,8 +281,11 @@ protected:
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         BLOG_D("Handling TEvKqp::TEvQueryResponse " << ev->Get()->Record.ShortDebugString());
         NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record.GetRef();
-        if (record.GetResponse().HasCommandTag()) {
-            Response_->Tag = record.GetResponse().GetCommandTag();
+        if (record.GetResponse().HasExtraInfo()) {
+            const auto& extraInfo = record.GetResponse().GetExtraInfo();
+            if (extraInfo.HasPgInfo() && extraInfo.GetPgInfo().HasCommandTag()) {
+                Response_->Tag = extraInfo.GetPgInfo().GetCommandTag();
+            }
         }
         UpdateConnectionWithKqpResponse(record);
         try {

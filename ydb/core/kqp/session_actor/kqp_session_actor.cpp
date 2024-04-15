@@ -1590,7 +1590,9 @@ public:
         FillStats(record);
 
         if (QueryState->CommandTagName) {
-            response->SetCommandTag(*QueryState->CommandTagName);
+            auto *extraInfo = response->MutableExtraInfo();
+            auto* pgExtraInfo = extraInfo->MutablePgInfo();
+            pgExtraInfo->SetCommandTag(*QueryState->CommandTagName);
         }
 
         if (QueryState->TxCtx) {

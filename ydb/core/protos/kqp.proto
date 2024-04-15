@@ -258,6 +258,14 @@ message TPreparedQuery {
     optional NKqpProto.TKqpPhyQuery PhysicalQuery = 6;
 };
 
+message TQueryResponsePgInfo {
+    optional string CommandTag = 1;
+}
+
+message TQueryResponseExtraInfo {
+    optional TQueryResponsePgInfo PgInfo = 1;
+}
+
 message TQueryResponse {
     optional bytes SessionId = 1;
     reserved 2; // (deprecated) QueryErrors
@@ -275,7 +283,7 @@ message TQueryResponse {
     repeated Ydb.ResultSet YdbResults = 13;
     optional TTopicOperationsResponse TopicOperations = 14;
     optional string QueryDiagnostics = 15;
-    optional string CommandTag = 16;
+    optional TQueryResponseExtraInfo ExtraInfo = 16;
 }
 
 message TEvQueryResponse {

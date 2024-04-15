@@ -4,7 +4,7 @@
 namespace NYql::NDq {
 
 /* To make ASSOC, RASSCOM, LASSCOM tables simplier */
-EJoinKind GetEquivalentByAlgebraicPropertiesJoin(EJoinKind joinKind) {
+EJoinKind GetEquivalentJoinByAlgebraicProperties(EJoinKind joinKind) {
     switch (joinKind) {
         case EJoinKind::Exclusion:
             return EJoinKind::InnerJoin;
@@ -15,8 +15,8 @@ EJoinKind GetEquivalentByAlgebraicPropertiesJoin(EJoinKind joinKind) {
     }    
 }
 
-bool OperatorIsCommut(EJoinKind joinKind) {
-    joinKind = GetEquivalentByAlgebraicPropertiesJoin(joinKind);
+bool OperatorIsCommutative(EJoinKind joinKind) {
+    joinKind = GetEquivalentJoinByAlgebraicProperties(joinKind);
     switch (joinKind) {
         case EJoinKind::InnerJoin:
         case EJoinKind::OuterJoin:
@@ -29,9 +29,9 @@ bool OperatorIsCommut(EJoinKind joinKind) {
     Y_UNREACHABLE();
 }
 
-bool OperatorsAreAssoc(EJoinKind lhs, EJoinKind rhs) {
-    lhs = GetEquivalentByAlgebraicPropertiesJoin(lhs);
-    rhs = GetEquivalentByAlgebraicPropertiesJoin(rhs);
+bool OperatorsAreAssociative(EJoinKind lhs, EJoinKind rhs) {
+    lhs = GetEquivalentJoinByAlgebraicProperties(lhs);
+    rhs = GetEquivalentJoinByAlgebraicProperties(rhs);
 
     static THashMap<EJoinKind, THashSet<EJoinKind>> ASSOC_TABLE = {
         {EJoinKind::Cross, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
@@ -48,8 +48,8 @@ bool OperatorsAreAssoc(EJoinKind lhs, EJoinKind rhs) {
 }
 
 bool OperatorsAreLeftAsscom(EJoinKind lhs, EJoinKind rhs) {
-    lhs = GetEquivalentByAlgebraicPropertiesJoin(lhs);
-    rhs = GetEquivalentByAlgebraicPropertiesJoin(rhs);
+    lhs = GetEquivalentJoinByAlgebraicProperties(lhs);
+    rhs = GetEquivalentJoinByAlgebraicProperties(rhs);
 
     static THashMap<EJoinKind, THashSet<EJoinKind>> LASSCOM_TABLE = {
         {EJoinKind::Cross, {EJoinKind::Cross, EJoinKind::InnerJoin, EJoinKind::LeftSemi, EJoinKind::LeftJoin}},
@@ -67,8 +67,8 @@ bool OperatorsAreLeftAsscom(EJoinKind lhs, EJoinKind rhs) {
 }
 
 bool OperatorsAreRightAsscom(EJoinKind lhs, EJoinKind rhs) {
-    lhs = GetEquivalentByAlgebraicPropertiesJoin(lhs);
-    rhs = GetEquivalentByAlgebraicPropertiesJoin(rhs);
+    lhs = GetEquivalentJoinByAlgebraicProperties(lhs);
+    rhs = GetEquivalentJoinByAlgebraicProperties(rhs);
 
     static THashMap<EJoinKind, THashSet<EJoinKind>> RASSCOM_TABLE = {
         {EJoinKind::Cross, {EJoinKind::Cross, EJoinKind::InnerJoin}},

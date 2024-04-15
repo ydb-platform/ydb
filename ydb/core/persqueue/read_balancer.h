@@ -212,10 +212,13 @@ private:
         size_t Iteration = 0;
         ui64 Cookie = 0;
 
-        // Return true if the reading of the partition has been finished and children's partition are readable.
+        TActorId LastPipe;
+
+        // Return true if the reading of the partition has been finished and children's partitions are readable.
         bool IsFinished() const;
         // Return true if children's partitions can't be balance separately.
         bool NeedReleaseChildren() const;
+        bool BalanceToOtherPipe() const;
 
         // Called when reading from a partition is started.
         // Return true if the reading of the partition has been finished before.
@@ -260,10 +263,10 @@ private:
     };
 
     struct TClientGroupInfo {
-        TClientGroupInfo(const TClientInfo& clientInfo)
+        TClientGroupInfo(TClientInfo& clientInfo)
             : ClientInfo(clientInfo) {}
 
-        const TClientInfo& ClientInfo;
+        TClientInfo& ClientInfo;
 
         TString ClientId;
         TString Topic;

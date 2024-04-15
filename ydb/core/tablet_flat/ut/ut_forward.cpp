@@ -576,87 +576,136 @@ Y_UNIT_TEST_SUITE(NFwd_TFlatIndexCache) {
             {953, 953, 753, 0, 0});
     }
 
-    Y_UNIT_TEST(Twice)
+    Y_UNIT_TEST(GetTwice)
     {
         const auto eggs = CookPart();
 
         TCacheWrap wrap(eggs.Lone(), CreateCache(&*eggs.Lone(), {}, nullptr), 200, 350);
         
-        wrap.To(0).Get(5, false, true, true, 
-            {1, 0, 1, 0, 0});
-        wrap.To(1).Get(5, false, true, true, 
-            {1, 0, 1, 0, 0});
-        wrap.To(2).Fill({5, 6, 7, 8, 9, 10, 11}, 
-            {7, 7, 1, 0, 0});
-        
-        wrap.To(3).Get(5, true, false, true, 
-            {7, 7, 1, 0, 0});
-        wrap.To(4).Get(5, true, false, true, 
-            {7, 7, 1, 0, 0});
+        // provide index page:
+        wrap.To(0).Get(20, false, false, true, 
+            {453, 0, 453, 0, 0});
+        wrap.To(1).Get(20, false, false, true, 
+            {453, 0, 453, 0, 0});
+        wrap.To(2).Fill({20}, 
+            {453, 453, 453, 0, 0});
+        wrap.To(3).Get(20, true, false, true, 
+            {453, 453, 453, 0, 0});
+        wrap.To(4).Get(20, true, false, true, 
+            {453, 453, 453, 0, 0});
 
-        wrap.To(5).Get(6, true, false, true, 
-            {7, 7, 2, 0, 0});
-        wrap.To(6).Get(6, true, false, true, 
-            {7, 7, 2, 0, 0});
+        wrap.To(5).Get(5, false, true, true, 
+            {503, 453, 503, 0, 0});
+        wrap.To(6).Get(5, false, true, true, 
+            {503, 453, 503, 0, 0});
+        wrap.To(7).Fill({5, 6, 7, 8, 9, 10, 11}, 
+            {803, 803, 503, 0, 0});
+        wrap.To(8).Get(5, true, false, true, 
+            {803, 803, 503, 0, 0});
+        wrap.To(9).Get(5, true, false, true, 
+            {803, 803, 503, 0, 0});
+        
+        wrap.To(10).Get(6, true, false, true, 
+            {803, 803, 553, 0, 0});
+        wrap.To(11).Get(6, true, false, true, 
+            {803, 803, 553, 0, 0});
     }
 
-    Y_UNIT_TEST(Jump_Done)
+    Y_UNIT_TEST(Skip_Done)
     {
         const auto eggs = CookPart();
 
         TCacheWrap wrap(eggs.Lone(), CreateCache(&*eggs.Lone(), {}, nullptr), 200, 350);
         
-        wrap.To(0).Get(0, false, true, true, 
-            {1, 0, 1, 0, 0});
-        wrap.To(1).Fill({0, 1, 2, 3, 4, 5, 6}, 
-            {7, 7, 1, 0, 0});
+        // provide index page:
+        wrap.To(0).Get(20, false, false, true, 
+            {453, 0, 453, 0, 0});
+        wrap.To(1).Fill({20}, 
+            {453, 453, 453, 0, 0});
 
-        wrap.To(2).Get(10, false, true, true, 
-            {8, 7, 2, 6, 0});
-        wrap.To(3).Fill({10, 11, 12, 13, 14, 15}, 
-            {13, 13, 2, 6, 0});
+        wrap.To(2).Get(0, false, true, true, 
+            {503, 453, 503, 0, 0});
+        wrap.To(3).Fill({0, 1, 2, 3, 4, 5, 6}, 
+            {803, 803, 503, 0, 0});
+
+        wrap.To(4).Get(5, true, true, true, 
+            {803, 803, 553, 200, 0});
+        wrap.To(5).Fill({7, 8, 9, 10},
+            {1003, 1003, 553, 200, 0});
     }
 
-    Y_UNIT_TEST(Jump_Keep)
+    Y_UNIT_TEST(Skip_Done_None)
     {
         const auto eggs = CookPart();
 
         TCacheWrap wrap(eggs.Lone(), CreateCache(&*eggs.Lone(), {}, nullptr), 200, 350);
         
-        wrap.To(0).Get(0, false, true, true, 
-            {1, 0, 1, 0, 0});
+        // provide index page:
+        wrap.To(0).Get(20, false, false, true, 
+            {453, 0, 453, 0, 0});
+        wrap.To(1).Fill({20}, 
+            {453, 453, 453, 0, 0});
 
-        // page 0 drops keep
-        wrap.To(1).Get(10, false, true, true, 
-            {2, 0, 2, 0, 1});
+        wrap.To(2).Get(0, false, true, true, 
+            {503, 453, 503, 0, 0});
+        wrap.To(3).Fill({0, 1, 2, 3, 4, 5, 6}, 
+            {803, 803, 503, 0, 0});
 
-        wrap.To(2).Fill({0, 10, 11, 12, 13, 14, 15}, 
-            {7, 7, 2, 0, 1});
+        wrap.To(4).Get(10, false, true, true, 
+            {853, 803, 553, 300, 0});
+        wrap.To(5).Fill({10, 11, 12, 13, 14, 15}, 
+            {1103, 1103, 553, 300, 0});
     }
 
-    Y_UNIT_TEST(Jump_Wait)
+    Y_UNIT_TEST(Skip_Keep)
     {
         const auto eggs = CookPart();
 
         TCacheWrap wrap(eggs.Lone(), CreateCache(&*eggs.Lone(), {}, nullptr), 200, 350);
         
-        wrap.To(0).Get(0, false, true, true, 
-            {1, 0, 1, 0, 0});
-        wrap.To(1).Forward({0, 1, 2, 3, 4, 5, 6}, 
-            {7, 0, 1, 0, 0});
+        // provide index page:
+        wrap.To(0).Get(20, false, false, true, 
+            {453, 0, 453, 0, 0});
+        wrap.To(1).Fill({20}, 
+            {453, 453, 453, 0, 0});
+
+        wrap.To(2).Get(0, false, true, true, 
+            {503, 453, 503, 0, 0});
+
+        wrap.To(3).Get(5, false, true, true, 
+            {553, 453, 553, 0, 50});
+        wrap.To(4).Fill({0, 5, 6, 7, 8, 9, 10},
+            {803, 803, 553, 0, 50});
+    }
+
+    Y_UNIT_TEST(Skip_Wait)
+    {
+        const auto eggs = CookPart();
+
+        TCacheWrap wrap(eggs.Lone(), CreateCache(&*eggs.Lone(), {}, nullptr), 200, 350);
+        
+        // provide index page:
+        wrap.To(0).Get(20, false, false, true, 
+            {453, 0, 453, 0, 0});
+        wrap.To(1).Fill({20}, 
+            {453, 453, 453, 0, 0});
+
+        wrap.To(2).Get(0, false, true, true, 
+            {503, 453, 503, 0, 0});
+        wrap.To(3).Forward({0, 1, 2, 3, 4, 5, 6}, 
+            {803, 453, 503, 0, 0});
 
         // page 0 drops keep, pages 1 - 6 drops wait
-        wrap.To(2).Get(10, false, false, true, 
-            {8, 0, 2, 0, 7});
-
-        wrap.To(3).Fill({0, 1, 2, 3, 4, 5, 6, 10}, 
-            {8, 8, 2, 0, 7});
-
+        wrap.To(4).Get(10, false, false, true, 
+            {853, 453, 553, 0, 350});
+        wrap.To(5).Fill({0, 1, 2, 3, 4, 5, 6, 10}, 
+            {853, 853, 553, 0, 350});
+        
         // ready to grow again:
-        wrap.To(4).Get(10, true, true, true, 
-            {8, 8, 2, 0, 7});
-        wrap.To(5).Fill({11, 12, 13, 14, 15, 16}, 
-            {14, 14, 2, 0, 7});
+        wrap.To(6).Get(10, true, true, true, 
+            {853, 853, 553, 0, 350});
+        wrap.To(7).Fill({11, 12, 13, 14, 15, 16}, 
+            {1153, 1153, 553, 0, 350});
     }
 
     Y_UNIT_TEST(Trace)
@@ -665,38 +714,44 @@ Y_UNIT_TEST_SUITE(NFwd_TFlatIndexCache) {
 
         TCacheWrap wrap(eggs.Lone(), CreateCache(&*eggs.Lone(), {}, nullptr), 200, 350);
         
-        wrap.To(0).Get(0, false, true, true, 
-            {1, 0, 1, 0, 0});
-        wrap.To(1).Fill({0, 1, 2, 3, 4, 5, 6}, 
-            {7, 7, 1, 0, 0});
+        // provide index page:
+        wrap.To(0).Get(20, false, false, true, 
+            {453, 0, 453, 0, 0});
+        wrap.To(1).Fill({20}, 
+            {453, 453, 453, 0, 0});
+
+        wrap.To(2).Get(0, false, true, true, 
+            {503, 453, 503, 0, 0});
+        wrap.To(3).Fill({0, 1, 2, 3, 4, 5, 6}, 
+            {803, 803, 503, 0, 0});
         
         // page 0 goes to trace:
-        wrap.To(2).Get(2, true, false, true, 
-            {7, 7, 2, 1, 0});
+        wrap.To(4).Get(2, true, false, true, 
+            {803, 803, 553, 50, 0});
 
         // page 2 goes to trace, page 1 drops:
-        wrap.To(3).Get(3, true, false, true, 
-            {7, 7, 3, 1, 0});
+        wrap.To(5).Get(3, true, false, true, 
+            {803, 803, 603, 50, 0});
         
         // trace: page 0, page 2:
-        wrap.To(4).Get(0, true, false, true, 
-            {7, 7, 3, 1, 0});
-        wrap.To(5).Get(2, true, false, true, 
-            {7, 7, 3, 1, 0});
-        wrap.To(6).Get(3, true, false, true, 
-            {7, 7, 3, 1, 0});
+        wrap.To(6).Get(0, true, false, true, 
+            {803, 803, 603, 50, 0});
+        wrap.To(7).Get(2, true, false, true, 
+            {803, 803, 603, 50, 0});
+        wrap.To(8).Get(3, true, false, true, 
+            {803, 803, 603, 50, 0});
 
         // page 3 goes to trace:
-        wrap.To(7).Get(4, true, false, true, 
-            {7, 7, 4, 1, 0});
+        wrap.To(9).Get(4, true, false, true, 
+            {803, 803, 653, 50, 0});
 
         // trace: page 2, page 3:
-        wrap.To(8).Get(2, true, false, true, 
-            {7, 7, 4, 1, 0});
-        wrap.To(9).Get(3, true, false, true, 
-            {7, 7, 4, 1, 0});
-        wrap.To(10).Get(4, true, false, true, 
-            {7, 7, 4, 1, 0});
+        wrap.To(10).Get(2, true, false, true, 
+            {803, 803, 653, 50, 0});
+        wrap.To(11).Get(3, true, false, true, 
+            {803, 803, 653, 50, 0});
+        wrap.To(12).Get(4, true, false, true, 
+            {803, 803, 653, 50, 0});
     }
 
     Y_UNIT_TEST(End)
@@ -705,16 +760,22 @@ Y_UNIT_TEST_SUITE(NFwd_TFlatIndexCache) {
 
         TCacheWrap wrap(eggs.Lone(), CreateCache(&*eggs.Lone(), {}, nullptr), 200, 350);
         
-        wrap.To(0).Get(17, false, true, true, 
-            {1, 0, 1, 0, 0});
-        wrap.To(1).Fill({17, 18, 19}, 
-            {3, 3, 1, 0, 0});
-        wrap.To(2).Get(17, true, false, true, 
-            {3, 3, 1, 0, 0});
-        wrap.To(3).Get(18, true, false, true, 
-            {3, 3, 2, 0, 0});
-        wrap.To(4).Get(19, true, false, true, 
-            {3, 3, 3, 0, 0});
+        // provide index page:
+        wrap.To(0).Get(20, false, false, true, 
+            {453, 0, 453, 0, 0});
+        wrap.To(1).Fill({20}, 
+            {453, 453, 453, 0, 0});
+
+        wrap.To(2).Get(17, false, true, true, 
+            {503, 453, 503, 0, 0});
+        wrap.To(3).Fill({17, 18, 19}, 
+            {603, 603, 503, 0, 0});
+        wrap.To(4).Get(17, true, false, true, 
+            {603, 603, 503, 0, 0});
+        wrap.To(5).Get(18, true, false, true, 
+            {603, 603, 553, 0, 0});
+        wrap.To(6).Get(19, true, false, true, 
+            {603, 603, 603, 0, 0});
     }
 
     Y_UNIT_TEST(Slices)
@@ -729,14 +790,20 @@ Y_UNIT_TEST_SUITE(NFwd_TFlatIndexCache) {
 
         TCacheWrap wrap(eggs.Lone(), CreateCache(&*eggs.Lone(), {}, slices), 1000, 1000);
         
-        wrap.To(0).Get(5, false, true, true, 
-            {1, 0, 1, 0, 0});
-        wrap.To(1).Fill({5, 6, 7, 8, 9, 10, 11}, 
-            {7, 7, 1, 0, 0});
-        wrap.To(2).Get(10, true, false, true, 
-            {7, 7, 2, 4, 0});
-        wrap.To(3).Get(11, true, false, true, 
-            {7, 7, 3, 4, 0});
+        // provide index page:
+        wrap.To(0).Get(20, false, false, true, 
+            {453, 0, 453, 0, 0});
+        wrap.To(1).Fill({20}, 
+            {453, 453, 453, 0, 0});
+
+        wrap.To(2).Get(5, false, true, true, 
+            {503, 453, 503, 0, 0});
+        wrap.To(3).Fill({5, 6, 7, 8, 9, 10, 11}, 
+            {803, 803, 503, 0, 0});
+        wrap.To(4).Get(10, true, false, true, 
+            {803, 803, 553, 200, 0});
+        wrap.To(5).Get(11, true, false, true, 
+            {803, 803, 603, 200, 0});
     }
 }
 

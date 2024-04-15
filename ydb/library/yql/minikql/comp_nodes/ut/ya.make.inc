@@ -57,6 +57,7 @@ SET(ORIG_SOURCES
     mkql_safe_circular_buffer_ut.cpp
     mkql_sort_ut.cpp
     mkql_switch_ut.cpp
+    mkql_time_order_recover_saveload_ut.cpp
     mkql_todict_ut.cpp
     mkql_variant_ut.cpp
     mkql_wide_chain_map_ut.cpp

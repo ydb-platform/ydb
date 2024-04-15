@@ -6,7 +6,7 @@
 
 #include <yt/yt/core/misc/intrusive_mpsc_stack.h>
 
-#include <library/cpp/yt/misc/function_view.h>
+#include <library/cpp/yt/memory/function_view.h>
 
 #include <util/system/context.h>
 

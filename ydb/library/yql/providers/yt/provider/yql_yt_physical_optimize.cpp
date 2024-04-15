@@ -1807,8 +1807,8 @@ private:
                 || (path->Table->RowSpec && path->Table->RowSpec->HasAuxColumns());
         });
 
-        TKeySelectorBuilder builder(node.Pos(), ctx, useNativeDescSort, inputItemType, true);
-        builder.ProcessKeySelector(keySelectorLambda.Ptr(), {});
+        TKeySelectorBuilder builder(node.Pos(), ctx, useNativeDescSort, inputItemType);
+        builder.ProcessKeySelector(keySelectorLambda.Ptr(), {}, true);
 
         TVector<std::pair<TString, bool>> reduceByColumns = builder.ForeignSortColumns();
         TVector<std::pair<TString, bool>> sortByColumns;

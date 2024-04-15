@@ -21,14 +21,13 @@ static TMaybeNode<TCoLambda> GetEqualVisitKeyExtractorLambda(const TCoLambda& la
 }
 
 TKeySelectorBuilder::TKeySelectorBuilder(TPositionHandle pos, TExprContext& ctx, bool useNativeDescSort,
-    const TTypeAnnotationNode* itemType, bool unordered)
+    const TTypeAnnotationNode* itemType)
     : Pos_(pos)
     , Ctx_(ctx)
     , Arg_(Build<TCoArgument>(ctx, pos).Name("item").Done().Ptr())
     , LambdaBody_(Arg_)
     , NonStructInput(itemType && itemType->GetKind() != ETypeAnnotationKind::Struct)
     , UseNativeDescSort(useNativeDescSort)
-    , Unordered_(unordered)
 {
     if (itemType) {
         if (itemType->GetKind() == ETypeAnnotationKind::Struct) {
@@ -50,8 +49,8 @@ TKeySelectorBuilder::TKeySelectorBuilder(TPositionHandle pos, TExprContext& ctx,
     }
 }
 
-void TKeySelectorBuilder::ProcessKeySelector(const TExprNode::TPtr& keySelectorLambda, const TExprNode::TPtr& sortDirections) {
-    YQL_ENSURE(!Unordered_ || !sortDirections);
+void TKeySelectorBuilder::ProcessKeySelector(const TExprNode::TPtr& keySelectorLambda, const TExprNode::TPtr& sortDirections, bool unordered) {
+    YQL_ENSURE(!unordered || !sortDirections);
     auto lambda = TCoLambda(keySelectorLambda);
     if (auto maybeLambda = GetEqualVisitKeyExtractorLambda(lambda)) {
         lambda = maybeLambda.Cast();
@@ -73,7 +72,8 @@ void TKeySelectorBuilder::ProcessKeySelector(const TExprNode::TPtr& keySelectorL
                     columnList.Item(i).Ptr(),
                     allAscending || IsTrue(TExprList(sortDirections).Item(i).Cast<TCoBool>().Literal().Value()),
                     i,
-                    keySelectorArg);
+                    keySelectorArg,
+                    unordered);
             }
         } else  {
             size_t tupleSize = keySelectorBody.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().size();
@@ -82,7 +82,8 @@ void TKeySelectorBuilder::ProcessKeySelector(const TExprNode::TPtr& keySelectorL
                     keySelectorBody.Ptr(),
                     allAscending || IsTrue(TExprList(sortDirections).Item(i).Cast<TCoBool>().Literal().Value()),
                     i,
-                    keySelectorArg);
+                    keySelectorArg,
+                    unordered);
             }
         }
     } else {
@@ -95,7 +96,8 @@ void TKeySelectorBuilder::ProcessKeySelector(const TExprNode::TPtr& keySelectorL
             keySelectorBody.Ptr(),
             ascending,
             0,
-            keySelectorArg);
+            keySelectorArg,
+            unordered);
     }
 }
 
@@ -108,7 +110,7 @@ void TKeySelectorBuilder::ProcessConstraint(const TSortedConstraintNode& sortCon
                 const auto& column = path.front();
                 const auto pos = StructType->FindItem(column);
                 YQL_ENSURE(pos, "Column " << column << " is missing in struct type");
-                AddColumn(column, StructType->GetItems()[*pos]->GetItemType(), item.second);
+                AddColumn(column, StructType->GetItems()[*pos]->GetItemType(), item.second, false);
                 good = true;
                 break;
             }
@@ -126,7 +128,7 @@ void TKeySelectorBuilder::ProcessRowSpec(const TYqlRowSpecInfo& rowSpec) {
     for (size_t i = 0; i < columns.size(); ++i) {
         auto pos = StructType->FindItem(columns[i]);
         YQL_ENSURE(pos, "Column " << columns[i] << " is missing in struct type");
-        AddColumn(columns[i], StructType->GetItems()[*pos]->GetItemType(), dirs[i]);
+        AddColumn(columns[i], StructType->GetItems()[*pos]->GetItemType(), dirs[i], false);
     }
 }
 
@@ -148,7 +150,8 @@ TExprNode::TPtr TKeySelectorBuilder::MakeRemapLambda(bool ordered) const {
 }
 
 template <bool ComputedTuple, bool SingleColumn>
-void TKeySelectorBuilder::AddColumn(const TExprNode::TPtr& rootLambda, const TExprNode::TPtr& keyNode, bool ascending, size_t columnIndex, const TExprNode::TPtr& structArg) {
+void TKeySelectorBuilder::AddColumn(const TExprNode::TPtr& rootLambda, const TExprNode::TPtr& keyNode, bool ascending, size_t columnIndex,
+    const TExprNode::TPtr& structArg, bool unordered) {
     const TTypeAnnotationNode* columnType = nullptr;
     if (ComputedTuple) {
         columnType = keyNode->GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[columnIndex];
@@ -222,7 +225,7 @@ void TKeySelectorBuilder::AddColumn(const TExprNode::TPtr& rootLambda, const TEx
             .Done();
     }
     if (needPresort) {
-        if (Unordered_) {
+        if (unordered) {
             key = Build<TCoStablePickle>(Ctx_, Pos_)
                 .Value(key)
                 .Done();
@@ -255,7 +258,8 @@ void TKeySelectorBuilder::AddColumn(const TExprNode::TPtr& rootLambda, const TEx
         .Ptr();
 }
 
-void TKeySelectorBuilder::AddColumn(const TStringBuf memberName, const TTypeAnnotationNode* columnType, bool ascending) {
+void TKeySelectorBuilder::AddColumn(const TStringBuf memberName, const TTypeAnnotationNode* columnType,
+    bool ascending, bool unordered) {
     auto presortColumnType = columnType;
     bool needPresort = false;
     if (ascending) {
@@ -290,15 +294,22 @@ void TKeySelectorBuilder::AddColumn(const TStringBuf memberName, const TTypeAnno
         .Done();
 
     if (needPresort) {
-        if (ascending) {
-            key = Build<TCoAscending>(Ctx_, Pos_)
-                .Input(key)
+        if (unordered) {
+            key = Build<TCoStablePickle>(Ctx_, Pos_)
+                .Value(key)
                 .Done();
         } else {
-            key = Build<TCoDescending>(Ctx_, Pos_)
-                .Input(key)
-                .Done();
+            if (ascending) {
+                key = Build<TCoAscending>(Ctx_, Pos_)
+                    .Input(key)
+                    .Done();
+            } else {
+                key = Build<TCoDescending>(Ctx_, Pos_)
+                    .Input(key)
+                    .Done();
+            }
         }
+        
         columnType = presortColumnType;
     }
 

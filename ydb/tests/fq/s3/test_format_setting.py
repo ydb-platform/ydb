@@ -922,9 +922,8 @@ Pear;15;33'''
 
         table = pa.Table.from_arrays(data, schema=schema)
         filename = 'test_parquet_converters_to_timestamp.parquet'
-        base_path = "ydb/tests/fq/s3"
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
 
         kikimr.control_plane.wait_bootstrap(1)
@@ -966,8 +965,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -987,8 +986,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -1008,8 +1007,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -1028,8 +1027,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         sql = f'''
             $result = SELECT
@@ -1065,8 +1064,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -1085,8 +1084,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         sql = f'''
             $result = SELECT
@@ -1123,8 +1122,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         sql = f'''
             $result = SELECT
@@ -1161,8 +1160,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         sql = f'''
             $result = SELECT
@@ -1199,8 +1198,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         sql = f'''
             $result = SELECT
@@ -1237,8 +1236,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         sql = f'''
             $result = SELECT
@@ -1275,8 +1274,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         sql = f'''
             $result = SELECT
@@ -1313,8 +1312,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         sql = f'''
             $result = SELECT
@@ -1351,8 +1350,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         sql = f'''
             $result = SELECT
@@ -1389,8 +1388,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         sql = f'''
             $result = SELECT
@@ -1428,9 +1427,8 @@ Pear;15;33'''
 
         table = pa.Table.from_arrays(data, schema=schema)
         filename = 'test_parquet_converters_to_datetime.parquet'
-        base_path = "ydb/tests/fq/s3"
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
 
         kikimr.control_plane.wait_bootstrap(1)
@@ -1473,8 +1471,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
@@ -1494,8 +1492,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
@@ -1515,8 +1513,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
@@ -1536,8 +1534,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         sql = f'''
             $result = SELECT
@@ -1573,8 +1571,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -1593,8 +1591,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         sql = f'''
             $result = SELECT
@@ -1631,8 +1629,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -1651,8 +1649,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -1671,8 +1669,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -1691,8 +1689,8 @@ Pear;15;33'''
         ])
 
         table = pa.Table.from_arrays(data, schema=schema)
-        pq.write_table(table, yatest_common.source_path("{}/{}".format(base_path, filename)))
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", base_path)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         sql = f'''
             $result = SELECT

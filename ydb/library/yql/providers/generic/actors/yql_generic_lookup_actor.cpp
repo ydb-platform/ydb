@@ -245,11 +245,9 @@ namespace NYql::NDq {
         }
 
         void FinalizeRequest() {
-            if (!LookupResult.empty()) {
-                YQL_CLOG(INFO, ProviderGeneric) << "Sending lookup results with " << LookupResult.size() << " rows";
-                auto ev = new IDqAsyncLookupSource::TEvLookupResult(Alloc, std::move(LookupResult));
-                TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
-            }
+            YQL_CLOG(INFO, ProviderGeneric) << "Sending lookup results with " << LookupResult.size() << " rows";
+            auto ev = new IDqAsyncLookupSource::TEvLookupResult(Alloc, std::move(LookupResult));
+            TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
             LookupResult = {};
             ReadSplitsIterator = {};
             InProgress = false;

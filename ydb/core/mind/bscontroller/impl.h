@@ -870,6 +870,7 @@ public:
         std::map<TString, NPDisk::TDriveData> KnownDrives;
         THashSet<TGroupId> WaitingForGroups;
         THashSet<TGroupId> GroupsRequested;
+        bool DeclarativePDiskManagement = false;
 
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {

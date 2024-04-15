@@ -72,6 +72,7 @@ void TNodeWarden::SendRegisterNode() {
     auto ev = std::make_unique<TEvBlobStorage::TEvControllerRegisterNode>(LocalNodeId, startedDynamicGroups, generations,
         WorkingLocalDrives);
     FillInVDiskStatus(ev->Record.MutableVDiskStatus(), true);
+    ev->Record.SetDeclarativePDiskManagement(true);
 
     SendToController(std::move(ev));
 }

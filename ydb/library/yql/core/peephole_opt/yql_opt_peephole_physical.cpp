@@ -2966,6 +2966,48 @@ TExprNode::TPtr ExpandAggrMinMax(const TExprNode::TPtr& node, TExprContext& ctx)
         .Seal().Build();
 }
 
+template<typename T>
+TExprNode::TPtr DoExpandMinMax(TStringBuf name, TPositionHandle pos, T argsBegin, T argsEnd, TExprContext& ctx) {
+    const size_t size = argsEnd - argsBegin;
+    YQL_ENSURE(size > 0);
+    if (size == 1) {
+        return *argsBegin;
+    }
+
+    TExprNode::TPtr left;
+    TExprNode::TPtr right;
+
+    if (size > 2) {
+        const size_t half = size / 2;
+        left = DoExpandMinMax(name, pos, argsBegin, argsBegin + half, ctx);
+        right = DoExpandMinMax(name, pos, argsBegin + half, argsEnd, ctx);
+    } else {
+        left = *argsBegin;
+        right = *(argsBegin + 1);
+    }
+
+    return ctx.Builder(pos)
+        .Callable("If")
+            .Callable(0, name == "Min" ? "AggrLessOrEqual" : "AggrGreaterOrEqual")
+                .Add(0, left)
+                .Add(1, right)
+            .Seal()
+            .Add(1, left)
+            .Add(2, right)
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr ExpandMinMax(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (IsDataOrOptionalOfData(node->GetTypeAnn())) {
+        return node;
+    }
+
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " with complex types";
+    const auto& children = node->ChildrenList();
+    return DoExpandMinMax(node->Content(), node->Pos(), children.begin(), children.end(), ctx);
+}
+
 template <bool Ordered>
 TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     const auto& arg = node->Tail().Head().Head();
@@ -7924,6 +7966,8 @@ struct TPeepHoleRules {
         {"OptionalReduce", &ExpandOptionalReduce},
         {"AggrMin", &ExpandAggrMinMax<true>},
         {"AggrMax", &ExpandAggrMinMax<false>},
+        {"Min", &ExpandMinMax},
+        {"Max", &ExpandMinMax},
         {"And", &OptimizeLogicalDups<true>},
         {"Or", &OptimizeLogicalDups<false>},
         {"CombineByKey", &ExpandCombineByKey},

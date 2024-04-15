@@ -679,6 +679,7 @@ private:
     TDuration InitDuration;
     bool InitDone;
     bool NewPartition;
+    ui64 PQRBCookie = 0;
 
     THashMap<TString, NKikimr::NPQ::TOwnerInfo> Owners;
     THashSet<TActorId> OwnerPipes;
@@ -781,4 +782,3 @@ private:
 };
 
 } // namespace NKikimr::NPQ
-

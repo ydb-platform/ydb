@@ -15,6 +15,10 @@ bool TPersQueueReadBalancer::TReadingPartitionStatus::NeedReleaseChildren() cons
      return !(Commited || (ReadingFinished && !ScaleAwareSDK));
 }
 
+bool TPersQueueReadBalancer::TReadingPartitionStatus::BalanceToOtherPipe() const {
+    return LastPipe && !Commited && ReadingFinished && !ScaleAwareSDK;
+}
+
 bool TPersQueueReadBalancer::TReadingPartitionStatus::StartReading() {
     return std::exchange(ReadingFinished, false);
 }
@@ -25,9 +29,16 @@ bool TPersQueueReadBalancer::TReadingPartitionStatus::StopReading() {
     return NeedReleaseChildren();
 }
 
-bool TPersQueueReadBalancer::TReadingPartitionStatus::SetCommittedState() {
-    Iteration = 0;
-    return !std::exchange(Commited, true);
+bool TPersQueueReadBalancer::TReadingPartitionStatus::SetCommittedState(ui32 generation, ui64 cookie) {
+    if (PartitionGeneration < generation || (PartitionGeneration == generation && PartitionCookie < cookie)) {
+        Iteration = 0;
+        PartitionGeneration = generation;
+        PartitionCookie = cookie;
+
+        return !std::exchange(Commited, true);
+    }
+
+    return false;
 }
 
 bool TPersQueueReadBalancer::TReadingPartitionStatus::SetFinishedState(bool scaleAwareSDK, bool startedReadingFromEndOffset) {
@@ -44,6 +55,9 @@ bool TPersQueueReadBalancer::TReadingPartitionStatus::SetFinishedState(bool scal
     } else {
         ++Iteration;
     }
+    if (scaleAwareSDK || currentStatus) {
+        LastPipe = TActorId();
+    }
     return currentStatus && !previousStatus;
 }
 
@@ -54,6 +68,7 @@ bool TPersQueueReadBalancer::TReadingPartitionStatus::Reset() {
     ReadingFinished = false;
     Commited = false;
     ++Cookie;
+    LastPipe = TActorId();
 
     return result;
 };

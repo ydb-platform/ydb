@@ -283,6 +283,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         TTestReadSession readSession1("Session-0", client, Max<size_t>(), false);
         readSession1.Offsets[0] = 1;
         readSession1.WaitAndAssertPartitions({0, 1, 2}, "Must read all exists partitions because read the partition 0 from offset 1");
+        readSession1.Offsets[0] = 0;
 
         TTestReadSession readSession2("Session-1", client, Max<size_t>(), false, 0);
         readSession2.Offsets[0] = 0;
@@ -298,7 +299,10 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         readSession2.Assert({0}, p2, "");
 
         readSession2.WaitAndAssertPartitions({}, "Partition must be released because reding finished");
+        readSession2.Run();
+
         readSession1.WaitAndAssertPartitions({}, "Partitions must be read only from Session-1");
+        readSession1.WaitAndAssertPartitions({0}, "Partition 0 must rebalance to other sessions (Session-0)");
 
         readSession1.Close();
         readSession2.Close();

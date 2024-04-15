@@ -787,6 +787,9 @@ message TStatusResponse {
 
         optional int64 UsedReserveSize = 31;
         optional TAggregatedCounters AggregatedCounters = 32;
+
+        optional uint32 Generation = 33;
+        optional uint64 Cookie = 34;
     }
 
     message TConsumerResult {
@@ -991,6 +994,8 @@ message TEvCheckPartitionStatusResponse {
 message TEvReadingPartitionStatusRequest {
     optional string Consumer = 1;
     optional uint32 PartitionId = 2;
+    optional uint32 Generation = 3;
+    optional uint32 Cookie = 4;
 };
 
 // The consumer's reading of the partition is finished (from ReadSession)

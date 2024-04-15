@@ -162,7 +162,7 @@ public:
     }
 
     void AddCleanupPortion(const TPortionInfo& info) {
-        CleanupPortions[portionInfo.GetRemoveSnapshotVerified() + RemovedPortionLivetime].emplace_back(portionInfo)
+        CleanupPortions[info.GetRemoveSnapshotVerified() + RemovedPortionLivetime].emplace_back(info)
     }
 
 private:

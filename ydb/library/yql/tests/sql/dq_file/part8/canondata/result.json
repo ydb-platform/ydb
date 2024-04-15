@@ -2925,7 +2925,13 @@
             "uri": "https://{canondata_backend}/1936947/0c847c42c62370cac424fd44dae1da49fad65b05/resource.tar.gz#test.test_stream_lookup_join-hint-default.txt-Plan_/plan.txt"
         }
     ],
-    "test.test[stream_lookup_join-hint-default.txt-Results]": [],
+    "test.test[stream_lookup_join-hint-default.txt-Results]": [
+        {
+            "checksum": "dc8b244cc4c634851fcf03c10cbec2d1",
+            "size": 1942,
+            "uri": "https://{canondata_backend}/1931696/818d483b9b140102ea24fd305c0c650c073a71f4/resource.tar.gz#test.test_stream_lookup_join-hint-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[table_range-concat_sorted_max_sorted_tables--Analyze]": [
         {
             "checksum": "d1b3a0495dbe3c030df2936be6d0808f",

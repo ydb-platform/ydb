@@ -355,6 +355,8 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace  {
+
 bool IsWhitelisted(const TError& error, const THashSet<TStringBuf>& attributeWhitelist)
 {
     for (const auto& key : error.Attributes().ListKeys()) {
@@ -397,6 +399,8 @@ std::vector<TError>& ApplyWhitelist(std::vector<TError>& errors, const THashSet<
 
     return errors;
 }
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 

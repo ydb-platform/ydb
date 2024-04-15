@@ -718,12 +718,14 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
 
     for (const auto& partRes : record.GetPartResult()) {
         auto partitionId = partRes.GetPartition();
+        auto generation = partRes.GetGeneration();
+        auto cookie = partRes.GetCookie();
         for (const auto& consumer : partRes.GetConsumerResult()) {
             if (consumer.GetReadingFinished()) {
                 auto it = ClientsInfo.find(consumer.GetConsumer());
                 if (it != ClientsInfo.end()) {
                     auto& clientInfo = it->second;
-                    if (clientInfo.IsReadeable(partitionId) && clientInfo.SetCommittedState(partitionId)) {
+                    if (clientInfo.IsReadeable(partitionId) && clientInfo.SetCommittedState(partitionId, generation, cookie)) {
                         clientInfo.ProccessReadingFinished(partRes.GetPartition(), ctx);
                     }
                 }
@@ -1127,8 +1129,8 @@ bool TPersQueueReadBalancer::TClientInfo::IsFinished(ui32 partitionId) const {
     return it->second.IsFinished();
 }
 
-bool TPersQueueReadBalancer::TClientInfo::SetCommittedState(ui32 partitionId) {
-    return ReadingPartitionStatus[partitionId].SetCommittedState();
+bool TPersQueueReadBalancer::TClientInfo::SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie) {
+    return ReadingPartitionStatus[partitionId].SetCommittedState(generation, cookie);
 }
 
 TPersQueueReadBalancer::TClientGroupInfo* TPersQueueReadBalancer::TClientInfo::FindGroup(ui32 partitionId) {
@@ -1998,7 +2000,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPt
             return;
         }
 
-        if (clientInfo.SetCommittedState(partitionId)) {
+        if (clientInfo.SetCommittedState(partitionId, r.GetGeneration(), r.GetCookie())) {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 "The offset of the partition " << partitionId << " was commited by " << r.GetConsumer());
 

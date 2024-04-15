@@ -29,9 +29,16 @@ bool TPersQueueReadBalancer::TReadingPartitionStatus::StopReading() {
     return NeedReleaseChildren();
 }
 
-bool TPersQueueReadBalancer::TReadingPartitionStatus::SetCommittedState() {
-    Iteration = 0;
-    return !std::exchange(Commited, true);
+bool TPersQueueReadBalancer::TReadingPartitionStatus::SetCommittedState(ui32 generation, ui64 cookie) {
+    if (PartitionGeneration < generation || (PartitionGeneration == generation && PartitionCookie < cookie)) {
+        Iteration = 0;
+        PartitionGeneration = generation;
+        PartitionCookie = cookie;
+
+        return !std::exchange(Commited, true);
+    }
+
+    return false;
 }
 
 bool TPersQueueReadBalancer::TReadingPartitionStatus::SetFinishedState(bool scaleAwareSDK, bool startedReadingFromEndOffset) {

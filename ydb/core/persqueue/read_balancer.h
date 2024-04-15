@@ -214,6 +214,10 @@ private:
 
         TActorId LastPipe;
 
+        // Generation of PQ-tablet and cookie for synchronization of commit information.
+        ui32 PartitionGeneration;
+        ui64 PartitionCookie;
+
         // Return true if the reading of the partition has been finished and children's partitions are readable.
         bool IsFinished() const;
         // Return true if children's partitions can't be balance separately.
@@ -229,7 +233,7 @@ private:
 
         // Called when the partition is inactive and commited offset is equal to EndOffset.
         // Return true if the commited status changed.
-        bool SetCommittedState();
+        bool SetCommittedState(ui32 generation, ui64 cookie);
         // Called when the partition reading finished.
         // Return true if the reading status changed.
         bool SetFinishedState(bool scaleAwareSDK, bool startedReadingFromEndOffset);
@@ -355,7 +359,7 @@ private:
 
         bool IsReadeable(ui32 partitionId) const;
         bool IsFinished(ui32 partitionId) const;
-        bool SetCommittedState(ui32 partitionId);
+        bool SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie);
 
         TClientGroupInfo* FindGroup(ui32 partitionId);
     };

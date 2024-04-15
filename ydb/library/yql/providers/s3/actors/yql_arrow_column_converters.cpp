@@ -452,7 +452,7 @@ TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& or
             auto& dateType = static_cast<arrow::Date32Type&>(*originalType);
             switch (slotItem) {
                 case NUdf::EDataSlot::Date:
-                    return ArrowDate32AsYqlDate(targetType, isOptional);
+                    return ArrowDate32AsYqlDate(targetType, isOptional, dateType.unit());
                 case NUdf::EDataSlot::Datetime:
                     return ArrowDate32AsYqlDatetime(targetType, isOptional, dateType.unit());
                 case NUdf::EDataSlot::Timestamp:

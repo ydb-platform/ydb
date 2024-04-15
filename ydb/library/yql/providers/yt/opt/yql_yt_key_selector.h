@@ -13,7 +13,8 @@ namespace NYql {
 
 class TKeySelectorBuilder {
 public:
-    TKeySelectorBuilder(TPositionHandle pos, TExprContext& ctx, bool useNativeDescSort, const TTypeAnnotationNode* itemType = nullptr);
+    TKeySelectorBuilder(TPositionHandle pos, TExprContext& ctx, bool useNativeDescSort,
+        const TTypeAnnotationNode* itemType = nullptr, bool unordered = false);
 
     void ProcessKeySelector(const TExprNode::TPtr& keySelectorLambda, const TExprNode::TPtr& sortDirections = {});
     void ProcessConstraint(const TSortedConstraintNode& sortConstraint);
@@ -68,6 +69,7 @@ private:
     THashSet<TString> UniqMemberColumns_;
     const bool NonStructInput;
     const bool UseNativeDescSort;
+    const bool Unordered_;
 };
 
 }

@@ -20,13 +20,15 @@ static TMaybeNode<TCoLambda> GetEqualVisitKeyExtractorLambda(const TCoLambda& la
     return {};
 }
 
-TKeySelectorBuilder::TKeySelectorBuilder(TPositionHandle pos, TExprContext& ctx, bool useNativeDescSort, const TTypeAnnotationNode* itemType)
+TKeySelectorBuilder::TKeySelectorBuilder(TPositionHandle pos, TExprContext& ctx, bool useNativeDescSort,
+    const TTypeAnnotationNode* itemType, bool unordered)
     : Pos_(pos)
     , Ctx_(ctx)
     , Arg_(Build<TCoArgument>(ctx, pos).Name("item").Done().Ptr())
     , LambdaBody_(Arg_)
     , NonStructInput(itemType && itemType->GetKind() != ETypeAnnotationKind::Struct)
     , UseNativeDescSort(useNativeDescSort)
+    , Unordered_(unordered)
 {
     if (itemType) {
         if (itemType->GetKind() == ETypeAnnotationKind::Struct) {
@@ -49,6 +51,7 @@ TKeySelectorBuilder::TKeySelectorBuilder(TPositionHandle pos, TExprContext& ctx,
 }
 
 void TKeySelectorBuilder::ProcessKeySelector(const TExprNode::TPtr& keySelectorLambda, const TExprNode::TPtr& sortDirections) {
+    YQL_ENSURE(!Unordered_ || !sortDirections);
     auto lambda = TCoLambda(keySelectorLambda);
     if (auto maybeLambda = GetEqualVisitKeyExtractorLambda(lambda)) {
         lambda = maybeLambda.Cast();
@@ -219,14 +222,20 @@ void TKeySelectorBuilder::AddColumn(const TExprNode::TPtr& rootLambda, const TEx
             .Done();
     }
     if (needPresort) {
-        if (ascending) {
-            key = Build<TCoAscending>(Ctx_, Pos_)
-                .Input(key)
+        if (Unordered_) {
+            key = Build<TCoStablePickle>(Ctx_, Pos_)
+                .Value(key)
                 .Done();
         } else {
-            key = Build<TCoDescending>(Ctx_, Pos_)
-                .Input(key)
-                .Done();
+            if (ascending) {
+                key = Build<TCoAscending>(Ctx_, Pos_)
+                    .Input(key)
+                    .Done();
+            } else {
+                key = Build<TCoDescending>(Ctx_, Pos_)
+                    .Input(key)
+                    .Done();
+            }
         }
         columnType = presortColumnType;
     }

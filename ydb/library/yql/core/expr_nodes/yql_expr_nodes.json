@@ -1690,7 +1690,8 @@
                 {"Index": 3, "Name": "SortDirections",    "Type": "TExprBase"},
                 {"Index": 4, "Name": "KeySelectorLambda", "Type": "TCoLambda"}
             ]
-        },        {
+        },
+        {
             "Name": "TCoAscending",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "Ascending"}
@@ -2512,6 +2513,14 @@
             "Name": "TCoPickle",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "Pickle"},
+            "Children": [
+                {"Index": 0, "Name": "Value", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TCoStablePickle",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "StablePickle"},
             "Children": [
                 {"Index": 0, "Name": "Value", "Type": "TExprBase"}
             ]

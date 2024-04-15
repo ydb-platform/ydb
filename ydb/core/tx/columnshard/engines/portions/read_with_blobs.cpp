@@ -152,7 +152,7 @@ std::optional<TWritePortionInfoWithBlobs> TReadPortionInfoWithBlobs::SyncPortion
     TPortionInfoConstructor constructor(source.PortionInfo, false, true);
     constructor.SetMinSnapshotDeprecated(to->GetSnapshot());
     constructor.SetSchemaVersion(to->GetVersion());
-    constructor.MutableMeta().SetTierName(targetTier);
+    constructor.MutableMeta().ResetTierName(targetTier);
 
     NStatistics::TPortionStorage storage;
     for (auto&& i : to->GetIndexInfo().GetStatisticsByName()) {

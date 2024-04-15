@@ -15,7 +15,7 @@ struct TIndexInfo;
 struct TPortionMeta {
 private:
     NArrow::TFirstLastSpecialKeys ReplaceKeyEdges; // first and last PK rows
-    YDB_ACCESSOR_DEF(TString, TierName);
+    YDB_READONLY_DEF(TString, TierName);
     YDB_READONLY_DEF(NStatistics::TPortionStorage, StatisticsStorage);
     friend class TPortionMetaConstructor;
     TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max)

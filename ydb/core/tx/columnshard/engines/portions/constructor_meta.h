@@ -25,6 +25,10 @@ public:
     TPortionMetaConstructor(const TPortionMeta& meta);
 
     void SetTierName(const TString& tierName);
+    void ResetTierName(const TString& tierName) {
+        TierName.reset();
+        SetTierName(tierName);
+    }
 
     void SetStatisticsStorage(NStatistics::TPortionStorage&& storage) {
         AFL_VERIFY(!StatisticsStorage);

@@ -1756,11 +1756,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_VALUES_EQUAL(rowsFetched, numberRows);
 
         // Test forget operation
+        const size_t forgetOperationRetryLimit = 2 * std::max(fileSize / 10_MB, numberRows / 10000);
         NYdb::NOperation::TOperationClient operationClient(kikimr->GetDriver());
-        while (true) {
+        for (size_t numberRetries = 0; numberRetries < forgetOperationRetryLimit; ++numberRetries) {
             auto status = operationClient.Forget(scriptExecutionOperation.Id()).ExtractValueSync();
             if (status.GetStatus() == NYdb::EStatus::SUCCESS || status.GetStatus() == NYdb::EStatus::NOT_FOUND) {
-                break;
+                return;
             }
 
             UNIT_ASSERT_C(status.GetStatus() == NYdb::EStatus::TIMEOUT || status.GetStatus() == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED, status.GetIssues().ToString());
@@ -1770,6 +1771,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                 Sleep(TDuration::Seconds(1));
             }
         }
+        UNIT_ASSERT_C(false, "Forget operation retry limit exceeded");
     }
 
     Y_UNIT_TEST(ExecuteScriptWithLargeStrings) {

@@ -113,6 +113,7 @@ public:
     TTxId TxId; // User tx
     bool Commit = false;
     bool Commited = false;
+    bool Begin = false;
 
     NTopic::TTopicOperations TopicOperations;
     TDuration CpuTime;
@@ -417,15 +418,12 @@ public:
     }
 
     void PrepareCurrentStatement() {
-        QueryData = {};
+        QueryData = std::make_shared<TQueryData>(TxCtx->TxAlloc);
         PreparedQuery = {};
         CompileResult = {};
-        TxCtx = {};
         CurrentTx = 0;
         TableVersions = {};
         MaxReadType = ETableReadType::Other;
-        Commit = false;
-        Commited = false;
         TopicOperations = {};
         ReplayMessage = {};
     }
@@ -444,7 +442,6 @@ public:
                     TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
                     break;
                 default:
-                    Commit = true;
                     TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
             }
         }

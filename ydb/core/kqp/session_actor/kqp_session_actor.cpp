@@ -577,6 +577,13 @@ public:
     }
 
     void OnSuccessCompileRequest() {
+        if (QueryState->HasTxControl()) {
+            const auto& txControl = QueryState->GetTxControl();
+            if (txControl.tx_selector_case() == Ydb::Table::TransactionControl::kTxId) {
+                LOG_E("TTTTTXXXXXX IIIIIDDDDD " << txControl.tx_id());
+            }
+        }
+
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE ||
             QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN)
         {
@@ -680,6 +687,7 @@ public:
     }
 
     void BeginTx(const Ydb::Table::TransactionSettings& settings) {
+        QueryState->Begin = true;
         QueryState->TxId = UlidGen.Next();
         QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
             AppData()->TimeProvider, AppData()->RandomProvider, Config->EnableKqpImmediateEffects);
@@ -733,7 +741,7 @@ public:
         if (hasTxControl || QueryState->HasImpliedTx()) {
             const auto& txControl = hasTxControl ? QueryState->GetTxControl() : GetImpliedTxControl();
 
-            QueryState->Commit = txControl.commit_tx();
+            QueryState->Commit = txControl.commit_tx() && QueryState->ProcessingLastStatement();
             switch (txControl.tx_selector_case()) {
                 case Ydb::Table::TransactionControl::kTxId: {
                     auto txId = TTxId::FromString(txControl.tx_id());
@@ -748,15 +756,17 @@ public:
                     break;
                 }
                 case Ydb::Table::TransactionControl::kBeginTx: {
-                    BeginTx(txControl.begin_tx());
+                    if (!QueryState->Begin) {
+                        BeginTx(txControl.begin_tx());
+                    }
                     break;
-               }
-               case Ydb::Table::TransactionControl::TX_SELECTOR_NOT_SET:
+                }
+                case Ydb::Table::TransactionControl::TX_SELECTOR_NOT_SET:
                     ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
                         << "wrong TxControl: tx_selector must be set";
                     break;
             }
-        } else {
+        } else if (QueryState->CurrentStatementId == 0) {
             QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
                 AppData()->TimeProvider, AppData()->RandomProvider, Config->EnableKqpImmediateEffects);
             QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
@@ -2068,7 +2078,9 @@ public:
         } else {
             CleanupCtx.reset();
             bool doNotKeepSession = QueryState && !QueryState->KeepSession;
-            QueryState.reset();
+            //if (!QueryState || QueryState->ProcessingLastStatement()) {
+                QueryState.reset();
+            //}
             if (doNotKeepSession) {
                 // TEvCloseSessionRequest was received in final=false CleanupState, so actor should rerun Cleanup with final=true
                 CleanupAndPassAway();

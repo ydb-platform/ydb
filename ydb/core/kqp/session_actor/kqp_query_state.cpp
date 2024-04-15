@@ -244,8 +244,15 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
         compileDeadline = Min(compileDeadline, QueryDeadlines.CancelAt);
     }
 
-    return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, CompileResult->Uid, CompileResult->Query, isQueryActionPrepare,
-        compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState);
+    TMaybe<TQueryAst> statementAst;
+    if (!Statements.empty()) {
+        YQL_ENSURE(CurrentStatementId < Statements.size());
+        statementAst = Statements[CurrentStatementId];
+    }
+
+    return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, CompileResult->Uid, query, isQueryActionPrepare,
+        compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState,
+        statementAst);
 }
 
 std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {
@@ -295,7 +302,6 @@ bool TKqpQueryState::PrepareNextStatementPart() {
     QueryData = {};
     PreparedQuery = {};
     CompileResult = {};
-    TxCtx = {};
     CurrentTx = 0;
     TableVersions = {};
     MaxReadType = ETableReadType::Other;

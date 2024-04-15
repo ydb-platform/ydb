@@ -699,7 +699,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     LastUsedStorageMeterTimestamp = ctx.Now();
     WriteTimestampEstimate = ManageWriteTimestampEstimate ? ctx.Now() : TInstant::Zero();
 
-    SplitMergeAvgWriteBytes = std::make_unique<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>>(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), 1000);
+    InitSplitMergeSlidingWindow();
 
     CloudId = Config.GetYcCloudId();
     DbId = Config.GetYdbDatabaseId();
@@ -958,6 +958,10 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     );
 }
 
+void TPartition::InitSplitMergeSlidingWindow() {
+    using Tui64SumSlidingWindow = NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>;
+    SplitMergeAvgWriteBytes = std::make_unique<Tui64SumSlidingWindow>(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), 1000);
+}
 
 //
 // Functions

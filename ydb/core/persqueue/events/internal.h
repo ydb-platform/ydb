@@ -1118,9 +1118,9 @@ struct TEvPQ {
     struct TEvPartitionScaleStatusChanged : public TEventPB<TEvPartitionScaleStatusChanged, NKikimrPQ::TEvPartitionScaleStatusChanged, EvPartitionScaleStatusChanged> {
         TEvPartitionScaleStatusChanged() = default;
 
-        TEvPartitionScaleStatusChanged(NKikimrPQ::EScaleStatus scaleStatus, ui32 partitionId) {
-            Record.SetScaleStatus(scaleStatus);
+        TEvPartitionScaleStatusChanged(ui32 partitionId, NKikimrPQ::EScaleStatus scaleStatus) {
             Record.SetPartitionId(partitionId);
+            Record.SetScaleStatus(scaleStatus);
         }
     };
 };

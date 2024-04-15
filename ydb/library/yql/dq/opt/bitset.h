@@ -5,6 +5,7 @@
 /* 
  * This header contains helper functions for working with bitsets.
  * They are templated by TNodeSet, which is a std::bitset<>.
+ * We use the the template for efficiency: for 64 bit nodesets we implement a faster next subset functionality
  */
 
 namespace NYql::NDq {

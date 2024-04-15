@@ -530,8 +530,8 @@ class TestYqStreaming(TestYdsBase):
         sql = R'''
             PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;
             PRAGMA FeatureR010="prototype";
-            PRAGMA config.flags("TimeOrderRecoverAhead", "60000000");
-            PRAGMA config.flags("TimeOrderRecoverDelay", "-60000000");
+            PRAGMA config.flags("TimeOrderRecoverAhead", "20000000");
+            PRAGMA config.flags("TimeOrderRecoverDelay", "-20000000");
             $parsed = SELECT JSON_VALUE(Cast(Data as Json), "$.event_class") as event_class, JSON_VALUE(Cast(Data as Json), "$.time") as time FROM myyds.`{input_topic}`;
 
             $tojson = ($data) -> (ToBytes(Unwrap(Yson2::SerializeJson(Yson::From($data)))));
@@ -571,18 +571,16 @@ class TestYqStreaming(TestYdsBase):
         kikimr.compute_plane.wait_zero_checkpoint(query_id)
 
         data = [
-            '{{"event_class": "{}", "time": "{}"}}'.format("ManagedKubernetesEvent", "2024-01-03T00:00:00Z")
+            '{{"event_class": "{}", "time": "{}"}}'.format("ManagedKubernetesEvent", "2024-01-03T00:00:00Z"),
+            '{{"event_class": "{}", "time": "{}"}}'.format("ManagedKubernetesEvent", "2024-01-03T00:00:20Z"),
+            '{{"event_class": "{}", "time": "{}"}}'.format("ManagedKubernetesEvent", "2024-01-03T00:00:42Z"),
+            '{{"event_class": "{}", "time": "{}"}}'.format("ManagedKubernetesEvent", "2024-01-03T00:01:02Z")
         ]
         self.write_stream(data, self.input_topic)
-        data = [
-            '{{"event_class": "{}", "time": "{}"}}'.format("ManagedKubernetesEvent", "2024-01-03T07:00:00Z")
-        ]
-        self.write_stream(data, self.input_topic)
-
 
         read_data = self.read_stream(1)
         logging.info("Data was read: {}".format(read_data))
-        assert len(read_data) == 1
+        assert len(read_data) == 3
 
         client.abort_query(query_id)
 

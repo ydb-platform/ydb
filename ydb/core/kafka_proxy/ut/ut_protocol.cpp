@@ -775,7 +775,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TInsecureTestServer testServer("2");
 
         TString topicName = "/Root/topic-0-test";
-        ui64 minActivePartitions = 12;
+        ui64 minActivePartitions = 10;
 
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
         {
@@ -1219,7 +1219,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         TString notExistsTopicName = "/Root/not-exists";
 
-        ui64 minActivePartitions = 10;
+        ui64 minActivePartitions = 12;
 
         TString group = "consumer-0";
         TString notExistsGroup = "consumer-not-exists";

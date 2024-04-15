@@ -14,13 +14,13 @@ void TWritePortionInfoWithBlobs::TBlobInfo::AddChunk(TWritePortionInfoWithBlobs&
     Y_ABORT_UNLESS(Chunks.emplace(chunk->GetChunkAddressVerified(), chunk).second);
     ChunksOrdered.emplace_back(chunk);
 
-    chunk->AddIntoPortionBeforeBlob(bRange, owner.PortionInfo);
+    chunk->AddIntoPortionBeforeBlob(bRange, owner.GetPortionConstructor());
 }
 
 void TWritePortionInfoWithBlobs::TBlobInfo::RegisterBlobId(TWritePortionInfoWithBlobs& owner, const TUnifiedBlobId& blobId) {
-    const TBlobRangeLink16::TLinkId idx = owner.PortionInfo.RegisterBlobId(blobId);
+    const TBlobRangeLink16::TLinkId idx = owner.GetPortionConstructor().RegisterBlobId(blobId);
     for (auto&& i : Chunks) {
-        owner.PortionInfo.RegisterBlobIdx(i.first, idx);
+        owner.GetPortionConstructor().RegisterBlobIdx(i.first, idx);
     }
 }
 
@@ -42,7 +42,6 @@ TWritePortionInfoWithBlobs TWritePortionInfoWithBlobs::BuildByBlobs(std::vector<
             blobInfo.AddChunk(chunk);
         }
     }
-    result.GetPortionInfo().ReorderChunks();
     return result;
 }
 
@@ -72,7 +71,7 @@ void TWritePortionInfoWithBlobs::FillStatistics(const TIndexInfo& index) {
         }
         i.second->FillStatisticsData(data, storage, index);
     }
-    PortionInfo.MutableMeta().SetStatisticsStorage(std::move(storage));
+    GetPortionConstructor().MutableMeta().SetStatisticsStorage(std::move(storage));
 }
 
 }

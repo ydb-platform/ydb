@@ -21,7 +21,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
-        AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChanges(dbWrap, changes, snapshot));
+        AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnExecute(dbWrap, changes, snapshot));
         LOG_S_DEBUG(TxPrefix() << "(" << changes->TypeString() << ") apply" << TxSuffix());
         NOlap::TWriteIndexContext context(&txc.DB, dbWrap, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>());
         changes->WriteIndexOnExecute(Self, context);
@@ -35,7 +35,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         NOlap::TBlobManagerDb blobsDb(txc.DB);
         changes->MutableBlobsAction().OnExecuteTxAfterAction(*Self, blobsDb, false);
         for (ui32 i = 0; i < changes->GetWritePortionsCount(); ++i) {
-            auto& portion = changes->GetWritePortionInfo(i)->GetPortionInfo();
+            auto& portion = changes->GetWritePortionInfo(i)->GetPortionResult();
             LOG_S_WARN(TxPrefix() << "(" << changes->TypeString() << ":" << portion.DebugString() << ") blob cannot apply changes: " << TxSuffix());
         }
         NOlap::TChangesFinishContext context("cannot write index blobs");
@@ -81,6 +81,9 @@ TTxWriteIndex::TTxWriteIndex(TColumnShard* self, TEvPrivate::TEvWriteIndex::TPtr
     , Ev(ev)
     , TabletTxNo(++Self->TabletTxCounter)
 {
+    NOlap::TSnapshot snapshot(Self->LastPlannedStep, Self->LastPlannedTxId);
+    auto changes = Ev->Get()->IndexChanges;
+    AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnTxCreate(changes, snapshot));
     Y_ABORT_UNLESS(Ev && Ev->Get()->IndexChanges);
 }
 

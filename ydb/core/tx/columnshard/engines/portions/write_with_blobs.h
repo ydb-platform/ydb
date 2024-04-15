@@ -61,11 +61,12 @@ public:
         void RegisterBlobId(TWritePortionInfoWithBlobs& owner, const TUnifiedBlobId& blobId);
     };
 private:
-    TPortionInfoConstructor PortionInfo;
+    std::optional<TPortionInfoConstructor> PortionConstructor;
+    std::optional<TPortionInfo> PortionResult;
     YDB_READONLY_DEF(std::vector<TBlobInfo>, Blobs);
 
-    explicit TWritePortionInfoWithBlobs(TPortionInfoConstructor&& portionInfo)
-        : PortionInfo(std::move(portionInfo)) {
+    explicit TWritePortionInfoWithBlobs(TPortionInfoConstructor&& portionConstructor)
+        : PortionConstructor(std::move(portionConstructor)) {
     }
 
     TBlobInfo::TBuilder StartBlob(const std::shared_ptr<IBlobsStorageOperator>& bOperator) {
@@ -74,10 +75,6 @@ private:
     }
 
 public:
-    TPortionInfoConstructor& MutablePortionInfo() {
-        return PortionInfo;
-    }
-
     std::vector<std::shared_ptr<IPortionDataChunk>> GetEntityChunks(const ui32 entityId) const;
 
     void FillStatistics(const TIndexInfo& index);
@@ -120,12 +117,23 @@ public:
         return TStringBuilder() << "blobs_count=" << Blobs.size() << ";";
     }
 
-    const TPortionInfoConstructor& GetPortionInfo() const {
-        return PortionInfo;
+    void FinalizePortionConstructor() {
+        AFL_VERIFY(!!PortionConstructor);
+        AFL_VERIFY(!PortionResult);
+        PortionResult = PortionConstructor->Build(true);
+        PortionConstructor.reset();
     }
 
-    TPortionInfoConstructor& GetPortionInfo() {
-        return PortionInfo;
+    const TPortionInfo& GetPortionResult() const {
+        AFL_VERIFY(!PortionConstructor);
+        AFL_VERIFY(!!PortionResult);
+        return *PortionResult;
+    }
+
+    TPortionInfoConstructor& GetPortionConstructor() {
+        AFL_VERIFY(!!PortionConstructor);
+        AFL_VERIFY(!PortionResult);
+        return *PortionConstructor;
     }
 
 };

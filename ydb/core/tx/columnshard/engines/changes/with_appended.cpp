@@ -17,7 +17,7 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
         portionInfo.SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), true);
     }
     const auto predRemoveDroppedTable = [self](const TWritePortionInfoWithBlobs& item) {
-        auto& portionInfo = item.GetPortionInfo();
+        auto& portionInfo = item.GetPortionResult();
         if (!!self && (!self->TablesManager.HasTable(portionInfo.GetPathId()) || self->TablesManager.GetTable(portionInfo.GetPathId()).IsDropped())) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_inserted_data")("reason", "table_removed")("path_id", portionInfo.GetPathId());
             return true;
@@ -27,19 +27,16 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
     };
     AppendedPortions.erase(std::remove_if(AppendedPortions.begin(), AppendedPortions.end(), predRemoveDroppedTable), AppendedPortions.end());
     for (auto& portionInfoWithBlobs : AppendedPortions) {
-        auto portionInfo = portionInfoWithBlobs.GetPortionInfo().Build(true);
+        auto& portionInfo = portionInfoWithBlobs.GetPortionResult();
         AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
         portionInfo.SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
     }
 }
 
 void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
-    std::vector<TPortionInfo> portions;
-    for (auto& portionInfo : AppendedPortions) {
-        portions.emplace_back(portionInfo.GetPortionInfo().Build(true));
-    };
     if (self) {
-        for (auto& portionInfo : portions) {
+        for (auto& portionBuilder : AppendedPortions) {
+            auto& portionInfo = portionBuilder.GetPortionResult();
             switch (portionInfo.GetMeta().Produced) {
                 case NOlap::TPortionMeta::EProduced::UNSPECIFIED:
                     Y_ABORT_UNLESS(false); // unexpected
@@ -82,19 +79,25 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
             const TPortionInfo& oldInfo = context.EngineLogs.GetGranuleVerified(portionInfo.GetPathId()).GetPortionVerified(portionInfo.GetPortion());
             context.EngineLogs.UpsertPortion(portionInfo, &oldInfo);
         }
-        for (auto& portionInfo : portions) {
-            context.EngineLogs.UpsertPortion(portionInfo);
+        for (auto& portionBuilder : AppendedPortions) {
+            context.EngineLogs.UpsertPortion(portionBuilder.GetPortionResult());
         }
     }
 }
 
 void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
     for (auto&& i : AppendedPortions) {
-        i.GetPortionInfo().SetPortionId(context.NextPortionId());
-        i.GetPortionInfo().MutableMeta().UpdateRecordsMeta(TPortionMeta::EProduced::INSERTED);
+        i.GetPortionConstructor().SetPortionId(context.NextPortionId());
+        i.GetPortionConstructor().MutableMeta().UpdateRecordsMeta(TPortionMeta::EProduced::INSERTED);
     }
     for (auto& [_, portionInfo] : PortionsToRemove) {
         portionInfo.SetRemoveSnapshot(context.GetSnapshot());
+    }
+}
+
+void TChangesWithAppend::DoOnAfterCompile() {
+    for (auto&& i : AppendedPortions) {
+        i.FinalizePortionConstructor();
     }
 }
 
@@ -134,8 +137,8 @@ std::vector<TWritePortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions
             out.back().FillStatistics(resultSchema->GetIndexInfo());
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
-            out.back().MutablePortionInfo().AddMetadata(*resultSchema, b);
-            out.back().MutablePortionInfo().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
+            out.back().GetPortionConstructor().AddMetadata(*resultSchema, b);
+            out.back().GetPortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
             recordIdx += slice.GetRecordsCount();
         }
     }

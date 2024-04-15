@@ -269,10 +269,10 @@ TString MakeTestBlob(i64 start = 0, i64 end = 100) {
 
 void AddIdsToBlobs(std::vector<TWritePortionInfoWithBlobs>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs, ui32& step) {
     for (auto& portion : portions) {
-        for (auto& rec : portion.MutablePortionInfo().MutableRecords()) {
-            rec.BlobRange.BlobIdx = portion.MutablePortionInfo().RegisterBlobId(MakeUnifiedBlobId(++step, portion.GetBlobFullSizeVerified(rec.ColumnId, rec.Chunk)));
+        for (auto& rec : portion.GetPortionConstructor().MutableRecords()) {
+            rec.BlobRange.BlobIdx = portion.GetPortionConstructor().RegisterBlobId(MakeUnifiedBlobId(++step, portion.GetBlobFullSizeVerified(rec.ColumnId, rec.Chunk)));
             TString data = portion.GetBlobByRangeVerified(rec.ColumnId, rec.Chunk);
-            blobs.Add(IStoragesManager::DefaultStorageId, portion.GetPortionInfo().RestoreBlobRange(rec.BlobRange), std::move(data));
+            blobs.Add(IStoragesManager::DefaultStorageId, portion.GetPortionConstructor().RestoreBlobRange(rec.BlobRange), std::move(data));
         }
     }
 }
@@ -305,7 +305,7 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
 
     AddIdsToBlobs(changes->AppendedPortions, blobs, step);
 
-    const bool result = engine.ApplyChanges(db, changes, snap);
+    const bool result = engine.ApplyChangesOnTxCreate(changes, snap) && engine.ApplyChangesOnExecute(db, changes, snap);
 
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
@@ -336,15 +336,15 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
 
     //    UNIT_ASSERT_VALUES_EQUAL(changes->GetTmpGranuleIds().size(), expected.NewGranules);
 
-    const bool result = engine.ApplyChanges(db, changes, snap);
+    const bool result = engine.ApplyChangesOnTxCreate(changes, snap) && engine.ApplyChangesOnExecute(db, changes, snap);
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
     NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     if (blobsPool) {
         for (auto&& i : changes->AppendedPortions) {
-            for (auto&& r : i.GetPortionInfo().GetRecords()) {
-                Y_ABORT_UNLESS(blobsPool->emplace(i.GetPortionInfo().RestoreBlobRange(r.BlobRange), i.GetBlobByRangeVerified(r.ColumnId, r.Chunk)).second);
+            for (auto&& r : i.GetPortionResult().GetRecords()) {
+                Y_ABORT_UNLESS(blobsPool->emplace(i.GetPortionResult().RestoreBlobRange(r.BlobRange), i.GetBlobByRangeVerified(r.ColumnId, r.Chunk)).second);
             }
         }
     }
@@ -363,7 +363,7 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
 
 
     changes->StartEmergency();
-    const bool result = engine.ApplyChanges(db, changes, snap);
+    const bool result = engine.ApplyChangesOnTxCreate(changes, snap) && engine.ApplyChangesOnExecute(db, changes, snap);
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
     NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
@@ -381,7 +381,7 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
 
 
     changes->StartEmergency();
-    const bool result = engine.ApplyChanges(db, changes, TSnapshot(1,1));
+    const bool result = engine.ApplyChangesOnTxCreate(changes, TSnapshot(1, 1)) && engine.ApplyChangesOnExecute(db, changes, TSnapshot(1, 1));
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
     NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);

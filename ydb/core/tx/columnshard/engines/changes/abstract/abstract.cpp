@@ -53,12 +53,10 @@ void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self
 
 void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
     Y_ABORT_UNLESS(Stage != EStage::Aborted);
-    if ((ui32)Stage >= (ui32)EStage::Compiled) {
-        return;
-    }
     Y_ABORT_UNLESS(Stage == EStage::Constructed);
 
     DoCompile(context);
+    DoOnAfterCompile();
 
     Stage = EStage::Compiled;
 }

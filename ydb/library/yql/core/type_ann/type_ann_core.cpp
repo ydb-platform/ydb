@@ -2100,20 +2100,23 @@ namespace NTypeAnnImpl {
             return status;
         }
 
+        const bool addTopLevelOptional = commonItemType->HasOptionalOrNull() && !commonItemType->IsOptionalOrNull();
+        const TTypeAnnotationNode* resultType = addTopLevelOptional ? ctx.Expr.MakeType<TOptionalExprType>(commonItemType) : commonItemType;
+
         if (1U == input->ChildrenSize()) {
-            output = input->HeadPtr();
+            output = ctx.Expr.WrapByCallableIf(addTopLevelOptional, "Just", input->HeadPtr());
             return IGraphTransformer::TStatus::Repeat;
         }
 
         for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
-            if (IsNull(*input->Child(i))) {
-                output = input->ChildPtr(i);
+            if (input->Child(i)->GetTypeAnn()->HasNull()) {
+                output = ctx.Expr.NewCallable(input->Child(i)->Pos(), "Nothing", { ExpandType(input->Child(i)->Pos(), *resultType, ctx.Expr) });
                 return IGraphTransformer::TStatus::Repeat;
             }
         }
 
         input->SetUnorderedChildren();
-        input->SetTypeAnn(commonItemType);
+        input->SetTypeAnn(resultType);
         return IGraphTransformer::TStatus::Ok;
     }
 

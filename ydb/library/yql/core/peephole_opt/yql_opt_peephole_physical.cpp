@@ -2967,7 +2967,7 @@ TExprNode::TPtr ExpandAggrMinMax(const TExprNode::TPtr& node, TExprContext& ctx)
 }
 
 template<typename T>
-TExprNode::TPtr DoExpandMinMax(TStringBuf name, TPositionHandle pos, T argsBegin, T argsEnd, TExprContext& ctx) {
+TExprNode::TPtr DoExpandMinMax(TStringBuf name, bool usePlainCompare, TPositionHandle pos, T argsBegin, T argsEnd, TExprContext& ctx) {
     const size_t size = argsEnd - argsBegin;
     YQL_ENSURE(size > 0);
     if (size == 1) {
@@ -2979,8 +2979,8 @@ TExprNode::TPtr DoExpandMinMax(TStringBuf name, TPositionHandle pos, T argsBegin
 
     if (size > 2) {
         const size_t half = size / 2;
-        left = DoExpandMinMax(name, pos, argsBegin, argsBegin + half, ctx);
-        right = DoExpandMinMax(name, pos, argsBegin + half, argsEnd, ctx);
+        left = DoExpandMinMax(name, usePlainCompare, pos, argsBegin, argsBegin + half, ctx);
+        right = DoExpandMinMax(name, usePlainCompare, pos, argsBegin + half, argsEnd, ctx);
     } else {
         left = *argsBegin;
         right = *(argsBegin + 1);
@@ -2988,7 +2988,8 @@ TExprNode::TPtr DoExpandMinMax(TStringBuf name, TPositionHandle pos, T argsBegin
 
     return ctx.Builder(pos)
         .Callable("If")
-            .Callable(0, name == "Min" ? "AggrLessOrEqual" : "AggrGreaterOrEqual")
+            .Callable(0, usePlainCompare ? (name == "Min" ? "<=" : ">=") :
+                                           (name == "Min" ? "AggrLessOrEqual" : "AggrGreaterOrEqual"))
                 .Add(0, left)
                 .Add(1, right)
             .Seal()
@@ -2999,13 +3000,75 @@ TExprNode::TPtr DoExpandMinMax(TStringBuf name, TPositionHandle pos, T argsBegin
 }
 
 TExprNode::TPtr ExpandMinMax(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_ENSURE(node->ChildrenSize() >= 2);
     if (IsDataOrOptionalOfData(node->GetTypeAnn())) {
         return node;
     }
 
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " with complex types";
     const auto& children = node->ChildrenList();
-    return DoExpandMinMax(node->Content(), node->Pos(), children.begin(), children.end(), ctx);
+    if (!node->GetTypeAnn()->IsOptionalOrNull()) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " with complex non-nullable types";
+        return DoExpandMinMax(node->Content(), true, node->Pos(), children.begin(), children.end(), ctx);
+    }
+
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " with complex nullable types";
+    TExprNodeList childrenWithPositions;
+    for (ui32 i = 0; i < children.size(); ++i) {
+        const auto& child = children[i];
+        childrenWithPositions.push_back(ctx.Builder(child->Pos())
+            .List()
+                .Add(0, child)
+                .Callable(1, "Uint32")
+                    .Atom(0, i)
+                .Seal()
+            .Seal()
+            .Build()
+        );
+    }
+    auto candidateTuple = DoExpandMinMax(node->Content(), false, node->Pos(), childrenWithPositions.begin(), childrenWithPositions.end(), ctx);
+
+    TExprNodeList compareWithCandidate;
+    for (ui32 i = 0; i < children.size(); ++i) {
+        const auto& child = children[i];
+        compareWithCandidate.push_back(ctx.Builder(child->Pos())
+            .Callable("If")
+                .Callable(0, "==")
+                    .Callable(0, "Nth")
+                        .Add(0, candidateTuple)
+                        .Atom(1, 1)
+                    .Seal()
+                    .Callable(1, "Uint32")
+                        .Atom(0, i)
+                    .Seal()
+                .Seal()
+                .Add(1, MakeBool<true>(child->Pos(), ctx))
+                .Callable(2, node->IsCallable("Min") ? "<=" : ">=")
+                    .Callable(0, "Nth")
+                        .Add(0, candidateTuple)
+                        .Atom(1, 0)
+                    .Seal()
+                    .Add(1, child)
+                .Seal()
+            .Seal()
+            .Build()
+        );
+    }
+
+    return ctx.Builder(node->Pos())
+        .Callable("If")
+            .Callable(0, "Coalesce")
+                .Add(0, ctx.NewCallable(node->Pos(), "And", std::move(compareWithCandidate)))
+                .Add(1, MakeBool<false>(node->Pos(), ctx))
+            .Seal()
+            .Callable(1, "Nth")
+                .Add(0, candidateTuple)
+                .Atom(1, 0)
+            .Seal()
+            .Callable(2, "Nothing")
+                .Add(0, ExpandType(node->Pos(), *node->GetTypeAnn(), ctx))
+            .Seal()
+        .Seal()
+        .Build();
 }
 
 template <bool Ordered>

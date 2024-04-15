@@ -3,7 +3,6 @@
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/minikql/computation/mkql_spiller_adapter.h>
 #include <ydb/library/yql/minikql/computation/mkql_spiller.h>

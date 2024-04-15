@@ -125,7 +125,6 @@ public:
     }
 
     void Bootstrap() override {
-        Cerr << "iiiii Bootstrap" << Endl;
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         ui64 hiveId = domains->GetHive();
         if (hiveId != TDomainsInfo::BadTabletId) {
@@ -251,7 +250,7 @@ public:
     }
 
     bool CheckGroupFilters(const TString& groupId, const TString& poolName, const TGroupRow& groupRow) {
-        if (!EffectiveFilterGroupIds.empty() && !EffectiveFilterGroupIds.contains(groupId)) {
+        if (!EffectiveGroupFilter.contains(groupId)) {
             return false;
         }
         switch (With) {
@@ -498,6 +497,7 @@ struct TJsonRequestParameters<TJsonStorage> {
                       {"name":"tenant","in":"query","description":"tenant name","required":false,"type":"string"},
                       {"name":"pool","in":"query","description":"storage pool name","required":false,"type":"string"},
                       {"name":"node_id","in":"query","description":"node id","required":false,"type":"integer"},
+                      {"name":"pdisk_id","in":"query","description":"pdisk id","required":false,"type":"integer"},
                       {"name":"group_id","in":"query","description":"group id","required":false,"type":"integer"},
                       {"name":"need_groups","in":"query","description":"return groups information","required":false,"type":"boolean","default":true},
                       {"name":"need_disks","in":"query","description":"return disks information","required":false,"type":"boolean","default":true},

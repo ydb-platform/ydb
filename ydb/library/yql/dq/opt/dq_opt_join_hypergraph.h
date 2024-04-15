@@ -150,9 +150,9 @@ public:
         for (const auto& edge: Edges_) {
             if (
                 IsSubset(edge.Left, lhs) &&
-                !AreOverlaps(edge.Left, rhs) &&
+                !Overlaps(edge.Left, rhs) &&
                 IsSubset(edge.Right, rhs) &&
-                !AreOverlaps(edge.Right, lhs)
+                !Overlaps(edge.Right, lhs)
             ) {
                 return &edge;
             }

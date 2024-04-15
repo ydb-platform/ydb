@@ -2,10 +2,15 @@
 
 #include <stdlib.h>
 
+/* 
+ * This header contains helper functions for working with bitsets.
+ * They are templated by TNodeSet, which is a std::bitset<>.
+ */
+
 namespace NYql::NDq {
 
 template <typename TNodeSet>
-inline bool AreOverlaps(const TNodeSet& lhs, const TNodeSet& rhs) {
+inline bool Overlaps(const TNodeSet& lhs, const TNodeSet& rhs) {
     return (lhs & rhs) != 0;
 }
 
@@ -31,6 +36,7 @@ inline size_t GetLowestSetBit(TNodeSet nodeSet) {
     return nodeSet.size();
 }
 
+/* Iterates the indecies of the set bits in the TNodeSet. */
 template <typename TNodeSet>
 class TSetBitsIt {
 public:

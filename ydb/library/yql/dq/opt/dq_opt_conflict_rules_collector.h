@@ -2,14 +2,21 @@
 
 #include <ydb/library/yql/core/cbo/cbo_optimizer_new.h> 
 
+/*
+ * This header contains an algorithm for resolving join conflicts with TConflictRulesCollector class
+ * and ConvertConflictRulesIntoTES function, which are used to construct the hypergraph.
+ */
+
 namespace NYql::NDq {
 
-bool OperatorIsCommut(EJoinKind);
+bool OperatorIsCommutative(EJoinKind);
 
-bool OperatorsAreAssoc(EJoinKind, EJoinKind);
+bool OperatorsAreAssociative(EJoinKind, EJoinKind);
 
+/* (e1 o12 e3) o13 e3 == (e1 o13 e3) o12 e2 */
 bool OperatorsAreLeftAsscom(EJoinKind, EJoinKind);
 
+/* e1 o13 (e2 o23 e3) == e2 o23 (e1 o13 e3) */
 bool OperatorsAreRightAsscom(EJoinKind, EJoinKind);
 
 template <typename TNodeSet>
@@ -50,7 +57,7 @@ public:
 private:
     auto GetLeftConflictsVisitor() {
         auto visitor = [this](const std::shared_ptr<TJoinOptimizerNode>& child) {
-            if (!OperatorsAreAssoc(child->JoinType, Root_->JoinType)) {
+            if (!OperatorsAreAssociative(child->JoinType, Root_->JoinType)) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->RightArg],
                     SubtreeNodes_[child->LeftArg]
@@ -70,7 +77,7 @@ private:
 
     auto GetRightConflictsVisitor() {
         auto visitor = [this](const std::shared_ptr<TJoinOptimizerNode>& child) {
-            if (!OperatorsAreAssoc(Root_->JoinType, child->JoinType)) {
+            if (!OperatorsAreAssociative(Root_->JoinType, child->JoinType)) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->LeftArg],
                     SubtreeNodes_[child->RightArg]
@@ -122,7 +129,7 @@ TNodeSet ConvertConflictRulesIntoTES(const TNodeSet& SES, TVector<TConflictRule<
         auto prevTES = TES;
 
         for (const auto& conflictRule: conflictRules) {
-            if (AreOverlaps(conflictRule.RuleActivationNodes, TES)) {
+            if (Overlaps(conflictRule.RuleActivationNodes, TES)) {
                 TES |= conflictRule.RequiredNodes;
             }
         }

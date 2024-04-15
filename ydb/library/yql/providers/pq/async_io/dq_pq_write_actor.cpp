@@ -101,6 +101,7 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
             LastAckLatency = task->GetCounter("LastAckLatencyMs");
             InFlyCheckpoints = task->GetCounter("InFlyCheckpoints");
             InFlyData = task->GetCounter("InFlyData");
+            AlreadyWritten = task->GetCounter("AlreadWritten");
         }
 
         ~TMetrics() {
@@ -113,9 +114,15 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
         ::NMonitoring::TDynamicCounters::TCounterPtr LastAckLatency;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyCheckpoints;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyData;
+        ::NMonitoring::TDynamicCounters::TCounterPtr AlreadyWritten;
     };
 
     struct TAckInfo {
+        TAckInfo(i64 messageSize, const TInstant& startTime)
+            : MessageSize(messageSize)
+            , StartTime(startTime)
+        {}
+
         i64 MessageSize = 0;
         TInstant StartTime;
     };
@@ -397,6 +404,10 @@ private:
                     TIssues issues;
                     issues.AddIssue(TStringBuilder() << "Message with seqNo " << it->SeqNo << " was discarded");
                     return issues;
+                }
+
+                if (it->State == NYdb::NTopic::TWriteSessionEvent::TWriteAck::EEventState::EES_ALREADY_WRITTEN) {
+                    Self.Metrics.AlreadyWritten->Inc();
                 }
 
                 const auto& ackInfo = Self.WaitingAcks.front();

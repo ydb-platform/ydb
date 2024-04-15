@@ -1,6 +1,6 @@
 # Migrating {{ ydb-short-name }} data schemas with the Liquibase migration tool
 
-## Introduction {#introductuin}
+## Introduction {#introduction}
 
 [Liquibase](https://www.liquibase.com/) is an open-source library for tracking, managing, and applying changes to database schemas. It is extended with dialects for different database management systems (DBMS), including {{ ydb-short-name }}.
 

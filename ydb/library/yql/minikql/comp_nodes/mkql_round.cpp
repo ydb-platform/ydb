@@ -110,7 +110,7 @@ public:
 
         if (To == EDataSlot::Date || To == EDataSlot::Date32) {
             i64 rounded = us / usInDay;
-            i64 rem = us % usInDay; // TODO test when rem > 2**32
+            i64 rem = us % usInDay;
             if (rem > 0 && !Down) {
                 rounded += 1;
             } else if (rem < 0 && Down) {

@@ -26,7 +26,7 @@ public:
     virtual TBatches FlushBatchesForce() = 0;
 
     virtual TString FlushBatch(ui64 shardId) = 0;
-    virtual const THashSet<ui64>& ShardIds() const = 0; // TODO: do something better
+    virtual const THashSet<ui64>& GetShardIds() const = 0;
 
     virtual i64 GetMemory() = 0;
 };

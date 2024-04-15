@@ -341,9 +341,9 @@ private:
             for (auto& [shardId, shardInfo] : ShardsInfo.GetShards()) {
                 shardInfo.Close();
             }
-        }
 
-        YQL_ENSURE(!Finished || Serializer->IsFinished());
+            YQL_ENSURE(Serializer->IsFinished());
+        }
 
         ProcessBatches();
     }
@@ -558,15 +558,28 @@ private:
     }
 
     void ProcessBatches() {
+        MakeNewBatches();
         SendBatchesToShards();
-        if (ShardsInfo.IsFinished()) {
+        if (Finished && Serializer->IsFinished() && ShardsInfo.IsFinished()) {
             CA_LOG_D("Write actor finished");
             Callbacks->OnAsyncOutputFinished(GetOutputIndex());
         }
     }
 
+    void MakeNewBatches() {
+        for (const size_t shardId : Serializer->GetShardIds()) {
+            auto& shard = ShardsInfo.GetShard(shardId);
+            if (shard.IsEmpty()) {
+                auto batch = Serializer->FlushBatch(shardId);
+                if (!batch.empty()) {
+                    shard.PushBatch(std::move(batch));
+                }
+            }
+        }
+    }
+
     void SendBatchesToShards() {
-        for (size_t shardId : ShardsInfo.GetPendingShards()) {
+        for (const size_t shardId : ShardsInfo.GetPendingShards()) {
             auto& shard = ShardsInfo.GetShard(shardId);
             YQL_ENSURE(!shard.IsEmpty());
             SendDataToShard(shardId);

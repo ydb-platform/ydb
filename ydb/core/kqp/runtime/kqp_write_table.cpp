@@ -198,6 +198,7 @@ public:
                     Memory += batch.size();
                     YQL_ENSURE(!batch.empty());
                 }
+                ShardIds.insert(shard);
             }
         }
     }
@@ -233,6 +234,24 @@ public:
         return std::move(newBatches);
     }
 
+    TString FlushBatch(ui64 shardId) override {
+        if (!Batches.contains(shardId)) {
+            return {};
+        }
+        auto batches = Batches.at(shardId);
+        if (batches.empty()) {
+            return {};
+        }
+
+        const auto batch = std::move(batches.front());
+        batches.pop_front();
+        return batch;
+    }
+
+    const THashSet<ui64>& GetShardIds() const override {
+        return ShardIds;
+    }
+
 private:
     NKikimr::NEvWrite::IShardsSplitter::IEvWriteDataAccessor::TPtr GetDataAccessor(
             const TRecordBatchPtr& batch) const {
@@ -265,6 +284,7 @@ private:
     NArrow::TArrowBatchBuilder BatchBuilder;
 
     TBatches Batches;
+    THashSet<ui64> ShardIds;
 
     i64 Memory = 0;
 
@@ -361,6 +381,9 @@ public:
     }
 
     TString FlushBatch(ui64 shardId) override {
+        if (!Batches.contains(shardId)) {
+            return {};
+        }
         auto batch = Batches.at(shardId);
         if (batch.empty()) {
             return {};
@@ -374,7 +397,7 @@ public:
         return matrix.ReleaseBuffer();
     }
 
-    const THashSet<ui64>& ShardIds() override {
+    const THashSet<ui64>& GetShardIds() const override {
         return ShardIds;
     }
 

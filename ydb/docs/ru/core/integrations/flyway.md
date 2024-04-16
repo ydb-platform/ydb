@@ -6,7 +6,7 @@
 
 ## Установка {#install}
 
-Чтобы использовать flyway вместе с YDB в Java / Kotlin приложении или в Gradle / Maven плагине требуется зависимость расширения flyway для YDB и [YDB JDBC Driver](https://github.com/ydb-platform/ydb-jdbc-driver):
+Чтобы использовать Flyway вместе с {{ ydb-short-name }} в Java / Kotlin приложении или в Gradle / Maven плагине, требуется зависимость расширения Flyway для {{ ydb-short-name }} и [{{ ydb-short-name }} JDBC Driver](https://github.com/ydb-platform/ydb-jdbc-driver):
 
 {% list tabs %}
 
@@ -46,9 +46,9 @@
 
 {% endlist %}
 
-Для работы с YDB через flyway CLI требуется установить саму flyway утилиту [любым из рекомендованных способов](https://documentation.red-gate.com/fd/command-line-184127404.html). 
+Для работы с {{ ydb-short-name }} через Flyway CLI требуется установить flyway утилиту [любым из рекомендованных способов](https://documentation.red-gate.com/fd/command-line-184127404.html). 
 
-Затем утилиту нужно расширить диалектом YDB и JDBC драйвером.
+Затем flyway нужно расширить диалектом {{ ydb-short-name }} и JDBC драйвером.
 
 ```bash
 # install flyway
@@ -64,11 +64,11 @@ cd ..
 cd lib && curl -L -o flyway-ydb-dialect.jar https://repo.maven.apache.org/maven2/tech/ydb/dialects/flyway-ydb-dialect/1.0.0-RC0/flyway-ydb-dialect-1.0.0-RC0.jar
 ```
 
-## Управление миграциями с помощью flyway {#flyway-main-commands}
+## Управление миграциями с помощью Flyway {#flyway-main-commands}
 
 ### baseline {#flyway-baseline}
 
-Команда [baseline](https://documentation.red-gate.com/flyway/flyway-cli-and-api/usage/command-line/command-line-baseline) инициализируют flyway в существующей базе данных, исключающая все миграции вплоть до baselineVersion включительно.
+Команда [baseline](https://documentation.red-gate.com/flyway/flyway-cli-and-api/usage/command-line/command-line-baseline) инициализируют Flyway в существующей базе данных, исключающая все миграции вплоть до `baselineVersion` включительно.
 
 Предположим, что мы имеем существующий проект с текущей схемой базы данных:
 
@@ -95,7 +95,7 @@ flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration -baseli
 
 ### migrate {#flyway-migrate}
 
-Команда [migrate](https://documentation.red-gate.com/flyway/flyway-cli-and-api/usage/command-line/command-line-migrate) эволюционирует схему базы данных до последней версии, если таблица истории схемы не была создана, то создаст ее автоматически.
+Команда [migrate](https://documentation.red-gate.com/flyway/flyway-cli-and-api/usage/command-line/command-line-migrate) эволюционирует схему базы данных до последней версии. Если таблица истории схемы не была создана, то Flyway создаст ее автоматически.
 
 Добавим к предыдущему примеру миграцию [загрузки данных](../yql/tutorial/fill_tables_with_data.md):
 
@@ -116,8 +116,6 @@ flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration migrate
 Результатом исполнения будет загруженные данные в таблицы `series`, `seasons` и `episodes`:
 
 ![_assets/flyway-migrate-step-1.png](_assets/flyway-migrate-step-1.png)
-
-[Загрузим данные](../yql/tutorial/fill_tables_with_data.md) без команды `COMMIT` в конце скрипта, [создадим индекс](../yql/reference/syntax/alter_table.md), затем переименуем индекс. 
 
 Эволюционируем схему путем добавление [вторичного индекса](../yql/reference/syntax/alter_table.md):
 
@@ -213,7 +211,7 @@ flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration repair
 
 После восстановления таблицы лога, валидация проходит успешно. 
 
-C помощью команды `repair` можно удалить не удавшийся DDL скрипт.
+Также с помощью команды `repair` можно удалить не удавшийся DDL скрипт.
 
 ### clean {#flyway-repair}
 
@@ -221,7 +219,7 @@ C помощью команды `repair` можно удалить не удав
 
 {% note warning %}
 
-YDB не имеет такую сущность как `schema`, команда `clean` просто удалит все таблицы в вашей базе данных.
+{{ ydb-short-name }} не имеет такую сущность как `schema`, команда `clean` удалит все таблицы в вашей базе данных.
 
 {% endnote %}
 

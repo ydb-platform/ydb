@@ -20,9 +20,10 @@
 
 namespace {
 
-using TDiskSpaceQuotas = NKikimr::NSchemeShard::TSubDomainInfo::TDiskSpaceQuotas;
+using namespace NKikimr::NSchemeShard;
+using TDiskSpaceQuotas = TSubDomainInfo::TDiskSpaceQuotas;
 using TQuotasPair = TDiskSpaceQuotas::TQuotasPair;
-using TStoragePoolUsage = NKikimr::NSchemeShard::TSubDomainInfo::TDiskSpaceUsage::TStoragePoolUsage;
+using TStoragePoolUsage = TSubDomainInfo::TDiskSpaceUsage::TStoragePoolUsage;
 
 enum class EDiskUsageStatus {
     AboveHardQuota,
@@ -48,6 +49,16 @@ EDiskUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsa
     return softQuotaExceeded
             ? EDiskUsageStatus::InBetween
             : EDiskUsageStatus::BelowSoftQuota;
+}
+
+EUserFacingStorageType GetUserFacingStorageType(const TString& poolKind) {
+    if (poolKind.StartsWith("ssd")) {
+        return EUserFacingStorageType::Ssd;
+    }
+    if (poolKind.StartsWith("hdd")) {
+        return EUserFacingStorageType::Hdd;
+    }
+    return EUserFacingStorageType::Ignored;
 }
 
 }
@@ -171,15 +182,21 @@ void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartiti
 
     for (const auto& [poolKind, newStoragePoolStats] : newAggr.StoragePoolsStats) {
         const auto* oldStats = oldAggr.StoragePoolsStats.FindPtr(poolKind);
-        auto& storagePoolUsage = DiskSpaceUsage.StoragePoolsUsage[poolKind];
-        storagePoolUsage.DataSize += newStoragePoolStats.DataSize - (oldStats ? oldStats->DataSize : 0u);
-        storagePoolUsage.IndexSize += newStoragePoolStats.IndexSize - (oldStats ? oldStats->IndexSize : 0u);
+        const i64 dataSizeIncrement = newStoragePoolStats.DataSize - (oldStats ? oldStats->DataSize : 0u);
+        const i64 indexSizeIncrement = newStoragePoolStats.IndexSize - (oldStats ? oldStats->IndexSize : 0u);
+        auto& [dataSize, indexSize] = DiskSpaceUsage.StoragePoolsUsage[poolKind];
+        dataSize += dataSizeIncrement;
+        indexSize += indexSizeIncrement;
+        counters->ChangeDiskSpaceTables(GetUserFacingStorageType(poolKind), dataSizeIncrement, indexSizeIncrement);
     }
     for (const auto& [poolKind, oldStoragePoolStats] : oldAggr.StoragePoolsStats) {
         if (const auto* newStats = newAggr.StoragePoolsStats.FindPtr(poolKind); !newStats) {
-            auto& storagePoolUsage = DiskSpaceUsage.StoragePoolsUsage[poolKind];
-            storagePoolUsage.DataSize -= oldStoragePoolStats.DataSize;
-            storagePoolUsage.IndexSize -= oldStoragePoolStats.IndexSize;
+            const i64 dataSizeDecrement = oldStoragePoolStats.DataSize;
+            const i64 indexSizeDecrement = oldStoragePoolStats.IndexSize;
+            auto& [dataSize, indexSize] = DiskSpaceUsage.StoragePoolsUsage[poolKind];
+            dataSize -= dataSizeDecrement;
+            indexSize -= indexSizeDecrement;
+            counters->ChangeDiskSpaceTables(GetUserFacingStorageType(poolKind), -dataSizeDecrement, -indexSizeDecrement);
         }
     }
 }

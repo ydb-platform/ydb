@@ -29,7 +29,7 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
     Y_ABORT_UNLESS(client);
     auto apiServiceProxy = client->CreateApiServiceProxy();
 
-    TVector<NYT::TFuture<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>> waitFor;
+    TVector<void*> requests;
 
     size_t inputIdx = 0;
     TVector<size_t> originalIndexes;
@@ -71,27 +71,26 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
         }
 
         ConfigureTransaction(request, richYPath);
-
         // Get skiff format yson string
         TStringStream fmt;
         format.Config.Save(&fmt);
         request->set_format(fmt.Str());
 
-        waitFor.emplace_back(std::move(CreateRpcClientInputStream(std::move(request)).ApplyUnique(BIND([](NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr&& stream) {
+        requests.emplace_back(request.Release());
+    }
+    return std::make_unique<TSettingsHolder>(std::move(connection), std::move(client), std::move(requests), std::move(originalIndexes));
+}
+
+NYT::TFuture<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> CreateInputStream(void* requestPtr) {
+    auto casted = static_cast<NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTable*>(requestPtr);
+    NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr request {casted};
+    return CreateRpcClientInputStream(std::move(request)).ApplyUnique(BIND([](NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr&& stream) {
             // first packet contains meta, skip it
             return stream->Read().ApplyUnique(BIND([stream = std::move(stream)](NYT::TSharedRef&&) {
                 return std::move(stream);
             }));
-        }))));
-    }
-    TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> rawInputs;
-    auto result = NYT::NConcurrency::WaitFor(NYT::AllSucceeded(waitFor));
-    if (!result.IsOK()) {
-        Cerr << "YT RPC Reader exception:\n";
-    }
-    result.ValueOrThrow().swap(rawInputs);
-
-    return std::make_unique<TSettingsHolder>(std::move(connection), std::move(client), std::move(rawInputs), std::move(originalIndexes));
+        }));
 }
+
 
 }

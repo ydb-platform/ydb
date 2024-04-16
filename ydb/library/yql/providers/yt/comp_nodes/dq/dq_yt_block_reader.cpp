@@ -350,7 +350,7 @@ public:
         size_t inflight, TType* type, std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> types, const THolderFactory& holderFactory, NKikimr::NMiniKQL::IStatsRegistry* jobStats)
         : HolderFactory(holderFactory)
         , Settings_(std::move(settings))
-        , Inputs_(std::move(Settings_->RawInputs))
+        , Inputs_()
         , Listener_(std::make_shared<TListener>(Inputs_.size(), inflight))
         , JobStats_(jobStats)
     {

@@ -26,6 +26,8 @@
 #include "engines/changes/cleanup_tables.h"
 #include "engines/changes/ttl.h"
 
+#include "export/manager/manager.h"
+
 #include "resource_subscriber/counters.h"
 
 #include "hooks/abstract/abstract.h"
@@ -524,6 +526,8 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
 //  !!!!!! MUST BE FIRST THROUGH DATA HAVE TO BE SAME IN SESSIONS AFTER TABLET RESTART
     SharingSessionsManager->Start(*this);
 
+    ExportsManager->Start(this);
+
     SetupIndexation();
     SetupCompaction();
     SetupCleanupPortions();
@@ -977,6 +981,20 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::T
     }
 };
 
+void TColumnShard::Handle(NOlap::NExport::NEvents::TEvExportSaveCursor::TPtr& ev, const TActorContext& ctx) {
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "Export")("event", "NExport::NEvents::TEvExportSaveCursor");
+    auto currentSession = ExportsManager->GetSessionOptional(ev->Get()->GetIdentifier());
+    if (!currentSession) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "ignore_inactual_export_session")("sesion_id", ev->Get()->GetIdentifier().ToString());
+        return;
+    }
+
+    auto txConclusion = currentSession->SaveCursorTx(this, ev->Get()->DetachCursor(), currentSession);
+    AFL_VERIFY(txConclusion)("error", txConclusion.GetErrorMessage());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "on_save_cursor")("id", ev->Get()->GetIdentifier().ToString());
+    Execute(txConclusion->release(), ctx);
+}
+
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx) {
     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvAckFinishFromInitiator");
     auto currentSession = SharingSessionsManager->GetDestinationSession(ev->Get()->Record.GetSessionId());
@@ -1075,6 +1093,11 @@ void TColumnShard::OnTieringModified(const std::optional<ui64> pathId) {
             TablesManager.MutablePrimaryIndex().OnTieringModified(Tiers, TablesManager.GetTtl(), pathId);
         }
     }
+}
+
+const NKikimr::NColumnShard::NTiers::TManager* TColumnShard::GetTierManagerPointer(const TString& tierId) const {
+    Y_ABORT_UNLESS(!!Tiers);
+    return Tiers->GetManagerOptional(tierId);
 }
 
 }

@@ -36,6 +36,11 @@ struct TEvPrivate {
         EvWritingAddDataToBuffer,
         EvWritingFlushBuffer,
 
+        EvExportWritingFinished,
+        EvExportWritingFailed,
+        EvExportCursorSaved,
+        EvExportSaveCursor,
+
         EvEnd
     };
 

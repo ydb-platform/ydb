@@ -77,6 +77,7 @@ public:
         return DoLoad(dbBlobs);
     }
     void OnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) {
+        AFL_VERIFY(tiers);
         return DoOnTieringModified(tiers);
     }
 

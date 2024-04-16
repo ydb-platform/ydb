@@ -254,12 +254,8 @@ class TColumnShard
         TabletCounters->Cumulative()[counter].Increment(num);
     }
 
-    void IncCounter(NColumnShard::EPercentileCounters counter, const TDuration& latency) const {
-        TabletCounters->Percentile()[counter].IncrementFor(latency.MicroSeconds());
-    }
-
-    void ActivateTiering(const ui64 pathId, const TString& useTiering, const bool onTabletInit = false);
-    void OnTieringModified();
+    void ActivateTiering(const ui64 pathId, const TString& useTiering);
+    void OnTieringModified(const std::optional<ui64> pathId = {});
 public:
     enum class EOverloadStatus {
         ShardTxInFly /* "shard_tx" */,

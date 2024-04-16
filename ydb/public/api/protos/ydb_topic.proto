@@ -849,16 +849,17 @@ message AutoscalingSettings {
 }
 
 message AutoscalingPartitionWriteSpeedStrategy {
-    // The time of exceeding the threshold value in seconds, after which the partition will be
+    // The time of exceeding the threshold value, after which the partition will be
     // autoscaling.
     // Zero value means default - 300.
-    int32 threshold_time_seconds = 1;
+    google.protobuf.Duration threshold_time = 1;
     // The threshold value of the write speed to the partition as a percentage, when exceeded,
     // the partition will be auto split.
     // Zero value means default - 90.
     int32 scale_up_threshold_percent = 2 [(Ydb.value) = ">= 0"];
     // The threshold value of the write speed to the partition as a percentage, if it is not reached,
-    // the partition will be auto merged.
+    // the partition will be auto merged. There is no guarantee that the automatic merge will occur
+    // immediately after the threshold_time expires.
     // Zero value means default - 30.
     int32 scale_down_threshold_percent = 3 [(Ydb.value) = ">= 0"];
 }
@@ -887,10 +888,10 @@ message AlterAutoscalingSettings {
 }
 
 message AlterAutoscalingPartitionWriteSpeedStrategy {
-    // The time of exceeding the threshold value in seconds, after which the partition will be
+    // The time of exceeding the threshold value, after which the partition will be
     // autoscaling.
     // Zero value means default - 300.
-    optional int32 set_threshold_time_seconds = 1;
+    optional google.protobuf.Duration set_threshold_time = 1;
     // The threshold value of the write speed to the partition as a percentage, when exceeded,
     // the partition will be auto split.
     // Zero value means default - 90.

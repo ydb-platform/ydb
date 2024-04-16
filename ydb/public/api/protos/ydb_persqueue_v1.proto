@@ -6,6 +6,8 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 
+import "google/protobuf/duration.proto";
+
 package Ydb.PersQueue.V1;
 
 option java_package = "com.yandex.ydb.persqueue";
@@ -1200,10 +1202,10 @@ message AutoscalingSettings {
 }
 
 message AutoscalingPartitionWriteSpeedStrategy {
-    // The time of exceeding the threshold value in seconds, after which the partition will be
+    // The time of exceeding the threshold value, after which the partition will be
     // auto scaling.
     // Zero value means default - 300.
-    int32 threshold_time_seconds = 1;
+    google.protobuf.Duration threshold_time = 1;
     // The threshold value of the write speed to the partition as a percentage, when exceeded,
     // the partition will be auto split.
     // Zero value means default - 90.

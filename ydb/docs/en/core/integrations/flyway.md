@@ -4,7 +4,7 @@
 
 [Flyway](https://documentation.red-gate.com/fd/) is an open-source database migration tool. It strongly favors simplicity and convention over configuration. It has extensions for various database management systems (DBMS), including {{ ydb-short-name }}.
 
-## Установка {#install}
+## Install {#install}
 
 To use Flyway together with {{ ydb-short-name }} in a Java / Kotlin application or in a Gradle / Maven plugin, you need to add a dependency for the Flyway extension for {{ ydb-short-name }} and the [{{ ydb-short-name }} JDBC Driver](https://github.com/ydb-platform/ydb-jdbc-driver):
 

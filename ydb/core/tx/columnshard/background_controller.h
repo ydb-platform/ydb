@@ -52,7 +52,6 @@ private:
     TCurrentCompaction ActiveCompactionInfo;
 
     bool ActiveCleanup = false;
-    bool TtlStarted = false;
     YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
 public:
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
@@ -89,15 +88,6 @@ public:
     }
     bool IsCleanupActive() const {
         return ActiveCleanup;
-    }
-
-    void StartTtl();
-    void FinishTtl() {
-        Y_ABORT_UNLESS(TtlStarted);
-        TtlStarted = false;
-    }
-    bool IsTtlActive() const {
-        return TtlStarted;
     }
 };
 

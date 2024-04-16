@@ -33,6 +33,7 @@ namespace NKikimr::NOlap {
 class TPortionInfoWithBlobs;
 struct TInsertedData;
 class TSnapshotColumnInfo;
+class ISnapshotSchema;
 using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
 
 /// Column engine index description in terms of tablet's local table.
@@ -50,6 +51,20 @@ private:
     void BuildArrowSchema();
     void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators);
 public:
+    std::set<TString> GetUsedStorageIds(const TString& portionTierName) const {
+        std::set<TString> result;
+        if (portionTierName && portionTierName != IStoragesManager::DefaultStorageId) {
+            result.emplace(portionTierName);
+        } else {
+            for (auto&& i : ColumnFeatures) {
+                result.emplace(i.second.GetOperator()->GetStorageId());
+            }
+        }
+        return result;
+    }
+
+    std::vector<std::shared_ptr<IPortionDataChunk>> MakeEmptyChunks(const ui32 columnId, const std::vector<ui32>& pages, const std::shared_ptr<ISnapshotSchema>& schema, const TSaverContext& saverContext) const;
+
     const std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer>& GetStatistics() const {
         return Statistics;
     }

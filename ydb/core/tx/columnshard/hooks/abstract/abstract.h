@@ -87,6 +87,11 @@ public:
     }
     virtual void OnMaxValueUsage() {
     }
+
+    virtual TDuration GetLagForCompactionBeforeTierings(const TDuration def) const {
+        return def;
+    }
+
     void OnTabletInitCompleted(const NColumnShard::TColumnShard& shard) {
         DoOnTabletInitCompleted(shard);
     }

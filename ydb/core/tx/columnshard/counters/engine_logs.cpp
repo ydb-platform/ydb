@@ -38,9 +38,21 @@ TEngineLogsCounters::TEngineLogsCounters()
 
     PortionToDropCount = TBase::GetDeriviative("Ttl/PortionToDrop/Count");
     PortionToDropBytes = TBase::GetDeriviative("Ttl/PortionToDrop/Bytes");
+    PortionToDropLag = TBase::GetHistogram("Ttl/PortionToDrop/Lag/Duration", NMonitoring::ExponentialHistogram(18, 2, 5));
+    SkipDeleteWithProcessMemory = TBase::GetHistogram("Ttl/PortionToDrop/Skip/ProcessMemory/Lag/Duration", NMonitoring::ExponentialHistogram(18, 2, 5));
+    SkipDeleteWithTxLimit = TBase::GetHistogram("Ttl/PortionToDrop/Skip/TxLimit/Lag/Duration", NMonitoring::ExponentialHistogram(18, 2, 5));
 
     PortionToEvictCount = TBase::GetDeriviative("Ttl/PortionToEvict/Count");
     PortionToEvictBytes = TBase::GetDeriviative("Ttl/PortionToEvict/Bytes");
+    PortionToEvictLag = TBase::GetHistogram("Ttl/PortionToEvict/Lag/Duration", NMonitoring::ExponentialHistogram(18, 2, 5));
+    SkipEvictionWithProcessMemory = TBase::GetHistogram("Ttl/PortionToEvict/Skip/ProcessMemory/Lag/Duration", NMonitoring::ExponentialHistogram(18, 2, 5));
+    SkipEvictionWithTxLimit = TBase::GetHistogram("Ttl/PortionToEvict/Skip/TxLimit/Lag/Duration", NMonitoring::ExponentialHistogram(18, 2, 5));
+
+    ActualizationTaskSizeRemove = TBase::GetHistogram("Actualization/RemoveTasks/Size", NMonitoring::ExponentialHistogram(18, 2));
+    ActualizationTaskSizeEvict = TBase::GetHistogram("Actualization/EvictTasks/Size", NMonitoring::ExponentialHistogram(18, 2));
+
+    ActualizationSkipRWProgressCount = TBase::GetDeriviative("Actualization/Skip/RWProgress/Count");
+    ActualizationSkipTooFreshPortion = TBase::GetHistogram("Actualization//Skip/TooFresh/Duration", NMonitoring::LinearHistogram(12, 0, 360));
 
     PortionNoTtlColumnCount = TBase::GetDeriviative("Ttl/PortionNoTtlColumn/Count");
     PortionNoTtlColumnBytes = TBase::GetDeriviative("Ttl/PortionNoTtlColumn/Bytes");
@@ -50,6 +62,16 @@ TEngineLogsCounters::TEngineLogsCounters()
 
     StatUsageForTTLCount = TBase::GetDeriviative("Ttl/StatUsageForTTLCount/Count");
     ChunkUsageForTTLCount = TBase::GetDeriviative("Ttl/ChunkUsageForTTLCount/Count");
+}
+
+void TEngineLogsCounters::OnActualizationTask(const ui32 evictCount, const ui32 removeCount) const {
+    AFL_VERIFY(evictCount * removeCount == 0)("evict", evictCount)("remove", removeCount);
+    AFL_VERIFY(evictCount + removeCount);
+    if (evictCount) {
+        ActualizationTaskSizeEvict->Collect(evictCount);
+    } else {
+        ActualizationTaskSizeRemove->Collect(removeCount);
+    }
 }
 
 void TEngineLogsCounters::TPortionsInfoGuard::OnNewPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {

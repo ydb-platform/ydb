@@ -7,6 +7,7 @@
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/tx/columnshard/engines/changes/compaction/column_portion_chunk.h>
 
 namespace NKikimr::NOlap {
 
@@ -284,14 +285,6 @@ std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortReplaceDescription() c
     return {};
 }
 
-bool TIndexInfo::AllowTtlOverColumn(const TString& name) const {
-    auto it = ColumnNames.find(name);
-    if (it == ColumnNames.end()) {
-        return false;
-    }
-    return MinMaxIdxColumnsIds.contains(it->second);
-}
-
 TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId, const TSaverContext& context) const {
     NArrow::NTransformation::ITransformer::TPtr transformer;
     NArrow::NSerialization::TSerializerContainer serializer;
@@ -477,6 +470,18 @@ void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& opera
         AFL_VERIFY(ArrowColumnByColumnIdCache.emplace(cId, GetColumnFieldVerified(cId)).second);
         AFL_VERIFY(ColumnFeatures.emplace(cId, TColumnFeatures::BuildFromIndexInfo(cId, *this, operators->GetDefaultOperator())).second);
     }
+}
+
+std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TIndexInfo::MakeEmptyChunks(const ui32 columnId, const std::vector<ui32>& pages, const std::shared_ptr<ISnapshotSchema>& schema, const TSaverContext& saverContext) const {
+    std::vector<std::shared_ptr<IPortionDataChunk>> result;
+    auto columnArrowSchema = GetColumnSchema(columnId);
+    TColumnSaver saver = GetColumnSaver(columnId, saverContext);
+    for (auto p : pages) {
+        auto arr = NArrow::MakeEmptyBatch(columnArrowSchema, p);
+        AFL_VERIFY(arr->num_columns() == 1)("count", arr->num_columns());
+        result.emplace_back(std::make_shared<NCompaction::TChunkPreparation>(saver.Apply(arr), arr->column(0), columnId, schema));
+    }
+    return result;
 }
 
 } // namespace NKikimr::NOlap

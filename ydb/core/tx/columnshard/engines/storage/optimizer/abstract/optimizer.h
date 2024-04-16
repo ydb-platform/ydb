@@ -106,7 +106,6 @@ public:
         {
         }
         ~TModificationGuard() {
-            TMemoryProfileGuard mGuard("Optimizer");
             Owner.ModifyPortions(AddPortions, RemovePortions);
         }
     };

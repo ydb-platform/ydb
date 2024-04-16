@@ -387,6 +387,10 @@ const TString& TPortionInfo::GetColumnStorageId(const ui32 columnId, const TInde
     return indexInfo.GetColumnStorageId(columnId, GetMeta().GetTierName());
 }
 
+const TString& TPortionInfo::GetEntityStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const {
+    return indexInfo.GetEntityStorageId(columnId, GetMeta().GetTierName());
+}
+
 void TPortionInfo::FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TIndexInfo& indexInfo) const {
     for (auto&& i : Records) {
         const TString& storageId = GetColumnStorageId(i.GetColumnId(), indexInfo);

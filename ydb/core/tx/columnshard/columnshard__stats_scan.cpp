@@ -83,7 +83,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
             NArrow::Append<arrow::StringType>(*builders[9], blobIdString);
             NArrow::Append<arrow::UInt64Type>(*builders[10], r->BlobRange.Offset);
             NArrow::Append<arrow::UInt64Type>(*builders[11], r->BlobRange.Size);
-            NArrow::Append<arrow::BooleanType>(*builders[12], !portion.HasRemoveSnapshot() || ReadMetadata->GetRequestSnapshot() < portion.GetRemoveSnapshot());
+            NArrow::Append<arrow::BooleanType>(*builders[12], !portion.IsRemovedFor(ReadMetadata->GetRequestSnapshot()));
 
             const auto tierName = portionSchema->GetIndexInfo().GetEntityStorageId(r->GetColumnId(), portion.GetMeta().GetTierName());
             std::string strTierName(tierName.data(), tierName.size());
@@ -114,7 +114,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
             NArrow::Append<arrow::StringType>(*builders[9], blobIdString);
             NArrow::Append<arrow::UInt64Type>(*builders[10], r->GetBlobRange().Offset);
             NArrow::Append<arrow::UInt64Type>(*builders[11], r->GetBlobRange().Size);
-            NArrow::Append<arrow::BooleanType>(*builders[12], !portion.HasRemoveSnapshot() || ReadMetadata->GetRequestSnapshot() < portion.GetRemoveSnapshot());
+            NArrow::Append<arrow::BooleanType>(*builders[12], !portion.IsRemovedFor(ReadMetadata->GetRequestSnapshot()));
             const auto tierName = portionSchema->GetIndexInfo().GetEntityStorageId(r->GetIndexId(), portion.GetMeta().GetTierName());
             std::string strTierName(tierName.data(), tierName.size());
             NArrow::Append<arrow::StringType>(*builders[13], strTierName);

@@ -106,15 +106,6 @@ public:
         return true;
     }
 
-    bool Cross(const TColumnsSet& columnsSet) const {
-        for (auto&& i : columnsSet.ColumnIds) {
-            if (ColumnIds.contains(i)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     bool IsEqual(const TColumnsSet& columnsSet) const {
         if (columnsSet.GetColumnIds().size() != ColumnIds.size()) {
             return false;

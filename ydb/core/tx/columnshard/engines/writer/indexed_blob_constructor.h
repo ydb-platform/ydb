@@ -160,9 +160,24 @@ public:
 
     void InitReadyInstant(const TMonotonic instant);
     void InitStartSending(const TMonotonic instant);
-    void InitReplyReceived(const TMonotonic instant);
 
-    std::vector<TWritingBlob> GroupIntoBlobs();
+    std::vector<TWritingBlob> GroupIntoBlobs() {
+        std::vector<TWritingBlob> result;
+        TWritingBlob currentBlob;
+        for (auto&& aggr : Aggregations) {
+            for (auto&& bInfo : aggr->MutableSplittedBlobs()) {
+                if (!currentBlob.AddData(bInfo)) {
+                    result.emplace_back(std::move(currentBlob));
+                    currentBlob = TWritingBlob();
+                    AFL_VERIFY(currentBlob.AddData(bInfo));
+                }
+            }
+        }
+        if (currentBlob.GetSize()) {
+            result.emplace_back(std::move(currentBlob));
+        }
+        return result;
+    }
 };
 
 class TIndexedWriteController : public NColumnShard::IWriteController, public NColumnShard::TMonitoringObjectsCounter<TIndexedWriteController, true> {

@@ -9,7 +9,13 @@ namespace NKikimr::NOlap {
 
 void TTTLColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     TBase::DoDebugString(out);
-    out << "eviction=" << PortionsToEvict.size() << ";";
+    if (PortionsToEvict.size()) {
+        out << "eviction=(count=" << PortionsToEvict.size() << ";portions=[";
+        for (auto& info : PortionsToEvict) {
+            out << info.GetPortionInfo() << ";to=" << info.GetFeatures().TargetTierName << ";";
+        }
+        out << "];";
+    }
 }
 
 void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
@@ -37,8 +43,8 @@ std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPorti
 
     auto* tiering = Tiering.FindPtr(evictFeatures.PathId);
     Y_ABORT_UNLESS(tiering);
-    auto serializer = tiering->GetSerializer(evictFeatures.TargetTierName);
-    if (!serializer) {
+    auto compression = tiering->GetCompression(evictFeatures.TargetTierName);
+    if (!compression) {
         // Nothing to recompress. We have no other kinds of evictions yet.
         evictFeatures.DataChanges = false;
         auto result = TPortionInfoWithBlobs::RestorePortion(portionInfo, srcBlobs);
@@ -52,7 +58,7 @@ std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPorti
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_for_eviction", portionInfo.DebugString());
 
     TSaverContext saverContext(evictFeatures.StorageOperator, SaverContext.GetStoragesManager());
-    saverContext.SetTierName(evictFeatures.TargetTierName).SetExternalSerializer(*serializer);
+    saverContext.SetTierName(evictFeatures.TargetTierName).SetExternalCompression(compression);
     auto withBlobs = TPortionInfoWithBlobs::RestorePortion(portionInfo, srcBlobs);
     withBlobs.GetPortionInfo().InitOperator(evictFeatures.StorageOperator, true);
     withBlobs.GetPortionInfo().MutableMeta().SetTierName(evictFeatures.TargetTierName);

@@ -69,7 +69,7 @@ bool TPortionMeta::DeserializeFromProto(const NKikimrTxColumnShard::TIndexPortio
 }
 
 std::optional<NKikimrTxColumnShard::TIndexPortionMeta> TPortionMeta::SerializeToProto(const ui32 columnId, const ui32 chunk) const {
-    if (!IsChunkWithPortionInfo(columnId, chunk)) {
+    if (columnId != FirstPkColumn || chunk != 0) {
         return {};
     }
 

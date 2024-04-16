@@ -375,10 +375,10 @@ NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpec
             cProto.SetName(tier.Name);
             *cProto.MutableObjectStorage() = tier.S3;
             if (tier.Codec) {
-                cProto.MutableCompression()->SetCodec(tier.GetCodecId());
+                cProto.MutableCompression()->SetCompressionCodec(tier.GetCodecId());
             }
             if (tier.CompressionLevel) {
-                cProto.MutableCompression()->SetLevel(*tier.CompressionLevel);
+                cProto.MutableCompression()->SetCompressionLevel(*tier.CompressionLevel);
             }
             NColumnShard::NTiers::TTierConfig tConfig(tier.Name, cProto);
             cs->MutableTierConfigs().emplace(tConfig.GetTierName(), tConfig);

@@ -4,7 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/formats/arrow/hash/xx_hash.h>
 #include <ydb/core/formats/arrow/hash/calcer.h>
-#include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/formats/arrow/serializer/full.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 
 namespace NKikimr::NOlap::NIndexes {
@@ -14,7 +14,6 @@ void TPortionIndexChunk::DoAddIntoPortion(const TBlobRange& bRange, TPortionInfo
 }
 
 std::shared_ptr<NKikimr::NOlap::IPortionDataChunk> TIndexByColumns::DoBuildIndex(const ui32 indexId, std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
-    AFL_VERIFY(Serializer);
     AFL_VERIFY(data.size());
     std::vector<TChunkedColumnReader> columnReaders;
     for (auto&& i : ColumnIds) {
@@ -28,12 +27,12 @@ std::shared_ptr<NKikimr::NOlap::IPortionDataChunk> TIndexByColumns::DoBuildIndex
     }
     TChunkedBatchReader reader(std::move(columnReaders));
     std::shared_ptr<arrow::RecordBatch> indexBatch = DoBuildIndexImpl(reader);
-    const TString indexData = Serializer->SerializeFull(indexBatch);
+    const TString indexData = TColumnSaver(nullptr, Serializer).Apply(indexBatch);
     return std::make_shared<TPortionIndexChunk>(indexId, recordsCount, NArrow::GetBatchDataSize(indexBatch), indexData);
 }
 
 bool TIndexByColumns::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& /*proto*/) {
-    Serializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
+    Serializer = std::make_shared<NArrow::NSerialization::TFullDataSerializer>(arrow::ipc::IpcWriteOptions::Defaults());
     return true;
 }
 
@@ -41,7 +40,7 @@ TIndexByColumns::TIndexByColumns(const ui32 indexId, const TString& indexName, c
     : TBase(indexId, indexName)
     , ColumnIds(columnIds)
 {
-    Serializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
+    Serializer = std::make_shared<NArrow::NSerialization::TFullDataSerializer>(arrow::ipc::IpcWriteOptions::Defaults());
 }
 
 NKikimr::TConclusionStatus TIndexByColumns::CheckSameColumnsForModification(const IIndexMeta& newMeta) const {

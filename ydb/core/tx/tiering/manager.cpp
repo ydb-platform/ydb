@@ -24,7 +24,7 @@ public:
 
     }
     ~TActor() {
-        Owner->Stop(false);
+        Owner->Stop();
     }
 
     STATEFN(StateMain) {
@@ -106,16 +106,10 @@ TManager::TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, 
 {
 }
 
-NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compressionProto) {
-    NArrow::NSerialization::TSerializerContainer container;
-    AFL_VERIFY(container.DeserializeFromProto(compressionProto));
-    return container;
-}
-
-NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializerProto) {
-    NArrow::NSerialization::TSerializerContainer container;
-    AFL_VERIFY(container.DeserializeFromProto(serializerProto));
-    return container;
+NArrow::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression) {
+    auto out = NArrow::TCompression::BuildFromProto(compression);
+    Y_ABORT_UNLESS(out, "%s", out.GetErrorMessage().data());
+    return *out;
 }
 }
 
@@ -162,11 +156,11 @@ TTiersManager& TTiersManager::Start(std::shared_ptr<TTiersManager> ownerPtr) {
     return *this;
 }
 
-TTiersManager& TTiersManager::Stop(const bool needStopActor) {
+TTiersManager& TTiersManager::Stop() {
     if (!Actor) {
         return *this;
     }
-    if (TlsActivationContext && needStopActor) {
+    if (TlsActivationContext) {
         TActivationContext::AsActorContext().Send(Actor->SelfId(), new NActors::TEvents::TEvPoison);
     }
     Actor = nullptr;
@@ -214,7 +208,7 @@ THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
                 for (auto& [name, tier] : pathTiering.GetTierByName()) {
                     auto it = tierConfigs.find(name);
                     if (it != tierConfigs.end()) {
-                        tier->SetSerializer(NTiers::ConvertCompression(it->second.GetCompression()));
+                        tier->SetCompression(NTiers::ConvertCompression(it->second.GetCompression()));
                     }
                 }
             }

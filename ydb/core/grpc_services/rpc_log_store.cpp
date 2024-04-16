@@ -42,16 +42,16 @@ bool ConvertCompressionFromPublicToInternal(const Ydb::LogStore::Compression& fr
             error = "LogStores with no compression are disabled.";
             return false;
         case Ydb::LogStore::Compression::CODEC_LZ4:
-            to.SetCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+            to.SetCompressionCodec(NKikimrSchemeOp::ColumnCodecLZ4);
             break;
         case Ydb::LogStore::Compression::CODEC_ZSTD:
-            to.SetCodec(NKikimrSchemeOp::ColumnCodecZSTD);
+            to.SetCompressionCodec(NKikimrSchemeOp::ColumnCodecZSTD);
             break;
         default:
             break;
     }
     if (from.compression_level()) {
-        to.SetLevel(from.compression_level());
+        to.SetCompressionLevel(from.compression_level());
     }
     return true;
 }
@@ -60,7 +60,7 @@ void ConvertCompressionFromInternalToPublic(const NKikimrSchemeOp::TCompressionO
                                             Ydb::LogStore::Compression& to)
 {
     to.set_compression_codec(Ydb::LogStore::Compression::CODEC_LZ4); // LZ4 if not set
-    switch (from.GetCodec()) {
+    switch (from.GetCompressionCodec()) {
         case NKikimrSchemeOp::ColumnCodecPlain:
             to.set_compression_codec(Ydb::LogStore::Compression::CODEC_PLAIN);
             break;
@@ -73,7 +73,7 @@ void ConvertCompressionFromInternalToPublic(const NKikimrSchemeOp::TCompressionO
         default:
             break;
     }
-    to.set_compression_level(from.GetLevel());
+    to.set_compression_level(from.GetCompressionLevel());
 }
 
 bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikimrSchemeOp::TColumnTableSchema& to,

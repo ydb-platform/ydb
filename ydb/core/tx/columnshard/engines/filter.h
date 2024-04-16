@@ -3,7 +3,6 @@
 #include "defs.h"
 #include <ydb/core/formats/arrow/program.h>
 #include <ydb/core/formats/arrow/replace_key.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
 
 namespace NKikimr::NOlap {
 

@@ -3,7 +3,6 @@
 #include "defs.h"
 #include "column_engine.h"
 #include <ydb/core/tx/columnshard/common/scalars.h>
-#include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/columnshard_ttl.h>
 #include "scheme/tier_info.h"
@@ -85,45 +84,20 @@ private:
     std::shared_ptr<IStoragesManager> StoragesManager;
     TEvictionsController EvictionsController;
     class TTieringProcessContext {
-    private:
-        const ui64 MemoryUsageLimit;
-        ui64 MemoryUsage = 0;
-        ui64 TxWriteVolume = 0;
-        std::shared_ptr<TColumnEngineChanges::IMemoryPredictor> MemoryPredictor;
     public:
+        bool AllowEviction = true;
+        bool AllowDrop = true;
         const TInstant Now;
+        const ui64 MaxEvictBytes;
         std::shared_ptr<TTTLColumnEngineChanges> Changes;
         std::map<ui64, TDuration> DurationsForced;
         const THashSet<TPortionAddress>& BusyPortions;
-
-        void AppPortionForEvictionChecker(const TPortionInfo& info) {
-            MemoryUsage = MemoryPredictor->AddPortion(info);
-            TxWriteVolume += info.GetTxVolume();
-        }
-
-        void AppPortionForTtlChecker(const TPortionInfo& info) {
-            TxWriteVolume += info.GetTxVolume();
-        }
-
-        bool HasLimitsForEviction() const {
-            return MemoryUsage < MemoryUsageLimit && TxWriteVolume < TGlobalLimits::TxWriteLimitBytes;
-        }
-
-        bool HasLimitsForTtl() const {
-            return TxWriteVolume < TGlobalLimits::TxWriteLimitBytes;
-        }
-
-        TTieringProcessContext(const ui64 memoryUsageLimit, std::shared_ptr<TTTLColumnEngineChanges> changes,
-            const THashSet<TPortionAddress>& busyPortions, const std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>& memoryPredictor);
+        TTieringProcessContext(const ui64 maxEvictBytes, std::shared_ptr<TTTLColumnEngineChanges> changes, const THashSet<TPortionAddress>& busyPortions);
     };
 
     TDuration ProcessTiering(const ui64 pathId, const TTiering& tiering, TTieringProcessContext& context) const;
     bool DrainEvictionQueue(std::map<TMonotonic, std::vector<TEvictionsController::TTieringWithPathId>>& evictionsQueue, TTieringProcessContext& context) const;
 public:
-    ui64* GetLastPortionPointer() {
-        return &LastPortion;
-    }
-
     enum ETableIdx {
         GRANULES = 0,
     };
@@ -161,8 +135,8 @@ public:
     std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(const TCompactionLimits& limits, const THashSet<TPortionAddress>& busyPortions) noexcept override;
     std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop, ui32 maxRecords) noexcept override;
-    std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
-        const THashSet<TPortionAddress>& busyPortions, const ui64 memoryUsageLimit) noexcept override;
+    std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const THashSet<TPortionAddress>& busyPortions,
+                                                   ui64 maxEvictBytes = TCompactionLimits::DEFAULT_EVICTION_BYTES) noexcept override;
 
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
                       const TSnapshot& snapshot) noexcept override;
@@ -190,7 +164,9 @@ public:
     }
 
     const TGranuleMeta& GetGranuleVerified(const ui64 pathId) const {
-        return *GetGranulePtrVerified(pathId);
+        auto it = Tables.find(pathId);
+        AFL_VERIFY(it != Tables.end())("path_id", pathId)("count", Tables.size());
+        return *it->second;
     }
 
     std::shared_ptr<TGranuleMeta> GetGranulePtrVerified(const ui64 pathId) const {

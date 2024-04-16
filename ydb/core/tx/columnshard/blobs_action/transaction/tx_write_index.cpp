@@ -85,11 +85,4 @@ TTxWriteIndex::TTxWriteIndex(TColumnShard* self, TEvPrivate::TEvWriteIndex::TPtr
     Y_ABORT_UNLESS(Ev && Ev->Get()->IndexChanges);
 }
 
-void TTxWriteIndex::Describe(IOutputStream& out) const noexcept {
-    out << TypeName(*this);
-    if (Ev->Get()->IndexChanges) {
-        out << ": " << Ev->Get()->IndexChanges->DebugString();
-    }
-}
-
 }

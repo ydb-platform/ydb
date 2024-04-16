@@ -15,8 +15,7 @@
 namespace NKikimr::NColumnShard {
 namespace NTiers {
 
-NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializerProto);
-NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compressionProto);
+NArrow::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression);
 
 class TManager {
 private:
@@ -81,7 +80,7 @@ public:
     }
 
     TTiersManager& Start(std::shared_ptr<TTiersManager> ownerPtr);
-    TTiersManager& Stop(const bool needStopActor);
+    TTiersManager& Stop();
     const NTiers::TManager& GetManagerVerified(const TString& tierId) const;
     const NTiers::TManager* GetManagerOptional(const TString& tierId) const;
     NMetadata::NFetcher::ISnapshotsFetcher::TPtr GetExternalDataManipulation() const;

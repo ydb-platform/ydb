@@ -2,7 +2,6 @@
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
-#include <ydb/core/formats/arrow/serializer/abstract.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -14,13 +13,13 @@ namespace NKikimr::NSchemeShard {
         Name = columnSchema.GetName();
         NotNullFlag = columnSchema.GetNotNull();
         TypeName = columnSchema.GetType();
-        if (columnSchema.HasSerializer()) {
-            NArrow::NSerialization::TSerializerContainer serializer;
-            if (!serializer.DeserializeFromProto(columnSchema.GetSerializer())) {
-                errors.AddError("Cannot parse serializer info");
+        if (columnSchema.HasCompression()) {
+            auto compression = NArrow::TCompression::BuildFromProto(columnSchema.GetCompression());
+            if (!compression) {
+                errors.AddError("Cannot parse compression info: " + compression.GetErrorMessage());
                 return false;
             }
-            Serializer = serializer;
+            Compression = *compression;
         }
         if (columnSchema.HasDictionaryEncoding()) {
             auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnSchema.GetDictionaryEncoding());
@@ -73,14 +72,10 @@ namespace NKikimr::NSchemeShard {
                 columnSchema.GetTypeId(), nullptr)
                 .TypeInfo;
         }
-        if (columnSchema.HasSerializer()) {
-            NArrow::NSerialization::TSerializerContainer serializer;
-            AFL_VERIFY(serializer.DeserializeFromProto(columnSchema.GetSerializer()));
-            Serializer = serializer;
-        } else if (columnSchema.HasCompression()) {
-            NArrow::NSerialization::TSerializerContainer serializer;
-            AFL_VERIFY(serializer.DeserializeFromProto(columnSchema.GetCompression()));
-            Serializer = serializer;
+        if (columnSchema.HasCompression()) {
+            auto compression = NArrow::TCompression::BuildFromProto(columnSchema.GetCompression());
+            Y_ABORT_UNLESS(compression.IsSuccess(), "%s", compression.GetErrorMessage().data());
+            Compression = *compression;
         }
         if (columnSchema.HasDictionaryEncoding()) {
             auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnSchema.GetDictionaryEncoding());
@@ -94,8 +89,8 @@ namespace NKikimr::NSchemeShard {
         columnSchema.SetName(Name);
         columnSchema.SetType(TypeName);
         columnSchema.SetNotNull(NotNullFlag);
-        if (Serializer) {
-            Serializer->SerializeToProto(*columnSchema.MutableSerializer());
+        if (Compression) {
+            *columnSchema.MutableCompression() = Compression->SerializeToProto();
         }
         if (DictionaryEncoding) {
             *columnSchema.MutableDictionaryEncoding() = DictionaryEncoding->SerializeToProto();
@@ -110,8 +105,12 @@ namespace NKikimr::NSchemeShard {
 
     bool TOlapColumnAdd::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors) {
         Y_ABORT_UNLESS(GetName() == diffColumn.GetName());
-        if (diffColumn.GetSerializer()) {
-            Serializer = diffColumn.GetSerializer();
+        {
+            auto result = diffColumn.GetCompression().Apply(Compression);
+            if (!result) {
+                errors.AddError("Cannot merge compression info: " + result.GetErrorMessage());
+                return false;
+            }
         }
         {
             auto result = diffColumn.GetDictionaryEncoding().Apply(DictionaryEncoding);

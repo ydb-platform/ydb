@@ -214,9 +214,7 @@ class TColumnShard
     void OnTieringModified();
 public:
     enum class EOverloadStatus {
-        ShardTxInFly /* "shard_tx" */,
-        ShardWritesInFly /* "shard_writes" */,
-        ShardWritesSizeInFly /* "shard_writes_size" */,
+        Shard /* "shard" */,
         InsertTable /* "insert_table" */,
         Disk /* "disk" */,
         None /* "none" */
@@ -300,8 +298,8 @@ private:
     class TWritesMonitor {
     private:
         TColumnShard& Owner;
-        YDB_READONLY(ui64, WritesInFlight, 0);
-        YDB_READONLY(ui64, WritesSizeInFlight, 0);
+        ui64 WritesInFlight = 0;
+        ui64 WritesSizeInFlight = 0;
 
     public:
         class TGuard: public TNonCopyable {
@@ -337,8 +335,17 @@ private:
             return TGuard(*this);
         }
 
+        bool ShardOverloaded() const {
+            ui64 txLimit = Owner.Settings.OverloadTxInFlight;
+            ui64 writesLimit = Owner.Settings.OverloadWritesInFlight;
+            ui64 writesSizeLimit = Owner.Settings.OverloadWritesSizeInFlight;
+            return  (txLimit && Owner.Executor()->GetStats().TxInFly > txLimit) ||
+                    (writesLimit && WritesInFlight > writesLimit) ||
+                    (writesSizeLimit && WritesSizeInFlight > writesSizeLimit);
+        }
+
         TString DebugString() const {
-            return TStringBuilder() << "{object=write_monitor;count=" << WritesInFlight << ";size=" << WritesSizeInFlight << "}";
+            return TStringBuilder() << "TWritesMonitor: inflight " << WritesInFlight << " (" << WritesSizeInFlight << " bytes)";
         }
 
     private:
@@ -385,7 +392,6 @@ private:
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters> SubscribeCounters;
     NOlap::NResourceBroker::NSubscribe::TTaskContext InsertTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
-    NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
     const TScanCounters ReadCounters;
     const TScanCounters ScanCounters;
     const TIndexationCounters CompactionCounters = TIndexationCounters("GeneralCompaction");

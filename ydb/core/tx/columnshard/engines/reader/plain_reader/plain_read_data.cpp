@@ -33,10 +33,15 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<NOlap::TReadContext>& conte
             } else {
                 insertedPortionsBytes += (*itPortion)->BlobsBytes();
             }
-            sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, *itPortion, SpecialReadContext, (*itPortion)->IndexKeyStart(), (*itPortion)->IndexKeyEnd()));
+            auto start = GetReadMetadata()->BuildSortedPosition((*itPortion)->IndexKeyStart());
+            auto finish = GetReadMetadata()->BuildSortedPosition((*itPortion)->IndexKeyEnd());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", start.DebugJson())("finish", finish.DebugJson());
+            sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, *itPortion, SpecialReadContext, start, finish));
             ++itPortion;
         } else {
-            sources.emplace_back(std::make_shared<TCommittedDataSource>(sourceIdx++, *itCommitted, SpecialReadContext, itCommitted->GetFirstVerified(), itCommitted->GetLastVerified()));
+            auto start = GetReadMetadata()->BuildSortedPosition(itCommitted->GetFirstVerified());
+            auto finish = GetReadMetadata()->BuildSortedPosition(itCommitted->GetLastVerified());
+            sources.emplace_back(std::make_shared<TCommittedDataSource>(sourceIdx++, *itCommitted, SpecialReadContext, start, finish));
             committedPortionsBytes += itCommitted->GetSize();
             ++itCommitted;
         }

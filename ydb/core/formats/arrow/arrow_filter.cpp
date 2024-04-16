@@ -569,7 +569,7 @@ TColumnFilter TColumnFilter::CombineSequentialAnd(const TColumnFilter& extFilter
                 ++itExt;
             }
         }
-        AFL_VERIFY(itSelf == Filter.end() && itExt == extFilter.Filter.cend());
+        Y_ABORT_UNLESS(itSelf == Filter.end() && itExt == extFilter.Filter.cend());
         TColumnFilter result = TColumnFilter::BuildAllowFilter();
         std::swap(resultFilter, result.Filter);
         std::swap(curCurrent, result.LastValue);
@@ -609,14 +609,6 @@ std::optional<ui32> TColumnFilter::GetFilteredCount() const {
         }
     }
     return *FilteredCount;
-}
-
-void TColumnFilter::Append(const TColumnFilter& filter) {
-    bool currentVal = filter.GetStartValue();
-    for (auto&& i : filter.Filter) {
-        Add(currentVal, i);
-        currentVal = !currentVal;
-    }
 }
 
 }

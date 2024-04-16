@@ -314,6 +314,10 @@ namespace NFwd {
         void Forward(IPageLoadingQueue *head, ui64 upper) noexcept override
         {
             for (auto& level : Levels) {
+                if (level.Pages.empty()) {
+                    // level hasn't been used yet
+                    continue;
+                }
                 while (!level.Queue.empty() && GetDataSize(level) < upper) {
                     RequestNextPage(level, head);
                 }
@@ -347,13 +351,16 @@ namespace NFwd {
                     NPage::TBtreeIndexNode node(one.Data);
                     for (auto pos : xrange(node.GetChildrenCount())) {
                         auto& child = node.GetShortChild(pos);
+                        if (child.RowCount <= BeginRowId) {
+                            continue;
+                        }
                         Levels[*levelId + 1].Queue.emplace(child.PageId, child.DataSize);
                         Y_ABORT_UNLESS(LevelsMap.emplace(child.PageId, *levelId + 1).second);
-                        it->Settle(one);
                     }
+                    it->Settle(one);
                 } else {
                     Y_DEBUG_ABORT_UNLESS(Part->GetPageType(one.PageId) == EPage::DataPage);
-                    it->Settle(one); // settle of a dropped page returns 0 and releases its data
+                    it->Settle(one); // settle of a dropped releases its data
                     ++it;
                 }
             }
@@ -395,17 +402,17 @@ namespace NFwd {
         }
 
         ui64 GetDataSize(TLevel& level) {
-            if (&level == &*Levels.end()) {
+            if (&level == &*Levels.rbegin()) {
                 return 
                     level.Trace.GetDataSize() +
-                    level.Pages.empty() 
+                    (level.Pages.empty() 
                         ? 0 
-                        // Note: for simplicity consider pages are sequential
-                        : level.Pages.end()->EndDataSize - level.Pages.begin()->EndDataSize + level.Pages.begin()->Size;
+                        // Note: for simplicity consider pages as sequential
+                        : level.Pages.rbegin()->EndDataSize - level.Pages.begin()->EndDataSize + level.Pages.begin()->Size);
             } else {
                 return level.Pages.empty() 
                     ? 0 
-                    : level.Pages.end()->EndDataSize - level.Pages.begin()->EndDataSize;
+                    : level.Pages.rbegin()->EndDataSize - level.Pages.begin()->EndDataSize;
             }
         }
 

@@ -16,16 +16,16 @@ public:
 private:
     THashMap<NKikimr::NOlap::TBlobRange, TString> Blobs;
     TDataContainer Portions;
-    std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
+    THashMap<ui64, ISnapshotSchema::TPtr> Schemas;
     TNormalizationContext NormContext;
 protected:
     virtual bool DoExecute() override {
-        Y_ABORT_UNLESS(!Schemas->empty());
-        auto pkColumnIds = Schemas->begin()->second->GetPkColumnsIds();
+        Y_ABORT_UNLESS(!Schemas.empty());
+        auto pkColumnIds = Schemas.begin()->second->GetPkColumnsIds();
         pkColumnIds.insert(TIndexInfo::GetSpecialColumnIds().begin(), TIndexInfo::GetSpecialColumnIds().end());
 
         for (auto&& portionInfo : Portions) {
-            auto blobSchema = Schemas->FindPtr(portionInfo->GetPortionId());
+            auto blobSchema = Schemas.FindPtr(portionInfo->GetPortionId());
             THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> blobsDataAssemble;
             for (auto&& i : portionInfo->Records) {
                 auto blobIt = Blobs.find(i.BlobRange);
@@ -47,10 +47,10 @@ protected:
     }
 
 public:
-    TMinMaxSnapshotChangesTask(THashMap<NKikimr::NOlap::TBlobRange, TString>&& blobs, const TNormalizationContext& nCtx, TDataContainer&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
+    TMinMaxSnapshotChangesTask(THashMap<NKikimr::NOlap::TBlobRange, TString>&& blobs, const TNormalizationContext& nCtx, TDataContainer&& portions, THashMap<ui64, ISnapshotSchema::TPtr>&& schemas)
         : Blobs(std::move(blobs))
         , Portions(std::move(portions))
-        , Schemas(schemas)
+        , Schemas(std::move(schemas))
         , NormContext(nCtx)
     {}
 
@@ -135,7 +135,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizer::Init(const 
     }
 
     THashMap<ui64, std::shared_ptr<TPortionInfo>> portions;
-    auto schemas = std::make_shared<THashMap<ui64, ISnapshotSchema::TPtr>>();
+    THashMap<ui64, ISnapshotSchema::TPtr> schemas;
     auto pkColumnIds = TMinMaxSnapshotChangesTask::GetColumnsFilter(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema());
 
     {
@@ -161,7 +161,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizer::Init(const 
             auto portionMeta = loadContext.GetPortionMeta();
             if (it == portions.end()) {
                 Y_ABORT_UNLESS(portion.Records.empty());
-                (*schemas)[portion.GetPortionId()] = currentSchema;
+                schemas[portion.GetPortionId()] = currentSchema;
                 auto portionNew = std::make_shared<TPortionInfo>(portion);
                 portionNew->AddRecord(currentSchema->GetIndexInfo(), rec, portionMeta);
                 it = portions.emplace(portion.GetPortion(), portionNew).first;
@@ -202,7 +202,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizer::Init(const 
         }
         ++brokenPortioncCount;
         package.emplace_back(portion.second);
-        if (package.size() == 1000) {
+        if (package.size() == 100) {
             std::vector<std::shared_ptr<TPortionInfo>> local;
             local.swap(package);
             tasks.emplace_back(std::make_shared<TPortionsNormalizerTask<TMinMaxSnapshotChangesTask>>(std::move(local), schemas));

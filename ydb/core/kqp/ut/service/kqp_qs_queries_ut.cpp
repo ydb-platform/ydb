@@ -1165,6 +1165,15 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(!resultSelect.IsSuccess());
         }
+
+        Sleep(TDuration::Seconds(1));
+
+        {
+            auto schemeClient = kikimr.GetSchemeClient();
+            auto listResult = schemeClient.ListDirectory("/Root/.tmp/sessions").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS, listResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 0);
+        }
     }
 
     Y_UNIT_TEST(AlterTempTable) {

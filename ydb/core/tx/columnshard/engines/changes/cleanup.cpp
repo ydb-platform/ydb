@@ -18,15 +18,20 @@ void TCleanupColumnEngineChanges::DoDebugString(TStringOutput& out) const {
 void TCleanupColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     THashSet<ui64> pathIds;
     if (self) {
+        THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
         for (auto&& p : PortionsToDrop) {
             p.RemoveFromDatabase(context.DBWrapper);
 
-            auto removing = BlobsAction.GetRemoving(p);
-            for (auto&& r : p.Records) {
-                removing->DeclareRemove((TTabletId)self->TabletID(), r.BlobRange.BlobId);
-            }
+            p.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
             pathIds.emplace(p.GetPathId());
         }
+        for (auto&& i : blobIdsByStorage) {
+            auto action = BlobsAction.GetRemoving(i.first);
+            for (auto&& b : i.second) {
+                action->DeclareRemove((TTabletId)self->TabletID(), b);
+            }
+        }
+
         if (context.DB) {
             for (auto&& p : pathIds) {
                 self->TablesManager.TryFinalizeDropPath(*context.DB, p);

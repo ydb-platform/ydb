@@ -24,6 +24,7 @@ SRCS(
     columnshard_view.cpp
     counters.cpp
     defs.cpp
+    inflight_request_tracker.cpp
     write_actor.cpp
     tables_manager.cpp
 )

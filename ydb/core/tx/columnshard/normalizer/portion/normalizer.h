@@ -37,8 +37,8 @@ protected:
         NConveyor::TCompServiceOperator::SendTaskToExecute(task);
     }
 
-    virtual bool DoOnError(const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {
-        Y_UNUSED(status, range);
+    virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {
+        Y_UNUSED(status, range, storageId);
         return false;
     }
 

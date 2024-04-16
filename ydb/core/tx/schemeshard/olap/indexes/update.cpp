@@ -4,11 +4,17 @@ namespace NKikimr::NSchemeShard {
 
 void TOlapIndexUpsert::SerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& requestedProto) const {
     requestedProto.SetName(Name);
+    if (StorageId && !!*StorageId) {
+        requestedProto.SetStorageId(*StorageId);
+    }
     IndexConstructor.SerializeToProto(requestedProto);
 }
 
 void TOlapIndexUpsert::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& indexSchema) {
     Name = indexSchema.GetName();
+    if (!!indexSchema.GetStorageId()) {
+        StorageId = indexSchema.GetStorageId();
+    }
     AFL_VERIFY(IndexConstructor.DeserializeFromProto(indexSchema))("incorrect_proto", indexSchema.DebugString());
 }
 

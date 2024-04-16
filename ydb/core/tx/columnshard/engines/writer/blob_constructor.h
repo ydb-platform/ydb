@@ -23,7 +23,7 @@ class TBlobWriteInfo {
 private:
     YDB_READONLY_DEF(TUnifiedBlobId, BlobId);
     YDB_READONLY_DEF(TString, Data);
-    YDB_READONLY_DEF(std::shared_ptr<IBlobsWritingAction>, WriteOperator);
+    YDB_ACCESSOR_DEF(std::shared_ptr<IBlobsWritingAction>, WriteOperator);
 
     TBlobWriteInfo(const TString& data, const std::shared_ptr<IBlobsWritingAction>& writeOperator)
         : Data(data)

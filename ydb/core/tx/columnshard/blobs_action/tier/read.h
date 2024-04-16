@@ -10,7 +10,7 @@ private:
     using TBase = IBlobsReadingAction;
     const NWrappers::NExternalStorage::IExternalStorageOperator::TPtr ExternalStorageOperator;
 protected:
-    virtual void DoStartReading(const THashMap<TUnifiedBlobId, THashSet<TBlobRange>>& ranges) override;
+    virtual void DoStartReading(THashSet<TBlobRange>&& ranges) override;
 public:
 
     TReadingAction(const TString& storageId, const NWrappers::NExternalStorage::IExternalStorageOperator::TPtr& storageOperator)

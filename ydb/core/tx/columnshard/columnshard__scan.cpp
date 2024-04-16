@@ -846,7 +846,11 @@ void TTxScan::Complete(const TActorContext& ctx) {
         return;
     }
 
-    ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(ReadMetadataRanges);
+    const NOlap::TVersionedIndex* index = nullptr;
+    if (Self->HasIndex()) {
+        index = &Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex();
+    }
+    ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(ReadMetadataRanges, index);
     auto statsDelta = Self->InFlightReadsTracker.GetSelectStatsDelta();
 
     Self->IncCounter(COUNTER_READ_INDEX_PORTIONS, statsDelta.Portions);

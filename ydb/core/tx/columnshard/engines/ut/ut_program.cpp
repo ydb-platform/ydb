@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/formats/arrow/converter.h>
 
@@ -20,16 +21,16 @@ using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 
 namespace {
-    static const std::vector<std::pair<TString, TTypeInfo>> testColumns = {
-        {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
-        {"uid", TTypeInfo(NTypeIds::Utf8) },
-        {"sum", TTypeInfo(NTypeIds::Int32) },
-        {"vat", TTypeInfo(NTypeIds::Int32) },
+    static const std::vector<NArrow::NTest::TTestColumn> testColumns = {
+        NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
+        NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ),
+        NArrow::NTest::TTestColumn("sum", TTypeInfo(NTypeIds::Int32)),
+        NArrow::NTest::TTestColumn("vat", TTypeInfo(NTypeIds::Int32)),
     };
 
-    static const std::vector<std::pair<TString, TTypeInfo>> testKey = {
-        {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
-        {"uid", TTypeInfo(NTypeIds::Utf8) }
+    static const std::vector<NArrow::NTest::TTestColumn> testKey = {
+        NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
+        NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) )
     };
 }
 

@@ -95,6 +95,14 @@ public:
 
     }
 
+    TString GetStorageIds() const {
+        TStringBuilder sb;
+        for (auto&& i : StorageActions) {
+            sb << i.first << ",";
+        }
+        return sb;
+    }
+
     ui32 GetWritingBlobsCount() const {
         ui32 result = 0;
         for (auto&& [_, action] : StorageActions) {
@@ -160,19 +168,13 @@ public:
         return GetStorageAction(storageId).GetRemoving(ConsumerId);
     }
 
-    std::shared_ptr<IBlobsDeclareRemovingAction> GetRemoving(const TPortionInfo& portionInfo);
-
     std::shared_ptr<IBlobsWritingAction> GetWriting(const TString& storageId) {
         return GetStorageAction(storageId).GetWriting(ConsumerId);
     }
 
-    std::shared_ptr<IBlobsWritingAction> GetWriting(const TPortionInfo& portionInfo);
-
     std::shared_ptr<IBlobsReadingAction> GetReading(const TString& storageId) {
         return GetStorageAction(storageId).GetReading(ConsumerId);
     }
-
-    std::shared_ptr<IBlobsReadingAction> GetReading(const TPortionInfo& portionInfo);
 
 };
 

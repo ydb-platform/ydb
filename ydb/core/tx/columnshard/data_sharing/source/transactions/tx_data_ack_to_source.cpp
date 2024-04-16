@@ -1,4 +1,5 @@
 #include "tx_data_ack_to_source.h"
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
@@ -7,9 +8,10 @@ bool TTxDataAckToSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc
     THashMap<TString, TTabletsByBlob> sharedTabletBlobIds;
     {
         THashMap<TString, THashSet<NBlobCache::TUnifiedBlobId>> sharedBlobIds;
+        auto& index = Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
         for (auto&& [_, i] : Session->GetCursorVerified()->GetPreviousSelected()) {
             for (auto&& portion : i.GetPortions()) {
-                portion.FillBlobIdsByStorage(sharedBlobIds);
+                portion.FillBlobIdsByStorage(sharedBlobIds, index);
             }
         }
         for (auto&& i : sharedBlobIds) {

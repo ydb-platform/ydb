@@ -5,23 +5,22 @@
 
 namespace NKikimr::NOlap::NDataSharing {
 
-bool TSharedBlobsManager::Load(NTable::TDatabase& database) {
+bool TSharedBlobsManager::LoadIdempotency(NTable::TDatabase& database) {
     NIceDb::TNiceDb db(database);
     using namespace NKikimr::NColumnShard;
+    THashMap<TString, THashMap<TUnifiedBlobId, THashSet<TTabletId>>> sharedBlobIds;
+    THashMap<TString, THashMap<TUnifiedBlobId, TTabletId>> borrowedBlobIds;
     {
         auto rowset = db.Table<Schema::SharedBlobIds>().Select();
         if (!rowset.IsReady())
             return false;
 
         TString error;
-
         while (!rowset.EndOfSet()) {
             const TString& storageId = rowset.GetValue<Schema::SharedBlobIds::StorageId>();
-            const TString blobIdStr = rowset.GetValue<Schema::SharedBlobIds::BlobId>();
-            NOlap::TUnifiedBlobId unifiedBlobId = NOlap::TUnifiedBlobId::ParseFromString(blobIdStr, nullptr, error);
-            Y_ABORT_UNLESS(unifiedBlobId.IsValid(), "%s", error.c_str());
-
-            AFL_VERIFY(GetStorageManagerGuarantee(storageId)->UpsertSharedBlobOnLoad(unifiedBlobId, (TTabletId)rowset.GetValue<Schema::SharedBlobIds::TabletId>()));
+            auto unifiedBlobId = NOlap::TUnifiedBlobId::BuildFromString(rowset.GetValue<Schema::SharedBlobIds::BlobId>(), nullptr);
+            AFL_VERIFY(!!unifiedBlobId)("error", unifiedBlobId.GetErrorMessage());
+            AFL_VERIFY(sharedBlobIds[storageId][*unifiedBlobId].emplace((TTabletId)rowset.GetValue<Schema::SharedBlobIds::TabletId>()).second)("blob_id", *unifiedBlobId)("storage_id", storageId);
             if (!rowset.Next())
                 return false;
         }
@@ -36,13 +35,28 @@ bool TSharedBlobsManager::Load(NTable::TDatabase& database) {
 
         while (!rowset.EndOfSet()) {
             const TString& storageId = rowset.GetValue<Schema::BorrowedBlobIds::StorageId>();
-            const TString blobIdStr = rowset.GetValue<Schema::BorrowedBlobIds::BlobId>();
-            NOlap::TUnifiedBlobId unifiedBlobId = NOlap::TUnifiedBlobId::ParseFromString(blobIdStr, nullptr, error);
-            Y_ABORT_UNLESS(unifiedBlobId.IsValid(), "%s", error.c_str());
-
-            AFL_VERIFY(GetStorageManagerGuarantee(storageId)->UpsertBorrowedBlobOnLoad(unifiedBlobId, (TTabletId)rowset.GetValue<Schema::BorrowedBlobIds::TabletId>()));
+            auto unifiedBlobId = NOlap::TUnifiedBlobId::BuildFromString(rowset.GetValue<Schema::BorrowedBlobIds::BlobId>(), nullptr);
+            AFL_VERIFY(!!unifiedBlobId)("error", unifiedBlobId.GetErrorMessage());
+            AFL_VERIFY(borrowedBlobIds[storageId].emplace(*unifiedBlobId, (TTabletId)rowset.GetValue<Schema::BorrowedBlobIds::TabletId>()).second)("blob_id", *unifiedBlobId)("storage_id", storageId);
             if (!rowset.Next())
                 return false;
+        }
+    }
+    for (auto&& i : Storages) {
+        i.second->Clear();
+    }
+    for (auto&& [storageId, blobs] : sharedBlobIds) {
+        auto storage = GetStorageManagerGuarantee(storageId);
+        for (auto&& b : blobs) {
+            for (auto&& t : b.second) {
+                AFL_VERIFY(storage->UpsertSharedBlobOnLoad(b.first, t));
+            }
+        }
+    }
+    for (auto&& [storageId, blobs] : borrowedBlobIds) {
+        auto storage = GetStorageManagerGuarantee(storageId);
+        for (auto&& b : blobs) {
+            AFL_VERIFY(storage->UpsertBorrowedBlobOnLoad(b.first, b.second));
         }
     }
     return true;

@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     blob_manager_db.cpp
-    memory.cpp
 )
 
 PEERDIR(

@@ -14,7 +14,7 @@ class TMinMaxSnapshotChangesTask: public NConveyor::ITask {
 public:
     using TDataContainer = std::vector<std::shared_ptr<TPortionInfo>>;
 private:
-    THashMap<NKikimr::NOlap::TBlobRange, TString> Blobs;
+    NBlobOperations::NRead::TCompositeReadBlobs Blobs;
     TDataContainer Portions;
     THashMap<ui64, ISnapshotSchema::TPtr> Schemas;
     TNormalizationContext NormContext;
@@ -25,12 +25,11 @@ protected:
         pkColumnIds.insert(TIndexInfo::GetSpecialColumnIds().begin(), TIndexInfo::GetSpecialColumnIds().end());
 
         for (auto&& portionInfo : Portions) {
-            auto blobSchema = Schemas.FindPtr(portionInfo->GetPortionId());
-            THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> blobsDataAssemble;
+            auto blobSchema = Schemas->FindPtr(portionInfo->GetPortionId());
+            THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo> blobsDataAssemble;
             for (auto&& i : portionInfo->Records) {
-                auto blobIt = Blobs.find(i.BlobRange);
-                Y_ABORT_UNLESS(blobIt != Blobs.end());
-                blobsDataAssemble.emplace(i.BlobRange, blobIt->second);
+                auto blobData = Blobs.Extract((*blobSchema)->GetIndexInfo().GetColumnStorageId(i.GetColumnId(), portionInfo->GetMeta().GetTierName()), i.BlobRange);
+                blobsDataAssemble.emplace(i.GetAddress(), blobData);
             }
 
             AFL_VERIFY(!!blobSchema)("details", portionInfo->DebugString());
@@ -47,7 +46,7 @@ protected:
     }
 
 public:
-    TMinMaxSnapshotChangesTask(THashMap<NKikimr::NOlap::TBlobRange, TString>&& blobs, const TNormalizationContext& nCtx, TDataContainer&& portions, THashMap<ui64, ISnapshotSchema::TPtr>&& schemas)
+    TMinMaxSnapshotChangesTask(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TNormalizationContext& nCtx, TDataContainer&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
         : Blobs(std::move(blobs))
         , Portions(std::move(portions))
         , Schemas(std::move(schemas))

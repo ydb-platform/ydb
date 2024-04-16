@@ -6,6 +6,10 @@
 
 #include <ydb/library/actors/core/event_pb.h>
 
+namespace NKikimr::NOlap {
+class TVersionedIndex;
+}
+
 namespace NKikimr::NOlap::NDataSharing {
 class TSharedBlobsManager;
 class TTaskForTablet;
@@ -45,7 +49,8 @@ public:
     std::vector<TPortionInfo> DetachPortions() {
         return std::move(Portions);
     }
-    THashMap<TTabletId, TTaskForTablet> BuildLinkTabletTasks(const std::shared_ptr<TSharedBlobsManager>& sharedBlobs, const TTabletId selfTabletId, const TTransferContext& context);
+    THashMap<TTabletId, TTaskForTablet> BuildLinkTabletTasks(const std::shared_ptr<TSharedBlobsManager>& sharedBlobs, const TTabletId selfTabletId,
+        const TTransferContext& context, const TVersionedIndex& index);
 
     void InitPortionIds(ui64* lastPortionId, const std::optional<ui64> pathId = {}) {
         AFL_VERIFY(lastPortionId);

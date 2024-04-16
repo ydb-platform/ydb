@@ -72,3 +72,7 @@ util/all_thread.cpp
 util/all_util.cpp
 util/charset/all_charset.cpp
 
+/.vs
+/out/build/x64-Debug
+/ydb/out/build/x64-Debug
+/yt/out/build/x64-Debug

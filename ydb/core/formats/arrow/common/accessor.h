@@ -50,6 +50,14 @@ public:
         YDB_READONLY(ui64, Position, 0);
         YDB_READONLY(ui64, ChunkIdx, 0);
     public:
+        bool NextPosition() {
+            if (Position + 1 < (ui32)Array->length()) {
+                ++Position;
+                return true;
+            }
+            return false;
+        }
+
         TAddress(const std::shared_ptr<arrow::Array>& arr, const ui64 position, const ui64 chunkIdx)
             : Array(arr)
             , Position(position)

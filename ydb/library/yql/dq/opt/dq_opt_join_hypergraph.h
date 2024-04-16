@@ -86,18 +86,10 @@ public:
     };
 
 public:
-    /* Return's ID of added node. It won't add anything, if node already exists in graph. */
+    /* Add node to the hypergraph and returns its id */
     size_t AddNode(const std::shared_ptr<IBaseOptimizerNode>& relationNode) {
-        Y_ASSERT(relationNode->Labels().size() == 1);
-
-        auto it = NodeIdByRelationName_.find(relationNode->Labels()[0]); 
-
-        if (it != NodeIdByRelationName_.end()) {
-            return it->second;
-        }
-
         size_t nodeId = Nodes_.size(); 
-        NodeIdByRelationName_.insert({relationNode->Labels()[0], nodeId});
+        NodeIdByRelationOptimizerNode_.insert({relationNode, nodeId});
 
         Nodes_.push_back({});
         Nodes_.back().RelationOptimizerNode = relationNode;
@@ -127,14 +119,23 @@ public:
         AddEdgeImpl(reversedEdge);
     }
 
-    TNodeSet GetNodesByRelNames(const TVector<TString>& relationNames) {
-        TNodeSet nodeSet{};
+    TNodeSet GetNodesByRelNamesInSubtree(const std::shared_ptr<IBaseOptimizerNode>& subtreeRoot, const TVector<TString>& relationNames) {
+        if (subtreeRoot->Kind == RelNodeType) {
+            TString relationName = subtreeRoot->Labels()[0];
 
-        for (const auto& relationName: relationNames) {
-            if (NodeIdByRelationName_.contains(relationName)) {
-                nodeSet[NodeIdByRelationName_[relationName]] = 1;
+            TNodeSet nodeSet{};
+            if (std::find(relationNames.begin(), relationNames.end(), relationName) != relationNames.end()) {
+                nodeSet[NodeIdByRelationOptimizerNode_[subtreeRoot]] = 1;
             }
+            return nodeSet;
         }
+
+        auto joinNode = std::static_pointer_cast<TJoinOptimizerNode>(subtreeRoot);
+        
+        auto leftNodeSet = GetNodesByRelNamesInSubtree(joinNode->LeftArg, relationNames);
+        auto rightNodeSet = GetNodesByRelNamesInSubtree(joinNode->RightArg, relationNames);
+
+        TNodeSet nodeSet = leftNodeSet | rightNodeSet;
 
         return nodeSet;
     }
@@ -163,16 +164,6 @@ public:
         return nullptr;
     }
 
-    bool LoopEdgeExists() {
-            for (const auto& edge: Edges_) {
-                if (edge.Left == edge.Right) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
 private:
     /* Attach edges to nodes */
     void AddEdgeImpl(TEdge edge) {
@@ -190,7 +181,7 @@ private:
     }
 
 private:
-    THashMap<TString, size_t> NodeIdByRelationName_;
+    std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, size_t> NodeIdByRelationOptimizerNode_;
 
     TVector<TNode> Nodes_;
     TVector<TEdge> Edges_;

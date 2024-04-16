@@ -445,14 +445,17 @@ template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeS
     Y_ENSURE(DpTable_.contains(s2), "DP Table does not conaint S2");
 
     const auto* reversedEdge = &Graph_.GetEdge(csgCmpEdge->ReversedEdgeId);
-
+    auto leftNodes = DpTable_[s1];
+    auto rightNodes = DpTable_[s2];
+    
     if (csgCmpEdge->IsReversed) {
         std::swap(csgCmpEdge, reversedEdge);
+        std::swap(leftNodes, rightNodes);
     }
 
     auto bestJoin = PickBestJoin(
-        DpTable_[s1],
-        DpTable_[s2],
+        leftNodes,
+        rightNodes,
         csgCmpEdge->JoinKind,
         csgCmpEdge->IsCommutative,
         csgCmpEdge->JoinConditions,

@@ -39,7 +39,19 @@ TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
     auto conflictRulesCollector = TConflictRulesCollector<TNodeSet>(joinNode, subtreeNodes);
     auto conflictRules = conflictRulesCollector.CollectConflicts();
 
-    TNodeSet TES = ConvertConflictRulesIntoTES(conditionUsedRels, std::move(conflictRules));
+    TNodeSet TES = ConvertConflictRulesIntoTES(conditionUsedRels, conflictRules);
+
+
+    /* For CROSS Join and degenerate predicates (if subtree tables and joinCondition tables do not intersect) */
+    if (!Overlaps(TES, subtreeNodes[joinNode->LeftArg])) {
+        TES |= subtreeNodes[joinNode->LeftArg];
+        TES = ConvertConflictRulesIntoTES(TES, conflictRules);
+    }
+
+    if (!Overlaps(TES, subtreeNodes[joinNode->RightArg])) {
+        TES |= subtreeNodes[joinNode->RightArg];
+        TES = ConvertConflictRulesIntoTES(TES, conflictRules);
+    }
 
     TNodeSet left = TES & subtreeNodes[joinNode->LeftArg];
     TNodeSet right = TES & subtreeNodes[joinNode->RightArg];
@@ -68,11 +80,7 @@ void MakeJoinHypergraphRec(
     subtreeNodes[joinTree] = subtreeNodes[joinNode->LeftArg] | subtreeNodes[joinNode->RightArg];
 
     TNodeSet conditionUsedRels{};
-    if (joinNode->JoinType == EJoinKind::Cross) {
-        conditionUsedRels = graph.GetNodesByRelNames(joinTree->Labels());
-    } else {
-        conditionUsedRels = graph.GetNodesByRelNames(GetConditionUsedRelationNames(joinNode));
-    }
+    conditionUsedRels = graph.GetNodesByRelNamesInSubtree(joinTree, GetConditionUsedRelationNames(joinNode));
 
     graph.AddEdge(MakeHyperedge<TNodeSet>(joinNode, conditionUsedRels, subtreeNodes));
 }

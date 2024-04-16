@@ -131,7 +131,9 @@ public:
         TNodeSet nodeSet{};
 
         for (const auto& relationName: relationNames) {
-            nodeSet[NodeIdByRelationName_[relationName]] = 1;
+            if (NodeIdByRelationName_.contains(relationName)) {
+                nodeSet[NodeIdByRelationName_[relationName]] = 1;
+            }
         }
 
         return nodeSet;
@@ -160,6 +162,16 @@ public:
 
         return nullptr;
     }
+
+    bool LoopEdgeExists() {
+            for (const auto& edge: Edges_) {
+                if (edge.Left == edge.Right) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
 
 private:
     /* Attach edges to nodes */

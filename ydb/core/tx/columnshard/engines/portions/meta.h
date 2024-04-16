@@ -33,6 +33,10 @@ public:
         StatisticsStorage = std::move(storage);
     }
 
+    void ResetStatisticsStorage(NStatistics::TPortionStorage&& storage) {
+        StatisticsStorage = std::move(storage);
+    }
+
     bool IsChunkWithPortionInfo(const ui32 columnId, const ui32 chunkIdx) const {
         return columnId == FirstPkColumn && chunkIdx == 0;
     }

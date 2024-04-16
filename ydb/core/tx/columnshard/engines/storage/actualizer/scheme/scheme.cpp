@@ -57,6 +57,7 @@ void TSchemeActualizer::DoBuildTasks(TTieringProcessContext& tasksContext, const
             AFL_VERIFY(info);
             auto portionScheme = VersionedIndex.GetSchema(portion->GetMinSnapshot());
             TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
+            features.SetTargetTierName(portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
 
             if (!tasksContext.AddPortion(*portion, std::move(features), {})) {
                 break;

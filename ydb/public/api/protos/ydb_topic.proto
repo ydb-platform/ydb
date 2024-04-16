@@ -812,12 +812,13 @@ message AlterConsumer {
 }
 
 enum AutoScalingStrategy {
+    UNSPECIFIED = 0;
     // Auto scaling disabled
-    DISABLED = 0;
+    DISABLED = 1;
     // The auto scaling may only increase the number of partitions
-    SCALE_UP = 1;
+    SCALE_UP = 2;
     // The auto scaling may increase and decrease the number of partitions
-    SCALE_UP_AND_DOWN = 2;
+    SCALE_UP_AND_DOWN = 3;
 }
 
 message AutoScalingPartitionWriteSpeedStrategy {

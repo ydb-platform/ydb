@@ -198,6 +198,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
 private:
     struct TClientInfo;
+    struct TReadingSession;
 
     struct TReadingPartitionStatus {
         // Client had commited rad offset equals EndOffset of the partition
@@ -240,6 +241,63 @@ private:
         // Called when the parent partition is reading.
         bool Reset();
     };
+
+    // Multiple partitions balancing together always in one reading session
+    struct TPartitionFamilty {
+        TPartitionFamilty();
+
+        enum class EStatus {
+            Active,    // The family are reading
+            Releasing, // The family is waiting for partition to be released
+            Free       // The family isn't reading
+        };
+
+        size_t Id;
+        EStatus Status;
+
+        // Partitions that are in the family
+        std::vector<ui32> Partitions;
+
+        // The reading session in which the family is currently being read.
+        TReadingSession* Session;
+        // Partitions that are in the family
+        std::unordered_set<ui32> LockedPartitions;
+
+        // The number of active partitions in the family
+        size_t ActivePartitionCount;
+        // The number of inactive partitions in the family
+        size_t InactivePartitionCount;
+
+        // Reading sessions that have a list of partitions to read and these sessions can read this family
+        std::unordered_map<TActorId, TReadingSession*> SpecialSessions;
+
+        void Release(const TActorContext& ctx);
+        void Release(ui32 partitionId, const TActorContext& ctx);
+        void Read(const TActorContext& ctx);
+        void AddPartition(ui32 partitionId, const TActorContext& ctx);
+    };
+
+    struct TBalancingConsumerInfo {
+        TBalancingConsumerInfo();
+
+        TString Consumer;
+
+        size_t NextFamilyId;
+        std::unordered_map<size_t, std::unique_ptr<TPartitionFamilty>> Families;
+
+        // Mapping the IDs of the partitions to the families they belong to
+        std::unordered_map<ui32, TPartitionFamilty*> PartitionMapping;
+
+        // All reading sessions in which the family is currently being read.
+        std::unordered_map<TActorId, TReadingSession*> ReadingSessions;
+
+        // Families is not reading now.
+        std::unordered_map<size_t, TReadingSession*> UnreadableFamilies;
+
+        void CreateFamily(std::vector<ui32> partitions);
+
+    };
+
 
     struct TSessionInfo {
         TSessionInfo(const TString& session, const TActorId sender, const TString& clientNode, ui32 proxyNodeId, TInstant ts)
@@ -394,7 +452,7 @@ private:
         }
     };
 
-    std::unordered_map<TActorId, TReadingSession> ReadingSessions;
+    std::unordered_map<TActorId, std::unique_ptr<TReadingSession>> ReadingSessions;
 
     NMetrics::TResourceMetrics *ResourceMetrics;
 

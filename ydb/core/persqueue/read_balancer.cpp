@@ -595,16 +595,21 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& 
     auto it = ReadingSessions.find(ev->Get()->ClientId);
 
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "pipe " << ev->Get()->ClientId << " disconnected; active server actors: "
-                        << (it != ReadingSessions.end() ? it->second.ServerActors : -1));
+                        << (it != ReadingSessions.end() ? it->second->ServerActors : -1));
 
     if (it != ReadingSessions.end()) {
-        if (--(it->second.ServerActors) > 0)
+        auto& session = it->second;
+        if (--(session->ServerActors) > 0) {
             return;
-        if (!it->second.Session.empty()) {
-            LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "pipe " << ev->Get()->ClientId << " client " << it->second.ClientId << " disconnected session " << it->second.Session);
+        }
+        if (!session->Session.empty()) {
+            LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "pipe " << ev->Get()->ClientId << " client "
+                    << session->ClientId << " disconnected session " << session->Session);
+
             UnregisterSession(it->first, ctx);
         } else {
             LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "pipe " << ev->Get()->ClientId << " disconnected no session");
+
             ReadingSessions.erase(it);
         }
     }
@@ -1016,10 +1021,13 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev,
 {
     const TActorId& sender = ev->Get()->ClientId;
     auto& pipe = ReadingSessions[sender];
-    ++pipe.ServerActors;
+    if (!pipe) {
+        pipe = std::make_unique<TReadingSession>();
+    }
+    ++pipe->ServerActors;
 
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "pipe " << sender << " connected; active server actors: " << pipe.ServerActors);
+            GetPrefix() << "pipe " << sender << " connected; active server actors: " << pipe->ServerActors);
 }
 
 TPersQueueReadBalancer::TClientGroupInfo& TPersQueueReadBalancer::TClientInfo::AddGroup(const ui32 group) {
@@ -1548,7 +1556,7 @@ void TPersQueueReadBalancer::RegisterSession(const TActorId& pipe, const TActorC
     //TODO : change structs for only this session, not all client
     auto it = ReadingSessions.find(pipe);
     Y_ABORT_UNLESS(it != ReadingSessions.end());
-    auto jt = ClientsInfo.find(it->second.ClientId);
+    auto jt = ClientsInfo.find(it->second->ClientId);
     Y_ABORT_UNLESS(jt != ClientsInfo.end());
     for (auto& c : jt->second.ClientGroupsInfo) {
         c.second.ScheduleBalance(ctx);
@@ -1562,7 +1570,7 @@ void TPersQueueReadBalancer::UnregisterSession(const TActorId& pipe, const TActo
     Y_ABORT_UNLESS(it != ReadingSessions.end());
     auto& pipeInfo = it->second;
 
-    auto jt = ClientsInfo.find(pipeInfo.ClientId);
+    auto jt = ClientsInfo.find(pipeInfo->ClientId);
     Y_ABORT_UNLESS(jt != ClientsInfo.end());
     TClientInfo& clientInfo = jt->second;
 

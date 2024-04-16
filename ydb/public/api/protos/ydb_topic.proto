@@ -564,6 +564,8 @@ message StreamReadMessage {
 
     // Signal from server that client has finished reading the partition and all messages has been read.
     // Once a partition has been finished no further messages will ever arrive on that partition.
+    // This command is a hint to the client to commit offsets, after which the child partitions will be balanced independently in different reading sessions.
+    // Unlike StopPartitionSessionRequest, the client does not have to close the reading session.
     // Client should not send a response to the command.
     message EndPartitionSession {
         // Partition session identifier.

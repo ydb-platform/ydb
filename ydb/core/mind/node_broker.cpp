@@ -359,8 +359,14 @@ void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
     info.SetAddress(node.Address);
     info.SetExpire(node.Expire.GetValue());
     node.Location.Serialize(info.MutableLocation(), false);
-    if (EnableDynamicNodeNameGeneration && node.SlotIndex.has_value()) {
-        const TString name = TStringBuilder() << "slot-" << node.SlotIndex;
+    FillNodeName(node.SlotIndex, info);
+}
+
+void TNodeBroker::FillNodeName(const std::optional<ui32> &slotIndex,
+                               NKikimrNodeBroker::TNodeInfo &info) const
+{
+    if (EnableDynamicNodeNameGeneration && slotIndex.has_value()) {
+        const TString name = TStringBuilder() << "slot-" << slotIndex;
         info.SetName(name);
     }
 }
@@ -458,8 +464,9 @@ void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
 
 void TNodeBroker::SubscribeForConfigUpdates(const TActorContext &ctx)
 {
-    ui32 item = (ui32)NKikimrConsole::TConfigItem::NodeBrokerConfigItem;
-    NConsole::SubscribeViaConfigDispatcher(ctx, {item}, ctx.SelfID);
+    ui32 nodeBrokerItem = (ui32)NKikimrConsole::TConfigItem::NodeBrokerConfigItem;
+    ui32 featureFlagsItem = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
+    NConsole::SubscribeViaConfigDispatcher(ctx, {nodeBrokerItem, featureFlagsItem}, ctx.SelfID);
 }
 
 void TNodeBroker::ProcessTx(ITransaction *tx,
@@ -804,7 +811,12 @@ void TNodeBroker::DbUpdateNodeLocation(const TNodeInfo &node,
 
 void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                          const TActorContext &ctx)
-{
+{   
+    const auto& appConfig = ev->Get()->Record.GetConfig();
+    if (appConfig.HasFeatureFlags()) {
+        EnableDynamicNodeNameGeneration = appConfig.GetFeatureFlags().GetEnableDynamicNodeNameGeneration();
+    }
+
     if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {
         ProcessTx(CreateTxUpdateConfig(ev), ctx);
     } else {

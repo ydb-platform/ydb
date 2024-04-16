@@ -237,6 +237,8 @@ private:
     void ScheduleEpochUpdate(const TActorContext &ctx);
     void FillNodeInfo(const TNodeInfo &node,
                       NKikimrNodeBroker::TNodeInfo &info) const;
+    void FillNodeName(const std::optional<ui32> &slotIndex,
+                      NKikimrNodeBroker::TNodeInfo &info) const;
 
     void ComputeNextEpochDiff(TStateDiff &diff);
     void ApplyStateDiff(const TStateDiff &diff);

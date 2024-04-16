@@ -7,11 +7,6 @@ DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/datasource/ydb/do
 DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/fq-connector-go)
 ENV(COMPOSE_PROJECT_NAME=ydb)
 
-# This requirement forces tests to be launched consequently,
-# otherwise CI system would be overloaded due to simultaneous launch of many Docker containers.
-# See DEVTOOLSSUPPORT-44103 for details
-REQUIREMENTS(cpu:all)
-
 IF (AUTOCHECK) 
     # Split tests to chunks only when they're running on different machines with distbuild,
     # otherwise this directive will slow down local test execution.
@@ -26,6 +21,7 @@ IF (AUTOCHECK)
     )
 
     REQUIREMENTS(
+        cpu:all
         container:4467981730
         dns:dns64
     )
@@ -40,6 +36,11 @@ IF (OPENSOURCE)
     SIZE(MEDIUM)
     SET(TEST_TAGS_VALUE)
     SET(TEST_REQUIREMENTS_VALUE)
+
+    # This requirement forces tests to be launched consequently,
+    # otherwise CI system would be overloaded due to simultaneous launch of many Docker containers.
+    # See DEVTOOLSSUPPORT-44103, YA-1759 for details.
+    REQUIREMENTS(cpu:all)
 ENDIF()
 
 TEST_SRCS(

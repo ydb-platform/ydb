@@ -6,7 +6,7 @@
 
 ## Install {#install}
 
-To use Flyway together with {{ ydb-short-name }} in a Java / Kotlin application or in a Gradle / Maven plugin, you need to add a dependency for the Flyway extension for {{ ydb-short-name }} and the [{{ ydb-short-name }} JDBC Driver](https://github.com/ydb-platform/ydb-jdbc-driver):
+To use Flyway with {{ ydb-short-name }} in a Java / Kotlin application or a Gradle / Maven plugin, you need to add a dependency for the Flyway extension for {{ ydb-short-name }} and the [{{ ydb-short-name }} JDBC Driver](https://github.com/ydb-platform/ydb-jdbc-driver):
 
 {% list tabs %}
 

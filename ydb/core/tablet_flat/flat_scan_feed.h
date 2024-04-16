@@ -311,7 +311,7 @@ namespace NTable {
 
             Y_ABORT_UNLESS(Lead.Key.GetCells().size() <= keyDefaults->Size(), "TLead key is too large");
 
-            Iter = new TTableIt(Subset.Scheme.Get(), Lead.Tags, -1, SnapshotVersion, Subset.CommittedTransactions);
+            Iter = new TTableIter(Subset.Scheme.Get(), Lead.Tags, -1, SnapshotVersion, Subset.CommittedTransactions);
 
             CurrentEnv = MakeEnv();
 
@@ -507,7 +507,7 @@ namespace NTable {
         THolder<TLevels> Levels;
         TLead Lead;
         TBoots Boots;
-        TAutoPtr<TTableIt> Iter;
+        TAutoPtr<TTableIter> Iter;
         ui64 Seeks = Max<ui64>();
         ESeekState SeekState;
         bool OnPause = false;

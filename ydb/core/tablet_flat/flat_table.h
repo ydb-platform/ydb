@@ -136,11 +136,11 @@ public:
 
     TVector<TIntrusiveConstPtr<TMemTable>> GetMemTables() const noexcept;
 
-    TAutoPtr<TTableIt> Iterate(TRawVals key, TTagsRef tags, IPages* env, ESeek,
+    TAutoPtr<TTableIter> Iterate(TRawVals key, TTagsRef tags, IPages* env, ESeek,
             TRowVersion snapshot,
             const ITransactionMapPtr& visible = nullptr,
             const ITransactionObserverPtr& observer = nullptr) const noexcept;
-    TAutoPtr<TTableReverseIt> IterateReverse(TRawVals key, TTagsRef tags, IPages* env, ESeek,
+    TAutoPtr<TTableReverseIter> IterateReverse(TRawVals key, TTagsRef tags, IPages* env, ESeek,
             TRowVersion snapshot,
             const ITransactionMapPtr& visible = nullptr,
             const ITransactionObserverPtr& observer = nullptr) const noexcept;

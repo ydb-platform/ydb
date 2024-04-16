@@ -455,23 +455,23 @@ private:
     bool SeekInternal(TArrayRef<const TCell> key, ESeek seek) noexcept;
 };
 
-class TTableIt;
-class TTableReverseIt;
+class TTableIter;
+class TTableReverseIter;
 
-class TTableIt : public TTableItBase<TTableItOps> {
+class TTableIter : public TTableItBase<TTableItOps> {
 public:
     using TTableItBase::TTableItBase;
 
-    typedef TTableReverseIt TReverseType;
+    typedef TTableReverseIter TReverseType;
 
     static constexpr EDirection Direction = EDirection::Forward;
 };
 
-class TTableReverseIt : public TTableItBase<TTableItReverseOps> {
+class TTableReverseIter : public TTableItBase<TTableItReverseOps> {
 public:
     using TTableItBase::TTableItBase;
 
-    typedef TTableIt TReverseType;
+    typedef TTableIter TReverseType;
 
     static constexpr EDirection Direction = EDirection::Reverse;
 };

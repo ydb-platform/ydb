@@ -26,8 +26,8 @@ namespace NKikimr::NTable {
 namespace {
     using namespace NTest;
 
-    using TCheckIt = TChecker<TWrapIter, TSubset>;
-    using TCheckReverseIt = TChecker<TWrapReverseIter, TSubset>;
+    using TCheckIter = TChecker<TWrapIter, TSubset>;
+    using TCheckReverseIter = TChecker<TWrapReverseIter, TSubset>;
 
     NPage::TConf PageConf(size_t groups, bool writeBTreeIndex) noexcept
     {
@@ -68,11 +68,11 @@ namespace {
             }
 
             if (history) {
-                Checker = new TCheckIt(*Subset, {new TTestEnv()}, TRowVersion(0, 8));
-                CheckerReverse = new TCheckReverseIt(*Subset, {new TTestEnv()}, TRowVersion(0, 8));
+                Checker = new TCheckIter(*Subset, {new TTestEnv()}, TRowVersion(0, 8));
+                CheckerReverse = new TCheckReverseIter(*Subset, {new TTestEnv()}, TRowVersion(0, 8));
             } else {
-                Checker = new TCheckIt(*Subset, {new TTestEnv()});
-                CheckerReverse = new TCheckReverseIt(*Subset, {new TTestEnv()});
+                Checker = new TCheckIter(*Subset, {new TTestEnv()});
+                CheckerReverse = new TCheckReverseIter(*Subset, {new TTestEnv()});
             }
 
             GroupId = TGroupId(groups, history);
@@ -82,8 +82,8 @@ namespace {
         TMersenne<ui64> Rnd;
         TAutoPtr<NTest::TMass> Mass;
         TAutoPtr<TSubset> Subset;
-        TAutoPtr<TCheckIt> Checker;
-        TAutoPtr<TCheckReverseIt> CheckerReverse;
+        TAutoPtr<TCheckIter> Checker;
+        TAutoPtr<TCheckReverseIter> CheckerReverse;
         TTestEnv Env;
         TGroupId GroupId;
         TPart const* Part;

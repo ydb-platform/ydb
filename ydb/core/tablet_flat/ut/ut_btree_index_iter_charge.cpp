@@ -237,7 +237,7 @@ namespace {
     }
 }
 
-Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
+Y_UNIT_TEST_SUITE(TPartGroupBtreeIndexIter) {
     void AssertEqual(const TPartGroupBtreeIndexIter& bTree, EReady bTreeReady, const TPartGroupFlatIndexIter& flat, EReady flatReady, const TString& message, bool allowFirstLastPageDifference = false) {
         // Note: it's possible that B-Tree index don't return Gone status for keys before the first page or keys after the last page
         if (allowFirstLastPageDifference && flatReady == EReady::Gone && bTreeReady == EReady::Data && 

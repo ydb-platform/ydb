@@ -972,7 +972,7 @@ TMemTable& TTable::MemTable()
     return *Mutable;
 }
 
-TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
+TAutoPtr<TTableIter> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const noexcept
@@ -982,7 +982,7 @@ TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ES
     const TCelled key(key_, *Scheme->Keys, false);
     const ui64 limit = seek == ESeek::Exact ? 1 : Max<ui64>();
 
-    TAutoPtr<TTableIt> dbIter(new TTableIt(Scheme.Get(), tags, limit, snapshot,
+    TAutoPtr<TTableIter> dbIter(new TTableIter(Scheme.Get(), tags, limit, snapshot,
             TMergedTransactionMap::Create(visible, CommittedTransactions),
             observer));
 
@@ -1019,7 +1019,7 @@ TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ES
     return dbIter;
 }
 
-TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
+TAutoPtr<TTableReverseIter> TTable::IterateReverse(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const noexcept
@@ -1029,7 +1029,7 @@ TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, I
     const TCelled key(key_, *Scheme->Keys, false);
     const ui64 limit = seek == ESeek::Exact ? 1 : Max<ui64>();
 
-    TAutoPtr<TTableReverseIt> dbIter(new TTableReverseIt(Scheme.Get(), tags, limit, snapshot,
+    TAutoPtr<TTableReverseIter> dbIter(new TTableReverseIter(Scheme.Get(), tags, limit, snapshot,
             TMergedTransactionMap::Create(visible, CommittedTransactions),
             observer));
 

@@ -71,16 +71,16 @@ public:
 
     /*_ Call Next() before accessing each row including the 1st row. */
 
-    TAutoPtr<TTableIt> Iterate(ui32 table, TRawVals key, TTagsRef tags, ELookup) const noexcept;
-    TAutoPtr<TTableIt> IterateExact(ui32 table, TRawVals key, TTagsRef tags,
+    TAutoPtr<TTableIter> Iterate(ui32 table, TRawVals key, TTagsRef tags, ELookup) const noexcept;
+    TAutoPtr<TTableIter> IterateExact(ui32 table, TRawVals key, TTagsRef tags,
             TRowVersion snapshot = TRowVersion::Max(),
             const ITransactionMapPtr& visible = nullptr,
             const ITransactionObserverPtr& observer = nullptr) const noexcept;
-    TAutoPtr<TTableIt> IterateRange(ui32 table, const TKeyRange& range, TTagsRef tags,
+    TAutoPtr<TTableIter> IterateRange(ui32 table, const TKeyRange& range, TTagsRef tags,
             TRowVersion snapshot = TRowVersion::Max(),
             const ITransactionMapPtr& visible = nullptr,
             const ITransactionObserverPtr& observer = nullptr) const noexcept;
-    TAutoPtr<TTableReverseIt> IterateRangeReverse(ui32 table, const TKeyRange& range, TTagsRef tags,
+    TAutoPtr<TTableReverseIter> IterateRangeReverse(ui32 table, const TKeyRange& range, TTagsRef tags,
             TRowVersion snapshot = TRowVersion::Max(),
             const ITransactionMapPtr& visible = nullptr,
             const ITransactionObserverPtr& observer = nullptr) const noexcept;

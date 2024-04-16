@@ -200,8 +200,8 @@ namespace NTest {
     using TWrapPart = TWrapPartImpl<EDirection::Forward>;
     using TWrapReversePart = TWrapPartImpl<EDirection::Reverse>;
 
-    using TCheckIt = TChecker<TWrapPart, TPartEggs>;
-    using TCheckReverseIt = TChecker<TWrapReversePart, TPartEggs>;
+    using TCheckIter = TChecker<TWrapPart, TPartEggs>;
+    using TCheckReverseIter = TChecker<TWrapReversePart, TPartEggs>;
 }
 }
 }

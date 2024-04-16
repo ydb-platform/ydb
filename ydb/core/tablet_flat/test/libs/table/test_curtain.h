@@ -54,7 +54,7 @@ namespace NTest {
         }
 
     private:
-        TCheckIt Wrap;
+        TCheckIter Wrap;
     };
 
 

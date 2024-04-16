@@ -41,6 +41,8 @@ protected:
     }
 
     NOlap::TBlobWriteInfo& AddWriteTask(NOlap::TBlobWriteInfo&& task);
+    virtual void DoAbort() {
+    }
 public:
     const NOlap::TWriteActionsCollection& GetBlobActions() const {
         return WritingActions;
@@ -63,6 +65,7 @@ public:
         for (auto&& i : WritingActions) {
             i.second->Abort();
         }
+        DoAbort();
     }
 
     using TPtr = std::shared_ptr<IWriteController>;

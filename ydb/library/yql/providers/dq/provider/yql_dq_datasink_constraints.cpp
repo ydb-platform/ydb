@@ -39,6 +39,7 @@ public:
             TDqCnUnionAll::CallableName(),
             TDqCnBroadcast::CallableName(),
             TDqCnMap::CallableName(),
+            TDqCnStreamLookup::CallableName(),
             TDqCnHashShuffle::CallableName(),
             TDqCnResult::CallableName(),
             TDqCnValue::CallableName()

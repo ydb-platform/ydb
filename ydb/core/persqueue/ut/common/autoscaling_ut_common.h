@@ -40,19 +40,43 @@ struct TTestReadSession {
         bool Commited;
     };
 
+    TString Name;
+    std::unordered_map<ui32, ui64> Offsets;
+
     bool AutoCommit;
 
     std::shared_ptr<IReadSession> Session;
 
-    NThreading::TPromise<void> Promise = NThreading::NewPromise<void>();
+    NThreading::TPromise<std::vector<MsgInfo>> DataPromise = NThreading::NewPromise<std::vector<MsgInfo>>();
+    NThreading::TPromise<std::set<size_t>> PartitionsPromise = NThreading::NewPromise<std::set<size_t>>();
+
     std::vector<MsgInfo> ReceivedMessages;
     std::set<size_t> Partitions;
+    std::optional<std::set<size_t>> ExpectedPartitions;
 
-    TTestReadSession(TTopicClient& client, size_t expectedMessagesCount, bool autoCommit = true);
+    TMutex Lock;
+    TSemaphore Semaphore;
+
+    static constexpr size_t SemCount = 1;
+
+    TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount = Max<size_t>(), bool autoCommit = true, std::optional<ui32> partition = std::nullopt);
 
     void WaitAllMessages();
+    NThreading::TFuture<std::set<size_t>> Wait(std::set<size_t> partitions, const TString& message);
 
+    void Assert(const std::set<size_t>& expected, NThreading::TFuture<std::set<size_t>> f, const TString& message);
+    void WaitAndAssertPartitions(std::set<size_t> partitions, const TString& message);
+
+    void Run();
     void Commit();
+
+    void Close();
+
+private:
+    void Acquire();
+    void Release();
+
+    void Modify(std::function<void (std::set<size_t>&)> modifier);
 };
 
 }

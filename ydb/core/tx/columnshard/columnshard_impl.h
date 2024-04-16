@@ -524,6 +524,10 @@ private:
     NOlap::TSnapshot GetMaxReadVersion() const;
     ui64 GetMinReadStep() const;
     ui64 GetOutdatedStep() const;
+    TDuration GetTxCompleteLag() const {
+        ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;
+        return ProgressTxController->GetTxCompleteLag(mediatorTime);
+    }
 
     TWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId);
     TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId);
@@ -568,9 +572,6 @@ private:
     void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
     void ConfigureStats(const NOlap::TColumnEngineStats& indexStats, ::NKikimrTableStats::TTableStats* tabletStats);
     void FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats) const;
-
-    static TDuration GetControllerPeriodicWakeupActivationPeriod();
-    static TDuration GetControllerStatsReportInterval();
 
 public:
     ui64 TabletTxCounter = 0;

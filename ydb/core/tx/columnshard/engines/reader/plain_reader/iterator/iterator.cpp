@@ -9,10 +9,6 @@ TColumnShardScanIterator::TColumnShardScanIterator(const std::shared_ptr<TReadCo
 {
     IndexedData = readMetadata->BuildReader(Context);
     Y_ABORT_UNLESS(Context->GetReadMetadata()->IsSorted());
-
-    if (readMetadata->Empty()) {
-        IndexedData->Abort("empty read metadata");
-    }
 }
 
 TConclusion<std::optional<TPartialReadResult>> TColumnShardScanIterator::GetBatch() {

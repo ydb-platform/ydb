@@ -1,4 +1,5 @@
 #include "type_ann_blocks.h"
+#include "type_ann_impl.h"
 #include "type_ann_list.h"
 #include "type_ann_wide.h"
 #include "type_ann_pg.h"
@@ -428,6 +429,73 @@ IGraphTransformer::TStatus BlockAsTupleWrapper(const TExprNode::TPtr& input, TEx
     input->SetTypeAnn(resultType);
     return IGraphTransformer::TStatus::Ok;
 }
+
+IGraphTransformer::TStatus BlockMemberWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto& child = input->Head();
+    if (!EnsureBlockOrScalarType(child, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool isScalar;
+    const TTypeAnnotationNode* blockItemType = GetBlockItemType(*child.GetTypeAnn(), isScalar);
+    const TTypeAnnotationNode* resultType;
+    if (IsNull(*blockItemType)) {
+        resultType = blockItemType;
+    } else {
+        const TStructExprType* structType;
+        bool isOptional;
+        if (blockItemType->GetKind() == ETypeAnnotationKind::Optional) {
+            auto itemType = blockItemType->Cast<TOptionalExprType>()->GetItemType();
+            if (!EnsureStructType(child.Pos(), *itemType, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            structType = itemType->Cast<TStructExprType>();
+            isOptional = true;
+        } else {
+            if (!EnsureStructType(child.Pos(), *blockItemType, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            structType = blockItemType->Cast<TStructExprType>();
+            isOptional = false;
+        }
+
+        if (!EnsureComputableType(input->Head().Pos(), *structType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto memberName = input->Tail().Content();
+        auto pos = FindOrReportMissingMember(memberName, input->Pos(), *structType, ctx.Expr);
+        if (!pos) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        resultType = structType->GetItems()[*pos]->GetItemType();
+        if (isOptional && !resultType->IsOptionalOrNull()) {
+            resultType = ctx.Expr.MakeType<TOptionalExprType>(resultType);
+        }
+    }
+
+    if (isScalar) {
+        resultType = ctx.Expr.MakeType<TScalarExprType>(resultType);
+    } else {
+        resultType = ctx.Expr.MakeType<TBlockExprType>(resultType);
+    }
+
+    input->SetTypeAnn(resultType);
+    return IGraphTransformer::TStatus::Ok;
+}
+
 
 IGraphTransformer::TStatus BlockNthWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);

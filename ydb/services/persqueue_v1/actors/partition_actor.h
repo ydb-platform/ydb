@@ -135,6 +135,7 @@ private:
     void MakeCommit(const TActorContext& ctx);
     void SendPublishDirectRead(const ui64 directReadId, const TActorContext& ctx);
     void SendForgetDirectRead(const ui64 directReadId, const TActorContext& ctx);
+    void SendPartitionReady(const TActorContext& ctx);
 
 
 private:

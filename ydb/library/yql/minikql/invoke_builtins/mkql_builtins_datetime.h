@@ -157,6 +157,17 @@ inline bool IsBadScaledDate(TScaledDate val) {
 }
 
 #ifndef MKQL_DISABLE_CODEGEN
+
+template<typename TLayout>
+inline Value* GenIsInt64Overflow(Value* value, LLVMContext &context, BasicBlock* block) {
+    if constexpr (std::is_same_v<ui64, TLayout>) {
+        const auto i64Max = ConstantInt::get(value->getType(), static_cast<ui64>(std::numeric_limits<i64>::max()));
+        return CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, value, i64Max, "ugt", block);
+    } else {
+        return ConstantInt::getFalse(context);
+    }
+}
+
 template<typename TDateType>
 inline Value* GenIsBadDateTime(Value* val, LLVMContext &context, BasicBlock* block) {
     static_assert(TDateType::Features & (NYql::NUdf::DateType | NYql::NUdf::TzDateType), "Date type expected");

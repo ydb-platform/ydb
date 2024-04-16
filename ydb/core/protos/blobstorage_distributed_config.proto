@@ -146,8 +146,12 @@ message TEvNodeConfigInvokeOnRoot {
         TStorageConfig Config = 1;
     }
 
+    message TQueryConfig
+    {}
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
+        TQueryConfig QueryConfig = 2;
     }
 }
 
@@ -168,11 +172,17 @@ message TEvNodeConfigInvokeOnRootResult {
     message TUpdateConfig {
     }
 
+    message TQueryConfig {
+        TStorageConfig Config = 1;
+        TStorageConfig CurrentProposedStorageConfig = 2;
+    }
+
     EStatus Status = 1;
     optional string ErrorReason = 2;
     TScepter Scepter = 3;
 
     oneof Response {
         TUpdateConfig UpdateConfig = 4;
+        TQueryConfig QueryConfig = 5;
     }
 }

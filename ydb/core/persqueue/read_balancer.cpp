@@ -716,16 +716,17 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
 
     AggregatedStats.Cookies.erase(tabletId);
 
-    std::unordered_set<TString> consumersForBalance;
-
     for (const auto& partRes : record.GetPartResult()) {
+        auto partitionId = partRes.GetPartition();
+        auto generation = partRes.GetGeneration();
+        auto cookie = partRes.GetCookie();
         for (const auto& consumer : partRes.GetConsumerResult()) {
             if (consumer.GetReadingFinished()) {
                 auto it = ClientsInfo.find(consumer.GetConsumer());
                 if (it != ClientsInfo.end()) {
                     auto& clientInfo = it->second;
-                    if (clientInfo.SetCommittedState(partRes.GetPartition()) && clientInfo.ProccessReadingFinished(partRes.GetPartition())) {
-                        consumersForBalance.insert(consumer.GetConsumer());
+                    if (clientInfo.IsReadeable(partitionId) && clientInfo.SetCommittedState(partitionId, generation, cookie)) {
+                        clientInfo.ProccessReadingFinished(partRes.GetPartition(), ctx);
                     }
                 }
             }
@@ -740,11 +741,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
             partRes.GetAvgWriteSpeedPerHour(), partRes.GetAvgWriteSpeedPerDay());
         AggregatedStats.Stats[partRes.GetPartition()].Counters = partRes.GetAggregatedCounters();
         AggregatedStats.Stats[partRes.GetPartition()].HasCounters = true;
-    }
-
-    for(auto& consumer : consumersForBalance) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << " balance " << consumer);
-        ctx.Send(ctx.SelfID, new TEvPersQueue::TEvWakeupClient(consumer, TClientInfo::MAIN_GROUP));
     }
 
     if (AggregatedStats.Cookies.empty()) {
@@ -1019,13 +1015,11 @@ void TPersQueueReadBalancer::GetACL(const TActorContext& ctx) {
 void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx)
 {
     const TActorId& sender = ev->Get()->ClientId;
-    auto it = PipesInfo.find(sender);
-    if (it == PipesInfo.end()) {
-        PipesInfo.insert({sender, {"", "", TActorId(), false, 1}});
-    } else {
-        it->second.ServerActors++;
-    }
-    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "pipe " << sender << " connected; active server actors: " << PipesInfo[sender].ServerActors);
+    auto& pipe = PipesInfo[sender];
+    ++pipe.ServerActors;
+
+    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            GetPrefix() << "pipe " << sender << " connected; active server actors: " << pipe.ServerActors);
 }
 
 TPersQueueReadBalancer::TClientGroupInfo& TPersQueueReadBalancer::TClientInfo::AddGroup(const ui32 group) {
@@ -1044,18 +1038,18 @@ TPersQueueReadBalancer::TClientGroupInfo& TPersQueueReadBalancer::TClientInfo::A
     return clientInfo;
 }
 
-void TPersQueueReadBalancer::TClientGroupInfo::InactivatePartition(ui32 partitionId) {
-    auto partitionIt = PartitionsInfo.find(partitionId);
-    if (partitionIt != PartitionsInfo.end()) {
-        auto& partitionInfo = partitionIt->second;
-        if (partitionInfo.Session) {
-            auto* session = FindSession(partitionInfo.Session);
-            if (session) {
-                session->NumInactive++;
-            }
-        }
+void TPersQueueReadBalancer::TClientGroupInfo::ActivatePartition(ui32 partitionId) {
+    auto* session = FindSession(partitionId);
+    if (session) {
+        --session->NumInactive;
     }
+}
 
+void TPersQueueReadBalancer::TClientGroupInfo::InactivatePartition(ui32 partitionId) {
+    auto* session = FindSession(partitionId);
+    if (session) {
+        ++session->NumInactive;
+    }
 }
 
 void TPersQueueReadBalancer::TClientGroupInfo::FreePartition(ui32 partitionId) {
@@ -1135,70 +1129,63 @@ bool TPersQueueReadBalancer::TClientInfo::IsFinished(ui32 partitionId) const {
     return it->second.IsFinished();
 }
 
-bool TPersQueueReadBalancer::TClientInfo::SetCommittedState(ui32 partitionId) {
-    return ReadingPartitionStatus[partitionId].SetCommittedState();
+bool TPersQueueReadBalancer::TClientInfo::SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie) {
+    return ReadingPartitionStatus[partitionId].SetCommittedState(generation, cookie);
 }
 
 TPersQueueReadBalancer::TClientGroupInfo* TPersQueueReadBalancer::TClientInfo::FindGroup(ui32 partitionId) {
-    for (auto& [_, group] : ClientGroupsInfo) {
-        if (group.PartitionsInfo.contains(partitionId)) {
-            return &group;
-        }
+    auto it = ClientGroupsInfo.find(partitionId + 1);
+    if (it != ClientGroupsInfo.end()) {
+        return &it->second;
+    }
+
+    it = ClientGroupsInfo.find(MAIN_GROUP);
+    if (it == ClientGroupsInfo.end()) {
+        return nullptr;
+    }
+
+    auto& group = it->second;
+    if (group.PartitionsInfo.contains(partitionId)) {
+        return &group;
     }
 
     return nullptr;
 }
 
-bool TPersQueueReadBalancer::TClientInfo::ProccessReadingFinished(ui32 partitionId) {
+bool TPersQueueReadBalancer::TClientInfo::ProccessReadingFinished(ui32 partitionId, const TActorContext& ctx) {
     if (!ScalingSupport()) {
         return false;
     }
 
-    auto* n = Balancer.PartitionGraph.GetPartition(partitionId);
-    if (!n) {
-        return false;
+    auto* groupInfo = FindGroup(partitionId);
+    if (!groupInfo) {
+        return false; // TODO is it correct?
     }
-
-    auto it = ClientGroupsInfo.find(MAIN_GROUP);
-    if (it == ClientGroupsInfo.end()) {
-        return false;
-    }
+    groupInfo->InactivatePartition(partitionId);
 
     bool hasChanges = false;
 
-    auto& groupInfo = it->second;
-    if (groupInfo.PartitionsInfo.contains(partitionId)) {
-        auto& freePartitions = groupInfo.FreePartitions;
-
-        std::deque<const TPartitionGraph::Node*> queue;
-        queue.push_back(n);
-        while (!queue.empty()) {
-            const auto* node = queue.front();
-            queue.pop_front();
-
-            for (const auto* c : node->Children) {
-                if (IsReadeable(c->Id)) {
-                    auto it = groupInfo.PartitionsInfo.find(c->Id);
-                    Y_ABORT_UNLESS(it != groupInfo.PartitionsInfo.end());
-                    auto& partitionInfo = it->second;
-
-                    if (partitionInfo.State != EPS_ACTIVE) {
-                        freePartitions.push_back(c->Id);
-                        hasChanges = true;
-                    }
-                    queue.push_back(c);
-                }
+    Balancer.PartitionGraph.Travers(partitionId, [&](ui32 id) {
+        if (IsReadeable(id)) {
+            auto* groupInfo = FindGroup(id);
+            if (!groupInfo) {
+                return false; // TODO is it correct?
             }
-        }
+            auto it = groupInfo->PartitionsInfo.find(id);
+            if (it == groupInfo->PartitionsInfo.end()) {
+                return false; // TODO is it correct?
+            }
+            auto& partitionInfo = it->second;
 
-        groupInfo.InactivatePartition(partitionId);
-    } else {
-        auto git = ClientGroupsInfo.find(partitionId + 1);
-        if (git != ClientGroupsInfo.end()) {
-            git->second.InactivatePartition(partitionId);
+            if (partitionInfo.State == EPS_FREE) {
+                groupInfo->FreePartitions.push_back(id);
+                groupInfo->ScheduleBalance(ctx);
+                hasChanges = true;
+            }
+            return true;
         }
-    }
-
+        return false;
+    });
 
     return hasChanges;
 }
@@ -1215,7 +1202,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
     const auto& record = ev->Get()->Record;
 
     TActorId pipe = ActorIdFromProto(record.GetPipeClient());
-    LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "client " << record.GetClientId() << " register session for pipe " << pipe << " session " << record.GetSession());
+    LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            "client " << record.GetClientId() << " register session for pipe " << pipe << " session " << record.GetSession());
 
     Y_ABORT_UNLESS(!record.GetSession().empty());
     Y_ABORT_UNLESS(!record.GetClientId().empty());
@@ -1226,7 +1214,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
 
     auto jt = PipesInfo.find(pipe);
     if (jt == PipesInfo.end()) {
-        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "client " << record.GetClientId() << " pipe " << pipe
+        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "client " << record.GetClientId() << " pipe " << pipe
                         << " is not connected and got register session request for session " << record.GetSession());
         return;
     }
@@ -1234,18 +1223,18 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
     std::vector<ui32> groups;
     groups.reserve(record.GroupsSize());
     for (auto& group : record.GetGroups()) {
-        groups.push_back(group);
-        if (groups.back() == 0 || groups.back() > TotalGroups) {
+        if (group == 0 || group > TotalGroups) {
             THolder<TEvPersQueue::TEvError> response(new TEvPersQueue::TEvError);
             response->Record.SetCode(NPersQueue::NErrorCode::BAD_REQUEST);
-            response->Record.SetDescription(TStringBuilder() << "no group " << groups.back() << " in topic " << Topic);
+            response->Record.SetDescription(TStringBuilder() << "no group " << group << " in topic " << Topic);
             ctx.Send(ev->Sender, response.Release());
             return;
         }
+        groups.push_back(group);
     }
 
     auto& pipeInfo = jt->second;
-    pipeInfo = {record.GetClientId(), record.GetSession(), ev->Sender, !groups.empty(), pipeInfo.ServerActors};
+    pipeInfo.Init(record.GetClientId(), record.GetSession(), ev->Sender, groups);
 
     auto cit = Consumers.find(record.GetClientId());
     NKikimrPQ::EConsumerScalingSupport scalingSupport = cit == Consumers.end() ? DefaultScalingSupport() : cit->second.ScalingSupport;
@@ -1469,7 +1458,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev
 }
 
 void TPersQueueReadBalancer::TClientInfo::UnlockPartition(ui32 partitionId, const TActorContext& ctx) {
-    if (GetPartitionReadingStatus(partitionId).Unlock()) {
+    if (GetPartitionReadingStatus(partitionId).StopReading()) {
         // Release all children partitions if required
 
         auto* n = Balancer.PartitionGraph.GetPartition(partitionId);
@@ -1571,27 +1560,29 @@ void TPersQueueReadBalancer::UnregisterSession(const TActorId& pipe, const TActo
     //TODO : change structs for only this session
     auto it = PipesInfo.find(pipe);
     Y_ABORT_UNLESS(it != PipesInfo.end());
-    const TString& clientId = it->second.ClientId;
-    auto jt = ClientsInfo.find(clientId);
+    auto& pipeInfo = it->second;
+
+    auto jt = ClientsInfo.find(pipeInfo.ClientId);
     Y_ABORT_UNLESS(jt != ClientsInfo.end());
     TClientInfo& clientInfo = jt->second;
+
     for (auto& [groupKey, groupInfo] : clientInfo.ClientGroupsInfo) {
-        for (auto& [partitionNumber, partitionInfo] : groupInfo.PartitionsInfo) { //TODO: reverse map
+        for (auto& [partitionId, partitionInfo] : groupInfo.PartitionsInfo) { //TODO: reverse map
             if (partitionInfo.Session == pipe) {
                 partitionInfo.Unlock();
-                groupInfo.FreePartition(partitionNumber);
+                groupInfo.FreePartition(partitionId);
             }
         }
 
-        bool res = groupInfo.EraseSession(pipe);
-        if (res)
+        if (groupInfo.EraseSession(pipe)) {
             groupInfo.ScheduleBalance(ctx);
+        }
     }
-    if (it->second.WithGroups && --clientInfo.SessionsWithGroup == 0) {
+    if (pipeInfo.WithGroups() && --clientInfo.SessionsWithGroup == 0) {
         clientInfo.MergeGroups(ctx);
     }
 
-    PipesInfo.erase(pipe);
+    PipesInfo.erase(it);
 }
 
 
@@ -1611,9 +1602,22 @@ TPersQueueReadBalancer::TSessionInfo* TPersQueueReadBalancer::TClientGroupInfo::
     return &(it->second);
 }
 
+TPersQueueReadBalancer::TSessionInfo* TPersQueueReadBalancer::TClientGroupInfo::FindSession(ui32 partitionId) {
+    auto partitionIt = PartitionsInfo.find(partitionId);
+    if (partitionIt != PartitionsInfo.end()) {
+        auto& partitionInfo = partitionIt->second;
+        if (partitionInfo.Session) {
+            return FindSession(partitionInfo.Session);
+        }
+    }
+
+    return nullptr;
+}
+
 void TPersQueueReadBalancer::TClientGroupInfo::ScheduleBalance(const TActorContext& ctx) {
-    if (WakeupScheduled)
+    if (WakeupScheduled) {
         return;
+    }
     WakeupScheduled = true;
     ctx.Send(ctx.SelfID, new TEvPersQueue::TEvWakeupClient(ClientId, Group));
 }
@@ -1647,7 +1651,7 @@ std::tuple<ui32, ui32, ui32> TPersQueueReadBalancer::TClientGroupInfo::TotalPart
 }
 
 void TPersQueueReadBalancer::TClientGroupInfo::ReleaseExtraPartitions(ui32 desired, ui32 allowPlusOne, const TActorContext& ctx) {
-    //request partitions from sessions if needed
+    // request partitions from sessions if needed
     for (auto& [sessionKey, sessionInfo] : SessionsInfo) {
         ui32 realDesired = (allowPlusOne > 0) ? desired + 1 : desired;
         if (allowPlusOne > 0) {
@@ -1669,8 +1673,11 @@ void TPersQueueReadBalancer::TClientGroupInfo::LockMissingPartitions(
             const TActorContext& ctx) {
 
     std::deque<ui32> freePartitions = std::move(FreePartitions);
+    std::deque<ui32> toOtherPartitions;
 
     for (auto& [sessionKey, sessionInfo] : SessionsInfo) {
+        auto& pipe = sessionKey.first;
+
         ui32 realDesired = (allowPlusOne > 0) ? desired + 1 : desired;
         if (allowPlusOne > 0) {
             --allowPlusOne;
@@ -1681,13 +1688,17 @@ void TPersQueueReadBalancer::TClientGroupInfo::LockMissingPartitions(
             continue;
         }
 
-
         i64 req = ((i64)realDesired) - actual;
         while (req > 0 && !freePartitions.empty()) {
             auto partitionId = freePartitions.front();
             if (partitionPredicate(partitionId)) {
-                --req;
-                LockPartition(sessionKey.first, sessionInfo, partitionId, ctx);
+                auto& status = ClientInfo.GetPartitionReadingStatus(partitionId);
+                if (status.BalanceToOtherPipe() && status.LastPipe != pipe || SessionsInfo.size() == 1) {
+                    --req;
+                    LockPartition(pipe, sessionInfo, partitionId, ctx);
+                } else {
+                    toOtherPartitions.push_back(partitionId);
+                }
             } else {
                 FreePartitions.push_back(partitionId);
             }
@@ -1698,6 +1709,40 @@ void TPersQueueReadBalancer::TClientGroupInfo::LockMissingPartitions(
             Y_ABORT_UNLESS(actualExtractor(sessionInfo) >= desired && actualExtractor(sessionInfo) <= desired + 1);
         }
     }
+
+    if (!toOtherPartitions.empty()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "client: "<< ClientId << " balance group " << Group << " partitions " << JoinRange(", ", toOtherPartitions.begin(), toOtherPartitions.end()) << " to other sessions");
+
+        for (auto& [sessionKey, sessionInfo] : SessionsInfo) {
+            auto& pipe = sessionKey.first;
+            ui32 realDesired = desired + 1;
+
+            ssize_t actual = actualExtractor(sessionInfo);
+            if (actual >= realDesired) {
+                continue;
+            }
+
+            ssize_t req = ((ssize_t)realDesired) - actual;
+            size_t possibleIterations = toOtherPartitions.size();
+            while (req > 0 && !toOtherPartitions.empty() && possibleIterations) {
+                auto partitionId = toOtherPartitions.front();
+                toOtherPartitions.pop_front();
+
+                auto& status = ClientInfo.GetPartitionReadingStatus(partitionId);
+                if (status.LastPipe != pipe) {
+                    --req;
+                    --possibleIterations;
+                    LockPartition(pipe, sessionInfo, partitionId, ctx);
+                } else {
+                    --possibleIterations;
+                    toOtherPartitions.push_back(partitionId);
+                }
+            }
+        }
+    }
+
+    FreePartitions.insert(FreePartitions.end(), freePartitions.begin(), freePartitions.end());
 }
 
 void TPersQueueReadBalancer::TClientGroupInfo::Balance(const TActorContext& ctx) {
@@ -1708,6 +1753,10 @@ void TPersQueueReadBalancer::TClientGroupInfo::Balance(const TActorContext& ctx)
     }
 
     auto [totalActive, totalInactive, totalUnreadable] = TotalPartitions();
+
+    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "client " << ClientId << " balance group " << Group << ": "
+                            << " TotalActive=" << totalActive << ", TotalInactive=" << totalInactive << ", TotalUnreadable=" << totalUnreadable);
+
 
     //FreePartitions and PipeInfo[].NumActive are consistent
     ui32 desiredActive = totalActive / sessionsCount;
@@ -1738,8 +1787,10 @@ void TPersQueueReadBalancer::TClientGroupInfo::Balance(const TActorContext& ctx)
 void TPersQueueReadBalancer::TClientGroupInfo::LockPartition(const TActorId pipe, TSessionInfo& sessionInfo, ui32 partition, const TActorContext& ctx) {
     auto it = PartitionsInfo.find(partition);
     Y_ABORT_UNLESS(it != PartitionsInfo.end());
+
     auto& partitionInfo = it->second;
     partitionInfo.Lock(pipe);
+
     ++sessionInfo.NumActive;
     if (ClientInfo.IsFinished(partition)) {
         ++sessionInfo.NumInactive;
@@ -1936,67 +1987,111 @@ void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
     auto& r = ev->Get()->Record;
+    auto partitionId = r.GetPartitionId();
 
     auto it = ClientsInfo.find(r.GetConsumer());
     if (it != ClientsInfo.end()) {
         auto& clientInfo = it->second;
 
-        if (clientInfo.SetCommittedState(r.GetPartitionId())) {
+        if (!clientInfo.IsReadeable(partitionId)) {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                "Reading of partition " << r.GetPartitionId() << " was finished by " << r.GetConsumer());
+                        "The offset of the partition " << partitionId << " was commited by " << r.GetConsumer()
+                        << " but the partition isn't readable");
+            return;
+        }
 
-            if (clientInfo.ProccessReadingFinished(r.GetPartitionId())) {
-                ctx.Send(ctx.SelfID, new TEvPersQueue::TEvWakeupClient(r.GetConsumer(), TClientInfo::MAIN_GROUP));
-            }
+        if (clientInfo.SetCommittedState(partitionId, r.GetGeneration(), r.GetCookie())) {
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                "The offset of the partition " << partitionId << " was commited by " << r.GetConsumer());
+
+            clientInfo.ProccessReadingFinished(partitionId, ctx);
         }
     }
 }
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx) {
     auto& r = ev->Get()->Record;
+    auto partitionId = r.GetPartitionId();
 
     auto it = ClientsInfo.find(r.GetConsumer());
-    if (it != ClientsInfo.end()) {
-        auto& clientInfo = it->second;
-        auto& status = clientInfo.GetPartitionReadingStatus(r.GetPartitionId());
+    if (it == ClientsInfo.end()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                "Received TEvReadingPartitionStartedRequest from unknown consumer " << r.GetConsumer());
+    }
 
-        if (r.GetScaleAwareSDK()) {
-            if (!status.ScaleAwareSDK || !status.ReadingFinished) {
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                            "Reading of partition " << r.GetPartitionId() << " was finished by " << r.GetConsumer()
-                            << ", firstMessage=" << r.GetStartedReadingFromEndOffset() << ", ScaleAwareSDK");
+    auto& clientInfo = it->second;
+    auto& status = clientInfo.GetPartitionReadingStatus(partitionId);
 
-                status.ScaleAwareSDK = true;
-                status.ReadingFinished = true;
-                status.StartedReadingFromEndOffset = r.GetStartedReadingFromEndOffset();
+    if (status.StartReading()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                "Reading of the partition " << partitionId << " was started by " << r.GetConsumer() << ". We stop reading from child partitions.");
 
-                if (clientInfo.ProccessReadingFinished(r.GetPartitionId())) {
-                    ctx.Send(ctx.SelfID, new TEvPersQueue::TEvWakeupClient(r.GetConsumer(), TClientInfo::MAIN_GROUP));
-                }
-            }
-        } else {
-            if (status.ScaleAwareSDK || !status.ReadingFinished) {
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                            "Reading of partition " << r.GetPartitionId() << " was finished by " << r.GetConsumer()
-                            << ", firstMessage=" << r.GetStartedReadingFromEndOffset() << ", old SDK, iteration=" << status.Iteration);
-
-                status.ScaleAwareSDK = false;
-                status.ReadingFinished = true;
-                status.StartedReadingFromEndOffset = r.GetStartedReadingFromEndOffset();
-
-                if (status.StartedReadingFromEndOffset) {
-                    if (clientInfo.ProccessReadingFinished(r.GetPartitionId())) {
-                        ctx.Send(ctx.SelfID, new TEvPersQueue::TEvWakeupClient(r.GetConsumer(), TClientInfo::MAIN_GROUP));
-                    }
-                } else {
-                    ++status.Iteration;
-                    ++status.Cookie;
-
-                    auto deleay = std::min<size_t>(1ul << status.Iteration, TabletConfig.GetPartitionConfig().GetLifetimeSeconds());
-                    ctx.Schedule(TDuration::Seconds(deleay), new TEvPQ::TEvWakeupReleasePartition(r.GetConsumer(), r.GetPartitionId(), status.Cookie));
-                }
-            }
+        auto* groupInfo = clientInfo.FindGroup(partitionId);
+        if (groupInfo) {
+            groupInfo->ActivatePartition(partitionId);
         }
+
+        // We releasing all children's partitions because we don't start reading the partition from EndOffset
+        PartitionGraph.Travers(partitionId, [&](ui32 partitionId) {
+            auto& status = clientInfo.GetPartitionReadingStatus(partitionId);
+            auto* group = clientInfo.FindGroup(partitionId);
+
+            if (group) {
+                if (status.Reset()) {
+                    group->ActivatePartition(partitionId);
+                }
+                group->ReleasePartition(partitionId, ctx);
+            }
+
+            return true;
+        });
+    } else {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                "Reading of the partition " << partitionId << " was started by " << r.GetConsumer() << ".");
+
+    }
+}
+
+TString GetSdkDebugString(bool scaleAwareSDK) {
+    return scaleAwareSDK ? "ScaleAwareSDK" : "old SDK";
+}
+
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
+    auto& r = ev->Get()->Record;
+    auto partitionId = r.GetPartitionId();
+
+    auto it = ClientsInfo.find(r.GetConsumer());
+    if (it == ClientsInfo.end()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                "Received TEvReadingPartitionFinishedRequest from unknown consumer " << r.GetConsumer());
+    }
+
+    auto& clientInfo = it->second;
+    auto& status = clientInfo.GetPartitionReadingStatus(partitionId);
+
+    if (!clientInfo.IsReadeable(partitionId)) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                    "Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
+                    << " but the partition isn't readable");
+        return;
+    }
+
+    if (status.SetFinishedState(r.GetScaleAwareSDK(), r.GetStartedReadingFromEndOffset())) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                    "Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
+                    << ", firstMessage=" << r.GetStartedReadingFromEndOffset() << ", " << GetSdkDebugString(r.GetScaleAwareSDK()));
+
+        clientInfo.ProccessReadingFinished(partitionId, ctx);
+    } else if (!status.IsFinished()) {
+        auto delay = std::min<size_t>(1ul << status.Iteration, TabletConfig.GetPartitionConfig().GetLifetimeSeconds()); // TODO Учесть время закрытия партиции на запись
+
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                    "Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
+                    << ". Scheduled release of the partition for re-reading. Delay=" << delay << " seconds,"
+                    << " firstMessage=" << r.GetStartedReadingFromEndOffset() << ", " << GetSdkDebugString(r.GetScaleAwareSDK()));
+
+        status.LastPipe = ev->Sender;
+        ctx.Schedule(TDuration::Seconds(delay), new TEvPQ::TEvWakeupReleasePartition(r.GetConsumer(), partitionId, status.Cookie));
     }
 }
 

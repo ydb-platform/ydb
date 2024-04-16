@@ -67,10 +67,11 @@ public:
         return Discard;
     }
 
-    void Init(bool discard, const TString& label, TMaybe<TPosition> pos) override {
+    void Init(bool discard, const TString& label, TMaybe<TPosition> pos, bool unordered) override {
         Discard = discard;
         Y_UNUSED(label);
         Y_UNUSED(pos);
+        Y_UNUSED(unordered);
     }
 
     void Write(const TStringBuf& resultData) override {

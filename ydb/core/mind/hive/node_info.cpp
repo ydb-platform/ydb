@@ -206,12 +206,18 @@ bool TNodeInfo::IsAllowedToRunTablet(const TTabletInfo& tablet, TTabletDebugStat
 }
 
 i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet) const {
+    i32 priority = 0;
+
     auto it = TabletAvailability.find(tablet.GetTabletType());
-    if (it == TabletAvailability.end()) {
-        return 0;
+    if (it != TabletAvailability.end()) {
+        priority = it->second.FromLocal.GetPriority();
     }
 
-    return it->second.FromLocal.GetPriority();
+    if (tablet.FailedNodeId == Id) {
+        --priority;
+    }
+
+    return priority;
 }
 
 bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState) const {

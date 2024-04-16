@@ -314,6 +314,8 @@ public:
                 BlockEngineEnabled = true;
             } else if (flag == "BlockEngineForce") {
                 BlockEngineForce = true;
+            } if (flag == "UnorderedResult") {
+                UnorderedResult = true;
             }
         }
 
@@ -1314,7 +1316,7 @@ public:
             return State.Statements.back();
         }
 
-        auto resOptions = QL(QL(QA("type")), QL(QA("autoref")));
+        auto resOptions = BuildResultOptions(!sort);
         State.Statements.push_back(L(A("let"), A("output"), output));
         State.Statements.push_back(L(A("let"), A("result_sink"), L(A("DataSink"), QA(TString(NYql::ResultProviderName)))));
         State.Statements.push_back(L(A("let"), A("world"), L(A("Write!"),
@@ -1322,6 +1324,17 @@ public:
         State.Statements.push_back(L(A("let"), A("world"), L(A("Commit!"),
             A("world"), A("result_sink"))));
         return State.Statements.back();
+    }
+
+    TAstNode* BuildResultOptions(bool unordered) {
+        TVector<TAstNode*> options;
+        options.push_back(QL(QA("type")));
+        options.push_back(QL(QA("autoref")));
+        if (unordered && UnorderedResult) {
+            options.push_back(QL(QA("unordered")));
+        }
+
+        return QVL(options.data(), options.size());
     }
 
     [[nodiscard]]
@@ -2251,7 +2264,7 @@ public:
             }
         }
 
-        if (name == "useblocks" || name == "emitaggapply") {
+        if (name == "useblocks" || name == "emitaggapply" || name == "unorderedresult") {
             if (ListLength(value->args) != 1) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
                 return nullptr;
@@ -2260,9 +2273,13 @@ public:
             auto arg = ListNodeNth(value->args, 0);
             if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
                 TString rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
-                auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
-                State.Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
-                    QA(TString(rawStr == "true" ? "" : "Disable") + TString((name == "useblocks") ? "UseBlocks" : "PgEmitAggApply")))));
+                if (name == "unorderedresult") {
+                    UnorderedResult = (rawStr == "true");
+                } else {
+                    auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
+                    State.Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+                        QA(TString(rawStr == "true" ? "" : "Disable") + TString((name == "useblocks") ? "UseBlocks" : "PgEmitAggApply")))));
+                }
             } else {
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
@@ -2546,7 +2563,7 @@ public:
         State.Statements.push_back(L(A("let"), A("output"), output));
         State.Statements.push_back(L(A("let"), A("result_sink"), L(A("DataSink"), QA(TString(NYql::ResultProviderName)))));
 
-        const auto resOptions = QL(QL(QA("type")), QL(QA("autoref")));
+        const auto resOptions = BuildResultOptions(true);
         State.Statements.push_back(L(A("let"), A("world"), L(A("Write!"),
             A("world"), A("result_sink"), L(A("Key")), A("output"), resOptions)));
         State.Statements.push_back(L(A("let"), A("world"), L(A("Commit!"),
@@ -2859,8 +2876,10 @@ public:
 
 
     TAstNode* BuildPgObjectExpression(const TStringBuf objectName, const TStringBuf objectType) {
+        bool noPrefix = (objectType == "pgIndex");
+        TString name = noPrefix ? TString(objectName) : TablePathPrefix + TString(objectName);
         return L(A("Key"), QL(QA("pgObject"),
-                              L(A("String"), QA(objectName)),
+                              L(A("String"), QAX(std::move(name))),
                               L(A("String"), QA(objectType))
                               ));
     }
@@ -4849,6 +4868,7 @@ private:
     bool DqEngineForce = false;
     bool BlockEngineEnabled = false;
     bool BlockEngineForce = false;
+    bool UnorderedResult = false;
     TString TablePathPrefix;
     TVector<ui32> RowStarts;
     ui32 QuerySize;

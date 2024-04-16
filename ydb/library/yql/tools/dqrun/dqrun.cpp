@@ -21,6 +21,7 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
+#include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
 #include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.h>
 #include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h>
@@ -148,12 +149,16 @@ private:
     char Delim;
 };
 
-void ReadGatewaysConfig(const TString& configFile, TGatewaysConfig* config) {
+void ReadGatewaysConfig(const TString& configFile, TGatewaysConfig* config, THashSet<TString>& sqlFlags) {
     auto configData = TFileInput(configFile ? configFile : "../../../../../yql/cfg/local/gateways.conf").ReadAll();
 
     using ::google::protobuf::TextFormat;
     if (!TextFormat::ParseFromString(configData, config)) {
         ythrow yexception() << "Bad format of gateways configuration";
+    }
+
+    if (config->HasSqlCore()) {
+        sqlFlags.insert(config->GetSqlCore().GetTranslationFlags().begin(), config->GetSqlCore().GetTranslationFlags().end());
     }
 }
 
@@ -237,6 +242,7 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(
     size_t HTTPmaxTimeSeconds, 
     size_t maxRetriesCount) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
+    RegisterDqInputTransformLookupActorFactory(*factory);
     RegisterDqPqReadActorFactory(*factory, driver, nullptr);
     RegisterYdbReadActorFactory(*factory, driver, nullptr);
     RegisterS3ReadActorFactory(*factory, nullptr, httpGateway, GetHTTPDefaultRetryPolicy(TDuration::Seconds(HTTPmaxTimeSeconds), maxRetriesCount), {}, nullptr);
@@ -305,13 +311,14 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
     return std::make_tuple(std::move(actorSystemManager), std::move(actorIds));
 }
 
-int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<TString, TString>& clusters) {
+int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<TString, TString>& clusters, const THashSet<TString>& sqlFlags) {
     bool fail = true;
     if (options.Sql) {
         Cout << "Parse SQL..." << Endl;
         NSQLTranslation::TTranslationSettings sqlSettings;
         sqlSettings.ClusterMapping = clusters;
         sqlSettings.SyntaxVersion = 1;
+        sqlSettings.Flags = sqlFlags;
         sqlSettings.AnsiLexer = options.AnsiLexer;
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         sqlSettings.Flags.insert("DqEngineEnable");
@@ -701,7 +708,7 @@ int RunMain(int argc, const char* argv[])
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
 
     TGatewaysConfig gatewaysConfig;
-    ReadGatewaysConfig(gatewaysCfgFile, &gatewaysConfig);
+    ReadGatewaysConfig(gatewaysCfgFile, &gatewaysConfig, sqlFlags);
     if (runOptions.AnalyzeQuery) {
         auto* setting = gatewaysConfig.MutableDq()->AddDefaultSettings();
         setting->SetName("AnalyzeQuery");
@@ -973,7 +980,7 @@ int RunMain(int argc, const char* argv[])
         runOptions.LineageStream = &Cout;
     }
 
-    int result = RunProgram(std::move(program), runOptions, clusters);
+    int result = RunProgram(std::move(program), runOptions, clusters, sqlFlags);
     if (res.Has("metrics")) {
         NProto::TMetricsRegistrySnapshot snapshot;
         snapshot.SetDontIncrement(true);

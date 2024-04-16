@@ -92,6 +92,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx); // from Partition/PQ
+    void Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx); // from ReadSession
     void Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx); // from ReadSession
 
     TStringBuilder GetPrefix() const;
@@ -211,10 +212,33 @@ private:
         size_t Iteration = 0;
         ui64 Cookie = 0;
 
-        bool IsFinished() const { return Commited || (ReadingFinished && (StartedReadingFromEndOffset || ScaleAwareSDK)); };
-        bool SetCommittedState() { return !std::exchange(Commited, true); };
-        bool Unlock() { ReadingFinished = false; ++Cookie; return ReleaseChildren(); };
-        bool ReleaseChildren() { return !Commited; }
+        TActorId LastPipe;
+
+        // Generation of PQ-tablet and cookie for synchronization of commit information.
+        ui32 PartitionGeneration;
+        ui64 PartitionCookie;
+
+        // Return true if the reading of the partition has been finished and children's partitions are readable.
+        bool IsFinished() const;
+        // Return true if children's partitions can't be balance separately.
+        bool NeedReleaseChildren() const;
+        bool BalanceToOtherPipe() const;
+
+        // Called when reading from a partition is started.
+        // Return true if the reading of the partition has been finished before.
+        bool StartReading();
+        // Called when reading from a partition is stopped.
+        // Return true if children's partitions can't be balance separately.
+        bool StopReading();
+
+        // Called when the partition is inactive and commited offset is equal to EndOffset.
+        // Return true if the commited status changed.
+        bool SetCommittedState(ui32 generation, ui64 cookie);
+        // Called when the partition reading finished.
+        // Return true if the reading status changed.
+        bool SetFinishedState(bool scaleAwareSDK, bool startedReadingFromEndOffset);
+        // Called when the parent partition is reading.
+        bool Reset();
     };
 
     struct TSessionInfo {
@@ -235,20 +259,18 @@ private:
         ui32 NumActive;
         ui32 NumInactive;
 
-        std::set<ui32> ActivePartitions;
-
         TString ClientNode;
         ui32 ProxyNodeId;
         TInstant Timestamp;
 
-        void Unlock(bool inactive) { --NumActive; --NumSuspended; if (inactive) { -- NumInactive; } }
+        void Unlock(bool inactive);
     };
 
     struct TClientGroupInfo {
-        TClientGroupInfo(const TClientInfo& clientInfo)
+        TClientGroupInfo(TClientInfo& clientInfo)
             : ClientInfo(clientInfo) {}
 
-        const TClientInfo& ClientInfo;
+        TClientInfo& ClientInfo;
 
         TString ClientId;
         TString Topic;
@@ -262,11 +284,12 @@ private:
 
         std::unordered_map<ui32, TPartitionInfo> PartitionsInfo; // partitionId -> info
         std::deque<ui32> FreePartitions;
-        std::unordered_map<std::pair<TActorId, ui64>, TSessionInfo> SessionsInfo; //map from ActorID and random value - need for reordering sessions in different topics
+        std::unordered_map<std::pair<TActorId, ui64>, TSessionInfo> SessionsInfo; //map from ActorID and random value - need for reordering sessions in different topics (groups?)
 
         std::pair<TActorId, ui64> SessionKey(const TActorId pipe) const;
         bool EraseSession(const TActorId pipe);
         TSessionInfo* FindSession(const TActorId pipe);
+        TSessionInfo* FindSession(ui32 partitionId);
 
         void ScheduleBalance(const TActorContext& ctx);
         void Balance(const TActorContext& ctx);
@@ -278,6 +301,7 @@ private:
         THolder<TEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(const TActorId pipe, const TSessionInfo& sessionInfo, const ui32 count, const std::set<ui32>& partitions);
 
         void FreePartition(ui32 partitionId);
+        void ActivatePartition(ui32 partitionId);
         void InactivatePartition(ui32 partitionId);
 
         TStringBuilder GetPrefix() const;
@@ -307,7 +331,7 @@ private:
         std::unordered_map<ui32, TClientGroupInfo> ClientGroupsInfo; //map from group to info
         std::unordered_map<ui32, TReadingPartitionStatus> ReadingPartitionStatus; // partitionId->status
 
-        ui32 SessionsWithGroup = 0;
+        size_t SessionsWithGroup = 0;
 
         TString ClientId;
         TString Topic;
@@ -325,7 +349,7 @@ private:
         void AddSession(const ui32 group, const std::unordered_map<ui32, TPartitionInfo>& partitionsInfo,
                         const TActorId& sender, const NKikimrPQ::TRegisterReadSession& record);
 
-        bool ProccessReadingFinished(ui32 partitionId);
+        bool ProccessReadingFinished(ui32 partitionId, const TActorContext& ctx);
 
         TStringBuilder GetPrefix() const;
 
@@ -335,7 +359,7 @@ private:
 
         bool IsReadeable(ui32 partitionId) const;
         bool IsFinished(ui32 partitionId) const;
-        bool SetCommittedState(ui32 partitionId);
+        bool SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie);
 
         TClientGroupInfo* FindGroup(ui32 partitionId);
     };
@@ -344,11 +368,25 @@ private:
 
 private:
     struct TPipeInfo {
-        TString ClientId;
+        TPipeInfo()
+            : ServerActors(0)
+        {}
+
+        TString ClientId;         // The consumer name
         TString Session;
         TActorId Sender;
-        bool WithGroups;
-        ui32 ServerActors;
+        std::vector<ui32> Groups; // groups which are reading
+        ui32 ServerActors;        // the number of pipes connected from SessionActor to ReadBalancer
+
+        // true if client connected to read from concret partitions
+        bool WithGroups() { return !Groups.empty(); }
+
+        void Init(const TString& clientId, const TString& session, const TActorId& sender, const std::vector<ui32>& groups) {
+            ClientId = clientId;
+            Session = session;
+            Sender = sender;
+            Groups = groups;
+        }
     };
 
     std::unordered_map<TActorId, TPipeInfo> PipesInfo;
@@ -484,6 +522,7 @@ public:
             HFunc(TEvPersQueue::TEvStatus, Handle);
             HFunc(TEvPersQueue::TEvGetPartitionsLocation, Handle);
             HFunc(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
+            HFunc(TEvPersQueue::TEvReadingPartitionStartedRequest, Handle);
             HFunc(TEvPersQueue::TEvReadingPartitionFinishedRequest, Handle);
             HFunc(TEvPQ::TEvWakeupReleasePartition, Handle);
 

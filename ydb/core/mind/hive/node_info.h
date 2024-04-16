@@ -64,6 +64,7 @@ public:
     bool Down;
     bool Freeze;
     bool Drain;
+    bool BecomeUpOnRestart = false;
     TVector<TActorId> DrainInitiators;
     TDrainSettings DrainSettings;
     std::unordered_map<TTabletInfo::EVolatileState, std::unordered_set<TTabletInfo*>> Tablets;

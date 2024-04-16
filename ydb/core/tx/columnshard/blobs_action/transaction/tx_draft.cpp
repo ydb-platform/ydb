@@ -11,6 +11,7 @@ bool TTxWriteDraft::Execute(TTransactionContext& txc, const TActorContext& /*ctx
 }
 
 void TTxWriteDraft::Complete(const TActorContext& ctx) {
+    Completed = true;
     for (auto&& action : WriteController->GetBlobActions()) {
         action.second->OnCompleteTxBeforeWrite(*Self);
     }

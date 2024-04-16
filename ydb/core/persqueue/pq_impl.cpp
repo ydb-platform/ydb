@@ -3744,9 +3744,11 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
             event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(tx.Step, tx.TxId);
         }
 
-        event->AddOperation(operation.GetConsumer(),
-                            operation.GetBegin(),
-                            operation.GetEnd());
+        if (operation.HasBegin()) {
+            event->AddOperation(operation.GetConsumer(),
+                                operation.GetBegin(),
+                                operation.GetEnd());
+        }
     }
 
     if (tx.WriteId.Defined()) {

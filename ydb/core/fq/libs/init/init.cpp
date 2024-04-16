@@ -229,7 +229,7 @@ void Init(
             httpGateway, s3HttpRetryPolicy);
         RegisterGenericProviderFactories(*asyncIoFactory, credentialsFactory, connectorClient);
 
-        RegisterDqPqWriteActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
+        RegisterDqPqWriteActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, yqCounters->GetSubgroup("subsystem", "DqSinkTracker"));
         RegisterDQSolomonWriteActorFactory(*asyncIoFactory, credentialsFactory);
     }
 

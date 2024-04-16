@@ -49,11 +49,6 @@ namespace NKikimr::NOlap {
     class TNormalizationContext {
         YDB_ACCESSOR_DEF(TActorId, ResourceSubscribeActor);
         YDB_ACCESSOR_DEF(TActorId, ColumnshardActor);
-        std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
-    public:
-        void SetResourcesGuard(std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> rg) {
-            ResourcesGuard = rg;
-        }
     };
 
     class TNormalizationController;
@@ -122,7 +117,7 @@ namespace NKikimr::NOlap {
         TString DebugString() const {
             return TStringBuilder() << "normalizers_count=" << Normalizers.size()
                                     << ";current_normalizer_idx=" << CurrentNormalizerIndex
-                                    << ";current_normalizer=" << (CurrentNormalizerIndex < Normalizers.size() ? Normalizers[CurrentNormalizerIndex]->GetName() : "");
+                                    << ";current_normalizer=" << (CurrentNormalizerIndex < Normalizers.size()) ? Normalizers[CurrentNormalizerIndex]->GetName() : "";
         }
 
         const INormalizerComponent::TPtr& GetNormalizer() const;

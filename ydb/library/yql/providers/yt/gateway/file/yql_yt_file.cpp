@@ -504,7 +504,7 @@ public:
                     const auto& value = compGraph->GetValue();
                     const auto it = value.GetListIterator();
                     for (NUdf::TUnboxedValue current; it.Next(current);) {
-                        res.Tables.push_back(TCanonizedPath{TString(current.AsStringRef()), Nothing(), {}, "");
+                        res.Tables.push_back(TCanonizedPath{TString(current.AsStringRef()), Nothing(), {}, ""});
                     }
                 }
                 else {

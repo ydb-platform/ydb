@@ -97,7 +97,7 @@ flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration -baseli
 
 Команда [migrate](https://documentation.red-gate.com/flyway/flyway-cli-and-api/usage/command-line/command-line-migrate) эволюционирует схему базы данных до последней версии, если таблица истории схемы не была создана, то создаст ее автоматически.
 
-Добавим к предыдущему примеру миграцию [загрузки данных](../yql/reference/yql/tutorial/fill_tables_with_data.md):
+Добавим к предыдущему примеру миграцию [загрузки данных](../yql/tutorial/fill_tables_with_data.md):
 
 ```
 db/migration:
@@ -117,7 +117,7 @@ flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration migrate
 
 ![_assets/flyway-migrate-step-1.png](_assets/flyway-migrate-step-1.png)
 
-[Загрузим данные](../yql/reference/tutorial/fill_tables_with_data.md) без команды `COMMIT` в конце скрипта, [создадим индекс](../yql/reference/syntax/alter_table.md), затем переименуем индекс. 
+[Загрузим данные](../yql/tutorial/fill_tables_with_data.md) без команды `COMMIT` в конце скрипта, [создадим индекс](../yql/reference/syntax/alter_table.md), затем переименуем индекс. 
 
 Эволюционируем схему путем добавление [вторичного индекса](../yql/reference/syntax/alter_table.md):
 

@@ -1596,11 +1596,11 @@ TUnversionedValueRangeTruncationResult TruncateUnversionedValues(
         truncatedValues.push_back(value);
         auto& truncatedValue = truncatedValues.back();
 
-        if (clipped || value.Type == EValueType::Any) {
+        if (clipped) {
             truncatedValue = MakeUnversionedNullValue(value.Id, value.Flags);
-        } else if (value.Type == EValueType::Composite) {
-            if (auto truncatedCompositeValue = TruncateCompositeValue(TYsonStringBuf(value.AsStringBuf()), maxSizePerValue)) {
-                truncatedValue = rowBuffer->CaptureValue(MakeUnversionedCompositeValue(truncatedCompositeValue->AsStringBuf(), value.Id, value.Flags));
+        } else if (value.Type == EValueType::Any || value.Type == EValueType::Composite) {
+            if (auto truncatedYsonValue = TruncateYsonValue(TYsonStringBuf(value.AsStringBuf()), maxSizePerValue)) {
+                truncatedValue = rowBuffer->CaptureValue(MakeUnversionedStringLikeValue(value.Type, truncatedYsonValue->AsStringBuf(), value.Id, value.Flags));
             } else {
                 truncatedValue = MakeUnversionedNullValue(value.Id, value.Flags);
             }

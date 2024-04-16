@@ -226,6 +226,26 @@ class ReplicatedSummingMergeTree(ReplicatedMergeTree):
     pass
 
 
+class SharedReplacingMergeTree(ReplacingMergeTree):
+    pass
+
+
+class SharedAggregatingMergeTree(AggregatingMergeTree):
+    pass
+
+
+class SharedSummingMergeTree(SummingMergeTree):
+    pass
+
+
+class SharedVersionedCollapsingMergeTree(VersionedCollapsingMergeTree):
+    pass
+
+
+class SharedGraphiteMergeTree(GraphiteMergeTree):
+    pass
+
+
 def build_engine(full_engine: str) -> Optional[TableEngine]:
     """
     Factory function to create TableEngine class from ClickHouse full_engine expression

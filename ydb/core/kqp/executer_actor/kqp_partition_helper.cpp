@@ -78,7 +78,6 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(
         } else {
             shardData.Ranges.emplace_back(std::move(point));
         }
-        auto& shardData = ret[shardId];
 
         for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
             TString columnName(structType->GetMemberName(i));

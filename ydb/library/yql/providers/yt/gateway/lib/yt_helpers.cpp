@@ -133,6 +133,13 @@ THashSet<TStringBuf> SERVICE_YQL_ATTRS = {
 
 }
 
+TString SerializeRichYPathAttrs(const NYT::TRichYPath& richPath) {
+    NYT::TNode node;
+    NYT::TNodeBuilder builder(&node);
+    NYT::Serialize(richPath, &builder);
+    return NYT::NodeToYsonString(node);
+}
+
 IYtGateway::TCanonizedPath CanonizedPath(const TString& path) {
     NYT::TRichYPath richYPath(path);
     if (path.StartsWith('<')) {
@@ -212,7 +219,7 @@ IYtGateway::TCanonizedPath CanonizedPath(const TString& path) {
         richYPath.Path_,
         richYPath.Columns_.Defined() ? richYPath.Columns_->Parts_ : TMaybe<TVector<TString>>(),
         richYPath.GetRanges(),
-        richYPath.Timestamp_
+        NYT::NodeToYsonString(NYT::NodeFromYsonString(path))
     };
 };
 

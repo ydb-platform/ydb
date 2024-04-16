@@ -63,6 +63,8 @@ static TResult ResultFromCurrentException(TPosition pos = {}, bool shortErrors =
     return result;
 }
 
+TString SerializeRichYPathAttrs(const NYT::TRichYPath& richPath);
+
 IYtGateway::TCanonizedPath CanonizedPath(const TString& path);
 
 void EnsureSpecDoesntUseNativeYtTypes(const NYT::TNode& spec, TStringBuf tableName, bool read);

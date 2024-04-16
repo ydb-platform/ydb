@@ -174,7 +174,7 @@ public:
         TString Path;
         TMaybe<TVector<TString>> Columns;
         TMaybe<TVector<NYT::TReadRange>> Ranges;
-        TMaybe<ui64> Timestamp;
+        TString AdditionalAttributes;
     };
 
     struct TCanonizePathsResult: public NCommon::TOperationResult {

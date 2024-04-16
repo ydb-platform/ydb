@@ -16,6 +16,7 @@
 
 #include <library/cpp/yson/node/node_io.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
+#include <yt/cpp/mapreduce/interface/serialize.h>
 
 #include <util/stream/output.h>
 #include <util/stream/str.h>
@@ -2805,11 +2806,8 @@ bool TYtPathInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         return false;
     }
 
-    if (!node.Child(TYtPath::idx_Timestamp)->IsCallable(NNodes::TCoUint64::CallableName())
-        && !node.Child(TYtPath::idx_Timestamp)->IsCallable(TCoVoid::CallableName())) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Child(TYtPath::idx_Timestamp)->Pos()), TStringBuilder()
-            << "Expected " << TCoUint64::CallableName()
-            << " or Void"));
+    if (!node.Child(TYtPath::idx_AdditionalAttributes)->IsAtom()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Child(TYtPath::idx_AdditionalAttributes)->Pos()), TStringBuilder() << "Atom expected"));
         return false;
     }
 
@@ -2833,8 +2831,8 @@ void TYtPathInfo::Parse(TExprBase node) {
     if (path.Stat().Maybe<TYtStat>()) {
         Stat = MakeIntrusive<TYtTableStatInfo>(path.Stat().Ptr());
     }
-    if (path.Timestamp().Maybe<TCoUint64>()) {
-        Timestamp = FromString<ui64>(path.Timestamp().Cast<TCoUint64>().Literal().Value());
+    if (path.AdditionalAttributes().Maybe<TCoAtom>()) {
+        AdditionalAttributes = path.AdditionalAttributes().Cast().Value();
     }
 }
 
@@ -2856,21 +2854,19 @@ TExprBase TYtPathInfo::ToExprNode(TExprContext& ctx, const TPositionHandle& pos,
     } else {
         pathBuilder.Stat<TCoVoid>().Build();
     }
-    if (Timestamp) {
-        pathBuilder.Timestamp<TCoUint64>()
-            .Literal()
-                .Value(ToString(*Timestamp))
-            .Build()
+    if (!AdditionalAttributes.Empty()) {
+        pathBuilder.AdditionalAttributes<TCoAtom>()
+            .Value(AdditionalAttributes)
         .Build();
-    } else {
-        pathBuilder.Timestamp<TCoVoid>().Build();
     }
     
-
     return pathBuilder.Done();
 }
 
 void TYtPathInfo::FillRichYPath(NYT::TRichYPath& path) const {
+    if (!AdditionalAttributes.Empty()) {
+        NYT::Deserialize(path, NYT::NodeFromYsonString(AdditionalAttributes));
+    }
     if (Columns) {
         // Should have the same criteria as in TYtPathInfo::GetCodecSpecNode()
         bool useAllColumns = !Table->RowSpec; // Always use all columns for YAMR format
@@ -2884,9 +2880,6 @@ void TYtPathInfo::FillRichYPath(NYT::TRichYPath& path) const {
         YQL_ENSURE(Table);
         YQL_ENSURE(Table->RowSpec);
         Ranges->FillRichYPath(path, Table->RowSpec->SortedBy.size());
-    }
-    if (Timestamp) {
-        path.Timestamp(static_cast<i64>(*Timestamp));
     }
 }
 

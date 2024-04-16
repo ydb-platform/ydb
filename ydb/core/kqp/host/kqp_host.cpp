@@ -180,8 +180,8 @@ public:
 
     TAsyncValidateYqlResult(TExprNode* queryRoot, TIntrusivePtr<TKikimrSessionContext> sessionCtx,
         TExprContext& exprCtx, TAutoPtr<IGraphTransformer> transformer, TMaybe<TSqlVersion> sqlVersion,
-        bool keepInCache, const TMaybe<TString>& commandTagName)
-        : TKqpAsyncResultBase(queryRoot, exprCtx, *transformer.Get())
+        bool keepInCache, const TMaybe<TString>& commandTagName, TAsyncTransformStatusCallback asyncTransformCallback)
+        : TKqpAsyncResultBase(queryRoot, exprCtx, *transformer.Get(), asyncTransformCallback)
         , SessionCtx(sessionCtx)
         , Transformer(transformer)
         , SqlVersion(sqlVersion)
@@ -217,8 +217,9 @@ public:
 
     TAsyncExplainYqlResult(TExprNode* queryRoot, TIntrusivePtr<TKikimrSessionContext> sessionCtx,
         TExprContext& exprCtx, TAutoPtr<IGraphTransformer> transformer, IPlanBuilder& planBuilder,
-        TMaybe<TSqlVersion> sqlVersion, bool keepInCache, const TMaybe<TString>& commandTagName, bool useDqExplain = false)
-        : TKqpAsyncResultBase(queryRoot, exprCtx, *transformer.Get())
+        TMaybe<TSqlVersion> sqlVersion, bool keepInCache, const TMaybe<TString>& commandTagName,
+        TAsyncTransformStatusCallback asyncTransformCallback, bool useDqExplain = false)
+        : TKqpAsyncResultBase(queryRoot, exprCtx, *transformer.Get(), asyncTransformCallback)
         , SessionCtx(sessionCtx)
         , Transformer(transformer)
         , PlanBuilder(planBuilder)
@@ -269,8 +270,8 @@ public:
     TAsyncExecuteYqlResult(TExprNode* queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer,
         const TString& cluster, TIntrusivePtr<TKikimrSessionContext> sessionCtx,
         const TResultProviderConfig& resultProviderConfig, IPlanBuilder& planBuilder,
-        TMaybe<TSqlVersion> sqlVersion, bool keepInCache, const TMaybe<TString>& commandTagName)
-        : TKqpAsyncResultBase(queryRoot, exprCtx, transformer)
+        TMaybe<TSqlVersion> sqlVersion, bool keepInCache, const TMaybe<TString>& commandTagName, TAsyncTransformStatusCallback asyncTransformCallback)
+        : TKqpAsyncResultBase(queryRoot, exprCtx, transformer, asyncTransformCallback)
         , Cluster(cluster)
         , SessionCtx(sessionCtx)
         , ResultProviderConfig(resultProviderConfig)
@@ -329,8 +330,8 @@ public:
     using TResult = IKqpHost::TQueryResult;
 
     TAsyncExecuteKqlResult(TExprNode* queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer,
-        TIntrusivePtr<TKikimrSessionContext> sessionCtx, TExecuteContext& executeCtx)
-        : TKqpAsyncResultBase(queryRoot, exprCtx, transformer)
+        TIntrusivePtr<TKikimrSessionContext> sessionCtx, TExecuteContext& executeCtx, TAsyncTransformStatusCallback asyncTransformCallback)
+        : TKqpAsyncResultBase(queryRoot, exprCtx, transformer, asyncTransformCallback)
         , SessionCtx(sessionCtx)
         , ExecuteCtx(executeCtx) {}
 
@@ -360,8 +361,8 @@ public:
 
     TAsyncPrepareYqlResult(TExprNode::TPtr queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer,
         TIntrusivePtr<TKikimrQueryContext> queryCtx, const TKqpQueryRef& query, TMaybe<TSqlVersion> sqlVersion,
-        TIntrusivePtr<TKqlTransformContext> transformCtx, bool keepInCache, const TMaybe<TString>& commandTagName)
-        : TKqpAsyncResultBase(std::move(queryRoot), exprCtx, transformer)
+        TIntrusivePtr<TKqlTransformContext> transformCtx, bool keepInCache, const TMaybe<TString>& commandTagName, TAsyncTransformStatusCallback asyncTransformCallback)
+        : TKqpAsyncResultBase(std::move(queryRoot), exprCtx, transformer, asyncTransformCallback)
         , QueryCtx(queryCtx)
         , ExprCtx(exprCtx)
         , TransformCtx(transformCtx)
@@ -1368,7 +1369,7 @@ private:
         YQL_ENSURE(compileResult.QueryExprs.size() == 1);
 
         return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExprs.front().Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
-            *ResultProviderConfig, *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName);
+            *ResultProviderConfig, *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
     IAsyncQueryResultPtr ExplainDataQueryInternal(const TKqpQueryRef& query, bool isSql, TExprContext& ctx) {
@@ -1428,7 +1429,7 @@ private:
         YQL_ENSURE(compileResult.QueryExprs.size() == 1);
 
         return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExprs.front().Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
-            query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName);
+            query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
     IAsyncQueryResultPtr PrepareDataQueryAstInternal(const TKqpQueryRef& queryAst, const TPrepareSettings& settings,
@@ -1458,7 +1459,7 @@ private:
         YQL_ENSURE(!sqlVersion);
 
         return MakeIntrusive<TAsyncExecuteKqlResult>(compileResult.QueryExprs.front().Get(), ctx, *DataQueryAstTransformer,
-            SessionCtx, *ExecuteCtx);
+            SessionCtx, *ExecuteCtx, DataProvidersFinalizer);
     }
 
     TMaybe<TSqlVersion> SetupQueryParameters(const TPrepareSettings& settings, EKikimrQueryType queryType) {
@@ -1504,11 +1505,11 @@ private:
                 return MakeIntrusive<TAsyncPrepareNeedToSplitYqlResult>();
             } else {
                 return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExprs.front().Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
-                    query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName);
+                    query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
             }
         } else {
             return MakeIntrusive<TAsyncPrepareYqlResult>(expr, ctx, *YqlTransformer, SessionCtx->QueryPtr(),
-                query.Text, sqlVersion, TransformCtx, false, Nothing());
+                query.Text, sqlVersion, TransformCtx, false, Nothing(), DataProvidersFinalizer);
         }
     }
 
@@ -1540,7 +1541,7 @@ private:
 
 
         return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExprs.front().Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
-            query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName);
+            query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
     IAsyncQueryResultPtr PrepareScanQueryAstInternal(const TKqpQueryRef& queryAst, TExprContext& ctx) {
@@ -1562,7 +1563,7 @@ private:
         YQL_ENSURE(compileResult.QueryExprs.size() == 1);
 
         return MakeIntrusive<TAsyncExecuteKqlResult>(compileResult.QueryExprs.front().Get(), ctx, *DataQueryAstTransformer,
-            SessionCtx, *ExecuteCtx);
+            SessionCtx, *ExecuteCtx, DataProvidersFinalizer);
     }
 
     IAsyncQueryResultPtr ExecuteYqlScriptInternal(const TKqpQueryRef& script, const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& parameters,
@@ -1589,7 +1590,7 @@ private:
         (SessionCtx->Query().QueryData)->ParseParameters(parameters);
 
         return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExprs.front().Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
-            *ResultProviderConfig, *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName);
+            *ResultProviderConfig, *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
     IAsyncQueryResultPtr StreamExecuteYqlScriptInternal(const TKqpQueryRef& script, const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& parameters,
@@ -1618,7 +1619,7 @@ private:
         (SessionCtx->Query().QueryData)->ParseParameters(parameters);
 
         return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExprs.front().Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
-            *ResultProviderConfig, *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName);
+            *ResultProviderConfig, *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
     IAsyncQueryResultPtr ValidateYqlScriptInternal(const TKqpQueryRef& script, TExprContext& ctx) {
@@ -1647,7 +1648,7 @@ private:
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
             .Build(false);
 
-        return MakeIntrusive<TAsyncValidateYqlResult>(compileResult.QueryExprs.front().Get(), SessionCtx, ctx, transformer, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName);
+        return MakeIntrusive<TAsyncValidateYqlResult>(compileResult.QueryExprs.front().Get(), SessionCtx, ctx, transformer, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
     IAsyncQueryResultPtr ExplainYqlScriptInternal(const TKqpQueryRef& script, TExprContext& ctx) {
@@ -1668,7 +1669,7 @@ private:
         YQL_ENSURE(compileResult.QueryExprs.size() == 1);
 
         return MakeIntrusive<TAsyncExplainYqlResult>(compileResult.QueryExprs.front().Get(), SessionCtx, ctx, YqlTransformer,
-            *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, true /* UseDqExplain */);
+            *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer, true /* UseDqExplain */);
     }
 
     void InitS3Provider(EKikimrQueryType queryType) {
@@ -1727,6 +1728,10 @@ private:
 
         TypesCtx->AddDataSource(YtProviderName, CreateYtDataSource(ytState));
         TypesCtx->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
+
+        DataProvidersFinalizer = [ytGateway = FederatedQuerySetup->YtGateway, sessionId](const NYql::IGraphTransformer::TStatus&) {
+            return ytGateway->CloseSession(NYql::IYtGateway::TCloseSessionOptions(sessionId));
+        };
     }
 
     void InitPgProvider() {
@@ -1838,6 +1843,8 @@ private:
         SessionCtx->Reset(KeepConfigChanges);
         SessionCtx->Query().Type = queryType;
 
+        DataProvidersFinalizer = nullptr;
+
         Init(queryType);
 
         ExprCtx->Reset();
@@ -1894,6 +1901,7 @@ private:
     TAutoPtr<IGraphTransformer> YqlTransformer;
     TAutoPtr<IGraphTransformer> DataQueryAstTransformer;
     TExprNode::TPtr FakeWorld;
+    TKqpAsyncResultBase<IKqpHost::TQueryResult>::TAsyncTransformStatusCallback DataProvidersFinalizer;
 
     TIntrusivePtr<TExecuteContext> ExecuteCtx;
     TIntrusivePtr<TKqlTransformContext> TransformCtx;

@@ -1437,6 +1437,12 @@ struct IQuotaCounters {
     virtual void ChangeDiskSpaceTablesDataBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceTablesIndexBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceTablesTotalBytes(i64 delta) = 0;
+    virtual void ChangeDiskSpaceTablesDataBytesOnSsd(i64 delta) = 0;
+    virtual void ChangeDiskSpaceTablesIndexBytesOnSsd(i64 delta) = 0;
+    virtual void ChangeDiskSpaceTablesTotalBytesOnSsd(i64 delta) = 0;
+    virtual void ChangeDiskSpaceTablesDataBytesOnHdd(i64 delta) = 0;
+    virtual void ChangeDiskSpaceTablesIndexBytesOnHdd(i64 delta) = 0;
+    virtual void ChangeDiskSpaceTablesTotalBytesOnHdd(i64 delta) = 0;
     virtual void ChangeDiskSpaceTopicsTotalBytes(ui64 value) = 0;
     virtual void ChangeDiskSpaceQuotaExceeded(i64 delta) = 0;
     virtual void ChangeDiskSpaceHardQuotaBytes(i64 delta) = 0;

@@ -173,14 +173,34 @@ void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartiti
     for (const auto& [poolKind, newStoragePoolStats] : newAggr.StoragePoolsStats) {
         const auto* oldStats = oldAggr.StoragePoolsStats.FindPtr(poolKind);
         auto& storagePoolUsage = DiskSpaceUsage.StoragePoolsUsage[poolKind];
-        storagePoolUsage.DataSize += newStoragePoolStats.DataSize - (oldStats ? oldStats->DataSize : 0u);
-        storagePoolUsage.IndexSize += newStoragePoolStats.IndexSize - (oldStats ? oldStats->IndexSize : 0u);
+        const auto dataSizeIncrement = newStoragePoolStats.DataSize - (oldStats ? oldStats->DataSize : 0u);
+        const auto indexSizeIncrement = newStoragePoolStats.IndexSize - (oldStats ? oldStats->IndexSize : 0u);
+        storagePoolUsage.DataSize += dataSizeIncrement;
+        storagePoolUsage.IndexSize += indexSizeIncrement;
+        if (poolKind == "ssd") {
+            counters->ChangeDiskSpaceTablesDataBytesOnSsd(dataSizeIncrement);
+            counters->ChangeDiskSpaceTablesIndexBytesOnSsd(indexSizeIncrement);
+            counters->ChangeDiskSpaceTablesTotalBytesOnSsd(dataSizeIncrement + indexSizeIncrement);
+        } else if (poolKind == "hdd") {
+            counters->ChangeDiskSpaceTablesDataBytesOnHdd(dataSizeIncrement);
+            counters->ChangeDiskSpaceTablesIndexBytesOnHdd(indexSizeIncrement);
+            counters->ChangeDiskSpaceTablesTotalBytesOnHdd(dataSizeIncrement + indexSizeIncrement);
+        }
     }
     for (const auto& [poolKind, oldStoragePoolStats] : oldAggr.StoragePoolsStats) {
         if (const auto* newStats = newAggr.StoragePoolsStats.FindPtr(poolKind); !newStats) {
             auto& storagePoolUsage = DiskSpaceUsage.StoragePoolsUsage[poolKind];
             storagePoolUsage.DataSize -= oldStoragePoolStats.DataSize;
             storagePoolUsage.IndexSize -= oldStoragePoolStats.IndexSize;
+            if (poolKind == "ssd") {
+                counters->ChangeDiskSpaceTablesDataBytesOnSsd(-oldStoragePoolStats.DataSize);
+                counters->ChangeDiskSpaceTablesIndexBytesOnSsd(-oldStoragePoolStats.IndexSize);
+                counters->ChangeDiskSpaceTablesTotalBytesOnSsd(-oldStoragePoolStats.DataSize - oldStoragePoolStats.IndexSize);
+            } else if (poolKind == "hdd") {
+                counters->ChangeDiskSpaceTablesDataBytesOnHdd(-oldStoragePoolStats.DataSize);
+                counters->ChangeDiskSpaceTablesIndexBytesOnHdd(-oldStoragePoolStats.IndexSize);
+                counters->ChangeDiskSpaceTablesTotalBytesOnHdd(-oldStoragePoolStats.DataSize - oldStoragePoolStats.IndexSize);
+            }
         }
     }
 }

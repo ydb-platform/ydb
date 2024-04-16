@@ -197,6 +197,13 @@ enum ESimpleCounters {
     COUNTER_GRAPHSHARD_COUNT = 158 [(CounterOpts) = {Name: "GraphShards"}];
 
     COUNTER_IN_FLIGHT_OPS_TxCopySequence = 159            [(CounterOpts) = {Name: "InFlightOps/CopySequence"}];
+    
+    COUNTER_DISK_SPACE_TABLES_DATA_BYTES_ON_SSD = 160     [(CounterOpts) = {Name: "DiskSpaceTablesDataBytesOnSsd"}];
+    COUNTER_DISK_SPACE_TABLES_INDEX_BYTES_ON_SSD = 161    [(CounterOpts) = {Name: "DiskSpaceTablesIndexBytesOnSsd"}];
+    COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES_ON_SSD = 162    [(CounterOpts) = {Name: "DiskSpaceTablesTotalBytesOnSsd"}];
+    COUNTER_DISK_SPACE_TABLES_DATA_BYTES_ON_HDD = 163     [(CounterOpts) = {Name: "DiskSpaceTablesDataBytesOnHdd"}];
+    COUNTER_DISK_SPACE_TABLES_INDEX_BYTES_ON_HDD = 164    [(CounterOpts) = {Name: "DiskSpaceTablesIndexBytesOnHdd"}];
+    COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES_ON_HDD = 165    [(CounterOpts) = {Name: "DiskSpaceTablesTotalBytesOnHdd"}];
 }
 
 enum ECumulativeCounters {

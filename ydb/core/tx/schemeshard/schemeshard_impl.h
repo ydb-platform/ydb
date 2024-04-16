@@ -1356,6 +1356,12 @@ public:
     void ChangeDiskSpaceTablesDataBytes(i64 delta) override;
     void ChangeDiskSpaceTablesIndexBytes(i64 delta) override;
     void ChangeDiskSpaceTablesTotalBytes(i64 delta) override;
+    void ChangeDiskSpaceTablesDataBytesOnSsd(i64 delta) override;
+    void ChangeDiskSpaceTablesIndexBytesOnSsd(i64 delta) override;
+    void ChangeDiskSpaceTablesTotalBytesOnSsd(i64 delta) override;
+    void ChangeDiskSpaceTablesDataBytesOnHdd(i64 delta) override;
+    void ChangeDiskSpaceTablesIndexBytesOnHdd(i64 delta) override;
+    void ChangeDiskSpaceTablesTotalBytesOnHdd(i64 delta) override;
     void ChangeDiskSpaceTopicsTotalBytes(ui64 value) override;
     void ChangeDiskSpaceQuotaExceeded(i64 delta) override;
     void ChangeDiskSpaceHardQuotaBytes(i64 delta) override;

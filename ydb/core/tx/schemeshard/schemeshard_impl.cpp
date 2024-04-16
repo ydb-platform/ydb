@@ -7107,6 +7107,30 @@ void TSchemeShard::ChangeDiskSpaceTablesTotalBytes(i64 delta) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES].Add(delta);
 }
 
+void TSchemeShard::ChangeDiskSpaceTablesDataBytesOnSsd(i64 delta) {
+    TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_DATA_BYTES_ON_SSD].Add(delta);
+}
+
+void TSchemeShard::ChangeDiskSpaceTablesIndexBytesOnSsd(i64 delta) {
+    TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_INDEX_BYTES_ON_SSD].Add(delta);
+}
+
+void TSchemeShard::ChangeDiskSpaceTablesTotalBytesOnSsd(i64 delta) {
+    TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES_ON_SSD].Add(delta);
+}
+
+void TSchemeShard::ChangeDiskSpaceTablesDataBytesOnHdd(i64 delta) {
+    TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_DATA_BYTES_ON_HDD].Add(delta);
+}
+
+void TSchemeShard::ChangeDiskSpaceTablesIndexBytesOnHdd(i64 delta) {
+    TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_INDEX_BYTES_ON_HDD].Add(delta);
+}
+
+void TSchemeShard::ChangeDiskSpaceTablesTotalBytesOnHdd(i64 delta) {
+    TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES_ON_HDD].Add(delta);
+}
+
 void TSchemeShard::ChangeDiskSpaceTopicsTotalBytes(ui64 value) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_TOPICS_TOTAL_BYTES].Set(value);
 }

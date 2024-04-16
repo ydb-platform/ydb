@@ -155,10 +155,7 @@ bool TSchemeShard::ContinueBackgroundCleaning(const TPathId& pathId) {
 
 void TSchemeShard::HandleBackgroundCleaningCompletionResult(const TTxId& txId) {
     const auto pathId = BackgroundCleaningTxToDirPathId.at(txId);
-    if (auto stateIter = BackgroundCleaningState.find(pathId);
-        stateIter == std::end(BackgroundCleaningState) || !stateIter->second.TxIds.contains(txId)) {
-        return;
-    }
+    Y_ABORT_UNLESS(BackgroundCleaningState.at(pathId).TxIds.contains(txId));
 
     auto ctx = ActorContext();
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Get BackgroundCleaning CompletionResult "
@@ -336,11 +333,7 @@ void TSchemeShard::HandleBackgroundCleaningTransactionResult(
         TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& result) {
     const auto txId = TTxId(result->Get()->Record.GetTxId());
     const auto pathId = BackgroundCleaningTxToDirPathId.at(txId);
-
-    if (auto stateIter = BackgroundCleaningState.find(pathId);
-        stateIter == std::end(BackgroundCleaningState) || !stateIter->second.TxIds.contains(txId)) {
-        return;
-    }
+    Y_ABORT_UNLESS(BackgroundCleaningState.at(pathId).TxIds.contains(txId));
 
     auto ctx = ActorContext();
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Get BackgroundCleaning TransactionResult "

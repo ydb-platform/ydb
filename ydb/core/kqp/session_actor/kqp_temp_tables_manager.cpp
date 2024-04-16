@@ -229,11 +229,7 @@ private:
             Finish();
         }
 
-        if (++DroppedDirsCount == DirsToDrop.size()) {
-            Finish();
-        } else {
-            RemoveNextDir();
-        }
+        RemoveNextDir();
     }
 
     void Finish() {
@@ -248,7 +244,6 @@ private:
     size_t DroppedTablesCount = 0;
 
     TVector<TPath> DirsToDrop;
-    size_t DroppedDirsCount = 0;
 
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TActorId Target;

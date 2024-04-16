@@ -53,13 +53,22 @@ void AsyncCreateTempTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 t
     AsyncSend(runtime, schemeShardId, ev, nodeIdx, ownerActorId);
 }
 
+void AsyncMkDir(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx) {
+    auto ev = MkDirRequest(txId, workingDir, scheme);
+    AsyncSend(runtime, schemeShardId, ev, nodeIdx, ownerActorId);
+}
+
 void AsyncMkTempDir(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx) {
     auto ev = MkDirRequest(txId, workingDir, scheme);
     auto* tx = ev->Record.MutableTransaction(0);
     auto* desc = tx->MutableMkDir();
     ActorIdToProto(ownerActorId, desc->MutableOwnerActorId());
-
     AsyncSend(runtime, schemeShardId, ev, nodeIdx, ownerActorId);
+}
+
+void TestMkDir(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, const TVector<TExpectedResult>& expectedResults, ui32 ownerNodeIdx) {
+    AsyncMkDir(runtime, TTestTxConfig::SchemeShard, txId, workingDir, scheme, ownerActorId, ownerNodeIdx);
+    TestModificationResults(runtime, txId, expectedResults);
 }
 
 void TestMkTempDir(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, const TVector<TExpectedResult>& expectedResults, ui32 ownerNodeIdx) {
@@ -122,6 +131,19 @@ void CheckTable(
     UNIT_ASSERT(tables.contains(userTableName));
 }
 
+void CheckPath(
+    TTestActorRuntime &runtime,
+    const char* fullPath,
+    ui64 schemeshardId = TTestTxConfig::SchemeShard,
+    bool checkExists = true) {
+    auto description = DescribePrivatePath(runtime, schemeshardId, fullPath, true, true);
+    if (checkExists) {
+        UNIT_ASSERT(description.GetStatus() == NKikimrScheme::EStatus::StatusSuccess);
+    } else {
+        UNIT_ASSERT(description.GetStatus() == NKikimrScheme::EStatus::StatusPathDoesNotExist);
+    }
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
@@ -141,10 +163,12 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         ui64 txId = 100;
 
         TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        TestMkDir(runtime, txId, "/MyRoot/tmp", "a", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        TestMkDir(runtime, txId, "/MyRoot/tmp/a", "b", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
         env.TestWaitNotification(runtime, txId);
         ++txId;
 
-        TestCreateTempTable(runtime, txId, "/MyRoot/tmp", R"(
+        TestCreateTempTable(runtime, txId, "/MyRoot/tmp/a/b", R"(
             TableDescription {
                 Name: "TempTable"
                 Columns { Name: "key"   Type: "Uint64" }
@@ -155,7 +179,10 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         env.TestWaitNotification(runtime, txId);
 
-        CheckTable(runtime, "/MyRoot/tmp/TempTable");
+        CheckTable(runtime, "/MyRoot/tmp/a/b/TempTable");
+        CheckPath(runtime, "/MyRoot/tmp/a/b", TTestTxConfig::SchemeShard, true);
+        CheckPath(runtime, "/MyRoot/tmp/a", TTestTxConfig::SchemeShard, true);
+        CheckPath(runtime, "/MyRoot/tmp", TTestTxConfig::SchemeShard, true);
 
         const TActorId proxy = runtime.GetInterconnectProxy(1, 0);
         runtime.Send(new IEventHandle(proxy, TActorId(), new TEvInterconnect::TEvDisconnect(), 0, 0), 1, true);
@@ -164,7 +191,10 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         runtime.DispatchEvents(options);
 
         env.SimulateSleep(runtime, TDuration::Seconds(50));
-        CheckTable(runtime, "/MyRoot/tmp/TempTable", TTestTxConfig::SchemeShard, false);
+        CheckTable(runtime, "/MyRoot/tmp/a/b/TempTable", TTestTxConfig::SchemeShard, false);
+        CheckPath(runtime, "/MyRoot/tmp/a/b", TTestTxConfig::SchemeShard, false);
+        CheckPath(runtime, "/MyRoot/tmp/b", TTestTxConfig::SchemeShard, false);
+        CheckPath(runtime, "/MyRoot/tmp", TTestTxConfig::SchemeShard, false);
     }
 
     Y_UNIT_TEST(SchemeshardBackgroundCleaningTestCreateCleanWithRetry) {
@@ -197,6 +227,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         env.TestWaitNotification(runtime, txId);
 
         CheckTable(runtime, "/MyRoot/tmp/TempTable");
+        CheckPath(runtime, "/MyRoot/tmp", TTestTxConfig::SchemeShard, true);
 
         const TActorId proxy = runtime.GetInterconnectProxy(1, 0);
 
@@ -209,6 +240,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         env.SimulateSleep(runtime, TDuration::Seconds(50));
 
         CheckTable(runtime, "/MyRoot/tmp/TempTable", TTestTxConfig::SchemeShard, true);
+        CheckPath(runtime, "/MyRoot/tmp", TTestTxConfig::SchemeShard, true);
     }
 
     Y_UNIT_TEST(SchemeshardBackgroundCleaningTestCreateCleanManyTables) {
@@ -252,6 +284,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         CheckTable(runtime, "/MyRoot/tmp/TempTable1");
         CheckTable(runtime, "/MyRoot/tmp/TempTable2");
+        CheckPath(runtime, "/MyRoot/tmp", TTestTxConfig::SchemeShard, true);
 
         const TActorId proxy = runtime.GetInterconnectProxy(1, 0);
         runtime.Send(new IEventHandle(proxy, TActorId(), new TEvInterconnect::TEvDisconnect(), 0, 0), 1, true);
@@ -267,6 +300,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         CheckTable(runtime, "/MyRoot/tmp/TempTable1", TTestTxConfig::SchemeShard, false);
         CheckTable(runtime, "/MyRoot/tmp/TempTable2", TTestTxConfig::SchemeShard, false);
+        CheckPath(runtime, "/MyRoot/tmp", TTestTxConfig::SchemeShard, false);
     }
 
     Y_UNIT_TEST(SchemeshardBackgroundCleaningTestReboot) {
@@ -317,6 +351,9 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         CheckTable(runtime, "/MyRoot/tmp1/TempTable1");
         CheckTable(runtime, "/MyRoot/tmp2/TempTable2");
 
+        CheckPath(runtime, "/MyRoot/tmp1", TTestTxConfig::SchemeShard, true);
+        CheckPath(runtime, "/MyRoot/tmp1", TTestTxConfig::SchemeShard, true);
+
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
@@ -332,7 +369,10 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         env.SimulateSleep(runtime, TDuration::Seconds(50));
         CheckTable(runtime, "/MyRoot/tmp1/TempTable1", TTestTxConfig::SchemeShard, false);
+        CheckPath(runtime, "/MyRoot/tmp1", TTestTxConfig::SchemeShard, false);
+
         CheckTable(runtime, "/MyRoot/tmp2/TempTable2", TTestTxConfig::SchemeShard);
+        CheckPath(runtime, "/MyRoot/tmp2", TTestTxConfig::SchemeShard, true);
     }
 
     Y_UNIT_TEST(SchemeshardBackgroundCleaningTestSimpleDrop) {
@@ -365,12 +405,14 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         env.TestWaitNotification(runtime, txId);
 
         CheckTable(runtime, "/MyRoot/tmp/TempTable");
+        CheckPath(runtime, "/MyRoot/tmp", TTestTxConfig::SchemeShard, true);
 
         ++txId;
         TestDropTempTable(runtime, txId, "/MyRoot/tmp", "TempTable", true);
 
         env.SimulateSleep(runtime, TDuration::Seconds(50));
         CheckTable(runtime, "/MyRoot/tmp/TempTable", TTestTxConfig::SchemeShard, false);
+        CheckPath(runtime, "/MyRoot/tmp", TTestTxConfig::SchemeShard, true);
     }
 
     Y_UNIT_TEST(SchemeshardBackgroundCleaningTestSimpleDropIndex) {
@@ -415,6 +457,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         env.SimulateSleep(runtime, TDuration::Seconds(50));
         CheckTable(runtime, "/MyRoot/tmp/TempTable", TTestTxConfig::SchemeShard, false);
+        CheckPath(runtime, "/MyRoot/tmp", TTestTxConfig::SchemeShard, true);
 
         TestLs(runtime, "/MyRoot/tmp/TempTable/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathNotExist);
     }
@@ -453,6 +496,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         env.TestWaitNotification(runtime, txId);
 
         CheckTable(runtime, "/MyRoot/tmp/TempTable");
+        CheckPath(runtime, "/MyRoot/tmp", TTestTxConfig::SchemeShard, true);
 
         TestLs(runtime, "/MyRoot/tmp/TempTable/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
 
@@ -465,6 +509,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         env.SimulateSleep(runtime, TDuration::Seconds(50));
 
         CheckTable(runtime, "/MyRoot/tmp/TempTable", TTestTxConfig::SchemeShard, false);
+        CheckPath(runtime, "/MyRoot/tmp", TTestTxConfig::SchemeShard, false);
 
         TestLs(runtime, "/MyRoot/tmp/TempTable/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathNotExist);
     }

@@ -206,6 +206,9 @@ protected:
     }
 
 public:
+    virtual TDuration GetRemovedPortionLivetime(const TDuration /*def*/) const override {
+        return TDuration::Zero();
+    }
     const TAtomicCounter& GetIndexWriteControllerBrokeCount() const {
         return IndexWriteControllerBrokeCount;
     }

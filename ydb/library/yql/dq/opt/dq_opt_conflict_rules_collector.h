@@ -57,14 +57,14 @@ public:
 private:
     auto GetLeftConflictsVisitor() {
         auto visitor = [this](const std::shared_ptr<TJoinOptimizerNode>& child) {
-            if (!OperatorsAreAssociative(child->JoinType, Root_->JoinType)) {
+            if (!OperatorsAreAssociative(child->JoinType, Root_->JoinType) || !Root_->IsReorderable || !child->IsReorderable) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->RightArg],
                     SubtreeNodes_[child->LeftArg]
                 );
             }
 
-            if (!OperatorsAreLeftAsscom(child->JoinType, Root_->JoinType)) {
+            if (!OperatorsAreLeftAsscom(child->JoinType, Root_->JoinType) || !Root_->IsReorderable || !child->IsReorderable) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->LeftArg],
                     SubtreeNodes_[child->RightArg]
@@ -77,14 +77,14 @@ private:
 
     auto GetRightConflictsVisitor() {
         auto visitor = [this](const std::shared_ptr<TJoinOptimizerNode>& child) {
-            if (!OperatorsAreAssociative(Root_->JoinType, child->JoinType)) {
+            if (!OperatorsAreAssociative(Root_->JoinType, child->JoinType) || !Root_->IsReorderable || !child->IsReorderable) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->LeftArg],
                     SubtreeNodes_[child->RightArg]
                 );
             }
 
-            if (!OperatorsAreRightAsscom(Root_->JoinType, child->JoinType)) {
+            if (!OperatorsAreRightAsscom(Root_->JoinType, child->JoinType) || !Root_->IsReorderable || !child->IsReorderable) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->RightArg],
                     SubtreeNodes_[child->LeftArg]
@@ -122,7 +122,7 @@ private:
  * It is initialized with SES (Syntatic Eligibility Set) - condition used tables.
  */
 template <typename TNodeSet>
-TNodeSet ConvertConflictRulesIntoTES(const TNodeSet& SES, TVector<TConflictRule<TNodeSet>> conflictRules) {
+TNodeSet ConvertConflictRulesIntoTES(const TNodeSet& SES, TVector<TConflictRule<TNodeSet>>& conflictRules) {
     auto TES = SES;
 
     while (true) {

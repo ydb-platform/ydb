@@ -25,19 +25,19 @@ struct TTableItOps {
         return 0;
     }
 
-    static inline void MoveNext(TMemIt& it) {
+    static inline void MoveNext(TMemIter& it) {
         it.Next();
     }
 
-    static inline EReady MoveNext(TRunIt& it) {
+    static inline EReady MoveNext(TRunIter& it) {
         return it.Next();
     }
 
-    static inline void Seek(TMemIt& it, TArrayRef<const TCell> key, ESeek seek) {
+    static inline void Seek(TMemIter& it, TArrayRef<const TCell> key, ESeek seek) {
         it.Seek(key, seek);
     }
 
-    static inline EReady Seek(TRunIt& it, TArrayRef<const TCell> key, ESeek seek) {
+    static inline EReady Seek(TRunIter& it, TArrayRef<const TCell> key, ESeek seek) {
         return it.Seek(key, seek);
     }
 
@@ -165,19 +165,19 @@ struct TTableItReverseOps {
         return -TTableItOps::CompareKeys(types, a, b);
     }
 
-    static void MoveNext(TMemIt& it) {
+    static void MoveNext(TMemIter& it) {
         it.Prev();
     }
 
-    static EReady MoveNext(TRunIt& it) {
+    static EReady MoveNext(TRunIter& it) {
         return it.Prev();
     }
 
-    static void Seek(TMemIt& it, TArrayRef<const TCell> key, ESeek seek) {
+    static void Seek(TMemIter& it, TArrayRef<const TCell> key, ESeek seek) {
         it.SeekReverse(key, seek);
     }
 
-    static EReady Seek(TRunIt& it, TArrayRef<const TCell> key, ESeek seek) {
+    static EReady Seek(TRunIter& it, TArrayRef<const TCell> key, ESeek seek) {
         return it.SeekReverse(key, seek);
     }
 

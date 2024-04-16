@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         const auto foo = *TSchemedCookRow(*lay).Col(555_u32, "foo", 3.14, nullptr);
         const auto bar = *TSchemedCookRow(*lay).Col(777_u32, "bar", 2.72, true);
 
-        TCheckIt wrap(TPartCook(lay, { }).Add(foo).Add(bar).Finish(), { });
+        TCheckIter wrap(TPartCook(lay, { }).Add(foo).Add(bar).Finish(), { });
 
         wrap.To(10).Has(foo).Has(bar);
         wrap.To(11).NoVal(*TSchemedCookRow(*lay).Col(555_u32, "foo", 10.));
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         UNIT_ASSERT_VALUES_EQUAL(part->GroupsCount, 3u);
 
-        TCheckIt wrap(eggs, { });
+        TCheckIter wrap(eggs, { });
 
         wrap.To(10).Has(foo).Has(bar);
     }
@@ -248,7 +248,7 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         eggs.Scheme = fake.RowScheme();
 
-        TCheckIt wrap(std::move(eggs), { });
+        TCheckIter wrap(std::move(eggs), { });
 
         auto trA = *TSchemedCookRow(*fake).Col(10_u64, 3_u32, 7_u32, 77_u32);
         auto trB = *TSchemedCookRow(*fake).Col(12_u64, 3_u32, 7_u32, 44_u32);
@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         const auto foo = *TSchemedCookRow(*lay).Col(7_u32, TString(128, 'x'));
 
-        TCheckIt wrap(TPartCook(lay, { true, 99, 32 }).Add(foo).Finish(), { });
+        TCheckIter wrap(TPartCook(lay, { true, 99, 32 }).Add(foo).Finish(), { });
 
         wrap.To(10).Seek(foo, ESeek::Exact).To(11).Is(foo);
 
@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         const auto glob = cook.PutBlob(TString(128, 'x'), 0);
         const auto foo = *TSchemedCookRow(*lay).Col(7_u32,  glob);
 
-        TCheckIt wrap(cook.Add(foo).Finish(), { });
+        TCheckIter wrap(cook.Add(foo).Finish(), { });
 
         wrap.Displace<IPages>(new TNoEnv{ true, ELargeObjNeed::No });
         wrap.To(10).Seek(foo, ESeek::Exact).To(11).Is(foo);
@@ -367,7 +367,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         const auto foo = *TSchemedCookRow(*lay).Col(7_u32, TString(24, 'x'));
         const auto bar = *TSchemedCookRow(*lay).Col(8_u32, TString(10, 'x'));
 
-        TCheckIt wrap(cook.Add(foo).Add(bar).Finish(), { });
+        TCheckIter wrap(cook.Add(foo).Add(bar).Finish(), { });
 
         wrap.To(10).Has(foo, bar);
 
@@ -459,32 +459,32 @@ Y_UNIT_TEST_SUITE(TPart) {
 
     Y_UNIT_TEST(WreckPart)
     {
-        TWreck<TCheckIt, TPartEggs>(Mass0(), 666).Do(EWreck::Cached, Eggs0());
+        TWreck<TCheckIter, TPartEggs>(Mass0(), 666).Do(EWreck::Cached, Eggs0());
     }
 
     Y_UNIT_TEST(PageFailEnv)
     {
-        TWreck<TCheckIt, TPartEggs>(Mass0(), 666).Do(EWreck::Evicted, Eggs0());
+        TWreck<TCheckIter, TPartEggs>(Mass0(), 666).Do(EWreck::Evicted, Eggs0());
     }
 
     Y_UNIT_TEST(ForwardEnv)
     {
-        TWreck<TCheckIt, TPartEggs>(Mass0(), 666).Do(EWreck::Forward, Eggs0());
+        TWreck<TCheckIter, TPartEggs>(Mass0(), 666).Do(EWreck::Forward, Eggs0());
     }
 
     Y_UNIT_TEST(WreckPartColumnGroups)
     {
-        TWreck<TCheckIt, TPartEggs>(Mass1(), 666).Do(EWreck::Cached, Eggs1());
+        TWreck<TCheckIter, TPartEggs>(Mass1(), 666).Do(EWreck::Cached, Eggs1());
     }
 
     Y_UNIT_TEST(PageFailEnvColumnGroups)
     {
-        TWreck<TCheckIt, TPartEggs>(Mass1(), 666).Do(EWreck::Evicted, Eggs1());
+        TWreck<TCheckIter, TPartEggs>(Mass1(), 666).Do(EWreck::Evicted, Eggs1());
     }
 
     Y_UNIT_TEST(ForwardEnvColumnGroups)
     {
-        TWreck<TCheckIt, TPartEggs>(Mass1(), 666).Do(EWreck::Forward, Eggs1());
+        TWreck<TCheckIter, TPartEggs>(Mass1(), 666).Do(EWreck::Forward, Eggs1());
     }
 
     Y_UNIT_TEST(Versions)
@@ -528,7 +528,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         UNIT_ASSERT_VALUES_EQUAL(part->MinRowVersion, TRowVersion(0, 99));
         UNIT_ASSERT_VALUES_EQUAL(part->MaxRowVersion, TRowVersion(5, 50));
 
-        TCheckIt wrap(eggs, { });
+        TCheckIter wrap(eggs, { });
 
         wrap.To(10).Has(hey).NoKey(foo, false).Has(bar);
 
@@ -619,7 +619,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         UNIT_ASSERT_VALUES_EQUAL(part->MinRowVersion, TRowVersion(0, 42));
         UNIT_ASSERT_VALUES_EQUAL(part->MaxRowVersion, TRowVersion(2, 1000));
 
-        TCheckIt wrap(eggs, { });
+        TCheckIter wrap(eggs, { });
 
         wrap.To(10).Has(foos[0]).Has(bars[0]);
 
@@ -713,7 +713,7 @@ Y_UNIT_TEST_SUITE(TPart) {
             cook.Add(*TSchemedCookRow(*lay).Col(r.first, r.second));
         }
 
-        TCheckIt wrap(cook.Finish(), { new TTouchEnv() });
+        TCheckIter wrap(cook.Finish(), { new TTouchEnv() });
 
         const auto part = (*wrap).Eggs.Lone();
 
@@ -776,8 +776,8 @@ Y_UNIT_TEST_SUITE(TPart) {
             fullCookR.Add(*TSchemedCookRow(*lay).Col(r.first, r.second));
         }
 
-        TCheckIt cutWrap(cutCook.Finish(), { new TTouchEnv() }), fullWrap(fullCook.Finish(), { new TTouchEnv() });
-        TCheckReverseIt cutWrapR(cutCookR.Finish(), { new TTouchEnv() }), fullWrapR(fullCookR.Finish(), { new TTouchEnv() });
+        TCheckIter cutWrap(cutCook.Finish(), { new TTouchEnv() }), fullWrap(fullCook.Finish(), { new TTouchEnv() });
+        TCheckReverseIter cutWrapR(cutCookR.Finish(), { new TTouchEnv() }), fullWrapR(fullCookR.Finish(), { new TTouchEnv() });
 
         const auto cutPart = (*cutWrap).Eggs.Lone();
         const auto fullPart = (*fullWrap).Eggs.Lone();
@@ -883,8 +883,8 @@ Y_UNIT_TEST_SUITE(TPart) {
             fullCookR.Add(*TSchemedCookRow(*lay).Col(r.first, r.second));
         }
 
-        TCheckIt cutWrap(cutCook.Finish(), { new TTouchEnv() }), fullWrap(fullCook.Finish(), { new TTouchEnv() });
-        TCheckReverseIt cutWrapR(cutCookR.Finish(), { new TTouchEnv() }), fullWrapR(fullCookR.Finish(), { new TTouchEnv() });
+        TCheckIter cutWrap(cutCook.Finish(), { new TTouchEnv() }), fullWrap(fullCook.Finish(), { new TTouchEnv() });
+        TCheckReverseIter cutWrapR(cutCookR.Finish(), { new TTouchEnv() }), fullWrapR(fullCookR.Finish(), { new TTouchEnv() });
 
         const auto cutPart = (*cutWrap).Eggs.Lone();
         const auto fullPart = (*fullWrap).Eggs.Lone();
@@ -973,7 +973,7 @@ Y_UNIT_TEST_SUITE(TPart) {
             fullCookR.Add(*TSchemedCookRow(*lay).Col(r.first, r.second));
         }
 
-        TCheckIt cutWrapTmp(cutCookTmp.Finish(), { });
+        TCheckIter cutWrapTmp(cutCookTmp.Finish(), { });
         auto cutPartTmp = (*cutWrapTmp).Eggs.Lone();
 
         TSlices slices;
@@ -996,8 +996,8 @@ Y_UNIT_TEST_SUITE(TPart) {
             }
         }
 
-        TCheckIt cutWrap(cutEggs, { new TTouchEnv() }), fullWrap(fullCook.Finish(), { new TTouchEnv() });
-        TCheckReverseIt cutWrapR(cutEggsR, { new TTouchEnv() }), fullWrapR(fullCookR.Finish(), { new TTouchEnv() });
+        TCheckIter cutWrap(cutEggs, { new TTouchEnv() }), fullWrap(fullCook.Finish(), { new TTouchEnv() });
+        TCheckReverseIter cutWrapR(cutEggsR, { new TTouchEnv() }), fullWrapR(fullCookR.Finish(), { new TTouchEnv() });
 
         auto cutPart = (*cutWrap).Eggs.Lone();
         auto fullPart = (*fullWrap).Eggs.Lone();
@@ -1072,7 +1072,7 @@ Y_UNIT_TEST_SUITE(TPart) {
             cook.Add(*TSchemedCookRow(*lay).Col(a == "<NULL>" ? nullptr : a));
             cook.Add(*TSchemedCookRow(*lay).Col(b));
 
-            TCheckIt wrap(cook.Finish(), { });
+            TCheckIter wrap(cook.Finish(), { });
 
             const auto part = (*wrap).Eggs.Lone();
 
@@ -1179,7 +1179,7 @@ Y_UNIT_TEST_SUITE(TPart) {
             cook.Add(rowA);
             cook.Add(rowB);
 
-            TCheckIt wrap(cook.Finish(), { });
+            TCheckIter wrap(cook.Finish(), { });
 
             const auto part = (*wrap).Eggs.Lone();
 

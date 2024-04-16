@@ -247,7 +247,7 @@ namespace {
             Y_ABORT_UNLESS(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
 
             auto sticky = GetIndexPages();
-            NTest::TCheckIt wrap(Eggs, { new TTouchEnv(false, sticky) });
+            NTest::TCheckIter wrap(Eggs, { new TTouchEnv(false, sticky) });
 
             wrap.To(CurrentStep());
             wrap.StopAfter(Tool.KeyCells(Mass.Saved[upper]));
@@ -283,7 +283,7 @@ namespace {
             Y_ABORT_UNLESS(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
 
             auto sticky = GetIndexPages();
-            NTest::TCheckReverseIt wrap(Eggs, { new TTouchEnv(false, sticky) });
+            NTest::TCheckReverseIter wrap(Eggs, { new TTouchEnv(false, sticky) });
 
             wrap.To(CurrentStep());
             wrap.StopAfter(Tool.KeyCells(Mass.Saved[upper]));

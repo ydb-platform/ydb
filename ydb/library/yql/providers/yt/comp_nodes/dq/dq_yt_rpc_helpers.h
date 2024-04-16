@@ -53,7 +53,7 @@ private:
 
 struct TSettingsHolder : public TNonCopyable {
     TSettingsHolder(NYT::NApi::IConnectionPtr&& connection, NYT::TIntrusivePtr<NYT::NApi::NRpcProxy::TClient>&& client,
-        TVector<void*>&& requests, TVector<size_t>&& originalIndexes)
+        TVector<NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr>&& requests, TVector<size_t>&& originalIndexes)
         : Connection(std::move(connection))
         , Client(std::move(client))
         , Requests(std::move(requests))
@@ -68,14 +68,13 @@ struct TSettingsHolder : public TNonCopyable {
     const TMkqlIOSpecs* Specs = nullptr;
     arrow::MemoryPool* Pool = nullptr;
     const NUdf::IPgBuilder* PgBuilder = nullptr;
-//    TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> RawInputs;
-    TVector<void*> Requests;
+    TVector<NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr> Requests;
 
     TVector<size_t> OriginalIndexes;
     std::unordered_map<std::string, ui32> ColumnNameMapping;
 };
 
 std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString& token, const TString& clusterName, const ui64 timeout, bool unordered, const TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>& tables, NYT::TNode samplingSpec);
-NYT::TFuture<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> CreateInputStream(void* requestPtr);
+NYT::TFuture<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> CreateInputStream(NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr requestPtr);
 
 };

@@ -29,7 +29,7 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
     Y_ABORT_UNLESS(client);
     auto apiServiceProxy = client->CreateApiServiceProxy();
 
-    TVector<void*> requests;
+    TVector<NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr> requests;
 
     size_t inputIdx = 0;
     TVector<size_t> originalIndexes;
@@ -76,14 +76,12 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
         format.Config.Save(&fmt);
         request->set_format(fmt.Str());
 
-        requests.emplace_back(request.Release());
+        requests.emplace_back(std::move(request));
     }
     return std::make_unique<TSettingsHolder>(std::move(connection), std::move(client), std::move(requests), std::move(originalIndexes));
 }
 
-NYT::TFuture<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> CreateInputStream(void* requestPtr) {
-    auto casted = static_cast<NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTable*>(requestPtr);
-    NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr request {casted};
+NYT::TFuture<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> CreateInputStream(NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr request) {
     return CreateRpcClientInputStream(std::move(request)).ApplyUnique(BIND([](NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr&& stream) {
             // first packet contains meta, skip it
             return stream->Read().ApplyUnique(BIND([stream = std::move(stream)](NYT::TSharedRef&&) {

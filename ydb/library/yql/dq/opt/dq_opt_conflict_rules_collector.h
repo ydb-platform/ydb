@@ -57,14 +57,14 @@ public:
 private:
     auto GetLeftConflictsVisitor() {
         auto visitor = [this](const std::shared_ptr<TJoinOptimizerNode>& child) {
-            if (!OperatorsAreAssociative(child->JoinType, Root_->JoinType) || !Root_->IsReorderable || !child->IsReorderable) {
+            if (!OperatorsAreAssociative(child->JoinType, Root_->JoinType) || !child->IsReorderable) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->RightArg],
                     SubtreeNodes_[child->LeftArg]
                 );
             }
 
-            if (!OperatorsAreLeftAsscom(child->JoinType, Root_->JoinType) || !Root_->IsReorderable || !child->IsReorderable) {
+            if (!OperatorsAreLeftAsscom(child->JoinType, Root_->JoinType) || !child->IsReorderable) {
                 ConflictRules_.emplace_back(
                     SubtreeNodes_[child->LeftArg],
                     SubtreeNodes_[child->RightArg]

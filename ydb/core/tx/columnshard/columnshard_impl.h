@@ -40,7 +40,8 @@
 #include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NOlap {
-class TCleanupColumnEngineChanges;
+class TCleanupPortionsColumnEngineChanges;
+class TCleanupTablesColumnEngineChanges;
 class TTTLColumnEngineChanges;
 class TChangesWithAppend;
 class TCompactColumnEngineChanges;
@@ -139,7 +140,8 @@ class TColumnShard
     friend class TTxMonitoring;
     friend class TTxRemoveSharedBlobs;
 
-    friend class NOlap::TCleanupColumnEngineChanges;
+    friend class NOlap::TCleanupPortionsColumnEngineChanges;
+    friend class NOlap::TCleanupTablesColumnEngineChanges;
     friend class NOlap::TTTLColumnEngineChanges;
     friend class NOlap::TChangesWithAppend;
     friend class NOlap::TCompactColumnEngineChanges;
@@ -504,8 +506,9 @@ private:
     void StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dataToIndex, const i64 bytesToIndex);
     void SetupIndexation();
     void SetupCompaction();
-    bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {}, const bool force = false);
-    void SetupCleanup();
+    bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {});
+    void SetupCleanupPortions();
+    void SetupCleanupTables();
     void SetupCleanupInsertTable();
     void SetupGC();
 

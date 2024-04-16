@@ -1,4 +1,5 @@
 #pragma once
+#include <util/generic/string.h>
 
 namespace NKikimr::NOlap::NBlobOperations {
 

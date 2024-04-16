@@ -4,7 +4,8 @@
 #include "changes/actualization/construction/context.h"
 #include "changes/indexation.h"
 #include "changes/general_compaction.h"
-#include "changes/cleanup.h"
+#include "changes/cleanup_portions.h"
+#include "changes/cleanup_tables.h"
 #include "changes/ttl.h"
 
 #include <ydb/core/tx/columnshard/common/limits.h>
@@ -255,23 +256,46 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(cons
     return changes;
 }
 
-std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const TSnapshot& snapshot,
-                                                                         THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
-    AFL_VERIFY(dataLocksManager);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size());
-    auto changes = std::make_shared<TCleanupColumnEngineChanges>(StoragesManager);
+std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCleanupTables(THashSet<ui64>& pathsToDrop) noexcept {
+    auto changes = std::make_shared<TCleanupTablesColumnEngineChanges>(StoragesManager);
 
     // Add all portions from dropped paths
-    THashSet<ui64> emptyPaths;
     ui64 txSize = 0;
     const ui64 txSizeLimit = TGlobalLimits::TxWriteLimitBytes / 4;
-    changes->NeedRepeat = false;
+    THashSet<ui64> pathsToRemove;
+    for (ui64 pathId : pathsToDrop) {
+        if (!HasDataInPathId(pathId)) {
+            changes->TablesToDrop.emplace(pathId);
+        }
+        txSize += 256;
+        if (txSize > txSizeLimit) {
+            break;
+        }
+    }
+    for (auto&& i : pathsToRemove) {
+        pathsToDrop.erase(i);
+    }
+    if (changes->TablesToDrop.empty()) {
+        return nullptr;
+    }
+    return changes;
+}
+
+std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::StartCleanupPortions(const TSnapshot& snapshot,
+                                                                         const THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
+    AFL_VERIFY(dataLocksManager);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size());
+    auto changes = std::make_shared<TCleanupPortionsColumnEngineChanges>(StoragesManager);
+
+    // Add all portions from dropped paths
+    ui64 txSize = 0;
+    const ui64 txSizeLimit = TGlobalLimits::TxWriteLimitBytes / 4;
     ui32 skipLocked = 0;
     ui32 portionsFromDrop = 0;
+    bool limitExceeded = false;
     for (ui64 pathId : pathsToDrop) {
         auto itTable = Tables.find(pathId);
         if (itTable == Tables.end()) {
-            emptyPaths.insert(pathId);
             continue;
         }
 
@@ -283,18 +307,15 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
             if (txSize + info->GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
                 txSize += info->GetTxVolume();
             } else {
-                changes->NeedRepeat = true;
+                limitExceeded = true;
                 break;
             }
             changes->PortionsToDrop.push_back(*info);
             ++portionsFromDrop;
         }
     }
-    for (ui64 pathId : emptyPaths) {
-        pathsToDrop.erase(pathId);
-    }
 
-    for (auto it = CleanupPortions.begin(); it != CleanupPortions.end();) {
+    for (auto it = CleanupPortions.begin(); !limitExceeded && it != CleanupPortions.end();) {
         if (it->first >= snapshot) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanupStop")("snapshot", snapshot.DebugString())("current_snapshot", it->first.DebugString());
             break;
@@ -309,7 +330,7 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
             if (txSize + it->second[i].GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
                 txSize += it->second[i].GetTxVolume();
             } else {
-                changes->NeedRepeat = true;
+                limitExceeded = true;
                 break;
             }
             changes->PortionsToDrop.push_back(std::move(it->second[i]));
@@ -318,7 +339,7 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
             }
             it->second.pop_back();
         }
-        if (changes->NeedRepeat) {
+        if (limitExceeded) {
             break;
         }
         if (it->second.empty()) {
@@ -328,7 +349,7 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
         }
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")
-        ("portions_count", CleanupPortions.size())("portions_prepared", changes->PortionsToDrop.size())("repeat", changes->NeedRepeat)("drop", portionsFromDrop)("skip", skipLocked);
+        ("portions_count", CleanupPortions.size())("portions_prepared", changes->PortionsToDrop.size())("drop", portionsFromDrop)("skip", skipLocked);
 
     if (changes->PortionsToDrop.empty()) {
         return nullptr;

@@ -7,7 +7,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
-#include <ydb/core/tx/columnshard/engines/changes/cleanup.h>
+#include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -2529,7 +2529,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     }
                     Cerr << Endl;
                 }
-                if (auto cleanup = dynamic_pointer_cast<NOlap::TCleanupColumnEngineChanges>(msg->IndexChanges)) {
+                if (auto cleanup = dynamic_pointer_cast<NOlap::TCleanupPortionsColumnEngineChanges>(msg->IndexChanges)) {
                     Y_ABORT_UNLESS(cleanup->PortionsToDrop.size());
                     ++cleanupsHappened;
                     Cerr << "Cleanup old portions:";

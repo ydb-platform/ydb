@@ -72,15 +72,15 @@ TEST(TCompositeCompare, CompositeFingerprint)
     EXPECT_EQ(getFarmHash("#"), GetFarmFingerprint(MakeUnversionedNullValue()));
 }
 
-TEST(TCompositeCompare, TruncateCompositeValue)
+TEST(TCompositeCompare, TruncateYsonValue)
 {
     auto normalizeYson = [] (TStringBuf yson) {
         return yson.empty() ? TString(yson) : ConvertToYsonString(TYsonString(yson), EYsonFormat::Binary).ToString();
     };
 
     auto getTruncatedYson = [&] (TStringBuf original, i64 size) {
-        auto truncatedCompositeValue = TruncateCompositeValue(TYsonString(original), size);
-        return truncatedCompositeValue ? truncatedCompositeValue->ToString() : "";
+        auto truncatedValue = TruncateYsonValue(TYsonString(original), size);
+        return truncatedValue ? truncatedValue->ToString() : "";
     };
 
     // When we rebuild the whole string during truncation, we should produce the correct normalized binary YSON version of the string as output.

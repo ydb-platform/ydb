@@ -138,8 +138,6 @@ using TInternedObjectDataPtr = TIntrusivePtr<TInternedObjectData<T>>;
 template <class T>
 class TInternedObject;
 
-DECLARE_REFCOUNTED_STRUCT(IMemoryUsageTracker)
-
 class TStatistics;
 class TSummary;
 
@@ -171,7 +169,7 @@ DEFINE_ENUM(EProcessErrorCode,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_STRUCT(IMemoryReferenceTracker)
+DECLARE_REFCOUNTED_STRUCT(IMemoryUsageTracker)
 
 ////////////////////////////////////////////////////////////////////////////////
 

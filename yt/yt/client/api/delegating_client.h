@@ -558,7 +558,7 @@ public:
         const TBuildMasterSnapshotsOptions& options),
         (options))
 
-    DELEGATE_METHOD(TFuture<TCellIdToSequenceNumberMap>, GetMasterConsistentState, (
+    DELEGATE_METHOD(TFuture<TCellIdToConsistentStateMap>, GetMasterConsistentState, (
         const TGetMasterConsistentStateOptions& options),
         (options))
 

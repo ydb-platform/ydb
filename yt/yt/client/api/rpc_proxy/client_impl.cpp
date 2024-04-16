@@ -1647,7 +1647,7 @@ TFuture<TCellIdToSnapshotIdMap> TClient::BuildMasterSnapshots(const TBuildMaster
     ThrowUnimplemented("BuildMasterSnapshots");
 }
 
-TFuture<TCellIdToSequenceNumberMap> TClient::GetMasterConsistentState(const TGetMasterConsistentStateOptions& /*options*/)
+TFuture<TCellIdToConsistentStateMap> TClient::GetMasterConsistentState(const TGetMasterConsistentStateOptions& /*options*/)
 {
     ThrowUnimplemented("GetMasterConsistentState");
 }

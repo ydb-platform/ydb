@@ -2,7 +2,6 @@
 
 #include "public.h"
 
-#include <yt/yt/core/concurrency/public.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
 namespace NYT {

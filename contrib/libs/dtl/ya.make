@@ -9,8 +9,6 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-OWNER(g:cpp-contrib)
-
 VERSION(1.20)
 
 ORIGINAL_SOURCE(https://github.com/cubicdaiya/dtl/archive/v1.20.tar.gz)

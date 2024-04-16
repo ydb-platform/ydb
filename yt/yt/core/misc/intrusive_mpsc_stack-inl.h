@@ -37,7 +37,7 @@ TSimpleIntrusiveList<T, Tag> TIntrusiveMPSCStack<T, Tag>::PopAll() noexcept
 
     TSimpleIntrusiveList<T, Tag> list;
 
-    while (head != nullptr) {
+    while (head) {
         auto tmp = head;
         head = head->Next;
         tmp->Next = nullptr;

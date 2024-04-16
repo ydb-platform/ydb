@@ -425,9 +425,7 @@ class TMemoryTrackedWriterOptions
     : public NYTree::TYsonStruct
 {
 public:
-    IMemoryUsageTrackerPtr MemoryTracker;
-
-    IMemoryReferenceTrackerPtr MemoryReferenceTracker;
+    IMemoryUsageTrackerPtr MemoryUsageTracker;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

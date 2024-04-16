@@ -2,6 +2,7 @@
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/misc/error.h>
+#include <yt/yt/core/misc/error_helpers.h>
 
 #include <yt/yt/core/yson/string.h>
 
@@ -478,6 +479,25 @@ TEST(TErrorTest, FormatCtor)
     EXPECT_EQ("Some error hello", TError("Some error %v", "hello").GetMessage());
 }
 
+TEST(TErrorTest, FindRecursive)
+{
+    auto inner = TError("Inner")
+        << TErrorAttribute("inner_attr", 42);
+    auto error = TError("Error")
+        << inner
+        << TErrorAttribute("attr", 8);
+
+    auto attr = FindAttribute<int>(error, "attr");
+    EXPECT_TRUE(attr);
+    EXPECT_EQ(*attr, 8);
+
+    EXPECT_FALSE(FindAttribute<int>(error, "inner_attr"));
+
+    auto innerAttr = FindAttributeRecursive<int>(error, "inner_attr");
+    EXPECT_TRUE(innerAttr);
+    EXPECT_EQ(*innerAttr, 42);
+}
+
 TEST(TErrorTest, TruncateSimple)
 {
     auto error = TError("Some error")
@@ -651,6 +671,29 @@ TEST(TErrorTest, TruncateWhitelistInnerErrorsRValue)
     EXPECT_EQ(truncatedInnerError.GetMessage(), innerError.GetMessage());
     EXPECT_EQ("...<attribute truncated>...", truncatedInnerError.Attributes().Get<TString>("attr1"));
     EXPECT_EQ("Some long long attr", truncatedInnerError.Attributes().Get<TString>("attr2"));
+}
+
+TEST(TErrorTest, TruncateWhitelistSaveInnerError)
+{
+    auto genericInner = TError("GenericInner");
+    auto whitelistedInner = TError("Inner")
+        << TErrorAttribute("whitelisted_key", 42);
+
+    auto error = TError("Error")
+        << (genericInner << TErrorAttribute("foo", "bar"))
+        << whitelistedInner
+        << genericInner;
+
+    error = std::move(error).Truncate(1, 20, {
+        "whitelisted_key"
+    });
+    EXPECT_TRUE(!error.IsOK());
+    EXPECT_EQ(error.InnerErrors().size(), 2u);
+    EXPECT_EQ(error.InnerErrors()[0], whitelistedInner);
+    EXPECT_EQ(error.InnerErrors()[1], genericInner);
+
+    EXPECT_TRUE(FindAttributeRecursive<int>(error, "whitelisted_key"));
+    EXPECT_FALSE(FindAttributeRecursive<int>(error, "foo"));
 }
 
 TEST(TErrorTest, YTExceptionToError)

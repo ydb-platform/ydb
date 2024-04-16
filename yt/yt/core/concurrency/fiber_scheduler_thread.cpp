@@ -17,7 +17,7 @@
 
 #include <library/cpp/yt/memory/memory_tag.h>
 
-#include <library/cpp/yt/misc/function_view.h>
+#include <library/cpp/yt/memory/function_view.h>
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 

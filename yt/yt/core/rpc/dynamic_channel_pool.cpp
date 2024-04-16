@@ -848,7 +848,7 @@ private:
         ViablePeerRegistry_->UnregisterPeer(address);
     }
 
-    TError MaybeTransformChannelError(TError error)
+    TError TransformChannelError(TError error)
     {
         auto guard = ReaderGuard(SpinLock_);
 
@@ -888,7 +888,7 @@ private:
             BIND(&IsChannelFailureError),
             BIND([this_ = MakeWeak(this)] (TError error) {
                 if (auto strongThis = this_.Lock()) {
-                    return strongThis->MaybeTransformChannelError(std::move(error));
+                    return strongThis->TransformChannelError(std::move(error));
                 } else {
                     return error;
                 }

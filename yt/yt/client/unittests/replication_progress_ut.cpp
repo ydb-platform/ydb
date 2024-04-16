@@ -406,14 +406,14 @@ INSTANTIATE_TEST_SUITE_P(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicationProgressSerialization
+class TReplicationProgressSerializationTest
     : public ::testing::Test
     , public ::testing::WithParamInterface<std::tuple<
         const char*,
         const char*>>
 { };
 
-TEST_P(TReplicationProgressSerialization, Simple)
+TEST_P(TReplicationProgressSerializationTest, Simple)
 {
     const auto& params = GetParam();
     auto progress = ConvertTo<TReplicationProgress>(TYsonStringBuf(std::get<0>(params)));
@@ -428,8 +428,8 @@ TEST_P(TReplicationProgressSerialization, Simple)
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    TReplicationProgressSerialization,
-    TReplicationProgressSerialization,
+    TReplicationProgressSerializationTest,
+    TReplicationProgressSerializationTest,
     ::testing::Values(
         std::tuple(
             "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",
@@ -448,7 +448,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicationProgressProjectedSerialization
+class TReplicationProgressProjectedSerializationTest
     : public ::testing::Test
     , public ::testing::WithParamInterface<std::tuple<
         const char*,
@@ -457,7 +457,7 @@ class TReplicationProgressProjectedSerialization
         const char*>>
 { };
 
-TEST_P(TReplicationProgressProjectedSerialization, Simple)
+TEST_P(TReplicationProgressProjectedSerializationTest, Simple)
 {
     const auto& params = GetParam();
     auto progress = ConvertTo<TReplicationProgress>(TYsonStringBuf(std::get<0>(params)));
@@ -478,8 +478,8 @@ TEST_P(TReplicationProgressProjectedSerialization, Simple)
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    TReplicationProgressProjectedSerialization,
-    TReplicationProgressProjectedSerialization,
+    TReplicationProgressProjectedSerializationTest,
+    TReplicationProgressProjectedSerializationTest,
     ::testing::Values(
         std::tuple(
             "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",
@@ -536,7 +536,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicationProgressComputeReplicationProgressLag
+class TReplicationProgressComputeReplicationProgressLagTest
     : public ::testing::Test
     , public ::testing::WithParamInterface<std::tuple<
         const char*,
@@ -544,7 +544,7 @@ class TReplicationProgressComputeReplicationProgressLag
         TDuration>>
 { };
 
-TEST_P(TReplicationProgressComputeReplicationProgressLag, Simple)
+TEST_P(TReplicationProgressComputeReplicationProgressLagTest, Simple)
 {
     const auto& params = GetParam();
     auto maxProgress = ConvertTo<TReplicationProgress>(TYsonStringBuf(std::get<0>(params)));
@@ -560,8 +560,8 @@ TEST_P(TReplicationProgressComputeReplicationProgressLag, Simple)
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    TReplicationProgressComputeReplicationProgressLag,
-    TReplicationProgressComputeReplicationProgressLag,
+    TReplicationProgressComputeReplicationProgressLagTest,
+    TReplicationProgressComputeReplicationProgressLagTest,
     ::testing::Values(
         std::tuple(
             "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",
@@ -635,7 +635,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicationProgressBuildMax
+class TReplicationProgressBuildMaxTest
     : public ::testing::Test
     , public ::testing::WithParamInterface<std::tuple<
         const char*,
@@ -643,7 +643,7 @@ class TReplicationProgressBuildMax
         const char*>>
 { };
 
-TEST_P(TReplicationProgressBuildMax, Simple)
+TEST_P(TReplicationProgressBuildMaxTest, Simple)
 {
     const auto& params = GetParam();
     auto progress = ConvertTo<TReplicationProgress>(TYsonStringBuf(std::get<0>(params)));
@@ -666,8 +666,8 @@ TEST_P(TReplicationProgressBuildMax, Simple)
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    TReplicationProgressBuildMax,
-    TReplicationProgressBuildMax,
+    TReplicationProgressBuildMaxTest,
+    TReplicationProgressBuildMaxTest,
     ::testing::Values(
         std::tuple(
             "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",

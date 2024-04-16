@@ -163,6 +163,7 @@ class KikimrConfigGenerator(object):
             pg_compatible_expirement=False,
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
             pgwire_port=None,
+            pgwire_tcp_not_delay=False
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -255,13 +256,15 @@ class KikimrConfigGenerator(object):
         if os.getenv('YDB_TABLE_ENABLE_PREPARED_DDL', 'false').lower() == 'true':
             self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
 
+        self.yaml_config["local_pg_wire_config"] = {}
+
         if os.getenv('PGWIRE_LISTENING_PORT', ''):
-            self.yaml_config["local_pg_wire_config"] = {}
             self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
 
         if pgwire_port:
-            self.yaml_config["local_pg_wire_config"] = {}
             self.yaml_config["local_pg_wire_config"]["listening_port"] = pgwire_port
+
+        self.yaml_config["local_pg_wire_config"]["tcp_not_delay"] = pgwire_tcp_not_delay
 
         if disable_iterator_reads:
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_source_read"] = False

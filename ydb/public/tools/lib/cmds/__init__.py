@@ -38,6 +38,7 @@ class EmptyArguments(object):
         self.dont_use_log_files = False
         self.enabled_feature_flags = []
         self.enabled_grpc_services = []
+        self.pgwire_tcp_not_delay = False
 
 
 def ensure_path_exists(path):
@@ -371,6 +372,7 @@ def deploy(arguments):
         extra_feature_flags=enable_feature_flags,
         extra_grpc_services=arguments.enabled_grpc_services,
         generic_connector_config=generic_connector_config(),
+        pgwire_tcp_not_delay = arguments.pgwire_tcp_not_delay,
         **optionals
     )
 
@@ -517,6 +519,7 @@ def produce_arguments(args):
     parser.add_argument("--pq-client-service-type", action='append', default=[])
     parser.add_argument("--enable-datastreams", action='store_true', default=False)
     parser.add_argument("--enable-pqcd", action='store_true', default=False)
+    parser.add_argument("--pgwire-tcp-not-delay", action='store_true', default=False)
     parsed, _ = parser.parse_known_args(args)
     arguments = EmptyArguments()
     arguments.suppress_version_check = parsed.suppress_version_check
@@ -531,6 +534,7 @@ def produce_arguments(args):
     arguments.pq_client_service_types = parsed.pq_client_service_type
     arguments.enable_datastreams = parsed.enable_datastreams
     arguments.enable_pqcd = parsed.enable_pqcd
+    arguments.pgwire_tcp_not_delay = parsed.pgwire_tcp_not_delay
     return arguments
 
 

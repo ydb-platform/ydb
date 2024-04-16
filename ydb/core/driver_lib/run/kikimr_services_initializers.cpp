@@ -535,6 +535,16 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     }
     result.SocketBacklogSize = config.GetSocketBacklogSize();
 
+    if (config.HasFirstErrorSleep()) {
+        result.FirstErrorSleep = DurationFromProto(config.GetFirstErrorSleep());
+    }
+    if (config.HasMaxErrorSleep()) {
+        result.MaxErrorSleep = DurationFromProto(config.GetMaxErrorSleep());
+    }
+    if (config.HasErrorSleepRetryMultiplier()) {
+        result.ErrorSleepRetryMultiplier = config.GetErrorSleepRetryMultiplier();
+    }
+
     return result;
 }
 

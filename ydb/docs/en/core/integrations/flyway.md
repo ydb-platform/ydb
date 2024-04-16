@@ -97,7 +97,7 @@ The result of the execution will be the creation of a table `flyway_schema_histo
 
 Command [migrate](https://documentation.red-gate.com/flyway/flyway-cli-and-api/usage/command-line/command-line-migrate) evolves the database schema to the latest version. Flyway will create the schema history table automatically if it doesn't exist.
 
-Let's add the migration of [data downloads](../yql/reference/yql/tutorial/fill_tables_with_data.md) to the previous example:
+Let's add the migration of [data downloads](../yql/tutorial/fill_tables_with_data.md) to the previous example:
 
 ```
 db/migration:

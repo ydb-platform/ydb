@@ -812,58 +812,15 @@ message AlterConsumer {
     map<string, string> alter_attributes = 6;
 }
 
-enum AutoScalingStrategy {
+enum AutoscalingStrategy {
+    // The autoscaling algorithm is not specified. The default value will be used.
     UNSPECIFIED = 0;
-    // Auto scaling disabled
+    // Autoscaling is disabled.
     DISABLED = 1;
-    // The auto scaling may only increase the number of partitions
+    // The autoscaling algorithm will increase the number of partitions and will never decrease them.
     SCALE_UP = 2;
-    // The auto scaling may increase and decrease the number of partitions
+    // The autoscaling algorithm will both increase and decrease the number of partitions depending on the current load.
     SCALE_UP_AND_DOWN = 3;
-}
-
-message AutoScalingPartitionWriteSpeedStrategy {
-    // The time of exceeding the threshold value in seconds, after which the partition will be
-    // auto scaling.
-    // Zero value means default - 300.
-    int32 threshold_time_seconds = 1;
-    // The threshold value of the write speed to the partition as a percentage, when exceeded,
-    // the partition will be auto split.
-    // Zero value means default - 90.
-    int32 scale_up_threshold_percent = 2 [(Ydb.value) = ">= 0"];
-    // The threshold value of the write speed to the partition as a percentage, if it is not reached,
-    // the partition will be auto merged.
-    // Zero value means default - 30.
-    int32 scale_down_threshold_percent = 3 [(Ydb.value) = ">= 0"];
-}
-
-message AutoScalingSettings {
-    // Strategy of auto scaling
-    AutoScalingStrategy strategy = 1;
-    // AutoScaling partition write speed options.
-    AutoScalingPartitionWriteSpeedStrategy partition_write_speed = 2;
-}
-
-message AlterAutoScalingPartitionWriteSpeedStrategy {
-    // The time of exceeding the threshold value in seconds, after which the partition will be
-    // auto scaling.
-    // Zero value means default - 300.
-    optional int32 set_threshold_time_seconds = 1;
-    // The threshold value of the write speed to the partition as a percentage, when exceeded,
-    // the partition will be auto split.
-    // Zero value means default - 90.
-    optional int32 set_scale_up_threshold_percent = 2 [(Ydb.value) = ">= 0"];
-    // The threshold value of the write speed to the partition as a percentage, if it is not reached,
-    // the partition will be auto merged.
-    // Zero value means default - 30.
-    optional int32 set_scale_down_threshold_percent = 3 [(Ydb.value) = ">= 0"];
-}
-
-message AlterAutoScalingSettings {
-    // Strategy of auto scaling
-    optional AutoScalingStrategy set_strategy = 1;
-    // AutoScaling partition write speed options.
-    optional AlterAutoScalingPartitionWriteSpeedStrategy set_partition_write_speed = 2;
 }
 
 // Partitioning settings for topic.
@@ -878,8 +835,30 @@ message PartitioningSettings {
     // Zero value means default - 100.
     // Use max_active_partitions
     int64 partition_count_limit = 2 [(Ydb.value) = ">= 0", deprecated = true];
-    // Settings for auto scaling the partition number
-    AutoScalingSettings auto_scaling_settings = 4;
+    // Settings for autoscaling the partition number
+    AutoscalingSettings autoscaling_settings = 4;
+}
+
+message AutoscalingSettings {
+    // Strategy of autoscaling
+    AutoscalingStrategy strategy = 1;
+    // Autoscaling partition write speed options.
+    AutoscalingPartitionWriteSpeedStrategy partition_write_speed = 2;
+}
+
+message AutoscalingPartitionWriteSpeedStrategy {
+    // The time of exceeding the threshold value in seconds, after which the partition will be
+    // autoscaling.
+    // Zero value means default - 300.
+    int32 threshold_time_seconds = 1;
+    // The threshold value of the write speed to the partition as a percentage, when exceeded,
+    // the partition will be auto split.
+    // Zero value means default - 90.
+    int32 scale_up_threshold_percent = 2 [(Ydb.value) = ">= 0"];
+    // The threshold value of the write speed to the partition as a percentage, if it is not reached,
+    // the partition will be auto merged.
+    // Zero value means default - 30.
+    int32 scale_down_threshold_percent = 3 [(Ydb.value) = ">= 0"];
 }
 
 // Partitioning settings for topic.
@@ -894,8 +873,30 @@ message AlterPartitioningSettings {
     // Zero value means default - 100.
     // Use set_max_active_partitions
     optional int64 set_partition_count_limit = 2 [(Ydb.value) = ">= 0", deprecated = true];
-    // Settings for auto scaling the partition number
-    optional AlterAutoScalingSettings alter_auto_scaling_settings = 4;
+    // Settings for autoscaling the partition number
+    optional AlterAutoscalingSettings alter_autoscaling_settings = 4;
+}
+
+message AlterAutoscalingSettings {
+    // Strategy of autoscaling
+    optional AutoscalingStrategy set_strategy = 1;
+    // Autoscaling partition write speed options.
+    optional AlterAutoscalingPartitionWriteSpeedStrategy set_partition_write_speed = 2;
+}
+
+message AlterAutoscalingPartitionWriteSpeedStrategy {
+    // The time of exceeding the threshold value in seconds, after which the partition will be
+    // autoscaling.
+    // Zero value means default - 300.
+    optional int32 set_threshold_time_seconds = 1;
+    // The threshold value of the write speed to the partition as a percentage, when exceeded,
+    // the partition will be auto split.
+    // Zero value means default - 90.
+    optional int32 set_scale_up_threshold_percent = 2 [(Ydb.value) = ">= 0"];
+    // The threshold value of the write speed to the partition as a percentage, if it is not reached,
+    // the partition will be auto merged.
+    // Zero value means default - 30.
+    optional int32 set_scale_down_threshold_percent = 3 [(Ydb.value) = ">= 0"];
 }
 
 // Metering mode specifies the method used to determine consumption of resources by the topic.

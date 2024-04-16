@@ -5,6 +5,8 @@
 #include <ydb/library/yql/public/udf/udf_type_builder.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 
+#include <contrib/libs/xxhash/xxhash.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 namespace GraceJoin {
@@ -158,6 +160,9 @@ class TTable {
 
     // Returns tuple data in td from bucket with id bucketNum.  Tuple id inside bucket is tupleId.
     inline void GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData& td);
+
+    inline XXH64_hash_t GetTemporaryTupleHash();
+    void FillTemporaryTuple(ui64 * intColumns, char ** stringColumns, ui32 * stringsSizes, NYql::NUdf::TUnboxedValue * iColumns);
 
     // True if current iterator of tuple in joinedTable has corresponding joined tuple in second table. Id of joined tuple in second table returns in tupleId2.
     inline bool HasJoinedTupleId(TTable* joinedTable, ui32& tupleId2);

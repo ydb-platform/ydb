@@ -3,11 +3,7 @@
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <contrib/libs/xxhash/xxhash.h>
-#include <chrono>
 #include <string_view>
-#include <format>
-
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -71,7 +67,7 @@ XXH64_hash_t TTable::GetTemporaryTupleHash() {
 
     if (!hash) hash = 1;
 
-    return;
+    return hash;
 }
 
 

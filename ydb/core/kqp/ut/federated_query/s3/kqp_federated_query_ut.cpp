@@ -1756,7 +1756,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_VALUES_EQUAL(rowsFetched, numberRows);
 
         // Test forget operation
-        const size_t forgetOperationRetryLimit = 2 * std::max(fileSize / 10_MB, numberRows / 10000);
+        const size_t forgetOperationRetryLimit = 2 * std::max(fileSize / 10_MB, numberRows / 100000);
         NYdb::NOperation::TOperationClient operationClient(kikimr->GetDriver());
         for (size_t numberRetries = 0; numberRetries < forgetOperationRetryLimit; ++numberRetries) {
             auto status = operationClient.Forget(scriptExecutionOperation.Id()).ExtractValueSync();

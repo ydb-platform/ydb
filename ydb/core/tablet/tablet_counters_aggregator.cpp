@@ -865,6 +865,10 @@ private:
                 "resources.storage.limit_bytes", false);
             ResourcesStorageTableUsedBytes = ydbGroup->GetNamedCounter("name",
                 "resources.storage.table.used_bytes", false);
+            ResourcesStorageTableUsedBytesOnSsd = ydbGroup->GetNamedCounter("name",
+                "resources.storage.table.used_bytes.ssd", false);
+            ResourcesStorageTableUsedBytesOnHdd = ydbGroup->GetNamedCounter("name",
+                "resources.storage.table.used_bytes.hdd", false);
             ResourcesStorageTopicUsedBytes = ydbGroup->GetNamedCounter("name",
                 "resources.storage.topic.used_bytes", false);
 

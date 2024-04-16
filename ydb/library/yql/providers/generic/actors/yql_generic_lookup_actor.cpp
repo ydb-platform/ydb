@@ -115,7 +115,8 @@ namespace NYql::NDq {
                       hFunc(TEvReadSplitsIterator, Handle);
                       hFunc(TEvReadSplitsPart, Handle);
                       hFunc(TEvReadSplitsFinished, Handle);
-                      hFunc(TEvError, Handle);)
+                      hFunc(TEvError, Handle);
+                      hFunc(NActors::TEvents::TEvPoison, Handle);)
 
         void Handle(TEvListSplitsIterator::TPtr ev) {
             auto& iterator = ev->Get()->Iterator;
@@ -170,6 +171,10 @@ namespace NYql::NDq {
 
         void Handle(TEvError::TPtr) {
             FinalizeRequest();
+        }
+
+        void Handle(NActors::TEvents::TEvPoison::TPtr) {
+            PassAway();
         }
 
     private:

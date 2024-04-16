@@ -832,7 +832,7 @@ private:
 };
 
 class TForgetScriptExecutionOperationQueryActor : public TQueryBase {
-    static constexpr i64 MAX_NUMBER_ROWS_IN_BATCH = 10000;
+    static constexpr i64 MAX_NUMBER_ROWS_IN_BATCH = 100000;
     static constexpr i64 MAX_BATCH_SIZE = 10_MB;
 
     struct TResultSetDescription {

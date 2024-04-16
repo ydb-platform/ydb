@@ -69,20 +69,16 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
 
 TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo, ui64& metadataBytes) {
     TColumnEngineStats::TPortionsStats deltaStats;
-    THashSet<TUnifiedBlobId> blobs;
+    deltaStats.Bytes = 0;
     for (auto& rec : portionInfo.Records) {
         metadataBytes += rec.GetMeta().GetMetadataSize();
-        blobs.insert(rec.BlobRange.BlobId);
+        deltaStats.Bytes += rec.GetBlobRange().GetSize();
         deltaStats.BytesByColumn[rec.ColumnId] += rec.BlobRange.Size;
         deltaStats.RawBytesByColumn[rec.ColumnId] += rec.GetMeta().GetRawBytes().value_or(0);
     }
     deltaStats.Rows = portionInfo.NumRows();
     deltaStats.RawBytes = portionInfo.RawBytesSum();
-    deltaStats.Bytes = 0;
-    for (auto& blobId : blobs) {
-        deltaStats.Bytes += blobId.BlobSize();
-    }
-    deltaStats.Blobs = blobs.size();
+    deltaStats.Blobs = portionInfo.GetBlobIdsCount();
     deltaStats.Portions = 1;
     return deltaStats;
 }
@@ -181,8 +177,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         }
         AFL_VERIFY(portion.ValidSnapshotInfo())("details", portion.DebugString());
         // Locate granule and append the record.
-        TColumnRecord rec(loadContext, *currentIndexInfo);
-        GetGranulePtrVerified(portion.GetPathId())->AddColumnRecord(*currentIndexInfo, portion, rec, loadContext.GetPortionMeta());
+        GetGranulePtrVerified(portion.GetPathId())->AddColumnRecordOnLoad(*currentIndexInfo, portion, loadContext, loadContext.GetPortionMeta());
     })) {
         return false;
     }
@@ -190,7 +185,8 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
         auto portion = GetGranulePtrVerified(pathId)->GetPortionPtr(portionId);
         AFL_VERIFY(portion);
-        portion->AddIndex(loadContext.BuildIndexChunk());
+        const auto linkBlobId = portion->RegisterBlobId(loadContext.GetBlobRange().GetBlobId());
+        portion->AddIndex(loadContext.BuildIndexChunk(linkBlobId));
     })) {
         return false;
     };

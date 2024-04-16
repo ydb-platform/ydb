@@ -79,15 +79,15 @@ private:
 public:
     ui32 ColumnId = 0;
     ui16 Chunk = 0;
-    TBlobRange BlobRange;
+    TBlobRangeLink16 BlobRange;
 
 
-    void RegisterBlobId(const TUnifiedBlobId& blobId) {
+    void RegisterBlobIdx(const ui16 blobIdx) {
 //        AFL_VERIFY(!BlobRange.BlobId.GetTabletId())("original", BlobRange.BlobId.ToStringNew())("new", blobId.ToStringNew());
-        BlobRange.BlobId = blobId;
+        BlobRange.BlobIdx = blobIdx;
     }
 
-    TColumnRecord(const TChunkAddress& address, const TBlobRange& range, TChunkMeta&& meta)
+    TColumnRecord(const TChunkAddress& address, const TBlobRangeLink16& range, TChunkMeta&& meta)
         : Meta(std::move(meta))
         , ColumnId(address.GetColumnId())
         , Chunk(address.GetChunk())
@@ -114,7 +114,7 @@ public:
     ui16 GetChunkIdx() const {
         return Chunk;
     }
-    const TBlobRange& GetBlobRange() const {
+    const TBlobRangeLink16& GetBlobRange() const {
         return BlobRange;
     }
 
@@ -151,11 +151,7 @@ public:
     }
 
     bool Valid() const {
-        return ColumnId && ValidBlob();
-    }
-
-    TString SerializedBlobId() const {
-        return BlobRange.BlobId.SerializeBinary();
+        return ColumnId && BlobRange.IsValid();
     }
 
     TString DebugString() const {
@@ -165,13 +161,9 @@ public:
             ;
     }
 
-    bool ValidBlob() const {
-        return BlobRange.BlobId.IsValid() && BlobRange.Size;
-    }
-
     TColumnRecord(const TChunkAddress& address, const std::shared_ptr<arrow::Array>& column, const TIndexInfo& info);
 
-    TColumnRecord(const TColumnChunkLoadContext& loadContext, const TIndexInfo& info);
+    TColumnRecord(const TBlobRangeLink16::TLinkId blobLinkId, const TColumnChunkLoadContext& loadContext, const TIndexInfo& info);
 
     friend IOutputStream& operator << (IOutputStream& out, const TColumnRecord& rec) {
         out << '{';

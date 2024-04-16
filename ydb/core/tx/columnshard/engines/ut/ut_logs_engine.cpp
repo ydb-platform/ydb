@@ -85,7 +85,7 @@ public:
         }
 
         auto& data = Indices[0].Columns[portion.GetPathId()];
-        NOlap::TColumnChunkLoadContext loadContext(row.GetAddress(), row.BlobRange, rowProto);
+        NOlap::TColumnChunkLoadContext loadContext(row.GetAddress(), portion.RestoreBlobRange(row.BlobRange), rowProto);
         auto itInsertInfo = LoadContexts[portion.GetAddress()].emplace(row.GetAddress(), loadContext);
         if (!itInsertInfo.second) {
             itInsertInfo.first->second = loadContext;
@@ -252,9 +252,9 @@ TString MakeTestBlob(i64 start = 0, i64 end = 100) {
 void AddIdsToBlobs(std::vector<TPortionInfoWithBlobs>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs, ui32& step) {
     for (auto& portion : portions) {
         for (auto& rec : portion.GetPortionInfo().Records) {
-            rec.BlobRange.BlobId = MakeUnifiedBlobId(++step, portion.GetBlobFullSizeVerified(rec.ColumnId, rec.Chunk));
+            rec.BlobRange.BlobIdx = portion.GetPortionInfo().RegisterBlobId(MakeUnifiedBlobId(++step, portion.GetBlobFullSizeVerified(rec.ColumnId, rec.Chunk)));
             TString data = portion.GetBlobByRangeVerified(rec.ColumnId, rec.Chunk);
-            blobs.Add(IStoragesManager::DefaultStorageId, rec.BlobRange, std::move(data));
+            blobs.Add(IStoragesManager::DefaultStorageId, portion.GetPortionInfo().RestoreBlobRange(rec.BlobRange), std::move(data));
         }
     }
 }
@@ -336,7 +336,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
     if (blobsPool) {
         for (auto&& i : changes->AppendedPortions) {
             for (auto&& r : i.GetPortionInfo().Records) {
-                Y_ABORT_UNLESS(blobsPool->emplace(r.BlobRange, i.GetBlobByRangeVerified(r.ColumnId, r.Chunk)).second);
+                Y_ABORT_UNLESS(blobsPool->emplace(i.GetPortionInfo().RestoreBlobRange(r.BlobRange), i.GetBlobByRangeVerified(r.ColumnId, r.Chunk)).second);
             }
         }
     }

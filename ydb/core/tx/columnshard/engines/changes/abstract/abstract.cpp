@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr::NOlap {
@@ -75,6 +76,7 @@ void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinis
 void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
     self.DataLocksManager->RegisterLock(BuildDataLock());
     Y_ABORT_UNLESS(Stage == EStage::Created);
+    NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(self.TabletID(), TypeString());
     DoStart(self);
     Stage = EStage::Started;
     if (!NeedConstruction()) {

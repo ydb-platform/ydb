@@ -33,7 +33,6 @@ bool TSession::Start(const std::shared_ptr<IStoragesManager>& storages, const TT
     AFL_VERIFY(!ExportActorId);
     ExportActorId = NActors::TActivationContext::AsActorContext().Register(new TActor(tabletActorId, tabletId,
         Task->GetSerializer(), Task->GetSelector(), blobsOperator.DetachResult(), Task->GetIdentifier(), Cursor));
-    AFL_VERIFY(false);
     Status = EStatus::Started;
     return true;
 }

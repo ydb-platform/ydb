@@ -206,7 +206,7 @@ private:
 
         if (!ChunksLimiter.HasMore()) {
             ScanIterator->PrepareResults();
-            ACFL_DEBUG("stage", "bytes limit exhausted")("limit", ChunksLimiter.DebugString());
+            ACFL_DEBUG("stage", "limit exhausted")("limit", ChunksLimiter.DebugString());
             return false;
         }
 
@@ -271,13 +271,12 @@ private:
             ACFL_DEBUG("event", "ContinueProcessingStep")("stage", "iterator is not initialized");
             return;
         }
-        const bool hasAck = !!AckReceivedInstant;
         // Send new results if there is available capacity
         while (ScanIterator && ProduceResults()) {
         }
 
         // Switch to the next range if the current one is finished
-        if (ScanIterator && ScanIterator->Finished() && hasAck) {
+        if (ScanIterator && ScanIterator->Finished() && ChunksLimiter.HasMore()) {
             NextReadMetadata();
         }
 

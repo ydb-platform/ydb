@@ -35,6 +35,7 @@ public:
         DoSerializeToProto(proto);
     }
 
+    virtual ui64 GetPathId() const = 0;
     virtual TString GetClassName() const = 0;
 };
 

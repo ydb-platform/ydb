@@ -63,7 +63,7 @@ namespace NTest {
             return Iter && Iter->IsValid() && Ready == EReady::Data;
         }
 
-        TPartsIter* Get() const noexcept
+        TRunIter* Get() const noexcept
         {
             return Iter.Get();
         }
@@ -76,7 +76,7 @@ namespace NTest {
         void Make(IPages *env) noexcept
         {
             Ready = EReady::Gone;
-            Iter = MakeHolder<TPartsIter>(Run, Remap_.Tags, Scheme->Keys, env);
+            Iter = MakeHolder<TRunIter>(Run, Remap_.Tags, Scheme->Keys, env);
         }
 
         EReady Seek(TRawVals key_, ESeek seek) noexcept
@@ -193,7 +193,7 @@ namespace NTest {
         TRowState State;
         TRun Run_;
         TRun& Run;
-        THolder<TPartsIter> Iter;
+        THolder<TRunIter> Iter;
         TOwnedCellVec StopKey;
     };
 

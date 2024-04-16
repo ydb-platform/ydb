@@ -1371,11 +1371,11 @@ namespace NTable {
         ui8 SkipEraseVersion : 1;
     };
 
-    class TPartsIter final {
+    class TRunIter final {
     public:
         using TCells = NPage::TCells;
 
-        TPartsIter(const TRun& run, TTagsRef tags, TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults, IPages* env)
+        TRunIter(const TRun& run, TTagsRef tags, TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults, IPages* env)
             : Run(run)
             , Tags(tags)
             , KeyCellDefaults(std::move(keyDefaults))

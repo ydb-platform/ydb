@@ -317,7 +317,7 @@ namespace NTable {
 
             for (auto &mem: Subset.Frozen)
                 Iter->Push(
-                    TMemIt::Make(
+                    TMemIter::Make(
                         *mem, mem.Snapshot, Lead.Key.GetCells(), Lead.Relation, keyDefaults, &Iter->Remap, CurrentEnv));
 
             if (Lead.StopKey.GetCells()) {
@@ -389,7 +389,7 @@ namespace NTable {
                 Boots.reserve(Levels->size());
                 for (auto &run: *Levels) {
                     Boots.push_back(
-                        MakeHolder<TPartsIter>(run, Lead.Tags, keyDefaults, CurrentEnv));
+                        MakeHolder<TRunIter>(run, Lead.Tags, keyDefaults, CurrentEnv));
                 }
             }
         }
@@ -497,7 +497,7 @@ namespace NTable {
         TRowVersion NextRowVersion;
 
     private:
-        using TBoots = TVector<THolder<TPartsIter>>;
+        using TBoots = TVector<THolder<TRunIter>>;
 
         IPages* CurrentEnv = nullptr;
 

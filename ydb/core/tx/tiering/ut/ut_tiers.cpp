@@ -31,6 +31,9 @@ public:
     virtual bool NeedForceCompactionBacketsConstruction() const override {
         return true;
     }
+    virtual TDuration GetRemovedPortionLivetime(const TDuration /*def*/) const override {
+        return TDuration::Zero();
+    }
     virtual ui64 GetSmallPortionSizeDetector(const ui64 /*def*/) const override {
         return 0;
     }

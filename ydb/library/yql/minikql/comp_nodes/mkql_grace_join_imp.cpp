@@ -1146,7 +1146,8 @@ void TTable::Clear() {
 TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
                 ui64 numberOfDataIntColumns, ui64 numberOfDataStringColumns,
                 ui64 numberOfKeyIColumns, ui64 numberOfDataIColumns,
-                ui64 nullsBitmapSize,  TColTypeInterface * colInterfaces, bool isAny ) :
+                ui64 nullsBitmapSize,  TColTypeInterface * colInterfaces, bool isAny,
+                std::shared_ptr<ISpillerFactory> spillerFactory) :
 
                 NumberOfKeyIntColumns(numberOfKeyIntColumns),
                 NumberOfKeyStringColumns(numberOfKeyStringColumns),
@@ -1156,7 +1157,8 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
                 NumberOfDataIColumns(numberOfDataIColumns),
                 ColInterfaces(colInterfaces),
                 NullsBitmapSize_(nullsBitmapSize),
-                IsAny_(isAny)  {
+                IsAny_(isAny),
+                SpillerFactory(spillerFactory) {
 
     NumberOfKeyColumns = NumberOfKeyIntColumns + NumberOfKeyStringColumns + NumberOfKeyIColumns;
     NumberOfDataColumns = NumberOfDataIntColumns + NumberOfDataStringColumns + NumberOfDataIColumns;
@@ -1188,6 +1190,10 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
         b.StringsValues.reserve( (totalForTuples * NumberOfStringColumns) / (NumberOfColumns + 1) );
         b.InterfaceOffsets.reserve( (totalForTuples * NumberOfIColumns) / (NumberOfColumns + 1) );
         b.InterfaceValues.reserve( (totalForTuples * NumberOfIColumns) / (NumberOfColumns + 1));
+        if (SpillerFactory) {
+            b.SpillerPtr = SpillerFactory->CreateSpiller();
+        }
+
 
      }
 

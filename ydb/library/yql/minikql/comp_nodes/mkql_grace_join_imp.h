@@ -70,6 +70,8 @@ struct TTableBucket {
     std::set<ui32> AllRightMatchedIds; // All row ids of right join table which matching rows in left table. To process streaming join mode. 
     KeysHashTable AnyHashTable; // Hash table to process join only for unique keys (any join attribute)
 
+    ISpiller::TPtr SpillerPtr;
+
     enum class EBucketState {
         InMemory,
         SpillingState,
@@ -185,6 +187,8 @@ class TTable {
 
     ui64 TuplesFound_ = 0; // Total number of matching keys found during join
 
+    std::shared_ptr<ISpillerFactory> SpillerFactory;
+
 public:
 
     // Adds new tuple to the table.  intColumns, stringColumns - data of columns, 
@@ -214,7 +218,8 @@ public:
     TTable(ui64 numberOfKeyIntColumns = 0, ui64 numberOfKeyStringColumns = 0,
             ui64 numberOfDataIntColumns = 0, ui64 numberOfDataStringColumns = 0,
             ui64 numberOfKeyIColumns = 0, ui64 numberOfDataIColumns = 0, 
-            ui64 nullsBitmapSize = 1, TColTypeInterface * colInterfaces = nullptr, bool isAny = false);
+            ui64 nullsBitmapSize = 1, TColTypeInterface * colInterfaces = nullptr, bool isAny = false,
+            std::shared_ptr<ISpillerFactory> spillerFactory = nullptr);
     
     ~TTable();
 

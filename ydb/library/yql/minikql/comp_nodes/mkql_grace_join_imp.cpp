@@ -14,11 +14,7 @@ namespace NMiniKQL {
 
 namespace GraceJoin {
 
-
-void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * stringsSizes, NYql::NUdf::TUnboxedValue * iColumns ) {
-
-    TotalPacked++;
-
+void TTable::FillTemporaryTuple(ui64 * intColumns, char ** stringColumns, ui32 * stringsSizes, NYql::NUdf::TUnboxedValue * iColumns) {
     TempTuple.clear();
     TempTuple.insert(TempTuple.end(), intColumns, intColumns + NullsBitmapSize_ + NumberOfKeyIntColumns);
 
@@ -68,6 +64,22 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
 
 
     }
+}
+
+XXH64_hash_t TTable::GetTemporaryTupleHash() {
+    XXH64_hash_t hash = XXH64(TempTuple.data() + NullsBitmapSize_, (TempTuple.size() - NullsBitmapSize_) * sizeof(ui64), 0);
+
+    if (!hash) hash = 1;
+
+    return;
+}
+
+
+void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * stringsSizes, NYql::NUdf::TUnboxedValue * iColumns ) {
+
+    TotalPacked++;
+
+    FillTemporaryTuple(intColumns, stringColumns, stringsSizes, iColumns);
 
 
     TempTuple[0] &= ui64(0x1); // Setting only nulls in key bit, all other bits are ignored for key hash
@@ -75,14 +87,13 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
         TempTuple[i] = 0;
     }
 
-
-    XXH64_hash_t hash = XXH64(TempTuple.data() + NullsBitmapSize_, (TempTuple.size() - NullsBitmapSize_) * sizeof(ui64), 0);
-
-    if (!hash) hash = 1;
+    auto hash = GetTemporaryTupleHash();
 
     ui64 bucket = hash & BucketsMask;
 
-    
+    if (IsBucketSpilled[bucket]) {
+        
+    }
 
     std::vector<ui64, TMKQLAllocator<ui64>> & keyIntVals = TableBuckets[bucket].KeyIntVals;
     std::vector<ui32, TMKQLAllocator<ui32>> & stringsOffsets = TableBuckets[bucket].StringsOffsets;

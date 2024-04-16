@@ -68,6 +68,14 @@ struct TTableBucket {
     std::set<ui32> AllRightMatchedIds; // All row ids of right join table which matching rows in left table. To process streaming join mode. 
     KeysHashTable AnyHashTable; // Hash table to process join only for unique keys (any join attribute)
 
+    enum class EBucketState {
+        InMemory,
+        SpillingState,
+        SpillingData
+    };
+
+    EBucketState BucketState = EBucketState::InMemory;
+
  };
 
 
@@ -118,6 +126,7 @@ class TTable {
     
     // Table data is partitioned in buckets based on key value
     std::vector<TTableBucket> TableBuckets;
+    std::vector<bool> IsBucketSpilled;
 
     // Temporary vector for tuples manipulation;
     std::vector<ui64> TempTuple;

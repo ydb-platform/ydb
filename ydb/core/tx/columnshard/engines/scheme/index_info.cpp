@@ -3,8 +3,9 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/sort_cursor.h>
 #include <ydb/core/sys_view/common/schema.h>
-#include <ydb/core/formats/arrow/serializer/native.h>
+#include <ydb/core/formats/arrow/serializer/batch_only.h>
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
+#include <ydb/core/formats/arrow/serializer/full.h>
 #include <ydb/core/base/appdata.h>
 
 namespace NKikimr::NOlap {
@@ -295,23 +296,32 @@ bool TIndexInfo::AllowTtlOverColumn(const TString& name) const {
 }
 
 TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId, const TSaverContext& context) const {
+    arrow::ipc::IpcWriteOptions options;
+    options.use_threads = false;
+
     NArrow::NTransformation::ITransformer::TPtr transformer;
-    NArrow::NSerialization::TSerializerContainer serializer;
+    std::unique_ptr<arrow::util::Codec> columnCodec;
     {
         auto it = ColumnFeatures.find(columnId);
         AFL_VERIFY(it != ColumnFeatures.end());
         transformer = it->second.GetSaveTransformer();
-        serializer = it->second.GetSerializer();
+        columnCodec = it->second.GetCompressionCodec();
     }
 
-    if (!!context.GetExternalSerializer()) {
-        return TColumnSaver(transformer, *context.GetExternalSerializer());
-    } else if (!!serializer) {
-        return TColumnSaver(transformer, serializer);
-    } else if (DefaultSerializer) {
-        return TColumnSaver(transformer, DefaultSerializer);
+    if (context.GetExternalCompression()) {
+        options.codec = context.GetExternalCompression()->BuildArrowCodec();
+    } else if (columnCodec) {
+        options.codec = std::move(columnCodec);
+    } else if (DefaultCompression) {
+        options.codec = DefaultCompression->BuildArrowCodec();
     } else {
-        return TColumnSaver(transformer, NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
+        options.codec = NArrow::TCompression::BuildDefaultCodec();
+    }
+
+    if (!transformer) {
+        return TColumnSaver(transformer, std::make_shared<NArrow::NSerialization::TBatchPayloadSerializer>(options));
+    } else {
+        return TColumnSaver(transformer, std::make_shared<NArrow::NSerialization::TFullDataSerializer>(options));
     }
 }
 
@@ -380,7 +390,8 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
         const ui32 id = col.GetId();
         const TString& name = col.GetName();
         const bool notNull = col.HasNotNull() ? col.GetNotNull() : false;
-        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(), col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
+            col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
         Columns[id] = NTable::TColumn(name, id, typeInfoMod.TypeInfo, typeInfoMod.TypeMod, notNull);
         ColumnNames[name] = id;
     }
@@ -402,12 +413,12 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     }
 
     if (schema.HasDefaultCompression()) {
-        NArrow::NSerialization::TSerializerContainer container;
-        if (!container.DeserializeFromProto(schema.GetDefaultCompression())) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_index_info")("reason", "cannot_parse_default_serializer");
+        auto result = NArrow::TCompression::BuildFromProto(schema.GetDefaultCompression());
+        if (!result) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_index_info")("reason", result.GetErrorMessage());
             return false;
         }
-        DefaultSerializer = container;
+        DefaultCompression = *result;
     }
     Version = schema.GetVersion();
     return true;

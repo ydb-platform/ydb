@@ -17,9 +17,9 @@ TConclusionStatus TAlterColumnOperation::DoDeserialize(NYql::TObjectSettingsImpl
         }
     }
     {
-        auto status = Serializer.DeserializeFromRequest(features);
-        if (!status) {
-            return status;
+        auto result = CompressionDiff.DeserializeFromRequestFeatures(features);
+        if (!result) {
+            return TConclusionStatus::Fail(result.GetErrorMessage());
         }
     }
     return TConclusionStatus::Success();
@@ -28,9 +28,7 @@ TConclusionStatus TAlterColumnOperation::DoDeserialize(NYql::TObjectSettingsImpl
 void TAlterColumnOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& schemaData) const {
     auto* column = schemaData.AddAlterColumns();
     column->SetName(ColumnName);
-    if (!!Serializer) {
-        Serializer.SerializeToProto(*column->MutableSerializer());
-    }
+    *column->MutableCompression() = CompressionDiff.SerializeToProto();
     *column->MutableDictionaryEncoding() = DictionaryEncodingDiff.SerializeToProto();
 }
 

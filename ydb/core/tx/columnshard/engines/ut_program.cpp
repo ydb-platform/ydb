@@ -1,4 +1,4 @@
-#include <ydb/core/tx/columnshard/engines/index_info.h>
+#include "index_info.h"
 
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>

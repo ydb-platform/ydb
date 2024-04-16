@@ -244,6 +244,7 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/external_sources
     ydb/core/filestore/core
+    ydb/core/formats/arrow/compression
     ydb/core/kesus/tablet
     ydb/core/metering
     ydb/core/persqueue

@@ -1,4 +1,5 @@
 #include "columnshard.h"
+#include <ydb/core/formats/arrow/serializer/full.h>
 #include <ydb/core/testlib/cs_helper.h>
 
 namespace NKikimr {

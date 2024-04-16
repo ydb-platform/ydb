@@ -9,7 +9,11 @@ TStorageCounters::TStorageCounters(const TString& storageId)
 }
 
 std::shared_ptr<NKikimr::NOlap::NBlobOperations::TConsumerCounters> TStorageCounters::GetConsumerCounter(const TString& consumerId) {
-    return std::make_shared<TConsumerCounters>(consumerId, *this);
+    auto it = ConsumerCounters.find(consumerId);
+    if (it == ConsumerCounters.end()) {
+        it = ConsumerCounters.emplace(consumerId, std::make_shared<TConsumerCounters>(consumerId, *this)).first;
+    }
+    return it->second;
 }
 
 TConsumerCounters::TConsumerCounters(const TString& consumerId, const TStorageCounters& parent)

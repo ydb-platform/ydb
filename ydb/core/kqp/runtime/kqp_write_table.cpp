@@ -14,7 +14,7 @@ namespace NKqp {
 
 namespace {
 
-constexpr ui64 MaxBatchBytes = 8_MB;
+constexpr ui64 MaxBatchBytes = 1_MB;
 
 TVector<TSysTables::TTableColumnInfo> BuildColumns(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
     TVector<TSysTables::TTableColumnInfo> result;
@@ -331,7 +331,7 @@ public:
                     /* copy */ true);
             }
 
-            auto it = std::lower_bound(
+            auto shardIter = std::lower_bound(
                 std::begin(keyRange.GetPartitions()),
                 std::end(keyRange.GetPartitions()),
                 TArrayRef(cells.data(), KeyColumnTypes.size()),
@@ -341,14 +341,19 @@ public:
                         range.IsInclusive || range.IsPoint, true, KeyColumnTypes);
                 });
 
-            YQL_ENSURE(it != keyRange.GetPartitions().end());
+            YQL_ENSURE(shardIter != keyRange.GetPartitions().end());
 
-            for (auto& cell : cells) {
-                Memory += cell.Size();
-                Batches[it->ShardId].Size += cell.Size();
-                Batches[it->ShardId].Data.emplace_back(std::move(cell));
+            auto batcherIter = Batchers.find(shardIter->ShardId);
+            if (batcherIter == std::end(Batchers)) {
+                Batchers.emplace(
+                    shardIter->ShardId,
+                    TCellsBatcher(Columns.size(), MaxBatchBytes));
             }
-            ShardIds.insert(it->ShardId);
+
+            Memory += Batchers.at(shardIter->ShardId).AddRow(std::move(cells));
+            ShardIds.insert(shardIter->ShardId);
+
+            cells.resize(Columns.size());
         });
     }
 
@@ -369,66 +374,40 @@ public:
     }
 
     bool IsEmpty() override {
-        return Batches.empty();
+        return Batchers.empty();
     }
 
     bool IsFinished() override {
         return IsClosed() && IsEmpty();
     }
 
-    TString ExtractNextBatch(TBatch& batch) {
-        ui64 rows = 0;
-        ui64 currentSize = sizeof(ui32) + sizeof(ui16);
-        while ((rows + 1) * Columns.size() <= batch.Data.size()) {
-            ui64 nextRowSize = 0;
-            for (size_t index = Columns.size() * rows; index < Columns.size() * (rows + 1); ++index) {
-                nextRowSize += /*sizeof(TCellHeader)*/ 4 + batch.Data[index].Size();
-            }
-
-            if (nextRowSize + currentSize <= MaxBatchBytes) {
-                ++rows;
-            } else {
-                break;
-            }
-        }
-
-        const auto batchRef = TConstArrayRef<TCell>{batch.Data.data(), rows * Columns.size()};
-
-        TSerializedCellMatrix matrix(
-            batchRef,
-            rows,
-            Columns.size());
-        const auto result = matrix.ReleaseBuffer();
-
-        for (size_t index = 0; index < rows * Columns.size(); ++index) {
-            Memory -= batch.Data.front().Size();
-            batch.Size -= batch.Data.front().Size();
-        }
-        batch.Data = std::vector<TCell>{std::begin(batch.Data) + rows * Columns.size(), std::end(batch.Data)};
-        return result;
+    TString ExtractNextBatch(TCellsBatcher& batcher, bool force) {
+        auto batchResult = batcher.Flush(force);
+        Memory -= batchResult.Memory;
+        return batchResult.Data;
     }
 
     TBatches FlushBatchesForce() override {
         TBatches result;
-        for (auto& [shardId, batch] : Batches) {
-            while (batch.Data.size() > 0) {
-                result[shardId].push_back(ExtractNextBatch(batch));
-            }
+        for (auto& [shardId, batcher] : Batchers) {
+            while (true) {
+                auto batch = ExtractNextBatch(batcher, true);
+                if (batch.empty()) {
+                    break;
+                }
+                result[shardId].emplace_back(std::move(batch));
+            };
         }
-        Batches.clear();
+        Batchers.clear();
         return result;
     }
 
     TString FlushBatch(ui64 shardId) override {
-        if (!Batches.contains(shardId)) {
+        if (!Batchers.contains(shardId)) {
             return {};
         }
-        auto batch = Batches.at(shardId);
-        if (batch.Data.empty() || batch.Size < MaxBatchBytes) {
-            return {};
-        }
-
-        return ExtractNextBatch(batch);
+        auto& batcher = Batchers.at(shardId);
+        return ExtractNextBatch(batcher, false);
     }
 
     const THashSet<ui64>& GetShardIds() const override {
@@ -449,7 +428,7 @@ private:
     const std::vector<ui32> WriteColumnIds;
     const TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
-    THashMap<ui64, TBatch> Batches;
+    THashMap<ui64, TCellsBatcher> Batchers;
     THashSet<ui64> ShardIds;
 
     i64 Memory = 0;

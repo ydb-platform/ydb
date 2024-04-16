@@ -10,6 +10,7 @@
 #include <util/system/unaligned_mem.h>
 #include <util/memory/pool.h>
 
+#include <deque>
 #include <type_traits>
 
 namespace NKikimr {
@@ -650,6 +651,33 @@ private:
     TVector<TCell> Cells;
     ui32 RowCount;
     ui16 ColCount;
+};
+
+class TCellsBatcher {
+public:
+    explicit TCellsBatcher(ui16 colCount, ui64 maxBytesPerBatch);
+
+    bool IsEmpty() const;
+
+    struct TOutputBatch {
+        ui64 Memory = 0;
+        TString Data;
+    };
+
+    TOutputBatch Flush(bool force);
+
+    ui64 AddRow(TVector<TCell>&& cells);
+
+private:
+    struct TBatch {
+        ui64 Memory = 0;
+        ui64 MemorySerialized = 0;
+        TVector<TCell> Data;
+    };
+    std::deque<TBatch> Batches;
+
+    ui16 ColCount;
+    ui64 MaxBytesPerBatch;
 };
 
 class TCellsStorage

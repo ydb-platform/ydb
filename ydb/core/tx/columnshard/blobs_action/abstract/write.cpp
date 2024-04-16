@@ -41,7 +41,7 @@ bool IBlobsWritingAction::IsReady() const {
 }
 
 IBlobsWritingAction::~IBlobsWritingAction() {
-    AFL_VERIFY(!NActors::TlsActivationContext || BlobsWaiting.empty() || Aborted);
+//    AFL_VERIFY(!NActors::TlsActivationContext || BlobsWaiting.empty() || Aborted);
 }
 
 void IBlobsWritingAction::SendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) {

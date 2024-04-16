@@ -325,14 +325,6 @@ void TColumnShard::ConfigureStats(const NOlap::TColumnEngineStats& indexStats,
     tabletStats->SetLastUpdateTime(lastIndexUpdate.GetPlanStep());
 }
 
-TDuration TColumnShard::GetControllerPeriodicWakeupActivationPeriod() {
-    return NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod(TSettings::DefaultPeriodicWakeupActivationPeriod);
-}
-
-TDuration TColumnShard::GetControllerStatsReportInterval() {
-    return NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval(TSettings::DefaultStatsReportInterval);
-}
-
 void TColumnShard::FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats) const {
     tableStats->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOAD].Get());
     tableStats->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_OUT_OF_SPACE].Get());

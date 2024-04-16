@@ -534,9 +534,6 @@ private:
     void ConfigureStats(const NOlap::TColumnEngineStats& indexStats, ::NKikimrTableStats::TTableStats* tabletStats);
     void FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats) const;
 
-    static TDuration GetControllerPeriodicWakeupActivationPeriod();
-    static TDuration GetControllerStatsReportInterval();
-
 public:
     ui64 TabletTxCounter = 0;
 

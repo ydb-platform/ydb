@@ -2158,7 +2158,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr&
     }
     auto& record = ev->Get()->Record;
     auto partitionInfoIt = PartitionsInfo.find(record.GetPartitionId());
-    if (partitionInfoIt.IsEnd()) {
+    if (partitionInfoIt == PartitionsInfo.end()) {
         return;
     }
 

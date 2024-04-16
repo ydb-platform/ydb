@@ -66,6 +66,7 @@ void TRetryEventsQueue::Retry() {
 
 void TRetryEventsQueue::Connect() {
     auto connectEvent = MakeHolder<NActors::TEvInterconnect::TEvConnectNode>();
+    Y_ASSERT(NActors::TActivationContext::ActorSystem()->NodeId == SenderId.NodeId());
     NActors::TActivationContext::Send(
         new NActors::IEventHandle(NActors::TActivationContext::InterconnectProxy(RecipientId.NodeId()), SenderId, connectEvent.Release(), 0, 0));
 }

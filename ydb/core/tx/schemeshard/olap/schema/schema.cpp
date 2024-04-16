@@ -136,7 +136,6 @@ void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& ta
     Version = tableSchema.GetVersion();
     Y_ABORT_UNLESS(tableSchema.HasEngine());
     Engine = tableSchema.GetEngine();
-    CompositeMarksFlag = tableSchema.GetCompositeMarks();
 
     Columns.Parse(tableSchema);
     Indexes.Parse(tableSchema);
@@ -147,7 +146,6 @@ void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& ta
 void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {
     tableSchema.SetNextColumnId(NextColumnId);
     tableSchema.SetVersion(Version);
-    tableSchema.SetCompositeMarks(CompositeMarksFlag);
 
     Y_ABORT_UNLESS(HasEngine());
     tableSchema.SetEngine(GetEngineUnsafe());

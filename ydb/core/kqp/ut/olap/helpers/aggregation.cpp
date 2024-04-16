@@ -8,8 +8,7 @@ namespace NKikimr::NKqp {
 
 void TestAggregationsBase(const std::vector<TAggregationTestCase>& cases) {
     auto settings = TKikimrSettings()
-        .SetWithSampleTables(false)
-        .SetForceColumnTablesCompositeMarks(true);
+        .SetWithSampleTables(false);
     TKikimrRunner kikimr(settings);
 
     TLocalHelper(kikimr).CreateTestOlapTable();
@@ -103,8 +102,7 @@ void WriteTestDataForTableWithNulls(TKikimrRunner& kikimr, TString testTable) {
 
 void TestTableWithNulls(const std::vector<TAggregationTestCase>& cases, const bool genericQuery /*= false*/) {
     auto settings = TKikimrSettings()
-        .SetWithSampleTables(false)
-        .SetForceColumnTablesCompositeMarks(true);
+        .SetWithSampleTables(false);
     TKikimrRunner kikimr(settings);
 
     Tests::NCommon::TLoggerInit(kikimr).Initialize();

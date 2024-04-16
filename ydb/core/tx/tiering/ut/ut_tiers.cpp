@@ -335,8 +335,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.GrpcPort = grpcPort;
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableMetadataProvider(true)
-            .SetForceColumnTablesCompositeMarks(true);
+            .SetEnableMetadataProvider(true);
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -425,7 +424,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetForceColumnTablesCompositeMarks(true)
             .SetAppConfig(appConfig);
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -557,7 +555,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
             .SetEnableBackgroundTasks(true)
-            .SetForceColumnTablesCompositeMarks(true);
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -865,7 +862,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
             .SetEnableBackgroundTasks(true)
-            .SetForceColumnTablesCompositeMarks(true);
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);

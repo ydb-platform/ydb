@@ -602,8 +602,9 @@ public:
     TDqYtReadBlockWrapper(const TComputationNodeFactoryContext& ctx, const TString& clusterName,
         const TString& token, const NYT::TNode& inputSpec, const NYT::TNode& samplingSpec,
         const TVector<ui32>& inputGroups,
-        TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables, NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight,
-        size_t timeout) : TBaseComputation(ctx.Mutables, EValueRepresentation::Boxed)
+        TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables,
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets)
+        : TBaseComputation(ctx.Mutables, EValueRepresentation::Boxed)
         , Width_(AS_TYPE(TStructType, itemType)->GetMembersCount())
         , CodecCtx_(ctx.Env, ctx.FunctionRegistry, &ctx.HolderFactory)
         , ClusterName_(clusterName)
@@ -618,6 +619,7 @@ public:
         // TODO() Enable range indexes + row indexes
         Specs_.SetUseSkiff("", 0);
         Specs_.Init(CodecCtx_, inputSpec, inputGroups, tableNames, itemType, {}, {}, jobStats);
+        Specs_.SetTableOffsets(tableOffsets);
     }
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
@@ -659,9 +661,10 @@ private:
 IComputationNode* CreateDqYtReadBlockWrapper(const TComputationNodeFactoryContext& ctx, const TString& clusterName,
         const TString& token, const NYT::TNode& inputSpec, const NYT::TNode& samplingSpec,
         const TVector<ui32>& inputGroups,
-        TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables, NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight,
-        size_t timeout) 
+        TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables,
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets) 
 {
-    return new TDqYtReadBlockWrapper(ctx, clusterName, token, inputSpec, samplingSpec, inputGroups, itemType, tableNames, std::move(tables), jobStats, inflight, timeout);
+    return new TDqYtReadBlockWrapper(ctx, clusterName, token, inputSpec, samplingSpec, inputGroups, itemType,
+                                                tableNames, std::move(tables), jobStats, inflight, timeout, tableOffsets);
 }
 }

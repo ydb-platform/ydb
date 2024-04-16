@@ -136,7 +136,7 @@ public:
                         if (!DeclareRemoveAction) {
                             DeclareRemoveAction = bOperator->StartDeclareRemovingAction("WRITING_BUFFER");
                         }
-                        DeclareRemoveAction->DeclareRemove(s.GetRange().BlobId);
+                        DeclareRemoveAction->DeclareRemove(bOperator->GetSelfTabletId(), s.GetRange().BlobId);
                     }
                 }
                 Aggregations.erase(Aggregations.begin() + i);

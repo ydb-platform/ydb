@@ -3,7 +3,7 @@
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
-void TWriteAction::DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+void TWriteAction::DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
     ui64 blobsWritten = BlobBatch.GetBlobCount();
     ui64 bytesWritten = BlobBatch.GetTotalSize();
     if (blobsWroteSuccessfully) {

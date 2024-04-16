@@ -34,7 +34,7 @@ public:
 
     }
 
-    std::shared_ptr<TColumnEngineChanges> BuildMergeTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const;
+    std::shared_ptr<TColumnEngineChanges> BuildMergeTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const;
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion) {
         AFL_VERIFY(portion->BlobsBytes() < SizeLimit);
@@ -127,13 +127,13 @@ public:
         return result;
     }
 
-    std::shared_ptr<TColumnEngineChanges> BuildMergeTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const {
+    std::shared_ptr<TColumnEngineChanges> BuildMergeTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
         auto* limiter = GetMaxWeightLimiter();
         if (!limiter) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("fail", "limiter absent");
             return nullptr;
         }
-        return limiter->BuildMergeTask(limits, granule, busyPortions);
+        return limiter->BuildMergeTask(limits, granule, locksManager);
     }
 
     TBlobsBySize(const std::shared_ptr<TCounters>& counters, const std::shared_ptr<IStoragesManager>& storagesManager) {

@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
+#include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <ydb/library/actors/core/av_bootstrapped.h>
@@ -46,14 +47,14 @@ protected:
         }
         return true;
     }
-    virtual bool DoOnWriteIndexComplete(const ui64 /*tabletId*/, const TString& changeClassName) override {
-        if (changeClassName.find("TTL") != TString::npos) {
+    virtual bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& changes, const NColumnShard::TColumnShard& /*shard*/) override {
+        if (changes.TypeString() == NOlap::TTTLColumnEngineChanges::StaticTypeName()) {
             AtomicIncrement(TTLFinishedCounter);
         }
         return true;
     }
     virtual bool DoOnWriteIndexStart(const ui64 /*tabletId*/, const TString& changeClassName) override {
-        if (changeClassName.find("TTL") != TString::npos) {
+        if (changeClassName.find(NOlap::TTTLColumnEngineChanges::StaticTypeName()) != TString::npos) {
             AtomicIncrement(TTLStartedCounter);
         }
         return true;

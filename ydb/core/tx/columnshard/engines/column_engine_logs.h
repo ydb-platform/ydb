@@ -19,6 +19,10 @@ struct TSortDescription;
 
 namespace NKikimr::NOlap {
 
+namespace NDataSharing {
+class TDestinationSession;
+}
+
 struct TReadMetadata;
 class TGranulesTable;
 class TColumnsTable;
@@ -79,6 +83,7 @@ class TColumnEngineForLogs : public IColumnEngine {
     friend class TChangesWithAppend;
     friend class TCompactColumnEngineChanges;
     friend class TCleanupColumnEngineChanges;
+    friend class NDataSharing::TDestinationSession;
 private:
     const NColumnShard::TEngineLogsCounters SignalCounters;
     std::shared_ptr<TGranulesStorage> GranulesStorage;
@@ -94,7 +99,7 @@ private:
         const TInstant Now;
         std::shared_ptr<TTTLColumnEngineChanges> Changes;
         std::map<ui64, TDuration> DurationsForced;
-        const THashSet<TPortionAddress>& BusyPortions;
+        const std::shared_ptr<NDataLocks::TManager> DataLocksManager;
 
         void AppPortionForEvictionChecker(const TPortionInfo& info) {
             MemoryUsage = MemoryPredictor->AddPortion(info);
@@ -114,7 +119,7 @@ private:
         }
 
         TTieringProcessContext(const ui64 memoryUsageLimit, std::shared_ptr<TTTLColumnEngineChanges> changes,
-            const THashSet<TPortionAddress>& busyPortions, const std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>& memoryPredictor);
+            const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>& memoryPredictor);
     };
 
     TDuration ProcessTiering(const ui64 pathId, const TTiering& tiering, TTieringProcessContext& context) const;
@@ -159,10 +164,10 @@ public:
     bool Load(IDbWrapper& db) override;
 
     std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept override;
-    std::shared_ptr<TColumnEngineChanges> StartCompaction(const TCompactionLimits& limits, const THashSet<TPortionAddress>& busyPortions) noexcept override;
-    std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop, ui32 maxRecords) noexcept override;
+    std::shared_ptr<TColumnEngineChanges> StartCompaction(const TCompactionLimits& limits, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
+    std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
     std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
-        const THashSet<TPortionAddress>& busyPortions, const ui64 memoryUsageLimit) noexcept override;
+        const std::shared_ptr<NDataLocks::TManager>& locksManager, const ui64 memoryUsageLimit) noexcept override;
 
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
                       const TSnapshot& snapshot) noexcept override;
@@ -207,10 +212,13 @@ public:
         return it->second;
     }
 
-    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const ui64 pathIdFrom, const ui64 pathIdTo) const {
+    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<ui64> pathIdFrom, const std::optional<ui64> pathIdTo) const {
         std::vector<std::shared_ptr<TGranuleMeta>> result;
         for (auto&& i : Tables) {
-            if (i.first < pathIdFrom || i.first > pathIdTo) {
+            if (pathIdFrom && i.first < *pathIdFrom) {
+                continue;
+            }
+            if (pathIdTo && i.first > *pathIdTo) {
                 continue;
             }
             result.emplace_back(i.second);

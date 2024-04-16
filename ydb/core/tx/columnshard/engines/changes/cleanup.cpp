@@ -21,7 +21,7 @@ void TCleanupColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self,
     for (auto&& p : PortionsToDrop) {
         auto removing = BlobsAction.GetRemoving(p);
         for (auto&& r : p.Records) {
-            removing->DeclareRemove(r.BlobRange.BlobId);
+            removing->DeclareRemove((TTabletId)self.TabletID(), r.BlobRange.BlobId);
         }
         pathIds.emplace(p.GetPathId());
         self.IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, p.RawBytesSum());

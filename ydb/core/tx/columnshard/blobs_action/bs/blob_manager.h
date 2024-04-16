@@ -1,9 +1,10 @@
 #pragma once
 
-#include "blob.h"
-#include "blobs_action/blob_manager_db.h"
-#include "blobs_action/abstract/storage.h"
-#include "counters/blobs_manager.h"
+#include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+#include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
+#include <ydb/core/tx/columnshard/counters/blobs_manager.h>
 
 #include <ydb/core/tablet_flat/flat_executor.h>
 #include <ydb/core/util/backoff.h>
@@ -15,12 +16,8 @@ namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 class TGCTask;
 }
 
-namespace NKikimr::NColumnShard {
+namespace NKikimr::NOlap {
 
-using NOlap::TUnifiedBlobId;
-using NOlap::TBlobRange;
-using NOlap::TEvictedBlob;
-using NOlap::EEvictState;
 using NKikimrTxColumnShard::TEvictMetadata;
 
 
@@ -89,29 +86,8 @@ public:
         return DoSaveBlobBatch(std::move(blobBatch), db);
     }
 
-    virtual void DeleteBlobOnExecute(const TUnifiedBlobId& blobId, IBlobManagerDb& db) = 0;
-    virtual void DeleteBlobOnComplete(const TUnifiedBlobId& blobId) = 0;
-};
-
-// An interface for exporting and caching exported blobs out of ColumnShard index to external storages like S3.
-// Just do not mix it with IBlobManager that use out storage model.
-class IBlobExporter {
-protected:
-    ~IBlobExporter() = default;
-
-public:
-    // Lazily export blob to external object store. Keep it available via blobId.
-    virtual bool ExportOneToOne(TEvictedBlob&& evict, const TEvictMetadata& meta, IBlobManagerDb& db) = 0;
-    virtual bool DropOneToOne(const TUnifiedBlobId& blobId, IBlobManagerDb& db) = 0;
-    virtual bool UpdateOneToOne(TEvictedBlob& evict, IBlobManagerDb& db, bool& dropped) = 0;
-    virtual bool EraseOneToOne(const TEvictedBlob& evict, IBlobManagerDb& db) = 0;
-    virtual bool LoadOneToOneExport(IBlobManagerDb& db, THashSet<TUnifiedBlobId>& droppedEvicting) = 0;
-    virtual TEvictedBlob GetEvicted(const TUnifiedBlobId& blob, TEvictMetadata& meta) = 0;
-    virtual TEvictedBlob GetDropped(const TUnifiedBlobId& blobId, TEvictMetadata& meta) = 0;
-    virtual void GetCleanupBlobs(THashMap<TString, THashSet<TEvictedBlob>>& tierBlobs,
-                                const THashSet<TUnifiedBlobId>& allowList = {}) const = 0;
-    virtual void GetReexportBlobs(THashMap<TString, THashSet<TEvictedBlob>>& tierBlobs) const = 0;
-    virtual bool HasExternBlobs() const = 0;
+    virtual void DeleteBlobOnExecute(const TTabletId tabletId, const TUnifiedBlobId& blobId, IBlobManagerDb& db) = 0;
+    virtual void DeleteBlobOnComplete(const TTabletId tabletId, const TUnifiedBlobId& blobId) = 0;
 };
 
 // A ref-counted object to keep track when GC barrier can be moved to some step.
@@ -143,12 +119,13 @@ struct TBlobManagerCounters {
 };
 
 // The implementation of BlobManager that hides all GC-related details
-class TBlobManager : public IBlobManager, public NOlap::TCommonBlobsTracker {
+class TBlobManager : public IBlobManager, public TCommonBlobsTracker {
 private:
     static constexpr size_t BLOB_COUNT_TO_TRIGGER_GC_DEFAULT = 1000;
     static constexpr ui64 GC_INTERVAL_SECONDS_DEFAULT = 60;
 
 private:
+    const TTabletId SelfTabletId;
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     const ui32 CurrentGen;
     ui32 CurrentStep;
@@ -158,10 +135,10 @@ private:
     // Lists of blobs that need Keep flag to be set
     TSet<TLogoBlobID> BlobsToKeep;
     // Lists of blobs that need DoNotKeep flag to be set
-    TSet<TLogoBlobID> BlobsToDelete;
+    TTabletsByBlob BlobsToDelete;
 
     // List of blobs that are marked for deletion but are still used by in-flight requests
-    TSet<TLogoBlobID> BlobsToDeleteDelayed;
+    TTabletsByBlob BlobsToDeleteDelayed;
 
     // Sorted queue of GenSteps that have in-flight BlobBatches
     TDeque<TAllocatedGenStepConstPtr> AllocatedGenSteps;
@@ -172,7 +149,7 @@ private:
     // The barrier in the current in-flight GC request(s)
     bool FirstGC = true;
 
-    const TBlobsManagerCounters BlobsManagerCounters = TBlobsManagerCounters("BlobsManager");
+    const NColumnShard::TBlobsManagerCounters BlobsManagerCounters = NColumnShard::TBlobsManagerCounters("BlobsManager");
 
     // Stores counter updates since last call to GetCountersUpdate()
     // Then the counters are reset and start accumulating new delta
@@ -184,12 +161,16 @@ private:
 
     virtual void DoSaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) override;
 public:
-    TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 gen);
+    TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId);
 
     virtual void OnBlobFree(const TUnifiedBlobId& blobId) override;
 
-    const TBlobsManagerCounters& GetCounters() const {
+    const NColumnShard::TBlobsManagerCounters& GetCounters() const {
         return BlobsManagerCounters;
+    }
+
+    TTabletId GetSelfTabletId() const {
+        return SelfTabletId;
     }
 
     ui64 GetTabletId() const {
@@ -203,10 +184,12 @@ public:
     void RegisterControls(NKikimr::TControlBoard& icb);
 
     // Loads the state at startup
-    bool LoadState(IBlobManagerDb& db);
+    bool LoadState(IBlobManagerDb& db, const TTabletId selfTabletId);
 
     // Prepares Keep/DontKeep lists and GC barrier
-    std::shared_ptr<NOlap::NBlobOperations::NBlobStorage::TGCTask> BuildGCTask(const TString& storageId, const std::shared_ptr<TBlobManager>& manager);
+    std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> BuildGCTask(const TString& storageId,
+        const std::shared_ptr<TBlobManager>& manager, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobsInfo,
+        const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters);
 
     void OnGCFinished(const TGenStep& genStep, IBlobManagerDb& db);
 
@@ -218,8 +201,8 @@ public:
 
     // Implementation of IBlobManager interface
     TBlobBatch StartBlobBatch(ui32 channel = BLOB_CHANNEL) override;
-    void DeleteBlobOnExecute(const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
-    void DeleteBlobOnComplete(const TUnifiedBlobId& blobId) override;
+    virtual void DeleteBlobOnExecute(const TTabletId tabletId, const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
+    virtual void DeleteBlobOnComplete(const TTabletId tabletId, const TUnifiedBlobId& blobId) override;
 private:
     TGenStep FindNewGCBarrier();
 

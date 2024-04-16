@@ -189,6 +189,32 @@ public:
         return *PrimaryIndex;
     }
 
+    template <class TIndex>
+    TIndex& MutablePrimaryIndexAsVerified() {
+        AFL_VERIFY(!!PrimaryIndex);
+        auto result = dynamic_cast<TIndex*>(PrimaryIndex.get());
+        AFL_VERIFY(result);
+        return *result;
+    }
+
+    template <class TIndex>
+    const TIndex& GetPrimaryIndexAsVerified() const {
+        AFL_VERIFY(!!PrimaryIndex);
+        auto result = dynamic_cast<const TIndex*>(PrimaryIndex.get());
+        AFL_VERIFY(result);
+        return *result;
+    }
+
+    template <class TIndex>
+    const TIndex* GetPrimaryIndexAsOptional() const {
+        if (!PrimaryIndex) {
+            return nullptr;
+        }
+        auto result = dynamic_cast<const TIndex*>(PrimaryIndex.get());
+        AFL_VERIFY(result);
+        return result;
+    }
+
     bool InitFromDB(NIceDb::TNiceDb& db);
     bool LoadIndex(NOlap::TDbWrapper& db);
 

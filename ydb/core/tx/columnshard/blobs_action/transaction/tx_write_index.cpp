@@ -1,4 +1,5 @@
 #include "tx_write_index.h"
+#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
@@ -28,7 +29,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         Self->UpdateIndexCounters();
     } else {
         TBlobGroupSelector dsGroupSelector(Self->Info());
-        NColumnShard::TBlobManagerDb blobsDb(txc.DB);
+        NOlap::TBlobManagerDb blobsDb(txc.DB);
         changes->MutableBlobsAction().OnExecuteTxAfterAction(*Self, blobsDb, false);
         for (ui32 i = 0; i < changes->GetWritePortionsCount(); ++i) {
             for (auto&& i : changes->GetWritePortionInfo(i)->GetPortionInfo().Records) {
@@ -65,7 +66,7 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     }
 
     changes->MutableBlobsAction().OnCompleteTxAfterAction(*Self, Ev->Get()->GetPutStatus() == NKikimrProto::OK);
-    NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexComplete(Self->TabletID(), changes->TypeString());
+    NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexComplete(*changes, *Self);
 }
 
 TTxWriteIndex::~TTxWriteIndex() {

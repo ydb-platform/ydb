@@ -1,0 +1,38 @@
+package NKikimrColumnShardDataSharingProto;
+
+message TInitiator {
+    message TController {
+        optional string ClassName = 1;
+
+        message TTest {
+        }
+
+        oneof Implementation {
+            TTest Test = 40;
+        }
+    }
+
+    message TStatus {
+        message TInProgress {
+            optional uint32 PortionsCount = 1;
+            optional uint32 PortionsReady = 2;
+        }
+
+        message TStartFailed {
+            optional string ErrorMessage = 1;
+        }
+
+        message TNotFound {
+            optional string ErrorMessage = 1;
+        }
+
+        optional string ClassName = 1;
+        optional string SessionId = 2;
+
+        oneof Implementation {
+            TInProgress InProgress = 40;
+            TStartFailed StartFailed = 41;
+            TNotFound NotFound = 42;
+        }
+    }
+}

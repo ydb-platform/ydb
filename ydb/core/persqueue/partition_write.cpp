@@ -548,6 +548,26 @@ void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) 
     ScaleStatus = scaleStatus;
 }
 
+NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& /*ctx*/) {
+    auto const writeSpeedUsagePercent = SplitMergeAvgWriteBytes->GetValue() / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / TotalPartitionWriteSpeed * 100;
+
+    if (writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()) {
+        return NKikimrPQ::EScaleStatus::NEED_SPLIT;
+    } else if (writeSpeedUsagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
+        return NKikimrPQ::EScaleStatus::NEED_MERGE;
+    }
+    return NKikimrPQ::EScaleStatus::NORMAL;
+}
+
+void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) {
+    if (scaleStatus == ScaleStatus || LastScaleRequestTime + TDuration::Seconds(SCALE_REQUEST_REPEAT_MIN_SECONDS) > TInstant::Now()) {
+        return;
+    }
+    Send(Tablet, new TEvPQ::TEvPartitionScaleStatusChanged(Partition.OriginalPartitionId, scaleStatus));
+    LastScaleRequestTime = TInstant::Now();
+    ScaleStatus = scaleStatus;
+}
+
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     PQ_LOG_T("TPartition::HandleOnWrite TEvWrite.");
 

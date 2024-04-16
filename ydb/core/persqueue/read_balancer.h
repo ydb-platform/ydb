@@ -466,7 +466,7 @@ private:
 
     TPartitionGraph PartitionGraph;
 
-public:
+public: 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_READ_BALANCER_ACTOR;
     }

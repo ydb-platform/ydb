@@ -5,7 +5,6 @@
 #include "flat_row_remap.h"
 #include "flat_row_state.h"
 #include "flat_range_cache.h"
-#include "util_fmt_cell.h"
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
@@ -22,8 +21,8 @@ enum class ENext {
     Uncommitted,
 };
 
-template<class TIteratorOps>
-class TTableItBase : TNonCopyable {
+template<class TIterOps>
+class TTableIterBase : TNonCopyable {
     enum class EType : ui8 {
         Mem = 0,
         Run = 1,
@@ -39,10 +38,10 @@ class TTableItBase : TNonCopyable {
     };
 
     class TEraseCachingState {
-        using TOps = typename TIteratorOps::TEraseCacheOps;
+        using TOps = typename TIterOps::TEraseCacheOps;
 
     public:
-        TEraseCachingState(TTableItBase* it)
+        TEraseCachingState(TTableIterBase* it)
             : It(it)
             , Cache(it->ErasedKeysCache.Get())
         { }
@@ -214,7 +213,7 @@ class TTableItBase : TNonCopyable {
         }
 
     private:
-        TTableItBase* It;
+        TTableIterBase* It;
         TOps Cache;
         TKeyRangeCache::const_iterator PrevEntry;
         TKeyRangeCache::const_iterator NextEntry;
@@ -244,13 +243,13 @@ class TTableItBase : TNonCopyable {
     }
 
 public:
-    TTableItBase(
+    TTableIterBase(
         const TRowScheme* scheme, TTagsRef tags, ui64 lim = Max<ui64>(),
         TRowVersion snapshot = TRowVersion::Max(),
         NTable::ITransactionMapPtr committedTransactions = nullptr,
         NTable::ITransactionObserverPtr transactionObserver = nullptr);
 
-    ~TTableItBase();
+    ~TTableIterBase();
 
     void Push(TAutoPtr<TMemIter>);
     void Push(TAutoPtr<TRunIter>);
@@ -389,7 +388,7 @@ private:
 
         int CompareKeys(TArrayRef<const TCell> a, TArrayRef<const TCell> b) const noexcept
         {
-            return TIteratorOps::CompareKeys(Types, a, b);
+            return TIterOps::CompareKeys(Types, a, b);
         }
 
         bool operator() (const TElement& a, const TElement& b) const noexcept
@@ -458,18 +457,18 @@ private:
 class TTableIter;
 class TTableReverseIter;
 
-class TTableIter : public TTableItBase<TTableItOps> {
+class TTableIter : public TTableIterBase<TTableIterOps> {
 public:
-    using TTableItBase::TTableItBase;
+    using TTableIterBase::TTableIterBase;
 
     typedef TTableReverseIter TReverseType;
 
     static constexpr EDirection Direction = EDirection::Forward;
 };
 
-class TTableReverseIter : public TTableItBase<TTableItReverseOps> {
+class TTableReverseIter : public TTableIterBase<TTableItReverseOps> {
 public:
-    using TTableItBase::TTableItBase;
+    using TTableIterBase::TTableIterBase;
 
     typedef TTableIter TReverseType;
 
@@ -477,7 +476,7 @@ public:
 };
 
 template<class TIteratorOps>
-inline TTableItBase<TIteratorOps>::TTableItBase(
+inline TTableIterBase<TIteratorOps>::TTableIterBase(
         const TRowScheme* scheme, TTagsRef tags, ui64 limit,
         TRowVersion snapshot,
         NTable::ITransactionMapPtr committedTransactions,
@@ -495,12 +494,12 @@ inline TTableItBase<TIteratorOps>::TTableItBase(
 {}
 
 template<class TIteratorOps>
-inline TTableItBase<TIteratorOps>::~TTableItBase()
+inline TTableIterBase<TIteratorOps>::~TTableIterBase()
 {
 }
 
 template<class TIteratorOps>
-inline void TTableItBase<TIteratorOps>::AddReadyIterator(TArrayRef<const TCell> key, TIteratorId itId) {
+inline void TTableIterBase<TIteratorOps>::AddReadyIterator(TArrayRef<const TCell> key, TIteratorId itId) {
     Active = Iterators.emplace(Active, TElement({key, itId}));
     ++Active;
     std::push_heap(Iterators.begin(), Active, Comparator);
@@ -508,7 +507,7 @@ inline void TTableItBase<TIteratorOps>::AddReadyIterator(TArrayRef<const TCell> 
 }
 
 template<class TIteratorOps>
-inline void TTableItBase<TIteratorOps>::AddNotReadyIterator(TIteratorId itId) {
+inline void TTableIterBase<TIteratorOps>::AddNotReadyIterator(TIteratorId itId) {
     size_t actPos = Active - Iterators.begin();
     Iterators.emplace_back(TElement({{ }, itId}));
     Active = Iterators.begin() + actPos;
@@ -516,7 +515,7 @@ inline void TTableItBase<TIteratorOps>::AddNotReadyIterator(TIteratorId itId) {
 }
 
 template<class TIteratorOps>
-inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TMemIter> it)
+inline void TTableIterBase<TIteratorOps>::Push(TAutoPtr<TMemIter> it)
 {
     if (it && it->IsValid()) {
         TIteratorId itId = { EType::Mem, IteratorIndexFromSize(MemIters.size()), it->MemTable->Epoch };
@@ -528,7 +527,7 @@ inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TMemIter> it)
 }
 
 template<class TIteratorOps>
-inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TRunIter> it)
+inline void TTableIterBase<TIteratorOps>::Push(TAutoPtr<TRunIter> it)
 {
     TIteratorId itId = { EType::Run, IteratorIndexFromSize(RunIters.size()), it->Epoch() };
 
@@ -544,7 +543,7 @@ inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TRunIter> it)
 }
 
 template<class TIteratorOps>
-inline void TTableItBase<TIteratorOps>::StopBefore(TArrayRef<const TCell> key)
+inline void TTableIterBase<TIteratorOps>::StopBefore(TArrayRef<const TCell> key)
 {
     Y_ABORT_UNLESS(!StopKey, "Using multiple stop keys not allowed");
 
@@ -561,7 +560,7 @@ inline void TTableItBase<TIteratorOps>::StopBefore(TArrayRef<const TCell> key)
 }
 
 template<class TIteratorOps>
-inline void TTableItBase<TIteratorOps>::StopAfter(TArrayRef<const TCell> key)
+inline void TTableIterBase<TIteratorOps>::StopAfter(TArrayRef<const TCell> key)
 {
     Y_ABORT_UNLESS(!StopKey, "Using multiple stop keys not allowed");
 
@@ -578,7 +577,7 @@ inline void TTableItBase<TIteratorOps>::StopAfter(TArrayRef<const TCell> key)
 }
 
 template<class TIteratorOps>
-inline EReady TTableItBase<TIteratorOps>::Start() noexcept
+inline EReady TTableIterBase<TIteratorOps>::Start() noexcept
 {
     if (Active != Iterators.end()) {
         return EReady::Page;
@@ -616,7 +615,7 @@ inline EReady TTableItBase<TIteratorOps>::Start() noexcept
 }
 
 template<class TIteratorOps>
-inline EReady TTableItBase<TIteratorOps>::Turn() noexcept
+inline EReady TTableIterBase<TIteratorOps>::Turn() noexcept
 {
     if (!Limit) {
         // Optimization: avoid calling Next after returning the last row
@@ -684,7 +683,7 @@ inline EReady TTableItBase<TIteratorOps>::Turn() noexcept
 }
 
 template<class TIteratorOps>
-inline bool TTableItBase<TIteratorOps>::IsUncommitted() const noexcept
+inline bool TTableIterBase<TIteratorOps>::IsUncommitted() const noexcept
 {
     // Must only be called after a fully successful Apply()
     Y_DEBUG_ABORT_UNLESS(Stage == EStage::Done && Ready == EReady::Data);
@@ -696,7 +695,7 @@ inline bool TTableItBase<TIteratorOps>::IsUncommitted() const noexcept
 }
 
 template<class TIteratorOps>
-inline ui64 TTableItBase<TIteratorOps>::GetUncommittedTxId() const noexcept
+inline ui64 TTableIterBase<TIteratorOps>::GetUncommittedTxId() const noexcept
 {
     // Must only be called after a fully successful Apply()
     Y_DEBUG_ABORT_UNLESS(Stage == EStage::Done && Ready == EReady::Data);
@@ -711,7 +710,7 @@ inline ui64 TTableItBase<TIteratorOps>::GetUncommittedTxId() const noexcept
 }
 
 template<class TIteratorOps>
-inline EReady TTableItBase<TIteratorOps>::SkipUncommitted() noexcept
+inline EReady TTableIterBase<TIteratorOps>::SkipUncommitted() noexcept
 {
     // Must only be called after successful Apply() or page fault in SkipUncommitted()
     Y_DEBUG_ABORT_UNLESS(Stage == EStage::Done && Ready != EReady::Gone);
@@ -736,7 +735,7 @@ inline EReady TTableItBase<TIteratorOps>::SkipUncommitted() noexcept
 }
 
 template<class TIteratorOps>
-inline TRowVersion TTableItBase<TIteratorOps>::GetRowVersion() const noexcept
+inline TRowVersion TTableIterBase<TIteratorOps>::GetRowVersion() const noexcept
 {
     // Must only be called after a fully successful Apply()
     Y_DEBUG_ABORT_UNLESS(Stage == EStage::Done && Ready == EReady::Data);
@@ -763,7 +762,7 @@ inline TRowVersion TTableItBase<TIteratorOps>::GetRowVersion() const noexcept
 }
 
 template<class TIteratorOps>
-inline EReady TTableItBase<TIteratorOps>::SkipToRowVersion(TRowVersion rowVersion) noexcept
+inline EReady TTableIterBase<TIteratorOps>::SkipToRowVersion(TRowVersion rowVersion) noexcept
 {
     // Must only be called after successful Apply()
     Y_DEBUG_ABORT_UNLESS(Stage == EStage::Done && Ready != EReady::Gone);
@@ -783,7 +782,7 @@ inline EReady TTableItBase<TIteratorOps>::SkipToRowVersion(TRowVersion rowVersio
 }
 
 template<class TIteratorOps>
-inline EReady TTableItBase<TIteratorOps>::Snap() noexcept
+inline EReady TTableIterBase<TIteratorOps>::Snap() noexcept
 {
     Y_DEBUG_ABORT_UNLESS(Active != Inactive);
 
@@ -806,7 +805,7 @@ inline EReady TTableItBase<TIteratorOps>::Snap() noexcept
 }
 
 template<class TIteratorOps>
-inline EReady TTableItBase<TIteratorOps>::Snap(TRowVersion rowVersion) noexcept
+inline EReady TTableIterBase<TIteratorOps>::Snap(TRowVersion rowVersion) noexcept
 {
     for (auto i = TReverseIter(Inactive), e = TReverseIter(Active); i != e; ++i) {
         TIteratorId ai = i->IteratorId;
@@ -842,7 +841,7 @@ inline EReady TTableItBase<TIteratorOps>::Snap(TRowVersion rowVersion) noexcept
 }
 
 template<class TIteratorOps>
-inline EReady TTableItBase<TIteratorOps>::DoSkipUncommitted() noexcept
+inline EReady TTableIterBase<TIteratorOps>::DoSkipUncommitted() noexcept
 {
     Y_DEBUG_ABORT_UNLESS(Delta && Uncommitted);
 
@@ -885,7 +884,7 @@ inline EReady TTableItBase<TIteratorOps>::DoSkipUncommitted() noexcept
 }
 
 template<class TIteratorOps>
-inline EReady TTableItBase<TIteratorOps>::Apply() noexcept
+inline EReady TTableIterBase<TIteratorOps>::Apply() noexcept
 {
     State.Reset(Remap.CellDefaults());
 
@@ -958,7 +957,7 @@ inline EReady TTableItBase<TIteratorOps>::Apply() noexcept
 }
 
 template<class TIteratorOps>
-inline void TTableItBase<TIteratorOps>::InitLastKey(ERowOp op) noexcept
+inline void TTableIterBase<TIteratorOps>::InitLastKey(ERowOp op) noexcept
 {
     TArrayRef<const TCell> key = Iterators.back().Key;
 
@@ -988,13 +987,13 @@ inline void TTableItBase<TIteratorOps>::InitLastKey(ERowOp op) noexcept
 }
 
 template<class TIteratorOps>
-inline TDbTupleRef TTableItBase<TIteratorOps>::GetKey() const noexcept
+inline TDbTupleRef TTableIterBase<TIteratorOps>::GetKey() const noexcept
 {
     return { Scheme->Keys->BasicTypes().data(), LastKey.data(), static_cast<ui32>(LastKey.size()) };
 }
 
 template<class TIteratorOps>
-inline TDbTupleRef TTableItBase<TIteratorOps>::GetValues() const noexcept
+inline TDbTupleRef TTableIterBase<TIteratorOps>::GetValues() const noexcept
 {
     if (State.GetRowState() == ERowOp::Erase)
         return TDbTupleRef();
@@ -1002,7 +1001,7 @@ inline TDbTupleRef TTableItBase<TIteratorOps>::GetValues() const noexcept
 }
 
 template<class TIteratorOps>
-inline bool TTableItBase<TIteratorOps>::SeekInternal(TArrayRef<const TCell> key, ESeek seek) noexcept
+inline bool TTableIterBase<TIteratorOps>::SeekInternal(TArrayRef<const TCell> key, ESeek seek) noexcept
 {
     Stage = EStage::Seek;
 

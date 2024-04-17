@@ -7,7 +7,7 @@
 namespace NKikimr {
 namespace NTable {
 
-struct TTableItOps {
+struct TTableIterOps {
     static inline int CompareKeys(
             TArrayRef<const NScheme::TTypeInfoOrder> types,
             TArrayRef<const TCell> a,
@@ -162,7 +162,7 @@ struct TTableItReverseOps {
             TArrayRef<const TCell> a,
             TArrayRef<const TCell> b) noexcept
     {
-        return -TTableItOps::CompareKeys(types, a, b);
+        return -TTableIterOps::CompareKeys(types, a, b);
     }
 
     static void MoveNext(TMemIter& it) {
@@ -181,7 +181,7 @@ struct TTableItReverseOps {
         return it.SeekReverse(key, seek);
     }
 
-    class TEraseCacheOps : public TTableItOps::TEraseCacheOpsCommon {
+    class TEraseCacheOps : public TTableIterOps::TEraseCacheOpsCommon {
     public:
         using TEraseCacheOpsCommon::TEraseCacheOpsCommon;
 

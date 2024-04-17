@@ -533,6 +533,25 @@ arrow::Status UnaryPreallocatedExecImpl(arrow::compute::KernelContext* ctx, cons
     return arrow::Status::OK();
 }
 
+
+template <typename TReader, typename TOutput, TOutput(*Core)(TBlockItem)>
+arrow::Status UnaryPreallocatedReaderExecImpl(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+    Y_UNUSED(ctx);
+    static_assert(std::is_base_of_v<IBlockReader, TReader>);
+    TReader reader;
+
+    auto& inArray = batch.values[0].array();
+    auto& outArray = res->array();
+    TOutput* outValues = outArray->GetMutableValues<TOutput>(1);
+    auto length = inArray->length;
+    for (int64_t i = 0; i < length; ++i) {
+        auto item = reader.GetItem(*inArray, i);
+        outValues[i] = Core(item);
+    }
+
+    return arrow::Status::OK();
+}
+
 template<typename TInput, typename TOutput, std::pair<TOutput, bool> Core(TInput)>
 struct TUnaryUnsafeFixedSizeFilterKernel {
     static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {

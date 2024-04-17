@@ -8,6 +8,7 @@
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include <ydb/library/yql/public/udf/udf_type_inspection.h>
+#include <ydb/library/yql/minikql/mkql_type_builder.h>
 
 #include <arrow/datum.h>
 #include <arrow/c/bridge.h>
@@ -1160,20 +1161,12 @@ TVector<std::unique_ptr<TArrayBuilderBase>> Children_;
 template<typename TDate, bool Nullable>
 class TTzDateArrayBuilder final : public TTupleArrayBuilderBase<Nullable, TTzDateArrayBuilder<TDate, Nullable>> {
     using TDateLayout = typename TDataType<TDate>::TLayout;
-
-    static std::shared_ptr<arrow::DataType> GetArrowTypeForLayout() {
-        if constexpr (std::is_same_v<TDate, TTzDate>) {
-            return arrow::uint16();
-        } else if constexpr (std::is_same_v<TDate, TTzDatetime>) {
-            return arrow::uint32();
-        }
-        return arrow::uint64();
-    }
+    static constexpr auto DataSlot = TDataType<TDate>::Slot;
 
 public:
     TTzDateArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
         : TTupleArrayBuilderBase<Nullable, TTzDateArrayBuilder<TDate, Nullable>>(typeInfoHelper, type, pool, maxLen)
-        , DateBuilder_(typeInfoHelper, GetArrowTypeForLayout(), pool, maxLen)
+        , DateBuilder_(typeInfoHelper, NKikimr::NMiniKQL::MakeTzLayoutArrowType<DataSlot>(), pool, maxLen)
         , TimezoneBuilder_(typeInfoHelper, arrow::uint16(), pool, maxLen)
         {
         }

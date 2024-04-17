@@ -326,7 +326,7 @@ int run_container_negation_range_inplace(run_container_t *src,
     }
 
     // as with Java implementation, use locals to give self a buffer of depth 1
-    rle16_t buffered = MAKE_RLE16(0, 0);
+    rle16_t buffered = CROARING_MAKE_RLE16(0, 0);
     rle16_t next = buffered;
     if (k < my_nbr_runs) buffered = src->runs[k];
 

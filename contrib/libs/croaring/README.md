@@ -1,4 +1,4 @@
-# CRoaring 
+# CRoaring
 
 [![Ubuntu-CI](https://github.com/RoaringBitmap/CRoaring/actions/workflows/ubuntu-noexcept-ci.yml/badge.svg)](https://github.com/RoaringBitmap/CRoaring/actions/workflows/ubuntu-noexcept-ci.yml) [![VS17-CI](https://github.com/RoaringBitmap/CRoaring/actions/workflows/vs17-ci.yml/badge.svg)](https://github.com/RoaringBitmap/CRoaring/actions/workflows/vs17-ci.yml)
 [![Fuzzing Status](https://oss-fuzz-build-logs.storage.googleapis.com/badges/croaring.svg)](https://bugs.chromium.org/p/oss-fuzz/issues/list?sort=-opened&can=1&q=proj:croaring)
@@ -41,7 +41,7 @@ Roaring bitmaps are found to work well in many important applications:
 > Use Roaring for bitmap compression whenever possible. Do not use other bitmap compression methods ([Wang et al., SIGMOD 2017](http://db.ucsd.edu/wp-content/uploads/2017/03/sidm338-wangA.pdf))
 
 
-[There is a serialized format specification for interoperability between implementations](https://github.com/RoaringBitmap/RoaringFormatSpec/). Hence, it is possible to serialize a Roaring Bitmap from C++, read it in Java, modify it, serialize it back and read it in Go and Python. 
+[There is a serialized format specification for interoperability between implementations](https://github.com/RoaringBitmap/RoaringFormatSpec/). Hence, it is possible to serialize a Roaring Bitmap from C++, read it in Java, modify it, serialize it back and read it in Go and Python.
 
 # Objective
 
@@ -57,7 +57,7 @@ of the latest hardware. Roaring bitmaps are already available on a variety of pl
 
 - Linux, macOS, FreeBSD, Windows (MSYS2 and Microsoft Visual studio).
 - We test the library with ARM, x64/x86 and POWER processors. We only support little endian systems (big endian systems are vanishingly rare).
-- Recent C compiler supporting the C11 standard (GCC 7 or better, LLVM 7.0 or better, Xcode 11 or better, Microsoft Visual Studio 2022 or better, Intel oneAPI Compiler 2023.2 or better), there is also an optional C++ class that requires a C++ compiler supporting the C++11 standard.
+- Recent C compiler supporting the C11 standard (GCC 7 or better, LLVM 8 or better (clang), Xcode 11 or better, Microsoft Visual Studio 2022 or better, Intel oneAPI Compiler 2023.2 or better), there is also an optional C++ class that requires a C++ compiler supporting the C++11 standard.
 - CMake (to contribute to the project, users can rely on amalgamation/unity builds if they do not wish to use CMake).
 - The CMake system assumes that git is available.
 - Under x64 systems, the library provides runtime dispatch so that optimized functions are called based on the detected CPU features. It works with GCC, clang (version 9 and up) and Visual Studio (2017 and up). Other systems (e.g., ARM) do not need runtime dispatch.
@@ -72,7 +72,7 @@ IO serialization which is only supported on little-endian systems (see [issue 42
 The CRoaring library can be amalgamated into a single source file that makes it easier
 for integration into other projects. Moreover, by making it possible to compile
 all the critical code into one compilation unit, it can improve the performance. For
-the rationale, please see the [SQLite documentation](https://www.sqlite.org/amalgamation.html), 
+the rationale, please see the [SQLite documentation](https://www.sqlite.org/amalgamation.html),
 or the corresponding [Wikipedia entry](https://en.wikipedia.org/wiki/Single_Compilation_Unit).
 Users who choose this route, do not need to rely on CRoaring's build system (based on CMake).
 
@@ -129,13 +129,13 @@ Linux or macOS users might follow the following instructions if they have a rece
     ```
  2. Compile
     ```
-    cc -o demo demo.c 
+    cc -o demo demo.c
     c++ -std=c++11 -o demopp demo.cpp
     ```
  3. `./demo`
     ```
     cardinality = 900
-    1000 
+    1000
     ```
  4. `./demopp`
     ```
@@ -258,11 +258,11 @@ By default, the benchmark tools picks one data set (e.g., `CRoaring/benchmarks/r
 We have several data sets and you may pick others:
 
 ```
-./build/microbenchmarks/bench benchmarks/realdata/wikileaks-noquotes 
+./build/microbenchmarks/bench benchmarks/realdata/wikileaks-noquotes
 ```
 
 You may disable some functionality for the purpose of benchmarking. For example, assuming you
-have an x64 processor, you could benchmark the code without AVX-512 even if both your processor 
+have an x64 processor, you could benchmark the code without AVX-512 even if both your processor
 and compiler supports it:
 
 ```
@@ -298,7 +298,7 @@ int main(){
 # Example (C)
 
 
-This example assumes that CRoaring has been build and that you are linking against the corresponding library. By default, CRoaring will install its header files in a `roaring` directory. If you are working from the amalgamation script, you may add the line `#include "roaring.c"` if you are not linking against a prebuilt CRoaring library and replace `#include <roaring/roaring.h>` by `#include "roaring.h"`. 
+This example assumes that CRoaring has been build and that you are linking against the corresponding library. By default, CRoaring will install its header files in a `roaring` directory. If you are working from the amalgamation script, you may add the line `#include "roaring.c"` if you are not linking against a prebuilt CRoaring library and replace `#include <roaring/roaring.h>` by `#include "roaring.h"`.
 
 ```c
 #include <roaring/roaring.h>
@@ -551,7 +551,7 @@ whether the conversion to a bitset has performance benefits in your case.
 # Example (C++)
 
 
-This example assumes that CRoaring has been build and that you are linking against the corresponding library. By default, CRoaring will install its header files in a `roaring` directory so you may need to replace `#include "roaring.hh"` by `#include <roaring/roaring.hh>`. If you are working from the amalgamation script, you may add the line `#include "roaring.c"` if you are not linking against a CRoaring prebuilt library. 
+This example assumes that CRoaring has been build and that you are linking against the corresponding library. By default, CRoaring will install its header files in a `roaring` directory so you may need to replace `#include "roaring.hh"` by `#include <roaring/roaring.hh>`. If you are working from the amalgamation script, you may add the line `#include "roaring.c"` if you are not linking against a CRoaring prebuilt library.
 
 ```c++
 #include <iostream>
@@ -769,7 +769,7 @@ On Windows (64-bit):
 will build and install `roaring` as a shared library.
 
 ```
-.\vcpkg.exe install roaring:x64-windows-static  
+.\vcpkg.exe install roaring:x64-windows-static
 ```
 
 will build and install `roaring` as a static library.
@@ -780,23 +780,43 @@ If you find the version of `roaring` shipped with `vcpkg` is out-of-date, feel f
 
 # SIMD-related throttling
 
-Our AVX2 code does not use floating-point numbers or multiplications, so it is not subject to turbo frequency throttling on many-core Intel processors. 
+Our AVX2 code does not use floating-point numbers or multiplications, so it is not subject to turbo frequency throttling on many-core Intel processors.
 
 Our AVX-512 code is only enabled on recent hardware (Intel Ice Lake or better and AMD Zen 4) where SIMD-specific frequency throttling is not observed.
 
 # Thread safety
 
-Like, for example, STL containers or Java's default data structures, the CRoaring library has no built-in thread support. Thus whenever you modify a bitmap in one thread, it is unsafe to query it in others. It is safe however to query bitmaps (without modifying them) from several distinct threads,  as long as you do not use the copy-on-write attribute. For example, you can safely copy a bitmap and use both copies in concurrently. One should probably avoid the use of the copy-on-write attribute in a threaded environment.
+Like, for example, STL containers, the CRoaring library has no built-in thread support. Thus whenever you modify a bitmap in one thread, it is unsafe to query it in others. However, you can safely copy a bitmap and use both copies in concurrently.
 
-Some of our users rely on "copy-on-write" (default to disabled). A bitmap with the copy-on-write flag
-set to true might generate shared containers. A shared container is just a reference to a single
-container with reference counting (we keep track of the number of shallow copies). If you copy shared
-containers over several threads, this might be unsafe due to the need to update the counter concurrently.
-Thus for shared containers, we use reference counting with an atomic counter. If the library is compiled
-as a C library (the default), we use C11 atomics. Unfortunately, Visual Studio does not support C11
-atomics at this times (though this is subject to change). To compensate, we
-use Windows-specific code in such instances (`_InterlockedDecrement` `_InterlockedIncrement`).
+If you use  "copy-on-write" (default to disabled), then you should pass copies to the different threads. They will create shared containers, and for shared containers, we use reference counting with an atomic counter.
 
+
+
+To summarize:
+- If you do not use copy-on-write, you can access concurrent the same bitmap safely as long as you do not modify it. If you plan on modifying it, you should pass different copies to the different threads.
+- If you use copy-on-write, you should always pass copies to the different threads. The copies and then lightweight (shared containers).
+
+Thus the following pattern where you copy bitmaps and pass them to different threads is safe with or without COW:
+
+```C
+    roaring_bitmap_set_copy_on_write(r1, true);
+    roaring_bitmap_set_copy_on_write(r2, true);
+    roaring_bitmap_set_copy_on_write(r3, true);
+
+    roaring_bitmap_t * r1a = roaring_bitmap_copy(r1);
+    roaring_bitmap_t * r1b = roaring_bitmap_copy(r1);
+
+    roaring_bitmap_t * r2a = roaring_bitmap_copy(r2);
+    roaring_bitmap_t * r2b = roaring_bitmap_copy(r2);
+
+    roaring_bitmap_t * r3a = roaring_bitmap_copy(r3);
+    roaring_bitmap_t * r3b = roaring_bitmap_copy(r3);
+
+    roaring_bitmap_t *rarray1[3] = {r1a, r2a, r3a};
+    roaring_bitmap_t *rarray2[3] = {r1b, r2b, r3b};
+    std::thread thread1(run, rarray1);
+    std::thread thread2(run, rarray2);
+```
 
 # How to best aggregate bitmaps?
 

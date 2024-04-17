@@ -52,8 +52,6 @@
 #include <util/string/type.h>
 #include <util/system/env.h>
 
-#include <exception>
-
 using namespace NYT::NDetail::NRawClient;
 
 namespace NYT {

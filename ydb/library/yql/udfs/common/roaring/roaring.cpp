@@ -157,7 +157,11 @@ namespace {
 
     class TRoaringUint32List: public TBoxedValue {
     public:
-        TRoaringUint32List() {
+        TRoaringUint32List(ui32 indexLimit, ui32 indexOffset, bool hasLimitOffset)
+            : indexLimit_(indexLimit)
+            , indexOffset_(indexOffset)
+            , hasLimitOffset_(hasLimitOffset)
+        {
         }
 
         static TStringRef Name() {
@@ -170,23 +174,43 @@ namespace {
             if (!args[0]) {
                 return TUnboxedValuePod();
             }
+
             try {
                 auto bitmap = GetBitmapFromArg(args[0]);
                 auto cardinality = roaring_bitmap_get_cardinality(bitmap);
                 auto resultList = TVector<TUnboxedValue>();
                 resultList.reserve(cardinality);
 
-                auto i = roaring_iterator_create(bitmap);
-                while (i->has_value) {
-                    resultList.push_back(TUnboxedValuePod(i->current_value));
-                    roaring_uint32_iterator_advance(i);
+                auto limit = cardinality;
+                auto offset = 0;
+
+                if (hasLimitOffset_) {
+                    limit = args[1].GetElement(indexLimit_).Get<ui32>();
+                    offset = args[1].GetElement(indexOffset_).Get<ui32>();
                 }
 
-                return valueBuilder->NewList(resultList.data(), cardinality);
+                auto i = roaring_iterator_create(bitmap);
+                while (i->has_value && limit > 0) {
+                    if (offset > 0) {
+                        offset--;
+                    } else {
+                        resultList.push_back(TUnboxedValuePod(i->current_value));
+                        limit--;
+                    }
+                    roaring_uint32_iterator_advance(i);
+                }
+                roaring_uint32_iterator_free(i);
+                if (resultList.size() == 0) {
+                    return valueBuilder->NewEmptyList();
+                }
+                return valueBuilder->NewList(resultList.data(), resultList.size());
             } catch (const std::exception& e) {
                 UdfTerminate(CurrentExceptionMessage().c_str());
             }
         }
+
+        ui32 indexLimit_, indexOffset_;
+        bool hasLimitOffset_;
     };
 
     class TRoaringDeserialize: public TBoxedValue {
@@ -287,7 +311,7 @@ namespace {
 
             sink.Add(TRoaringCardinality::Name());
 
-            sink.Add(TRoaringUint32List::Name());
+            sink.Add(TRoaringUint32List::Name())->SetTypeAwareness();
 
             sink.Add(TRoaringOrWithBinary::Name());
             sink.Add(TRoaringOr::Name());
@@ -303,7 +327,6 @@ namespace {
                                    const TStringRef& typeConfig, ui32 flags,
                                    IFunctionTypeInfoBuilder& builder) const final {
             try {
-                Y_UNUSED(userType);
                 Y_UNUSED(typeConfig);
 
                 auto typesOnly = (flags & TFlags::TypesOnly);
@@ -336,14 +359,38 @@ namespace {
                         builder.Implementation(new TRoaringCardinality());
                     }
                 } else if (TRoaringUint32List::Name() == name) {
-                    auto ui32ListType = builder.List()->Item(builder.SimpleType<ui32>()).Build();
-                    builder
-                        .Returns(builder.Optional()->Item(ui32ListType).Build())
-                        .Args()
-                        ->Add(optionalRoaringType);
+                    Y_ENSURE(userType);
+                    auto ui32ListType =
+                        builder.List()->Item(builder.SimpleType<ui32>()).Build();
 
+                    ui32 indexLimit = 0, indexOffset = 0;
+                    auto structType = builder.Struct()
+                                          ->AddField<ui32>("listLimit", &indexLimit)
+                                          .AddField<ui32>("listOffset", &indexOffset)
+                                          .Build();
+
+                    auto typeHelper = builder.TypeInfoHelper();
+                    builder.UserType(userType);
+
+                    auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType);
+                    auto argsTypeTuple = userTypeInspector.GetElementType(0);
+                    auto argsTypeInspector =
+                        TTupleTypeInspector(*typeHelper, argsTypeTuple);
+                    bool hasLimitOffset = argsTypeInspector.GetElementsCount() == 2;
+                    if (hasLimitOffset) {
+                        builder.Returns(builder.Optional()->Item(ui32ListType).Build())
+                            .Args()
+                            ->Add(optionalRoaringType)
+                            .Add(builder.Optional()->Item(structType).Build());
+
+                    } else {
+                        builder.Returns(builder.Optional()->Item(ui32ListType).Build())
+                            .Args()
+                            ->Add(optionalRoaringType);
+                    }
                     if (!typesOnly) {
-                        builder.Implementation(new TRoaringUint32List());
+                        builder.Implementation(
+                            new TRoaringUint32List(indexLimit, indexOffset, hasLimitOffset));
                     }
                 } else if (TRoaringOrWithBinary::Name() == name) {
                     builder.Returns(optionalRoaringType)
@@ -457,4 +504,3 @@ namespace {
 } // namespace
 
 REGISTER_MODULES(TRoaringModule)
-

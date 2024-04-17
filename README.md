@@ -91,4 +91,4 @@ We are glad to welcome new contributors!
 
 Take a look at YDB [web site](https://ydb.tech/) for the latest success stories and user scenarios.
 
-......
+

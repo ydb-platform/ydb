@@ -2452,11 +2452,6 @@ TExprNode::TPtr OptimizeMultiMap(const TExprNode::TPtr& node, TExprContext& ctx)
     return node;
 }
 
-TExprNode::TPtr ReplaceWithFirstArg(const TExprNode::TPtr& node, TExprContext&) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Exclude " << node->Content();
-    return node->HeadPtr();
-}
-
 TExprNode::TPtr WrapIteratorForOptionalList(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Wrap " << node->Content() << " for optional list.";
@@ -5573,7 +5568,9 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
 
         TExprNode::TListType funcArgs;
         std::string_view arrowFunctionName;
-        if (node->IsList() || node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
+        const bool rewriteAsIs = node->IsCallable({"AssumeStrict", "AssumeNonStrict", "Likely"});
+        if (node->IsList() || rewriteAsIs ||
+            node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
         {
             if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), ctx, types)) {
                 return true;
@@ -5612,7 +5609,8 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                 }
             }
 
-            TString blockFuncName = TString("Block") + (node->IsList() ? "AsTuple" : node->Content());
+            const TString blockFuncName = rewriteAsIs ? ToString(node->Content()) :
+                (TString("Block") + (node->IsList() ? "AsTuple" : node->Content()));
             if (node->IsCallable({"And", "Or", "Xor"}) && funcArgs.size() > 2) {
                 // Split original argument list by pairs (since the order is not important balanced tree is used)
                 rewrites[node.Get()] = SplitByPairs(node->Pos(), blockFuncName, funcArgs, 0, funcArgs.size(), ctx);
@@ -5689,6 +5687,16 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                     .Add(3, node->Head().ChildPtr(3))
                 .Seal()
                 .Build());
+
+            if (HasSetting(*node->Head().Child(7), "strict")) {
+                auto newArg = ctx.Builder(node->Head().Pos())
+                    .Callable("EnsureStrict")
+                        .Add(0, funcArgs.back())
+                        .Atom(1, TStringBuilder() << "Block version of " << node->Head().Child(0)->Content() << " is not marked as strict")
+                    .Seal()
+                    .Build();
+                funcArgs.back() = std::move(newArg);
+            }
         } else {
             auto fit = funcs.find(node->Content());
             if (fit == funcs.end()) {
@@ -8128,8 +8136,6 @@ struct TPeepHoleRules {
     const TPeepHoleOptimizerMap FinalStageRules = {
         {"Take", &OptimizeTake},
         {"Skip", &OptimizeSkip},
-        {"Likely", &ReplaceWithFirstArg},
-        {"AssumeStrict", &ReplaceWithFirstArg},
         {"GroupByKey", &PeepHoleConvertGroupBySingleKey},
         {"PartitionByKey", &PeepHolePlainKeyForPartitionByKey},
         {"ExtractMembers", &PeepHoleExpandExtractItems},

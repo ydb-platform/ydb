@@ -3593,6 +3593,45 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus LikelyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (IsNull(input->Head())) {
+            output = MakeBoolNothing(input->Head().Pos(), ctx.Expr);
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        const TTypeAnnotationNode* argType = input->Head().GetTypeAnn();
+
+        const TTypeAnnotationNode* underlyingType = nullptr;
+        if (argType->GetKind() == ETypeAnnotationKind::Block) {
+            underlyingType = argType->Cast<TBlockExprType>()->GetItemType();
+        } else if (argType->GetKind() == ETypeAnnotationKind::Scalar) {
+            underlyingType = argType->Cast<TScalarExprType>()->GetItemType();
+        } else {
+            underlyingType = argType;
+        }
+
+        bool isOptional;
+        const TDataExprType* dataType;
+        if (!EnsureDataOrOptionalOfData(input->Head().Pos(), underlyingType, isOptional, dataType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureSpecificDataType(input->Head().Pos(), *dataType, EDataSlot::Bool, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     template <bool Xor>
     IGraphTransformer::TStatus LogicalWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
@@ -11637,6 +11676,28 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus EnsureStrictWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!IsStrict(input->HeadPtr())) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), input->Tail().Content()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        output = input->HeadPtr();
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     TSyncFunctionsMap::TSyncFunctionsMap() {
         Functions["Data"] = &DataWrapper;
         Functions["DataOrOptionalData"] = &DataWrapper;
@@ -11760,7 +11821,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Or"] = &LogicalWrapper<false>;
         Functions["Xor"] = &LogicalWrapper<true>;
         Functions["Not"] = &BoolOpt1Wrapper;
-        Functions["Likely"] = &BoolOpt1Wrapper;
+        Functions["Likely"] = &LikelyWrapper;
         Functions["Map"] = &MapWrapper;
         Functions["OrderedMap"] = &MapWrapper;
         Functions["MapNext"] = &MapNextWrapper;
@@ -11825,6 +11886,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["AssumeChopped"] = &AssumeConstraintWrapper<true>;
         Functions["AssumeAllMembersNullableAtOnce"] = &AssumeAllMembersNullableAtOnceWrapper;
         Functions["AssumeStrict"] = &AssumeStrictWrapper;
+        Functions["AssumeNonStrict"] = &AssumeStrictWrapper;
+        Functions["EnsureStrict"] = &EnsureStrictWrapper;
         Functions["Top"] = &TopWrapper;
         Functions["TopSort"] = &TopWrapper;
         Functions["KeepTop"] = &KeepTopWrapper;

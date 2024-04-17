@@ -517,7 +517,15 @@ TSensorSet* TSolomonRegistry::FindSet(const TString& name, const TSensorOptions&
     }
 }
 
-NProto::TSensorDump TSolomonRegistry::DumpSensors() {
+NProto::TSensorDump TSolomonRegistry::DumpSensors(std::vector<TTagId> extraTags)
+{
+    {
+        auto guard = Guard(DynamicTagsLock_);
+        for (const auto& [key, value] : DynamicTags_) {
+            extraTags.push_back(Tags_.Encode(std::make_pair(key, value)));
+        }
+    }
+
     NProto::TSensorDump dump;
     Tags_.DumpTags(&dump);
 
@@ -528,10 +536,27 @@ NProto::TSensorDump TSolomonRegistry::DumpSensors() {
 
         auto cube = dump.add_cubes();
         cube->set_name(name);
-        set.DumpCube(cube);
+        set.DumpCube(cube, extraTags);
     }
 
     return dump;
+}
+
+NProto::TSensorDump TSolomonRegistry::DumpSensors()
+{
+    return DumpSensors({});
+}
+
+NProto::TSensorDump TSolomonRegistry::DumpSensors(const std::optional<TString>& host, const THashMap<TString, TString>& instanceTags)
+{
+    std::vector<TTagId> extraTags;
+    if (host) {
+        extraTags.push_back(Tags_.Encode(std::make_pair("host", *host)));
+    }
+    for (const auto& [key, value] : instanceTags) {
+        extraTags.push_back(Tags_.Encode(std::make_pair(key, value)));
+    }
+    return DumpSensors(extraTags);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

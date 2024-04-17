@@ -410,7 +410,7 @@ void TBlobManager::DeleteBlobOnComplete(const TTabletId tabletId, const TUnified
     // used by in-flight requests
     if (!IsBlobInUsage(blobId)) {
         LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delete Blob " << blobId);
-        AFL_VERIFY(BlobsToDelete.Add(tabletId, blobId));
+        Y_UNUSED(BlobsToDelete.Add(tabletId, blobId));
         BlobsManagerCounters.OnDeleteBlobMarker(blobId.BlobSize());
         BlobsManagerCounters.OnBlobsDelete(BlobsToDelete);
     } else {

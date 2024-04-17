@@ -26,7 +26,7 @@ void TPartitionScaleManager::HandleScaleStatusChange(const TPartitionInfo& parti
 
 void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
     TInstant delayDeadline = LastResponseTime + RequestTimeout;
-    if (!DatabasePath || RequestInflight || delayDeadline > ctx.Now()) {
+    if (DatabasePath.empty() || RequestInflight || delayDeadline > ctx.Now()) {
         return;
     }
 

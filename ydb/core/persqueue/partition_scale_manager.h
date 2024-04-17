@@ -76,7 +76,7 @@ private:
     static const ui32 MAX_SCALE_REQUEST_REPEAT_SECONDS_TIMEOUT = 1000;
     
     const TString TopicName;
-    TString DatabasePath;
+    TString DatabasePath = "";
     TActorId CurrentScaleRequest;
     TDuration RequestTimeout = TDuration::MilliSeconds(0);
     TInstant LastResponseTime = TInstant::Zero();

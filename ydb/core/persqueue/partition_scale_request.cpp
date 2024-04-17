@@ -45,7 +45,7 @@ void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransa
     //applyIf->SetCheckGeneralVersion(false);
 
     NKikimrSchemeOp::TPersQueueGroupDescription groupDescription;
-    groupDescription.SetName(topicName);//savnik: check short/full name
+    groupDescription.SetName(topicName);
 
     for(const auto& split: Splits) {
         auto* newSplit = groupDescription.AddSplit();

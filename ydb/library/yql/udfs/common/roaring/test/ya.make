@@ -1,15 +1,12 @@
-OWNER(djant)
+YQL_UDF_YDB_TEST()
 
-YQL_UDF_TEST()
-
-
-DEPENDS(
-    yql/udfs/examples/roaring
-)
+DEPENDS(ydb/library/yql/udfs/common/roaring)
 
 TIMEOUT(300)
 SIZE(MEDIUM)
 
-REQUIREMENTS(ram:9)
+IF (SANITIZER_TYPE == "memory")
+    TAG(ya:not_autocheck) # YQL-15385
+ENDIF()
 
 END()

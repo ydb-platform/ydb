@@ -1987,7 +1987,7 @@ private:
             return;
         }
 
-        ProgramRunnerId = Register(new NYql::NDq::TLogWrapReceive(new TProgramRunnerActor(
+        ProgramRunnerId = RegisterWithSameMailbox(new NYql::NDq::TLogWrapReceive(new TProgramRunnerActor(
             SelfId(),
             Params.FunctionRegistry,
             Params.NextUniqueId,

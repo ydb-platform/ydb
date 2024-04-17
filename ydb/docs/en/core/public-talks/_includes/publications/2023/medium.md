@@ -6,7 +6,7 @@ Any production process that works with a database will require a schema migratio
 
 ### About Prepared statements, server-side compiled query cache, or how to efficiently cache queries in YDB {#2023-pub-medium-cache-queries}
 
-![How to efficiently cache queries in YDB](./_includes/cache-queries.webp ={{pub-cover-size}})
+![How to efficiently cache queries in YDB](./_includes/cache-queries.webp =700x300)
 
 There are various ways to reduce the cost of SQL query execution in modern DBMS. The most common approaches are using prepared statements and query caching. Both methods are available in YDB. Their functionality and benefits are discussed in this [article](https://blog.ydb.tech/about-prepared-statements-server-side-compiled-query-cache-or-how-to-efficiently-cache-queries-in-df3af73eb001).
 

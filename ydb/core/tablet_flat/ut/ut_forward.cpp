@@ -146,8 +146,10 @@ namespace {
         {
         }
 
-        ui64 AddToQueue(TPageId pageId, EPage) noexcept override
+        ui64 AddToQueue(TPageId pageId, EPage type) noexcept override
         {
+            Y_ABORT_UNLESS(type == Part->GetPageType(pageId, { }));
+
             Queue.push_back(pageId);
 
             return Part->GetPageSize(pageId, { });

@@ -439,7 +439,7 @@ namespace NFwd {
 
         ui64 GetDataSize(TLevel& level) noexcept
         {
-            if (&level == &*Levels.rbegin()) {
+            if (&level == &Levels.back()) {
                 return 
                     level.Trace.GetDataSize() +
                     (level.Pages.empty() 
@@ -472,7 +472,8 @@ namespace NFwd {
             Y_ABORT_UNLESS(!level.Queue.empty());
             auto pageId = level.Queue.front().PageId;
 
-            auto size = head->AddToQueue(pageId, EPage::DataPage);
+            auto type = &level == &Levels.back() ? EPage::DataPage : EPage::BTreeIndex;
+            auto size = head->AddToQueue(pageId, type);
 
             Stat.Fetch += size;
 

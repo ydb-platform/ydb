@@ -116,6 +116,10 @@ private:
             PushSettingsToStat(settings, nodeName, "SkipDqReadSettings", DqReadSupportedSettings);
             return false;
         }
+        if (HasNonEmptyKeyFilter(section)) {
+            PushSkipStat("NonEmptyKeyFilter", nodeName);
+            return false;
+        }
         auto sampleSetting = GetSetting(section.Settings().Ref(), EYtSettingType::Sample);
         if (sampleSetting && sampleSetting->Child(1)->Child(0)->Content() == "system") {
             return false;

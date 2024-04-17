@@ -48,7 +48,7 @@ TDataShard::TPromotePostExecuteEdges TFinishProposeWriteUnit::PromoteImmediatePo
         TTransactionContext& txc)
 {
     if (op->IsMvccSnapshotRead()) {
-        if (op->IsMvccSnapshotRepeatable()) {
+        if (op->IsMvccSnapshotRepeatable() && op->GetPerformedUserReads()) {
             return DataShard.PromoteImmediatePostExecuteEdges(op->GetMvccSnapshot(), TDataShard::EPromotePostExecuteEdges::RepeatableRead, txc);
         } else {
             return DataShard.PromoteImmediatePostExecuteEdges(op->GetMvccSnapshot(), TDataShard::EPromotePostExecuteEdges::ReadOnly, txc);

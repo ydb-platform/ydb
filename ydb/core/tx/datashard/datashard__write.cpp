@@ -197,6 +197,11 @@ void TDataShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorCo
 
     LWTRACK(WriteRequest, msg->GetOrbit());
 
+    if (CheckDataTxRejectAndReply(ev, ctx)) {
+        IncCounter(COUNTER_WRITE_REQUEST);
+        return;
+    }
+
     // Check if we need to delay an immediate transaction
     if (MediatorStateWaiting && record.txmode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE)
     {
@@ -215,19 +220,17 @@ void TDataShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorCo
         return;
     }
 
-    if (CheckTxNeedWait()) {
+    if (CheckTxNeedWait(ev)) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvProposeTransaction delayed at " << TabletID() << " until interesting plan step will come");
-        if (Pipeline.AddWaitingTxOp(ev)) {
+        if (Pipeline.AddWaitingTxOp(ev, ctx)) {
             UpdateProposeQueueSize();
             return;
+        } else {
+            Y_ABORT("Unexpected failure to add a waiting unrejected tx");
         }
     }
 
     IncCounter(COUNTER_WRITE_REQUEST);
-
-    if (CheckDataTxRejectAndReply(ev, ctx)) {
-        return;
-    }
 
     ProposeTransaction(std::move(ev), ctx);
 }

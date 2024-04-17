@@ -2013,6 +2013,10 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
         if (tx.GetKqpTransaction().HasLocks())
             evWrite->Record.MutableLocks()->CopyFrom(tx.GetKqpTransaction().GetLocks());
 
+        if (record.HasMvccSnapshot()) {
+            *evWrite->Record.MutableMvccSnapshot() = record.GetMvccSnapshot();
+        }
+
         // Replace event
         auto handle = new IEventHandle(event->Recipient, event->Sender, evWrite.release(), 0, event->Cookie);
         handle->Rewrite(handle->GetTypeRewrite(), event->GetRecipientRewrite());

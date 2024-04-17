@@ -1425,7 +1425,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
                       rec.GetFlags(), 0,
                       receivedAt,
                       tieBreakerIndex);
-    if (rec.HasMvccSnapshot()) {
+    if (rec.HasMvccSnapshot() && rec.GetMvccSnapshot().GetRepeatableRead()) {
         info.SetMvccSnapshot(TRowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId()));
     }
     TActiveTransaction::TPtr tx = MakeIntrusive<TActiveTransaction>(info);
@@ -1674,6 +1674,9 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
 {
     const auto& rec = ev->Get()->Record;
     TBasicOpInfo info(rec.GetTxId(), EOperationKind::WriteTx, NEvWrite::TConvertor::GetProposeFlags(rec.GetTxMode()), 0, receivedAt, tieBreakerIndex);
+    if (rec.HasMvccSnapshot() && rec.GetMvccSnapshot().GetRepeatableRead()) {
+        info.SetMvccSnapshot(TRowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId()));
+    }
     auto writeOp = MakeIntrusive<TWriteOperation>(info, std::move(ev), Self);
     writeOp->OperationSpan = std::move(operationSpan);
     auto writeTx = writeOp->GetWriteTx();
@@ -2005,11 +2008,17 @@ void TPipeline::MaybeActivateWaitingSchemeOps(const TActorContext& ctx) const {
 
 bool TPipeline::CheckInflightLimit() const {
     // check in-flight limit
-    size_t totalInFly =
-        Self->ReadIteratorsInFly() + Self->TxInFly() + Self->ImmediateInFly()
-            + Self->ProposeQueue.Size() + WaitingDataTxOps.size();
-    if (totalInFly > Self->GetMaxTxInFly())
+    size_t totalInFly = (
+        Self->TxInFly() +
+        Self->ImmediateInFly() +
+        Self->ReadIteratorsInFly() +
+        Self->MediatorStateWaitingMsgs.size() +
+        Self->ProposeQueue.Size() +
+        Self->TxWaiting());
+
+    if (totalInFly > Self->GetMaxTxInFly()) {
         return false; // let tx to be rejected
+    }
 
     return true;
 }
@@ -2034,11 +2043,22 @@ bool TPipeline::AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, co
     return true;
 }
 
-bool TPipeline::AddWaitingTxOp(NEvents::TDataEvents::TEvWrite::TPtr& ev) {
+bool TPipeline::AddWaitingTxOp(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     if (!CheckInflightLimit())
         return false;
 
-    WaitingDataTxOps.emplace(TRowVersion::Min(), IEventHandle::Upcast<NEvents::TDataEvents::TEvWrite>(std::move(ev)));  // postpone tx processing till mvcc state switch is finished
+    if (Self->MvccSwitchState == TSwitchState::SWITCHING) {
+        WaitingDataTxOps.emplace(TRowVersion::Min(), IEventHandle::Upcast<NEvents::TDataEvents::TEvWrite>(std::move(ev)));  // postpone tx processing till mvcc state switch is finished
+    } else {
+        Y_DEBUG_ABORT_UNLESS(ev->Get()->Record.HasMvccSnapshot());
+        TRowVersion snapshot(ev->Get()->Record.GetMvccSnapshot().GetStep(), ev->Get()->Record.GetMvccSnapshot().GetTxId());
+        WaitingDataTxOps.emplace(snapshot, IEventHandle::Upcast<NEvents::TDataEvents::TEvWrite>(std::move(ev)));
+        const ui64 waitStep = snapshot.Step;
+        TRowVersion unreadableEdge;
+        if (!Self->WaitPlanStep(waitStep) && snapshot < (unreadableEdge = GetUnreadableEdge())) {
+            ActivateWaitingTxOps(unreadableEdge, ctx);  // Async MediatorTimeCastEntry update, need to reschedule the op
+        }
+    }
 
     return true;
 }
@@ -2199,11 +2219,7 @@ TRowVersion TPipeline::GetUnreadableEdge() const {
     // generations). Note that we also update CompleteEdge when the distributed
     // queue is empty, but we have been performing immediate writes and thus
     // observing an updated mediator timecast step.
-    const ui64 mediatorStep = Max(
-        Self->MediatorTimeCastEntry ? Self->MediatorTimeCastEntry->Get(Self->TabletID()) : 0,
-        Self->SnapshotManager.GetIncompleteEdge().Step,
-        Self->SnapshotManager.GetCompleteEdge().Step,
-        LastPlannedTx.Step);
+    const ui64 mediatorStep = Self->GetMaxObservedStep();
 
     // Using an observed mediator step we conclude that we have observed all
     // distributed transactions up to the end of that step.

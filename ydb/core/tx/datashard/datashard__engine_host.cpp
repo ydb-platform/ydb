@@ -304,6 +304,10 @@ public:
         return UserDb.GetVolatileCommitOrdered();
     }
 
+    bool GetPerformedUserReads() const {
+        return UserDb.GetPerformedUserReads();
+    }
+
     bool IsValidKey(TKeyDesc& key) const override {
         TKeyValidator::TValidateOptions options(
             UserDb.GetLockTxId(),
@@ -328,6 +332,8 @@ public:
             Self->SysLocksTable().SetLock(tableId, row);
         }
 
+        UserDb.SetPerformedUserReads(true);
+
         Self->SetTableAccessTime(tableId, UserDb.GetNow());
         return TEngineHost::SelectRow(tableId, row, columnIds, returnType, readTarget, holderFactory);
     }
@@ -342,6 +348,8 @@ public:
         if (UserDb.GetLockTxId()) {
             Self->SysLocksTable().SetLock(tableId, range);
         }
+
+        UserDb.SetPerformedUserReads(true);
 
         Self->SetTableAccessTime(tableId, UserDb.GetNow());
         return TEngineHost::SelectRange(tableId, range, columnIds, skipNullKeys, returnType, readTarget,
@@ -660,6 +668,13 @@ bool TEngineBay::GetVolatileCommitOrdered() const {
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     return host->GetVolatileCommitOrdered();
+}
+
+bool TEngineBay::GetPerformedUserReads() const {
+    Y_ABORT_UNLESS(EngineHost);
+
+    auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
+    return host->GetPerformedUserReads();
 }
 
 IEngineFlat * TEngineBay::GetEngine() {

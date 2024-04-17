@@ -84,7 +84,7 @@ bool TKeyValidator::IsValidKey(TKeyDesc& key, const TValidateOptions& opt) const
     if (TSysTables::IsSystemTable(key.TableId))
         return true;
 
-    if (key.RowOperation != TKeyDesc::ERowOperation::Read && !opt.IsWriteTx) {
+    if (key.RowOperation != TKeyDesc::ERowOperation::Read) {
         // Prevent updates/erases with LockTxId set, unless it's allowed for immediate mvcc txs
         if (opt.IsLockTxId) {
             if (!(Self.GetEnableLockedWrites() && opt.IsImmediateTx && opt.IsRepeatableSnapshot && opt.IsLockNodeId)) {

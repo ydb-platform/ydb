@@ -203,6 +203,8 @@ private:
     YDB_ACCESSOR_DEF(absl::flat_hash_set<ui64>, VolatileDependencies);
     YDB_ACCESSOR_DEF(bool, VolatileCommitOrdered);
 
+    YDB_ACCESSOR_DEF(bool, PerformedUserReads);
+
     NMiniKQL::TEngineHostCounters& Counters;
 };
 

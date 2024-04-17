@@ -65,6 +65,7 @@ std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartition
             auto mid = GetRangeMid(partition.KeyRange.FromBound ? *partition.KeyRange.FromBound : "", partition.KeyRange.ToBound ?*partition.KeyRange.ToBound : "");
             if (mid.empty()) {
                 itSplit = PartitionsToSplit.erase(itSplit);
+                continue;
             }
 
             TPartitionSplit split;

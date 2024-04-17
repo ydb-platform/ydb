@@ -682,6 +682,32 @@ def add_format_mode(modes, walle_provider):
     mode.set_defaults(handler=_run)
 
 
+def add_create_systemd_service(modes, walle_provider):
+    def _run(args):
+        dispatch_run(handlers.Slice.slice_create_systemd_service, args, walle_provider)
+
+    mode = modes.add_parser(
+        "create-systemd-service",
+        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args()],
+        description="Create systemd services. WARNING: this mode is not production ready"
+
+    )
+    mode.set_defaults(handler=_run)
+
+
+def add_create_file_drives(modes, walle_provider):
+    def _run(args):
+        dispatch_run(handlers.Slice.slice_create_file_drives, args, walle_provider)
+
+    mode = modes.add_parser(
+        "create-file-drives",
+        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args()],
+        description="Creates file drives. WARNING: this mode is not production ready"
+
+    )
+    mode.set_defaults(handler=_run)
+
+
 #
 # docker and kube scenarios
 def build_and_push_docker_image(build_args, docker_package, build_ydbd, image, force_rebuild):
@@ -1184,6 +1210,8 @@ def main(walle_provider=None):
         add_update_raw_configs(modes, walle_provider)
         add_clear_mode(modes, walle_provider)
         add_format_mode(modes, walle_provider)
+        add_create_systemd_service(modes, walle_provider)
+        add_create_file_drives(modes, walle_provider)
         add_explain_mode(modes, walle_provider)
         add_docker_build_mode(modes)
         add_kube_generate_mode(modes)

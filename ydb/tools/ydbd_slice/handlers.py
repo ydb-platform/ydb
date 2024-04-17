@@ -1,4 +1,5 @@
 import os
+import tempfile
 import time
 import logging
 import subprocess
@@ -23,6 +24,7 @@ class CalledProcessError(subprocess.CalledProcessError):
 class Slice:
     def __init__(self, components, nodes, cluster_details, configurator, do_clear_logs, yav_version, walle_provider):
         self.slice_kikimr_path = '/Berkanavt/kikimr/bin/kikimr'
+        self.slice_lib_dir = '/Berkanavt/kikimr/lib'
         self.slice_cfg_path = '/Berkanavt/kikimr/cfg'
         self.slice_secrets_path = '/Berkanavt/kikimr/token'
         self.components = components
@@ -363,10 +365,9 @@ mon={mon}""".format(
             self._stop_static()
 
     def _update_kikimr(self):
-        bin_directory = os.path.dirname(self.configurator.kikimr_bin)
         self.nodes.copy(self.configurator.kikimr_bin, self.slice_kikimr_path, compressed_path=self.configurator.kikimr_compressed_bin)
         for lib in ['libiconv.so', 'liblibaio-dynamic.so', 'liblibidn-dynamic.so']:
-            lib_path = os.path.join(bin_directory, lib)
+            lib_path = self.slice_lib_dir
             if os.path.exists(lib_path):
                 remote_lib_path = os.path.join('/lib', lib)
                 self.nodes.copy(lib_path, remote_lib_path)
@@ -428,3 +429,56 @@ mon={mon}""".format(
                 self._update_cfg(kikimr_cfg)
 
         self.slice_start()
+
+    def slice_create_systemd_service(self):
+        # TODO: config need proper review
+        systemd_unit = """[Unit]
+Description=YDB storage node
+After=network-online.target rc-local.service
+Wants=network-online.target
+StartLimitInterval=10
+StartLimitBurst=15
+
+[Service]
+Restart=always
+RestartSec=1
+User={user}
+PermissionsStartOnly=true
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=ydbd
+SyslogFacility=daemon
+SyslogLevel=err
+Environment=LD_LIBRARY_PATH={lib_dir}
+ExecStart={kikimr_path} server --log-level 3 --syslog --tcp --yaml-config  {cfg_path}/config.yaml \
+    --grpc-port 2135 --ic-port 19001 --mon-port 8765 --node static
+LimitNOFILE=65536
+LimitCORE=0
+LimitMEMLOCK=3221225472
+
+[Install]
+WantedBy=multi-user.target
+""".format(
+            user="yc-user", 
+            lib_dir=self.slice_lib_dir,
+            kikimr_path=self.slice_kikimr_path,
+            cfg_path=self.slice_cfg_path, 
+        )
+
+        
+        fd, local_unit_path = tempfile.mkstemp()
+        try:
+            with os.fdopen(fd, "w") as tmp:
+                tmp.write(systemd_unit)
+            self.nodes.copy(local_unit_path, "/etc/systemd/system/kikimr.service")
+        finally:
+            os.remove(local_unit_path)
+
+    def slice_create_file_drives(self):
+        tasks = []
+        for (host_name, drive_path) in self._get_all_drives():
+            # TODO: customize disk size somehow
+            cmd = "fallocate -l 32GB {}".format(drive_path)
+            tasks.extend(self.nodes.execute_async_ret(cmd, nodes=[host_name]))
+        self.nodes._check_async_execution(tasks)
+

@@ -15,10 +15,16 @@ Add the following dependency to your project:
 - Maven
 
     ```xml
+    <!-- Set an actual versions -->
+    <dependency>
+        <groupId>tech.ydb.jdbc</groupId>
+        <artifactId>ydb-jdbc-driver</artifactId>
+        <version>${ydb.jdbc.version}</version>
+    </dependency>
+
     <dependency>
         <groupId>tech.ydb.dialects</groupId>
         <artifactId>hibernate-ydb-dialect</artifactId>
-        <!-- Set an actual version -->
         <version>${hibernate.ydb.dialect.version}</version> 
     </dependency>
     ```
@@ -27,7 +33,9 @@ Add the following dependency to your project:
 
     ```groovy
     dependencies {
-        implementation 'tech.ydb.dialects:hibernate-ydb-dialect:$version' // Set an actual version
+        // Set an actual versions
+        implementation "tech.ydb.dialects:hibernate-ydb-dialect:$ydbDialectVersion"
+        implementation "tech.ydb.jdbc:ydb-jdbc-driver:$ydbJdbcVersion"
     }
     ```
 
@@ -37,7 +45,7 @@ If you use Hibernate version 5, you need `<artifactId>hibernate-ydb-dialect-v5</
 
 ## Configuration {#configuration-dialect}
 
-Configure Hibernate to use the custom {{ ydb-short-name }} dialect by updating your hibernate.cfg.xml file::
+Configure Hibernate to use the custom {{ ydb-short-name }} dialect by updating your [persistence.xml](https://docs.jboss.org/hibernate/orm/6.4/introduction/html_single/Hibernate_Introduction.html#configuration-jpa) file:
 
 ```xml
 <property name="hibernate.dialect">tech.ydb.hibernate.dialect.YdbDialect</property>

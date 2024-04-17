@@ -8,17 +8,25 @@ Hibernate - это фреймворк объектно-реляционного 
 
 ## Установка диалекта {{ ydb-short-name }} {#install-dialect}
 
-Чтобы воспользоваться диалектом YDB в ваш проект нужно добавить зависимость самого диалекта и [JDBC драйвера](https://github.com/ydb-platform/ydb-jdbc-driver):
+Чтобы воспользоваться диалектом {{ ydb-short-name }} требуются зависимости диалекта {{ ydb-short-name }} и [JDBC драйвера](https://github.com/ydb-platform/ydb-jdbc-driver):
+
+Примеры для различных систем сборки:
 
 {% list tabs %}
 
 - Maven
 
     ```xml
+    <!-- Set an actual versions -->
+    <dependency>
+        <groupId>tech.ydb.jdbc</groupId>
+        <artifactId>ydb-jdbc-driver</artifactId>
+        <version>${ydb.jdbc.version}</version>
+    </dependency>
+
     <dependency>
         <groupId>tech.ydb.dialects</groupId>
         <artifactId>hibernate-ydb-dialect</artifactId>
-        <!-- Set an actual version -->
         <version>${hibernate.ydb.dialect.version}</version> 
     </dependency>
     ```
@@ -27,17 +35,19 @@ Hibernate - это фреймворк объектно-реляционного 
 
     ```groovy
     dependencies {
-        implementation 'tech.ydb.dialects:hibernate-ydb-dialect:$version' // Set an actual version
+        // Set an actual versions
+        implementation "tech.ydb.dialects:hibernate-ydb-dialect:$ydbDialectVersion"
+        implementation "tech.ydb.jdbc:ydb-jdbc-driver:$ydbJdbcVersion"
     }
     ```
 
 {% endlist %}
 
-В случае использования Hibernate 5 версии нужен artifactId равный `hibernate-ydb-dialect-v5` для Maven или `implementation 'tech.ydb.dialects:hibernate-ydb-dialect:$version'` для Gradle.
+В случае использования Hibernate 5 версии нужен artifactId равный `hibernate-ydb-dialect-v5` для Maven или `implementation "tech.ydb.dialects:hibernate-ydb-dialect-v5:$version"` для Gradle.
 
 ## Конфигурация диалекта {#configuration-dialect}
 
-После добавления зависимости в проект нужно явно указать ваш диалект. Сконфигурировать Hibernate c помощью hibernate.cfg.xml:
+После добавления зависимости в проект нужно явно указать ваш диалект. Сконфигурировать Hibernate c помощью [persistence.xml](https://docs.jboss.org/hibernate/orm/6.4/introduction/html_single/Hibernate_Introduction.html#configuration-jpa):
 
 ```xml
 <property name="hibernate.dialect">tech.ydb.hibernate.dialect.YdbDialect</property>
@@ -56,9 +66,108 @@ public static Configuration basedConfiguration() {
 
 Используйте этот диалект так же, как и любой другой диалект Hibernate. Сопоставьте классы сущностей с таблицами базы данных и используйте фабрику сессий Hibernate для выполнения операций с базой данных.
 
-### Пример Spring Data JPA {#integration-with-spring-data-jpa-example}
+Таблица сопоставления Java типов с [YDB типами](../yql/reference/types/primitive.md):
 
-Настройте Spring Data JPA для использования диалекта YDB, обновив свой application.properties:
+| Java type                                      | {{ ydb-short-name }} type   |
+|------------------------------------------------|-----------------------------|
+| `bool`, `Boolean`                              | `Bool`                      |
+| `String`                                       | `Text` (синоним `Utf8`)     |
+| `java.time.LocalDate`                          | `Date`                      |
+| `java.math.BigDecimal`, `java.math.BigInteger` | `Decimal(22,9)`             |
+| `double`, `Double`                             | `Double`                    |
+| `float`, `Float`                               | `Float`                     |
+| `int`, `java.lang.Integer`                     | `Int32`                     |
+| `long`, `java.lang.Long`                       | `Int64`                     |
+| `short`, `java.lang.Short`                     | `Int16`                     |
+| `byte`, `java.lang.Byte`                       | `Int8`                      |
+| `[]byte`                                       | `Bytes`  (синоним `String`) |
+| `java.time.LocalDateTime`                      | `Datetime`                  |
+| `java.time.Instant`                            | `Timestamp`                 |
+
+Поддержана генерация схемы базы данных по hibernate сущностям.
+
+Например, для класса Group: 
+
+```java
+@Getter
+@Setter
+@Entity
+@Table(name = "Groups", indexes = @Index(name = "group_name_index", columnList = "GroupName"))
+@NamedQuery(
+        name = "Group.findGroups",
+        query = "SELECT g FROM Group g " +
+                "JOIN Plan p ON g.id = p.planId.groupId " +
+                "JOIN Lecturer l ON p.planId.lecturerId = l.id " +
+                "WHERE p.planId.courseId = :CourseId and l.id = :LecturerId"
+)
+public class Group {
+
+    @Id
+    @Column(name = "GroupId")
+    private int id;
+  
+    @Column(name = "GroupName")
+    private String name;
+  
+    @OneToMany(mappedBy = "group")
+    private List<Student> students;
+  
+    @Override
+    public int hashCode() {
+      return id;
+    }
+}
+```
+
+Будет сгенерирована следующая таблица `Groups` и вторичный индекс `group_name_index` к колонке `GroupName`:
+
+```sql
+create table Groups (
+    GroupId Int32 not null,
+    GroupName Text,
+    primary key (GroupId)
+);
+
+alter table Groups
+  add index group_name_index global 
+       on (GroupName);
+```
+
+Если эволюционировать сущность Group путем добавления поля `deparment`:
+
+```java
+    @Column
+    private String department;
+```
+
+Hibernate при старте приложения обновит схему базы данных, если установлен режим `update`:
+
+```properties
+jakarta.persistence.schema-generation.database.action=update
+```
+
+Результат изменения схемы:
+
+```sql
+alter table Groups 
+   add column department Text
+```
+
+{% note warning %}
+
+Hibernate не предназначен для управления схемами баз данных.
+
+{% endnote %}
+
+{% note info %}
+
+Вы можете использовать [Liquibase](./liquibase.md) для управления схемой базы данных.
+
+{% endnote %}
+
+### Пример с Spring Data JPA {#integration-with-spring-data-jpa-example}
+
+Настройте Spring Data JPA для использования диалекта {{ ydb-short-name }}, обновив свой application.properties:
 
 ```properties
 spring.jpa.properties.hibernate.dialect=tech.ydb.hibernate.dialect.YdbDialect

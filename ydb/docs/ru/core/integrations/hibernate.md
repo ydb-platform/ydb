@@ -66,25 +66,25 @@ public static Configuration basedConfiguration() {
 
 Используйте этот диалект так же, как и любой другой диалект Hibernate. Сопоставьте классы сущностей с таблицами базы данных и используйте фабрику сессий Hibernate для выполнения операций с базой данных.
 
-Таблица сопоставления Java типов с [YDB типами](../yql/reference/types/primitive.md):
+Таблица сопоставления Java типов с [{{ ydb-short-name }} типами](../yql/reference/types/primitive.md):
 
-| Java type                                      | {{ ydb-short-name }} type   |
-|------------------------------------------------|-----------------------------|
-| `bool`, `Boolean`                              | `Bool`                      |
-| `String`                                       | `Text` (синоним `Utf8`)     |
-| `java.time.LocalDate`                          | `Date`                      |
-| `java.math.BigDecimal`, `java.math.BigInteger` | `Decimal(22,9)`             |
-| `double`, `Double`                             | `Double`                    |
-| `float`, `Float`                               | `Float`                     |
-| `int`, `java.lang.Integer`                     | `Int32`                     |
-| `long`, `java.lang.Long`                       | `Int64`                     |
-| `short`, `java.lang.Short`                     | `Int16`                     |
-| `byte`, `java.lang.Byte`                       | `Int8`                      |
-| `[]byte`                                       | `Bytes`  (синоним `String`) |
-| `java.time.LocalDateTime`                      | `Datetime`                  |
-| `java.time.Instant`                            | `Timestamp`                 |
+| Java type                                                           | {{ ydb-short-name }} type   |
+|---------------------------------------------------------------------|-----------------------------|
+| `bool`, `Boolean`                                                   | `Bool`                      |
+| `String`, enum with `@Enumerated(EnumType.STRING)`                  | `Text` (синоним `Utf8`)     |
+| `java.time.LocalDate`                                               | `Date`                      |
+| `java.math.BigDecimal`, `java.math.BigInteger`                      | `Decimal(22,9)`             |
+| `double`, `Double`                                                  | `Double`                    |
+| `float`, `Float`                                                    | `Float`                     |
+| `int`, `java.lang.Integer`                                          | `Int32`                     |
+| `long`, `java.lang.Long`                                            | `Int64`                     |
+| `short`, `java.lang.Short`                                          | `Int16`                     |
+| `byte`, `java.lang.Byte`, enum with `@Enumerated(EnumType.ORDINAL)` | `Int8`                      |
+| `[]byte`                                                            | `Bytes`  (синоним `String`) |
+| `java.time.LocalDateTime`                                           | `Datetime`                  |
+| `java.time.Instant`                                                 | `Timestamp`                 |
 
-Поддержана генерация схемы базы данных по hibernate сущностям.
+Поддержана генерация схемы базы данных по Hibernate сущностям.
 
 Например, для класса Group: 
 
@@ -136,8 +136,8 @@ alter table Groups
 Если эволюционировать сущность Group путем добавления поля `deparment`:
 
 ```java
-    @Column
-    private String department;
+@Column
+private String department;
 ```
 
 Hibernate при старте приложения обновит схему базы данных, если установлен режим `update`:
@@ -167,7 +167,7 @@ Hibernate не предназначен для управления схемам
 
 ### Пример с Spring Data JPA {#integration-with-spring-data-jpa-example}
 
-Настройте Spring Data JPA для использования диалекта {{ ydb-short-name }}, обновив свой application.properties:
+Настройте Spring Data JPA для использования диалекта {{ ydb-short-name }}, обновив свой `application.properties`:
 
 ```properties
 spring.jpa.properties.hibernate.dialect=tech.ydb.hibernate.dialect.YdbDialect

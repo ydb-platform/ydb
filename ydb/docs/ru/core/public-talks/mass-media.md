@@ -3,6 +3,10 @@
 Публичные материалы о {{ ydb-short-name }} в СМИ.
 
 {% list tabs %}
+
+  - 2024
+
+    {% include [Habr](./_includes/publications/2024/Habr.md) %}
   
   - 2023
     

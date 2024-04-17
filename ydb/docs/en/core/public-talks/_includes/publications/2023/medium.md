@@ -1,12 +1,12 @@
 ### Migrations in YDB using “goose” {#2023-pub-medium-goose}
 
-![Migrations in YDB using goose](./_includes/goose.webp)
+![Migrations in YDB using goose](./_includes/goose.webp ={{pub-cover-size}})
 
 Any production process that works with a database will require a schema migration sooner or later. The migration updates the database’s table structure from one version to the next. Schema migrations can be done manually by executing an `ALTER TABLE` query or by using specialized tools. One such tool is called goose. In this [article](https://blog.ydb.tech/migrations-in-ydb-using-goose-58137bc5c303) we see how goose provides schema management in a project and has supported YDB (a distributed open-source database) since v3.16.0.
 
 ### About Prepared statements, server-side compiled query cache, or how to efficiently cache queries in YDB {#2023-pub-medium-cache-queries}
 
-![How to efficiently cache queries in YDB](./_includes/cache-queries.webp)
+![How to efficiently cache queries in YDB](./_includes/cache-queries.webp ={{pub-cover-size}})
 
 There are various ways to reduce the cost of SQL query execution in modern DBMS. The most common approaches are using prepared statements and query caching. Both methods are available in YDB. Their functionality and benefits are discussed in this [article](https://blog.ydb.tech/about-prepared-statements-server-side-compiled-query-cache-or-how-to-efficiently-cache-queries-in-df3af73eb001).
 

@@ -238,6 +238,7 @@ namespace NKikimr {
                 ReplyError(NKikimrProto::ERROR, "VPatch is disabled", ev, ctx, TAppData::TimeProvider->Now());
                 return;
             }
+            UpdateVPatchOrchestrator();
             TActivationContext::Send(ev->Forward(VPatchOrchestrator));
         }
 

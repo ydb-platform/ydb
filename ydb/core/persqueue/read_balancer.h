@@ -305,7 +305,7 @@ public:
 
         const TPartitionInfo& GetPartitionInfo(ui32 partitionId) const;
         TReadingPartitionStatus* GetPartitionStatus(ui32 partitionId);
-        bool IsReadeable(ui32 partitionId) const;
+        bool IsReadable(ui32 partitionId) const;
         ui32 NextStep();
 
     private:
@@ -330,7 +330,7 @@ public:
     struct TBalancingConsumerInfo {
         TPersQueueReadBalancer& Balancer;
 
-        TString Consumer;
+        TString ConsumerName;
 
         size_t NextFamilyId;
         std::unordered_map<size_t, const std::unique_ptr<TPartitionFamilty>> Families;
@@ -348,7 +348,7 @@ public:
 
         ui32 Step;
 
-        TBalancingConsumerInfo(TPersQueueReadBalancer& balancer);
+        TBalancingConsumerInfo(TPersQueueReadBalancer& balancer, const TString& consumerName);
         ~TBalancingConsumerInfo() = default;
 
         const TString& Topic() const;
@@ -358,10 +358,11 @@ public:
         TReadingPartitionStatus* GetPartitionStatus(ui32 partitionId);
         ui32 NextStep();
 
-        void RegisterPartition(ui32 partitionId);
+        void RegisterPartition(ui32 partitionId, const TActorContext& ctx);
         void UnregisterPartition(ui32 partitionId);
+        void InitPartitions(const TActorContext& ctx);
 
-        void CreateFamily(std::vector<ui32>&& partitions);
+        void CreateFamily(std::vector<ui32>&& partitions, const TActorContext& ctx);
         TPartitionFamilty* FindFamily(ui32 partitionId);
 
         void RegisterReadingSession(TReadingSession* session);
@@ -371,10 +372,12 @@ public:
 
         bool SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie);
         bool ProccessReadingFinished(ui32 partitionId, const TActorContext& ctx);
+        void StartReading(ui32 partitionId, const TActorContext& ctx);
+        void FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx);
 
         void Balance(const TActorContext& ctx);
 
-        bool IsReadeable(ui32 partitionId);
+        bool IsReadable(ui32 partitionId);
         bool IsFinished(ui32 partitionId);
 
         bool ScalingSupport() const;

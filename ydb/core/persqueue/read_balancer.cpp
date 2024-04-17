@@ -134,8 +134,11 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
     }
 
     // NEW
-    for (auto& [_, consumer] : BalancingConsumers) {
-        consumer->Balance(ctx);
+    for (auto& [_, balancingConsumer] : BalancingConsumers) {
+        for (auto& [partitionId,_] : PartitionsInfo) {
+            balancingConsumer->RegisterPartition(partitionId, ctx);
+        }
+        balancingConsumer->Balance(ctx);
     }
 
     for (auto &ev : UpdateEvents) {
@@ -586,7 +589,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     for (auto& partition : newPartitions) {
         auto partitionId = partition.PartitionId;
         for (auto& [_, balancingConsumer] : BalancingConsumers) {
-            balancingConsumer->RegisterPartition(partitionId);
+            balancingConsumer->RegisterPartition(partitionId, ctx);
         }
     }
 
@@ -1277,10 +1280,11 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
     {
         auto it = BalancingConsumers.find(consumerName);
         if (it == BalancingConsumers.end()) {
-            auto [i, _] = BalancingConsumers.emplace(consumerName, std::make_unique<TBalancingConsumerInfo>(*this));
+            auto [i, _] = BalancingConsumers.emplace(consumerName, std::make_unique<TBalancingConsumerInfo>(*this, consumerName));
             it = i;
         }
         auto balancingConsumer = it->second.get();
+        balancingConsumer->InitPartitions(ctx);
         balancingConsumer->RegisterReadingSession(pipeInfo);
         balancingConsumer->Balance(ctx);
     }
@@ -1649,7 +1653,11 @@ void TPersQueueReadBalancer::UnregisterSession(const TActorId& pipe, const TActo
     if (cit != BalancingConsumers.end()) {
         auto& balancingConsumer = cit->second;
         balancingConsumer->UnregisterReadingSession(readingSession.get());
-        balancingConsumer->Balance(ctx);
+        if (balancingConsumer->ReadingSessions.empty()) {
+            BalancingConsumers.erase(cit);
+        } else {
+            balancingConsumer->Balance(ctx);
+        }
     }
 
     ReadingSessions.erase(it);
@@ -2083,7 +2091,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPt
     if (cit != BalancingConsumers.end()) {
         auto& balancingConsumer = cit->second;
 
-        if (!balancingConsumer->IsReadeable(partitionId)) {
+        if (!balancingConsumer->IsReadable(partitionId)) {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                         "The offset of the partition " << partitionId << " was commited by " << r.GetConsumer()
                         << " but the partition isn't readable");
@@ -2105,10 +2113,23 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequ
     auto& r = ev->Get()->Record;
     auto partitionId = r.GetPartitionId();
 
+    // NEW
+    auto cit = BalancingConsumers.find(r.GetConsumer());
+    if (cit == BalancingConsumers.end()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                "Received TEvReadingPartitionStartedRequest from unknown consumer " << r.GetConsumer());
+        return;
+    }
+
+    auto& readingConsumer = cit->second;
+    readingConsumer->StartReading(partitionId, ctx);
+
+
     auto it = ClientsInfo.find(r.GetConsumer());
     if (it == ClientsInfo.end()) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 "Received TEvReadingPartitionStartedRequest from unknown consumer " << r.GetConsumer());
+        return;
     }
 
     auto& clientInfo = it->second;
@@ -2152,10 +2173,23 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedReq
     auto& r = ev->Get()->Record;
     auto partitionId = r.GetPartitionId();
 
+    //  NEW
+    auto cit = BalancingConsumers.find(r.GetConsumer());
+    if (cit == BalancingConsumers.end()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                "Received TEvReadingPartitionFinishedRequest from unknown consumer " << r.GetConsumer());
+        return;
+    }
+
+    auto& balancingConsumer = cit->second;
+    balancingConsumer->FinishReading(ev, ctx);
+
+
     auto it = ClientsInfo.find(r.GetConsumer());
     if (it == ClientsInfo.end()) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 "Received TEvReadingPartitionFinishedRequest from unknown consumer " << r.GetConsumer());
+        return;
     }
 
     auto& clientInfo = it->second;

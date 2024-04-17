@@ -37,8 +37,8 @@ ui32 TPersQueueReadBalancer::TPartitionFamilty::TabletGeneration() const {
 const TPersQueueReadBalancer::TPartitionInfo& TPersQueueReadBalancer::TPartitionFamilty::GetPartitionInfo(ui32 partitionId) const {
     return ConsumerInfo.GetPartitionInfo(partitionId);
 }
-bool TPersQueueReadBalancer::TPartitionFamilty::IsReadeable(ui32 partitionId) const {
-    return ConsumerInfo.IsReadeable(partitionId);
+bool TPersQueueReadBalancer::TPartitionFamilty::IsReadable(ui32 partitionId) const {
+    return ConsumerInfo.IsReadable(partitionId);
 }
 
 ui32 TPersQueueReadBalancer::TPartitionFamilty::NextStep() {
@@ -218,7 +218,7 @@ void TPersQueueReadBalancer::TPartitionFamilty::InactivatePartition(ui32 partiti
 }
 
 TString TPersQueueReadBalancer::TPartitionFamilty::DebugStr() const {
-    return TStringBuilder() << "family=" << Id << "(Status=" << Status << ", Partitions=[" << JoinRange(", ", Partitions.begin(), Partitions.end()) << "])";
+    return TStringBuilder() << "family=" << Id << " (Status=" << Status << ", Partitions=[" << JoinRange(", ", Partitions.begin(), Partitions.end()) << "])";
 }
 
 
@@ -233,7 +233,7 @@ std::pair<size_t, size_t> TPersQueueReadBalancer::TPartitionFamilty::ClassifyPar
 
     for (auto partitionId : partitions) {
         auto* partitionStatus = GetPartitionStatus(partitionId);
-        if (IsReadeable(partitionId)) {
+        if (IsReadable(partitionId)) {
             if (partitionStatus && partitionStatus->IsFinished()) {
                 ++inactivePartitionCount;
             } else {
@@ -307,11 +307,13 @@ std::unique_ptr<TEvPersQueue::TEvLockPartition> TPersQueueReadBalancer::TPartiti
 // TBalancingConsumerInfo
 //
 
-TPersQueueReadBalancer::TBalancingConsumerInfo::TBalancingConsumerInfo(TPersQueueReadBalancer& balancer)
+TPersQueueReadBalancer::TBalancingConsumerInfo::TBalancingConsumerInfo(TPersQueueReadBalancer& balancer, const TString& consumerName)
     : Balancer(balancer)
+    , ConsumerName(consumerName)
     , NextFamilyId(0)
     , Step(0)
-{}
+{
+}
 
 const TString& TPersQueueReadBalancer::TBalancingConsumerInfo::Topic() const {
     return Balancer.Topic;
@@ -341,21 +343,32 @@ ui32 TPersQueueReadBalancer::TBalancingConsumerInfo::NextStep() {
     return ++Step;
 }
 
-void TPersQueueReadBalancer::TBalancingConsumerInfo::RegisterPartition(ui32 partitionId) {
+void TPersQueueReadBalancer::TBalancingConsumerInfo::RegisterPartition(ui32 partitionId, const TActorContext& ctx) {
     Partitions[partitionId];
-    if (IsReadeable(partitionId)) {
-        CreateFamily({partitionId});
+    if (IsReadable(partitionId)) {
+        CreateFamily({partitionId}, ctx);
     }
 }
 
 void TPersQueueReadBalancer::TBalancingConsumerInfo::UnregisterPartition(ui32 partitionId) {
-    Partitions.erase(partitionId);
+    Partitions.erase(partitionId); // TODO аккуратно почистить в families
 }
 
-void TPersQueueReadBalancer::TBalancingConsumerInfo::CreateFamily(std::vector<ui32>&& partitions) {
+void  TPersQueueReadBalancer::TBalancingConsumerInfo::InitPartitions(const TActorContext& ctx) {
+    for (auto& [partitionId,_] : Balancer.PartitionsInfo) {
+        RegisterPartition(partitionId, ctx);
+    }
+}
+
+void TPersQueueReadBalancer::TBalancingConsumerInfo::CreateFamily(std::vector<ui32>&& partitions, const TActorContext& ctx) {
     auto id = ++NextFamilyId;
     auto [it, _] = Families.emplace(id, std::make_unique<TPersQueueReadBalancer::TPartitionFamilty>(*this, id, std::move(partitions)));
-    UnreadableFamilies.emplace(it->first, it->second.get());
+    auto* family = it->second.get();
+
+    UnreadableFamilies.emplace(id, family);
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+        GetPrefix() << "family created " << family->DebugStr());
 }
 
 TPersQueueReadBalancer::TPartitionFamilty* TPersQueueReadBalancer::TBalancingConsumerInfo::FindFamily(ui32 partitionId) {
@@ -405,26 +418,31 @@ bool TPersQueueReadBalancer::TBalancingConsumerInfo::Unlock(const TActorId& send
     return family->Unlock(sender, partitionId, ctx);
 }
 
-bool TPersQueueReadBalancer::TBalancingConsumerInfo::IsReadeable(ui32 partitionId) {
+bool TPersQueueReadBalancer::TBalancingConsumerInfo::IsReadable(ui32 partitionId) {
+    Cerr << ">>>>> IsReadable 0" << Endl;
     if (!ScalingSupport()) {
         return true;
     }
 
     auto* node = Balancer.PartitionGraph.GetPartition(partitionId);
     if (!node) {
+        Cerr << ">>>>> IsReadable 1" << Endl;
         return false;
     }
 
     if (Partitions.empty()) {
+        Cerr << ">>>>> IsReadable 2 " << node->Parents.empty() << Endl;
         return node->Parents.empty();
     }
 
     for(auto* parent : node->HierarhicalParents) {
         if (!IsFinished(parent->Id)) {
+            Cerr << ">>>>> IsReadable 3" << Endl;
             return false;
         }
     }
 
+    Cerr << ">>>>> IsReadable 4" << Endl;
     return true;
 }
 
@@ -441,7 +459,7 @@ bool TPersQueueReadBalancer::TBalancingConsumerInfo::ScalingSupport() const {
 }
 
 TString TPersQueueReadBalancer::TBalancingConsumerInfo::GetPrefix() const {
-    return TStringBuilder() << "Consumer=" << Consumer << " ";
+    return TStringBuilder() << "Consumer=" << ConsumerName << " ";
 }
 
 bool TPersQueueReadBalancer::TBalancingConsumerInfo::SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie) {
@@ -463,7 +481,7 @@ bool TPersQueueReadBalancer::TBalancingConsumerInfo::ProccessReadingFinished(ui3
 
     std::vector<ui32> newPartitions;
     Balancer.PartitionGraph.Travers(partitionId, [&](ui32 id) {
-        if (!IsReadeable(id)) {
+        if (!IsReadable(id)) {
             return false;
         }
 
@@ -478,12 +496,82 @@ bool TPersQueueReadBalancer::TBalancingConsumerInfo::ProccessReadingFinished(ui3
         family->AttachePartitions(newPartitions, ctx);
     } else {
         for (auto p : newPartitions) {
-            CreateFamily({p});
+            CreateFamily({p}, ctx);
         }
     }
 
     return !newPartitions.empty();
 
+}
+
+void TPersQueueReadBalancer::TBalancingConsumerInfo::StartReading(ui32 partitionId, const TActorContext& ctx) {
+    auto* status = GetPartitionStatus(partitionId);
+
+    if (status->StartReading()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                "Reading of the partition " << partitionId << " was started by " << ConsumerName << ". We stop reading from child partitions.");
+
+        auto* family = FindFamily(partitionId);
+        if (family) {
+            family->ActivatePartition(partitionId);
+        }
+
+        // We releasing all children's partitions because we don't start reading the partition from EndOffset
+        Balancer.PartitionGraph.Travers(partitionId, [&](ui32 partitionId) {
+            // TODO несколько партиции в одном family
+            auto* status = GetPartitionStatus(partitionId);
+            auto* family = FindFamily(partitionId);
+
+            if (family) {
+                if (status->Reset()) {
+                    family->ActivatePartition(partitionId);
+                }
+                family->Release(ctx);
+            }
+
+            return true;
+        });
+    } else {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                "Reading of the partition " << partitionId << " was started by " << ConsumerName << ".");
+
+    }
+}
+
+TString GetSdkDebugString0(bool scaleAwareSDK) {
+    return scaleAwareSDK ? "ScaleAwareSDK" : "old SDK";
+}
+
+void TPersQueueReadBalancer::TBalancingConsumerInfo::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
+    auto& r = ev->Get()->Record;
+    auto partitionId = r.GetPartitionId();
+
+    auto* status = GetPartitionStatus(partitionId);
+
+    if (!IsReadable(partitionId)) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                    "Reading of the partition " << partitionId << " was finished by " << ConsumerName
+                    << " but the partition isn't readable");
+        return;
+    }
+
+    if (status->SetFinishedState(r.GetScaleAwareSDK(), r.GetStartedReadingFromEndOffset())) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                    "Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
+                    << ", firstMessage=" << r.GetStartedReadingFromEndOffset() << ", " << GetSdkDebugString0(r.GetScaleAwareSDK()));
+
+        ProccessReadingFinished(partitionId, ctx);
+    } else if (!status->IsFinished()) {
+        auto delay = std::min<size_t>(1ul << status->Iteration, Balancer.TabletConfig.GetPartitionConfig().GetLifetimeSeconds()); // TODO Учесть время закрытия партиции на запись
+
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                    "Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
+                    << ". Scheduled release of the partition for re-reading. Delay=" << delay << " seconds,"
+                    << " firstMessage=" << r.GetStartedReadingFromEndOffset() << ", " << GetSdkDebugString0(r.GetScaleAwareSDK()));
+
+        status->LastPipe = ev->Sender;
+        ctx.Schedule(TDuration::Seconds(delay), new TEvPQ::TEvWakeupReleasePartition(ConsumerName, partitionId, status->Cookie));
+    }
 }
 
 struct SessionComparator {
@@ -542,7 +630,19 @@ size_t GetMaxFamilySize(const std::unordered_map<size_t, const std::unique_ptr<T
     return result;
 }
 
+TString DebugIds(const std::unordered_map<size_t, TPersQueueReadBalancer::TPartitionFamilty*>& values) {
+    TStringBuilder sb;
+    for (auto& [id, family] : values) {
+        sb << id << " (" << JoinRange(", ", family->Partitions.begin(), family->Partitions.end()) << "), ";
+    }
+    return sb;
+}
+
 void TPersQueueReadBalancer::TBalancingConsumerInfo::Balance(const TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            GetPrefix() << "balancing. ReadingSessions=" << ReadingSessions.size() << ", Families=" << Families.size()
+            << ", UnradableFamilies=" << UnreadableFamilies.size() << " [" << DebugIds(UnreadableFamilies) << "]");
+
     if (ReadingSessions.empty()) {
         return;
     }
@@ -558,10 +658,15 @@ void TPersQueueReadBalancer::TBalancingConsumerInfo::Balance(const TActorContext
         auto& sessions = (family->SpecialSessions.empty()) ? commonSessions : (specialSessions = OrderSessions(family->SpecialSessions));
 
         auto sit = sessions.begin();
+        if (sit == sessions.end()) {
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                    GetPrefix() << "balancing of the " << family->DebugStr() << " failed because there are no suitable reading sessions.");
+            continue;
+        }
         auto* session = *sit;
         sessions.erase(sit);
 
-        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 GetPrefix() << "balancing partitions " << family->DebugStr() << " for " << session->DebugStr());
         family->StartReading(*session, ctx);
 

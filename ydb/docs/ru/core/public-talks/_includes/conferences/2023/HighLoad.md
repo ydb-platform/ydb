@@ -18,7 +18,7 @@
 
 Доклад будет интересен разработчикам нагруженных систем и разработчикам платформ различного назначения.
 
-[Слайды доклада](https://disk.yandex.ru/i/BJXSguMIPJgTaQ)
+[Слайды](https://presentations.ydb.tech/2023/ru/highload/olap/presentation.pdf)
 
 ### database/sql: плохой, хороший и злой. Опыт разработки драйвера для распределенной СУБД YDB {#2023-conf-hl-database-sql}
 
@@ -32,7 +32,7 @@
 
 Доклад будет интересен разработчикам и пользователям драйверов в стандарте `database/sql`, а также пользователям распределенной базы данных YDB, разрабатывающим свой код на языке Golang.
 
-[Слайды доклада](https://disk.yandex.ru/i/_a0AQJwZIXfOTQ)
+[Слайды](https://presentations.ydb.tech/2023/ru/golang_conf/database_sql/presentation.pdf)
 
 ### YDB-оптимизации производительности под ARM {#2023-conf-hl-ydb-opt}
 
@@ -44,7 +44,7 @@
 
 Доклад будет интересен разработчикам баз данных, разработчикам систем хранения данных и разработчикам высоконагруженных приложений.
 
-[Слайды доклада](https://disk.yandex.ru/i/MlV9na2qSBmw1w)
+[Слайды](https://presentations.ydb.tech/2023/ru/highload/ydb_optimizations_for_arm/presentation.pdf)
 
 ### YDB Topic Service: как мы повышали производительность очереди сообщений {#2023-conf-hl-ydb-topic}
 
@@ -62,7 +62,7 @@
 
 Доклад будет интересен разработчикам, лидам разработки, техническим менеджерам. Всем, кто решал, решает или интересуется задачей масштабируемой поставки данных.
 
-[Слайды доклада](https://disk.yandex.ru/i/r8M8LsXGfM8lOw)
+[Слайды](https://presentations.ydb.tech/2023/ru/highload/ydb_topic_service/presentation.pdf)
 
 ### Особенности шин данных для очень больших инсталляций на примере YDB Topics {#2023-conf-hl-data-bus}
 
@@ -74,7 +74,7 @@
 
 Доклад будет интересен разработчикам и командам эксплуатации, особенно в компаниях больших размеров. 
 
-[Слайды доклада](https://disk.yandex.ru/i/gttNHRfUZ9hF-Q)
+[Слайды](https://presentations.ydb.tech/2023/ru/highload/ydb_topics_data_bus/presentation.pdf)
 
 ### Поиск по образцу на последовательностях строк в БД {#2023-conf-hl-search-inline}
 
@@ -86,7 +86,7 @@
 
 Отдельная часть выступления посвящена отличиям в обработке аналитических запросов на табличках и обработке на потоках «живых» данных. Доклад будет интересен разработчикам БД, дата-аналитикам, а также всем, кто интересуется поиском по образцу на больших данных. 
 
-[Слайды доклада](https://disk.yandex.ru/i/Kzsj2mryXkfPxw)
+[Слайды](https://presentations.ydb.tech/2023/ru/highload/template_search_in_str_seq/presentation.pdf)
 
 ### Из pytest в Go. Тестовое окружение на фикстурах {#2023-conf-hl-pytest-go}
 
@@ -98,4 +98,4 @@
 
 Доклад будет интересен разработчикам на Go и тимлидам. 
 
-[Слайды доклада](https://disk.yandex.ru/i/hPK4BTpN_22rZw)
+[Слайды](https://presentations.ydb.tech/2023/ru/golang_conf/from_pytest_to_go/presentation.pdf)

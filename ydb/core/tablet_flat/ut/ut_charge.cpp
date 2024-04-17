@@ -93,7 +93,7 @@ namespace {
 
     private:
         const NTest::TRowTool Tool;
-        NPage::TIndexWriter Writer;
+        NPage::TFlatIndexWriter Writer;
     };
 
     struct TModel : public NTest::TSteps<TModel> {

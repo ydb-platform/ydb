@@ -73,8 +73,9 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::ChunkListMap ||
         type == EObjectType::ChunkViewMap ||
         type == EObjectType::MediumMap ||
-        type == EObjectType::TransactionMap ||
+        type == EObjectType::ForeignTransactionMap ||
         type == EObjectType::TopmostTransactionMap ||
+        type == EObjectType::TransactionMap ||
         type == EObjectType::ClusterNodeNode ||
         type == EObjectType::ClusterNodeMap ||
         type == EObjectType::DataNodeMap ||

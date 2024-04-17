@@ -22,7 +22,7 @@ TFingerprint CompositeFarmHash(NYson::TYsonStringBuf compositeValue);
 //!
 //! NB: The current implementation guarantees that the size of the returned string is not larger then the provided limit. However,
 //! this might be hard to maintain and is not something one should rely on. It is better to think of this function as an approximate one.
-std::optional<NYson::TYsonString> TruncateCompositeValue(NYson::TYsonStringBuf value, i64 size);
+std::optional<NYson::TYsonString> TruncateYsonValue(NYson::TYsonStringBuf value, i64 size);
 
 ////////////////////////////////////////////////////////////////////////////////
 

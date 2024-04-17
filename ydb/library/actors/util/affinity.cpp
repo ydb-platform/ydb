@@ -9,9 +9,9 @@ class TAffinity::TImpl {
     cpu_set_t Mask;
 #endif
 public:
-    TImpl() {
+    TImpl(size_t pid = 0) {
 #ifdef _linux_
-        int ar = sched_getaffinity(0, sizeof(cpu_set_t), &Mask);
+        int ar = sched_getaffinity(pid, sizeof(cpu_set_t), &Mask);
         Y_DEBUG_ABORT_UNLESS(ar == 0);
 #endif
     }
@@ -30,9 +30,9 @@ public:
 #endif
     }
 
-    void Set() const {
+    void Set(size_t pid) const {
 #ifdef _linux_
-        int ar = sched_setaffinity(0, sizeof(cpu_set_t), &Mask);
+        int ar = sched_setaffinity(pid, sizeof(cpu_set_t), &Mask);
         Y_DEBUG_ABORT_UNLESS(ar == 0);
 #endif
     }
@@ -71,13 +71,13 @@ TAffinity::TAffinity(const TCpuMask& mask) {
     }
 }
 
-void TAffinity::Current() {
-    Impl.Reset(new TImpl());
+void TAffinity::Current(size_t pid) {
+    Impl.Reset(new TImpl(pid));
 }
 
-void TAffinity::Set() const {
+void TAffinity::Set(size_t pid) const {
     if (!!Impl) {
-        Impl->Set();
+        Impl->Set(pid);
     }
 }
 

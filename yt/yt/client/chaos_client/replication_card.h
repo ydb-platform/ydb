@@ -190,6 +190,8 @@ TDuration ComputeReplicationProgressLag(
     const TReplicationProgress& maxProgress,
     const TReplicationProgress& replicaProgress);
 
+THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TReplicaInfo>& replicas);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NChaosClient

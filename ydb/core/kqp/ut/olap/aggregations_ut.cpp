@@ -79,8 +79,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
     Y_UNIT_TEST(AggregationCountPushdown) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetForceColumnTablesCompositeMarks(true);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -129,8 +128,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
     Y_UNIT_TEST(AggregationCountGroupByPushdown) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetForceColumnTablesCompositeMarks(true);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -175,8 +173,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
     Y_UNIT_TEST_TWIN(CountAllPushdown, UseLlvm) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetForceColumnTablesCompositeMarks(true);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -219,8 +216,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
     Y_UNIT_TEST_TWIN(CountAllPushdownBackwardCompatibility, EnableLlvm) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetForceColumnTablesCompositeMarks(true);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -263,8 +259,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
     Y_UNIT_TEST(CountAllNoPushdown) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetForceColumnTablesCompositeMarks(true);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();

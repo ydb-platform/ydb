@@ -1,9 +1,12 @@
 #include "yaml_config_parser.h"
+#include "yaml_config_parser_impl.h"
 #include "yaml_config_helpers.h"
 #include "core_constants.h"
 
+#include <ydb/library/pdisk_io/device_type.h>
 #include <ydb/library/yaml_config/protos/config.pb.h>
 
+#include <ydb/core/base/blobstorage_pdisk_category.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
@@ -236,11 +239,11 @@ namespace NKikimr::NYaml {
         }
 
         if (data == "ROT") {
-            return 0;
+            return TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw();
         } else if (data == "SSD") {
-            return 1;
+            return TPDiskCategory(NPDisk::DEVICE_TYPE_SSD, 0).GetRaw();
         } else if (data == "NVME") {
-            return 2;
+            return TPDiskCategory(NPDisk::DEVICE_TYPE_NVME, 0).GetRaw();
         }
 
         Y_ENSURE_BT(false, "unknown pdisk category " << data);

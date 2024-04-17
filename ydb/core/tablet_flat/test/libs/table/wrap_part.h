@@ -63,7 +63,7 @@ namespace NTest {
             return Iter && Iter->IsValid() && Ready == EReady::Data;
         }
 
-        TRunIt* Get() const noexcept
+        TRunIter* Get() const noexcept
         {
             return Iter.Get();
         }
@@ -76,7 +76,7 @@ namespace NTest {
         void Make(IPages *env) noexcept
         {
             Ready = EReady::Gone;
-            Iter = MakeHolder<TRunIt>(Run, Remap_.Tags, Scheme->Keys, env);
+            Iter = MakeHolder<TRunIter>(Run, Remap_.Tags, Scheme->Keys, env);
         }
 
         EReady Seek(TRawVals key_, ESeek seek) noexcept
@@ -193,15 +193,15 @@ namespace NTest {
         TRowState State;
         TRun Run_;
         TRun& Run;
-        THolder<TRunIt> Iter;
+        THolder<TRunIter> Iter;
         TOwnedCellVec StopKey;
     };
 
     using TWrapPart = TWrapPartImpl<EDirection::Forward>;
     using TWrapReversePart = TWrapPartImpl<EDirection::Reverse>;
 
-    using TCheckIt = TChecker<TWrapPart, TPartEggs>;
-    using TCheckReverseIt = TChecker<TWrapReversePart, TPartEggs>;
+    using TCheckIter = TChecker<TWrapPart, TPartEggs>;
+    using TCheckReverseIter = TChecker<TWrapReversePart, TPartEggs>;
 }
 }
 }

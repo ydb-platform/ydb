@@ -1,6 +1,10 @@
 #pragma once
 
+#include <signal.h>
+
 namespace NSignals {
+
+using sighandler_t = void (*)(int);
 
 template <int signum, sighandler_t handler>
 struct TSignalHandler {

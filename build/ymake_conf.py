@@ -18,6 +18,8 @@ import tempfile
 
 import six
 
+from functools import total_ordering
+
 logger = logging.getLogger(__name__ if __name__ != '__main__' else 'ymake_conf.py')
 
 
@@ -82,6 +84,7 @@ class ConfigureError(Exception):
     pass
 
 
+@total_ordering
 class Platform(object):
     def __init__(self, name, os, arch):
         """
@@ -273,8 +276,8 @@ class Platform(object):
     def __eq__(self, other):
         return (self.name, self.os, self.arch) == (other.name, other.os, other.arch)
 
-    def __cmp__(self, other):
-        return cmp((self.name, self.os, self.arch), (other.name, other.os, other.arch))
+    def __lt__(self, other):
+        return (self.name, self.os, self.arch) < (other.name, other.os, other.arch)
 
     def __hash__(self):
         return hash((self.name, self.os, self.arch))
@@ -1346,7 +1349,7 @@ class GnuToolchain(Toolchain):
 
     def setup_apple_arcadia_sdk(self, target):
         if target.is_ios:
-            self.setup_xcode_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
+            self.setup_xcode_sdk(project='build/internal/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
             self.platform_projects.append('build/internal/platform/macos_system_stl')
         if target.is_macos:
             self.setup_xcode_sdk(project='build/internal/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
@@ -2406,7 +2409,7 @@ class Cuda(object):
             return False
 
         if host != target:
-            if not(host.is_linux_x86_64 and target.is_linux_armv8):
+            if not (host.is_linux_x86_64 and target.is_linux_armv8):
                 return False
             if not self.cuda_version.from_user:
                 return False

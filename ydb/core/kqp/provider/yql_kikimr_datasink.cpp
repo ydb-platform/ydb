@@ -103,6 +103,12 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleDropSequence(NNodes::TKiDropSequence node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
     TStatus HandleModifyPermissions(TKiModifyPermissions node, TExprContext& ctx) override {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
             << "ModifyPermissions is not yet implemented for intent determination transformer"));
@@ -480,7 +486,8 @@ public:
             return true;
         }
 
-        if (node.IsCallable(TKiCreateSequence::CallableName())) {
+        if (node.IsCallable(TKiCreateSequence::CallableName())
+            || node.IsCallable(TKiDropSequence::CallableName())) {
             return true;
         }
 
@@ -560,9 +567,9 @@ public:
                 .Ptr();
     }
 
-    static TExprNode::TPtr MakeCreateSequence(const TExprNode::TPtr& node, const TKikimrKey& key, TExprContext& ctx)
+    static TExprNode::TPtr MakeCreateSequence(const TExprNode::TPtr& node,
+            const NCommon::TWriteSequenceSettings& settings, const TKikimrKey& key, TExprContext& ctx)
     {
-        NCommon::TWriteSequenceSettings settings = NCommon::ParseSequenceSettings(TExprList(node->Child(4)), ctx);
         YQL_ENSURE(settings.Mode);
         auto mode = settings.Mode.Cast();
         if (node->Child(3)->Content() != "Void") {
@@ -591,6 +598,23 @@ public:
                 .Build()
             .SequenceSettings(settings.SequenceSettings.Cast())
             .Settings(settings.Other)
+            .Done()
+            .Ptr();
+    }
+
+    static TExprNode::TPtr MakeDropSequence(const TExprNode::TPtr& node,
+            const NCommon::TWriteSequenceSettings& settings, const TKikimrKey& key, TExprContext& ctx)
+    {
+        bool missingOk = (settings.Mode.Cast().Value() == "drop_if_exists");
+
+        return Build<TKiDropSequence>(ctx, node->Pos())
+            .World(node->Child(0))
+            .DataSink(node->Child(1))
+            .Sequence().Build(key.GetPGObjectId())
+            .Settings(settings.Other)
+            .MissingOk<TCoAtom>()
+                .Value(missingOk)
+            .Build()
             .Done()
             .Ptr();
     }
@@ -1149,8 +1173,12 @@ public:
                 if (mode == "dropIndex") {
                     return MakePgDropObject(node, settings, key, ctx);
                 } else if (key.GetPGObjectType() == "pgSequence") {
+                    NCommon::TWriteSequenceSettings settings =
+                        NCommon::ParseSequenceSettings(TExprList(node->Child(4)), ctx);
                     if (mode == "create" || mode == "create_if_not_exists") {
-                        return MakeCreateSequence(node, key, ctx);
+                        return MakeCreateSequence(node, settings, key, ctx);
+                    } else if (mode == "drop" || mode == "drop_if_exists") {
+                        return MakeDropSequence(node, settings, key, ctx);
                     } else {
                         YQL_ENSURE(false, "unknown Sequence mode \"" << TString(mode) << "\"");
                     }
@@ -1330,6 +1358,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = callable.Maybe<TKiCreateSequence>()) {
         return HandleCreateSequence(node.Cast(), ctx);
+    }
+
+    if (auto node = callable.Maybe<TKiDropSequence>()) {
+        return HandleDropSequence(node.Cast(), ctx);
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "

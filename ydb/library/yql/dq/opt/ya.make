@@ -14,7 +14,10 @@ PEERDIR(
 SRCS(
     dq_opt.cpp
     dq_opt_build.cpp
+    dq_opt_conflict_rules_collector.cpp
     dq_opt_join.cpp
+    dq_opt_join_cost_based.cpp
+    dq_opt_join_tree_node.cpp
     dq_opt_hopping.cpp
     dq_opt_log.cpp
     dq_opt_peephole.cpp
@@ -22,7 +25,6 @@ SRCS(
     dq_opt_phy.cpp
     dq_opt_stat.cpp
     dq_opt_stat_transformer_base.cpp
-    dq_opt_join_cost_based.cpp
     dq_opt_predicate_selectivity.cpp
 )
 

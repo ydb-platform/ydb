@@ -1314,8 +1314,18 @@ message TEvControllerNodeReport {
         optional EVDiskPhase Phase = 3;
     }
 
+    enum EPDiskPhase {
+        PD_UNKNOWN = 0;
+        PD_RESTARTED = 1;
+    }
+    message TPDiskReport {
+        optional uint32 PDiskId = 1;
+        optional EPDiskPhase Phase = 2;
+    }
+
     optional uint32 NodeId = 1;
     repeated TVDiskReport VDiskReports = 2;
+    repeated TPDiskReport PDiskReports = 3;
 }
 
 message TEvControllerGroupDecommittedNotify {

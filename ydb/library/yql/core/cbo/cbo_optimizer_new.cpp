@@ -70,7 +70,7 @@ TJoinOptimizerNode::TJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>
     JoinConditions(joinConditions),
     JoinType(joinType),
     JoinAlgo(joinAlgo) {
-        IsReorderable = (JoinType==EJoinKind::InnerJoin) && (nonReorderable==false);
+        IsReorderable = !nonReorderable;
         for (auto [l,r] : joinConditions ) {
             LeftJoinKeys.push_back(l.AttributeName);
             RightJoinKeys.push_back(r.AttributeName);

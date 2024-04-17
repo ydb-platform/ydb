@@ -46,8 +46,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
 
     void TestClickBenchBase(const std::vector<TAggregationTestCase>& cases, const bool genericQuery) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetForceColumnTablesCompositeMarks(true);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TClickHelper(kikimr).CreateClickBenchTable();

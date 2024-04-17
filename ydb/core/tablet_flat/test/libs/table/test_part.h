@@ -148,9 +148,9 @@ namespace NTest {
     namespace IndexTools {
         using TGroupId = NPage::TGroupId;
 
-        inline const TPartIndexIt::TRecord * GetFlatRecord(const TPart& part, ui32 pageIndex) {
+        inline const TPartGroupFlatIndexIter::TRecord * GetFlatRecord(const TPart& part, ui32 pageIndex) {
             TTestEnv env;
-            TPartIndexIt index(&part, &env, { });
+            TPartGroupFlatIndexIter index(&part, &env, { });
 
             Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
             for (TPageId p = 0; p < pageIndex; p++) {
@@ -160,9 +160,9 @@ namespace NTest {
             return index.GetRecord();
         }
 
-        inline const TPartIndexIt::TRecord * GetFlatLastRecord(const TPart& part) {
+        inline const TPartGroupFlatIndexIter::TRecord * GetFlatLastRecord(const TPart& part) {
             TTestEnv env;
-            TPartIndexIt index(&part, &env, { });
+            TPartGroupFlatIndexIter index(&part, &env, { });
             Y_ABORT_UNLESS(index.SeekLast() == EReady::Data);
             return index.GetLastRecord();
         }

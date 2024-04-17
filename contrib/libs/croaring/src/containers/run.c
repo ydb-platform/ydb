@@ -595,7 +595,8 @@ void run_container_andnot(const run_container_t *src_1,
     while ((rlepos1 < src_1->n_runs) && (rlepos2 < src_2->n_runs)) {
         if (end <= start2) {
             // output the first run
-            dst->runs[dst->n_runs++] = MAKE_RLE16(start, end - start - 1);
+            dst->runs[dst->n_runs++] =
+                CROARING_MAKE_RLE16(start, end - start - 1);
             rlepos1++;
             if (rlepos1 < src_1->n_runs) {
                 start = src_1->runs[rlepos1].value;
@@ -611,7 +612,7 @@ void run_container_andnot(const run_container_t *src_1,
         } else {
             if (start < start2) {
                 dst->runs[dst->n_runs++] =
-                    MAKE_RLE16(start, start2 - start - 1);
+                    CROARING_MAKE_RLE16(start, start2 - start - 1);
             }
             if (end2 < end) {
                 start = end2;
@@ -625,7 +626,7 @@ void run_container_andnot(const run_container_t *src_1,
         }
     }
     if (rlepos1 < src_1->n_runs) {
-        dst->runs[dst->n_runs++] = MAKE_RLE16(start, end - start - 1);
+        dst->runs[dst->n_runs++] = CROARING_MAKE_RLE16(start, end - start - 1);
         rlepos1++;
         if (rlepos1 < src_1->n_runs) {
             memcpy(dst->runs + dst->n_runs, src_1->runs + rlepos1,
@@ -827,7 +828,7 @@ void run_container_smart_append_exclusive(run_container_t *src,
 
     if (!src->n_runs ||
         (start > (old_end = last_run->value + last_run->length + 1))) {
-        *appended_last_run = MAKE_RLE16(start, length);
+        *appended_last_run = CROARING_MAKE_RLE16(start, length);
         src->n_runs++;
         return;
     }
@@ -841,10 +842,10 @@ void run_container_smart_append_exclusive(run_container_t *src,
     if (start == last_run->value) {
         // wipe out previous
         if (new_end < old_end) {
-            *last_run = MAKE_RLE16(new_end, old_end - new_end - 1);
+            *last_run = CROARING_MAKE_RLE16(new_end, old_end - new_end - 1);
             return;
         } else if (new_end > old_end) {
-            *last_run = MAKE_RLE16(old_end, new_end - old_end - 1);
+            *last_run = CROARING_MAKE_RLE16(old_end, new_end - old_end - 1);
             return;
         } else {
             src->n_runs--;
@@ -853,10 +854,12 @@ void run_container_smart_append_exclusive(run_container_t *src,
     }
     last_run->length = start - last_run->value - 1;
     if (new_end < old_end) {
-        *appended_last_run = MAKE_RLE16(new_end, old_end - new_end - 1);
+        *appended_last_run =
+            CROARING_MAKE_RLE16(new_end, old_end - new_end - 1);
         src->n_runs++;
     } else if (new_end > old_end) {
-        *appended_last_run = MAKE_RLE16(old_end, new_end - old_end - 1);
+        *appended_last_run =
+            CROARING_MAKE_RLE16(old_end, new_end - old_end - 1);
         src->n_runs++;
     }
 }
@@ -1055,6 +1058,7 @@ int run_container_cardinality(const run_container_t *run) {
 #else
 
 /* Get the cardinality of `run'. Requires an actual computation. */
+ALLOW_UNALIGNED
 int run_container_cardinality(const run_container_t *run) {
     const int32_t n_runs = run->n_runs;
     const rle16_t *runs = run->runs;

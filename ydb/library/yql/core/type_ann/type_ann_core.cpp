@@ -9497,7 +9497,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             // somewhat ugly attempt to find SqlProject to obtain column order
             auto currInput = input->HeadPtr();
             TString path = ToString(input->Content());
-            while (currInput->IsCallable({"PersistableRepr", "SqlAggregateAll", "RemoveSystemMembers", "Sort"})) {
+            while (currInput->IsCallable({"PersistableRepr", "SqlAggregateAll", "RemoveSystemMembers", "Sort", "Take", "Skip"})) {
                 path = path + " -> " + ToString(currInput->Content());
                 currInput = currInput->HeadPtr();
             }

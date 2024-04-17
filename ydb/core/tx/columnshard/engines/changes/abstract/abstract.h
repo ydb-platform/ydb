@@ -264,7 +264,7 @@ public:
     }
 
     void StartEmergency();
-    void AbortEmergency();
+    void AbortEmergency(const TString& reason);
 
     void Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context);
     void Start(NColumnShard::TColumnShard& self);

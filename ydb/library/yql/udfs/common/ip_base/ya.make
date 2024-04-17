@@ -1,20 +1,34 @@
-YQL_UDF_YDB(ip_udf)
+IF (YQL_PACKAGED)
+    PACKAGE()
 
-YQL_ABI_VERSION(
-    2
-    28
-    0
-)
+    FROM_SANDBOX(
+        FILE {FILE_RESOURCE_ID} OUT_NOAUTO
+            libip_udf.so
+    )
 
-SRCS(
-    ip_base.cpp
-)
+    END()
 
-PEERDIR(
-    ydb/library/yql/udfs/common/ip_base/lib
-)
+ELSE()
 
-END()
+    YQL_UDF_YDB(ip_udf)
+
+    YQL_ABI_VERSION(
+        2
+        28
+        0
+    )
+
+    SRCS(
+        ip_base.cpp
+    )
+
+    PEERDIR(
+        ydb/library/yql/udfs/common/ip_base/lib
+    )
+
+    END()
+
+ENDIF()
 
 RECURSE_FOR_TESTS(
     test

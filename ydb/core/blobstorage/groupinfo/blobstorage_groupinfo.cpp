@@ -420,6 +420,10 @@ ui32 TBlobStorageGroupInfo::TTopology::GetIdxInSubgroup(const TVDiskIdShort& vdi
     return BlobMapper->GetIdxInSubgroup(vdisk, hash);
 }
 
+bool TBlobStorageGroupInfo::TTopology::IsHandoff(const TVDiskIdShort& vdisk, ui32 hash) const {
+    return BlobMapper->GetIdxInSubgroup(vdisk, hash) >= GType.TotalPartCount();
+}
+
 TVDiskIdShort TBlobStorageGroupInfo::TTopology::GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash) const {
     return BlobMapper->GetVDiskInSubgroup(idxInSubgroup, hash);
 }

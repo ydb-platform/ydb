@@ -26,7 +26,10 @@ select
     DateTime::ToMicroseconds(`timestamp`) as timestamp_to_usec,
     DateTime::ToMicroseconds(`tzdate`) as tzdate_to_usec,
     DateTime::ToMicroseconds(`tzdatetime`) as tzdatetime_to_usec,
-    DateTime::ToMicroseconds(`tztimestamp`) as tztimestamp_to_usec
+    DateTime::ToMicroseconds(`tztimestamp`) as tztimestamp_to_usec,
+
+    /* Overflow test */
+    DateTime::ToDays(`negative_1d`) as negative_1d,
 from (
     select
         cast(fdate as Date) as `date`,
@@ -35,6 +38,7 @@ from (
         cast(finterval as Interval) as `interval`,
         cast(ftzdate as TzDate) as `tzdate`,
         cast(ftzdatetime as TzDatetime) as `tzdatetime`,
-        cast(ftztimestamp as TzTimestamp) as `tztimestamp`
+        cast(ftztimestamp as TzTimestamp) as `tztimestamp`,
+        -cast(finterval_1day as Interval) as `negative_1d`,
     from Input
 );

@@ -14,6 +14,15 @@ public:
     TColumnSaver() = default;
     TColumnSaver(NArrow::NTransformation::ITransformer::TPtr transformer, const NArrow::NSerialization::TSerializerContainer serializer);
 
+    void ResetSerializer(const NArrow::NSerialization::TSerializerContainer& serializer) {
+        AFL_VERIFY(serializer);
+        if (Serializer.IsCompatibleForExchange(serializer)) {
+            Serializer = serializer;
+        } else {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_reset_serializer")("reason", "incompatible_serializers");
+        }
+    }
+
     bool IsHardPacker() const;
 
     TString Apply(std::shared_ptr<arrow::Array> data, std::shared_ptr<arrow::Field> field) const;

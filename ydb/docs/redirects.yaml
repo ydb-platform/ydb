@@ -4,29 +4,123 @@ common:
   - from: changelog.md
     to: changelog-server.md
   - from: /administration/quickstart.md
-    to: /getting_started/quickstart.md
+    to: /quickstart.md
   - from: /getting_started/create_db.md
-    to: /getting_started/quickstart.md
+    to: /quickstart.md
   - from: /getting_started/auth.md
     to: /concepts/auth.md
   - from: /getting_started/cli.md
     to: /reference/ydb-cli/index.md
   - from: /getting_started/sdk.md
     to: /reference/ydb-sdk/index.md
+  - from: /getting_started/self_hosted/ydb_docker.md
+    to: /quickstart.md
+  - from: /getting_started/self_hosted/ydb_local.md
+    to: /quickstart.md
+  - from: /getting_started/self_hosted/ydb_minikube.md
+    to: /quickstart.md
   - from: /ops/devslice-user-guide-k8s-baremetal-host.md
     to: /ops/devslice-setup-kikimr-slice.md
   - from: /deploy/orchestrated/concepts.md
-    to: /getting_started/kubernetes.md
+    to: /devops/kubernetes/initial-deployment.md
   - from: /deploy/orchestrated/yc_managed_kubernetes.md
-    to: /getting_started/kubernetes.md
+    to: /devops/kubernetes/initial-deployment.md
   - from: /deploy/orchestrated/aws_eks.md
-    to: /getting_started/kubernetes.md
+    to: /devops/kubernetes/initial-deployment.md
   - from: /deploy/orchestrated/operate.md
-    to: /getting_started/kubernetes.md
+    to: /devops/kubernetes/initial-deployment.md
   - from: /getting_started/index.md
-    to: /getting_started/quickstart.md
+    to: /quickstart.md
+  - from: /getting_started/kubernetes.md
+    to: /devops/kubernetes/initial-deployment.md
+  - from: /getting_started/ansible.md
+    to: /devops/ansible/initial-deployment.md
+  - from: /getting_started/yql.md
+    to: /yql/reference/index.md
+  - from: /troubleshooting/system_views_cluster.md
+    to: /devops/manual/system-views.md
+  - from: /concepts/datatypes.md
+    to: /yql/reference/types/index.md
 
-# Redirect from export_import to export-import   
+# DBA-related redirects
+  - from: /db/index.md
+    to: /dba/index.md
+  - from: /maintenance/backup_and_recovery.md
+    to: /dba/backup-and-recovery.md
+  - from: /troubleshooting/system_views.md
+    to: /dba/system-views.md
+  - from: /troubleshooting/system_views_db.md
+    to: /dba/system-views.md
+  - from: /operations/manage-users-attr.md
+    to: /dba/custom-attributes.md
+  - from: /operations/query_plans_optimization.md
+    to: /dba/query-plans-optimization.md
+  - from: /best_practices/cdc.md
+    to: /dba/cdc.md
+  - from: /best_practices/pk-olap-scalability.md
+    to: /dba/primary-key/row-oriented.md
+  - from: /best_practices/pk-olap-scalability.md
+    to: /dba/primary-key/column-oriented.md
+  - from: /best_practices/schema_design.md
+    to: /dba/primary-key/index.md
+  - from: /best_practices/secondary_indexes.md
+    to: /dba/secondary-indexes.md
+  - from: /best_practices/table_sharding.md
+    to:  /dba/primary-key/index.md
+
+# Dev-related redirects
+  - from: /best_practices/batch_upload.md
+    to: /dev/batch-upload.md
+  - from: /best_practices/paging.md
+    to: /dev/paging.md
+  - from: /best_practices/timeouts.md
+    to: /dev/timeouts.md
+
+# Contributors-related redirects
+  - from: /development/build-ya.md
+    to: /contributor/build-ya.md
+  - from: /development/datashard-locks-and-change-visibility.md
+    to: /contributor/datashard-locks-and-change-visibility.md
+  - from: /development/index.md
+    to: /contributor/index.md
+  - from: /development/load-actors-key-value.md
+    to: /contributor/load-actors-key-value.md
+  - from: /development/load-actors-kqp.md
+    to: /contributor/load-actors-kqp.md
+  - from: /development/load-actors-memory.md
+    to: /contributor/load-actors-memory.md
+  - from: /development/load-actors-overview.md
+    to: /contributor/load-actors-overview.md
+  - from: /development/load-actors-pdisk-log.md
+    to: /contributor/load-actors-pdisk-log.md
+  - from: /development/load-actors-pdisk-read.md
+    to: /contributor/load-actors-pdisk-read.md
+  - from: /development/load-actors-pdisk-write.md
+    to: /contributor/load-actors-pdisk-write.md
+  - from: /development/load-actors-stop.md
+    to: /contributor/load-actors-stop.md
+  - from: /development/load-actors-storage.md
+    to: /contributor/load-actors-storage.md
+  - from: /development/load-actors-vdisk.md
+    to: /contributor/load-actors-vdisk.md
+  - from: /development/localdb-uncommitted-txs.md
+    to: /contributor/localdb-uncommitted-txs.md
+  - from: /development/manage-releases.md
+    to: /contributor/manage-releases.md
+  - from: /development/suggest-change.md
+    to: /contributor/suggest-change.md
+
+# Redirects for ydb-dstool
+  - from: /administration/ydb-dstool-device-list.md
+    to: /reference/ydb-dstool/device-list.md
+  - from: /administration/ydb-dstool-global-options.md
+    to: /reference/ydb-dstool/global-options.md
+  - from: /administration/ydb-dstool-overview.md
+    to: /reference/ydb-dstool/index.md
+  - from: /administration/ydb-dstool-setup.md
+    to: /reference/ydb-dstool/install.md
+
+# Redirects from export_import to export-import   
   - from: /reference/ydb-cli/export_import/s3_conn.md
     to: /reference/ydb-cli/export-import/auth-s3.md
   - from: /reference/ydb-cli/export_import/s3_export.md
@@ -49,3 +143,5 @@ ru:
     to: /concepts/datamodel/table.md
   - from: /postgresql/index.md
     to: /postgresql/intro.md
+  - from: /db/terraform.md
+    to: /dba/terraform.md

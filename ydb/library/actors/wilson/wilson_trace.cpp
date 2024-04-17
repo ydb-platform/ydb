@@ -3,8 +3,29 @@
 #include <util/generic/algorithm.h>
 #include <util/string/hex.h>
 
+#include <ydb/library/actors/protos/actors.pb.h>
+
 namespace NWilson {
-    TTraceId TTraceId::FromTraceparentHeader(const TStringBuf header) {
+    TTraceId::TTraceId(const NActorsProto::TTraceId& pb)
+        : TTraceId()
+    {
+        if (pb.HasData()) {
+            const auto& data = pb.GetData();
+            if (data.size() == sizeof(TSerializedTraceId)) {
+                *this = *reinterpret_cast<const TSerializedTraceId*>(data.data());
+            }
+        }
+    }
+
+    void TTraceId::Serialize(NActorsProto::TTraceId *pb) const {
+        if (*this) {
+            TSerializedTraceId data;
+            Serialize(&data);
+            pb->SetData(reinterpret_cast<const char*>(&data), sizeof(data));
+        }
+    }
+
+    TTraceId TTraceId::FromTraceparentHeader(const TStringBuf header, ui8 verbosity) {
         constexpr size_t versionChars = 2; // Only version 0 is supported
         constexpr size_t versionStart = 0;
 
@@ -61,7 +82,7 @@ namespace NWilson {
             return {};
         }
 
-        return TTraceId(traceId, spanId, 15, Max<ui32>());
+        return TTraceId(traceId, spanId, verbosity, Max<ui32>());
     }
 
     TString TTraceId::GetHexTraceId() const {

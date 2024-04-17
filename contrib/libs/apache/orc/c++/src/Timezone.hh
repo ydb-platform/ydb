@@ -23,9 +23,9 @@
 
 #include "Adaptor.hh"
 
+#include <stdint.h>
 #include <memory>
 #include <stdexcept>
-#include <stdint.h>
 #include <string>
 #include <vector>
 
@@ -55,7 +55,7 @@ namespace orc {
    * city in the region (eg. America/Los_Angeles or America/Mexico_City).
    */
   class Timezone {
-  public:
+   public:
     virtual ~Timezone();
 
     /**
@@ -79,12 +79,17 @@ namespace orc {
     /**
      * Get the version of the zone file.
      */
-    virtual uint64_t getVersion() const =0;
+    virtual uint64_t getVersion() const = 0;
 
     /**
      * Convert wall clock time of current timezone to UTC timezone
      */
     virtual int64_t convertToUTC(int64_t clk) const = 0;
+
+    /**
+     * Convert UTC timezone to wall clock time of current timezone
+     */
+    virtual int64_t convertFromUTC(int64_t clk) const = 0;
   };
 
   /**
@@ -105,11 +110,11 @@ namespace orc {
   std::unique_ptr<Timezone> getTimezone(const std::string& filename,
                                         const std::vector<unsigned char>& b);
 
-  class TimezoneError: public std::runtime_error {
-  public:
-    TimezoneError(const std::string& what);
-    TimezoneError(const TimezoneError&);
-    virtual ~TimezoneError() ORC_NOEXCEPT;
+  class TimezoneError : public std::runtime_error {
+   public:
+    explicit TimezoneError(const std::string& what);
+    explicit TimezoneError(const TimezoneError&);
+    ~TimezoneError() noexcept override;
   };
 
   /**
@@ -118,7 +123,7 @@ namespace orc {
    * the future.
    */
   class FutureRule {
-  public:
+   public:
     virtual ~FutureRule();
     virtual bool isDefined() const = 0;
     virtual const TimezoneVariant& getVariant(int64_t clk) const = 0;
@@ -129,6 +134,6 @@ namespace orc {
    * Parse the POSIX TZ string.
    */
   std::shared_ptr<FutureRule> parseFutureRule(const std::string& ruleString);
-}
+}  // namespace orc
 
 #endif

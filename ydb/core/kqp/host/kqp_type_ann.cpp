@@ -1718,9 +1718,10 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
 
     TVector<const TItemExprType*> resultStructItems;
     for (const auto& item : leftRowType->GetItems()) {
-        resultStructItems.emplace_back(
-            ctx.MakeType<TItemExprType>(TString::Join(leftLabel.Value(), ".", item->GetName()), item->GetItemType())
-        );
+        TString itemName = leftLabel.Value().empty()
+            ? TString(item->GetName())
+            : TString::Join(leftLabel.Value(), ".", item->GetName());
+        resultStructItems.emplace_back(ctx.MakeType<TItemExprType>(itemName, item->GetItemType()));
     }
 
     if (RightJoinSideAllowed(joinType.Value())) {
@@ -1731,9 +1732,10 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
                 ? ctx.MakeType<TOptionalExprType>(item->GetItemType())
                 : item->GetItemType();
 
-            resultStructItems.emplace_back(
-                ctx.MakeType<TItemExprType>(TString::Join(rightLabel.Value(), ".", item->GetName()), itemType)
-            );
+            TString itemName = rightLabel.Value().empty()
+                ? TString(item->GetName())
+                : TString::Join(rightLabel.Value(), ".", item->GetName());
+            resultStructItems.emplace_back(ctx.MakeType<TItemExprType>(itemName, itemType));
         }
     }
 

@@ -12,19 +12,23 @@ namespace NYql::NDq {
     class TGenericTokenProvider {
     public:
         using TPtr = std::unique_ptr<TGenericTokenProvider>;
-
-        TGenericTokenProvider(const NYql::Generic::TSource& source,
-                              const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
+        TGenericTokenProvider() = default; //No auth required
+        TGenericTokenProvider(const TString& staticIamToken);
+        TGenericTokenProvider(
+            const TString& serviceAccountId,
+            const TString& ServiceAccountIdSignature,
+            const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
 
         void MaybeFillToken(NConnector::NApi::TDataSourceInstance& dsi) const;
 
     private:
-        NYql::Generic::TSource Source_;
         TString StaticIAMToken_;
         NYdb::TCredentialsProviderPtr CredentialsProvider_;
     };
 
     TGenericTokenProvider::TPtr
-    CreateGenericTokenProvider(const NYql::Generic::TSource& source,
-                               const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
+    CreateGenericTokenProvider(
+        const TString& staticIamToken,
+        const TString& serviceAccountId, const TString& ServiceAccountIdSignature,
+        const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
 } //namespace NYql::NDq

@@ -20,11 +20,11 @@ public:
         , CoutColors_(NColorizer::AutoColors(Cout))
     {}
 
-    bool ExecuteSchemeQuery(const TString& query) const {
+    bool ExecuteSchemeQuery(const TString& query, const TString& traceId) const {
         StartSchemeTraceOpt();
 
         TSchemeMeta meta;
-        TRequestResult status = YdbSetup_.SchemeQueryRequest(query, meta);
+        TRequestResult status = YdbSetup_.SchemeQueryRequest(query, traceId, meta);
         TYdbSetup::StopTraceOpt();
 
         PrintSchemeQueryAst(meta.Ast);
@@ -80,6 +80,19 @@ public:
                 Cerr << CerrColors_.Red() << "Failed to fetch result set with id " << resultSetId << ", reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
                 return false;
             }
+        }
+
+        return true;
+    }
+
+    bool ForgetExecutionOperation() {
+        TYdbSetup::StopTraceOpt();
+
+        TRequestResult status = YdbSetup_.ForgetScriptExecutionOperationRequest(ExecutionOperation_);
+
+        if (!status.IsSuccess()) {
+            Cerr << CerrColors_.Red() << "Failed to forget script execution operation, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+            return false;
         }
 
         return true;
@@ -199,8 +212,8 @@ TKqpRunner::TKqpRunner(const TRunnerOptions& options)
     : Impl_(new TImpl(options))
 {}
 
-bool TKqpRunner::ExecuteSchemeQuery(const TString& query) const {
-    return Impl_->ExecuteSchemeQuery(query);
+bool TKqpRunner::ExecuteSchemeQuery(const TString& query, const TString& traceId) const {
+    return Impl_->ExecuteSchemeQuery(query, traceId);
 }
 
 bool TKqpRunner::ExecuteScript(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId) const {
@@ -213,6 +226,10 @@ bool TKqpRunner::ExecuteQuery(const TString& query, NKikimrKqp::EQueryAction act
 
 bool TKqpRunner::FetchScriptResults() {
     return Impl_->FetchScriptResults();
+}
+
+bool TKqpRunner::ForgetExecutionOperation() {
+    return Impl_->ForgetExecutionOperation();
 }
 
 void TKqpRunner::PrintScriptResults() const {

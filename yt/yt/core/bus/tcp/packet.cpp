@@ -6,8 +6,6 @@
 
 #include <library/cpp/yt/string/guid.h>
 
-#include <library/cpp/yt/memory/chunked_memory_allocator.h>
-
 namespace NYT::NBus {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -17,7 +15,6 @@ constexpr ui32 NullPacketPartSize = 0xffffffff;
 
 constexpr int TypicalPacketPartCount = 16;
 constexpr int TypicalVariableHeaderSize = TypicalPacketPartCount * (sizeof(ui32) + sizeof(ui64));
-constexpr i64 PacketDecoderChunkSize = 16_KB;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -160,12 +157,10 @@ class TPacketDecoder
     , public TPacketTranscoderBase<TPacketDecoder>
 {
 public:
-    TPacketDecoder(const NLogging::TLogger& logger, bool verifyChecksum)
+    TPacketDecoder(
+        const NLogging::TLogger& logger,
+        bool verifyChecksum)
         : TPacketTranscoderBase(logger)
-        , Allocator_(
-            PacketDecoderChunkSize,
-            TChunkedMemoryAllocator::DefaultMaxSmallBlockSizeRatio,
-            GetRefCountedTypeCookie<TPacketDecoderTag>())
         , VerifyChecksum_(verifyChecksum)
     {
         Restart();
@@ -239,8 +234,6 @@ public:
 
 private:
     friend class TPacketTranscoderBase<TPacketDecoder>;
-
-    TChunkedMemoryAllocator Allocator_;
 
     std::vector<TSharedRef> Parts_;
 
@@ -350,7 +343,7 @@ private:
             } else if (partSize == 0) {
                 Parts_.push_back(TSharedRef::MakeEmpty());
             } else {
-                auto part = Allocator_.AllocateAligned(partSize);
+                TSharedMutableRef part = TSharedMutableRef::Allocate<TPacketDecoderTag>(partSize);
                 BeginPhase(EPacketPhase::MessagePart, part.Begin(), part.Size());
                 Parts_.push_back(std::move(part));
                 break;
@@ -494,9 +487,10 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TPacketTranscoderFactory
+class TPacketTranscoderFactory
     : public IPacketTranscoderFactory
 {
+public:
     std::unique_ptr<IPacketDecoder> CreateDecoder(
         const NLogging::TLogger& logger,
         bool verifyChecksum) const override

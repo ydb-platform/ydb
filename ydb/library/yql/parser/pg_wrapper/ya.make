@@ -38,6 +38,7 @@ SRCS(
     cost_mocks.cpp
     syscache.cpp
     pg_utils_wrappers.cpp
+    utils.cpp
 )
 
 IF (ARCH_X86_64)
@@ -78,6 +79,10 @@ PEERDIR(
     ydb/library/yql/public/issue
     ydb/library/yql/public/udf
     ydb/library/yql/utils
+    ydb/library/yql/public/decimal
+    ydb/library/binary_json
+    ydb/library/dynumber
+    ydb/library/uuid
 
     contrib/libs/icu
     contrib/libs/libc_compat

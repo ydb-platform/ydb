@@ -1,5 +1,7 @@
 LIBRARY()
 
+GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/client/ydb_topic/codecs/codecs.h)
+
 SRCS(
     codecs.h
     codecs.cpp

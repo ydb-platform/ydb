@@ -43,6 +43,7 @@ TExecFunc arrow_multirange_before_range() { return TGenericExec<TPgDirectFunc<&m
 TExecFunc arrow_multirange_cmp() { return TGenericExec<TPgDirectFunc<&multirange_cmp>, true, true, TArgs_multirange_cmp_Policy>({}); }
 TExecFunc arrow_multirange_constructor0() { return TGenericExec<TPgDirectFunc<&multirange_constructor0>, true, false, TArgs_multirange_constructor0_Policy>({}); }
 TExecFunc arrow_multirange_constructor1() { return TGenericExec<TPgDirectFunc<&multirange_constructor1>, true, false, TArgs_multirange_constructor1_Policy>({}); }
+TExecFunc arrow_multirange_constructor2() { return TGenericExec<TPgDirectFunc<&multirange_constructor2>, true, false, TDefaultArgsPolicy>({}); }
 TExecFunc arrow_multirange_contained_by_multirange() { return TGenericExec<TPgDirectFunc<&multirange_contained_by_multirange>, true, true, TArgs_multirange_contained_by_multirange_Policy>({}); }
 TExecFunc arrow_multirange_contained_by_range() { return TGenericExec<TPgDirectFunc<&multirange_contained_by_range>, true, true, TArgs_multirange_contained_by_range_Policy>({}); }
 TExecFunc arrow_multirange_contains_elem() { return TGenericExec<TPgDirectFunc<&multirange_contains_elem>, true, true, TArgs_multirange_contains_elem_Policy>({}); }

@@ -278,22 +278,33 @@ struct TSysCache {
             auto name = MakeFixedString(desc.Name, NAMEDATALEN);
             FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_proname, (Datum)name);
             FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_pronargs, (Datum)desc.ArgTypes.size());
-            {
+            if (!desc.VariadicType) {
                 auto arr = buildoidvector(desc.ArgTypes.data(), (int)desc.ArgTypes.size());
+                FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_proargtypes, (Datum)arr);
+            } else {
+                std::unique_ptr<Oid[]> allOids(new Oid[1 + desc.ArgTypes.size()]);
+                std::copy(desc.ArgTypes.begin(), desc.ArgTypes.end(), allOids.get());
+                allOids[desc.ArgTypes.size()] = desc.VariadicArgType;
+                auto arr = buildoidvector(allOids.get(), (int)(1 + desc.ArgTypes.size()));
                 FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_proargtypes, (Datum)arr);
             }
 
-            const ui32 fullArgsCount = desc.ArgTypes.size() + desc.OutputArgTypes.size();
-            if (!desc.OutputArgTypes.empty())
+            auto variadicDelta = desc.VariadicType ? 1 : 0;
+            const ui32 fullArgsCount = desc.ArgTypes.size() + desc.OutputArgTypes.size() + variadicDelta;
+            if (!desc.OutputArgTypes.empty() || variadicDelta)
             {
                 std::unique_ptr<Oid[]> allOids(new Oid[fullArgsCount]);
                 std::copy(desc.ArgTypes.begin(), desc.ArgTypes.end(), allOids.get());
-                std::copy(desc.OutputArgTypes.begin(), desc.OutputArgTypes.end(), allOids.get() + desc.ArgTypes.size());
+                if (variadicDelta) {
+                    allOids.get()[desc.ArgTypes.size()] = desc.VariadicArgType;
+                }
+
+                std::copy(desc.OutputArgTypes.begin(), desc.OutputArgTypes.end(), allOids.get() + desc.ArgTypes.size() + variadicDelta);
 
                 auto arr = buildoidvector(allOids.get(), (int)fullArgsCount);
                 FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_proallargtypes, (Datum)arr);
             }
-            if (!desc.OutputArgTypes.empty())
+            if (!desc.OutputArgTypes.empty() || variadicDelta)
             {
                 int dims[MAXDIM];
                 int lbs[MAXDIM];
@@ -302,14 +313,18 @@ struct TSysCache {
                 std::unique_ptr<Datum[]> dvalues(new Datum[fullArgsCount]);
                 std::unique_ptr<bool[]> dnulls(new bool[fullArgsCount]);
                 std::fill_n(dvalues.get(), desc.ArgTypes.size(), CharGetDatum('i'));
-                std::fill_n(dvalues.get() + desc.ArgTypes.size(), desc.OutputArgTypes.size(), CharGetDatum('o'));
+                if (variadicDelta) {
+                    dvalues.get()[desc.ArgTypes.size()] = CharGetDatum('v');
+                }
+
+                std::fill_n(dvalues.get() + desc.ArgTypes.size() + variadicDelta, desc.OutputArgTypes.size(), CharGetDatum('o'));
                 std::fill_n(dnulls.get(), fullArgsCount, false);
 
                 auto arr = construct_md_array(dvalues.get(), dnulls.get(), 1, dims, lbs, CHAROID, charDesc.TypeLen, charDesc.PassByValue, charDesc.TypeAlign);
                 FillDatum(Natts_pg_proc, values, nulls, Anum_pg_proc_proargmodes, (Datum)arr);
             }
-            if (!desc.OutputArgNames.empty() || !desc.InputArgNames.empty()) {
-                Y_ENSURE(desc.InputArgNames.size() + desc.OutputArgNames.size() == fullArgsCount);
+            if (!desc.OutputArgNames.empty() || !desc.InputArgNames.empty() || !desc.VariadicArgName.empty()) {
+                Y_ENSURE(desc.InputArgNames.size() + variadicDelta + desc.OutputArgNames.size() == fullArgsCount);
                 int dims[MAXDIM];
                 int lbs[MAXDIM];
                 dims[0] = fullArgsCount;
@@ -320,8 +335,12 @@ struct TSysCache {
                     dvalues[i] = PointerGetDatum(MakeVar(desc.InputArgNames[i]));
                 }
 
+                if (variadicDelta) {
+                    dvalues[desc.InputArgNames.size()] = PointerGetDatum(MakeVar(desc.VariadicArgName));
+                }
+
                 for (ui32 i = 0; i < desc.OutputArgNames.size(); ++i) {
-                    dvalues[i + desc.InputArgNames.size()] = PointerGetDatum(MakeVar(desc.OutputArgNames[i]));
+                    dvalues[i + desc.InputArgNames.size() + variadicDelta] = PointerGetDatum(MakeVar(desc.OutputArgNames[i]));
                 }
                 std::fill_n(dnulls.get(), fullArgsCount, false);
 

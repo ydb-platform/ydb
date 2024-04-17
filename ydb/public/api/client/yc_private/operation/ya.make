@@ -2,6 +2,8 @@ PROTO_LIBRARY()
 
 EXCLUDE_TAGS(GO_PROTO)
 
+PY_NAMESPACE(yandex.cloud.priv.operation)
+
 GRPC()
 SRCS(
     operation.proto

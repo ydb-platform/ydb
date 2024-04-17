@@ -47,6 +47,18 @@ var (
 	libcPath = "libc.so"
 )
 
+var (
+	regexpComma          = regexp.MustCompile(`\s*,\s*`)
+	regexpParamKV        = regexp.MustCompile(`^(\S*) (\S*)$`)
+	regexpSys            = regexp.MustCompile(`^\/\/sys\t`)
+	regexpSysNonblock    = regexp.MustCompile(`^\/\/sysnb\t`)
+	regexpSysDeclaration = regexp.MustCompile(`^\/\/sys(nb)?\t(\w+)\(([^()]*)\)\s*(?:\(([^()]+)\))?\s*(?:=\s*((?i)SYS_[A-Z0-9_]+))?$`)
+	regexpPointer        = regexp.MustCompile(`^\*`)
+	regexpSlice          = regexp.MustCompile(`^\[](.*)`)
+	regexpDragonflyExtp  = regexp.MustCompile(`^(?i)extp(read|write)`)
+	regexpSyscallName    = regexp.MustCompile(`([a-z])([A-Z])`)
+)
+
 // cmdLine returns this programs's commandline arguments
 func cmdLine() string {
 	return "go run mksyscall.go " + strings.Join(os.Args[1:], " ")
@@ -75,12 +87,12 @@ func parseParamList(list string) []string {
 	if list == "" {
 		return []string{}
 	}
-	return regexp.MustCompile(`\s*,\s*`).Split(list, -1)
+	return regexpComma.Split(list, -1)
 }
 
 // parseParam splits a parameter into name and type
 func parseParam(p string) Param {
-	ps := regexp.MustCompile(`^(\S*) (\S*)$`).FindStringSubmatch(p)
+	ps := regexpParamKV.FindStringSubmatch(p)
 	if ps == nil {
 		fmt.Fprintf(os.Stderr, "malformed parameter: %s\n", p)
 		os.Exit(1)
@@ -138,15 +150,15 @@ func main() {
 		s := bufio.NewScanner(file)
 		for s.Scan() {
 			t := s.Text()
-			nonblock := regexp.MustCompile(`^\/\/sysnb\t`).FindStringSubmatch(t)
-			if regexp.MustCompile(`^\/\/sys\t`).FindStringSubmatch(t) == nil && nonblock == nil {
+			nonblock := regexpSysNonblock.FindStringSubmatch(t)
+			if regexpSys.FindStringSubmatch(t) == nil && nonblock == nil {
 				continue
 			}
 
 			// Line must be of the form
 			//	func Open(path string, mode int, perm int) (fd int, errno error)
 			// Split into name, in params, out params.
-			f := regexp.MustCompile(`^\/\/sys(nb)?\t(\w+)\(([^()]*)\)\s*(?:\(([^()]+)\))?\s*(?:=\s*((?i)SYS_[A-Z0-9_]+))?$`).FindStringSubmatch(t)
+			f := regexpSysDeclaration.FindStringSubmatch(t)
 			if f == nil {
 				fmt.Fprintf(os.Stderr, "%s:%s\nmalformed //sys declaration\n", path, t)
 				os.Exit(1)
@@ -184,7 +196,7 @@ func main() {
 			n := 0
 			for _, param := range in {
 				p := parseParam(param)
-				if regexp.MustCompile(`^\*`).FindStringSubmatch(p.Type) != nil {
+				if regexpPointer.FindStringSubmatch(p.Type) != nil {
 					args = append(args, "uintptr(unsafe.Pointer("+p.Name+"))")
 				} else if p.Type == "string" && errvar != "" {
 					text += fmt.Sprintf("\tvar _p%d *byte\n", n)
@@ -198,7 +210,7 @@ func main() {
 					text += fmt.Sprintf("\t_p%d, _ = BytePtrFromString(%s)\n", n, p.Name)
 					args = append(args, fmt.Sprintf("uintptr(unsafe.Pointer(_p%d))", n))
 					n++
-				} else if regexp.MustCompile(`^\[\](.*)`).FindStringSubmatch(p.Type) != nil {
+				} else if regexpSlice.FindStringSubmatch(p.Type) != nil {
 					// Convert slice into pointer, length.
 					// Have to be careful not to take address of &a[0] if len == 0:
 					// pass dummy pointer in that case.
@@ -218,7 +230,7 @@ func main() {
 						args = append(args, fmt.Sprintf("uintptr(%s)", p.Name))
 					}
 				} else if p.Type == "int64" && *dragonfly {
-					if regexp.MustCompile(`^(?i)extp(read|write)`).FindStringSubmatch(funct) == nil {
+					if regexpDragonflyExtp.FindStringSubmatch(funct) == nil {
 						args = append(args, "0")
 					}
 					if endianness == "big-endian" {
@@ -278,7 +290,7 @@ func main() {
 			// System call number.
 			if sysname == "" {
 				sysname = "SYS_" + funct
-				sysname = regexp.MustCompile(`([a-z])([A-Z])`).ReplaceAllString(sysname, `${1}_$2`)
+				sysname = regexpSyscallName.ReplaceAllString(sysname, `${1}_$2`)
 				sysname = strings.ToUpper(sysname)
 			}
 

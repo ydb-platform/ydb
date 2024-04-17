@@ -60,6 +60,23 @@ TCellTag GetSiblingChaosCellTag(TCellTag cellTag)
     return TCellTag(cellTag.Underlying() ^ 1);
 }
 
+bool IsValidReplicationProgress(const TReplicationProgress& progress)
+{
+    const auto& segments = progress.Segments;
+
+    if (segments.empty()) {
+        return false;
+    }
+
+    for (int segmentIndex = 1; segmentIndex < std::ssize(segments); ++segmentIndex) {
+        if (segments[segmentIndex - 1].LowerKey >= segments[segmentIndex].LowerKey) {
+            return false;
+        }
+    }
+
+    return segments.back().LowerKey < progress.UpperKey;
+}
+
 bool IsOrderedTabletReplicationProgress(const TReplicationProgress& progress)
 {
     const auto& segments = progress.Segments;

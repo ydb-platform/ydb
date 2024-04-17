@@ -117,10 +117,11 @@ TExprBase BuildDqJoinInput(TExprContext& ctx, TPositionHandle pos, const TExprBa
 }
 
 TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
-    const THashMap<TStringBuf, TJoinInputDesc>& inputs, EHashJoinMode mode, TExprContext& ctx)
+    const THashMap<TStringBuf, TJoinInputDesc>& inputs, EHashJoinMode mode, bool useCBO, TExprContext& ctx, const TTypeAnnotationContext& typeCtx)
 {
     auto options = joinTuple.Options();
     auto linkSettings = GetEquiJoinLinkSettings(options.Ref());
+    YQL_ENSURE(linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin || typeCtx.StreamLookupJoin, "Unsupported join strategy: streamlookup");
     bool leftAny = linkSettings.LeftHints.contains("any");
     bool rightAny = linkSettings.RightHints.contains("any");
 
@@ -129,7 +130,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
         left = inputs.at(joinTuple.LeftScope().Cast<TCoAtom>().Value());
         YQL_ENSURE(left, "unknown scope " << joinTuple.LeftScope().Cast<TCoAtom>().Value());
     } else {
-        left = BuildDqJoin(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), inputs, mode, ctx);
+        left = BuildDqJoin(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), inputs, mode, useCBO, ctx, typeCtx);
         if (!left) {
             return {};
         }
@@ -140,7 +141,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
         right = inputs.at(joinTuple.RightScope().Cast<TCoAtom>().Value());
         YQL_ENSURE(right, "unknown scope " << joinTuple.RightScope().Cast<TCoAtom>().Value());
     } else {
-        right = BuildDqJoin(joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), inputs, mode, ctx);
+        right = BuildDqJoin(joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), inputs, mode, useCBO, ctx, typeCtx);
         if (!right) {
             return {};
         }
@@ -171,6 +172,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
     leftJoinKeyNames.reserve(joinKeysCount);
     TVector<TCoAtom> rightJoinKeyNames;
     rightJoinKeyNames.reserve(joinKeysCount);
+    auto joinAlgo = BuildAtom(ToString(linkSettings.JoinAlgo), joinTuple.Pos(), ctx).Ptr();
 
     auto joinKeysBuilder = Build<TDqJoinKeyTupleList>(ctx, left->Input.Pos());
 
@@ -221,6 +223,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
             .RightJoinKeyNames()
                 .Add(rightJoinKeyNames)
                 .Build()
+            .JoinAlgo(joinAlgo)
             .Done();
         return TJoinInputDesc(Nothing(), dqJoin, std::move(resultKeys));
     } else {
@@ -243,6 +246,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
             .RightJoinKeyNames()
                 .Add(rightJoinKeyNames)
                 .Build()
+            .JoinAlgo(joinAlgo)
             .Flags().Add(std::move(flags)).Build()
             .Done();
         return TJoinInputDesc(Nothing(), dqJoin, std::move(resultKeys));
@@ -370,7 +374,7 @@ bool CheckJoinColumns(const TExprBase& node) {
  * physical stages with join operators.
  * Potentially this optimizer can also perform joins reorder given cardinality information.
  */
-TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, TExprContext& ctx) {
+TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
     if (!node.Maybe<TCoEquiJoin>()) {
         return node;
     }
@@ -387,7 +391,7 @@ TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, TExprCont
     }
 
     auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
-    auto result = BuildDqJoin(joinTuple, inputs, mode, ctx);
+    auto result = BuildDqJoin(joinTuple, inputs, mode, useCBO, ctx, typeCtx);
     if (!result) {
         return node;
     }
@@ -525,6 +529,7 @@ TExprBase DqRewriteRightJoinToLeft(const TExprBase node, TExprContext& ctx) {
         .JoinKeys(joinKeysBuilder.Done())
         .LeftJoinKeyNames(dqJoin.LeftJoinKeyNames())
         .RightJoinKeyNames(dqJoin.RightJoinKeyNames())
+        .JoinAlgo(dqJoin.JoinAlgo())
         .Flags(newFlags)
         .Done();
 }
@@ -710,6 +715,11 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
         if (!buildNewStage) {
             // NOTE: Do not push join to stage with multiple outputs, reduce memory footprint.
             buildNewStage = GetStageOutputsCount(leftCn.Output().Stage()) > 1;
+            if (!buildNewStage && rightBroadcast) {
+                // NOTE: Do not fuse additional input into stage which have first input `Broadcast` type.
+                // Rule described in /ydb/library/yql/dq/tasks/dq_connection_builder.h:23
+                buildNewStage = DqStageFirstInputIsBroadcast(leftCn.Output().Stage());
+            }
         }
     }
 
@@ -1109,9 +1119,25 @@ TExprNode::TPtr ReplaceJoinOnSide(TExprNode::TPtr&& input, const TTypeAnnotation
 
 }
 
-TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx) {
+TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, bool useCBO, TExprContext& ctx, IOptimizationContext& optCtx) {
     const auto joinType = join.JoinType().Value();
     YQL_ENSURE(joinType != "Cross"sv);
+
+    if (useCBO) {
+        auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
+        switch (joinAlgo) {
+            case EJoinAlgoType::LookupJoin:
+            case EJoinAlgoType::MapJoin:
+                mode = EHashJoinMode::Map;
+                break;
+            case EJoinAlgoType::GraceJoin:
+                mode = EHashJoinMode::GraceAndSelf;
+                break;
+            default:
+                break;
+        }
+
+    }
 
     const auto leftIn = join.LeftInput().Cast<TDqCnUnionAll>().Output();
     const auto rightIn = join.RightInput().Cast<TDqCnUnionAll>().Output();
@@ -1401,6 +1427,8 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                                         return parent;
                                     })
                                 .Seal()
+                                .List(7).Add(join.LeftJoinKeyNames().Ref().ChildrenList()).Seal()
+                                .List(8).Add(join.RightJoinKeyNames().Ref().ChildrenList()).Seal()
                             .Seal()
                         .Seal()
                     .Seal().Build();
@@ -1449,6 +1477,8 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                                         return parent;
                                     })
                                 .Seal()
+                                .List(7).Add(join.LeftJoinKeyNames().Ref().ChildrenList()).Seal()
+                                .List(8).Add(join.RightJoinKeyNames().Ref().ChildrenList()).Seal()
                             .Seal()
                         .Seal()
                     .Seal().Build();

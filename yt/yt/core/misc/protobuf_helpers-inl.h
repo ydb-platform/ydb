@@ -298,27 +298,29 @@ bool RemoveProtoExtension(NProto::TExtensionSet* extensions)
 
 namespace NDetail {
 
-template <class TSerializedArray, class TOriginalArray>
+template <class TSerializedArray, class TOriginalArray, class... TArgs>
 void ToProtoArrayImpl(
     TSerializedArray* serializedArray,
-    const TOriginalArray& originalArray)
+    const TOriginalArray& originalArray,
+    TArgs&&... args)
 {
     serializedArray->Clear();
     serializedArray->Reserve(originalArray.size());
     for (const auto& item : originalArray) {
-        ToProto(serializedArray->Add(), item);
+        ToProto(serializedArray->Add(), item, std::forward<TArgs>(args)...);
     }
 }
 
-template <class TOriginalArray, class TSerializedArray>
+template <class TOriginalArray, class TSerializedArray, class... TArgs>
 void FromProtoArrayImpl(
     TOriginalArray* originalArray,
-    const TSerializedArray& serializedArray)
+    const TSerializedArray& serializedArray,
+    TArgs&&... args)
 {
     originalArray->clear();
     originalArray->resize(serializedArray.size());
     for (int i = 0; i < serializedArray.size(); ++i) {
-        FromProto(&(*originalArray)[i], serializedArray.Get(i));
+        FromProto(&(*originalArray)[i], serializedArray.Get(i), std::forward<TArgs>(args)...);
     }
 }
 
@@ -433,12 +435,13 @@ void FromProtoArrayImpl(
 
 } // namespace NDetail
 
-template <class TSerialized, class TOriginalArray>
+template <class TSerialized, class TOriginalArray, class... TArgs>
 void ToProto(
     ::google::protobuf::RepeatedPtrField<TSerialized>* serializedArray,
-    const TOriginalArray& originalArray)
+    const TOriginalArray& originalArray,
+    TArgs&&... args)
 {
-    NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray);
+    NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray, std::forward<TArgs>(args)...);
 }
 
 template <class TSerialized, class TOriginalArray>
@@ -449,12 +452,13 @@ void ToProto(
     NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray);
 }
 
-template <class TOriginalArray, class TSerialized>
+template <class TOriginalArray, class TSerialized, class... TArgs>
 void FromProto(
     TOriginalArray* originalArray,
-    const ::google::protobuf::RepeatedPtrField<TSerialized>& serializedArray)
+    const ::google::protobuf::RepeatedPtrField<TSerialized>& serializedArray,
+    TArgs&&... args)
 {
-    NYT::NDetail::FromProtoArrayImpl(originalArray, serializedArray);
+    NYT::NDetail::FromProtoArrayImpl(originalArray, serializedArray, std::forward<TArgs>(args)...);
 }
 
 template <class TOriginalArray, class TSerialized>

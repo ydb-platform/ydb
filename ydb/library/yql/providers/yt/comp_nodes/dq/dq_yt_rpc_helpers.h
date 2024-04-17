@@ -1,6 +1,9 @@
 #pragma once
 
-#include <ydb/library/yql/providers/yt/comp_nodes/yql_mkql_file_input_state.h>
+#include <ydb/library/yql/providers/yt/codec/yt_codec.h>
+#include <ydb/library/yql/public/udf/udf_value_builder.h>
+
+#include <yt/cpp/mapreduce/interface/io.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/interface/client.h>
 #include <yt/cpp/mapreduce/interface/serialize.h>
@@ -13,6 +16,8 @@
 #include <yt/yt/client/api/rpc_proxy/config.h>
 #include <yt/yt/client/api/rpc_proxy/connection.h>
 #include <yt/yt/client/api/rpc_proxy/row_stream.h>
+
+#include <arrow/memory_pool.h>
 
 namespace NYql::NDqs {
 NYT::NYPath::TRichYPath ConvertYPathFromOld(const NYT::TRichYPath& richYPath);
@@ -48,20 +53,28 @@ private:
 
 struct TSettingsHolder : public TNonCopyable {
     TSettingsHolder(NYT::NApi::IConnectionPtr&& connection, NYT::TIntrusivePtr<NYT::NApi::NRpcProxy::TClient>&& client,
-        TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>&& inputs, TVector<size_t>&& originalIndexes)
+        TVector<NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr>&& requests, TVector<size_t>&& originalIndexes)
         : Connection(std::move(connection))
         , Client(std::move(client))
-        , RawInputs(std::move(inputs))
+        , Requests(std::move(requests))
         , OriginalIndexes(std::move(originalIndexes)) {};
+    void SetColumns(const TVector<TString>& columnNames) {
+        for (ui32 i = 0; i < columnNames.size(); ++i) {
+            ColumnNameMapping[columnNames[i]] = i;
+        }
+    }
     NYT::NApi::IConnectionPtr Connection;
     NYT::TIntrusivePtr<NYT::NApi::NRpcProxy::TClient> Client;
     const TMkqlIOSpecs* Specs = nullptr;
     arrow::MemoryPool* Pool = nullptr;
     const NUdf::IPgBuilder* PgBuilder = nullptr;
-    TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> RawInputs;
+    TVector<NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr> Requests;
+
     TVector<size_t> OriginalIndexes;
+    std::unordered_map<std::string, ui32> ColumnNameMapping;
 };
 
 std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString& token, const TString& clusterName, const ui64 timeout, bool unordered, const TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>& tables, NYT::TNode samplingSpec);
+NYT::TFuture<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> CreateInputStream(NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr requestPtr);
 
 };

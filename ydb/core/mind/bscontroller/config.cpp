@@ -17,22 +17,21 @@ namespace NKikimr::NBsController {
                 , State(state)
             {}
 
-            void Execute(std::deque<std::unique_ptr<IEventHandle>>& outbox) {
+            void Execute() {
                 ApplyUpdates();
 
                 for (auto &pair : Services) {
                     const TNodeId &nodeId = pair.first;
 
-                    if (TNodeInfo *node = Self->FindNode(nodeId); node && node->ConnectedCount) {
-                        auto event = MakeHolder<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
+                    if (TNodeInfo *node = Self->FindNode(nodeId); node && node->ConnectedServerId) {
+                        auto event = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
                         auto& record = event->Record;
                         pair.second.Swap(&record);
                         record.SetStatus(NKikimrProto::OK);
                         record.SetNodeID(nodeId);
                         record.SetInstanceId(Self->InstanceId);
                         record.SetAvailDomain(AppData()->DomainsInfo->GetDomain()->DomainUid);
-                        outbox.push_back(std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId),
-                            Self->SelfId(), event.Release()));
+                        State.Outbox.emplace_back(nodeId, std::move(event), 0);
                     }
                 }
             }
@@ -44,6 +43,8 @@ namespace NKikimr::NBsController {
                         ApplyPDiskDeleted(overlay->first, *base->second);
                     } else if (!base) {
                         ApplyPDiskCreated(overlay->first, *overlay->second);
+                    } else {
+                        ApplyPDiskDiff(overlay->first, *base->second, *overlay->second);
                     }
                 }
                 for (auto&& [base, overlay] : State.VSlots.Diff()) {
@@ -67,16 +68,21 @@ namespace NKikimr::NBsController {
             }
 
             void ApplyPDiskCreated(const TPDiskId &pdiskId, const TPDiskInfo &pdiskInfo) {
-                if (!State.StaticPDisks.count(pdiskId)) {
-                    // don't create static PDisks as they are already created
-                    NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk *pdisk = CreatePDiskEntry(pdiskId, pdiskInfo);
-                    pdisk->SetEntityStatus(NKikimrBlobStorage::CREATE);
+                NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk *pdisk = CreatePDiskEntry(pdiskId, pdiskInfo);
+                pdisk->SetEntityStatus(NKikimrBlobStorage::CREATE);
+            }
+
+            void ApplyPDiskDiff(const TPDiskId &pdiskId, const TPDiskInfo &prev, const TPDiskInfo &cur) {
+                if (prev.Mood != cur.Mood) {
+                    // PDisk's mood has changed
+                    CreatePDiskEntry(pdiskId, cur);
                 }
             }
 
             void ApplyPDiskDeleted(const TPDiskId &pdiskId, const TPDiskInfo &pdiskInfo) {
                 DeletedPDiskIds.insert(pdiskId);
-                if (!State.StaticPDisks.count(pdiskId)) {
+                TNodeInfo *nodeInfo = Self->FindNode(pdiskId.NodeId);
+                if (!State.StaticPDisks.count(pdiskId) || (nodeInfo && nodeInfo->DeclarativePDiskManagement)) {
                     NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk *pdisk = CreatePDiskEntry(pdiskId, pdiskInfo);
                     pdisk->SetEntityStatus(NKikimrBlobStorage::DESTROY);
                 }
@@ -104,6 +110,14 @@ namespace NKikimr::NBsController {
                     // TODO(alexvru): report this somehow
                 }
                 pdisk->SetSpaceColorBorder(Self->PDiskSpaceColorBorder);
+
+                switch (pdiskInfo.Mood) {
+                    case NBsController::TPDiskMood::EValue::Normal:
+                        break;
+                    case NBsController::TPDiskMood::EValue::Restarting:
+                        pdisk->SetEntityStatus(NKikimrBlobStorage::RESTART);
+                        break;
+                }
 
                 return pdisk;
             }
@@ -448,7 +462,7 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            TNodeWardenUpdateNotifier(this, state).Execute(state.Outbox);
+            TNodeWardenUpdateNotifier(this, state).Execute();
 
             state.CheckConsistency();
             state.Commit();
@@ -460,7 +474,7 @@ namespace NKikimr::NBsController {
         }
 
         void TBlobStorageController::CommitSelfHealUpdates(TConfigState& state) {
-            auto ev = MakeHolder<TEvControllerNotifyGroupChange>();
+            auto ev = std::make_unique<TEvControllerNotifyGroupChange>();
             auto sh = MakeHolder<TEvControllerUpdateSelfHealInfo>();
 
             for (auto&& [base, overlay] : state.Groups.Diff()) {
@@ -500,7 +514,7 @@ namespace NKikimr::NBsController {
             }
 
             if (ev->Created || ev->Deleted) {
-                state.Outbox.push_back(std::make_unique<IEventHandle>(StatProcessorActorId, SelfId(), ev.Release()));
+                state.StatProcessorOutbox.push_back(std::move(ev));
             }
             if (sh->GroupsToUpdate) {
                 FillInSelfHealGroups(*sh, &state);
@@ -590,8 +604,11 @@ namespace NKikimr::NBsController {
         }
 
         ui64 TBlobStorageController::TConfigState::ApplyConfigUpdates() {
-            for (auto& msg : Outbox) {
-                TActivationContext::Send(msg.release());
+            for (auto& [nodeId, ev, cookie] : Outbox) {
+                Self.SendToWarden(nodeId, std::move(ev), cookie);
+            }
+            for (auto& ev : StatProcessorOutbox) {
+                Self.SelfId().Send(Self.StatProcessorActorId, ev.release());
             }
 
             if (UpdateSelfHealInfoMsg) {

@@ -86,7 +86,7 @@ class TestRecoveryMatchRecognize(TestYdsBase):
 
         self.init_topics(f"{test_name}_{yq_version}")
 
-        sql = sql_template.format(self.input_topic, self.output_topic);
+        sql = sql_template.format(self.input_topic, self.output_topic)
 
         client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
@@ -200,7 +200,7 @@ class TestRecoveryMatchRecognize(TestYdsBase):
             '{"dt": 1696849942000001, "str": "A" }',
             '{"dt": 1696849942500001, "str": "B" }',
             '{"dt": 1696849943000001, "str": "C" }',
-            '{"dt": 1696849943600001, "str": "D" }']       # push A+B from TimeOrderRecoverer to MatchRecognize 
+            '{"dt": 1696849943600001, "str": "D" }']       # push A+B from TimeOrderRecoverer to MatchRecognize
 
         # Before restart:
         #    A + B : in MatchRecognize
@@ -211,4 +211,3 @@ class TestRecoveryMatchRecognize(TestYdsBase):
         expected = [
             '{"a_str":"A","b_str":"B","c_str":"C","dt_begin":1696849942000001,"dt_end":1696849943000001}']
         self.recovery_impl(kikimr, client, yq_version, sql, request.node.name, messages_before_restart, messages_after_restart, expected)
-

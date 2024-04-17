@@ -272,17 +272,17 @@ struct TBigDateScale;
 
 template <>
 struct TBigDateScale<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TDatetime64>> {
-    static constexpr i64 Modifier = 86400;
+    static constexpr i64 Modifier = 86400LL;
 };
 
 template <>
 struct TBigDateScale<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TDatetime64>> {
-    static constexpr i64 Modifier = 86400;
+    static constexpr i64 Modifier = 86400LL;
 };
 
 template <>
 struct TBigDateScale<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TDatetime>> {
-    static constexpr i64 Modifier = 86400;
+    static constexpr i64 Modifier = 86400LL;
 };
 
 template <>
@@ -343,6 +343,7 @@ struct TBigDateToNarrowScaleUp : public TArithmeticConstraintsUnary<typename TIn
     static_assert(
             sizeof(typename TInput::TLayout) <= sizeof(typename TOutput::TLayout),
             "Output size should be greater or equal than input size.");
+    static_assert(std::is_signed_v<typename TInput::TLayout>, "Expect signed input type");
     static_assert(std::is_unsigned_v<typename TOutput::TLayout>, "Expect unsigned output type");
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
@@ -358,9 +359,12 @@ struct TBigDateToNarrowScaleUp : public TArithmeticConstraintsUnary<typename TIn
     {
         auto& context = ctx.Codegen.GetContext();
         const auto val = GetterFor<typename TInput::TLayout>(arg, context, block);
-        const auto mul = BinaryOperator::CreateMul(val, ConstantInt::get(val->getType(), TBigDateScale<TInput, TOutput>::Modifier), "mul", block);
-        const auto good = GenInBounds(mul, ConstantInt::get(mul->getType(), 0), ConstantInt::get(mul->getType(), UpperBound), block);
-        const auto cast = StaticCast<typename TInput::TLayout, typename TOutput::TLayout>(mul, context, block);
+        const auto val64 = StaticCast<typename TInput::TLayout, i64>(val, context, block);
+        const auto mul = BinaryOperator::CreateMul(val64, ConstantInt::get(val64->getType(), TBigDateScale<TInput, TOutput>::Modifier), "mul", block);
+        const auto cast = StaticCast<i64, typename TOutput::TLayout>(mul, context, block);
+        const auto gt = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGE, val, ConstantInt::get(val->getType(), 0), "gt", block);
+        const auto lt = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULE, mul, ConstantInt::get(mul->getType(), UpperBound), "lt", block);
+        const auto good = BinaryOperator::CreateAnd(gt, lt, "and", block);
         const auto full = SetterFor<typename TOutput::TLayout>(cast, context, block);
         return SelectInst::Create(good, full, ConstantInt::get(arg->getType(), 0), "result", block);
     }
@@ -445,8 +449,9 @@ struct TBigDateToNarrowScaleDown : public TArithmeticConstraintsUnary<typename T
         auto& context = ctx.Codegen.GetContext();
         const auto val = GetterFor<typename TInput::TLayout>(arg, context, block);
         const auto div = BinaryOperator::CreateSDiv(val, ConstantInt::get(val->getType(), TBigDateScale<TOutput, TInput>::Modifier), "div", block);
-        // TODO add preliminary check if val is negative
-        const auto good = GenInBounds(div, ConstantInt::get(val->getType(), 0), ConstantInt::get(val->getType(), UpperBound), block);
+        const auto gt = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGE, val, ConstantInt::get(val->getType(), 0), "gt", block);
+        const auto lt = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, div, ConstantInt::get(div->getType(), UpperBound), "lt", block);
+        const auto good = BinaryOperator::CreateAnd(gt, lt, "and", block);
         const auto cast = StaticCast<typename TInput::TLayout, typename TOutput::TLayout>(div, context, block);
         const auto full = SetterFor<typename TOutput::TLayout>(cast, context, block);
         return SelectInst::Create(good, full, ConstantInt::get(arg->getType(), 0), "result", block);

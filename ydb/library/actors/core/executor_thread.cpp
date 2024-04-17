@@ -48,6 +48,7 @@ namespace NActors {
         , ThreadName(threadName)
         , TimePerMailbox(timePerMailbox)
         , EventsPerMailbox(eventsPerMailbox)
+        , ActorSystemIndex(TActorTypeOperator::GetActorSystemIndex())
     {
         Ctx.Switch(
             ExecutorPool,
@@ -75,6 +76,7 @@ namespace NActors {
         , EventsPerMailbox(eventsPerMailbox)
         , SoftProcessingDurationTs(softProcessingDurationTs)
         , SharedStats(poolCount)
+        , ActorSystemIndex(TActorTypeOperator::GetActorSystemIndex())
     {
         Ctx.Switch(
             ExecutorPool,
@@ -239,9 +241,14 @@ namespace NActors {
                     if (activityType != prevActivityType) {
                         prevActivityType = activityType;
                         NProfiling::TMemoryTagScope::Reset(activityType);
+                        TlsThreadContext->ElapsingActorActivity.store(activityType, std::memory_order_release);
                     }
 
                     actor->Receive(ev);
+
+                    hpnow = GetCycleCountFast();
+                    hpprev = TlsThreadContext->StartOfElapsingTime.exchange(hpnow, std::memory_order_acq_rel);
+
                     mailbox->ProcessEvents(mailbox);
                     actor->OnDequeueEvent();
 
@@ -256,7 +263,6 @@ namespace NActors {
                     if (mailbox->IsEmpty()) // was not-free and become free, we must reclaim mailbox
                         reclaimAsFree = true;
 
-                    hpnow = GetCycleCountFast();
                     NHPTimer::STime elapsed = Ctx.AddEventProcessingStats(hpprev, hpnow, activityType, CurrentActorScheduledEventsCounter);
                     if (elapsed > 1000000) {
                         LwTraceSlowEvent(ev.Get(), evTypeForTracing, actorType, Ctx.PoolId, CurrentRecipient, NHPTimer::GetSeconds(elapsed) * 1000.0);
@@ -277,9 +283,9 @@ namespace NActors {
                         Ctx.IncrementNonDeliveredEvents();
                     }
                     hpnow = GetCycleCountFast();
+                    hpprev = TlsThreadContext->StartOfElapsingTime.exchange(hpnow, std::memory_order_acq_rel);
+                    Ctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
                 }
-
-                hpprev = hpnow;
 
                 if (TlsThreadContext->CapturedType == ESendingType::Tail) {
                     AtomicStore(&mailbox->ScheduleMoment, hpnow);
@@ -360,6 +366,7 @@ namespace NActors {
                 break; // empty queue, leave
             }
         }
+        TlsThreadContext->ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
 
         NProfiling::TMemoryTagScope::Reset(0);
         TlsActivationContext = nullptr;
@@ -495,8 +502,11 @@ namespace NActors {
         ThreadDisableBalloc();
 #endif
 
-        TThreadContext threadCtx;
-        TlsThreadContext = &threadCtx;
+        TlsThreadCtx.WorkerCtx = &Ctx;
+        TlsThreadCtx.ActorSystemIndex = ActorSystemIndex;
+        TlsThreadCtx.ElapsingActorActivity = ActorSystemIndex;
+        TlsThreadCtx.StartOfElapsingTime = GetCycleCountFast();
+        TlsThreadContext = &TlsThreadCtx;
         if (ThreadName) {
             ::SetCurrentThreadName(ThreadName);
         }
@@ -506,16 +516,15 @@ namespace NActors {
     }
 
     TGenericExecutorThread::TProcessingResult TSharedExecutorThread::ProcessSharedExecutorPool(TExecutorPoolBaseMailboxed *pool) {
+        TWorkerId workerId = (pool == ThreadCtx->ExecutorPools[0].load(std::memory_order_relaxed) ? -1 : -2);
         Ctx.Switch(
             pool,
             pool->MailboxTable.Get(),
             NHPTimer::GetClockRate() * TimePerMailbox.SecondsFloat(),
             EventsPerMailbox,
-            GetCycleCountFast() + SoftProcessingDurationTs,
+            (workerId == -1 ? -1 : GetCycleCountFast() + SoftProcessingDurationTs),
             &SharedStats[pool->PoolId]);
-        Y_ABORT_UNLESS(Ctx.Stats->ElapsedTicksByActivity.size());
-        Ctx.WorkerId = (pool == ThreadCtx->ExecutorPools[0].load(std::memory_order_relaxed) ? -1 : -2);
-        Y_ABORT_UNLESS(Ctx.Stats->ElapsedTicksByActivity.size());
+        Ctx.WorkerId = workerId;
         return ProcessExecutorPool(pool);
     }
 
@@ -529,8 +538,11 @@ namespace NActors {
         ThreadDisableBalloc();
 #endif
 
-        TThreadContext threadCtx;
-        TlsThreadContext = &threadCtx;
+        TlsThreadCtx.WorkerCtx = &Ctx;
+        TlsThreadCtx.ActorSystemIndex = ActorSystemIndex;
+        TlsThreadCtx.ElapsingActorActivity = ActorSystemIndex;
+        TlsThreadCtx.StartOfElapsingTime = GetCycleCountFast();
+        TlsThreadContext = &TlsThreadCtx;
         if (ThreadName) {
             ::SetCurrentThreadName(ThreadName);
         }
@@ -551,7 +563,7 @@ namespace NActors {
             }
 
             if (!wasWorking && !StopFlag.load(std::memory_order_relaxed)) {
-                TlsThreadContext->Timers.Reset();
+                ThreadCtx->UnsetWork();
                 ThreadCtx->Wait(0, &StopFlag);
             }
 
@@ -760,10 +772,26 @@ namespace NActors {
     }
 
     void TGenericExecutorThread::GetCurrentStats(TExecutorThreadStats& statsCopy) const {
+        NHPTimer::STime hpnow = GetCycleCountFast();
+        ui64 activityType = TlsThreadCtx.ElapsingActorActivity.load(std::memory_order_acquire);
+        NHPTimer::STime hpprev = TlsThreadCtx.StartOfElapsingTime.exchange(hpnow, std::memory_order_acq_rel);
+        if (activityType == Max<ui64>()) {
+            Ctx.AddParkedCycles(hpnow - hpprev);
+        } else {
+            Ctx.AddElapsedCycles(activityType, hpnow - hpprev);
+        }
         Ctx.GetCurrentStats(statsCopy);
     }
 
     void TGenericExecutorThread::GetSharedStats(i16 poolId, TExecutorThreadStats &statsCopy) const {
+        NHPTimer::STime hpnow = GetCycleCountFast();
+        ui64 activityType = TlsThreadCtx.ElapsingActorActivity.load(std::memory_order_acquire);
+        NHPTimer::STime hpprev = TlsThreadCtx.StartOfElapsingTime.exchange(hpnow, std::memory_order_acq_rel);
+        if (activityType == Max<ui64>()) {
+            Ctx.AddParkedCycles(hpnow - hpprev);
+        } else {
+            Ctx.AddElapsedCycles(activityType, hpnow - hpprev);
+        }
         statsCopy = TExecutorThreadStats();
         statsCopy.Aggregate(SharedStats[poolId]);
     }

@@ -191,9 +191,22 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
     }
 
     if (!op->IsReadOnly() && DataShard.TxPlanWaiting() > 0) {
-        // We must wait until there are no transactions waiting for plan
-        Pipeline.AddWaitingSchemeOp(op);
-        return EExecutionStatus::Continue;
+        // Eagerly stop any waiting volatile transactions
+        // Note: this may immediate reactivate this operation
+        std::vector<std::unique_ptr<IEventHandle>> replies;
+        Pipeline.CleanupWaitingVolatile(ctx, replies);
+        // Technically we would like to wait until everything is committed, but
+        // since volatile transactions are only stored in memory, sending
+        // replies with confirmed read-only lease should be enough.
+        if (!replies.empty()) {
+            DataShard.SendConfirmedReplies(DataShard.ConfirmReadOnlyLease(), std::move(replies));
+        }
+        // Cleanup call above may have changed the number of waiting transactions
+        if (DataShard.TxPlanWaiting() > 0) {
+            // We must wait until there are no transactions waiting for plan
+            Pipeline.AddWaitingSchemeOp(op);
+            return EExecutionStatus::Continue;
+        }
     }
 
     op->SetMinStep(Pipeline.AllowedSchemaStep());

@@ -89,7 +89,7 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
         stream << "    ";
     }
 
-    stream << "Join: (" << JoinType << ") ";
+    stream << "Join: (" << JoinType << "," << int(JoinAlgo) << ") ";
     for (auto c : JoinConditions){
         stream << c.first.RelName << "." << c.first.AttributeName
             << "=" << c.second.RelName << "."

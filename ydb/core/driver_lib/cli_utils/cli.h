@@ -27,8 +27,6 @@ namespace NDriverClient {
     void DumpSchemeErrorCode(IOutputStream &o, const NKikimrClient::TResponse &response);
 
     int SchemeInitRoot(TCommandConfig &cmdConf, int argc, char** argv);
-    int BSAdmCreateVSlots(TCommandConfig &cmdConf, int argc, char **argv);
-    int BSAdmCreateGroup(TCommandConfig &cmdConf, int argc, char **argv);
     int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv);
     int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv);
     int PersQueueRequest(TCommandConfig &cmdConf, int argc, char **argv);

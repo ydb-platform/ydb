@@ -2,16 +2,16 @@
 
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/trace_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils/trace.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/write_session.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/write_session.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -627,7 +627,7 @@ namespace NYdb::NTopic::NTests {
                                 .MessageGroupId(TEST_MESSAGE_GROUP_ID)
                                 .DirectWriteToPartition(true);
             auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
-            TTestReadSession ReadSession(client, 2);
+            TTestReadSession ReadSession("Session-0", client, 2);
 
             UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 2)));
 
@@ -673,6 +673,8 @@ namespace NYdb::NTopic::NTests {
             };
             auto const events = tracingBackend->GetEvents();
             UNIT_ASSERT(expected.Matches(events));
+
+            ReadSession.Close();
         }
     }
 }

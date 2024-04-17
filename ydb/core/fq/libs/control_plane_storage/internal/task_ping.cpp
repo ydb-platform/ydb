@@ -2,9 +2,11 @@
 
 #include <util/datetime/base.h>
 
+#include <ydb/core/fq/libs/compute/common/utils.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 #include <ydb/core/metering/metering.h>
+
 #include <ydb/library/protobuf_printer/size_printer.h>
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 
@@ -31,6 +33,16 @@ bool HasIssuesCode(const NYql::TIssues& issues, ::NYql::TIssuesIds::EIssueCode c
     return false;
 }
 
+THashMap<TString, i64> DeserializeFlatStats(const google::protobuf::RepeatedPtrField<Ydb::ValuePair>& src) {
+    THashMap<TString, i64> stats;
+    for (const auto& stat_pair : src) {
+        if (stat_pair.key().has_text_value() && stat_pair.payload().has_int64_value()) {
+            stats[stat_pair.key().text_value()] = stat_pair.payload().int64_value();
+        }
+    }
+    return stats;
+}
+
 }
 
 struct TPingTaskParams {
@@ -42,8 +54,12 @@ struct TPingTaskParams {
 
 struct TFinalStatus {
     FederatedQuery::QueryMeta::ComputeStatus Status = FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED;
+    NYql::NDqProto::StatusIds::StatusCode StatusCode = NYql::NDqProto::StatusIds::UNSPECIFIED;
     NYql::TIssues Issues;
     NYql::TIssues TransientIssues;
+    StatsValuesList FinalStatistics;
+    TString CloudId;
+    TString JobId;
 };
 
 TPingTaskParams ConstructHardPingTask(
@@ -51,7 +67,7 @@ TPingTaskParams ConstructHardPingTask(
     const TString& tablePathPrefix, const TDuration& automaticQueriesTtl, const TDuration& taskLeaseTtl,
     const THashMap<ui64, TRetryPolicyItem>& retryPolicies, ::NMonitoring::TDynamicCounterPtr rootCounters,
     uint64_t maxRequestSize, bool dumpRawStatistics, const std::shared_ptr<TFinalStatus>& finalStatus,
-    const TRequestCommonCountersPtr& commonCounters, const std::shared_ptr<StatsValuesList>& finalStatistics) {
+    const TRequestCommonCountersPtr& commonCounters) {
 
     auto scope = request.scope();
     auto query_id = request.query_id().value();
@@ -253,10 +269,14 @@ TPingTaskParams ConstructHardPingTask(
 
         if (request.statistics()) {
             TString statistics = request.statistics();
-            internal.clear_statistics();
-            PackStatisticsToProtobuf(*internal.mutable_statistics(), statistics);
+            if (request.flat_stats_size() == 0) {
+                internal.clear_statistics();
+                // TODO: remove once V1 and V2 stats go the same way
+                PackStatisticsToProtobuf(*internal.mutable_statistics(), statistics, TInstant::Now() - NProtoInterop::CastFromProto(job.meta().created_at()));
+            }
 
-            if (!dumpRawStatistics) {
+            // global dumpRawStatistics will be removed with YQv1
+            if (!dumpRawStatistics && !request.dump_raw_statistics()) {
                 try {
                     statistics = GetPrettyStatistics(statistics);
                 } catch (const std::exception&) {
@@ -266,6 +286,12 @@ TPingTaskParams ConstructHardPingTask(
             }
             *query.mutable_statistics()->mutable_json() = statistics;
             *job.mutable_statistics()->mutable_json() = statistics;
+        }
+
+        if (request.flat_stats_size() != 0) {
+            internal.clear_statistics();
+            auto stats = DeserializeFlatStats(request.flat_stats());
+            PackStatisticsToProtobuf(*internal.mutable_statistics(), stats, TInstant::Now() - NProtoInterop::CastFromProto(job.meta().created_at()));
         }
 
         if (!request.result_set_meta().empty()) {
@@ -393,6 +419,9 @@ TPingTaskParams ConstructHardPingTask(
         }
 
         finalStatus->Status = query.meta().status();
+        finalStatus->StatusCode = internal.status_code();
+        finalStatus->CloudId = internal.cloud_id();
+        finalStatus->JobId = jobId;
         NYql::IssuesFromMessage(query.issue(), finalStatus->Issues);
         NYql::IssuesFromMessage(query.transient_issue(), finalStatus->TransientIssues);
 
@@ -486,7 +515,7 @@ TPingTaskParams ConstructHardPingTask(
                     // YQv2 may not provide statistics with terminal status, use saved one
                     statistics = query.statistics().json();
                 }
-                *finalStatistics = ExtractStatisticsFromProtobuf(internal.statistics());
+                finalStatus->FinalStatistics = ExtractStatisticsFromProtobuf(internal.statistics());
                 auto records = GetMeteringRecords(statistics, isBillable, jobId, request.scope(), HostName());
                 meteringRecords->swap(records);
             } catch (const std::exception&) {
@@ -573,7 +602,6 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
 {
     TInstant startTime = TInstant::Now();
     Fq::Private::PingTaskRequest& request = ev->Get()->Request;
-    const TString cloudId = "";
     const TString scope = request.scope();
     TRequestCounters requestCounters = Counters.GetCounters("" /*CloudId*/, scope, RTS_PING_TASK, RTC_PING_TASK);
     requestCounters.IncInFly();
@@ -602,12 +630,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
 
     std::shared_ptr<Fq::Private::PingTaskResult> response = std::make_shared<Fq::Private::PingTaskResult>();
     std::shared_ptr<TFinalStatus> finalStatus = std::make_shared<TFinalStatus>();
-    std::shared_ptr finalStatistics = std::make_shared<StatsValuesList>();
 
     auto pingTaskParams = DoesPingTaskUpdateQueriesTable(request) ?
         ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config->AutomaticQueriesTtl,
             Config->TaskLeaseTtl, Config->RetryPolicies, Counters.Counters, Config->Proto.GetMaxRequestSize(),
-            Config->Proto.GetDumpRawStatistics(), finalStatus, requestCounters.Common, finalStatistics) :
+            Config->Proto.GetDumpRawStatistics(), finalStatus, requestCounters.Common) :
         ConstructSoftPingTask(request, response, YdbConnection->TablePathPrefix, Config->TaskLeaseTtl, requestCounters.Common);
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = ReadModifyWrite(pingTaskParams.Query, pingTaskParams.Params, pingTaskParams.Prepare, requestCounters, debugInfo);
@@ -635,8 +662,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
 
             if (success) {
                 actorSystem->Send(ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvFinalStatusReport(
-                    request.query_id().value(), request.job_id().value(), cloudId, scope, std::move(*finalStatistics),
-                    finalStatus->Status, finalStatus->Issues, finalStatus->TransientIssues));
+                    request.query_id().value(), finalStatus->JobId, finalStatus->CloudId, scope, std::move(finalStatus->FinalStatistics),
+                    finalStatus->Status, finalStatus->StatusCode, finalStatus->Issues, finalStatus->TransientIssues));
             }
         });
 }
@@ -647,6 +674,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvFinalStatus
         return;
     }
 
+    if (IsFailedStatus(event.Status)) {
+        FailedStatusCodeCounters->IncByScopeAndStatusCode(event.Scope, event.StatusCode, event.Issues);
+        LOG_YQ_AUDIT_SERVICE_INFO("FinalFailedStatus: cloud id: [" << event.CloudId  << "], scope: [" << event.Scope << "], query id: [" <<
+                                event.QueryId << "], job id: [" << event.JobId << "], "
+                                "status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status) <<
+                                ", label: " << LabelNameFromStatusCodeAndIssues(event.StatusCode, event.Issues) <<
+                                ", status code: " << NYql::NDqProto::StatusIds::StatusCode_Name(event.StatusCode) <<
+                                ", issues: " << event.Issues.ToOneLineString() <<
+                                ", transient issues " << event.TransientIssues.ToOneLineString());
+    }
+
     if (HasIssuesCode(event.Issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE) || HasIssuesCode(event.TransientIssues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE)) {
         Counters.GetFinalStatusCounters(event.CloudId, event.Scope)->Unavailable->Inc();
     }
@@ -655,7 +693,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvFinalStatus
 
     Statistics statistics{event.Statistics};
     LOG_YQ_AUDIT_SERVICE_INFO("FinalStatus: cloud id: [" << event.CloudId  << "], scope: [" << event.Scope << "], query id: [" <<
-                              event.QueryId << "], job id: [" << event.JobId << "], " << statistics << (statistics ? ", " : "") <<
+                              event.QueryId << "], job id: [" << event.JobId << "], " << statistics << ", " <<
                               "status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status));
 }
 

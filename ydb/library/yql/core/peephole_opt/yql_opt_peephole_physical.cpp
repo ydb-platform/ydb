@@ -2577,12 +2577,92 @@ TExprNode::TPtr ExpandListHas(const TExprNode::TPtr& input, TExprContext& ctx) {
     return RewriteSearchByKeyForTypesMismatch<true, true>(input, ctx);
 }
 
+TExprNode::TPtr ExpandPgArrayOp(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const bool all = input->Content() == "PgAllResolvedOp";
+    auto list = ctx.Builder(input->Pos())
+        .Callable("PgCall")
+            .Atom(0, "unnest")
+            .List(1)
+            .Seal()
+            .Add(2, input->ChildPtr(3))
+        .Seal()
+        .Build();
+
+    auto value = ctx.Builder(input->Pos())
+        .Callable("Fold")
+            .Add(0, list)
+            .Callable(1, "PgConst")
+                .Atom(0, all ? "true" : "false")
+                .Callable(1, "PgType")
+                    .Atom(0, "bool")
+                .Seal()
+            .Seal()
+            .Lambda(2)
+                .Param("item")
+                .Param("state")
+                .Callable(all ? "PgAnd" : "PgOr")
+                    .Arg(0, "state")
+                    .Callable(1, "PgResolvedOp")
+                        .Add(0, input->ChildPtr(0))
+                        .Add(1, input->ChildPtr(1))
+                        .Add(2, input->ChildPtr(2))
+                        .Arg(3, "item")
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    return ctx.Builder(input->Pos())
+        .Callable("If")
+            .Callable(0, "Exists")
+                .Add(0, input->ChildPtr(3))
+            .Seal()
+            .Add(1, value)
+            .Callable(2, "Null")
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr ExpandPgNullIf(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto pred = ctx.Builder(input->Pos())
+        .Callable("Coalesce")
+            .Callable(0, "FromPg")
+                .Callable( 0, "PgOp")
+                    .Atom(0, "=")
+                    .Add(1, input->Child(0))
+                    .Add(2, input->Child(1))
+                .Seal()
+            .Seal()
+            .Callable( 1, "Bool")
+                .Atom(0, "false")
+            .Seal()
+        .Seal().Build();
+    return ctx.Builder(input->Pos())
+        .Callable("If")
+            .Add(0, pred)
+            .Callable(1, "Null").Seal()
+            .Add(2, input->Child(0))
+        .Seal().Build();
+}
+
 template <bool Flat, bool List>
 TExprNode::TPtr ExpandContainerIf(const TExprNode::TPtr& input, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content();
     auto item = Flat ? input->TailPtr() : ctx.NewCallable(input->Tail().Pos(), List ? "AsList" : "Just", {input->TailPtr()});
     auto none = ctx.NewCallable(input->Tail().Pos(), "EmptyFrom", {item});
     return ctx.NewCallable(input->Pos(), "If", {input->HeadPtr(), std::move(item), std::move(none)});
+}
+
+TExprNode::TPtr DropDependsOnFromEmptyIterator(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (input->ChildrenSize() > 1) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop DependsOn from " << input->Content();
+        TExprNode::TListType newChildren;
+        newChildren.push_back(input->Child(0));
+        return ctx.ChangeChildren(*input, std::move(newChildren));
+    }
+    return input;
 }
 
 TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -2884,6 +2964,111 @@ TExprNode::TPtr ExpandAggrMinMax(const TExprNode::TPtr& node, TExprContext& ctx)
             .Add(1, node->HeadPtr())
             .Add(2, node->TailPtr())
         .Seal().Build();
+}
+
+template<typename T>
+TExprNode::TPtr DoExpandMinMax(TStringBuf name, bool usePlainCompare, TPositionHandle pos, T argsBegin, T argsEnd, TExprContext& ctx) {
+    const size_t size = argsEnd - argsBegin;
+    YQL_ENSURE(size > 0);
+    if (size == 1) {
+        return *argsBegin;
+    }
+
+    TExprNode::TPtr left;
+    TExprNode::TPtr right;
+
+    if (size > 2) {
+        const size_t half = size / 2;
+        left = DoExpandMinMax(name, usePlainCompare, pos, argsBegin, argsBegin + half, ctx);
+        right = DoExpandMinMax(name, usePlainCompare, pos, argsBegin + half, argsEnd, ctx);
+    } else {
+        left = *argsBegin;
+        right = *(argsBegin + 1);
+    }
+
+    return ctx.Builder(pos)
+        .Callable("If")
+            .Callable(0, usePlainCompare ? (name == "Min" ? "<=" : ">=") :
+                                           (name == "Min" ? "AggrLessOrEqual" : "AggrGreaterOrEqual"))
+                .Add(0, left)
+                .Add(1, right)
+            .Seal()
+            .Add(1, left)
+            .Add(2, right)
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr ExpandMinMax(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_ENSURE(node->ChildrenSize() >= 2);
+    if (IsDataOrOptionalOfData(node->GetTypeAnn())) {
+        return node;
+    }
+
+    const auto& children = node->ChildrenList();
+    if (!node->GetTypeAnn()->IsOptionalOrNull()) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " with complex non-nullable types";
+        return DoExpandMinMax(node->Content(), true, node->Pos(), children.begin(), children.end(), ctx);
+    }
+
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " with complex nullable types";
+    TExprNodeList childrenWithPositions;
+    for (ui32 i = 0; i < children.size(); ++i) {
+        const auto& child = children[i];
+        childrenWithPositions.push_back(ctx.Builder(child->Pos())
+            .List()
+                .Add(0, child)
+                .Callable(1, "Uint32")
+                    .Atom(0, i)
+                .Seal()
+            .Seal()
+            .Build()
+        );
+    }
+    auto candidateTuple = DoExpandMinMax(node->Content(), false, node->Pos(), childrenWithPositions.begin(), childrenWithPositions.end(), ctx);
+
+    TExprNodeList compareWithCandidate;
+    for (ui32 i = 0; i < children.size(); ++i) {
+        const auto& child = children[i];
+        compareWithCandidate.push_back(ctx.Builder(child->Pos())
+            .Callable("If")
+                .Callable(0, "==")
+                    .Callable(0, "Nth")
+                        .Add(0, candidateTuple)
+                        .Atom(1, 1)
+                    .Seal()
+                    .Callable(1, "Uint32")
+                        .Atom(0, i)
+                    .Seal()
+                .Seal()
+                .Add(1, MakeBool<true>(child->Pos(), ctx))
+                .Callable(2, node->IsCallable("Min") ? "<=" : ">=")
+                    .Callable(0, "Nth")
+                        .Add(0, candidateTuple)
+                        .Atom(1, 0)
+                    .Seal()
+                    .Add(1, child)
+                .Seal()
+            .Seal()
+            .Build()
+        );
+    }
+
+    return ctx.Builder(node->Pos())
+        .Callable("If")
+            .Callable(0, "Coalesce")
+                .Add(0, ctx.NewCallable(node->Pos(), "And", std::move(compareWithCandidate)))
+                .Add(1, MakeBool<false>(node->Pos(), ctx))
+            .Seal()
+            .Callable(1, "Nth")
+                .Add(0, candidateTuple)
+                .Atom(1, 0)
+            .Seal()
+            .Callable(2, "Nothing")
+                .Add(0, ExpandType(node->Pos(), *node->GetTypeAnn(), ctx))
+            .Seal()
+        .Seal()
+        .Build();
 }
 
 template <bool Ordered>
@@ -5388,7 +5573,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
 
         TExprNode::TListType funcArgs;
         std::string_view arrowFunctionName;
-        if (node->IsList() || node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "If", "Just", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
+        if (node->IsList() || node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
         {
             if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), ctx, types)) {
                 return true;
@@ -5629,7 +5814,8 @@ bool CanRewriteToBlocksWithInput(const TExprNode& input, const TTypeAnnotationCo
 
 TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     const auto lambda = node->TailPtr();
-    if (node->Head().IsCallable("WideFromBlocks")) {
+    // Swap trivial WideMap and WideFromBlocks.
+    if (node->IsCallable("WideMap") && node->Head().IsCallable("WideFromBlocks")) {
         if (auto newLambda = RebuildArgumentsOnlyLambdaForBlocks(*lambda, ctx, types)) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Head().Content() << " with " << node->Content();
             return ctx.Builder(node->Pos())
@@ -6549,6 +6735,36 @@ TExprNode::TPtr AggrEqualOpt(const TExprNode& node, TExprContext& ctx) {
             .Seal()
             .Add(2, std::move(stub))
         .Seal().Build();
+}
+
+template <bool Asc, bool Equals>
+TExprNode::TPtr AggrComparePg(const TExprNode& node, TExprContext& ctx) {
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand '" << node.Content() << "' over Pg.";
+    auto op = Asc ? ( Equals ? "<=" : "<") : ( Equals ? ">=" : ">");
+    auto finalPart = (Equals == Asc) ? MakeBool<true>(node.Pos(), ctx) : 
+        ctx.NewCallable(node.Pos(), "Exists", { node.TailPtr() });
+    if (!Asc) {
+        finalPart = ctx.NewCallable(node.Pos(), "Not", { finalPart });
+    }
+
+    return ctx.Builder(node.Pos())
+        .Callable("If")
+            .Callable(0, "Exists")
+                .Add(0, node.HeadPtr())
+            .Seal()
+            .Callable(1, "Coalesce")
+                .Callable(0, "FromPg")
+                    .Callable(0, "PgOp")
+                        .Atom(0, op)
+                        .Add(1, node.HeadPtr())
+                        .Add(2, node.TailPtr())
+                    .Seal()
+                .Seal()
+                .Add(1, MakeBool<!Asc>(node.Pos(), ctx))
+            .Seal()
+            .Add(2, finalPart)
+        .Seal()
+        .Build();
 }
 
 template <bool Asc, bool Equals>
@@ -7672,6 +7888,8 @@ TExprNode::TPtr ExpandAggrCompare(const TExprNode::TPtr& node, TExprContext& ctx
             return AggrCompareVariants<false, Asc>(*node, ctx);
         case ETypeAnnotationKind::Tagged:
             return CompareTagged(*node, ctx);
+        case ETypeAnnotationKind::Pg:
+            return AggrComparePg<Asc, Equals>(*node, ctx);
         case ETypeAnnotationKind::Optional:
             if (type->Cast<TOptionalExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Data)
                 return AggrCompareOpt<Asc, Equals>(*node, ctx);
@@ -7809,6 +8027,9 @@ struct TPeepHoleRules {
         {"Lookup", &RewriteSearchByKeyForTypesMismatch<false>},
         {"Contains", &RewriteSearchByKeyForTypesMismatch<true>},
         {"ListHas", &ExpandListHas},
+        {"PgAnyResolvedOp", &ExpandPgArrayOp},
+        {"PgNullIf", &ExpandPgNullIf},
+        {"PgAllResolvedOp", &ExpandPgArrayOp},
         {"Map", &CleckClosureOnUpperLambdaOverList},
         {"OrderedMap", &CleckClosureOnUpperLambdaOverList},
         {"FlatMap", &CleckClosureOnUpperLambdaOverList},
@@ -7840,6 +8061,8 @@ struct TPeepHoleRules {
         {"OptionalReduce", &ExpandOptionalReduce},
         {"AggrMin", &ExpandAggrMinMax<true>},
         {"AggrMax", &ExpandAggrMinMax<false>},
+        {"Min", &ExpandMinMax},
+        {"Max", &ExpandMinMax},
         {"And", &OptimizeLogicalDups<true>},
         {"Or", &OptimizeLogicalDups<false>},
         {"CombineByKey", &ExpandCombineByKey},
@@ -7855,6 +8078,12 @@ struct TPeepHoleRules {
         {">", &ExpandSqlCompare<false, false>},
         {"<=", &ExpandSqlCompare<true, true>},
         {">=", &ExpandSqlCompare<false, true>},
+        {"AggrEquals", &ExpandAggrEqual<true>},
+        {"AggrNotEquals", &ExpandAggrEqual<false>},
+        {"AggrLess", &ExpandAggrCompare<true, false>},
+        {"AggrGreater", &ExpandAggrCompare<false, false>},
+        {"AggrLessOrEqual", &ExpandAggrCompare<true, true>},
+        {"AggrGreaterOrEqual", &ExpandAggrCompare<false, true>},
         {"RangeEmpty", &ExpandRangeEmpty},
         {"AsRange", &ExpandAsRange},
         {"RangeFor", &ExpandRangeFor},
@@ -7868,6 +8097,7 @@ struct TPeepHoleRules {
         {"CheckedMinus", &ExpandCheckedMinus},
         {"JsonValue", &ExpandJsonValue},
         {"JsonExists", &ExpandJsonExists},
+        {"EmptyIterator", &DropDependsOnFromEmptyIterator},
     };
 
     const TExtPeepHoleOptimizerMap CommonStageExtRules = {
@@ -7951,12 +8181,6 @@ struct TPeepHoleRules {
         {"Top", &OptimizeTopOrSort<false, true>},
         {"TopSort", &OptimizeTopOrSort<true, true>},
         {"Sort", &OptimizeTopOrSort<true, false>},
-        {"AggrEquals", &ExpandAggrEqual<true>},
-        {"AggrNotEquals", &ExpandAggrEqual<false>},
-        {"AggrLess", &ExpandAggrCompare<true, false>},
-        {"AggrGreater", &ExpandAggrCompare<false, false>},
-        {"AggrLessOrEqual", &ExpandAggrCompare<true, true>},
-        {"AggrGreaterOrEqual", &ExpandAggrCompare<false, true>},
         {"ToFlow", &OptimizeToFlow},
     };
 

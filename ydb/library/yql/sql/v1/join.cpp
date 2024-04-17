@@ -499,8 +499,10 @@ public:
             }
 
             TNodePtr linkOptions = Y();
-            if (descr.LinkSettings.ForceSortedMerge) {
+            if (TJoinLinkSettings::EStrategy::SortedMerge == descr.LinkSettings.Strategy) {
                 linkOptions = L(linkOptions, Q(Y(Q("forceSortedMerge"))));
+            } else if (TJoinLinkSettings::EStrategy::StreamLookup == descr.LinkSettings.Strategy) {
+                linkOptions = L(linkOptions, Q(Y(Q("forceStreamLookup"))));
             }
             if (leftAny) {
                 linkOptions = L(linkOptions, Q(Y(Q("left"), Q("any"))));

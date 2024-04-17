@@ -423,6 +423,9 @@ void TChunkFragmentReaderConfig::Register(TRegistrar registrar)
         .Default(16_MB);
     registrar.Parameter("max_inflight_fragment_count", &TThis::MaxInflightFragmentCount)
         .Default(8192);
+
+    registrar.Parameter("prefetch_whole_blocks", &TThis::PrefetchWholeBlocks)
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -4,6 +4,9 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
+#include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/formats/arrow/reader/merger.h>
+#include <ydb/core/formats/arrow/reader/result_builder.h>
 
 namespace NKikimr::NOlap {
 
@@ -93,7 +96,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
     Y_ABORT_UNLESS(Blobs.IsEmpty());
     const std::vector<std::string> comparableColumns = resultSchema->GetIndexInfo().GetReplaceKey()->field_names();
     for (auto& [pathId, batches] : pathBatches) {
-        NIndexedReader::TMergePartialStream stream(resultSchema->GetIndexInfo().GetReplaceKey(), resultSchema->GetIndexInfo().ArrowSchemaWithSpecials(), false);
+        NArrow::NMerger::TMergePartialStream stream(resultSchema->GetIndexInfo().GetReplaceKey(), resultSchema->GetIndexInfo().ArrowSchemaWithSpecials(), false, IIndexInfo::GetSpecialColumnNames());
         THashMap<std::string, ui64> fieldSizes;
         ui64 rowsCount = 0;
         for (auto&& batch : batches) {
@@ -104,23 +107,24 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
             rowsCount += batch->num_rows();
         }
 
-        NIndexedReader::TRecordBatchBuilder builder(resultSchema->GetIndexInfo().ArrowSchemaWithSpecials()->fields(), rowsCount, fieldSizes);
+        NArrow::NMerger::TRecordBatchBuilder builder(resultSchema->GetIndexInfo().ArrowSchemaWithSpecials()->fields(), rowsCount, fieldSizes);
         stream.SetPossibleSameVersion(true);
         stream.DrainAll(builder);
 
         auto itGranule = PathToGranule.find(pathId);
         AFL_VERIFY(itGranule != PathToGranule.end());
-        std::vector<std::shared_ptr<arrow::RecordBatch>> result = NIndexedReader::TSortableBatchPosition::SplitByBordersInSequentialContainer(builder.Finalize(), comparableColumns, itGranule->second);
+        std::vector<std::shared_ptr<arrow::RecordBatch>> result = NArrow::NMerger::TSortableBatchPosition::SplitByBordersInSequentialContainer(builder.Finalize(), comparableColumns, itGranule->second);
         for (auto&& b : result) {
             if (!b) {
                 continue;
             }
+            std::optional<NArrow::NSerialization::TSerializerContainer> externalSaver;
             if (b->num_rows() < 100) {
-                SaverContext.SetExternalSerializer(NArrow::NSerialization::TSerializerContainer(std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::UNCOMPRESSED)));
+                externalSaver = NArrow::NSerialization::TSerializerContainer(std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::UNCOMPRESSED));
             } else {
-                SaverContext.SetExternalSerializer(NArrow::NSerialization::TSerializerContainer(std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::LZ4_FRAME)));
+                externalSaver = NArrow::NSerialization::TSerializerContainer(std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::LZ4_FRAME));
             }
-            auto portions = MakeAppendedPortions(b, pathId, maxSnapshot, nullptr, context);
+            auto portions = MakeAppendedPortions(b, pathId, maxSnapshot, nullptr, context, externalSaver);
             Y_ABORT_UNLESS(portions.size());
             for (auto& portion : portions) {
                 AppendedPortions.emplace_back(std::move(portion));

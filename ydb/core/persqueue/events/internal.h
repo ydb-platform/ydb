@@ -184,6 +184,8 @@ struct TEvPQ {
         EvGetWriteInfoResponse,
         EvGetWriteInfoError,
         EvReadingPartitionStatusRequest,
+        EvProcessChangeOwnerRequests,
+        EvWakeupReleasePartition,
         EvEnd
     };
 
@@ -1066,6 +1068,12 @@ struct TEvPQ {
         NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
         TVector<NPQ::TClientBlob> BlobsFromHead;
+        ui64 BytesWrittenTotal;
+        ui64 BytesWrittenGrpc;
+        ui64 BytesWrittenUncompressed;
+        ui64 MessagesWrittenTotal;
+        ui64 MessagesWrittenGrpc;
+        TVector<ui64> MessagesSizes;
     };
 
     struct TEvGetWriteInfoError : public TEventLocal<TEvGetWriteInfoError, EvGetWriteInfoError> {
@@ -1082,10 +1090,27 @@ struct TEvPQ {
     struct TEvReadingPartitionStatusRequest : public TEventPB<TEvReadingPartitionStatusRequest, NKikimrPQ::TEvReadingPartitionStatusRequest, EvReadingPartitionStatusRequest> {
         TEvReadingPartitionStatusRequest() = default;
 
-        TEvReadingPartitionStatusRequest(const TString& consumer, ui32 partitionId) {
+        TEvReadingPartitionStatusRequest(const TString& consumer, ui32 partitionId, ui32 generaion, ui64 cookie) {
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
+            Record.SetGeneration(generaion);
+            Record.SetCookie(cookie);
         }
+    };
+
+    struct TEvProcessChangeOwnerRequests : public TEventLocal<TEvProcessChangeOwnerRequests, EvProcessChangeOwnerRequests> {
+    };
+
+    struct TEvWakeupReleasePartition : TEventLocal<TEvWakeupReleasePartition, EvWakeupReleasePartition> {
+        TEvWakeupReleasePartition(const TString& consumer, const ui32 partitionId, const ui64 cookie)
+            : Consumer(consumer)
+            , PartitionId(partitionId)
+            , Cookie(cookie)
+        {}
+
+        TString Consumer;
+        ui32 PartitionId;
+        ui64 Cookie;
     };
 };
 

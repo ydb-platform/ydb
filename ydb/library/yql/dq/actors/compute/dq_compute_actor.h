@@ -88,9 +88,10 @@ struct TEvDqCompute {
 
         TEvInjectCheckpoint() = default;
 
-        TEvInjectCheckpoint(ui64 id, ui64 generation) {
+        TEvInjectCheckpoint(ui64 id, ui64 generation, NDqProto::ECheckpointType type) {
             Record.MutableCheckpoint()->SetId(id);
             Record.MutableCheckpoint()->SetGeneration(generation);
+            Record.MutableCheckpoint()->SetType(type);
             Record.SetGeneration(generation);
         }
     };
@@ -360,6 +361,7 @@ struct TComputeMemoryLimits {
 
     ui64 MinMemAllocSize = 30_MB;
     ui64 MinMemFreeSize = 30_MB;
+    ui64 OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
 
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
 };

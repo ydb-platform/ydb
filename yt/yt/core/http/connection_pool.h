@@ -40,7 +40,7 @@ public:
 
     TFuture<NNet::IConnectionPtr> Connect(
         const NNet::TNetworkAddress& address,
-        NNet::TRemoteContextPtr context = nullptr);
+        NNet::TDialerContextPtr context = nullptr);
 
     void Release(const NNet::IConnectionPtr& connection);
 

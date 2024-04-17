@@ -287,10 +287,11 @@ private:
 template <class TQueueImpl>
 TInvokerQueue<TQueueImpl>::TInvokerQueue(
     TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-    const TTagSet& counterTagSet)
+    const TTagSet& counterTagSet,
+    NProfiling::IRegistryImplPtr registry)
     : CallbackEventCount_(std::move(callbackEventCount))
 {
-    Counters_.push_back(CreateCounters(counterTagSet));
+    Counters_.push_back(CreateCounters(counterTagSet, std::move(registry)));
 }
 
 template <class TQueueImpl>
@@ -298,17 +299,15 @@ TInvokerQueue<TQueueImpl>::TInvokerQueue(
     TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
     const std::vector<TTagSet>& counterTagSets,
     const std::vector<NYTProf::TProfilerTagPtr>& profilerTags,
-    const TTagSet& cumulativeCounterTagSet)
+    NProfiling::IRegistryImplPtr registry)
     : CallbackEventCount_(std::move(callbackEventCount))
 {
     YT_VERIFY(counterTagSets.size() == profilerTags.size());
 
     Counters_.reserve(counterTagSets.size());
     for (const auto& tagSet : counterTagSets) {
-        Counters_.push_back(CreateCounters(tagSet));
+        Counters_.push_back(CreateCounters(tagSet, registry));
     }
-
-    CumulativeCounters_ = CreateCounters(cumulativeCounterTagSet);
 
     ProfilingTagSettingInvokers_.reserve(Counters_.size());
     for (int index = 0; index < std::ssize(Counters_); ++index) {
@@ -388,14 +387,10 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallback(
 
     auto action = MakeAction(std::move(callback), profilingTag, std::move(profilerTag), cpuInstant);
 
-    auto updateCounters = [&] (const TCountersPtr& counters) {
-        if (counters) {
-            counters->ActiveCallbacks += 1;
-            counters->EnqueuedCounter.Increment();
-        }
-    };
-    updateCounters(Counters_[profilingTag]);
-    updateCounters(CumulativeCounters_);
+    if (Counters_[profilingTag]) {
+        Counters_[profilingTag]->ActiveCallbacks += 1;
+        Counters_[profilingTag]->EnqueuedCounter.Increment();
+    }
 
     QueueImpl_.Enqueue(std::move(action));
     return cpuInstant;
@@ -421,14 +416,10 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallbacks(
         actions.push_back(MakeAction(std::move(callback), profilingTag, profilerTag, cpuInstant));
     }
 
-    auto updateCounters = [&] (const TCountersPtr& counters) {
-        if (counters) {
-            counters->ActiveCallbacks += std::ssize(actions);
-            counters->EnqueuedCounter.Increment(std::ssize(actions));
-        }
-    };
-    updateCounters(Counters_[profilingTag]);
-    updateCounters(CumulativeCounters_);
+    if (Counters_[profilingTag]) {
+        Counters_[profilingTag]->ActiveCallbacks += std::ssize(actions);
+        Counters_[profilingTag]->EnqueuedCounter.Increment(std::ssize(actions));
+    }
 
     QueueImpl_.Enqueue(actions);
     return cpuInstant;
@@ -493,14 +484,10 @@ bool TInvokerQueue<TQueueImpl>::BeginExecute(TEnqueuedAction* action, typename T
         WaitTimeObserver_(waitTime);
     }
 
-    auto updateCounters = [&] (const TCountersPtr& counters) {
-        if (counters) {
-            counters->DequeuedCounter.Increment();
-            counters->WaitTimer.Record(waitTime);
-        }
-    };
-    updateCounters(Counters_[action->ProfilingTag]);
-    updateCounters(CumulativeCounters_);
+    if (Counters_[action->ProfilingTag]) {
+        Counters_[action->ProfilingTag]->DequeuedCounter.Increment();
+        Counters_[action->ProfilingTag]->WaitTimer.Record(waitTime);
+    }
 
     if (const auto& profilerTag = action->ProfilerTag) {
         GetTlsRef(CpuProfilerTagGuard) = TCpuProfilerTagGuard(profilerTag);
@@ -532,16 +519,12 @@ void TInvokerQueue<TQueueImpl>::EndExecute(TEnqueuedAction* action)
     auto timeFromStart = CpuDurationToDuration(action->FinishedAt - action->StartedAt);
     auto timeFromEnqueue = CpuDurationToDuration(action->FinishedAt - action->EnqueuedAt);
 
-    auto updateCounters = [&] (const TCountersPtr& counters) {
-        if (counters) {
-            counters->ExecTimer.Record(timeFromStart);
-            counters->CumulativeTimeCounter.Add(timeFromStart);
-            counters->TotalTimer.Record(timeFromEnqueue);
-            counters->ActiveCallbacks -= 1;
-        }
-    };
-    updateCounters(Counters_[action->ProfilingTag]);
-    updateCounters(CumulativeCounters_);
+    if (Counters_[action->ProfilingTag]) {
+        Counters_[action->ProfilingTag]->ExecTimer.Record(timeFromStart);
+        Counters_[action->ProfilingTag]->CumulativeTimeCounter.Add(timeFromStart);
+        Counters_[action->ProfilingTag]->TotalTimer.Record(timeFromEnqueue);
+        Counters_[action->ProfilingTag]->ActiveCallbacks -= 1;
+    }
 }
 
 template <class TQueueImpl>
@@ -586,9 +569,9 @@ void TInvokerQueue<TQueueImpl>::RegisterWaitTimeObserver(TWaitTimeObserver waitT
 }
 
 template <class TQueueImpl>
-typename TInvokerQueue<TQueueImpl>::TCountersPtr TInvokerQueue<TQueueImpl>::CreateCounters(const TTagSet& tagSet)
+typename TInvokerQueue<TQueueImpl>::TCountersPtr TInvokerQueue<TQueueImpl>::CreateCounters(const TTagSet& tagSet, NProfiling::IRegistryImplPtr registry)
 {
-    auto profiler = TProfiler("/action_queue").WithTags(tagSet).WithHot();
+    auto profiler = TProfiler(registry, "/action_queue").WithTags(tagSet).WithHot();
 
     auto counters = std::make_unique<TCounters>();
     counters->EnqueuedCounter = profiler.Counter("/enqueued");

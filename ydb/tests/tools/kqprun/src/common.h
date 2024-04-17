@@ -2,12 +2,16 @@
 
 #include <ydb/core/protos/config.pb.h>
 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
 
 #include <ydb/public/lib/ydb_cli/common/formats.h>
 
 
 namespace NKqpRun {
+
+constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 
 struct TYdbSetupSettings {
     TString DomainName = "Root";
@@ -16,7 +20,9 @@ struct TYdbSetupSettings {
     TMaybe<TString> LogOutputFile;
 
     TString YqlToken;
-    TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry = nullptr;
+    TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
+    NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
+    TIntrusivePtr<NYql::IYtGateway> YtGateway;
     NKikimrConfig::TAppConfig AppConfig;
 };
 

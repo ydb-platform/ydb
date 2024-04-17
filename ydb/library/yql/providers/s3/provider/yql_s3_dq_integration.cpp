@@ -259,15 +259,6 @@ public:
 
             auto format = s3ReadObject.Object().Format().Ref().Content();
             if (const auto useCoro = State_->Configuration->SourceCoroActor.Get(); (!useCoro || *useCoro) && format != "raw" && format != "json_list") {
-                if (format == "parquet") {
-                    YQL_ENSURE(State_->Types->ArrowResolver);
-                    TVector<const TTypeAnnotationNode*> allTypes;
-                    for (const auto& x : rowType->Cast<TStructExprType>()->GetItems()) {
-                        allTypes.push_back(x->GetItemType());
-                    }
-                    auto resolveStatus = State_->Types->ArrowResolver->AreTypesSupported(ctx.GetPosition(read->Pos()), allTypes, ctx);
-                    YQL_ENSURE(resolveStatus == IArrowResolver::OK);
-                }
                 return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3ParseSettings>()
                         .Paths(s3ReadObject.Object().Paths())
@@ -494,23 +485,33 @@ public:
 
                 YQL_CLOG(DEBUG, ProviderS3) << " hasDirectories=" << hasDirectories << ", consumersCount=" << consumersCount;
 
-                auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(NDq::CreateS3FileQueueActor(
-                    0ul,
-                    std::move(paths),
-                    fileQueuePrefetchSize,
-                    fileSizeLimit,
-                    useRuntimeListing,
-                    consumersCount,
-                    fileQueueBatchSizeLimit,
-                    fileQueueBatchObjectCountLimit,
-                    State_->Gateway,
-                    connect.Url,
-                    GetAuthInfo(State_->CredentialsFactory, connect.Token),
-                    pathPattern,
-                    pathPatternVariant,
-                    NS3Lister::ES3PatternType::Wildcard
-                ));
-                srcDesc.MutableSettings()->insert({"fileQueueActor", fileQueueActor.ToString()});
+                auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(
+                    NDq::CreateS3FileQueueActor(
+                        0ul,
+                        std::move(paths),
+                        fileQueuePrefetchSize,
+                        fileSizeLimit,
+                        useRuntimeListing,
+                        consumersCount,
+                        fileQueueBatchSizeLimit,
+                        fileQueueBatchObjectCountLimit,
+                        State_->Gateway,
+                        connect.Url,
+                        GetAuthInfo(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
+                        pathPattern,
+                        pathPatternVariant,
+                        NS3Lister::ES3PatternType::Wildcard
+                    ),
+                    NActors::TMailboxType::HTSwap,
+                    State_->ExecutorPoolId
+                );
+
+                NActorsProto::TActorId protoId;
+                ActorIdToProto(fileQueueActor, &protoId);
+                TString stringId;
+                google::protobuf::TextFormat::PrintToString(protoId, &stringId);
+
+                srcDesc.MutableSettings()->insert({"fileQueueActor", stringId});
             }
 #endif
             protoSettings.PackFrom(srcDesc);

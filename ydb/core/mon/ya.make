@@ -16,7 +16,6 @@ PEERDIR(
     library/cpp/lwtrace/mon
     library/cpp/string_utils/url
     ydb/core/base
-    ydb/core/driver_lib/version
     ydb/core/protos
     ydb/library/aclib
 )

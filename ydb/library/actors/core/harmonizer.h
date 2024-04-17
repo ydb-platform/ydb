@@ -1,12 +1,12 @@
 #pragma once
 
 #include "defs.h"
-#include "config.h"
 #include "executor_pool_shared.h"
 
 namespace NActors {
     class IExecutorPool;
     class TSharedExecutorPool;
+    struct TSelfPingInfo;
 
     template <typename T>
     struct TWaitingStats;

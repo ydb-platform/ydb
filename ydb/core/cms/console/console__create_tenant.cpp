@@ -270,7 +270,26 @@ public:
             auto hardQuota = quotas.data_size_hard_quota();
             auto softQuota = quotas.data_size_soft_quota();
             if (hardQuota && softQuota && hardQuota < softQuota) {
-                return Error(Ydb::StatusIds::BAD_REQUEST, "Data size soft quota cannot be larger than hard quota", ctx);
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                    TStringBuilder() << "Overall data size soft quota (" << softQuota << ")"
+                                     << " of the database " << path
+                                     << " must be smaller than the hard quota (" << hardQuota << ")",
+                    ctx
+                );
+            }
+            for (const auto& storageQuota : quotas.storage_quotas()) {
+                const auto unitHardQuota = storageQuota.data_size_hard_quota();
+                const auto unitSoftQuota = storageQuota.data_size_soft_quota();
+                if (unitHardQuota && unitSoftQuota && unitHardQuota < unitSoftQuota) {
+                    return Error(Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder() << "Data size soft quota (" << unitSoftQuota << ")"
+                                         << " for a " << storageQuota.unit_kind() << " storage unit "
+                                         << " of the database " << path
+                                         << " must be smaller than the corresponding hard quota (" << unitHardQuota << ")",
+                        ctx
+                    );
+                }
+
             }
             Tenant->DatabaseQuotas.ConstructInPlace(quotas);
         }

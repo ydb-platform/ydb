@@ -30,6 +30,7 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSeriali
 }
 
 bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
+    TMemoryProfileGuard mpg("TTxWrite::Execute");
     NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "execute");
     ACFL_DEBUG("event", "start_execute");
     const NOlap::TWritingBuffer& buffer = PutBlobResult->Get()->MutableWritesBuffer();
@@ -88,7 +89,13 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
                 Y_ABORT_UNLESS(proto.SerializeToString(&txBody));
                 ProposeTransaction(TTxController::TBasicTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, operation->GetLockId()), txBody, writeMeta.GetSource(), operation->GetCookie(), txc);
             } else {
-                Results.emplace_back(NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId()));
+                NKikimrDataEvents::TLock lock;
+                lock.SetLockId(operation->GetLockId());
+                lock.SetDataShard(Self->TabletID());
+                lock.SetGeneration(1);
+                lock.SetCounter(1);
+
+                Results.emplace_back(NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock));
             }
         } else {
             Y_ABORT_UNLESS(aggr->GetWriteIds().size() == 1);
@@ -108,6 +115,7 @@ void TTxWrite::OnProposeError(TTxController::TProposeResult& proposeResult, cons
 }
 
 void TTxWrite::Complete(const TActorContext& ctx) {
+    TMemoryProfileGuard mpg("TTxWrite::Complete");
     NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "complete");
     const auto now = TMonotonic::Now();
     const NOlap::TWritingBuffer& buffer = PutBlobResult->Get()->MutableWritesBuffer();

@@ -588,11 +588,15 @@ namespace NSQLTranslationV1 {
         bool IsColumnPossible(TContext& ctx, const TString& column);
     };
 
-    struct TSortSpecification: public TSimpleRefCount<TSortSpecification> {
-        TNodePtr OrderExpr;
-        bool Ascending;
+    class TSortSpecification: public TSimpleRefCount<TSortSpecification> {
+    public:
+        TSortSpecification(const TNodePtr& orderExpr, bool ascending);
+        const TNodePtr OrderExpr;
+        const bool Ascending;
         TIntrusivePtr<TSortSpecification> Clone() const;
         ~TSortSpecification() {}
+    private:
+        const TNodePtr CleanOrderExpr;
     };
     typedef TIntrusivePtr<TSortSpecification> TSortSpecificationPtr;
 
@@ -1248,6 +1252,9 @@ namespace NSQLTranslationV1 {
         bool missingOk, std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context);
     TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
         std::vector<std::pair<TString, TString>>&& targets,
+        std::map<TString, TNodePtr>&& settings,
+        const TObjectOperatorContext& context);
+    TNodePtr BuildAlterAsyncReplication(TPosition pos, const TString& id,
         std::map<TString, TNodePtr>&& settings,
         const TObjectOperatorContext& context);
     TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);

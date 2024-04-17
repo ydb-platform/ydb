@@ -3,28 +3,59 @@
 #include "private_events.h"
 #include "util.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
-
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr::NReplication::NController {
 
+using namespace NConsole;
 using namespace NSchemeShard;
 
 class TDstCreator: public TActorBootstrapped<TDstCreator> {
-    void DescribeSrcPath() {
+    void GetTableProfiles() {
+        LOG_T("Get table profiles");
+
+        using namespace NKikimrConsole;
+        auto ev = MakeHolder<TEvConfigsDispatcher::TEvGetConfigRequest>((ui32)TConfigItem::TableProfilesConfigItem);
+        Send(MakeConfigsDispatcherID(SelfId().NodeId()), std::move(ev), IEventHandle::FlagTrackDelivery);
+
+        Become(&TThis::StateGetTableProfiles);
+    }
+
+    STATEFN(StateGetTableProfiles) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
+            sFunc(TEvents::TEvUndelivered, DescribeSrcPath);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+        TableProfiles.Load(ev->Get()->Config->GetTableProfilesConfig());
+        DescribeSrcPath();
+    }
+
+    void DescribeSrcPath(bool bootstrap = false) {
+        Become(&TThis::StateDescribeSrcPath);
+
         switch (Kind) {
         case TReplication::ETargetKind::Table:
-            Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(SrcPath, {}));
+            if (bootstrap) {
+                GetTableProfiles();
+            } else {
+                Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(SrcPath, {}));
+            }
             break;
         }
-
-        Become(&TThis::StateDescribeSrcPath);
     }
 
     STATEFN(StateDescribeSrcPath) {
@@ -74,16 +105,21 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         Ydb::Table::CreateTableRequest scheme;
         result.GetTableDescription().SerializeTo(scheme);
 
-        TTableProfiles profiles; // TODO: load
         Ydb::StatusIds::StatusCode status;
         TString error;
-        if (!FillTableDescription(TxBody, scheme, profiles, status, error)) {
+        if (!FillTableDescription(TxBody, scheme, TableProfiles, status, error)) {
             return Error(NKikimrScheme::StatusSchemeError, error);
         }
 
         // TODO: support indexed tables
         TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
-        TxBody.MutableCreateTable()->SetName(ToString(ExtractBase(DstPath)));
+        auto& desc = *TxBody.MutableCreateTable();
+        desc.SetName(ToString(ExtractBase(DstPath)));
+        // TODO: support other modes
+        auto& replicationConfig = *desc.MutableReplicationConfig();
+        replicationConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        replicationConfig.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
+
         AllocateTxId();
     }
 
@@ -217,6 +253,30 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
+        if (!got.HasReplicationConfig()) {
+            error = "Empty replication config";
+            return false;
+        }
+
+        const auto& replicationConfig = got.GetReplicationConfig();
+
+        switch (replicationConfig.GetMode()) {
+        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY:
+            break;
+        default:
+            error = "Unsupported replication mode";
+            return false;
+        }
+
+        switch (replicationConfig.GetConsistency()) {
+        case NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK:
+            break;
+        default:
+            error = TStringBuilder() << "Unsupported replication consistency"
+                << ": " << static_cast<int>(replicationConfig.GetConsistency());
+            return false;
+        }
+
         const auto& expected = TxBody.GetCreateTable();
 
         // check key
@@ -404,7 +464,7 @@ public:
     }
 
     void Bootstrap() {
-        DescribeSrcPath();
+        DescribeSrcPath(true);
     }
 
     STATEFN(StateBase) {
@@ -426,6 +486,7 @@ private:
     const TString DstPath;
     const TActorLogPrefix LogPrefix;
 
+    TTableProfiles TableProfiles;
     ui64 TxId = 0;
     NKikimrSchemeOp::TModifyScheme TxBody;
     TActorId PipeCache;
@@ -433,6 +494,13 @@ private:
     TPathId DstPathId;
 
 }; // TDstCreator
+
+IActor* CreateDstCreator(TReplication::TPtr replication, ui64 targetId, const TActorContext& ctx) {
+    const auto* target = replication->FindTarget(targetId);
+    Y_ABORT_UNLESS(target);
+    return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath());
+}
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath)

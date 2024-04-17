@@ -54,6 +54,8 @@ struct TYqlCallableComputationNodeBuilderFuncMapFiller {
         Map["EmptyDictTypeHandle"] = &WrapMakeType<NYql::ETypeAnnotationKind::EmptyDict>;
         Map["CallableTypeComponents"] = &WrapSplitType<NYql::ETypeAnnotationKind::Callable>;
         Map["CallableTypeHandle"] = &WrapMakeType<NYql::ETypeAnnotationKind::Callable>;
+        Map["PgTypeName"] = &WrapSplitType<NYql::ETypeAnnotationKind::Pg>;
+        Map["PgTypeHandle"] = &WrapMakeType<NYql::ETypeAnnotationKind::Pg>;
         Map["FormatCode"] = &WrapFormatCode<false>;
         Map["FormatCodeWithPositions"] = &WrapFormatCode<true>;
         Map["SerializeCode"] = &WrapSerializeCode;

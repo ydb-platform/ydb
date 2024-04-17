@@ -1791,6 +1791,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (const auto replicationConfig = std::get<9>(rec)) {
                     bool parseOk = ParseFromStringNoSizeLimit(tableInfo->MutableReplicationConfig(), replicationConfig);
                     Y_ABORT_UNLESS(parseOk);
+
+                    if (tableInfo->IsAsyncReplica()) {
+                        Self->PathsById.at(pathId)->SetAsyncReplica();
+                    }
                 }
 
                 tableInfo->IsBackup = std::get<8>(rec);
@@ -2259,6 +2263,22 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 stats.RowCount = rowSet.GetValue<Schema::TablePartitionStats::RowCount>();
                 stats.DataSize = rowSet.GetValue<Schema::TablePartitionStats::DataSize>();
                 stats.IndexSize = rowSet.GetValue<Schema::TablePartitionStats::IndexSize>();
+                if (rowSet.HaveValue<Schema::TablePartitionStats::StoragePoolsStats>()) {
+                    NKikimrTableStats::TStoragePoolsStats protobufRepresentation;
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(
+                            protobufRepresentation,
+                            rowSet.GetValue<Schema::TablePartitionStats::StoragePoolsStats>()
+                        )
+                    );
+                    for (const auto& poolUsage : protobufRepresentation.GetPoolsUsage()) {
+                        stats.StoragePoolsStats.emplace(
+                            poolUsage.GetPoolKind(),
+                            TPartitionStats::TStoragePoolStats{poolUsage.GetDataSize(),
+                                                               poolUsage.GetIndexSize()
+                            }
+                        );
+                    }
+                }
 
                 stats.LastAccessTime = TInstant::FromValue(rowSet.GetValue<Schema::TablePartitionStats::LastAccessTime>());
                 stats.LastUpdateTime = TInstant::FromValue(rowSet.GetValue<Schema::TablePartitionStats::LastUpdateTime>());

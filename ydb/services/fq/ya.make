@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     grpc_service.cpp
     private_grpc.cpp
+    ydb_over_fq.cpp
 )
 
 PEERDIR(

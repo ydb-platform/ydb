@@ -1,0 +1,5 @@
+items:
+- name: Настройка
+  href: setup.md
+- name: Передача внешнего trace-id
+  href: external-traces.md

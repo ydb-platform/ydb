@@ -25,16 +25,9 @@ private:
     YDB_READONLY_DEF(TString, Data);
     YDB_ACCESSOR_DEF(std::shared_ptr<IBlobsWritingAction>, WriteOperator);
 
-    TBlobWriteInfo(const TString& data, const std::shared_ptr<IBlobsWritingAction>& writeOperator)
-        : Data(data)
-        , WriteOperator(writeOperator) {
-        Y_ABORT_UNLESS(WriteOperator);
-        BlobId = WriteOperator->AddDataForWrite(data);
-    }
+    TBlobWriteInfo(const TString& data, const std::shared_ptr<IBlobsWritingAction>& writeOperator, const std::optional<TUnifiedBlobId>& customBlobId);
 public:
-    static TBlobWriteInfo BuildWriteTask(const TString& data, const std::shared_ptr<IBlobsWritingAction>& writeOperator) {
-        return TBlobWriteInfo(data, writeOperator);
-    }
+    static TBlobWriteInfo BuildWriteTask(const TString& data, const std::shared_ptr<IBlobsWritingAction>& writeOperator, const std::optional<TUnifiedBlobId>& customBlobId = {});
 };
 
 }

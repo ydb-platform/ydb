@@ -58,6 +58,11 @@ public:
 
         ::Ydb::Operations::OperationParams operationParams;
 
+        auto settings = NKqp::NPrivateEvents::TQueryRequestSettings()
+            .SetKeepSession(false)
+            .SetUseCancelAfter(false)
+            .SetSyntax(req->syntax());
+
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             NKikimrKqp::QUERY_ACTION_EXECUTE,
             NKikimrKqp::QUERY_TYPE_SQL_SCRIPT,
@@ -71,9 +76,7 @@ public:
             req->collect_stats(),
             nullptr, // query_cache_policy
             req->has_operation_params() ? &req->operation_params() : nullptr,
-            false, // keep session
-            false, // use cancelAfter
-            req->syntax()
+            settings
         );
 
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Span_.GetTraceId());

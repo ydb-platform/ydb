@@ -31,6 +31,8 @@ def is_result_fixed(oid_per_name, catalog_by_oid, name):
 def get_fixed_args(oid_per_name, catalog_by_oid, name):
     found = None
     for oid in oid_per_name[name]:
+        if "var_type" in catalog_by_oid[oid]:
+            return None
         fixed = [x["arg_type_fixed"] for x in catalog_by_oid[oid]["args"]]
         if found is None:
             found = fixed

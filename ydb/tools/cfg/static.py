@@ -1162,7 +1162,8 @@ class StaticConfigGenerator(object):
                     tvm_pb.Port = tvm["port"]
                 tvm_pb.SelfTvmId = tvm["self_tvm_id"]
                 tvm_pb.TracingTvmId = tvm["tracing_tvm_id"]
-                tvm_pb.DiskCacheDir = tvm["disk_cache_dir"]
+                if "disk_cache_dir" in tvm:
+                    tvm_pb.DiskCacheDir = tvm["disk_cache_dir"]
 
                 if "plain_text_secret" in tvm:
                     tvm_pb.PlainTextSecret = tvm["plain_text_secret"]

@@ -11,15 +11,21 @@ private:
     const TSnapshot SnapshotBarrier;
     const THashSet<TTabletId> PathIds;
 protected:
-    virtual bool DoIsLocked(const TPortionInfo& portion) const override {
-        return PathIds.contains((TTabletId)portion.GetPathId()) && portion.RecordSnapshotMin() <= SnapshotBarrier;
+    virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion) const override {
+        if (PathIds.contains((TTabletId)portion.GetPathId()) && portion.RecordSnapshotMin() <= SnapshotBarrier) {
+            return GetLockName();
+        }
+        return {};
     }
-    virtual bool DoIsLocked(const TGranuleMeta& granule) const override {
-        return PathIds.contains((TTabletId)granule.GetPathId());
+    virtual std::optional<TString> DoIsLocked(const TGranuleMeta& granule) const override {
+        if (PathIds.contains((TTabletId)granule.GetPathId())) {
+            return GetLockName();
+        }
+        return {};
     }
 public:
-    TSnapshotLock(const TSnapshot& snapshotBarrier, const THashSet<TTabletId>& pathIds, const bool readOnly = false)
-        : TBase(readOnly)
+    TSnapshotLock(const TString& lockName, const TSnapshot& snapshotBarrier, const THashSet<TTabletId>& pathIds, const bool readOnly = false)
+        : TBase(lockName, readOnly)
         , SnapshotBarrier(snapshotBarrier)
         , PathIds(pathIds)
     {

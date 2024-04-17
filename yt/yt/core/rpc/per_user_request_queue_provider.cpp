@@ -25,7 +25,7 @@ TPerUserRequestQueueProvider::TPerUserRequestQueueProvider(
 
 TRequestQueue* TPerUserRequestQueueProvider::GetQueue(const NProto::TRequestHeader& header)
 {
-    const auto& userName = header.has_user() ? header.user() : RootUserName;
+    auto userName = header.has_user() ? ::NYT::FromProto<TString>(header.user()) : RootUserName;
     return DoGetQueue(userName);
 }
 

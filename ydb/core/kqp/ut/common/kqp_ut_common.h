@@ -85,10 +85,10 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     IOutputStream* LogStream = nullptr;
     TMaybe<NFake::TStorage> Storage = Nothing();
     NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
+    NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
 
     TKikimrSettings()
     {
-        FeatureFlags.SetForceColumnTablesCompositeMarks(true);
         auto* tableServiceConfig = AppConfig.MutableTableServiceConfig();
         auto* infoExchangerRetrySettings = tableServiceConfig->MutableResourceManager()->MutableInfoExchangerSettings();
         auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
@@ -138,6 +138,8 @@ public:
         if (ThreadPoolStarted_) {
             ThreadPool.Stop();
         }
+
+        UNIT_ASSERT_C(WaitHttpGatewayFinalization(CountersRoot), "Failed to finalize http gateway before destruction");
 
         Server.Reset();
         Client.Reset();
@@ -194,6 +196,7 @@ private:
     TString Endpoint;
     NYdb::TDriverConfig DriverConfig;
     THolder<NYdb::TDriver> Driver;
+    NMonitoring::TDynamicCounterPtr CountersRoot;
 };
 
 inline TKikimrRunner DefaultKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSettings = {},
@@ -325,6 +328,7 @@ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer* server, TAc
 TVector<ui64> GetTableShards(Tests::TServer* server, TActorId sender, const TString &path);
 
 TVector<ui64> GetTableShards(Tests::TServer::TPtr server, TActorId sender, const TString &path);
+TVector<ui64> GetColumnTableShards(Tests::TServer* server, TActorId sender, const TString &path);
 
 void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
 

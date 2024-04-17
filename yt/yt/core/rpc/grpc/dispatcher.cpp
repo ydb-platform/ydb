@@ -88,8 +88,7 @@ private:
         TDispatcherThread(TGrpcLibraryLockPtr libraryLock, int index)
             : TThread(
                 Format("Grpc/%v", index),
-                NThreading::EThreadPriority::Normal,
-                GrpcDispatcherThreadShutdownPriority)
+                {.ShutdownPriority = GrpcDispatcherThreadShutdownPriority})
             , LibraryLock_(std::move(libraryLock))
             , GuardedCompletionQueue_(TGrpcCompletionQueuePtr(grpc_completion_queue_create_for_next(nullptr)))
         {

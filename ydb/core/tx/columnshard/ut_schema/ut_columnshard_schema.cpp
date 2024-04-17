@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
+#include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
@@ -26,82 +27,6 @@ enum class EInitialEviction {
     None,
     Ttl,
     Tiering
-};
-
-class TWaitCompactionController: public NKikimr::NYDBTest::NColumnShard::TController {
-private:
-    using TBase = NKikimr::NYDBTest::ICSController;
-    TAtomic TTLFinishedCounter = 0;
-    TAtomic TTLStartedCounter = 0;
-    NMetadata::NFetcher::ISnapshot::TPtr CurrentConfig;
-    bool CompactionEnabledFlag = true;
-    YDB_ACCESSOR(bool, TTLEnabled, true);
-    ui32 TiersModificationsCount = 0;
-    YDB_READONLY(TAtomicCounter, StatisticsUsageCount, 0);
-    YDB_READONLY(TAtomicCounter, MaxValueUsageCount, 0);
-protected:
-    virtual void OnTieringModified(const std::shared_ptr<TTiersManager>& /*tiers*/) override {
-        ++TiersModificationsCount;
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")("count", TiersModificationsCount);
-    }
-    virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) override {
-        if (!CompactionEnabledFlag) {
-            changes = nullptr;
-        }
-        if (!TTLEnabled && dynamic_pointer_cast<NOlap::TTTLColumnEngineChanges>(changes)) {
-            changes = nullptr;
-        }
-        return true;
-    }
-    virtual bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& changes, const NColumnShard::TColumnShard& /*shard*/) override {
-        if (changes.TypeString() == NOlap::TTTLColumnEngineChanges::StaticTypeName()) {
-            AtomicIncrement(TTLFinishedCounter);
-        }
-        return true;
-    }
-    virtual bool DoOnWriteIndexStart(const ui64 /*tabletId*/, const TString& changeClassName) override {
-        if (changeClassName.find(NOlap::TTTLColumnEngineChanges::StaticTypeName()) != TString::npos) {
-            AtomicIncrement(TTLStartedCounter);
-        }
-        return true;
-    }
-public:
-    virtual void OnStatisticsUsage(const NOlap::NStatistics::TOperatorContainer& /*statOperator*/) override {
-        StatisticsUsageCount.Inc();
-    }
-    virtual void OnMaxValueUsage() override {
-        MaxValueUsageCount.Inc();
-    }
-    void SetCompactionEnabled(const bool value) {
-        CompactionEnabledFlag = value;
-    }
-    virtual bool IsTTLEnabled() const override {
-        return TTLEnabled;
-    }
-    void SetTiersSnapshot(TTestBasicRuntime& runtime, const TActorId& tabletActorId, const NMetadata::NFetcher::ISnapshot::TPtr& snapshot) {
-        CurrentConfig = snapshot;
-        ui32 startCount = TiersModificationsCount;
-        ProvideTieringSnapshot(runtime, tabletActorId, snapshot);
-        while (TiersModificationsCount == startCount) {
-            runtime.SimulateSleep(TDuration::Seconds(1));
-        }
-    }
-
-    virtual NMetadata::NFetcher::ISnapshot::TPtr GetFallbackTiersSnapshot() const override {
-        if (CurrentConfig) {
-            return CurrentConfig;
-        } else {
-            return TBase::GetFallbackTiersSnapshot();
-        }
-    }
-    i64 GetTTLFinishedCounter() const {
-        return AtomicGet(TTLFinishedCounter);
-    }
-
-    i64 GetTTLStartedCounter() const {
-        return AtomicGet(TTLStartedCounter);
-    }
-
 };
 
 namespace {
@@ -250,8 +175,8 @@ static constexpr ui32 PORTION_ROWS = 80 * 1000;
 void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema = testYdbSchema)
 {
-    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TWaitCompactionController>();
-    csControllerGuard->SetCompactionEnabled(false);
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     std::vector<ui64> ts = {1600000000, 1620000000};
 
     ui32 ttlIncSeconds = 1;
@@ -326,7 +251,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     } else {
         TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[0] + ttlIncSeconds, spec.TtlColumn);
     }
-    while (csControllerGuard->GetTTLFinishedCounter() != csControllerGuard->GetTTLStartedCounter()) {
+    while (csControllerGuard->GetTTLFinishedCounter().Val() != csControllerGuard->GetTTLStartedCounter().Val()) {
         runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
     }
 
@@ -366,7 +291,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     } else {
         TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[1] + ttlIncSeconds, spec.TtlColumn);
     }
-    while (csControllerGuard->GetTTLFinishedCounter() != csControllerGuard->GetTTLStartedCounter()) {
+    while (csControllerGuard->GetTTLFinishedCounter().Val() != csControllerGuard->GetTTLStartedCounter().Val()) {
         runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
     }
 
@@ -400,7 +325,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     } else {
         TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[0] - ttlIncSeconds, spec.TtlColumn);
     }
-    while (csControllerGuard->GetTTLFinishedCounter() != csControllerGuard->GetTTLStartedCounter()) {
+    while (csControllerGuard->GetTTLFinishedCounter().Val() != csControllerGuard->GetTTLStartedCounter().Val()) {
         runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
     }
 
@@ -605,8 +530,8 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         Cerr << s.DebugString() << Endl;
     }
 
-    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TWaitCompactionController>();
-    csControllerGuard->SetTTLEnabled(false);
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+    csControllerGuard->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -664,7 +589,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
     if (reboots) {
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
     }
-    csControllerGuard->SetTTLEnabled(true);
+    csControllerGuard->EnableBackground(NYDBTest::ICSController::EBackground::TTL);
 
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
@@ -744,7 +669,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
                 UNIT_ASSERT(reader->IsCorrectlyFinished());
             }
         }
-        while (csControllerGuard->GetTTLFinishedCounter() != csControllerGuard->GetTTLStartedCounter()) {
+        while (csControllerGuard->GetTTLFinishedCounter().Val() != csControllerGuard->GetTTLStartedCounter().Val()) {
             runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
         }
 
@@ -1233,7 +1158,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             NTypeIds::Uint32,
             NTypeIds::Uint64,
             NTypeIds::Date,
-            NTypeIds::Datetime
+            NTypeIds::Datetime,
+            NTypeIds::Timestamp64,
+            NTypeIds::Interval64
         };
 
         auto schema = TTestSchema::YdbSchema(NArrow::NTest::TTestColumn("k0", TTypeInfo(NTypeIds::Timestamp)));

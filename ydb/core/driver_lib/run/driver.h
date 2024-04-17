@@ -16,6 +16,7 @@ namespace NKikimr {
 #define MODE_MAP(XX) \
     XX(EDM_RUN, "run", "run kikimr node") \
     XX(EDM_SERVER, "server", "run kikimr node") \
+    XX(EDM_CONFIG, "config", "config utils") \
     XX(EDM_ADMIN, "admin", "admin running kikimr") \
     XX(EDM_DB, "db", "admin running kikimr") \
     XX(EDM_TABLET, "tablet", "admin running kikimr") \

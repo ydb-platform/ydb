@@ -10,10 +10,8 @@
 #include "flat_table_subset.h"
 #include "flat_part_iface.h"
 #include "flat_part_store.h"
-#include "flat_sausage_packet.h"
 #include "flat_sausage_fetch.h"
 #include "util_fmt_abort.h"
-#include "util_basics.h"
 #include <util/generic/deque.h>
 #include <util/random/random.h>
 #include <util/generic/intrlist.h>
@@ -66,7 +64,7 @@ namespace NFwd {
         TAutoPtr<TFetch> Fetch;
     };
 
-    struct TEnv: public IPages {
+    struct TEnv : public IPages {
         using TSlot = ui32;
         using TSlotVec = TSmallVec<TSlot>;
 
@@ -202,15 +200,15 @@ namespace NFwd {
                 return stat += q->Stat;
             };
 
-            return
-                std::accumulate(Queues.begin(), Queues.end(), Total, aggr);
+            return std::accumulate(Queues.begin(), Queues.end(), Total, aggr);
         }
 
         TAutoPtr<TFetch> GrabFetches() noexcept
         {
             while (auto *q = Queue ? Queue.PopFront() : nullptr) {
-                if (std::exchange(q->Grow, false))
+                if (std::exchange(q->Grow, false)) {
                     (*q)->Forward(q, Max(ui64(1), Conf.AheadHi));
+                }
 
                 if (auto req = std::move(q->Fetch)) {
                     Y_ABORT_UNLESS(req->Pages, "Shouldn't sent an empty requests");
@@ -289,7 +287,8 @@ namespace NFwd {
             if ((q.Grow = got.Grow) || bool(q.Fetch)) {
                 Queue.PushBack(&q);
             } else if (got.Need && got.Page == nullptr) {
-                Y_ABORT("Cache line head don't want to do fetch but should");
+                // temporary hack for index pages as they are always stored in group 0 
+                Y_ABORT_UNLESS(!Queue.Empty(), "Cache line head don't want to do fetch but should");
             }
 
             return { got.Need, got.Page };
@@ -324,7 +323,7 @@ namespace NFwd {
         {
             auto it = Parts.find(part);
             Y_ABORT_UNLESS(it != Parts.end(),
-                "NFwd cache tyring to access part outside of subset");
+                "NFwd cache trying to access part outside of subset");
             Y_ABORT_UNLESS(room < it->second.size(),
                 "NFwd cache trying to access room out of bounds");
             Y_ABORT_UNLESS(it->second[room] != Max<ui16>(),
@@ -354,15 +353,15 @@ namespace NFwd {
             }
         }
 
-        TEgg MakeCache(const TPart *part, NPage::TGroupId groupId, TIntrusiveConstPtr<TSlices> bounds) noexcept
+        TEgg MakeCache(const TPart *part, NPage::TGroupId groupId, TIntrusiveConstPtr<TSlices> slices) noexcept
         {
-            auto *partStore = dynamic_cast<const TPartStore*>(part);
+            auto *partStore = CheckedCast<const TPartStore*>(part);
 
             Y_ABORT_UNLESS(groupId.Index < partStore->PageCollections.size(), "Got part without enough page collections");
 
             auto& cache = partStore->PageCollections[groupId.Index];
             
-            auto* fwd = new NFwd::TCache(part, this, groupId, bounds);
+            auto* fwd = new NFwd::TCache(part, this, groupId, slices);
             return { fwd, cache->PageCollection };
         }
 
@@ -423,7 +422,7 @@ namespace NFwd {
         TDeque<TSimpleEnv> IndexPages;
         THashMap<const TPart*, TSlotVec> Parts;
         THashSet<const TPart*> ColdParts;
-        // Wrapper for memable blobs
+        // Wrapper for memtable blobs
         TAutoPtr<TMemTableHandler> MemTable;
         // Waiting for read aheads
         TIntrusiveList<TPageLoadingQueue> Queue;

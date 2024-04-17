@@ -85,6 +85,7 @@ struct TYtState : public TThrRefBase {
     void LeaveEvaluation(ui64 id);
     bool IsHybridEnabled() const;
     bool IsHybridEnabledForCluster(const std::string_view& cluster) const;
+    bool HybridTakesTooLong() const;
 
     TString SessionId;
     IYtGateway::TPtr Gateway;
@@ -96,7 +97,8 @@ struct TYtState : public TThrRefBase {
     THashMap<std::pair<TString, TString>, TString> AnonymousLabels; // cluster + label -> name
     std::unordered_map<ui64, TString> NodeHash; // unique id -> hash
     THashMap<ui32, TOperationStatistics> Statistics; // public id -> stat
-    THashMap<TString, TOperationStatistics> HybridStatistics; // operation name -> stat
+    THashMap<TString, TOperationStatistics> HybridStatistics; // subfolder -> stat
+    THashMap<TString, THashMap<TString, TOperationStatistics>> HybridOpStatistics; // operation name -> subfolder -> stat
     TMutex StatisticsMutex;
     THashSet<std::pair<TString, TString>> Checkpoints; // Set of checkpoint tables
     THolder<IDqIntegration> DqIntegration_;

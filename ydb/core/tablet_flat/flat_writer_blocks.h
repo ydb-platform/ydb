@@ -5,6 +5,7 @@
 #include "flat_sausage_writer.h"
 #include "flat_sausage_solid.h"
 #include "flat_part_loader.h"
+#include "flat_writer_banks.h"
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {

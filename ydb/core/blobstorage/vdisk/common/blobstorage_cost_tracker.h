@@ -4,6 +4,7 @@
 #include "vdisk_costmodel.h"
 #include "vdisk_events.h"
 #include "vdisk_handle_class.h"
+#include "vdisk_mongroups.h"
 
 #include <library/cpp/bucket_quoter/bucket_quoter.h>
 #include <util/system/compiler.h>
@@ -231,7 +232,7 @@ public:
         const NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();
         const ui64 size = record.HasBuffer() ? record.GetBuffer().size() : ev.GetPayload(0).GetSize();
 
-        NPriPut::EHandleType handleType = NPriPut::HandleType(HugeBlobSize, handleClass, size);
+        NPriPut::EHandleType handleType = NPriPut::HandleType(HugeBlobSize, handleClass, size, true);
         if (handleType == NPriPut::Log) {
             return WriteCost(size);
         } else {
@@ -246,7 +247,7 @@ public:
 
         for (ui64 idx = 0; idx < record.ItemsSize(); ++idx) {
             const ui64 size = ev.GetBufferBytes(idx);
-            NPriPut::EHandleType handleType = NPriPut::HandleType(HugeBlobSize, handleClass, size);
+            NPriPut::EHandleType handleType = NPriPut::HandleType(HugeBlobSize, handleClass, size, true);
             if (handleType == NPriPut::Log) {
                 cost += WriteCost(size);
             } else {
@@ -311,13 +312,7 @@ private:
     TBlobStorageGroupType GroupType;
     std::unique_ptr<TBsCostModelBase> CostModel;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> CostCounters;
-
-    ::NMonitoring::TDynamicCounters::TCounterPtr UserDiskCost;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CompactionDiskCost;
-    ::NMonitoring::TDynamicCounters::TCounterPtr ScrubDiskCost;
-    ::NMonitoring::TDynamicCounters::TCounterPtr DefragDiskCost;
-    ::NMonitoring::TDynamicCounters::TCounterPtr InternalDiskCost;
-    ::NMonitoring::TDynamicCounters::TCounterPtr DiskTimeAvailableCtr;
+    std::shared_ptr<NMonGroup::TCostTrackerGroup> MonGroup;
 
     TAtomic BucketCapacity;  // 10^9 nsec
     TAtomic DiskTimeAvailable = 1'000'000'000;
@@ -358,52 +353,52 @@ public:
     void SetTimeAvailable(ui32 diskTimeAvailableNSec) {
         ui64 diskTimeAvailable = diskTimeAvailableNSec * DiskTimeAvailableScale;
         AtomicSet(DiskTimeAvailable, diskTimeAvailable);
-        *DiskTimeAvailableCtr = diskTimeAvailable;
+        MonGroup->DiskTimeAvailableCtr() = diskTimeAvailable;
     }
 
 public:
     template<class TEvent>
     void CountUserRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
-        *UserDiskCost += cost;
+        MonGroup->UserDiskCost() += cost;
         CountRequest(cost);
     }
 
     void CountUserCost(ui64 cost) {
-        *UserDiskCost += cost;
+        MonGroup->UserDiskCost() += cost;
         CountRequest(cost);
     }
 
     template<class TEvent>
     void CountCompactionRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
-        *CompactionDiskCost += cost;
+        MonGroup->CompactionDiskCost() += cost;
         CountRequest(cost);
     }
 
     template<class TEvent>
     void CountScrubRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
-        *UserDiskCost += cost;
+        MonGroup->UserDiskCost() += cost;
         CountRequest(cost);
     }
 
     template<class TEvent>
     void CountDefragRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
-        *DefragDiskCost += cost;
+        MonGroup->DefragDiskCost() += cost;
         CountRequest(cost);
     }
 
     template<class TEvent>
     void CountInternalRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
-        *InternalDiskCost += cost;
+        MonGroup->InternalDiskCost() += cost;
         CountRequest(cost);
     }
 
     void CountInternalCost(ui64 cost) {
-        *InternalDiskCost += cost;
+        MonGroup->InternalDiskCost() += cost;
         CountRequest(cost);
     }
 

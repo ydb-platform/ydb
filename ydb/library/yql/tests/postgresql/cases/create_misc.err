@@ -1,8 +1,8 @@
 Registering pre-existing tables
-	tenk1
+	hobbies_r
 	equipment_r
 	tenk2
-	hobbies_r
+	tenk1
 <sql-statement>
 --
 -- CREATE_MISC

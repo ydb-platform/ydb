@@ -3,11 +3,6 @@
 
 namespace NKikimr::NColumnShard {
 
-void TBackgroundController::StartTtl() {
-    Y_ABORT_UNLESS(!TtlStarted);
-    TtlStarted = true;
-}
-
 bool TBackgroundController::StartCompaction(const NOlap::TPlanCompactionInfo& info) {
     Y_ABORT_UNLESS(ActiveCompactionInfo.emplace(info.GetPathId(), info).second);
     return true;
@@ -50,15 +45,6 @@ TString TBackgroundController::DebugStringIndexation() const {
     sb << ";";
     sb << "}";
     return sb;
-}
-
-TString TBackgroundActivity::DebugString() const {
-    return TStringBuilder()
-        << "indexation:" << HasIndexation() << ";"
-        << "compaction:" << HasCompaction() << ";"
-        << "cleanup:" << HasCleanup() << ";"
-        << "ttl:" << HasTtl() << ";"
-        ;
 }
 
 }

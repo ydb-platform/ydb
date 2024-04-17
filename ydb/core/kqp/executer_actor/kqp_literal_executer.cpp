@@ -79,7 +79,9 @@ public:
         , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "LiteralExecuter")
         , UserRequestContext(userRequestContext)
     {
-        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc);
+        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(
+            Request.TxAlloc, TEvKqpExecuter::TEvTxResponse::EExecutionType::Literal);
+
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());

@@ -17,6 +17,8 @@ using namespace NYson;
 using namespace NJson;
 using namespace NRpc::NProto;
 
+using NYT::FromProto;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IMessageFormat
@@ -71,14 +73,14 @@ public:
 
     TSharedRef ConvertFrom(const TSharedRef& message, const NYson::TProtobufMessageType* messageType, const TYsonString& /*formatOptionsYson*/) override
     {
-        TString protoBuffer;
+        TProtobufString protoBuffer;
         {
             google::protobuf::io::StringOutputStream output(&protoBuffer);
             auto converter = CreateProtobufWriter(&output, messageType);
             // NB: formatOptionsYson is ignored, since YSON parser has no user-defined options.
             ParseYsonStringBuffer(TStringBuf(message.Begin(), message.End()), EYsonType::Node, converter.get());
         }
-        return TSharedRef::FromString(protoBuffer);
+        return TSharedRef::FromString(FromProto<TString>(protoBuffer));
     }
 
     TSharedRef ConvertTo(const TSharedRef& message, const NYson::TProtobufMessageType* messageType, const TYsonString& /*formatOptionsYson*/) override
@@ -106,7 +108,7 @@ public:
 
     TSharedRef ConvertFrom(const TSharedRef& message, const NYson::TProtobufMessageType* messageType, const TYsonString& formatOptionsYson) override
     {
-        TString protoBuffer;
+        TProtobufString protoBuffer;
         {
             google::protobuf::io::StringOutputStream output(&protoBuffer);
             auto converter = CreateProtobufWriter(&output, messageType);
@@ -117,7 +119,7 @@ public:
             }
             ParseJson(&input, converter.get(), formatConfig);
         }
-        return TSharedRef::FromString(protoBuffer);
+        return TSharedRef::FromString(FromProto<TString>(std::move(protoBuffer)));
     }
 
     TSharedRef ConvertTo(const TSharedRef& message, const NYson::TProtobufMessageType* messageType, const TYsonString& formatOptionsYson) override

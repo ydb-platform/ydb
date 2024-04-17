@@ -4,6 +4,7 @@ SRCS(
     parser.cpp
     getenv.cpp
     string_helpers.cpp
+    client_pid.cpp
 )
 
 PEERDIR(

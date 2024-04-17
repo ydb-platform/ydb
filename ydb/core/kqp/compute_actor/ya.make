@@ -24,7 +24,6 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/providers/generic/actors
     ydb/library/yql/providers/s3/actors
-    ydb/library/yql/providers/yt/comp_nodes/dq
     ydb/library/yql/public/issue
 )
 

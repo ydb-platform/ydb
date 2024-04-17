@@ -61,6 +61,7 @@ namespace NKikimr {
         , ReplNodeResponseQuoter(std::move(replNodeResponseQuoter))
         , CostTracker(std::make_shared<TBsCostTracker>(Top->GType, type, vdiskCounters, burstThresholdNs,
                 diskTimeAvailableScale))
+        , OOSMonGroup(std::make_shared<NMonGroup::TOutOfSpaceGroup>(VDiskCounters, "subsystem", "oos"))
         , OutOfSpaceState(Top->GetTotalVDisksNum(), Top->GetOrderNumber(ShortSelfVDisk))
         , CostMonGroup(vdiskCounters, "subsystem", "cost")
         , Logger(as ? ActorSystemLogger(as) : DevNullLogger())

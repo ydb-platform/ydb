@@ -125,7 +125,7 @@ RENAMES = {
            # 'Tkinter': 'tkinter',
            '_winreg': 'winreg',
            'thread': '_thread',
-           'dummy_thread': '_dummy_thread' if sys.version_info < (3, 9) else '_thread',
+           'dummy_thread': '_dummy_thread',
            # 'anydbm': 'dbm',   # causes infinite import loop
            # 'whichdb': 'dbm',  # causes infinite import loop
            # anydbm and whichdb are handled by fix_imports2

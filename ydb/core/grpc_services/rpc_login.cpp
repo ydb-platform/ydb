@@ -1,14 +1,17 @@
 #include "grpc_request_proxy.h"
+#include "service_auth.h"
 
-#include "rpc_calls.h"
-#include "rpc_kqp_base.h"
 #include "rpc_request_base.h"
 
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/core/security/ldap_auth_provider.h>
 #include <ydb/core/security/login_shared_func.h>
+
+#include <ydb/public/api/protos/ydb_auth.pb.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -154,8 +157,8 @@ private:
     }
 };
 
-void TGRpcRequestProxyHandleMethods::Handle(TEvLoginRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TLoginRPC(ev->Release().Release()));
+void DoLoginRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TLoginRPC(p.release()));
 }
 
 template<>

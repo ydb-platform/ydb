@@ -87,6 +87,9 @@ namespace NActors {
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
             Executors[excIdx]->Shutdown();
         }
+        if (Shared) {
+            Shared->Shutdown();
+        }
         for (ui32 round = 0, done = 0; done < ExecutorPoolCount && round < 3; ++round) {
             done = 0;
             for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
@@ -96,7 +99,6 @@ namespace NActors {
             }
         }
         if (Shared) {
-            Shared->Shutdown();
             Shared->Cleanup();
         }
     }
@@ -124,10 +126,6 @@ namespace NActors {
         for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
             if (cfg.PoolId == poolId) {
                 if (cfg.HasSharedThread) {
-                    cfg.Threads -= 1;
-                    if (cfg.MaxThreadCount) {
-                        cfg.MaxThreadCount -= 1;
-                    }
                     auto *sharedPool = static_cast<TSharedExecutorPool*>(Shared.get());
                     auto *pool = new TBasicExecutorPool(cfg, Harmonizer.get());
                     if (pool) {
@@ -155,6 +153,15 @@ namespace NActors {
             }
         }
         return pools;
+    }
+
+    void TCpuManager::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats>& sharedStatsCopy) const {
+        if (poolId < ExecutorPoolCount) {
+            Executors[poolId]->GetCurrentStats(poolStats, statsCopy);
+        }
+        if (Shared) {
+            Shared->GetSharedStats(poolId, sharedStatsCopy);
+        }
     }
 
 }

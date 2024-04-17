@@ -163,30 +163,6 @@ TString ParseCluster(TString str, const IAttributeDictionaryPtr& attributes)
 
     attributes->Set("cluster", clusterName);
     return remainingString;
-
-
-    // NB. If the path had attributes, then the leading spaces must be removed in preceding ParseAttributes()
-    // call. We can encounter the path with leading spaces here if it didn't have attributes and passed through
-    // ParseAttributes() unchanged. In this case, the path is most likely incorrect, so it returns unchanged from
-    // this function. For example, " <> cluster://path" will become "cluster://path" after call to ParseAttributes(),
-    // and "//path" after this function. But " cluster://path" will pass unchanged throughout ParseAttributes(), and
-    // will remain " cluster://path" after this function.
-    size_t index = 0;
-    size_t clusterStart = index;
-    while (index < str.size() && (IsAsciiAlnum(str[index]) || str[index] == '-' || str[index] == '_')) {
-        ++index;
-    }
-    if (index >= str.size() || str[index] != ':') {
-        // Not a cluster name, so return the string as-is.
-        return str;
-    }
-    size_t clusterEnd = index;
-    if (clusterStart == clusterEnd) {
-        THROW_ERROR_EXCEPTION("Cluster name cannot be empty");
-    }
-    attributes->Set("cluster", str.substr(clusterStart, clusterEnd - clusterStart));
-    ++index;
-    return str.substr(index);
 }
 
 void ParseColumns(NYson::TTokenizer& tokenizer, IAttributeDictionary* attributes)

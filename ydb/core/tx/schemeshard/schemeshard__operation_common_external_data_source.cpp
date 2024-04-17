@@ -74,6 +74,8 @@ bool ValidateAuth(const NKikimrSchemeOp::TAuth& auth,
             return CheckAuth("BASIC", availableAuthMethods, errStr);
         case NKikimrSchemeOp::TAuth::kAws:
             return CheckAuth("AWS", availableAuthMethods, errStr);
+        case NKikimrSchemeOp::TAuth::kToken:
+            return CheckAuth("TOKEN", availableAuthMethods, errStr);
         case NKikimrSchemeOp::TAuth::kNone:
             return CheckAuth("NONE", availableAuthMethods, errStr);
     }

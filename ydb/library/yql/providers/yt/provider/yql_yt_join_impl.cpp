@@ -1886,6 +1886,8 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
                                 .Add(4, ctx.NewList(pos, std::move(remappedMembers)))
                                 .Add(5, ctx.NewList(pos, std::move(leftRenameNodes)))
                                 .Add(6, ctx.NewList(pos, std::move(rightRenameNodes)))
+                                .Add(7, leftKeyColumns)
+                                .Add(8, rightKeyColumns)
                             .Seal()
                         .Seal()
                     .Seal()
@@ -1900,6 +1902,8 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
                         .Add(4, ctx.NewList(pos, std::move(remappedMembers)))
                         .Add(5, ctx.NewList(pos, std::move(leftRenameNodes)))
                         .Add(6, ctx.NewList(pos, std::move(rightRenameNodes)))
+                        .Add(7, leftKeyColumns)
+                        .Add(8, rightKeyColumns)
                     .Seal()
                     .Build();
             }

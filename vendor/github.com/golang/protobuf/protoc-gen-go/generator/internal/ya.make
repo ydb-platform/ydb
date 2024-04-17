@@ -1,1 +1,3 @@
-RECURSE(remap)
+RECURSE(
+    remap
+)

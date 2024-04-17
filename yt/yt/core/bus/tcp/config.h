@@ -92,6 +92,9 @@ public:
     TDuration ReadStallTimeout;
     TDuration WriteStallTimeout;
 
+    std::optional<TDuration> ConnectionStartDelay;
+    std::optional<TDuration> PacketDecoderDelay;
+
     bool VerifyChecksums;
     bool GenerateChecksums;
 

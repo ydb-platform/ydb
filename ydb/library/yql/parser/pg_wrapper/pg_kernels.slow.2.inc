@@ -43,6 +43,7 @@ TExecFunc arrow_multirange_before_range() { return MakeIndirectExec<true, true>(
 TExecFunc arrow_multirange_cmp() { return MakeIndirectExec<true, true>(&multirange_cmp); }
 TExecFunc arrow_multirange_constructor0() { return MakeIndirectExec<true, false>(&multirange_constructor0); }
 TExecFunc arrow_multirange_constructor1() { return MakeIndirectExec<true, false>(&multirange_constructor1); }
+TExecFunc arrow_multirange_constructor2() { return MakeIndirectExec<true, false>(&multirange_constructor2); }
 TExecFunc arrow_multirange_contained_by_multirange() { return MakeIndirectExec<true, true>(&multirange_contained_by_multirange); }
 TExecFunc arrow_multirange_contained_by_range() { return MakeIndirectExec<true, true>(&multirange_contained_by_range); }
 TExecFunc arrow_multirange_contains_elem() { return MakeIndirectExec<true, true>(&multirange_contains_elem); }

@@ -1035,7 +1035,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
             }
             labels.emplace("node_id", ToString(i));
             auto aid = Register(CreateConfigsDispatcher(
-                    NKikimr::NConsole::TConfigsDispatcherInitInfo {
+                    NKikimr::NConfig::TConfigsDispatcherInitInfo {
                         .InitialConfig = Extension,
                         .Labels = labels,
                     }

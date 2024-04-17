@@ -1,7 +1,5 @@
 default:
   lang: ru
-  # link-console-main: https://console.cloud.yandex.ru
-  
   team:
     babich:
       name: Михаил Бабич
@@ -119,5 +117,3 @@ default:
       name: Максим Зиналь
       profile: https://www.linkedin.com/in/maxzinal
       position: Архитектор YDB       
-        
-      

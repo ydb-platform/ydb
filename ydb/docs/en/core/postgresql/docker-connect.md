@@ -48,8 +48,6 @@ To preserve the container's state, you need to remove the environment variable `
 
 {% endlist %}
 
-The description of the environment variables can be found on the [adjacent page](../getting_started/self_hosted/ydb_docker.md#start-pars).
-
 After launching the container, you can connect to it via PostgreSQL clients on port 5432, the database `local`, or open the [web interface](http://localhost:8765) on port 8765.
 
 ## Connecting to the Running Container via psql

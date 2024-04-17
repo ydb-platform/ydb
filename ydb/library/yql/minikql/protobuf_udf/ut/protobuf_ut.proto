@@ -29,6 +29,15 @@ message TIntegral
 message TRepeated
 {
     repeated int32 Int32Field = 1;
+    repeated float FloatField = 2;
+}
+
+message TWithDefaults
+{
+    optional float DefFloat0 = 1 [default = 0];
+    optional float DefFloat05 = 2 [default = 0.5];
+    optional float DefFloatInf = 3 [default = inf];
+    optional float DefFloatNan = 4 [default = nan];
 }
 
 message TWithTypeOptions

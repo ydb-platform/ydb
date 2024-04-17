@@ -204,15 +204,23 @@ protected:
         }
     }
 
-    static void FillError(const NKikimrKqp::TEvQueryResponse& record, std::vector<std::pair<char, TString>>& errorFields) {
+    static void FillError(const NKikimrKqp::TEvQueryResponse& record, typename TResponseEventPtr::element_type& response) {
         NYql::TIssues issues;
         NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
         NYdb::TStatus status(NYdb::EStatus(record.GetYdbStatus()), std::move(issues));
         TString message(TStringBuilder() << status);
-        errorFields.push_back({'E', "ERROR"});
-        errorFields.push_back({'M', message});
+        response.ErrorFields.push_back({'E', "ERROR"});
+        response.ErrorFields.push_back({'M', message});
         if (message.find("Error: Cannot find table") != TString::npos) {
-            errorFields.push_back({'C', "42P01"});
+            response.ErrorFields.push_back({'C', "42P01"});
+        }
+        if (record.GetYdbStatus() == Ydb::StatusIds::INTERNAL_ERROR) {
+            response.ErrorFields.push_back({'C', "XX000"});
+            response.DropConnection = true;
+        }
+        if (record.GetYdbStatus() == Ydb::StatusIds::BAD_SESSION) {
+            response.ErrorFields.push_back({'C', "08006"});
+            response.DropConnection = true;
         }
     }
 
@@ -283,7 +291,7 @@ protected:
                         Response_->Tag = TStringBuilder() << Response_->Tag << " " << RowsSelected_;
                     }
                 } else {
-                    FillError(record, Response_->ErrorFields);
+                    FillError(record, *Response_);
                 }
             } else {
                 Response_->ErrorFields.push_back({'E', "ERROR"});
@@ -414,7 +422,7 @@ public:
                     }
                     Send(Owner_, new TEvEvents::TEvUpdateStatement(statement));
                 } else {
-                    FillError(record, Response_->ErrorFields);
+                    FillError(record, *Response_);
                 }
             } else {
                 Response_->ErrorFields.push_back({'E', "ERROR"});

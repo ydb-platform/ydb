@@ -6,7 +6,6 @@ items:
   href: auth.md
 - name: Модель данных и схема
   include: { path: datamodel/toc_p.yaml, mode: link }
-- { name: Типы данных,                            href: datatypes.md, hidden: true } # Deprecated
 - { name: Транзакции,                             href: transactions.md }
 - { name: Вторичные индексы,                      href: secondary_indexes.md }
 - { name: Change Data Capture (CDC),              href: cdc.md, when: feature_changefeed }

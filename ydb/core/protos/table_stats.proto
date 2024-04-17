@@ -16,6 +16,15 @@ message TChannelStats {
     optional uint64 IndexSize = 3;
 }
 
+message TStoragePoolsStats {
+    message TPoolUsage {
+        optional string PoolKind = 1;
+        optional uint64 DataSize = 2;
+        optional uint64 IndexSize = 3;
+    }
+    repeated TPoolUsage PoolsUsage = 1;
+}
+
 message TTableStats {
     optional uint64 DataSize = 1; // both inMem and ondisk
     optional uint64 RowCount = 2; // both inMem and ondisk
@@ -55,4 +64,6 @@ message TTableStats {
     optional bool HasLoanedParts = 29;
 
     repeated TChannelStats Channels = 30;
+
+    optional TStoragePoolsStats StoragePools = 31;
 }

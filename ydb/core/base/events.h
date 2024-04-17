@@ -171,9 +171,11 @@ struct TKikimrEvents : TEvents {
         ES_TABLE_CREATOR,
         ES_PQ_PARTITION_CHOOSER,
         ES_GRAPH,
-        ES_REPLICATION_SERVICE,
+        ES_REPLICATION_WORKER,
         ES_CHANGE_EXCHANGE,
         ES_S3_FILE_QUEUE,
+        ES_NEBIUS_ACCESS_SERVICE,
+        ES_REPLICATION_SERVICE,
     };
 };
 

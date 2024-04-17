@@ -1,7 +1,5 @@
 default:
   lang: en
-#  link-console-main: https://console.cloud.yandex.com
-
   team:
       bondar:
         name: Oleg Bondar

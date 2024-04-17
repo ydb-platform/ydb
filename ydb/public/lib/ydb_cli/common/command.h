@@ -23,12 +23,17 @@ public:
     TString Name;
     TVector<TString> Aliases;
     TString Description;
+    bool Visible = true;
     const TClientCommand* Parent;
     NLastGetopt::TOpts Opts;
     TString Argument;
     TMap<ui32, TString> Args;
 
-    TClientCommand(const TString& name, const std::initializer_list<TString>& aliases = std::initializer_list<TString>(), const TString& description = TString());
+    TClientCommand(
+        const TString& name,
+        const std::initializer_list<TString>& aliases = std::initializer_list<TString>(),
+        const TString& description = TString(),
+        bool visible = true);
 
     class TConfig {
         struct TCommandInfo {

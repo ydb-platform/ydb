@@ -57,4 +57,34 @@ TDiagnosableInvokerPoolPtr CreateFairShareInvokerPool(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Creates invoker pool from above with invokerCount = bucketNames.size()
+//! And adds profiling on top of it.
+
+TDiagnosableInvokerPoolPtr CreateProfiledFairShareInvokerPool(
+    IInvokerPtr underlyingInvoker,
+    TFairShareCallbackQueueFactory callbackQueueFactory = CreateFairShareCallbackQueue,
+    TDuration actionTimeRelevancyHalflife = TAdjustedExponentialMovingAverage::DefaultHalflife,
+    const TString& poolName = "fair_share_invoker_pool",
+    std::vector<TString> bucketNames = {},
+    NProfiling::IRegistryImplPtr registry = nullptr);
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Same as above but bucket names are derived from EInvoker domain values.
+
+template <class EInvoker>
+    requires TEnumTraits<EInvoker>::IsEnum
+TDiagnosableInvokerPoolPtr CreateEnumIndexedProfiledFairShareInvokerPool(
+    IInvokerPtr underlyingInvoker,
+    TFairShareCallbackQueueFactory callbackQueueFactory = CreateFairShareCallbackQueue,
+    TDuration actionTimeRelevancyHalflife = TAdjustedExponentialMovingAverage::DefaultHalflife,
+    const TString& poolName = "fair_share_invoker_pool",
+    NProfiling::IRegistryImplPtr registry = nullptr);
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NConcurrency
+
+#define FAIR_SHARE_INVOKER_POOL_INL_H_
+#include "fair_share_invoker_pool-inl.h"
+#undef FAIR_SHARE_INVOKER_POOL_INL_H_

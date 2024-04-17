@@ -107,6 +107,9 @@ bool operator == (const TLockMask& lhs, const TLockMask& rhs);
 
 TLockMask MaxMask(TLockMask lhs, TLockMask rhs);
 
+void ToProto(NTabletClient::NProto::TLockMask* protoLockMask, const TLockMask& lockMask);
+void FromProto(TLockMask* lockMask, const NTabletClient::NProto::TLockMask& protoLockMask);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TColumnSchema
@@ -278,10 +281,14 @@ public:
     bool HasAggregateColumns() const;
     bool HasHunkColumns() const;
     bool HasTimestampColumn() const;
+    bool HasTtlColumn() const;
     bool IsSorted() const;
     bool IsUniqueKeys() const;
     bool HasRenamedColumns() const;
     bool IsEmpty() const;
+    bool IsCGCompatarorApplicable() const;
+
+    std::optional<int> GetTtlColumnIndex() const;
 
     std::vector<TColumnStableName> GetKeyColumnStableNames() const;
     TKeyColumns GetKeyColumnNames() const;
@@ -336,6 +343,10 @@ public:
     //! For ordered tables, returns an empty schema.
     TTableSchemaPtr ToDelete() const;
 
+    //! For sorted tables, returns the non-computed key columns.
+    //! For ordered tables, returns an empty schema.
+    TTableSchemaPtr ToLock() const;
+
     //! Returns just the key columns.
     TTableSchemaPtr ToKeys() const;
 
@@ -370,7 +381,7 @@ public:
 
     TTableSchemaPtr ToModifiedSchema(ETableSchemaModification schemaModification) const;
 
-    TComparator ToComparator() const;
+    TComparator ToComparator(TCallback<TUUComparerSignature> CGComparator = {}) const;
 
     TKeyColumnTypes GetKeyColumnTypes() const;
 

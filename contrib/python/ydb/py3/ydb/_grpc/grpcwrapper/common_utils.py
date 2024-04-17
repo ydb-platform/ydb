@@ -202,7 +202,7 @@ class GrpcWrapperAsyncIO(IGrpcWrapperAsyncIO):
         # todo handle grpc exceptions and convert it to internal exceptions
         try:
             grpc_message = await self.from_server_grpc.__anext__()
-        except grpc.RpcError as e:
+        except (grpc.RpcError, grpc.aio.AioRpcError) as e:
             raise connection._rpc_error_handler(self._connection_state, e)
 
         issues._process_response(grpc_message)

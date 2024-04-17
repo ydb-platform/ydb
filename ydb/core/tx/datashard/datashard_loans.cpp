@@ -50,6 +50,7 @@ NTabletFlatExecutor::ITransaction* TDataShard::CreateTxInitiateBorrowedPartsRetu
 }
 
 void TDataShard::CompletedLoansChanged(const TActorContext &ctx) {
+    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " CompletedLoansChanged");
     Y_ABORT_UNLESS(Executor()->GetStats().CompactedPartLoans);
 
     CheckInitiateBorrowedPartsReturn(ctx);

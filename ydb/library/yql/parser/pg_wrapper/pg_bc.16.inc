@@ -78,7 +78,9 @@ LLVM_BC(
     arrow_inetpl
     arrow_json_agg_finalfn
     arrow_json_agg_transfn
+    arrow_json_build_array
     arrow_json_build_array_noargs
+    arrow_json_build_object
     arrow_json_build_object_noargs
     arrow_json_in
     arrow_json_object

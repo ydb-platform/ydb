@@ -57,6 +57,8 @@ LLVM_BC(
     arrow_json_array_element
     arrow_json_array_element_text
     arrow_json_array_length
+    arrow_json_extract_path
+    arrow_json_extract_path_text
     arrow_json_object_field
     arrow_json_object_field_text
     arrow_json_populate_record
@@ -67,8 +69,11 @@ LLVM_BC(
     arrow_jsonb_array_length
     arrow_jsonb_concat
     arrow_jsonb_delete
+    arrow_jsonb_delete_array
     arrow_jsonb_delete_idx
     arrow_jsonb_delete_path
+    arrow_jsonb_extract_path
+    arrow_jsonb_extract_path_text
     arrow_jsonb_insert
     arrow_jsonb_object_field
     arrow_jsonb_object_field_text

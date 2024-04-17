@@ -7,6 +7,7 @@
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/binary_json/read.h>
+#include <ydb/library/uuid/uuid.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <library/cpp/digest/md5/md5.h>
@@ -166,6 +167,8 @@ protected:
         case NScheme::NTypeIds::Pg:
             // TODO: support pg types
             Y_ABORT("pg types are not supported");
+        case NScheme::NTypeIds::Uuid:
+            return NJson::TJsonValue(NUuid::UuidBytesToString(cell.Data()));
         default:
             Y_ABORT("Unexpected type");
         }

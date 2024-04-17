@@ -339,7 +339,7 @@ class Request:
             url: The request URL, either as a `URL` instance, or as a string or bytes.
                 For example: `"https://www.example.com".`
             headers: The HTTP request headers.
-            content: The content of the response body.
+            content: The content of the request body.
             extensions: A dictionary of optional extra information included on
                 the request. Possible keys include `"timeout"`, and `"trace"`.
         """
@@ -352,6 +352,14 @@ class Request:
             content, name="content"
         )
         self.extensions = {} if extensions is None else extensions
+
+        if "target" in self.extensions:
+            self.url = URL(
+                scheme=self.url.scheme,
+                host=self.url.host,
+                port=self.url.port,
+                target=self.extensions["target"],
+            )
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} [{self.method!r}]>"

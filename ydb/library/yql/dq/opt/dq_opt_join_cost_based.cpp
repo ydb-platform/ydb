@@ -217,7 +217,7 @@ void TJoinOptimizerNodeInternal::Print(std::stringstream& stream, int ntabs) {
         stream << "\t";
     }
 
-    stream << "Join: (" << JoinType << ") ";
+    stream << "Join: (" << JoinType << "," << ToString(JoinAlgo) << ") ";
     for (auto c : JoinConditions){
         stream << c.first.RelName << "." << c.first.AttributeName
             << "=" << c.second.RelName << "."
@@ -1023,7 +1023,14 @@ TExprBase BuildTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
         rightJoinColumns.push_back(BuildAtom(pair.second.AttributeName, equiJoin.Pos(), ctx));
     }
 
-    TVector<TExprBase> options;
+    auto optionsList = ctx.Builder(equiJoin.Pos())
+        .List()
+            .List(0)
+                .Atom(0, "join_algo")
+                .Atom(1, ToString(reorderResult->JoinAlgo))
+            .Seal()
+        .Seal()
+        .Build();
 
     // Build the final output
     return Build<TCoEquiJoinTuple>(ctx,equiJoin.Pos())
@@ -1036,9 +1043,7 @@ TExprBase BuildTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
         .RightKeys()
             .Add(rightJoinColumns)
             .Build()
-        .Options()
-            .Add(options)
-            .Build()
+        .Options(optionsList)
         .Done();
 }
 
@@ -1146,7 +1151,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertToJoinTree(const TCoEquiJoinTuple& jo
             TJoinColumn(rightScope, rightColumn)));
     }
 
-    return std::make_shared<TJoinOptimizerNode>(left, right, joinConds, ConvertToJoinKind(joinTuple.Type().StringValue()), EJoinAlgoType::DictJoin);
+    return std::make_shared<TJoinOptimizerNode>(left, right, joinConds, ConvertToJoinKind(joinTuple.Type().StringValue()), EJoinAlgoType::Undefined);
 }
 
 /**
@@ -1212,7 +1217,7 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
         ComputeStatistics(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), ctx);
     }
     join->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*join->LeftArg->Stats, *join->RightArg->Stats,
-        join->LeftJoinKeys, join->RightJoinKeys, EJoinAlgoType::DictJoin, ctx));
+        join->LeftJoinKeys, join->RightJoinKeys, EJoinAlgoType::GraceJoin, ctx));
 }
 
 /**
@@ -1309,7 +1314,7 @@ public:
                 join->RightArg = OptimizeSubtree(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), MaxDPccpDPTableSize, Pctx);
             }
             join->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*join->LeftArg->Stats, *join->RightArg->Stats,
-                join->LeftJoinKeys, join->RightJoinKeys, EJoinAlgoType::DictJoin, Pctx));
+                join->LeftJoinKeys, join->RightJoinKeys, EJoinAlgoType::GraceJoin, Pctx));
         }
 
         // Optimize the root

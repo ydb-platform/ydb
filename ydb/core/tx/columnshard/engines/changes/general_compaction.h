@@ -1,6 +1,7 @@
 #pragma once
 #include "compaction.h"
-#include <ydb/core/formats/arrow/reader/read_filter_merger.h>
+#include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
@@ -8,9 +9,9 @@ class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges {
 private:
     using TBase = TCompactColumnEngineChanges;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
-    std::map<NIndexedReader::TSortableBatchPosition, bool> CheckPoints;
-    void BuildAppendedPortionsByFullBatches(TConstructionContext& context, std::vector<TPortionInfoWithBlobs>&& portions) noexcept;
-    void BuildAppendedPortionsByChunks(TConstructionContext& context, std::vector<TPortionInfoWithBlobs>&& portions) noexcept;
+    std::map<NArrow::NMerger::TSortableBatchPosition, bool> CheckPoints;
+    void BuildAppendedPortionsByFullBatches(TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept;
+    void BuildAppendedPortionsByChunks(TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept;
 protected:
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;
     virtual TPortionMeta::EProduced GetResultProducedClass() const override {
@@ -36,7 +37,7 @@ public:
         virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
             for (auto&& i : portionInfo.GetRecords()) {
                 SumMemory += i.BlobRange.Size;
-                SumMemory += 2 * i.GetMeta().GetRawBytesVerified();
+                SumMemory += 2 * i.GetMeta().GetRawBytes();
             }
             return SumMemory;
         }
@@ -54,7 +55,7 @@ public:
 
     static std::shared_ptr<IMemoryPredictor> BuildMemoryPredictor();
 
-    void AddCheckPoint(const NIndexedReader::TSortableBatchPosition& position, const bool include = true, const bool validationDuplications = true);
+    void AddCheckPoint(const NArrow::NMerger::TSortableBatchPosition& position, const bool include = true, const bool validationDuplications = true);
 
     virtual TString TypeString() const override {
         return StaticTypeName();

@@ -2,8 +2,8 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federated_topic_impl.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/callback_context.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/read_session.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session.h>
 
@@ -118,7 +118,7 @@ private:
     std::shared_ptr<TFederatedDbState> FederationState;
 };
 
-class TFederatedReadSessionImpl : public NPersQueue::TEnableSelfContext<TFederatedReadSessionImpl> {
+class TFederatedReadSessionImpl : public NTopic::TEnableSelfContext<TFederatedReadSessionImpl> {
     friend class TFederatedTopicClient::TImpl;
     friend class TFederatedReadSession;
 
@@ -137,7 +137,8 @@ public:
     TFederatedReadSessionImpl(const TFederatedReadSessionSettings& settings,
                               std::shared_ptr<TGRpcConnectionsImpl> connections,
                               const TFederatedTopicClientSettings& clientSetttings,
-                              std::shared_ptr<TFederatedDbObserver> observer);
+                              std::shared_ptr<TFederatedDbObserver> observer,
+                              std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs);
 
     ~TFederatedReadSessionImpl() = default;
 
@@ -175,6 +176,7 @@ private:
     // For subsessions creation
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     const NTopic::TTopicClientSettings SubClientSetttings;
+    std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> ProvidedCodecs;
 
     std::shared_ptr<TFederatedDbObserver> Observer;
     NThreading::TFuture<void> AsyncInit;
@@ -197,15 +199,16 @@ private:
 
 
 class TFederatedReadSession : public IFederatedReadSession,
-                              public NPersQueue::TContextOwner<TFederatedReadSessionImpl> {
+                              public NTopic::TContextOwner<TFederatedReadSessionImpl> {
     friend class TFederatedTopicClient::TImpl;
 
 public:
     TFederatedReadSession(const TFederatedReadSessionSettings& settings,
                           std::shared_ptr<TGRpcConnectionsImpl> connections,
                           const TFederatedTopicClientSettings& clientSettings,
-                          std::shared_ptr<TFederatedDbObserver> observer)
-        : TContextOwner(settings, std::move(connections), clientSettings, std::move(observer)) {
+                          std::shared_ptr<TFederatedDbObserver> observer,
+                          std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs)
+        : TContextOwner(settings, std::move(connections), clientSettings, std::move(observer), std::move(codecs)) {
     }
 
     ~TFederatedReadSession() {

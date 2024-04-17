@@ -279,7 +279,7 @@ namespace {
         }
 
         std::optional<std::unordered_set<std::string_view>> leftHints, rightHints;
-        bool forceSortedMerge = false;
+        bool hasJoinStrategyHint = false;
         for (auto child : linkOptions->Children()) {
             if (!EnsureTupleMinSize(*child, 1, ctx)) {
                 return IGraphTransformer::TStatus::Error;
@@ -318,16 +318,19 @@ namespace {
                     }
                 }
             }
-            else if (option.IsAtom("forceSortedMerge")) {
+            else if (option.IsAtom("forceSortedMerge") || option.IsAtom("forceStreamLookup")) {
                 if (!EnsureTupleSize(*child, 1, ctx)) {
                     return IGraphTransformer::TStatus::Error;
                 }
-                if (forceSortedMerge) {
+                if (hasJoinStrategyHint) {
                     ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() <<
                         "Duplicate " << option.Content() << " link option"));
                     return IGraphTransformer::TStatus::Error;
                 }
-                forceSortedMerge = true;
+                hasJoinStrategyHint = true;
+            }
+            else if (option.IsAtom("join_algo")) {
+                //do nothing
             }
             else {
                 ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() <<
@@ -768,6 +771,8 @@ IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandl
                     "Duplicated preferred_sort set: " << JoinSeq(", ", sortBy)));
             }
         } else if (optionName == "cbo_passed") {
+            // do nothing
+        } else if (optionName == "join_algo") {
             // do nothing
         } else {
             ctx.AddError(TIssue(position, TStringBuilder() <<
@@ -1333,7 +1338,17 @@ TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings) {
         collectHints(result.RightHints, *right->Child(1));
     }
 
+    if (auto algo = GetSetting(linkSettings, "join_algo")) {
+        YQL_ENSURE(algo->Child(1)->IsAtom());
+        result.JoinAlgo = FromString<EJoinAlgoType>(algo->Child(1)->Content());
+    }
+
     result.ForceSortedMerge = HasSetting(linkSettings, "forceSortedMerge");
+    
+    if(HasSetting(linkSettings, "forceStreamLookup")) {
+        result.JoinAlgo = EJoinAlgoType::StreamLookupJoin;
+    }
+
     return result;
 }
 

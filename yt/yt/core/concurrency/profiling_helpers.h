@@ -14,6 +14,7 @@ NProfiling::TTagSet GetBucketTags(
 
 NProfiling::TTagSet GetQueueTags(
     const TString& threadName,
+    const TString& bucketName,
     const TString& queueName);
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -318,6 +318,15 @@ public:
         TString GetPrefix() const;
     };
 
+    struct TPartitionFamilyComparator {
+        bool operator()(const TPartitionFamilty* lhs, const TPartitionFamilty* rhs) const {
+            return (lhs->ActivePartitionCount < rhs->ActivePartitionCount) && (lhs->InactivePartitionCount < rhs->InactivePartitionCount);
+        }
+    };
+
+    using TOrderedTPartitionFamilies = std::set<TPartitionFamilty*, TPartitionFamilyComparator>;
+
+
     struct TBalancingConsumerInfo {
         TPersQueueReadBalancer& Balancer;
 
@@ -511,6 +520,9 @@ public:
 
         size_t ActivePartitionCount;
         size_t InactivePartitionCount;
+
+        // The partition families that are being read by this session.
+        TOrderedTPartitionFamilies Families;
 
         void Init(const TString& clientId, const TString& session, const TActorId& sender, const std::vector<ui32>& partitions);
 

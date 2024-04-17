@@ -103,6 +103,8 @@ bool TPersQueueReadBalancer::TPartitionFamilty::Unlock(const TActorId& sender, u
 
 void TPersQueueReadBalancer::TPartitionFamilty::Reset() {
     Status = EStatus::Free;
+
+    Session->Families.erase(this);
     Session = nullptr;
 
     if (!AttachedPartitions.empty()) {
@@ -129,7 +131,9 @@ void TPersQueueReadBalancer::TPartitionFamilty::StartReading(TPersQueueReadBalan
     }
 
     Status = EStatus::Active;
+
     Session = &session;
+    Session->Families.insert(this);
 
     Session->ActivePartitionCount += ActivePartitionCount;
     Session->InactivePartitionCount += InactivePartitionCount;
@@ -144,8 +148,17 @@ void TPersQueueReadBalancer::TPartitionFamilty::StartReading(TPersQueueReadBalan
 void TPersQueueReadBalancer::TPartitionFamilty::AttachePartitions(const std::vector<ui32>& partitions, const TActorContext& ctx) {
     auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(partitions);
 
+    if (Session) {
+        Session->Families.erase(this);
+    }
+
     ActivePartitionCount += activePartitionCount;
     InactivePartitionCount += inactivePartitionCount;
+
+    if (Session) {
+        // Reordering Session->Families
+        Session->Families.insert(this);
+    }
 
     Partitions.insert(Partitions.end(), partitions.begin(), partitions.end());
     UpdatePartitionMapping(partitions);
@@ -169,6 +182,7 @@ void TPersQueueReadBalancer::TPartitionFamilty::AttachePartitions(const std::vec
         LockedPartitions.insert(partitions.begin(), partitions.end());
     }
 
+    // Removing sessions wich can't read the family now
     for (auto it = SpecialSessions.begin(); it != SpecialSessions.end();) {
         auto& session = it->second;
         if (session->AllPartitionsReadable(partitions)) {
@@ -467,100 +481,102 @@ bool TPersQueueReadBalancer::TBalancingConsumerInfo::ProccessReadingFinished(ui3
 
 }
 
+struct SessionComparator {
+    bool operator()(const TPersQueueReadBalancer::TReadingSession* lhs, const TPersQueueReadBalancer::TReadingSession* rhs) const {
+        return (lhs->ActivePartitionCount < rhs->ActivePartitionCount) && (lhs->InactivePartitionCount < rhs->InactivePartitionCount);
+    }
+};
+
+using TOrderedSessions = std::set<TPersQueueReadBalancer::TReadingSession*, SessionComparator>;
+
+TOrderedSessions OrderSessions(
+    const std::unordered_map<TActorId, TPersQueueReadBalancer::TReadingSession*>& values,
+    std::function<bool (const TPersQueueReadBalancer::TReadingSession*)> predicate = [](const TPersQueueReadBalancer::TReadingSession*) { return true; }
+) {
+    TOrderedSessions result;
+    for (auto& [_, v] : values) {
+        if (predicate(v)) {
+            result.insert(v);
+        }
+    }
+
+    return result;
+}
+
+
+TPersQueueReadBalancer::TOrderedTPartitionFamilies OrderFamilies(
+    const std::unordered_map<size_t, TPersQueueReadBalancer::TPartitionFamilty*>& values
+) {
+    TPersQueueReadBalancer::TOrderedTPartitionFamilies result;
+    for (auto& [_, v] : values) {
+        result.insert(v);
+    }
+
+    return result;
+}
+
+std::pair<size_t, size_t> GetStatistics(const std::unordered_map<TActorId, TPersQueueReadBalancer::TReadingSession*>& sessions) {
+    size_t activePartitionCount = 0;
+    size_t emptySessionsCount = 0;
+
+    for (auto [_, session] : sessions) {
+        activePartitionCount += session->ActivePartitionCount;
+        if (!session->WithGroups() && !session->ActivePartitionCount) {
+            ++emptySessionsCount;
+        }
+    }
+
+    return {activePartitionCount, emptySessionsCount};
+}
+
+size_t GetMaxFamilySize(const std::unordered_map<size_t, const std::unique_ptr<TPersQueueReadBalancer::TPartitionFamilty>>& values) {
+    size_t result = 1;
+    for (auto& [_, v] : values)  {
+        result = std::max(result, v->ActivePartitionCount);
+    }
+    return result;
+}
+
 void TPersQueueReadBalancer::TBalancingConsumerInfo::Balance(const TActorContext& ctx) {
     if (ReadingSessions.empty()) {
         return;
     }
 
-    auto SessionComparator = [](const TReadingSession* lhs, const TReadingSession* rhs) {
-        if (lhs->ActivePartitionCount < rhs->ActivePartitionCount) {
-            return true;
-        }
-
-        if (lhs->InactivePartitionCount < rhs->InactivePartitionCount) {
-            return true;
-        }
-
-        return false;
-    };
-
-    std::set<TReadingSession*, decltype(SessionComparator)> sessions;
-    for (auto& [_, s] : ReadingSessions) {
-        if (s->WithGroups()) {
-            continue;
-        }
-
-        sessions.insert(s);
-    }
-
-    struct FamilyOrderingKey {
-        // The number of active partitions in the family
-        size_t ActivePartitionCount;
-        // The number of inactive partitions in the family
-        size_t InactivePartitionCount;
-
-        FamilyOrderingKey()
-            : ActivePartitionCount(0)
-            , InactivePartitionCount(0)
-        {}
-
-        FamilyOrderingKey(const TPartitionFamilty* family)
-            : ActivePartitionCount(family->ActivePartitionCount)
-            , InactivePartitionCount(family->InactivePartitionCount) {
-        }
-
-        bool operator()(const FamilyOrderingKey& lhs, const FamilyOrderingKey& rhs) const {
-            if (lhs.ActivePartitionCount < rhs.ActivePartitionCount) {
-                return true;
-            }
-
-            if (lhs.InactivePartitionCount < rhs.InactivePartitionCount) {
-                return true;
-            }
-
-            return false;
-        }
-    };
-
-    std::map<FamilyOrderingKey, TPartitionFamilty*, FamilyOrderingKey> families;
-    for (auto& [_, family] : UnreadableFamilies) {
-        families[FamilyOrderingKey(family)] = family;
-    }
+    TOrderedSessions commonSessions = OrderSessions(ReadingSessions, [](const TPersQueueReadBalancer::TReadingSession* s) {
+        return !s->WithGroups();
+    });
+    auto families = OrderFamilies(UnreadableFamilies);
 
     for (auto it = families.rbegin(); it != families.rend(); ++it) {
-        auto* family = it->second;
-        if (!family->SpecialSessions.empty()) {
-            std::set<TReadingSession*, decltype(SessionComparator)> specialSessions;
-            for (auto& [_, s] : family->SpecialSessions) {
-                specialSessions.insert(s);
-            }
-
-            auto sit = sessions.begin();
-            auto* session = *sit;
-
-            LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    GetPrefix() << "balancing partitions " << family->DebugStr() << " for pipe " << session->DebugStr());
-
-            family->StartReading(*session, ctx);
-
-            UnreadableFamilies.erase(family->Id);
-            continue;
-        }
-
-        if (sessions.empty()) {
-            // All sessions specify groups for reading.
-            continue;
-        }
+        auto* family = *it;
+        TOrderedSessions specialSessions;
+        auto& sessions = (family->SpecialSessions.empty()) ? commonSessions : (specialSessions = OrderSessions(family->SpecialSessions));
 
         auto sit = sessions.begin();
         auto* session = *sit;
         sessions.erase(sit);
 
+        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "balancing partitions " << family->DebugStr() << " for " << session->DebugStr());
         family->StartReading(*session, ctx);
 
         // Reorder sessions
         sessions.insert(session);
+
         UnreadableFamilies.erase(family->Id);
+    }
+
+    auto [activePartitionCount, emptySessionsCount] = GetStatistics(ReadingSessions);
+    auto desiredPartitionCount = activePartitionCount / ReadingSessions.size() + GetMaxFamilySize(Families);
+
+    for (auto [_, session] : ReadingSessions) {
+        if (session->ActivePartitionCount > desiredPartitionCount && session->Families.size() > 1) {
+            for (auto family = session->Families.begin(); family != session->Families.end() &&
+                                                          session->ActivePartitionCount > desiredPartitionCount &&
+                                                          (*family)->ActivePartitionCount < desiredPartitionCount; ++family) {
+                (*family)->Release(ctx);
+            }
+        }
     }
 }
 
@@ -597,7 +613,7 @@ bool TPersQueueReadBalancer::TReadingSession::AllPartitionsReadable(const std::v
 }
 
 TString TPersQueueReadBalancer::TReadingSession::DebugStr() const {
-    return TStringBuilder() << "ReadingSession \"" << Session << "\" (Sender=" << Sender << ")";
+    return TStringBuilder() << "ReadingSession \"" << Session << "\" (Sender=" << Sender << ", Partitions=[" << JoinRange(", ", Partitions.begin(), Partitions.end()) << "])";
 }
 
 }

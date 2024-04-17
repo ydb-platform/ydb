@@ -2,6 +2,7 @@
 #include "manager.h"
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
@@ -143,6 +144,20 @@ NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> SendScheme
     });
 }
 
+NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> ValidateCreateExternalDatasource(const NKikimrSchemeOp::TExternalDataSourceDescription& externaDataSourceDesc, const TExternalDataSourceManager::TInternalModificationContext& context) {
+    const auto& authDescription = externaDataSourceDesc.GetAuth();
+    const auto& externalData = context.GetExternalData();
+    const auto& userToken = externalData.GetUserToken();
+    auto describeFuture = DescribeExternalDataSourceSecrets(authDescription, userToken ? userToken->GetUserSID() : "", externalData.GetActorSystem());
+
+    return describeFuture.Apply([](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& f) mutable {
+        if (const auto& value = f.GetValue(); value.Status != Ydb::StatusIds::SUCCESS) {
+            return TExternalDataSourceManager::TYqlConclusionStatus::Fail(NYql::YqlStatusFromYdbStatus(value.Status), value.Issues.ToString());   
+        }
+        return TExternalDataSourceManager::TYqlConclusionStatus::Success();
+    });
+}
+
 }
 
 NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalDataSourceManager::DoModify(const NYql::TObjectSettingsImpl& settings,
@@ -179,7 +194,14 @@ NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalD
     auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
     FillCreateExternalDataSourceCommand(schemeTx, settings, context);
 
-    return SendSchemeRequest(ev.Release(), context.GetExternalData().GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
+    auto validationFuture = ValidateCreateExternalDatasource(schemeTx.GetCreateExternalDataSource(), context);
+
+    return validationFuture.Apply([ev = ev.Release(), context, schemeTx](const NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus>& f) {
+        if (const auto& value = f.GetValue(); value.IsFail()) {
+            return NThreading::MakeFuture(value);
+        }
+        return SendSchemeRequest(ev, context.GetExternalData().GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
+    });
 }
 
 NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalDataSourceManager::DropExternalDataSource(const NYql::TDropObjectSettings& settings,
@@ -243,11 +265,15 @@ NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusio
         ev->Record.SetUserToken(context.GetUserToken()->GetSerializedToken());
     }
 
+    auto validationFuture = NThreading::MakeFuture(TExternalDataSourceManager::TYqlConclusionStatus::Success());
     auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
     switch (schemeOperation.GetOperationCase()) {
-        case NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource:
-            schemeTx.CopyFrom(schemeOperation.GetCreateExternalDataSource());
+        case NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource: {
+            const auto& createExternalDataSource = schemeOperation.GetCreateExternalDataSource();
+            validationFuture = ValidateCreateExternalDatasource(createExternalDataSource.GetCreateExternalDataSource(), context);
+            schemeTx.CopyFrom(createExternalDataSource);
             break;
+        }
         case NKqpProto::TKqpSchemeOperation::kAlterExternalDataSource:
             schemeTx.CopyFrom(schemeOperation.GetAlterExternalDataSource());
             break;
@@ -259,7 +285,12 @@ NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusio
                 TStringBuilder() << "Execution of prepare operation for EXTERNAL_DATA_SOURCE object: unsupported operation: " << int(schemeOperation.GetOperationCase())));
     }
 
-    return SendSchemeRequest(ev.Release(), context.GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
+    return validationFuture.Apply([ev = ev.Release(), context, schemeTx](const NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus>& f) {
+        if (const auto& value = f.GetValue(); value.IsFail()) {
+            return NThreading::MakeFuture(value);
+        }
+        return SendSchemeRequest(ev, context.GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
+    });
 }
 
 }

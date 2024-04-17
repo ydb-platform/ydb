@@ -1,7 +1,7 @@
 #pragma once
 
 #include "datashard_impl.h"
-#include <ydb/core/tx/locks/locks.h>
+#include "datashard_locks.h"
 #include "operation.h"
 
 #include <ydb/core/engine/minikql/change_collector_iface.h>

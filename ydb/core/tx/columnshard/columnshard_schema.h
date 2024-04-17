@@ -74,8 +74,6 @@ struct Schema : NIceDb::Schema {
         LastExportNumber = 10,
         OwnerPathId = 11,
         OwnerPath = 12,
-        LastCompletedStep = 13,
-        LastCompletedTxId = 14,
     };
 
     enum class EInsertTableIds : ui8 {

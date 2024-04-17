@@ -3810,6 +3810,12 @@ Y_UNIT_TEST(TestSnapshotReadAfterStuckRW) {
 Y_UNIT_TEST(TestSnapshotReadPriority) {
     TPortManager pm;
     TServerSettings::TControls controls;
+    // This test needs to make sure mediator time does not advance while
+    // certain operations are running. Unfortunately, volatile planning
+    // may happen every 1ms, and it's too hard to guarantee time stays
+    // still for such a short time. We disable volatile planning to make
+    // coordinator ticks are 100ms apart.
+    controls.MutableCoordinatorControls()->SetVolatilePlanLeaseMs(0);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetControls(controls)

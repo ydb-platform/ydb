@@ -1,5 +1,6 @@
 default:
   lang: ru
+  pub-cover-size: 700x400
   team:
     babich:
       name: Михаил Бабич

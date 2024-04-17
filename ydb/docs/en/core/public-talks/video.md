@@ -62,6 +62,7 @@ Video recordings of {{ ydb-short-name}} team speakers' presentations from confer
   - 2022  
 
     {% include [Hydra](./_includes/conferences/2022/Hydra.md) %}
+    
     {% include [webinars](./_includes/webinars/2022/webinars.md) %}
 
 

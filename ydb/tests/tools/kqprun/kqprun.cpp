@@ -19,6 +19,7 @@ struct TExecutionOptions {
     TString SchemeQuery;
 
     bool ClearExecution = false;
+    bool ForgetExecution = false;
     NKikimrKqp::EQueryAction ScriptQueryAction = NKikimrKqp::QUERY_ACTION_EXECUTE;
 
     TString ScriptTraceId = "kqprun";
@@ -51,6 +52,12 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
             Cout << colors.Yellow() << "Fetching script results..." << colors.Default() << Endl;
             if (!runner.FetchScriptResults()) {
                 ythrow yexception() << "Fetch script results failed";
+            }
+            if (executionOptions.ForgetExecution) {
+                Cout << colors.Yellow() << "Forgetting script execution operation..." << colors.Default() << Endl;
+                if (!runner.ForgetExecutionOperation()) {
+                    ythrow yexception() << "Forget script execution operation failed";
+                }
             }
         } else {
             if (!runner.ExecuteQuery(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.ScriptTraceId)) {
@@ -156,6 +163,11 @@ void RunMain(int argc, const char* argv[]) {
         .NoArgument()
         .DefaultValue(executionOptions.ClearExecution)
         .SetFlag(&executionOptions.ClearExecution);
+    options.AddLongOption('F', "forget", "Forget script execution operation after fetching results, cannot be used with -C")
+        .Optional()
+        .NoArgument()
+        .DefaultValue(executionOptions.ForgetExecution)
+        .SetFlag(&executionOptions.ForgetExecution);
     options.AddLongOption('T', "trace-opt", "print AST in the begin of each transformation, one of { scheme | script | all }")
         .Optional()
         .RequiredArgument("STR")

@@ -1,5 +1,6 @@
 #include "merger.h"
 #include "result_builder.h"
+#include <ydb/library/services/services.pb.h>
 
 namespace NKikimr::NArrow::NMerger {
 
@@ -133,9 +134,9 @@ std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSort
         SortHeap.UpdateTop();
     }
     if (SortHeap.Empty()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("pos", readTo.DebugJson().GetStringRobust())("heap", "EMPTY");
+        AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", readTo.DebugJson().GetStringRobust())("heap", "EMPTY");
     } else {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("pos", readTo.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
+        AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", readTo.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
     }
     return result;
 }
@@ -196,6 +197,35 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> TMergePartialStream::DrainAllPa
         result.pop_back();
     }
     return result;
+}
+
+void TMergePartialStream::SkipToLowerBound(const TSortableBatchPosition& pos, const bool include) {
+    if (SortHeap.Empty()) {
+        return;
+    }
+    AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", pos.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
+    while (!SortHeap.Empty()) {
+        const auto cmpResult = SortHeap.Current().GetKeyColumns().Compare(pos);
+        if (cmpResult == std::partial_ordering::greater) {
+            break;
+        }
+        if (cmpResult == std::partial_ordering::equivalent && include) {
+            break;
+        }
+        const TSortableBatchPosition::TFoundPosition skipPos = SortHeap.MutableCurrent().SkipToLower(pos);
+        AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", pos.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
+        if (skipPos.IsEqual()) {
+            if (!include && !SortHeap.MutableCurrent().Next()) {
+                SortHeap.RemoveTop();
+            } else {
+                SortHeap.UpdateTop();
+            }
+        } else if (skipPos.IsLess()) {
+            SortHeap.RemoveTop();
+        } else {
+            SortHeap.UpdateTop();
+        }
+    }
 }
 
 }

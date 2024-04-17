@@ -6,6 +6,7 @@ PEERDIR(
     ydb/core/formats/arrow/switch
     ydb/core/formats/arrow/common
     ydb/library/actors/core
+    ydb/library/services
 )
 
 SRCS(

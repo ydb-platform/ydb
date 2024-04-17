@@ -1,16 +1,16 @@
 Registering pre-existing tables
-	INT4_TBL
-	INT2_TBL
-	text_tbl
-	FLOAT8_TBL
-	tenk2
-	TEXT_TBL
-	int4_tbl
-	int8_tbl
 	onek
-	float8_tbl
+	int4_tbl
+	INT4_TBL
 	tenk1
+	text_tbl
+	float8_tbl
+	INT2_TBL
+	tenk2
 	int2_tbl
+	TEXT_TBL
+	FLOAT8_TBL
+	int8_tbl
 <sql-statement>
 --
 -- JOIN

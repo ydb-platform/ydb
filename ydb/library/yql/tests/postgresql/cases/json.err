@@ -587,11 +587,6 @@ BEGIN;
 <sql-statement>
 SET LOCAL TIME ZONE 10.5;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: timezone
-    	SET LOCAL TIME ZONE 10.5;
-	^
 <sql-statement>
 select to_json(timestamptz '2014-05-28 12:22:35.614298-04');
 </sql-statement>
@@ -609,11 +604,6 @@ select to_json(timestamptz '2014-05-28 12:22:35.614298-04');
 <sql-statement>
 SET LOCAL TIME ZONE -8;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: timezone
-    	SET LOCAL TIME ZONE -8;
-	^
 <sql-statement>
 select to_json(timestamptz '2014-05-28 12:22:35.614298-04');
 </sql-statement>

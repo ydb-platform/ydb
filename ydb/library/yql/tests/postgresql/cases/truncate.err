@@ -652,9 +652,9 @@ DROP FUNCTION trunctrigger();
 -- test TRUNCATE ... RESTART IDENTITY
 CREATE SEQUENCE truncate_a_id1 START WITH 33;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Pre type annotation
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 278
+    -stdin-:<main>:1:1: Error: Unexpected tag: pgObject
     	-- test TRUNCATE ... RESTART IDENTITY
 	^
 <sql-statement>

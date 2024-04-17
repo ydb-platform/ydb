@@ -1,15 +1,15 @@
 Registering pre-existing tables
+	int4_tbl
 	INT4_TBL
-	VARCHAR_TBL
+	tenk1
 	text_tbl
-	FLOAT8_TBL
+	VARCHAR_TBL
+	float8_tbl
 	CHAR_TBL
 	TEXT_TBL
-	int4_tbl
+	FLOAT8_TBL
 	varchar_tbl
 	int8_tbl
-	float8_tbl
-	tenk1
 <sql-statement>
 --
 -- UNION (also INTERSECT, EXCEPT)

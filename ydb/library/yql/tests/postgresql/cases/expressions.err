@@ -288,12 +288,12 @@ select '(0,0)'::point in ('(0,0,0,0)'::box, point(0,0));
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
     	-- However, if there's not a common supertype for the IN elements,
 	^
-        -stdin-:<main>:6:23: Error: At function: PgIn, At function: AsList
+        -stdin-:<main>:6:23: Error: At function: PgMixedIn
         	select '(0,0)'::point in ('(0,0,0,0)'::box, point(0,0));
 	                      ^
-            -stdin-:<main>:6:23: Error: Cannot infer common type for types 603 and 600
+            -stdin-:<main>:6:40: Error: Cannot infer common type for types 600 and 603
             	select '(0,0)'::point in ('(0,0,0,0)'::box, point(0,0));
-	                      ^
+	                                       ^
 <sql-statement>
 --
 -- Tests for ScalarArrayOpExpr with a hashfn
@@ -334,7 +334,7 @@ select return_int_input(1) in (10, 9, 2, 8, 3, 7, 4, 6, 5, 1);
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
     	select return_int_input(1) in (10, 9, 2, 8, 3, 7, 4, 6, 5, 1);
 	^
-        -stdin-:<main>:1:28: Error: At function: PgIn
+        -stdin-:<main>:1:28: Error: At function: PgMixedIn
         	select return_int_input(1) in (10, 9, 2, 8, 3, 7, 4, 6, 5, 1);
 	                           ^
             -stdin-:<main>:1:8: Error: At function: PgCall
@@ -351,7 +351,7 @@ select return_int_input(1) in (10, 9, 2, 8, 3, 7, 4, 6, 5, null);
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
     	select return_int_input(1) in (10, 9, 2, 8, 3, 7, 4, 6, 5, null);
 	^
-        -stdin-:<main>:1:28: Error: At function: PgIn
+        -stdin-:<main>:1:28: Error: At function: PgMixedIn
         	select return_int_input(1) in (10, 9, 2, 8, 3, 7, 4, 6, 5, null);
 	                           ^
             -stdin-:<main>:1:8: Error: At function: PgCall
@@ -368,7 +368,7 @@ select return_int_input(1) in (null, null, null, null, null, null, null, null, n
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
     	select return_int_input(1) in (null, null, null, null, null, null, null, null, null, null, null);
 	^
-        -stdin-:<main>:1:28: Error: At function: PgIn
+        -stdin-:<main>:1:28: Error: At function: PgMixedIn
         	select return_int_input(1) in (null, null, null, null, null, null, null, null, null, null, null);
 	                           ^
             -stdin-:<main>:1:8: Error: At function: PgCall
@@ -385,7 +385,7 @@ select return_int_input(1) in (10, 9, 2, 8, 3, 7, 4, 6, 5, 1, null);
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
     	select return_int_input(1) in (10, 9, 2, 8, 3, 7, 4, 6, 5, 1, null);
 	^
-        -stdin-:<main>:1:28: Error: At function: PgIn
+        -stdin-:<main>:1:28: Error: At function: PgMixedIn
         	select return_int_input(1) in (10, 9, 2, 8, 3, 7, 4, 6, 5, 1, null);
 	                           ^
             -stdin-:<main>:1:8: Error: At function: PgCall
@@ -402,7 +402,7 @@ select return_int_input(null::int) in (10, 9, 2, 8, 3, 7, 4, 6, 5, 1);
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
     	select return_int_input(null::int) in (10, 9, 2, 8, 3, 7, 4, 6, 5, 1);
 	^
-        -stdin-:<main>:1:36: Error: At function: PgIn
+        -stdin-:<main>:1:36: Error: At function: PgMixedIn
         	select return_int_input(null::int) in (10, 9, 2, 8, 3, 7, 4, 6, 5, 1);
 	                                   ^
             -stdin-:<main>:1:8: Error: At function: PgCall
@@ -419,7 +419,7 @@ select return_int_input(null::int) in (10, 9, 2, 8, 3, 7, 4, 6, 5, null);
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
     	select return_int_input(null::int) in (10, 9, 2, 8, 3, 7, 4, 6, 5, null);
 	^
-        -stdin-:<main>:1:36: Error: At function: PgIn
+        -stdin-:<main>:1:36: Error: At function: PgMixedIn
         	select return_int_input(null::int) in (10, 9, 2, 8, 3, 7, 4, 6, 5, null);
 	                                   ^
             -stdin-:<main>:1:8: Error: At function: PgCall
@@ -436,7 +436,7 @@ select return_text_input('a') in ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', '
     -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
     	select return_text_input('a') in ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j');
 	^
-        -stdin-:<main>:1:31: Error: At function: PgIn
+        -stdin-:<main>:1:31: Error: At function: PgMixedIn
         	select return_text_input('a') in ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j');
 	                              ^
             -stdin-:<main>:1:8: Error: At function: PgCall

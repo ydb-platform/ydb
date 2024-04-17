@@ -1,12 +1,12 @@
 Registering pre-existing tables
-	INT4_TBL
-	road
-	text_tbl
-	TEXT_TBL
-	int4_tbl
-	int8_tbl
 	onek
+	int4_tbl
+	INT4_TBL
 	tenk1
+	text_tbl
+	road
+	TEXT_TBL
+	int8_tbl
 <sql-statement>
 --
 -- SUBSELECT
@@ -1606,9 +1606,9 @@ where b and f1 >= 0;
 --
 create temp sequence ts1;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Pre type annotation
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 278
+    -stdin-:<main>:1:1: Error: Unexpected tag: pgObject
     	--
 	^
 <sql-statement>

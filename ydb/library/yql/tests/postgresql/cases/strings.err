@@ -1,6 +1,6 @@
 Registering pre-existing tables
-	VARCHAR_TBL
 	text_tbl
+	VARCHAR_TBL
 	CHAR_TBL
 	TEXT_TBL
 	varchar_tbl

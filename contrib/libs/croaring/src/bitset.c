@@ -200,8 +200,8 @@ size_t bitset_count(const bitset_t *bitset) {
     return card;
 }
 
-bool bitset_inplace_union(bitset_t *CBITSET_RESTRICT b1,
-                          const bitset_t *CBITSET_RESTRICT b2) {
+bool bitset_inplace_union(bitset_t *CROARING_CBITSET_RESTRICT b1,
+                          const bitset_t *CROARING_CBITSET_RESTRICT b2) {
     size_t minlength =
         b1->arraysize < b2->arraysize ? b1->arraysize : b2->arraysize;
     for (size_t k = 0; k < minlength; ++k) {
@@ -267,8 +267,8 @@ size_t bitset_maximum(const bitset_t *bitset) {
 /* Returns true if bitsets share no common elements, false otherwise.
  *
  * Performs early-out if common element found. */
-bool bitsets_disjoint(const bitset_t *CBITSET_RESTRICT b1,
-                      const bitset_t *CBITSET_RESTRICT b2) {
+bool bitsets_disjoint(const bitset_t *CROARING_CBITSET_RESTRICT b1,
+                      const bitset_t *CROARING_CBITSET_RESTRICT b2) {
     size_t minlength =
         b1->arraysize < b2->arraysize ? b1->arraysize : b2->arraysize;
 
@@ -282,8 +282,8 @@ bool bitsets_disjoint(const bitset_t *CBITSET_RESTRICT b1,
  * disjoint.
  *
  * Performs early-out if common element found. */
-bool bitsets_intersect(const bitset_t *CBITSET_RESTRICT b1,
-                       const bitset_t *CBITSET_RESTRICT b2) {
+bool bitsets_intersect(const bitset_t *CROARING_CBITSET_RESTRICT b1,
+                       const bitset_t *CROARING_CBITSET_RESTRICT b2) {
     size_t minlength =
         b1->arraysize < b2->arraysize ? b1->arraysize : b2->arraysize;
 
@@ -307,8 +307,8 @@ static bool any_bits_set(const bitset_t *b, size_t starting_loc) {
 /* Returns true if b1 has all of b2's bits set.
  *
  * Performs early out if a bit is found in b2 that is not found in b1. */
-bool bitset_contains_all(const bitset_t *CBITSET_RESTRICT b1,
-                         const bitset_t *CBITSET_RESTRICT b2) {
+bool bitset_contains_all(const bitset_t *CROARING_CBITSET_RESTRICT b1,
+                         const bitset_t *CROARING_CBITSET_RESTRICT b2) {
     size_t min_size = b1->arraysize;
     if (b1->arraysize > b2->arraysize) {
         min_size = b2->arraysize;
@@ -325,8 +325,8 @@ bool bitset_contains_all(const bitset_t *CBITSET_RESTRICT b1,
     return true;
 }
 
-size_t bitset_union_count(const bitset_t *CBITSET_RESTRICT b1,
-                          const bitset_t *CBITSET_RESTRICT b2) {
+size_t bitset_union_count(const bitset_t *CROARING_CBITSET_RESTRICT b1,
+                          const bitset_t *CROARING_CBITSET_RESTRICT b2) {
     size_t answer = 0;
     size_t minlength =
         b1->arraysize < b2->arraysize ? b1->arraysize : b2->arraysize;
@@ -366,8 +366,8 @@ size_t bitset_union_count(const bitset_t *CBITSET_RESTRICT b1,
     return answer;
 }
 
-void bitset_inplace_intersection(bitset_t *CBITSET_RESTRICT b1,
-                                 const bitset_t *CBITSET_RESTRICT b2) {
+void bitset_inplace_intersection(bitset_t *CROARING_CBITSET_RESTRICT b1,
+                                 const bitset_t *CROARING_CBITSET_RESTRICT b2) {
     size_t minlength =
         b1->arraysize < b2->arraysize ? b1->arraysize : b2->arraysize;
     size_t k = 0;
@@ -379,8 +379,8 @@ void bitset_inplace_intersection(bitset_t *CBITSET_RESTRICT b1,
     }
 }
 
-size_t bitset_intersection_count(const bitset_t *CBITSET_RESTRICT b1,
-                                 const bitset_t *CBITSET_RESTRICT b2) {
+size_t bitset_intersection_count(const bitset_t *CROARING_CBITSET_RESTRICT b1,
+                                 const bitset_t *CROARING_CBITSET_RESTRICT b2) {
     size_t answer = 0;
     size_t minlength =
         b1->arraysize < b2->arraysize ? b1->arraysize : b2->arraysize;
@@ -390,8 +390,8 @@ size_t bitset_intersection_count(const bitset_t *CBITSET_RESTRICT b1,
     return answer;
 }
 
-void bitset_inplace_difference(bitset_t *CBITSET_RESTRICT b1,
-                               const bitset_t *CBITSET_RESTRICT b2) {
+void bitset_inplace_difference(bitset_t *CROARING_CBITSET_RESTRICT b1,
+                               const bitset_t *CROARING_CBITSET_RESTRICT b2) {
     size_t minlength =
         b1->arraysize < b2->arraysize ? b1->arraysize : b2->arraysize;
     size_t k = 0;
@@ -400,8 +400,8 @@ void bitset_inplace_difference(bitset_t *CBITSET_RESTRICT b1,
     }
 }
 
-size_t bitset_difference_count(const bitset_t *CBITSET_RESTRICT b1,
-                               const bitset_t *CBITSET_RESTRICT b2) {
+size_t bitset_difference_count(const bitset_t *CROARING_CBITSET_RESTRICT b1,
+                               const bitset_t *CROARING_CBITSET_RESTRICT b2) {
     size_t minlength =
         b1->arraysize < b2->arraysize ? b1->arraysize : b2->arraysize;
     size_t k = 0;
@@ -415,8 +415,9 @@ size_t bitset_difference_count(const bitset_t *CBITSET_RESTRICT b1,
     return answer;
 }
 
-bool bitset_inplace_symmetric_difference(bitset_t *CBITSET_RESTRICT b1,
-                                         const bitset_t *CBITSET_RESTRICT b2) {
+bool bitset_inplace_symmetric_difference(
+    bitset_t *CROARING_CBITSET_RESTRICT b1,
+    const bitset_t *CROARING_CBITSET_RESTRICT b2) {
     size_t minlength =
         b1->arraysize < b2->arraysize ? b1->arraysize : b2->arraysize;
     size_t k = 0;
@@ -432,8 +433,9 @@ bool bitset_inplace_symmetric_difference(bitset_t *CBITSET_RESTRICT b1,
     return true;
 }
 
-size_t bitset_symmetric_difference_count(const bitset_t *CBITSET_RESTRICT b1,
-                                         const bitset_t *CBITSET_RESTRICT b2) {
+size_t bitset_symmetric_difference_count(
+    const bitset_t *CROARING_CBITSET_RESTRICT b1,
+    const bitset_t *CROARING_CBITSET_RESTRICT b2) {
     size_t minlength =
         b1->arraysize < b2->arraysize ? b1->arraysize : b2->arraysize;
     size_t k = 0;

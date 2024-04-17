@@ -6,14 +6,14 @@
 #include <roaring/memory.h>
 #include <roaring/portability.h>
 
-#define ART_NODE4_TYPE 0
-#define ART_NODE16_TYPE 1
-#define ART_NODE48_TYPE 2
-#define ART_NODE256_TYPE 3
-#define ART_NUM_TYPES 4
+#define CROARING_ART_NODE4_TYPE 0
+#define CROARING_ART_NODE16_TYPE 1
+#define CROARING_ART_NODE48_TYPE 2
+#define CROARING_ART_NODE256_TYPE 3
+#define CROARING_ART_NUM_TYPES 4
 
 // Node48 placeholder value to indicate no child is present at this key index.
-#define ART_NODE48_EMPTY_VAL 48
+#define CROARING_ART_NODE48_EMPTY_VAL 48
 
 // We use the least significant bit of node pointers to indicate whether a node
 // is a leaf or an inner node. This is never surfaced to the user.
@@ -24,15 +24,15 @@
 // deallocation of the ART, we know not to free the leaves without having to
 // dereference the leaf pointers.
 //
-// All internal operations on leaves should use CAST_LEAF before using the leaf.
-// The only places that use SET_LEAF are locations where a field is directly
-// assigned to a leaf pointer. After using SET_LEAF, the leaf should be treated
-// as a node of unknown type.
-#define IS_LEAF(p) (((uintptr_t)(p) & 1))
-#define SET_LEAF(p) ((art_node_t *)((uintptr_t)(p) | 1))
-#define CAST_LEAF(p) ((art_leaf_t *)((void *)((uintptr_t)(p) & ~1)))
+// All internal operations on leaves should use CROARING_CAST_LEAF before using
+// the leaf. The only places that use CROARING_SET_LEAF are locations where a
+// field is directly assigned to a leaf pointer. After using CROARING_SET_LEAF,
+// the leaf should be treated as a node of unknown type.
+#define CROARING_IS_LEAF(p) (((uintptr_t)(p) & 1))
+#define CROARING_SET_LEAF(p) ((art_node_t *)((uintptr_t)(p) | 1))
+#define CROARING_CAST_LEAF(p) ((art_leaf_t *)((void *)((uintptr_t)(p) & ~1)))
 
-#define NODE48_AVAILABLE_CHILDREN_MASK ((UINT64_C(1) << 48) - 1)
+#define CROARING_NODE48_AVAILABLE_CHILDREN_MASK ((UINT64_C(1) << 48) - 1)
 
 #ifdef __cplusplus
 extern "C" {
@@ -89,7 +89,8 @@ typedef struct art_node16_s {
 } art_node16_t;
 
 // Node48: key[i] corresponds with children[key[i]] if key[i] !=
-// ART_NODE48_EMPTY_VAL. Keys are naturally sorted due to direct indexing.
+// CROARING_ART_NODE48_EMPTY_VAL. Keys are naturally sorted due to direct
+// indexing.
 typedef struct art_node48_s {
     art_inner_node_t base;
     uint8_t count;
@@ -115,7 +116,9 @@ typedef struct art_indexed_child_s {
     art_key_chunk_t key_chunk;
 } art_indexed_child_t;
 
-static inline bool art_is_leaf(const art_node_t *node) { return IS_LEAF(node); }
+static inline bool art_is_leaf(const art_node_t *node) {
+    return CROARING_IS_LEAF(node);
+}
 
 static void art_leaf_populate(art_leaf_t *leaf, const art_key_chunk_t key[]) {
     memcpy(leaf->key, key, ART_KEY_BYTES);
@@ -159,7 +162,8 @@ static art_node_t *art_node256_insert(art_node256_t *node, art_node_t *child,
 static art_node4_t *art_node4_create(const art_key_chunk_t prefix[],
                                      uint8_t prefix_size) {
     art_node4_t *node = (art_node4_t *)roaring_malloc(sizeof(art_node4_t));
-    art_init_inner_node(&node->base, ART_NODE4_TYPE, prefix, prefix_size);
+    art_init_inner_node(&node->base, CROARING_ART_NODE4_TYPE, prefix,
+                        prefix_size);
     node->count = 0;
     return node;
 }
@@ -363,7 +367,8 @@ static bool art_node4_internal_validate(const art_node4_t *node,
 static art_node16_t *art_node16_create(const art_key_chunk_t prefix[],
                                        uint8_t prefix_size) {
     art_node16_t *node = (art_node16_t *)roaring_malloc(sizeof(art_node16_t));
-    art_init_inner_node(&node->base, ART_NODE16_TYPE, prefix, prefix_size);
+    art_init_inner_node(&node->base, CROARING_ART_NODE16_TYPE, prefix,
+                        prefix_size);
     node->count = 0;
     return node;
 }
@@ -546,18 +551,19 @@ static bool art_node16_internal_validate(const art_node16_t *node,
 static art_node48_t *art_node48_create(const art_key_chunk_t prefix[],
                                        uint8_t prefix_size) {
     art_node48_t *node = (art_node48_t *)roaring_malloc(sizeof(art_node48_t));
-    art_init_inner_node(&node->base, ART_NODE48_TYPE, prefix, prefix_size);
+    art_init_inner_node(&node->base, CROARING_ART_NODE48_TYPE, prefix,
+                        prefix_size);
     node->count = 0;
-    node->available_children = NODE48_AVAILABLE_CHILDREN_MASK;
+    node->available_children = CROARING_NODE48_AVAILABLE_CHILDREN_MASK;
     for (size_t i = 0; i < 256; ++i) {
-        node->keys[i] = ART_NODE48_EMPTY_VAL;
+        node->keys[i] = CROARING_ART_NODE48_EMPTY_VAL;
     }
     return node;
 }
 
 static void art_free_node48(art_node48_t *node) {
     uint64_t used_children =
-        (node->available_children) ^ NODE48_AVAILABLE_CHILDREN_MASK;
+        (node->available_children) ^ CROARING_NODE48_AVAILABLE_CHILDREN_MASK;
     while (used_children != 0) {
         // We checked above that used_children is not zero
         uint8_t child_idx = roaring_trailing_zeroes(used_children);
@@ -570,7 +576,7 @@ static void art_free_node48(art_node48_t *node) {
 static inline art_node_t *art_node48_find_child(const art_node48_t *node,
                                                 art_key_chunk_t key) {
     uint8_t val_idx = node->keys[key];
-    if (val_idx != ART_NODE48_EMPTY_VAL) {
+    if (val_idx != CROARING_ART_NODE48_EMPTY_VAL) {
         return node->children[val_idx];
     }
     return NULL;
@@ -592,7 +598,7 @@ static art_node_t *art_node48_insert(art_node48_t *node, art_node_t *child,
         art_node256_create(node->base.prefix, node->base.prefix_size);
     for (size_t i = 0; i < 256; ++i) {
         uint8_t val_idx = node->keys[i];
-        if (val_idx != ART_NODE48_EMPTY_VAL) {
+        if (val_idx != CROARING_ART_NODE48_EMPTY_VAL) {
             art_node256_insert(new_node, node->children[val_idx], i);
         }
     }
@@ -603,10 +609,10 @@ static art_node_t *art_node48_insert(art_node48_t *node, art_node_t *child,
 static inline art_node_t *art_node48_erase(art_node48_t *node,
                                            uint8_t key_chunk) {
     uint8_t val_idx = node->keys[key_chunk];
-    if (val_idx == ART_NODE48_EMPTY_VAL) {
+    if (val_idx == CROARING_ART_NODE48_EMPTY_VAL) {
         return (art_node_t *)node;
     }
-    node->keys[key_chunk] = ART_NODE48_EMPTY_VAL;
+    node->keys[key_chunk] = CROARING_ART_NODE48_EMPTY_VAL;
     node->available_children |= UINT64_C(1) << val_idx;
     node->count--;
     if (node->count > 16) {
@@ -617,7 +623,7 @@ static inline art_node_t *art_node48_erase(art_node48_t *node,
         art_node16_create(node->base.prefix, node->base.prefix_size);
     for (size_t i = 0; i < 256; ++i) {
         val_idx = node->keys[i];
-        if (val_idx != ART_NODE48_EMPTY_VAL) {
+        if (val_idx != CROARING_ART_NODE48_EMPTY_VAL) {
             art_node16_insert(new_node, node->children[val_idx], i);
         }
     }
@@ -629,7 +635,7 @@ static inline void art_node48_replace(art_node48_t *node,
                                       art_key_chunk_t key_chunk,
                                       art_node_t *new_child) {
     uint8_t val_idx = node->keys[key_chunk];
-    assert(val_idx != ART_NODE48_EMPTY_VAL);
+    assert(val_idx != CROARING_ART_NODE48_EMPTY_VAL);
     node->children[val_idx] = new_child;
 }
 
@@ -638,7 +644,7 @@ static inline art_indexed_child_t art_node48_next_child(
     art_indexed_child_t indexed_child;
     index++;
     for (size_t i = index; i < 256; ++i) {
-        if (node->keys[i] != ART_NODE48_EMPTY_VAL) {
+        if (node->keys[i] != CROARING_ART_NODE48_EMPTY_VAL) {
             indexed_child.index = i;
             indexed_child.child = node->children[node->keys[i]];
             indexed_child.key_chunk = i;
@@ -657,7 +663,7 @@ static inline art_indexed_child_t art_node48_prev_child(
     index--;
     art_indexed_child_t indexed_child;
     for (int i = index; i >= 0; --i) {
-        if (node->keys[i] != ART_NODE48_EMPTY_VAL) {
+        if (node->keys[i] != CROARING_ART_NODE48_EMPTY_VAL) {
             indexed_child.index = i;
             indexed_child.child = node->children[node->keys[i]];
             indexed_child.key_chunk = i;
@@ -685,7 +691,7 @@ static inline art_indexed_child_t art_node48_lower_bound(
     art_node48_t *node, art_key_chunk_t key_chunk) {
     art_indexed_child_t indexed_child;
     for (size_t i = key_chunk; i < 256; ++i) {
-        if (node->keys[i] != ART_NODE48_EMPTY_VAL) {
+        if (node->keys[i] != CROARING_ART_NODE48_EMPTY_VAL) {
             indexed_child.index = i;
             indexed_child.child = node->children[node->keys[i]];
             indexed_child.key_chunk = i;
@@ -707,7 +713,7 @@ static bool art_node48_internal_validate(const art_node48_t *node,
     uint64_t used_children = 0;
     for (int i = 0; i < 256; ++i) {
         uint8_t child_idx = node->keys[i];
-        if (child_idx != ART_NODE48_EMPTY_VAL) {
+        if (child_idx != CROARING_ART_NODE48_EMPTY_VAL) {
             if (used_children & (UINT64_C(1) << child_idx)) {
                 return art_validate_fail(
                     &validator, "Node48 keys point to the same child index");
@@ -721,7 +727,7 @@ static bool art_node48_internal_validate(const art_node48_t *node,
         }
     }
     uint64_t expected_used_children =
-        (node->available_children) ^ NODE48_AVAILABLE_CHILDREN_MASK;
+        (node->available_children) ^ CROARING_NODE48_AVAILABLE_CHILDREN_MASK;
     if (used_children != expected_used_children) {
         return art_validate_fail(
             &validator,
@@ -744,7 +750,7 @@ static bool art_node48_internal_validate(const art_node48_t *node,
 
     validator.depth++;
     for (int i = 0; i < 256; ++i) {
-        if (node->keys[i] != ART_NODE48_EMPTY_VAL) {
+        if (node->keys[i] != CROARING_ART_NODE48_EMPTY_VAL) {
             validator.current_key[validator.depth - 1] = i;
             if (!art_internal_validate_at(node->children[node->keys[i]],
                                           validator)) {
@@ -759,7 +765,8 @@ static art_node256_t *art_node256_create(const art_key_chunk_t prefix[],
                                          uint8_t prefix_size) {
     art_node256_t *node =
         (art_node256_t *)roaring_malloc(sizeof(art_node256_t));
-    art_init_inner_node(&node->base, ART_NODE256_TYPE, prefix, prefix_size);
+    art_init_inner_node(&node->base, CROARING_ART_NODE256_TYPE, prefix,
+                        prefix_size);
     node->count = 0;
     for (size_t i = 0; i < 256; ++i) {
         node->children[i] = NULL;
@@ -915,13 +922,13 @@ static bool art_node256_internal_validate(const art_node256_t *node,
 static art_node_t *art_find_child(const art_inner_node_t *node,
                                   art_key_chunk_t key_chunk) {
     switch (art_get_type(node)) {
-        case ART_NODE4_TYPE:
+        case CROARING_ART_NODE4_TYPE:
             return art_node4_find_child((art_node4_t *)node, key_chunk);
-        case ART_NODE16_TYPE:
+        case CROARING_ART_NODE16_TYPE:
             return art_node16_find_child((art_node16_t *)node, key_chunk);
-        case ART_NODE48_TYPE:
+        case CROARING_ART_NODE48_TYPE:
             return art_node48_find_child((art_node48_t *)node, key_chunk);
-        case ART_NODE256_TYPE:
+        case CROARING_ART_NODE256_TYPE:
             return art_node256_find_child((art_node256_t *)node, key_chunk);
         default:
             assert(false);
@@ -933,16 +940,16 @@ static art_node_t *art_find_child(const art_inner_node_t *node,
 static void art_replace(art_inner_node_t *node, art_key_chunk_t key_chunk,
                         art_node_t *new_child) {
     switch (art_get_type(node)) {
-        case ART_NODE4_TYPE:
+        case CROARING_ART_NODE4_TYPE:
             art_node4_replace((art_node4_t *)node, key_chunk, new_child);
             break;
-        case ART_NODE16_TYPE:
+        case CROARING_ART_NODE16_TYPE:
             art_node16_replace((art_node16_t *)node, key_chunk, new_child);
             break;
-        case ART_NODE48_TYPE:
+        case CROARING_ART_NODE48_TYPE:
             art_node48_replace((art_node48_t *)node, key_chunk, new_child);
             break;
-        case ART_NODE256_TYPE:
+        case CROARING_ART_NODE256_TYPE:
             art_node256_replace((art_node256_t *)node, key_chunk, new_child);
             break;
         default:
@@ -955,13 +962,13 @@ static void art_replace(art_inner_node_t *node, art_key_chunk_t key_chunk,
 static art_node_t *art_node_erase(art_inner_node_t *node,
                                   art_key_chunk_t key_chunk) {
     switch (art_get_type(node)) {
-        case ART_NODE4_TYPE:
+        case CROARING_ART_NODE4_TYPE:
             return art_node4_erase((art_node4_t *)node, key_chunk);
-        case ART_NODE16_TYPE:
+        case CROARING_ART_NODE16_TYPE:
             return art_node16_erase((art_node16_t *)node, key_chunk);
-        case ART_NODE48_TYPE:
+        case CROARING_ART_NODE48_TYPE:
             return art_node48_erase((art_node48_t *)node, key_chunk);
-        case ART_NODE256_TYPE:
+        case CROARING_ART_NODE256_TYPE:
             return art_node256_erase((art_node256_t *)node, key_chunk);
         default:
             assert(false);
@@ -974,15 +981,15 @@ static art_node_t *art_node_erase(art_inner_node_t *node,
 static art_node_t *art_node_insert_leaf(art_inner_node_t *node,
                                         art_key_chunk_t key_chunk,
                                         art_leaf_t *leaf) {
-    art_node_t *child = (art_node_t *)(SET_LEAF(leaf));
+    art_node_t *child = (art_node_t *)(CROARING_SET_LEAF(leaf));
     switch (art_get_type(node)) {
-        case ART_NODE4_TYPE:
+        case CROARING_ART_NODE4_TYPE:
             return art_node4_insert((art_node4_t *)node, child, key_chunk);
-        case ART_NODE16_TYPE:
+        case CROARING_ART_NODE16_TYPE:
             return art_node16_insert((art_node16_t *)node, child, key_chunk);
-        case ART_NODE48_TYPE:
+        case CROARING_ART_NODE48_TYPE:
             return art_node48_insert((art_node48_t *)node, child, key_chunk);
-        case ART_NODE256_TYPE:
+        case CROARING_ART_NODE256_TYPE:
             return art_node256_insert((art_node256_t *)node, child, key_chunk);
         default:
             assert(false);
@@ -997,16 +1004,16 @@ static void art_free_node(art_node_t *node) {
         return;
     }
     switch (art_get_type((art_inner_node_t *)node)) {
-        case ART_NODE4_TYPE:
+        case CROARING_ART_NODE4_TYPE:
             art_free_node4((art_node4_t *)node);
             break;
-        case ART_NODE16_TYPE:
+        case CROARING_ART_NODE16_TYPE:
             art_free_node16((art_node16_t *)node);
             break;
-        case ART_NODE48_TYPE:
+        case CROARING_ART_NODE48_TYPE:
             art_free_node48((art_node48_t *)node);
             break;
-        case ART_NODE256_TYPE:
+        case CROARING_ART_NODE256_TYPE:
             art_free_node256((art_node256_t *)node);
             break;
         default:
@@ -1024,13 +1031,13 @@ static art_indexed_child_t art_node_next_child(const art_node_t *node,
         return indexed_child;
     }
     switch (art_get_type((art_inner_node_t *)node)) {
-        case ART_NODE4_TYPE:
+        case CROARING_ART_NODE4_TYPE:
             return art_node4_next_child((art_node4_t *)node, index);
-        case ART_NODE16_TYPE:
+        case CROARING_ART_NODE16_TYPE:
             return art_node16_next_child((art_node16_t *)node, index);
-        case ART_NODE48_TYPE:
+        case CROARING_ART_NODE48_TYPE:
             return art_node48_next_child((art_node48_t *)node, index);
-        case ART_NODE256_TYPE:
+        case CROARING_ART_NODE256_TYPE:
             return art_node256_next_child((art_node256_t *)node, index);
         default:
             assert(false);
@@ -1048,13 +1055,13 @@ static art_indexed_child_t art_node_prev_child(const art_node_t *node,
         return indexed_child;
     }
     switch (art_get_type((art_inner_node_t *)node)) {
-        case ART_NODE4_TYPE:
+        case CROARING_ART_NODE4_TYPE:
             return art_node4_prev_child((art_node4_t *)node, index);
-        case ART_NODE16_TYPE:
+        case CROARING_ART_NODE16_TYPE:
             return art_node16_prev_child((art_node16_t *)node, index);
-        case ART_NODE48_TYPE:
+        case CROARING_ART_NODE48_TYPE:
             return art_node48_prev_child((art_node48_t *)node, index);
-        case ART_NODE256_TYPE:
+        case CROARING_ART_NODE256_TYPE:
             return art_node256_prev_child((art_node256_t *)node, index);
         default:
             assert(false);
@@ -1072,13 +1079,13 @@ static art_indexed_child_t art_node_child_at(const art_node_t *node,
         return indexed_child;
     }
     switch (art_get_type((art_inner_node_t *)node)) {
-        case ART_NODE4_TYPE:
+        case CROARING_ART_NODE4_TYPE:
             return art_node4_child_at((art_node4_t *)node, index);
-        case ART_NODE16_TYPE:
+        case CROARING_ART_NODE16_TYPE:
             return art_node16_child_at((art_node16_t *)node, index);
-        case ART_NODE48_TYPE:
+        case CROARING_ART_NODE48_TYPE:
             return art_node48_child_at((art_node48_t *)node, index);
-        case ART_NODE256_TYPE:
+        case CROARING_ART_NODE256_TYPE:
             return art_node256_child_at((art_node256_t *)node, index);
         default:
             assert(false);
@@ -1096,13 +1103,13 @@ static art_indexed_child_t art_node_lower_bound(const art_node_t *node,
         return indexed_child;
     }
     switch (art_get_type((art_inner_node_t *)node)) {
-        case ART_NODE4_TYPE:
+        case CROARING_ART_NODE4_TYPE:
             return art_node4_lower_bound((art_node4_t *)node, key_chunk);
-        case ART_NODE16_TYPE:
+        case CROARING_ART_NODE16_TYPE:
             return art_node16_lower_bound((art_node16_t *)node, key_chunk);
-        case ART_NODE48_TYPE:
+        case CROARING_ART_NODE48_TYPE:
             return art_node48_lower_bound((art_node48_t *)node, key_chunk);
-        case ART_NODE256_TYPE:
+        case CROARING_ART_NODE256_TYPE:
             return art_node256_lower_bound((art_node256_t *)node, key_chunk);
         default:
             assert(false);
@@ -1153,7 +1160,7 @@ static uint8_t art_common_prefix(const art_key_chunk_t key1[],
 static art_node_t *art_insert_at(art_node_t *node, const art_key_chunk_t key[],
                                  uint8_t depth, art_leaf_t *new_leaf) {
     if (art_is_leaf(node)) {
-        art_leaf_t *leaf = CAST_LEAF(node);
+        art_leaf_t *leaf = CROARING_CAST_LEAF(node);
         uint8_t common_prefix = art_common_prefix(
             leaf->key, depth, ART_KEY_BYTES, key, depth, ART_KEY_BYTES);
 
@@ -1233,7 +1240,7 @@ static art_erase_result_t art_erase_at(art_node_t *node,
     result.value_erased = NULL;
 
     if (art_is_leaf(node)) {
-        art_leaf_t *leaf = CAST_LEAF(node);
+        art_leaf_t *leaf = CROARING_CAST_LEAF(node);
         uint8_t common_prefix = art_common_prefix(leaf->key, 0, ART_KEY_BYTES,
                                                   key, 0, ART_KEY_BYTES);
         if (common_prefix != ART_KEY_BYTES) {
@@ -1298,7 +1305,7 @@ static art_val_t *art_find_at(const art_node_t *node,
         // Include both the prefix and the child key chunk in the depth.
         depth += inner_node->prefix_size + 1;
     }
-    art_leaf_t *leaf = CAST_LEAF(node);
+    art_leaf_t *leaf = CROARING_CAST_LEAF(node);
     if (depth >= ART_KEY_BYTES) {
         return (art_val_t *)leaf;
     }
@@ -1317,16 +1324,16 @@ size_t art_size_in_bytes_at(const art_node_t *node) {
     }
     size_t size = 0;
     switch (art_get_type((art_inner_node_t *)node)) {
-        case ART_NODE4_TYPE: {
+        case CROARING_ART_NODE4_TYPE: {
             size += sizeof(art_node4_t);
         } break;
-        case ART_NODE16_TYPE: {
+        case CROARING_ART_NODE16_TYPE: {
             size += sizeof(art_node16_t);
         } break;
-        case ART_NODE48_TYPE: {
+        case CROARING_ART_NODE48_TYPE: {
             size += sizeof(art_node48_t);
         } break;
-        case ART_NODE256_TYPE: {
+        case CROARING_ART_NODE256_TYPE: {
             size += sizeof(art_node256_t);
         } break;
         default:
@@ -1347,16 +1354,16 @@ static void art_node_print_type(const art_node_t *node) {
         return;
     }
     switch (art_get_type((art_inner_node_t *)node)) {
-        case ART_NODE4_TYPE:
+        case CROARING_ART_NODE4_TYPE:
             printf("Node4");
             return;
-        case ART_NODE16_TYPE:
+        case CROARING_ART_NODE16_TYPE:
             printf("Node16");
             return;
-        case ART_NODE48_TYPE:
+        case CROARING_ART_NODE48_TYPE:
             printf("Node48");
             return;
-        case ART_NODE256_TYPE:
+        case CROARING_ART_NODE256_TYPE:
             printf("Node256");
             return;
         default:
@@ -1368,7 +1375,7 @@ static void art_node_print_type(const art_node_t *node) {
 void art_node_printf(const art_node_t *node, uint8_t depth) {
     if (art_is_leaf(node)) {
         printf("{ type: Leaf, key: ");
-        art_leaf_t *leaf = CAST_LEAF(node);
+        art_leaf_t *leaf = CROARING_CAST_LEAF(node);
         for (size_t i = 0; i < ART_KEY_BYTES; ++i) {
             printf("%02x", leaf->key[i]);
         }
@@ -1395,7 +1402,7 @@ void art_node_printf(const art_node_t *node, uint8_t depth) {
     printf("\n");
 
     switch (art_get_type(inner_node)) {
-        case ART_NODE4_TYPE: {
+        case CROARING_ART_NODE4_TYPE: {
             art_node4_t *node4 = (art_node4_t *)node;
             for (uint8_t i = 0; i < node4->count; ++i) {
                 printf("%*s", depth, "");
@@ -1403,7 +1410,7 @@ void art_node_printf(const art_node_t *node, uint8_t depth) {
                 art_node_printf(node4->children[i], depth);
             }
         } break;
-        case ART_NODE16_TYPE: {
+        case CROARING_ART_NODE16_TYPE: {
             art_node16_t *node16 = (art_node16_t *)node;
             for (uint8_t i = 0; i < node16->count; ++i) {
                 printf("%*s", depth, "");
@@ -1411,10 +1418,10 @@ void art_node_printf(const art_node_t *node, uint8_t depth) {
                 art_node_printf(node16->children[i], depth);
             }
         } break;
-        case ART_NODE48_TYPE: {
+        case CROARING_ART_NODE48_TYPE: {
             art_node48_t *node48 = (art_node48_t *)node;
             for (int i = 0; i < 256; ++i) {
-                if (node48->keys[i] != ART_NODE48_EMPTY_VAL) {
+                if (node48->keys[i] != CROARING_ART_NODE48_EMPTY_VAL) {
                     printf("%*s", depth, "");
                     printf("key: %02x ", i);
                     printf("child: %02x ", node48->keys[i]);
@@ -1422,7 +1429,7 @@ void art_node_printf(const art_node_t *node, uint8_t depth) {
                 }
             }
         } break;
-        case ART_NODE256_TYPE: {
+        case CROARING_ART_NODE256_TYPE: {
             art_node256_t *node256 = (art_node256_t *)node;
             for (int i = 0; i < 256; ++i) {
                 if (node256->children[i] != NULL) {
@@ -1445,7 +1452,7 @@ void art_insert(art_t *art, const art_key_chunk_t *key, art_val_t *val) {
     art_leaf_t *leaf = (art_leaf_t *)val;
     art_leaf_populate(leaf, key);
     if (art->root == NULL) {
-        art->root = (art_node_t *)SET_LEAF(leaf);
+        art->root = (art_node_t *)CROARING_SET_LEAF(leaf);
         return;
     }
     art->root = art_insert_at(art->root, key, 0, leaf);
@@ -1503,7 +1510,7 @@ static inline art_node_t *art_iterator_node(art_iterator_t *iterator) {
 // true for convenience.
 static inline bool art_iterator_valid_loc(art_iterator_t *iterator,
                                           art_leaf_t *leaf) {
-    iterator->frames[iterator->frame].node = SET_LEAF(leaf);
+    iterator->frames[iterator->frame].node = CROARING_SET_LEAF(leaf);
     iterator->frames[iterator->frame].index_in_node = 0;
     memcpy(iterator->key, leaf->key, ART_KEY_BYTES);
     iterator->value = (art_val_t *)leaf;
@@ -1592,7 +1599,7 @@ static bool art_node_init_iterator(const art_node_t *node,
     // We're at a leaf.
     iterator->frames[iterator->frame].node = (art_node_t *)node;
     iterator->frames[iterator->frame].index_in_node = 0;  // Should not matter.
-    return art_iterator_valid_loc(iterator, CAST_LEAF(node));
+    return art_iterator_valid_loc(iterator, CROARING_CAST_LEAF(node));
 }
 
 bool art_iterator_move(art_iterator_t *iterator, bool forward) {
@@ -1652,7 +1659,7 @@ static bool art_node_iterator_lower_bound(const art_node_t *node,
         art_iterator_down(iterator, inner_node, indexed_child.index);
         node = indexed_child.child;
     }
-    art_leaf_t *leaf = CAST_LEAF(node);
+    art_leaf_t *leaf = CROARING_CAST_LEAF(node);
     if (art_compare_keys(leaf->key, key) >= 0) {
         // Leaf has an equal or larger key.
         return art_iterator_valid_loc(iterator, leaf);
@@ -1806,7 +1813,7 @@ static bool art_internal_validate_at(const art_node_t *node,
         return art_validate_fail(&validator, "node is null");
     }
     if (art_is_leaf(node)) {
-        art_leaf_t *leaf = CAST_LEAF(node);
+        art_leaf_t *leaf = CROARING_CAST_LEAF(node);
         if (art_compare_prefix(leaf->key, 0, validator.current_key, 0,
                                validator.depth) != 0) {
             return art_validate_fail(
@@ -1832,25 +1839,25 @@ static bool art_internal_validate_at(const art_node_t *node,
         validator.depth += inner_node->prefix_size;
 
         switch (inner_node->typecode) {
-            case ART_NODE4_TYPE:
+            case CROARING_ART_NODE4_TYPE:
                 if (!art_node4_internal_validate((art_node4_t *)inner_node,
                                                  validator)) {
                     return false;
                 }
                 break;
-            case ART_NODE16_TYPE:
+            case CROARING_ART_NODE16_TYPE:
                 if (!art_node16_internal_validate((art_node16_t *)inner_node,
                                                   validator)) {
                     return false;
                 }
                 break;
-            case ART_NODE48_TYPE:
+            case CROARING_ART_NODE48_TYPE:
                 if (!art_node48_internal_validate((art_node48_t *)inner_node,
                                                   validator)) {
                     return false;
                 }
                 break;
-            case ART_NODE256_TYPE:
+            case CROARING_ART_NODE256_TYPE:
                 if (!art_node256_internal_validate((art_node256_t *)inner_node,
                                                    validator)) {
                     return false;

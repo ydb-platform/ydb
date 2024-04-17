@@ -147,6 +147,10 @@ class MergeTree(TableEngine):
         super().__init__(locals())
 
 
+class SharedMergeTree(MergeTree):
+    pass
+
+
 class SummingMergeTree(MergeTree):
     pass
 

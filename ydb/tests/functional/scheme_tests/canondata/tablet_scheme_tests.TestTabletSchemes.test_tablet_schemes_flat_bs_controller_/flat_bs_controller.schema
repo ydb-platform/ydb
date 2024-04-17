@@ -227,6 +227,11 @@
                 "ColumnType": "Uint32"
             },
             {
+                "ColumnId": 18,
+                "ColumnName": "Mood",
+                "ColumnType": "Byte"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "NodeID",
                 "ColumnType": "Uint32"

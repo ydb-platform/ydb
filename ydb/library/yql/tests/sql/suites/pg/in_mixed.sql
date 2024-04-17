@@ -17,5 +17,5 @@ select 1 in (0, NULL);
 select 1 in (1, NULL);
 
 -- non-PG types handling
-select index in ('2', '4') from "Input";
+select index in ('2', '4') from plato."Input";
 

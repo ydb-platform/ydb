@@ -459,13 +459,12 @@ LimitMEMLOCK=3221225472
 [Install]
 WantedBy=multi-user.target
 """.format(
-            user="yc-user", 
+            user="yc-user",
             lib_dir=self.slice_lib_dir,
             kikimr_path=self.slice_kikimr_path,
-            cfg_path=self.slice_cfg_path, 
+            cfg_path=self.slice_cfg_path,
         )
 
-        
         fd, local_unit_path = tempfile.mkstemp()
         try:
             with os.fdopen(fd, "w") as tmp:
@@ -481,4 +480,3 @@ WantedBy=multi-user.target
             cmd = "fallocate -l 32GB {}".format(drive_path)
             tasks.extend(self.nodes.execute_async_ret(cmd, nodes=[host_name]))
         self.nodes._check_async_execution(tasks)
-

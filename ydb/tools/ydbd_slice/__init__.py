@@ -701,7 +701,7 @@ def add_create_systemd_service(modes, walle_provider):
 
     mode = modes.add_parser(
         "create-systemd-service",
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args()],
+        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
         description="Create systemd services. WARNING: this mode is not production ready"
 
     )
@@ -714,7 +714,7 @@ def add_create_file_drives(modes, walle_provider):
 
     mode = modes.add_parser(
         "create-file-drives",
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args()],
+        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
         description="Creates file drives. WARNING: this mode is not production ready"
 
     )

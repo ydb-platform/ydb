@@ -247,6 +247,9 @@ class TDataShard
 
     class TTxHandleSafeKqpScan;
     class TTxHandleSafeBuildIndexScan;
+    class TTxHandleSafeStatisticsScan;
+
+    class TTxMediatorStateRestored;
 
     ITransaction *CreateTxMonitoring(TDataShard *self,
                                      NMon::TEvRemoteHttpInfo::TPtr ev);
@@ -364,6 +367,7 @@ class TDataShard
             EvConfirmReadonlyLease,
             EvReadonlyLeaseConfirmation,
             EvPlanPredictedTxs,
+            EvStatisticsScanFinished,
             EvEnd
         };
 
@@ -559,6 +563,8 @@ class TDataShard
         struct TEvReadonlyLeaseConfirmation: public TEventLocal<TEvReadonlyLeaseConfirmation, EvReadonlyLeaseConfirmation> {};
 
         struct TEvPlanPredictedTxs : public TEventLocal<TEvPlanPredictedTxs, EvPlanPredictedTxs> {};
+
+        struct TEvStatisticsScanFinished : public TEventLocal<TEvStatisticsScanFinished, EvStatisticsScanFinished> {};
     };
 
     struct Schema : NIceDb::Schema {
@@ -1284,6 +1290,9 @@ class TDataShard
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRestartOperation::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvStatisticsScanRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvStatisticsScanRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvStatisticsScanFinished::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvCancelBackup::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvCancelRestore::TPtr &ev, const TActorContext &ctx);
@@ -1962,6 +1971,7 @@ public:
     void SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorContext& ctx);
 
     void CheckMediatorStateRestored();
+    void FinishMediatorStateRestore(TTransactionContext&, ui64, ui64);
 
     void FillExecutionStats(const TExecutionProfile& execProfile, NKikimrQueryStats::TTxStats& txStats) const;
 
@@ -2626,7 +2636,7 @@ private:
 
     TVector<THolder<IEventHandle>> MediatorStateWaitingMsgs;
     bool MediatorStateWaiting = false;
-    bool MediatorStateBackupInitiated = false;
+    bool MediatorStateRestoreTxPending = false;
 
     bool IcbRegistered = false;
 
@@ -2797,10 +2807,19 @@ private:
     // from the front
     THashMap<ui32, TCompactionWaiterList> CompactionWaiters;
 
-    using TCompactBorrowedWaiterList = TList<TActorId>;
+    struct TCompactBorrowedWaiter : public TThrRefBase {
+        TCompactBorrowedWaiter(TActorId actorId, TLocalPathId requestedTable)
+            : ActorId(actorId)
+            , RequestedTable(requestedTable)
+        { }
+
+        TActorId ActorId;
+        TLocalPathId RequestedTable;
+        THashSet<ui32> CompactingTables;
+    };
 
     // tableLocalTid -> waiters, similar to CompactionWaiters
-    THashMap<ui32, TCompactBorrowedWaiterList> CompactBorrowedWaiters;
+    THashMap<ui32, TList<TIntrusivePtr<TCompactBorrowedWaiter>>> CompactBorrowedWaiters;
 
     struct TReplicationSourceOffsetsReceiveState {
         // A set of tables for which we already received offsets
@@ -2833,6 +2852,10 @@ private:
     TVector<THolder<IEventHandle>> DelayedS3UploadRows;
 
     std::vector<TTrivialLogThrottler> LogThrottlers = {ELogThrottlerType::LAST, TDuration::Seconds(1)};
+
+    ui32 StatisticsScanTableId = 0;
+    ui64 StatisticsScanId = 0;
+
 public:
     auto& GetLockChangeRecords() {
         return LockChangeRecords;
@@ -3006,6 +3029,8 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
             HFunc(TEvPrivate::TEvConfirmReadonlyLease, Handle);
             HFunc(TEvPrivate::TEvPlanPredictedTxs, Handle);
+            HFunc(TEvDataShard::TEvStatisticsScanRequest, Handle);
+            HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());

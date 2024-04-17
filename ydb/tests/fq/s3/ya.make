@@ -1,12 +1,12 @@
 PY3TEST()
 
-FORK_SUBTESTS()
-SPLIT_FACTOR(50)
+FORK_TEST_FILES()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
 PEERDIR(
     contrib/python/boto3
+    contrib/python/pyarrow
     library/python/testing/recipe
     library/python/testing/yatest_common
     library/recipes/common
@@ -35,6 +35,7 @@ TEST_SRCS(
     test_size_limit.py
     test_statistics.py
     test_test_connection.py
+    test_ydb_over_fq.py
     test_yq_v2.py
 )
 
@@ -45,8 +46,8 @@ PY_SRCS(
 
 DATA(arcadia/ydb/tests/fq/s3)
 
-IF (SANITIZER_TYPE == "thread")
-    TIMEOUT(2400)
+IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "address")
+    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()

@@ -843,7 +843,7 @@ struct Schema {
             }
 
             template <typename TableType>
-            using Selector = TableSelector<NTable::TTableIt, TableType, KeyColumnsTypes...>;
+            using Selector = TableSelector<NTable::TTableIter, TableType, KeyColumnsTypes...>;
             using KeyColumnsType = std::tuple<KeyColumnsTypes...>;
             using KeyValuesType = typename TableColumns<KeyColumnsTypes...>::TupleType;
             using RealKeyValuesType = typename TableColumns<KeyColumnsTypes...>::RealTupleType;
@@ -1319,11 +1319,11 @@ struct Schema {
 
             template <typename TableType, typename KeyValuesType>
             class EqualKeyIterator
-                : public KeyIterator<NTable::TTableIt, EqualKeyIterator<TableType, KeyValuesType>>
+                : public KeyIterator<NTable::TTableIter, EqualKeyIterator<TableType, KeyValuesType>>
             {
             public:
                 using KeyColumnsType = typename TableType::TKey::KeyColumnsType;
-                using Iterator = KeyIterator<NTable::TTableIt, EqualKeyIterator<TableType, KeyValuesType>>;
+                using Iterator = KeyIterator<NTable::TTableIter, EqualKeyIterator<TableType, KeyValuesType>>;
 
                 EqualKeyIterator(TToughDb& database, const KeyValuesType& key, NTable::TTagsRef columns)
                     : Iterator(MakeIterator(database, key, columns))
@@ -1336,9 +1336,9 @@ struct Schema {
                 EqualKeyIterator(EqualKeyIterator&& iterator) = default;
                 EqualKeyIterator& operator =(EqualKeyIterator&& iterator) = default;
 
-                static THolder<NTable::TTableIt> MakeIterator(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
+                static THolder<NTable::TTableIter> MakeIterator(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
                     TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> key(keyValues);
-                    return THolder<NTable::TTableIt>(database.IterateExact(TableId, key, columns).Release());
+                    return THolder<NTable::TTableIter>(database.IterateExact(TableId, key, columns).Release());
                 }
 
                 static bool Precharge(
@@ -1355,7 +1355,7 @@ struct Schema {
                         key,
                         key,
                         columns,
-                        NTable::TTableIt::Direction,
+                        NTable::TTableIter::Direction,
                         maxRowCount,
                         maxBytes);
                 }

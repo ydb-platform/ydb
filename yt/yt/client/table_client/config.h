@@ -259,15 +259,36 @@ public:
     //! Upper limit on acceptable compression ratio. No chunk compression is performed if this limit is exceeded.
     double MaxAcceptableCompressionRatio;
 
-    //! Upper limit on content size of a batch that can be decompressed within a single iteration.
-    i64 MaxDecompressionBlobSize;
-
     REGISTER_YSON_STRUCT(TDictionaryCompressionConfig);
 
     static void Register(TRegistrar registrar);
 };
 
 DEFINE_REFCOUNTED_TYPE(TDictionaryCompressionConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TDictionaryCompressionSessionConfig
+    : public virtual NYTree::TYsonStruct
+{
+public:
+    // Compression session options.
+
+    //! Level of compression algorithm.
+    //! Applied to digested compression dictionary upon its construction.
+    int CompressionLevel;
+
+    // Decompression session options.
+
+    //! Upper limit on content size of a batch that can be decompressed within a single iteration.
+    i64 MaxDecompressionBlobSize;
+
+    REGISTER_YSON_STRUCT(TDictionaryCompressionSessionConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TDictionaryCompressionSessionConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -292,6 +313,7 @@ class TTableReaderConfig
     , public virtual TChunkReaderConfig
     , public TBatchHunkReaderConfig
     , public NChunkClient::TChunkFragmentReaderConfig
+    , public TDictionaryCompressionSessionConfig
 {
 public:
     bool SuppressAccessTracking;

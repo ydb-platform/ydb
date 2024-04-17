@@ -1553,24 +1553,36 @@ TTaskDiskStatistics GetSelfThreadTaskDiskStatistics()
 {
 #ifdef _linux_
     static const TString path = "/proc/thread-self/io";
+    static std::atomic<bool> supported = true;
 
     TTaskDiskStatistics stat;
 
-    TIFStream ioFile(path);
-    for (TString line; ioFile.ReadLine(line); ) {
-        if (line.empty()) {
-            continue;
-        }
+    if (supported) {
+        try {
+            TIFStream ioFile(path);
+            for (TString line; ioFile.ReadLine(line); ) {
+                if (line.empty()) {
+                    continue;
+                }
 
-        auto fields = SplitString(line, " ", 2);
-        if (fields.size() != 2) {
-            continue;
-        }
+                auto fields = SplitString(line, " ", 2);
+                if (fields.size() != 2) {
+                    continue;
+                }
 
-        if (fields[0] == "read_bytes:") {
-            TryFromString(fields[1], stat.ReadBytes);
-        } else if (fields[0] == "write_bytes:") {
-            TryFromString(fields[1], stat.ReadBytes);
+                if (fields[0] == "read_bytes:") {
+                    TryFromString(fields[1], stat.ReadBytes);
+                } else if (fields[0] == "write_bytes:") {
+                    TryFromString(fields[1], stat.ReadBytes);
+                }
+            }
+        } catch (const TSystemError& ex) {
+            if (ex.Status() == ENOENT) {
+                supported = false;
+                YT_LOG_WARNING(ex, "Task I/O accounting is not supported by kernel");
+            } else {
+                throw;
+            }
         }
     }
 

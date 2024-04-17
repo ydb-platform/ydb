@@ -20,7 +20,7 @@ public:
     TNotifyManager(
         TIntrusivePtr<NThreading::TEventCount> eventCount,
         const NProfiling::TTagSet& counterTagSet,
-        const TDuration pollingPeriod);
+        TDuration pollingPeriod);
 
     TCpuInstant ResetMinEnqueuedAt();
 

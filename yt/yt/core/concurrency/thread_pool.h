@@ -13,23 +13,38 @@ namespace NYT::NConcurrency {
 struct IThreadPool
     : public virtual TRefCounted
 {
+    //! Terminates all the threads.
     virtual void Shutdown() = 0;
 
-    //! Returns current thread count, it can differ from value set by Configure()
-    //! because it clamped between 1 and maximum thread count.
+    //! Returns the current thread count.
+    /*!
+     *  This can differ from value set by #Configure
+     *  because it clamped between 1 and the maximum thread count.
+     */
     virtual int GetThreadCount() = 0;
+
+    //! Enables changing thread pool configuration at runtime.
     virtual void Configure(int threadCount) = 0;
 
+    //! Returns the invoker for enqueuing callbacks into the thread pool.
     virtual const IInvokerPtr& GetInvoker() = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IThreadPool)
 
+////////////////////////////////////////////////////////////////////////////////
+
+struct TThreadPoolOptions
+{
+    NThreading::EThreadPriority ThreadPriority = NThreading::EThreadPriority::Normal;
+    TDuration PollingPeriod = TDuration::MilliSeconds(10);
+    std::function<void()> ThreadInitializer;
+};
+
 IThreadPoolPtr CreateThreadPool(
     int threadCount,
     const TString& threadNamePrefix,
-    NThreading::EThreadPriority threadPriority = NThreading::EThreadPriority::Normal,
-    TDuration pollingPeriod = TDuration::MilliSeconds(10));
+    const TThreadPoolOptions& options = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

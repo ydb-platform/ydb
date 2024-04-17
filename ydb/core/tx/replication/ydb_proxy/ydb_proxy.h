@@ -130,21 +130,24 @@ struct TEvYdbProxy {
         using TSelf = TTopicReaderSettings;
         using TBase = NYdb::NTopic::TReadSessionSettings;
 
-        FLUENT_SETTING_DEFAULT(bool, AutoCommit, true);
-
-        template <typename... Args>
-        TSelf& ConsumerName(Args&&... args) {
-            return static_cast<TSelf&>(TBase::ConsumerName(std::forward<Args>(args)...));
-        }
-
-        template <typename... Args>
-        TSelf& AppendTopics(Args&&... args) {
-            return static_cast<TSelf&>(TBase::AppendTopics(std::forward<Args>(args)...));
-        }
-
         const TBase& GetBase() const {
             return *this;
         }
+
+        FLUENT_SETTING_DEFAULT(bool, AutoCommit, true);
+
+        #define PROXY_METHOD(name) \
+            template <typename... Args> \
+            TSelf& name(Args&&... args) { \
+                return static_cast<TSelf&>(TBase::name(std::forward<Args>(args)...)); \
+            } \
+            Y_SEMICOLON_GUARD
+
+        PROXY_METHOD(ConsumerName);
+        PROXY_METHOD(AppendTopics);
+        PROXY_METHOD(MaxMemoryUsageBytes);
+
+        #undef PROXY_METHOD
     };
 
     struct TReadTopicResult {

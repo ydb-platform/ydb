@@ -14,6 +14,7 @@
 #include <arrow/array/data.h>
 #include <arrow/type.h>
 #include <arrow/type_traits.h>
+#include <arrow/compute/cast.h>
 
 namespace NYql::NDqs {
 
@@ -434,6 +435,10 @@ struct TYsonBlockReaderTraits {
         }
     }
 
+    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
+        Y_UNUSED(isOptional);
+        ythrow yexception() << "Yson reader not implemented for block resources";
+    }   
 };
 
 template<bool IsDictionary>
@@ -565,10 +570,16 @@ public:
                 return DictYsonConverter_.Convert(block);
             }
         } else {
-            if (block->type->Equals(Settings_.ArrowType)) {
+            auto blockType = block->type;
+            auto noConvert = blockType->Equals(Settings_.ArrowType);
+            if (noConvert) {
                 return block;
+            } else if (arrow::Type::UINT8 == Settings_.ArrowType->id() && arrow::Type::BOOL == blockType->id()) {
+                auto result = arrow::compute::Cast(arrow::Datum(*block), Settings_.ArrowType);
+                Y_ENSURE(result.ok());
+                return *result;
             } else {
-                YQL_ENSURE(arrow::Type::BINARY == block->type->id());
+                YQL_ENSURE(arrow::Type::BINARY == blockType->id());
                 return YsonConverter_.Convert(block);
             }
         }

@@ -39,6 +39,7 @@ TPipeline::~TPipeline()
         pr.second->ClearSpecialDependencies();
         pr.second->ClearPlannedConflicts();
         pr.second->ClearImmediateConflicts();
+        pr.second->ClearRepeatableReadConflicts();
     }
 }
 
@@ -400,13 +401,25 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
         if (Self->IsMvccEnabled()) {
             TStepOrder stepOrder = op->GetStepOrder();
             TRowVersion version(stepOrder.Step, stepOrder.TxId);
-            TRowVersion completeEdge = Max(
-                    Self->SnapshotManager.GetCompleteEdge(),
-                    Self->SnapshotManager.GetUnprotectedReadEdge());
-            if (version <= completeEdge) {
-                op->SetFlag(TTxFlags::BlockingImmediateOps);
-            } else if (version <= Self->SnapshotManager.GetIncompleteEdge()) {
-                op->SetFlag(TTxFlags::BlockingImmediateWrites);
+            if (version <= Self->SnapshotManager.GetCompleteEdge() ||
+                version < Self->SnapshotManager.GetImmediateWriteEdge() ||
+                version < Self->SnapshotManager.GetUnprotectedReadEdge())
+            {
+                // This transaction would have been marked as logically complete
+                if (!op->HasFlag(TTxFlags::BlockingImmediateOps)) {
+                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                        "Adding BlockingImmediateOps for op " << *op << " at " << Self->TabletID());
+                    op->SetFlag(TTxFlags::BlockingImmediateOps);
+                }
+            } else if (version <= Self->SnapshotManager.GetIncompleteEdge() ||
+                       version <= Self->SnapshotManager.GetUnprotectedReadEdge())
+            {
+                // This transaction would have been marked as logically incomplete
+                if (!op->HasFlag(TTxFlags::BlockingImmediateWrites)) {
+                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                        "Adding BlockingImmediateWrites for op " << *op << " at " << Self->TabletID());
+                    op->SetFlag(TTxFlags::BlockingImmediateWrites);
+                }
             }
         }
         auto pr = ActivePlannedOps.emplace(op->GetStepOrder(), op);
@@ -414,10 +427,14 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
         Y_ABORT_UNLESS(pr.first == std::prev(ActivePlannedOps.end()), "AddActiveOp must always add transactions in order");
         bool isComplete = op->HasFlag(TTxFlags::BlockingImmediateOps);
         if (ActivePlannedOpsLogicallyCompleteEnd == ActivePlannedOps.end() && !isComplete) {
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Operation " << *op << " is the new logically complete end at " << Self->TabletID());
             ActivePlannedOpsLogicallyCompleteEnd = pr.first;
         }
         bool isIncomplete = isComplete || op->HasFlag(TTxFlags::BlockingImmediateWrites);
         if (ActivePlannedOpsLogicallyIncompleteEnd == ActivePlannedOps.end() && !isIncomplete) {
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Operation " << *op << " is the new logically incomplete end at " << Self->TabletID());
             ActivePlannedOpsLogicallyIncompleteEnd = pr.first;
         }
     }
@@ -487,6 +504,7 @@ void TPipeline::UnblockNormalDependencies(const TOperation::TPtr &op)
     op->ClearDependencies();
     op->ClearPlannedConflicts();
     op->ClearImmediateConflicts();
+    op->ClearRepeatableReadConflicts();
     DepTracker.RemoveOperation(op);
 }
 
@@ -1238,7 +1256,7 @@ ECleanupStatus TPipeline::CleanupOutdated(NIceDb::TNiceDb& db, const TActorConte
 {
     const ui32 OUTDATED_BATCH_SIZE = 100;
     TVector<ui64> outdatedTxs;
-    auto status = Self->TransQueue.CleanupOutdated(db, outdatedStep, OUTDATED_BATCH_SIZE, outdatedTxs, replies);
+    auto status = Self->TransQueue.CleanupOutdated(db, outdatedStep, OUTDATED_BATCH_SIZE, outdatedTxs);
     switch (status) {
         case ECleanupStatus::None:
         case ECleanupStatus::Restart:
@@ -1254,8 +1272,10 @@ ECleanupStatus TPipeline::CleanupOutdated(NIceDb::TNiceDb& db, const TActorConte
     for (ui64 txId : outdatedTxs) {
         auto op = Self->TransQueue.FindTxInFly(txId);
         if (op && !op->IsExecutionPlanFinished()) {
+            op->OnCleanup(*Self, replies);
             GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
         }
+        Self->TransQueue.RemoveTxInFly(txId, &replies);
 
         ForgetTx(txId);
         LOG_INFO(ctx, NKikimrServices::TX_DATASHARD,
@@ -1271,12 +1291,14 @@ ECleanupStatus TPipeline::CleanupOutdated(NIceDb::TNiceDb& db, const TActorConte
 bool TPipeline::CleanupVolatile(ui64 txId, const TActorContext& ctx,
         std::vector<std::unique_ptr<IEventHandle>>& replies)
 {
-    if (Self->TransQueue.CleanupVolatile(txId, replies)) {
+    if (Self->TransQueue.CleanupVolatile(txId)) {
         auto op = Self->TransQueue.FindTxInFly(txId);
         if (op && !op->IsExecutionPlanFinished()) {
+            op->OnCleanup(*Self, replies);
             GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
         }
-        
+        Self->TransQueue.RemoveTxInFly(txId, &replies);
+
         ForgetTx(txId);
 
         Self->CheckDelayedProposeQueue(ctx);
@@ -1294,6 +1316,25 @@ bool TPipeline::CleanupVolatile(ui64 txId, const TActorContext& ctx,
     }
 
     return false;
+}
+
+size_t TPipeline::CleanupWaitingVolatile(const TActorContext& ctx, std::vector<std::unique_ptr<IEventHandle>>& replies)
+{
+    std::vector<ui64> cleanupTxs;
+    for (const auto& pr : Self->TransQueue.GetTxsInFly()) {
+        if (pr.second->HasVolatilePrepareFlag() && !pr.second->GetStep()) {
+            cleanupTxs.push_back(pr.first);
+        }
+    }
+
+    size_t cleaned = 0;
+    for (ui64 txId : cleanupTxs) {
+        if (CleanupVolatile(txId, ctx, replies)) {
+            ++cleaned;
+        }
+    }
+
+    return cleaned;
 }
 
 ui64 TPipeline::PlannedTxInFly() const
@@ -1783,7 +1824,7 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
             return EExecutionStatus::Reschedule;
         }
 
-        NWilson::TSpan unitSpan(TWilsonTablet::TabletFull, txc.TransactionExecutionSpan.GetTraceId(), "Datashard.Unit");
+        NWilson::TSpan unitSpan(TWilsonTablet::TabletDetailed, txc.TransactionExecutionSpan.GetTraceId(), "Datashard.Unit");
         
         NCpuTime::TCpuTimer timer;
         auto status = unit.Execute(op, txc, ctx);

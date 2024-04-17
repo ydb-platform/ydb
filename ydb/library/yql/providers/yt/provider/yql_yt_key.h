@@ -57,8 +57,6 @@ public:
         TExprNode::TPtr ResolveHandler;
         TExprNode::TPtr DiveHandler;
         TExprNode::TPtr PostHandler;
-
-        ui64 StateKey;
     };
 
     struct TWalkFoldersImplArgs {

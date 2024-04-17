@@ -14,9 +14,11 @@ TKqpComputeActor::TKqpComputeActor(const TActorId& executerId, ui64 txId, NDqPro
     IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
-    NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena)
+    NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
     : TBase(executerId, txId, task, std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena))
     , ComputeCtx(settings.StatsMode)
+    , FederatedQuerySetup(federatedQuerySetup)
 {
     if (GetTask().GetMeta().Is<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta>()) {
         Meta.ConstructInPlace();
@@ -44,7 +46,7 @@ void TKqpComputeActor::DoBootstrap() {
     execCtx.RandomProvider = TAppData::RandomProvider.Get();
     execCtx.TimeProvider = TAppData::TimeProvider.Get();
     execCtx.ComputeCtx = &ComputeCtx;
-    execCtx.ComputationFactory = NMiniKQL::GetKqpActorComputeFactory(&ComputeCtx);
+    execCtx.ComputationFactory = NMiniKQL::GetKqpActorComputeFactory(&ComputeCtx, FederatedQuerySetup);
     execCtx.ApplyCtx = nullptr;
     execCtx.TypeEnv = nullptr;
     execCtx.PatternCache = GetKqpResourceManager()->GetPatternCache();
@@ -278,10 +280,11 @@ IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::T
     IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
-    NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena)
+    NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
 {
     return new TKqpComputeActor(executerId, txId, task, std::move(asyncIoFactory),
-        functionRegistry, settings, memoryLimits, std::move(traceId), std::move(arena));
+        functionRegistry, settings, memoryLimits, std::move(traceId), std::move(arena), federatedQuerySetup);
 }
 
 } // namespace NKqp

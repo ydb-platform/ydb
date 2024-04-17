@@ -42,10 +42,10 @@ public:
     }
 
     TColumnMergeContext(const ui32 columnId, const ISnapshotSchema::TPtr& schema, const ui32 portionRowsCountLimit, const ui32 chunkRawBytesLimit,
-        const std::optional<TColumnSerializationStat>& columnStat, const TSaverContext& saverContext)
+        const std::optional<TColumnSerializationStat>& columnStat)
         : ColumnId(columnId)
         , SchemaInfo(schema)
-        , Saver(schema->GetColumnSaver(columnId, saverContext))
+        , Saver(schema->GetColumnSaver(columnId))
         , Loader(schema->GetColumnLoaderOptional(columnId))
         , ResultField(schema->GetIndexInfo().GetColumnFieldVerified(columnId))
         , PortionRowsCountLimit(portionRowsCountLimit)

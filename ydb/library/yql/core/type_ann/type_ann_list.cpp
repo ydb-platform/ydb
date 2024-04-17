@@ -1897,8 +1897,13 @@ namespace {
 
     IGraphTransformer::TStatus EmptyIteratorWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+        for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
+            if (!EnsureDependsOn(*input->Child(i), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
         if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
@@ -2168,7 +2173,10 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (const auto stepSlot = IsDataTypeDateOrTzDateOrInterval(slot) ? EDataSlot::Interval : MakeSigned(slot); stepItemType) {
+        const auto stepSlot = IsDataTypeDateOrTzDateOrInterval(slot)
+            ? (IsDataTypeBigDate(slot) ? EDataSlot::Interval64 : EDataSlot::Interval)
+            : MakeSigned(slot);
+        if (stepItemType) {
             if (const auto requredStepType = slot == stepSlot ? commonItemType : ctx.Expr.MakeType<TDataExprType>(stepSlot); !IsSameAnnotation(*stepItemType, *requredStepType)) {
                 if (const auto status = TrySilentConvertTo(input->ChildRef(2U), *requredStepType, ctx.Expr); status == IGraphTransformer::TStatus::Repeat)
                     return status;
@@ -5394,7 +5402,7 @@ namespace {
                 const NPg::TAggregateDesc& aggDesc = *aggDescPtr;
                 const auto& finalDesc = NPg::LookupProc(aggDesc.FinalFuncId ? aggDesc.FinalFuncId : aggDesc.TransFuncId);
                 auto resultType = finalDesc.ResultType;
-                AdjustReturnType(resultType, aggDesc.ArgTypes, argTypes);
+                AdjustReturnType(resultType, aggDesc.ArgTypes, 0, argTypes);
                 input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(resultType));
             }
         } else {

@@ -1,3 +1,4 @@
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NSchemeShardUT_Private;
@@ -7,9 +8,11 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         return Sprintf(R"(
             Name: "%s"
             Config {
-              StaticCredentials {
-                User: "user"
-                Password: "pwd"
+              SrcConnectionParams {
+                StaticCredentials {
+                  User: "user"
+                  Password: "pwd"
+                }
               }
               Specific {
                 Targets {
@@ -136,7 +139,20 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         }
     }
 
-    void CreateReplicatedTable(NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode mode) {
+    Y_UNIT_TEST(Describe) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication")); // default with user & password
+        env.TestWaitNotification(runtime, txId);
+
+        const auto desc = DescribePath(runtime, "/MyRoot/Replication");
+        const auto& params = desc.GetPathDescription().GetReplicationDescription().GetConfig().GetSrcConnectionParams();
+        UNIT_ASSERT(!params.GetStaticCredentials().HasPassword());
+    }
+
+    void CreateReplicatedTable(NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode mode, const TUserAttrs& attrs) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -152,15 +168,22 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         )", NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode_Name(mode).c_str()));
         env.TestWaitNotification(runtime, txId);
 
-        const auto desc = DescribePath(runtime, "/MyRoot/Table");
-        const auto& table = desc.GetPathDescription().GetTable();
-        UNIT_ASSERT(table.HasReplicationConfig());
-        UNIT_ASSERT_EQUAL(table.GetReplicationConfig().GetMode(), mode);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::ReplicationMode(mode),
+            NLs::UserAttrsEqual(attrs),
+        });
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::ReplicationMode(mode),
+            NLs::UserAttrsEqual(attrs),
+        });
     }
 
     Y_UNIT_TEST(CreateReplicatedTable) {
-        CreateReplicatedTable(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
-        CreateReplicatedTable(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        CreateReplicatedTable(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE, {});
+        CreateReplicatedTable(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY, {{"__async_replica", "true"}});
     }
 
     Y_UNIT_TEST(CannotAddReplicationConfig) {
@@ -182,6 +205,40 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
               Mode: REPLICATION_MODE_READ_ONLY
             }
         )", {NKikimrScheme::StatusInvalidParameter});
+    }
+
+    Y_UNIT_TEST(CannotSetAsyncReplicaAttribute) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )", {NKikimrScheme::StatusInvalidParameter}, AlterUserAttrs({{"__async_replica", "true"}}));
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            ReplicationConfig {
+              Mode: REPLICATION_MODE_READ_ONLY
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::UserAttrsHas({{"__async_replica", "true"}}),
+        });
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusInvalidParameter},
+            AlterUserAttrs({{"__async_replica", "true"}}, {}));
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusInvalidParameter},
+            AlterUserAttrs({}, {"__async_replica"}));
     }
 
     Y_UNIT_TEST(AlterReplicatedTable) {

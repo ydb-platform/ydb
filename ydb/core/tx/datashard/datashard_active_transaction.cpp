@@ -410,7 +410,7 @@ TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
     if (!DataTx) {
         Y_ABORT_UNLESS(TxBody);
         DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                    GetReceivedAt(), TxBody, MvccSnapshotRepeatable);
+                                                    GetReceivedAt(), TxBody, IsMvccSnapshotRepeatable());
         if (DataTx->HasStreamResponse())
             SetStreamSink(DataTx->GetSink());
     }
@@ -639,7 +639,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
 
     bool extractKeys = DataTx->IsTxInfoLoaded();
     DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                GetReceivedAt(), TxBody, MvccSnapshotRepeatable);
+                                                GetReceivedAt(), TxBody, IsMvccSnapshotRepeatable());
     if (DataTx->Ready() && extractKeys) {
         DataTx->ExtractKeys(true);
     }
@@ -935,6 +935,27 @@ bool TActiveTransaction::OnStopping(TDataShard& self, const TActorContext& ctx) 
 
         // Distributed ops avoid doing new work when stopping
         return false;
+    }
+}
+
+void TActiveTransaction::OnCleanup(TDataShard& self, std::vector<std::unique_ptr<IEventHandle>>& replies) {
+    if (!IsImmediate() && GetTarget() && !HasCompletedFlag()) {
+        auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(GetKind());
+        auto status = NKikimrTxDataShard::TEvProposeTransactionResult::ABORTED;
+        auto result = std::make_unique<TEvDataShard::TEvProposeTransactionResult>(
+            kind, self.TabletID(), GetTxId(), status);
+
+        if (self.State == TShardState::SplitSrcWaitForNoTxInFlight) {
+            result->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, TStringBuilder()
+                << "DataShard " << self.TabletID() << " is splitting");
+        } else if (self.Pipeline.HasWaitingSchemeOps()) {
+            result->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, TStringBuilder()
+                << "DataShard " << self.TabletID() << " is blocked by a schema operation");
+        } else {
+            result->AddError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Transaction was cleaned up");
+        }
+
+        replies.push_back(std::make_unique<IEventHandle>(GetTarget(), self.SelfId(), result.release(), 0, GetCookie()));
     }
 }
 

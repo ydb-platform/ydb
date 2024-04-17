@@ -47,6 +47,11 @@ bool IsAbortedStatus(FederatedQuery::QueryMeta::ComputeStatus status)
     return IsIn({ FederatedQuery::QueryMeta::ABORTED_BY_USER, FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM }, status);
 }
 
+bool IsFailedStatus(FederatedQuery::QueryMeta::ComputeStatus status) {
+    return IsIn({ FederatedQuery::QueryMeta::ABORTED_BY_USER, FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM,
+         FederatedQuery::QueryMeta::FAILED }, status);
+}
+
 bool IsBillablelStatus(FederatedQuery::QueryMeta::ComputeStatus status, NYql::NDqProto::StatusIds::StatusCode statusCode) {
     switch(status) {
     case FederatedQuery::QueryMeta::ABORTED_BY_USER:

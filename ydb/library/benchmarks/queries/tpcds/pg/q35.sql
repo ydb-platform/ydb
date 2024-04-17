@@ -48,12 +48,12 @@ select
           cd_dep_count,
           cd_dep_employed_count,
           cd_dep_college_count
- order by ca_state,
-          cd_gender,
-          cd_marital_status,
-          cd_dep_count,
-          cd_dep_employed_count,
-          cd_dep_college_count
+ order by ca_state nulls first,
+          cd_gender nulls first,
+          cd_marital_status nulls first,
+          cd_dep_count nulls first,
+          cd_dep_employed_count nulls first,
+          cd_dep_college_count nulls first
  limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query35.tpl

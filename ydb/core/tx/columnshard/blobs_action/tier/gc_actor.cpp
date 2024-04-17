@@ -13,12 +13,12 @@ void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjec
 }
 
 void TGarbageCollectionActor::Bootstrap(const TActorContext& ctx) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("actor", "TGarbageCollectionActor")("event", "starting");
-    for (auto&& i : GCTask->GetDraftBlobIds()) {
-        BlobIdsToRemove.emplace(i.GetLogoBlobId());
-    }
     for (auto i = GCTask->GetBlobsToRemove().GetDirect().GetIterator(); i.IsValid(); ++i) {
         BlobIdsToRemove.emplace(i.GetBlobId().GetLogoBlobId());
+    }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("actor", "TGarbageCollectionActor")("event", "starting")("storage_id", GCTask->GetStorageId())("drafts", GCTask->GetDraftBlobIds().size())("to_delete", BlobIdsToRemove.size());
+    for (auto&& i : GCTask->GetDraftBlobIds()) {
+        BlobIdsToRemove.emplace(i.GetLogoBlobId());
     }
     for (auto&& i : BlobIdsToRemove) {
         auto awsRequest = Aws::S3::Model::DeleteObjectRequest().WithKey(i.ToString());

@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/apps/version
     ydb/library/actors/testlib
     library/cpp/testing/unittest
     ydb/core/base

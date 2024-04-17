@@ -437,7 +437,7 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TStageInfo& stageIn
 {
     auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
-    if (stage.GetIsEffectsStage()) {
+    if (stage.GetIsEffectsStage() && stage.GetSinks().empty()) {
         YQL_ENSURE(stageInfo.OutputsCount == 1);
 
         for (auto& taskId : stageInfo.Tasks) {

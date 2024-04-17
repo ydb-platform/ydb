@@ -10,6 +10,7 @@ NActors::IActor* CreateStatisticsTableCreator(std::unique_ptr<NActors::IEventBas
 NActors::IActor* CreateSaveStatisticsQuery(const TPathId& pathId, ui64 statType,
     std::vector<TString>&& columnNames, std::vector<TString>&& data);
 
-NActors::IActor* CreateLoadStatisticsQuery(const TPathId& pathId, ui64 statType, const TString& columnName);
+NActors::IActor* CreateLoadStatisticsQuery(const TPathId& pathId, ui64 statType,
+    const TString& columnName, ui64 cookie);
 
 };

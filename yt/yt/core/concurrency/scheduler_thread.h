@@ -6,44 +6,28 @@ namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSchedulerThreadBase
+class TSchedulerThread
     : public TFiberSchedulerThread
 {
 public:
-    ~TSchedulerThreadBase();
-
     void Stop(bool graceful);
     void Stop();
 
 protected:
     const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_;
+
     std::atomic<bool> GracefulStop_ = false;
 
-    TSchedulerThreadBase(
+    TSchedulerThread(
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-        const TString& threadGroupName,
-        const TString& threadName,
-        NThreading::EThreadPriority threadPriority = NThreading::EThreadPriority::Normal,
-        int shutdownPriority = 0);
+        TString threadGroupName,
+        TString threadName,
+        NThreading::TThreadOptions options = {});
+
+    ~TSchedulerThread();
 
     virtual void OnStart();
     virtual void OnStop();
-
-private:
-    void StartEpilogue() override;
-    void StopPrologue() override;
-    void StopEpilogue() override;
-};
-
-DEFINE_REFCOUNTED_TYPE(TSchedulerThreadBase)
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TSchedulerThread
-    : public TSchedulerThreadBase
-{
-protected:
-    using TSchedulerThreadBase::TSchedulerThreadBase;
 
     TClosure OnExecute() override;
 
@@ -57,7 +41,13 @@ private:
 
     void MaybeRunMaintenance(TCpuInstant now);
     void RunMaintenance();
+
+    void StartEpilogue() override;
+    void StopPrologue() override;
+    void StopEpilogue() override;
 };
+
+DEFINE_REFCOUNTED_TYPE(TSchedulerThread)
 
 ////////////////////////////////////////////////////////////////////////////////
 

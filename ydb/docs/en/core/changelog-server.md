@@ -154,7 +154,7 @@ Release date: May 5, 2023. To update to version 23.1, select the [Downloads](dow
 **Functionality:**
 
 * Added [initial table scan](concepts/cdc.md#initial-scan) when creating a CDC changefeed. Now, you can export all the data existing at the time of changefeed creation.
-* Added [atomic index replacement](best_practices/secondary_indexes.md#atomic-index-replacement). Now, you can atomically replace one pre-defined index with another. This operation is absolutely transparent for your application. Indexes are replaced seamlessly, with no downtime.
+* Added [atomic index replacement](dba/secondary-indexes.md#atomic-index-replacement). Now, you can atomically replace one pre-defined index with another. This operation is absolutely transparent for your application. Indexes are replaced seamlessly, with no downtime.
 * Added the [audit log](cluster/audit-log.md): Event stream including data about all the operations on {{ ydb-short-name }} objects.
 
 **Performance:**

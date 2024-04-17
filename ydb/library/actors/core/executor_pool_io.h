@@ -12,6 +12,8 @@
 #include <util/system/condvar.h>
 
 namespace NActors {
+    struct TIOExecutorPoolConfig;
+
     class TIOExecutorPool: public TExecutorPoolBase {
         TArrayHolder<TExecutorThreadCtx> Threads;
         TUnorderedCache<ui32, 512, 4> ThreadQueue;

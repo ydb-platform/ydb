@@ -20,6 +20,7 @@ struct TEvPrivate {
         EvDropReplication,
         EvResolveTenantResult,
         EvUpdateTenantNodes,
+        EvRunWorkers,
 
         EvEnd,
     };
@@ -123,6 +124,9 @@ struct TEvPrivate {
 
         explicit TEvUpdateTenantNodes(const TString& tenant);
         TString ToString() const override;
+    };
+
+    struct TEvRunWorkers: public TEventLocal<TEvRunWorkers, EvRunWorkers> {
     };
 
 }; // TEvPrivate

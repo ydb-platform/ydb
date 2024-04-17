@@ -8,6 +8,7 @@
 #include <yt/yt/core/actions/callback.h>
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
+#include <yt/yt/core/misc/string_helpers.h>
 #include <yt/yt/core/misc/proc.h>
 
 #include <yt/yt/core/net/local_address.h>
@@ -43,6 +44,8 @@ using NYT::ToProto;
 ////////////////////////////////////////////////////////////////////////////////
 
 constexpr TStringBuf OriginalErrorDepthAttribute = "original_error_depth";
+
+constexpr TStringBuf ErrorMessageTruncatedSuffix = "...<message truncated>";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -352,6 +355,55 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace  {
+
+bool IsWhitelisted(const TError& error, const THashSet<TStringBuf>& attributeWhitelist)
+{
+    for (const auto& key : error.Attributes().ListKeys()) {
+        if (attributeWhitelist.contains(key)) {
+            return true;
+        }
+    }
+
+    for (const auto& innerError : error.InnerErrors()) {
+        if (IsWhitelisted(innerError, attributeWhitelist)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+//! Returns vector which consists of objects from errors such that:
+//! if N is the number of objects in errors s.t. IsWhitelisted is true
+//! then first N objects of returned vector are the ones for which IsWhitelisted is true
+//! followed by std::max(0, maxInnerErrorCount - N - 1) remaining objects
+//! finally followed by errors.back().
+std::vector<TError>& ApplyWhitelist(std::vector<TError>& errors, const THashSet<TStringBuf>& attributeWhitelist, int maxInnerErrorCount)
+{
+    if (std::ssize(errors) < std::max(2, maxInnerErrorCount)) {
+        return errors;
+    }
+
+    auto firstNotWhitelisted = std::partition(
+        errors.begin(),
+        std::prev(errors.end()),
+        [&attributeWhitelist] (const TError& error) {
+            return IsWhitelisted(error, attributeWhitelist);
+        });
+
+    int lastErrorOffset = std::max<int>(firstNotWhitelisted - errors.begin(), maxInnerErrorCount - 1);
+
+    *(errors.begin() + lastErrorOffset) = std::move(errors.back());
+    errors.resize(lastErrorOffset + 1);
+
+    return errors;
+}
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 TError::TErrorOr() = default;
 
 TError::~TErrorOr() = default;
@@ -369,12 +421,24 @@ TError::TErrorOr(TError&& other) noexcept
 
 TError::TErrorOr(const std::exception& ex)
 {
-    if (const auto* compositeException = dynamic_cast<const TCompositeException*>(&ex)) {
+    if (auto simpleException = dynamic_cast<const TSimpleException*>(&ex)) {
+        *this = TError(NYT::EErrorCode::Generic, simpleException->GetMessage());
+        // NB: clang-14 is incapable of capturing structured binding variables
+        //  so we force materialize them via this function call.
+        auto addAttribute = [this] (const auto& key, const auto& value) {
+            std::visit([&] (const auto& actual) {
+                *this <<= TErrorAttribute(key, actual);
+            }, value);
+        };
+        for (const auto& [key, value] : simpleException->GetAttributes()) {
+            addAttribute(key, value);
+        }
         try {
-            std::rethrow_exception(compositeException->GetInnerException());
+            if (simpleException->GetInnerException()) {
+                std::rethrow_exception(simpleException->GetInnerException());
+            }
         } catch (const std::exception& innerEx) {
-            *this = TError(NYT::EErrorCode::Generic, compositeException->GetMessage())
-                << TError(innerEx);
+            *this <<= TError(innerEx);
         }
     } else if (const auto* errorEx = dynamic_cast<const TErrorException*>(&ex)) {
         *this = errorEx->Error();
@@ -614,7 +678,10 @@ std::vector<TError>* TError::MutableInnerErrors()
 
 const TString InnerErrorsTruncatedKey("inner_errors_truncated");
 
-TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<TStringBuf>& attributeWhitelist) const &
+TError TError::Truncate(
+    int maxInnerErrorCount,
+    i64 stringLimit,
+    const THashSet<TStringBuf>& attributeWhitelist) const &
 {
     if (!Impl_) {
         return TError();
@@ -622,13 +689,6 @@ TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<
 
     auto truncateInnerError = [=, &attributeWhitelist] (const TError& innerError) {
         return innerError.Truncate(maxInnerErrorCount, stringLimit, attributeWhitelist);
-    };
-
-    auto truncateString = [stringLimit] (TString string) {
-        if (std::ssize(string) > stringLimit) {
-            return Format("%v...<message truncated>", string.substr(0, stringLimit));
-        }
-        return string;
     };
 
     auto truncateAttributes = [stringLimit, &attributeWhitelist] (const IAttributeDictionary& attributes) {
@@ -652,28 +712,43 @@ TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<
 
     auto result = std::make_unique<TImpl>();
     result->SetCode(GetCode());
-    result->SetMessage(truncateString(GetMessage()));
+    result->SetMessage(TruncateString(GetMessage(), stringLimit, ErrorMessageTruncatedSuffix));
     if (Impl_->HasAttributes()) {
         result->SetAttributes(truncateAttributes(Impl_->Attributes()));
     }
     result->CopyBuiltinAttributesFrom(*Impl_);
 
-    if (std::ssize(InnerErrors()) <= maxInnerErrorCount) {
-        for (const auto& innerError : InnerErrors()) {
-            result->MutableInnerErrors()->push_back(truncateInnerError(innerError));
+    const auto& innerErrors = InnerErrors();
+    auto& copiedInnerErrors = *result->MutableInnerErrors();
+
+    if (std::ssize(innerErrors) <= maxInnerErrorCount) {
+        for (const auto& innerError : innerErrors) {
+            copiedInnerErrors.push_back(truncateInnerError(innerError));
         }
     } else {
         result->MutableAttributes()->Set(InnerErrorsTruncatedKey, true);
-        for (int i = 0; i + 1 < maxInnerErrorCount; ++i) {
-            result->MutableInnerErrors()->push_back(truncateInnerError(InnerErrors()[i]));
+
+        // NB(arkady-e1ppa): We want to always keep the last inner error,
+        // so we make room for it and do not check if it is whitelisted.
+        for (int idx = 0; idx < std::ssize(innerErrors) - 1; ++idx) {
+            const auto& innerError = innerErrors[idx];
+            if (
+                IsWhitelisted(innerError, attributeWhitelist) ||
+                std::ssize(copiedInnerErrors) < maxInnerErrorCount - 1)
+            {
+                copiedInnerErrors.push_back(truncateInnerError(innerError));
+            }
         }
-        result->MutableInnerErrors()->push_back(truncateInnerError(InnerErrors().back()));
+        copiedInnerErrors.push_back(truncateInnerError(innerErrors.back()));
     }
 
     return TError(std::move(result));
 }
 
-TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<TStringBuf>& attributeWhitelist) &&
+TError TError::Truncate(
+    int maxInnerErrorCount,
+    i64 stringLimit,
+    const THashSet<TStringBuf>& attributeWhitelist) &&
 {
     if (!Impl_) {
         return TError();
@@ -681,12 +756,6 @@ TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<
 
     auto truncateInnerError = [=, &attributeWhitelist] (TError& innerError) {
         innerError = std::move(innerError).Truncate(maxInnerErrorCount, stringLimit, attributeWhitelist);
-    };
-
-    auto truncateString = [stringLimit] (TString* string) {
-        if (std::ssize(*string) > stringLimit) {
-            *string = Format("%v...<message truncated>", string->substr(0, stringLimit));
-        }
     };
 
     auto truncateAttributes = [stringLimit, &attributeWhitelist] (IAttributeDictionary* attributes) {
@@ -700,7 +769,7 @@ TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<
         }
     };
 
-    truncateString(Impl_->MutableMessage());
+    TruncateStringInplace(Impl_->MutableMessage(), stringLimit, ErrorMessageTruncatedSuffix);
     if (Impl_->HasAttributes()) {
         truncateAttributes(Impl_->MutableAttributes());
     }
@@ -709,14 +778,12 @@ TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<
             truncateInnerError(innerError);
         }
     } else {
-        auto& innerErrors = *MutableInnerErrors();
+        auto& innerErrors = ApplyWhitelist(*MutableInnerErrors(), attributeWhitelist, maxInnerErrorCount);
         MutableAttributes()->Set(InnerErrorsTruncatedKey, true);
-        for (int i = 0; i + 1 < maxInnerErrorCount; ++i) {
-            truncateInnerError(innerErrors[i]);
+
+        for (auto& innerError : innerErrors) {
+            truncateInnerError(innerError);
         }
-        truncateInnerError(innerErrors.back());
-        innerErrors[maxInnerErrorCount - 1] = std::move(innerErrors.back());
-        innerErrors.resize(maxInnerErrorCount);
     }
 
     return std::move(*this);
@@ -875,17 +942,30 @@ void TError::Load(TStreamLoadContext& context)
 
 std::optional<TError> TError::FindMatching(TErrorCode code) const
 {
+    return FindMatching([&] (TErrorCode errorCode) {
+        return code == errorCode;
+    });
+}
+
+std::optional<TError> TError::FindMatching(const THashSet<TErrorCode>& codes) const
+{
+    return FindMatching([&] (TErrorCode code) {
+        return codes.contains(code);
+    });
+}
+
+std::optional<TError> TError::FindMatching(std::function<bool(TErrorCode)> filter) const
+{
     if (!Impl_) {
         return {};
     }
 
-    if (GetCode() == code) {
+    if (filter(GetCode())) {
         return *this;
     }
 
     for (const auto& innerError : InnerErrors()) {
-        auto innerResult = innerError.FindMatching(code);
-        if (innerResult) {
+        if (auto innerResult = innerError.FindMatching(filter)) {
             return innerResult;
         }
     }
@@ -1104,7 +1184,7 @@ void FromProto(TError* error, const NYT::NProto::TError& protoError)
     }
 
     error->SetCode(TErrorCode(protoError.code()));
-    error->SetMessage(protoError.message());
+    error->SetMessage(FromProto<TString>(protoError.message()));
     if (protoError.has_attributes()) {
         error->Impl_->SetAttributes(FromProto(protoError.attributes()));
     } else {

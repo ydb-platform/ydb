@@ -1,0 +1,9 @@
+{
+    "schema" = <"strict" = %true; "unique_keys" = %false> [
+        {"type" = "int64"; "required" = %true; "name" = "row"};
+        {"type" = "int8"; "required" = %true; "name" = "i8"};
+        {"type" = "int16"; "required" = %true; "name" = "i16"};
+        {"type" = "int32"; "required" = %true; "name" = "i32"};
+        {"type" = "int64"; "required" = %true; "name" = "i64"};
+    ];
+}

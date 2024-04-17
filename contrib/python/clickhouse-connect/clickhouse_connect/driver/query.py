@@ -5,6 +5,7 @@ import uuid
 import pytz
 
 from enum import Enum
+from io import IOBase
 from typing import Any, Tuple, Dict, Sequence, Optional, Union, Generator
 from datetime import date, datetime, tzinfo
 
@@ -170,9 +171,7 @@ class QueryContext(BaseQueryContext):
             active_tz = self.server_tz
         else:
             active_tz = self.local_tz
-        #  Special case where if everything is UTC, including the local timezone, we use naive timezones
-        #  for performance reasons
-        if active_tz == pytz.UTC and active_tz.utcoffset(datetime.now()) == self.local_tz.utcoffset(datetime.now()):
+        if active_tz == pytz.UTC:
             return None
         return active_tz
 
@@ -304,8 +303,7 @@ class QueryResult(Closable):
     def rows_stream(self) -> StreamContext:
         def stream():
             for block in self._row_block_stream():
-                for row in block:
-                    yield row
+                yield from block
 
         return StreamContext(self, stream())
 
@@ -354,6 +352,8 @@ def quote_identifier(identifier: str):
 
 def finalize_query(query: str, parameters: Optional[Union[Sequence, Dict[str, Any]]],
                    server_tz: Optional[tzinfo] = None) -> str:
+    while query.endswith(';'):
+        query = query[:-1]
     if not parameters:
         return query
     if hasattr(parameters, 'items'):
@@ -363,6 +363,8 @@ def finalize_query(query: str, parameters: Optional[Union[Sequence, Dict[str, An
 
 def bind_query(query: str, parameters: Optional[Union[Sequence, Dict[str, Any]]],
                server_tz: Optional[tzinfo] = None) -> Tuple[str, Dict[str, str]]:
+    while query.endswith(';'):
+        query = query[:-1]
     if not parameters:
         return query, {}
     if external_bind_re.search(query) is None:
@@ -410,7 +412,7 @@ def format_query_value(value: Any, server_tz: tzinfo = pytz.UTC):
         return format_query_value(value.value, server_tz)
     if isinstance(value, (uuid.UUID, ipaddress.IPv4Address, ipaddress.IPv6Address)):
         return f"'{value}'"
-    return str(value)
+    return value
 
 
 # pylint: disable=too-many-branches
@@ -486,6 +488,12 @@ def to_arrow(content: bytes):
     pyarrow = check_arrow()
     reader = pyarrow.ipc.RecordBatchFileReader(content)
     return reader.read_all()
+
+
+def to_arrow_batches(buffer: IOBase) -> StreamContext:
+    pyarrow = check_arrow()
+    reader = pyarrow.ipc.open_stream(buffer)
+    return StreamContext(buffer, reader)
 
 
 def arrow_buffer(table) -> Tuple[Sequence[str], bytes]:

@@ -7,6 +7,9 @@ $datetime64_val = unwrap(cast(-86400 as datetime64));
 $timestamp_val = unwrap(cast(86400l*1000000 as timestamp));
 $timestamp64_val = unwrap(cast(-86400l*1000000 as timestamp64));
 
+$interval_val = unwrap(cast(1 as interval));
+$interval64_val = unwrap(cast(-1 as interval64));
+
 select 1, [$date_val, $datetime_val]
 , [$date_val, $timestamp_val]
 , [$date_val, $date32_val]
@@ -36,8 +39,11 @@ select 1, [$date_val, $datetime_val]
 , [$timestamp64_val, $datetime_val]
 , [$timestamp64_val, $timestamp_val]
 , [$timestamp64_val, $date32_val]
-, [$timestamp64_val, $datetime64_val];
-
-select [$date_val, $datetime_val, $timestamp_val, $date32_val, $datetime64_val, $timestamp64_val];
+, [$timestamp64_val, $datetime64_val]
+, 7,  [$date_val, $datetime_val, $timestamp_val, $date32_val, $datetime64_val, $timestamp64_val];
 
 select [unwrap(cast(1 as interval)), unwrap(cast(-1 as interval64))];
+
+$datetime_values = [$date_val, $date32_val, $datetime_val, $datetime64_val, $timestamp_val, $timestamp64_val];
+$interval_values = [$interval_val, $interval64_val];
+select ListSort(DictKeys(ToSet($datetime_values))), ListSort(DictKeys(ToSet($interval_values)));

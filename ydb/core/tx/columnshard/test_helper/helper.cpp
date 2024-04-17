@@ -1,4 +1,5 @@
 #include "helper.h"
+#include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -59,11 +60,15 @@ std::vector<NKikimr::NArrow::NTest::TTestColumn> TTestColumn::CropSchema(const s
 namespace NKikimr::NArrow {
 
 std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const std::vector<NTest::TTestColumn>& columns, const std::set<std::string>& notNullColumns /*= {}*/) {
-    return MakeArrowFields(NTest::TTestColumn::ConvertToPairs(columns), notNullColumns);
+    auto result = MakeArrowFields(NTest::TTestColumn::ConvertToPairs(columns), notNullColumns);
+    UNIT_ASSERT_C(result.ok(), result.status().ToString());
+    return result.ValueUnsafe();
 }
 
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const std::vector<NTest::TTestColumn>& columns, const std::set<std::string>& notNullColumns /*= {}*/) {
-    return MakeArrowSchema(NTest::TTestColumn::ConvertToPairs(columns), notNullColumns);
+    auto result = MakeArrowSchema(NTest::TTestColumn::ConvertToPairs(columns), notNullColumns);
+    UNIT_ASSERT_C(result.ok(), result.status().ToString());
+    return result.ValueUnsafe();
 }
 
 }

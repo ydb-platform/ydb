@@ -23,7 +23,7 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
 
     const TPortionMeta::EProduced producedClassResultCompaction = GetResultProducedClass();
     for (auto& portionInfo : AppendedPortions) {
-        portionInfo.GetPortionInfo().UpdateRecordsMeta(producedClassResultCompaction);
+        portionInfo.GetPortionConstructor().MutableMeta().UpdateRecordsMeta(producedClassResultCompaction);
     }
 }
 
@@ -68,8 +68,8 @@ void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, T
     NeedGranuleStatusProvide = false;
 }
 
-TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TSplitSettings& splitSettings, std::shared_ptr<TGranuleMeta> granule, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext)
-    : TBase(splitSettings, saverContext, StaticTypeName())
+TCompactColumnEngineChanges::TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext)
+    : TBase(saverContext, NBlobOperations::EConsumer::GENERAL_COMPACTION)
     , GranuleMeta(granule) {
     Y_ABORT_UNLESS(GranuleMeta);
 
@@ -77,7 +77,7 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TSplitSettings& s
     for (const auto& portionInfo : portions) {
         Y_ABORT_UNLESS(!portionInfo->HasRemoveSnapshot());
         SwitchedPortions.emplace_back(*portionInfo);
-        AFL_VERIFY(PortionsToRemove.emplace(portionInfo->GetAddress(), *portionInfo).second);
+        AddPortionToRemove(*portionInfo);
         Y_ABORT_UNLESS(portionInfo->GetPathId() == GranuleMeta->GetPathId());
     }
     Y_ABORT_UNLESS(SwitchedPortions.size());

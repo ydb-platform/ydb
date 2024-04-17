@@ -604,6 +604,22 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
     }
 }
 
+void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txStats) {
+    ui64 datashardCpuTimeUs = 0;
+    for (const auto& perShard : txStats.GetPerShardStats()) {
+        AffectedShards.emplace(perShard.GetShardId());
+
+        datashardCpuTimeUs += perShard.GetCpuTimeUsec();
+        UpdateAggr(ExtraStats.MutableShardsCpuTimeUs(), perShard.GetCpuTimeUsec());
+    }
+
+    Result->SetCpuTimeUs(Result->GetCpuTimeUs() + datashardCpuTimeUs);
+
+    if (CollectFullStats(StatsMode)) {
+        DatashardStats.emplace_back(std::move(txStats));
+    }
+}
+
 void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats) {
     Y_ASSERT(stats.GetTasks().size() == 1);
     const NYql::NDqProto::TDqTaskStats& taskStats = stats.GetTasks(0);
@@ -746,7 +762,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         for (auto& p2 : p.second.Egress) {
             ExportAggAsyncBufferStats(p2.second, (*stageStats.MutableEgress())[p2.first]);
         }
-    }    
+    }
 }
 
 void TQueryExecutionStats::Finish() {
@@ -761,7 +777,7 @@ void TQueryExecutionStats::Finish() {
     Result->SetDurationUs(FinishTs.MicroSeconds() - StartTs.MicroSeconds());
 
     // Result->Result* feilds are (temporary?) commented out in proto due to lack of use
-    // 
+    //
     // Result->SetResultBytes(ResultBytes);
     // Result->SetResultRows(ResultRows);
 
@@ -838,6 +854,11 @@ void TProgressStatEntry::Out(IOutputStream& o) const {
 }
 
 void TProgressStat::Set(const NDqProto::TDqComputeActorStats& stats) {
+    if (Cur.Defined) {
+        Cur = TEntry();
+    }
+
+    Cur.Defined = true;
     Cur.ComputeTime += TDuration::MicroSeconds(stats.GetCpuTimeUs());
     for (auto& task : stats.GetTasks()) {
         for (auto& table: task.GetTables()) {
@@ -848,7 +869,7 @@ void TProgressStat::Set(const NDqProto::TDqComputeActorStats& stats) {
 }
 
 TProgressStat::TEntry TProgressStat::GetLastUsage() const {
-    return Cur - Total;
+    return Cur.Defined ? Cur - Total : Cur;
 }
 
 void TProgressStat::Update() {

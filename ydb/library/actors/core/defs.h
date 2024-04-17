@@ -69,6 +69,11 @@ namespace NActors {
         Tail,
     };
 
+    enum class EASProfile {
+        Default,
+        LowCpuConsumption,
+        LowLatency,
+    };
 }
 
 template<>

@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include "yt/yt/core/actions/public.h"
+
 #include <yt/yt/core/concurrency/public.h>
 
 #include <yt/yt/core/http/public.h>
@@ -17,7 +19,8 @@ NHttp::IServerPtr CreateServer(
 NHttp::IServerPtr CreateServer(
     const TServerConfigPtr& config,
     const NConcurrency::IPollerPtr& poller,
-    const NConcurrency::IPollerPtr& acceptor);
+    const NConcurrency::IPollerPtr& acceptor,
+    const IInvokerPtr& controlInvoker);
 
 ////////////////////////////////////////////////////////////////////////////////
 

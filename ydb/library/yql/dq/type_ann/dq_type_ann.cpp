@@ -421,7 +421,7 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
 
 template <bool IsMapJoin>
 const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool stream, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 8, 9, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 8, 10, ctx)) {
         return nullptr;
     }
 
@@ -495,7 +495,7 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         ? join.RightLabel().Cast<TCoAtom>().Value()
         : TStringBuf("");
 
-    if (input->ChildrenSize() > 8U) {
+    if (input->ChildrenSize() > 9U) {
         for (auto i = 0U; i < input->Tail().ChildrenSize(); ++i) {
             if (const auto& flag = *input->Tail().Child(i); !flag.IsAtom({"LeftAny", "RightAny"})) {
                 ctx.AddError(TIssue(ctx.GetPosition(flag.Pos()), TStringBuilder() << "Unsupported DQ join option: " << flag.Content()));
@@ -565,6 +565,31 @@ TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
     }
 
     input->SetTypeAnn(resultType);
+    return TStatus::Ok;
+}
+
+TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto cnStreamLookup = TDqCnStreamLookup(input);
+    auto leftInputType = GetDqConnectionType(TDqConnection(input), ctx);
+    if (!leftInputType) {
+        return TStatus::Error;
+    }
+    auto leftRowType = GetSeqItemType(leftInputType);
+
+    const auto rightRowType = input->Child(TDqCnStreamLookup::idx_RightInputRowType)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+
+    const auto outputRowType = GetDqJoinResultType<true>(
+        input->Pos(),
+        *leftRowType->Cast<TStructExprType>(),
+        cnStreamLookup.LeftLabel().Cast<TCoAtom>().StringValue(),
+        *rightRowType->Cast<TStructExprType>(),
+        cnStreamLookup.RightLabel().StringValue(),
+        cnStreamLookup.JoinType().StringValue(),
+        cnStreamLookup.JoinKeys(),
+        ctx
+    );
+    //TODO (YQ-2068) verify lookup parameters
+    input->SetTypeAnn(ctx.MakeType<TStreamExprType>(outputRowType));
     return TStatus::Ok;
 }
 
@@ -979,6 +1004,9 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
             if (TDqCnMap::Match(input.Get())) {
                 return AnnotateDqConnection(input, ctx);
             }
+            if (TDqCnStreamLookup::Match(input.Get())) {
+                return AnnotateDqCnStreamLookup(input, ctx);
+            }
 
             if (TDqCnBroadcast::Match(input.Get())) {
                 return AnnotateDqConnection(input, ctx);
@@ -995,7 +1023,7 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
             if (TDqCnMerge::Match(input.Get())) {
                 return AnnotateDqCnMerge(input, ctx);
             }
-
+            
             if (TDqReplicate::Match(input.Get())) {
                 return AnnotateDqReplicate(input, ctx);
             }

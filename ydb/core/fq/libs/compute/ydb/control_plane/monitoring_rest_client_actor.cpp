@@ -1,14 +1,14 @@
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
-#include <ydb/library/services/services.pb.h>
-
-#include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-
 #include <ydb/library/actors/http/http_proxy.h>
+
+#include <ydb/library/security/util.h>
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/utils/actors/http_sender.h>
 #include <ydb/library/yql/utils/actors/http_sender_actor.h>
@@ -25,24 +25,6 @@
 namespace NFq {
 
 using namespace NActors;
-
-namespace {
-
-auto RetryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolicy(
-    [](const NHttp::TEvHttpProxy::TEvHttpIncomingResponse* resp){
-        if (!resp || !resp->Response) {
-            // Connection wasn't established. Should retry.
-            return ERetryErrorClass::ShortRetry;
-        }
-
-        if (resp->Response->Status == "401") {
-            return ERetryErrorClass::NoRetry;
-        }
-
-        return ERetryErrorClass::ShortRetry;
-    });
-
-}
 
 class TMonitoringRestServiceActor : public NActors::TActor<TMonitoringRestServiceActor> {
 public:
@@ -73,10 +55,11 @@ public:
                 .AddUrlParam("path", Database)
                 .Build()
         );
-        LOG_D(httpRequest->GetRawData());
-        httpRequest->Set("Authorization", CredentialsProvider->GetAuthInfo());
+        auto ticket = CredentialsProvider->GetAuthInfo();
+        LOG_D(httpRequest->GetRawData() << " using ticket " << NKikimr::MaskTicket(ticket));
+        httpRequest->Set("Authorization", ticket);
 
-        auto httpSenderId = Register(NYql::NDq::CreateHttpSenderActor(SelfId(), HttpProxyId, RetryPolicy));
+        auto httpSenderId = Register(NYql::NDq::CreateHttpSenderActor(SelfId(), HttpProxyId, NYql::NDq::THttpSenderRetryPolicy::GetNoRetryPolicy()));
         Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), 0, Cookie);
         Requests[Cookie++] = ev;
     }

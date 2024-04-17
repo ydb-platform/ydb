@@ -3,37 +3,29 @@
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 
 namespace NYql::NDq {
-    TGenericTokenProvider::TGenericTokenProvider(
-        const NYql::Generic::TSource& source, const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory)
-        : Source_(source)
-        , StaticIAMToken_(source.GetToken())
-        , CredentialsProvider_(nullptr)
+    TGenericTokenProvider::TGenericTokenProvider(const TString& staticIamToken)
+        : StaticIAMToken_(staticIamToken)
     {
-        // 1. User has provided IAM-token itself.
-        // This token will be used during the whole lifetime of a read actor.
-        if (!StaticIAMToken_.empty()) {
-            return;
-        }
+    }
 
-        // 2. User has provided service account creds.
-        // We create token accessor client that will renew token accessor by demand.
-        if (source.GetServiceAccountId() && source.GetServiceAccountIdSignature()) {
-            Y_ENSURE(credentialsFactory, "CredentialsFactory is not initialized");
+    TGenericTokenProvider::TGenericTokenProvider(
+        const TString& serviceAccountId,
+        const TString& ServiceAccountIdSignature,
+        const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory)
+    {
+        Y_ENSURE(!serviceAccountId.Empty(), "No service account provided");
+        Y_ENSURE(!ServiceAccountIdSignature.Empty(), "No service account signature provided");
+        Y_ENSURE(credentialsFactory, "CredentialsFactory is not initialized");
 
-            auto structuredTokenJSON =
-                TStructuredTokenBuilder()
-                    .SetServiceAccountIdAuth(source.GetServiceAccountId(), source.GetServiceAccountIdSignature())
-                    .ToJson();
+        auto structuredTokenJSON =
+            TStructuredTokenBuilder()
+                .SetServiceAccountIdAuth(serviceAccountId, ServiceAccountIdSignature)
+                .ToJson();
 
-            // If service account is provided, obtain IAM-token
-            Y_ENSURE(structuredTokenJSON, "empty structured token");
+        Y_ENSURE(structuredTokenJSON, "empty structured token");
 
-            auto credentialsProviderFactory =
-                CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, structuredTokenJSON, false);
-            CredentialsProvider_ = credentialsProviderFactory->CreateProvider();
-        }
-
-        // 3. If we reached this point, it means that user doesn't need token auth.
+        auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, structuredTokenJSON, false);
+        CredentialsProvider_ = credentialsProviderFactory->CreateProvider();
     }
 
     void TGenericTokenProvider::MaybeFillToken(NConnector::NApi::TDataSourceInstance& dsi) const {
@@ -60,8 +52,17 @@ namespace NYql::NDq {
     }
 
     TGenericTokenProvider::TPtr
-    CreateGenericTokenProvider(const NYql::Generic::TSource& source,
-                               const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
-        return std::make_unique<TGenericTokenProvider>(source, credentialsFactory);
+    CreateGenericTokenProvider(
+        const TString& staticIamToken,
+        const TString& serviceAccountId, const TString& serviceAccountIdSignature,
+        const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory)
+    {
+        if (!staticIamToken.Empty()) {
+            return std::make_unique<TGenericTokenProvider>(staticIamToken);
+        }
+        if (!serviceAccountId.Empty()) {
+            return std::make_unique<TGenericTokenProvider>(serviceAccountId, serviceAccountIdSignature, credentialsFactory);
+        }
+        return std::make_unique<TGenericTokenProvider>();
     }
 } //namespace NYql::NDq

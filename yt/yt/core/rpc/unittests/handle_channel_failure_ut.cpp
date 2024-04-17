@@ -16,9 +16,13 @@ class THandleChannelFailureTestBase
     : public ::testing::Test
 {
 public:
-    IServerPtr CreateServer(const TTestServerHost& serverHost)
+    IServerPtr CreateServer(
+        const TTestServerHost& serverHost,
+        IMemoryUsageTrackerPtr memoryUsageTracker)
     {
-        return TImpl::CreateServer(serverHost.GetPort());
+        return TImpl::CreateServer(
+            serverHost.GetPort(),
+            memoryUsageTracker);
     }
 
     IChannelPtr CreateChannel(const TString& address)
@@ -50,7 +54,9 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
     auto workerPool = NConcurrency::CreateThreadPool(4, "Worker");
 
     outerServer.InitializeServer(
-        this->CreateServer(outerServer),
+        this->CreateServer(
+            outerServer,
+            outerServer.GetMemoryUsageTracker()),
         workerPool->GetInvoker(),
         /*secure*/ false,
         BIND([&] (const TString& address) {
@@ -58,7 +64,9 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
         }));
 
     innerServer.InitializeServer(
-        this->CreateServer(innerServer),
+        this->CreateServer(
+            innerServer,
+            innerServer.GetMemoryUsageTracker()),
         workerPool->GetInvoker(),
         /*secure*/ false,
         /*createChannel*/ {});

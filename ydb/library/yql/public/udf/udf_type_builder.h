@@ -738,8 +738,8 @@ public:
     }
 
     template <typename T>
-    TType* SimpleSignatureType() const {
-        return NImpl::TSimpleSignatureTypeHelper<T>::Build(*this);
+    TType* SimpleSignatureType(ui32 optionalArgs = 0) const {
+        return NImpl::TSimpleSignatureTypeHelper<T>::Build(*this, optionalArgs);
     }
 
     IFunctionTypeInfoBuilder& RunConfig(TDataTypeId type) {
@@ -1066,10 +1066,11 @@ struct TSimpleSignatureHelper<TReturn(TArgs...)> {
 
 template <typename TReturn, typename... TArgs>
 struct TSimpleSignatureTypeHelper<TReturn(TArgs...)> {
-    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
+    static TType* Build(const IFunctionTypeInfoBuilder& builder, ui32 optionalArgc) {
         auto callableBuilder = builder.Callable(sizeof...(TArgs));
         callableBuilder->Returns(TTypeBuilderHelper<TReturn>::Build(builder));
         TCallableArgsHelper<TArgs...>::Arg(*callableBuilder, builder);
+        callableBuilder->OptionalArgs(optionalArgc);
         return callableBuilder->Build();
     }
 };

@@ -14,7 +14,9 @@ class TSuspendableActionQueue
     : public ISuspendableActionQueue
 {
 public:
-    explicit TSuspendableActionQueue(const TString& threadName)
+    TSuspendableActionQueue(
+        TString threadName,
+        TSuspendableActionQueueOptions options)
         : Queue_(New<TMpscInvokerQueue>(
             CallbackEventCount_,
             GetThreadTags(threadName)))
@@ -23,7 +25,10 @@ public:
             Queue_,
             CallbackEventCount_,
             threadName,
-            threadName))
+            threadName,
+            NThreading::TThreadOptions{
+                .ThreadInitializer = options.ThreadInitializer,
+            }))
         , ShutdownCookie_(RegisterShutdownCallback(
             Format("SuspendableActionQueue(%v)", threadName),
             BIND_NO_PROPAGATE(&TSuspendableActionQueue::Shutdown, MakeWeak(this), /*graceful*/ false),
@@ -71,6 +76,7 @@ public:
     }
 
 private:
+    const TSuspendableActionQueueOptions Options_;
     const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_ = New<NThreading::TEventCount>();
     const TMpscInvokerQueuePtr Queue_;
     const IInvokerPtr Invoker_;
@@ -96,9 +102,13 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ISuspendableActionQueuePtr CreateSuspendableActionQueue(const TString& threadName)
+ISuspendableActionQueuePtr CreateSuspendableActionQueue(
+    TString threadName,
+    TSuspendableActionQueueOptions options)
 {
-    return New<TSuspendableActionQueue>(threadName);
+    return New<TSuspendableActionQueue>(
+        std::move(threadName),
+        std::move(options));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

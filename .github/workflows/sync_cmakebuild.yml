@@ -1,7 +1,7 @@
 name: Sync cmakebuild with main
 on:
   schedule:
-    - cron: "0 * * * *"
+    - cron: "0 * * * *"  # At minute 0 every hour
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}

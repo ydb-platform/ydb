@@ -139,7 +139,9 @@ namespace {
             .Col(params.Groups ? 3 : 0, 4,  NScheme::NTypeIds::String)
             .Key({0, 1});
 
+        // these tests are based on comparison of flat and b-tree indexes
         conf.WriteBTreeIndex = true;
+        conf.WriteFlatIndex = true;
         
         TPartCook cook(lay, conf);
         
@@ -235,8 +237,8 @@ namespace {
     }
 }
 
-Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
-    void AssertEqual(const TPartBtreeIndexIt& bTree, EReady bTreeReady, const TPartIndexIt& flat, EReady flatReady, const TString& message, bool allowFirstLastPageDifference = false) {
+Y_UNIT_TEST_SUITE(TPartGroupBtreeIndexIter) {
+    void AssertEqual(const TPartGroupBtreeIndexIter& bTree, EReady bTreeReady, const TPartGroupFlatIndexIter& flat, EReady flatReady, const TString& message, bool allowFirstLastPageDifference = false) {
         // Note: it's possible that B-Tree index don't return Gone status for keys before the first page or keys after the last page
         if (allowFirstLastPageDifference && flatReady == EReady::Gone && bTreeReady == EReady::Data && 
                 (bTree.GetRowId() == 0 || bTree.GetNextRowId() == bTree.GetEndRowId())) {
@@ -253,19 +255,19 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         }
     }
 
-    EReady SeekRowId(IIndexIter& iter, TTouchEnv& env, TRowId rowId, const TString& message, ui32 failsAllowed = 10) {
+    EReady SeekRowId(IPartGroupIndexIter& iter, TTouchEnv& env, TRowId rowId, const TString& message, ui32 failsAllowed = 10) {
         return Retry([&]() {
             return iter.Seek(rowId);
         }, env, message, failsAllowed);
     }
 
-    EReady SeekLast(IIndexIter& iter, TTouchEnv& env, const TString& message, ui32 failsAllowed = 10) {
+    EReady SeekLast(IPartGroupIndexIter& iter, TTouchEnv& env, const TString& message, ui32 failsAllowed = 10) {
         return Retry([&]() {
             return iter.SeekLast();
         }, env, message, failsAllowed);
     }
 
-    EReady SeekKey(IIndexIter& iter, TTouchEnv& env, ESeek seek, bool reverse, TCells key, const TKeyCellDefaults *keyDefaults, const TString& message, ui32 failsAllowed = 10) {
+    EReady SeekKey(IPartGroupIndexIter& iter, TTouchEnv& env, ESeek seek, bool reverse, TCells key, const TKeyCellDefaults *keyDefaults, const TString& message, ui32 failsAllowed = 10) {
         return Retry([&]() {
             if (reverse) {
                 return iter.SeekReverse(seek, key, keyDefaults);
@@ -275,7 +277,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         }, env, message, failsAllowed);
     }
 
-    EReady NextPrev(IIndexIter& iter, TTouchEnv& env, bool next, const TString& message, ui32 failsAllowed = 10) {
+    EReady NextPrev(IPartGroupIndexIter& iter, TTouchEnv& env, bool next, const TString& message, ui32 failsAllowed = 10) {
         return Retry([&]() {
             if (next) {
                 return iter.Next();
@@ -289,8 +291,8 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         for (TRowId rowId1 : xrange<TRowId>(0, part.Stat.Rows + 1)) {
             for (TRowId rowId2 : xrange<TRowId>(0, part.Stat.Rows + 1)) {
                 TTouchEnv bTreeEnv, flatEnv;
-                TPartBtreeIndexIt bTree(&part, &bTreeEnv, { });
-                TPartIndexIt flat(&part, &flatEnv, { });
+                TPartGroupBtreeIndexIter bTree(&part, &bTreeEnv, { });
+                TPartGroupFlatIndexIter flat(&part, &flatEnv, { });
 
                 // checking initial seek:
                 {
@@ -315,8 +317,8 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
 
     void CheckSeekLast(const TPartStore& part) {
         TTouchEnv bTreeEnv, flatEnv;
-        TPartBtreeIndexIt bTree(&part, &bTreeEnv, { });
-        TPartIndexIt flat(&part, &flatEnv, { });
+        TPartGroupBtreeIndexIter bTree(&part, &bTreeEnv, { });
+        TPartGroupFlatIndexIter flat(&part, &flatEnv, { });
 
         TString message = TStringBuilder() << "SeekLast";
         EReady bTreeReady = SeekLast(bTree, bTreeEnv, message);
@@ -333,8 +335,8 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
                         TVector<TCell> key = MakeKey(firstCell, secondCell);
 
                         TTouchEnv bTreeEnv, flatEnv;
-                        TPartBtreeIndexIt bTree(&part, &bTreeEnv, { });
-                        TPartIndexIt flat(&part, &flatEnv, { });
+                        TPartGroupBtreeIndexIter bTree(&part, &bTreeEnv, { });
+                        TPartGroupFlatIndexIter flat(&part, &flatEnv, { });
 
                         TStringBuilder message = TStringBuilder() << (reverse ?  "SeekKeyReverse" : "SeekKey") << "(" << seek << ") ";
                         for (auto c : key) {
@@ -354,8 +356,8 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         for (bool next : {true, false}) {
             for (TRowId rowId : xrange<TRowId>(0, part.Stat.Rows)) {
                 TTouchEnv bTreeEnv, flatEnv;
-                TPartBtreeIndexIt bTree(&part, &bTreeEnv, { });
-                TPartIndexIt flat(&part, &flatEnv, { });
+                TPartGroupBtreeIndexIter bTree(&part, &bTreeEnv, { });
+                TPartGroupFlatIndexIter flat(&part, &flatEnv, { });
 
                 // checking initial seek:
                 {

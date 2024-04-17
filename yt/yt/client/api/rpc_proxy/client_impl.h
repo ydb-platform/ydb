@@ -323,6 +323,9 @@ public:
     TFuture<TCellIdToSnapshotIdMap> BuildMasterSnapshots(
         const TBuildMasterSnapshotsOptions& options) override;
 
+    TFuture<TCellIdToConsistentStateMap> GetMasterConsistentState(
+        const TGetMasterConsistentStateOptions& options) override;
+
     TFuture<void> ExitReadOnly(
         NHydra::TCellId cellId,
         const TExitReadOnlyOptions& options) override;
@@ -394,14 +397,14 @@ public:
         const std::vector<NObjectClient::TCellId>& cellIds,
         const TResumeTabletCellsOptions& options) override;
 
-    TFuture<TMaintenanceId> AddMaintenance(
+    TFuture<TMaintenanceIdPerTarget> AddMaintenance(
         EMaintenanceComponent component,
         const TString& address,
         EMaintenanceType type,
         const TString& comment,
         const TAddMaintenanceOptions& options) override;
 
-    TFuture<TMaintenanceCounts> RemoveMaintenance(
+    TFuture<TMaintenanceCountsPerTarget> RemoveMaintenance(
         EMaintenanceComponent component,
         const TString& address,
         const TMaintenanceFilter& filter,
@@ -545,7 +548,7 @@ private:
 
     NTransactionClient::ITimestampProviderPtr CreateTimestampProvider() const;
 
-    NRpc::IChannelPtr MaybeCreateRetryingChannel(NRpc::IChannelPtr channel, bool retryProxyBanned) const;
+    NRpc::IChannelPtr CreateSequoiaAwareRetryingChannel(NRpc::IChannelPtr channel, bool retryProxyBanned) const;
     // Returns an RPC channel to use for API calls to the particular address (e.g.: AttachTransaction).
     // The channel is non-retrying, so should be wrapped into retrying channel on demand.
     NRpc::IChannelPtr CreateNonRetryingChannelByAddress(const TString& address) const;

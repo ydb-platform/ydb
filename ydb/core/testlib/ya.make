@@ -22,6 +22,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/apps/version
     ydb/library/actors/core
     ydb/library/actors/interconnect
     ydb/library/grpc/client
@@ -88,7 +89,7 @@ PEERDIR(
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
     ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
+    ydb/public/sdk/cpp/client/ydb_topic/codecs
     ydb/public/sdk/cpp/client/ydb_query
     ydb/public/sdk/cpp/client/ydb_table
     ydb/services/auth

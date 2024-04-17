@@ -85,6 +85,11 @@ public:
     size_t PackedSizeEstimate() const {
         return IsBlock_ ? BlockBuffer_.size() : (Buffer_ ? (Buffer_->Size() + Buffer_->ReservedHeaderSize()) : 0);
     }
+
+    bool IsEmpty() const {
+        return !ItemCount_;
+    }
+
     void Clear();
     TRope Finish();
 

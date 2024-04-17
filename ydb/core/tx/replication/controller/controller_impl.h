@@ -6,15 +6,19 @@
 #include "public_events.h"
 #include "replication.h"
 #include "schema.h"
+#include "session_info.h"
 #include "sys_params.h"
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/defs.h>
 #include <ydb/core/protos/counters_replication.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/replication/service/service.h>
+#include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 
 namespace NKikimr::NReplication::NController {
 
@@ -72,8 +76,19 @@ private:
     void Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvRunWorkers::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscovery::TEvError::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
+
+    void CreateSession(ui32 nodeId, const TActorContext& ctx);
+    void DeleteSession(ui32 nodeId, const TActorContext& ctx);
+    void CloseSession(ui32 nodeId, const TActorContext& ctx);
+    void ScheduleRunWorkers();
+    void RunWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);
+    void StopWorker(ui32 nodeId, const TWorkerId& id);
 
     // local transactions
     class TTxInitSchema;
@@ -127,9 +142,13 @@ private:
     THashMap<ui64, TReplication::TPtr> Replications;
     THashMap<TPathId, TReplication::TPtr> ReplicationsByPathId;
 
-    // discovery
     TActorId DiscoveryCache;
     TNodesManager NodesManager;
+    THashMap<ui32, TSessionInfo> Sessions;
+    THashMap<TWorkerId, TWorkerInfo> Workers;
+    THashSet<TWorkerId> WorkersToRun;
+
+    bool RunWorkersScheduled = false;
 
 }; // TController
 

@@ -15,7 +15,7 @@
         "context"
 
         "github.com/prometheus/client_golang/prometheus"
-        metrics "github.com/ydb-platform/ydb-go-sdk-prometheus"
+        metrics "github.com/ydb-platform/ydb-go-sdk-prometheus/v2"
         "github.com/ydb-platform/ydb-go-sdk/v3"
         "github.com/ydb-platform/ydb-go-sdk/v3/trace"
     )
@@ -49,7 +49,7 @@
         "database/sql"
 
         "github.com/prometheus/client_golang/prometheus"
-        metrics "github.com/ydb-platform/ydb-go-sdk-prometheus"
+        metrics "github.com/ydb-platform/ydb-go-sdk-prometheus/v2"
         "github.com/ydb-platform/ydb-go-sdk/v3"
         "github.com/ydb-platform/ydb-go-sdk/v3/trace"
     )

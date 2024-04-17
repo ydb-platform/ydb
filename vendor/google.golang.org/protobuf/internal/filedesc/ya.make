@@ -9,6 +9,7 @@ SRCS(
     desc_lazy.go
     desc_list.go
     desc_list_gen.go
+    editions.go
     placeholder.go
 )
 

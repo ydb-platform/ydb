@@ -49,6 +49,8 @@ SRCS(
     vdisk_mongroups.h
     vdisk_outofspace.cpp
     vdisk_outofspace.h
+    vdisk_performance_params.cpp
+    vdisk_performance_params.h
     vdisk_pdisk_error.h
     vdisk_pdiskctx.h
     vdisk_private_events.h

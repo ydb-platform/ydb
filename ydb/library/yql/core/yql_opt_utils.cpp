@@ -128,6 +128,13 @@ TExprNode::TPtr MakeOptionalBool(TPositionHandle position, bool value, TExprCont
     return ctx.NewCallable(position, "Just", { MakeBool(position, value, ctx)});
 }
 
+TExprNode::TPtr MakePgBool(TPositionHandle position, bool value, TExprContext& ctx) {
+    return ctx.NewCallable(position, "PgConst", {
+        ctx.NewAtom(position, value ? "t" : "f", TNodeFlags::Default),
+        ctx.NewCallable(position, "PgType", { ctx.NewAtom(position, "bool")})
+     });
+}
+
 TExprNode::TPtr MakeIdentityLambda(TPositionHandle position, TExprContext& ctx) {
     return ctx.Builder(position)
         .Lambda()
@@ -352,13 +359,17 @@ TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& sr
         return node;
     }
 
+    return KeepColumnOrder(*columnOrder, node, ctx);
+}
+
+TExprNode::TPtr KeepColumnOrder(const TColumnOrder& order, const TExprNode::TPtr& node, TExprContext& ctx) {
     return ctx.Builder(node->Pos())
         .Callable("AssumeColumnOrder")
             .Add(0, node)
             .List(1)
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     size_t index = 0;
-                    for (auto& col : *columnOrder) {
+                    for (auto& col : order) {
                         parent
                             .Atom(index++, col);
                     }

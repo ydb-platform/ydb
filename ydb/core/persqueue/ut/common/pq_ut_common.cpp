@@ -539,21 +539,6 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
 
- 
-    runtime->SetObserverFunc(
-            [&](TAutoPtr<IEventHandle>& ev) {
-                if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
-                    Cerr << "Captured kesus quota request event\n";
-                    runtime->Send(new IEventHandle(
-                            ev->Sender, TActorId{},
-                            new TEvQuota::TEvClearance(TEvQuota::TEvClearance::EResult::Success), 0, ev->Cookie));
-
-                    return TTestActorRuntimeBase::EEventAction::DROP;
-                }
-                return TTestActorRuntimeBase::EEventAction::PROCESS;
-            }
-    );
-
     if (msn != -1) msgSeqNo = msn;
     TString cookie = ownerCookie;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
@@ -747,7 +732,7 @@ TActorId CmdCreateSession(const TPQCmdSettings& settings, TTestContext& tc) {
             auto req = request->Record.MutablePartitionRequest();
 
             ActorIdToProto(tabletPipe, req->MutablePipeClient());
-            Cerr << "Set pipe for create session: " << tabletPipe.ToString();
+            Cerr << "Set pipe for create session: " << tabletPipe.ToString() << Endl;
 
             req->SetPartition(settings.Partition);
             auto off = req->MutableCmdCreateSession();
@@ -757,7 +742,11 @@ TActorId CmdCreateSession(const TPQCmdSettings& settings, TTestContext& tc) {
             off->SetStep(settings.Step);
             off->SetPartitionSessionId(settings.PartitionSessionId);
 
-            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            if (settings.KeepPipe) {
+                tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries(), tabletPipe);
+            } else {
+                tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            }
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);
@@ -956,7 +945,7 @@ void CmdRead(
         TTestContext& tc, TVector<i32> offsets, const ui32 maxTimeLagMs, const ui64 readTimestampMs, const TString user
 ) {
     return CmdRead(
-            TPQCmdReadSettings("", partition, offset, count, size, resCount, timeouted, 
+            TPQCmdReadSettings("", partition, offset, count, size, resCount, timeouted,
                                offsets, maxTimeLagMs, readTimestampMs, user),
             tc
     );
@@ -996,7 +985,7 @@ void CmdRead(const TPQCmdReadSettings& settings, TTestContext& tc) {
             }
 
             req->SetCookie(123);
-            
+
             Cerr << "Send read request: " << request->Record.DebugString() << " via pipe: " << tc.Edge.ToString() << Endl;
 
             tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());

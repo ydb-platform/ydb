@@ -11,58 +11,58 @@ using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSchedulerThreadBase::~TSchedulerThreadBase()
+TSchedulerThread::TSchedulerThread(
+    TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+    TString threadGroupName,
+    TString threadName,
+    NThreading::TThreadOptions options)
+    : TFiberSchedulerThread(
+        std::move(threadGroupName),
+        std::move(threadName),
+        std::move(options))
+    , CallbackEventCount_(std::move(callbackEventCount))
+{ }
+
+TSchedulerThread::~TSchedulerThread()
 {
     Stop();
 }
 
-TSchedulerThreadBase::TSchedulerThreadBase(
-    TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-    const TString& threadGroupName,
-    const TString& threadName,
-    NThreading::EThreadPriority threadPriority,
-    int shutdownPriority)
-    : TFiberSchedulerThread(
-        threadGroupName,
-        threadName,
-        threadPriority,
-        shutdownPriority)
-    , CallbackEventCount_(std::move(callbackEventCount))
+void TSchedulerThread::OnStart()
 { }
 
-void TSchedulerThreadBase::OnStart()
+void TSchedulerThread::OnStop()
 { }
 
-void TSchedulerThreadBase::OnStop()
-{ }
-
-void TSchedulerThreadBase::Stop(bool graceful)
+void TSchedulerThread::Stop(bool graceful)
 {
     GracefulStop_.store(graceful);
     TThread::Stop();
 }
 
-void TSchedulerThreadBase::Stop()
+void TSchedulerThread::Stop()
 {
+    TFiberSchedulerThread::Stop();
     TThread::Stop();
 }
 
-void TSchedulerThreadBase::StartEpilogue()
+void TSchedulerThread::StartEpilogue()
 {
+    TFiberSchedulerThread::StartEpilogue();
     OnStart();
 }
 
-void TSchedulerThreadBase::StopPrologue()
+void TSchedulerThread::StopPrologue()
 {
+    TFiberSchedulerThread::StopPrologue();
     CallbackEventCount_->NotifyAll();
 }
 
-void TSchedulerThreadBase::StopEpilogue()
+void TSchedulerThread::StopEpilogue()
 {
+    TFiberSchedulerThread::StopEpilogue();
     OnStop();
 }
-
-////////////////////////////////////////////////////////////////////////////////
 
 TClosure TSchedulerThread::OnExecute()
 {

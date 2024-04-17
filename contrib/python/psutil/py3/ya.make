@@ -11,6 +11,7 @@ NO_LINT()
 NO_CHECK_IMPORTS(
     psutil._psaix
     psutil._psbsd
+    psutil._pslinux
     psutil._psosx
     psutil._pssunos
     psutil._psutil_bsd

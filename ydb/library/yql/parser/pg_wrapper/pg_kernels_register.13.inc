@@ -8,6 +8,7 @@ RegisterExec(2927, arrow_query_to_xmlschema());
 RegisterExec(2928, arrow_cursor_to_xmlschema());
 RegisterExec(2893, arrow_xml_in());
 RegisterExec(5051, arrow_btequalimage());
+RegisterExec(5028, arrow_satisfies_hash_partition());
 RegisterExec(2900, arrow_xmlconcat2());
 RegisterExec(3710, arrow_ts_rankcd_tt());
 RegisterExec(3708, arrow_ts_rankcd_wtt());

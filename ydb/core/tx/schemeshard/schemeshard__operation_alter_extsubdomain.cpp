@@ -258,6 +258,16 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
             }
         }
 
+        // storage pools quotas check
+        TString error;
+        if (const auto& effectivePools = requestedPools.empty()
+                ? actualPools
+                : requestedPools;
+            !CheckStorageQuotasKinds(input.GetDatabaseQuotas(), effectivePools, pathId.ToString(), error)
+        ) {
+            return paramError(error);
+        }
+
         std::set_difference(requestedPools.begin(), requestedPools.end(),
                             actualPools.begin(), actualPools.end(),
                             std::back_inserter(storagePoolsAdded));

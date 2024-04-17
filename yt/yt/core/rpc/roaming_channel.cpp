@@ -27,7 +27,9 @@ public:
         , StartTime_(TInstant::Now())
     {
         if (Options_.Timeout) {
-            asyncChannel = asyncChannel.WithTimeout(*Options_.Timeout);
+            asyncChannel = asyncChannel.WithTimeout(*Options_.Timeout, TFutureTimeoutOptions{
+                .Error = TError("Error getting channel")
+            });
         }
 
         asyncChannel.Subscribe(BIND(&TRoamingRequestControl::OnGotChannel, MakeStrong(this)));
@@ -40,12 +42,11 @@ public:
             return;
         }
 
-        auto error = TError(NYT::EErrorCode::Canceled, "RPC request canceled")
+        ResponseHandler_->HandleError(TError(NYT::EErrorCode::Canceled, "RPC request canceled")
             << TErrorAttribute("request_id", Request_->GetRequestId())
             << TErrorAttribute("realm_id", Request_->GetRealmId())
             << TErrorAttribute("service", Request_->GetService())
-            << TErrorAttribute("method", Request_->GetMethod());
-        ResponseHandler_->HandleError(error);
+            << TErrorAttribute("method", Request_->GetMethod()));
 
         Request_.Reset();
         ResponseHandler_.Reset();
@@ -154,7 +155,7 @@ public:
                         options),
                     channel);
             } else {
-                responseHandler->HandleError(*channelOrError);
+                responseHandler->HandleError(std::move(*channelOrError));
                 return New<TClientRequestControlThunk>();
             }
         }

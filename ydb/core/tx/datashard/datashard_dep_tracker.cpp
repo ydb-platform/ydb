@@ -46,8 +46,8 @@ namespace {
         return a.GetStep() < b.Step || (a.GetStep() == b.Step && a.GetTxId() < b.TxId);
     }
 
-    bool IsLessEqual(const TOperation& a, const TRowVersion& b) {
-        return a.GetStep() < b.Step || (a.GetStep() == b.Step && a.GetTxId() <= b.TxId);
+    bool IsEqual(const TOperation& a, const TRowVersion& b) {
+        return a.GetStep() == b.Step && a.GetTxId() == b.TxId;
     }
 }
 
@@ -799,8 +799,10 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
         Y_ABORT_UNLESS(!conflict.IsImmediate());
         if (snapshot.IsMax()) {
             conflict.AddImmediateConflict(op);
-        } else if (snapshotRepeatable ? IsLessEqual(conflict, snapshot) : IsLess(conflict, snapshot)) {
+        } else if (IsLess(conflict, snapshot)) {
             op->AddDependency(&conflict);
+        } else if (IsEqual(conflict, snapshot)) {
+            op->AddRepeatableReadConflict(&conflict);
         }
     };
 

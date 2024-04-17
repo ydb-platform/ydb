@@ -2,6 +2,8 @@
 
 #include "errors.h"
 
+#include <yt/yt/core/misc/protobuf_helpers.h>
+
 #include <yt/yt_proto/yt/formats/extension.pb.h>
 
 #include <google/protobuf/text_format.h>
@@ -531,15 +533,15 @@ TProtobufOneofOptions GetOneofOptions(
     auto variantFieldName = oneofDescriptor->options().GetExtension(variant_field_name);
     switch (options.Mode) {
         case EProtobufOneofMode::SeparateFields:
-            if (variantFieldName) {
+            if (!variantFieldName.empty()) {
                 ythrow TApiUsageError() << "\"variant_field_name\" requires (NYT.oneof_flags) = VARIANT";
             }
             break;
         case EProtobufOneofMode::Variant:
-            if (variantFieldName) {
-                options.VariantFieldName = variantFieldName;
+            if (variantFieldName.empty()) {
+                options.VariantFieldName = FromProto<TString>(oneofDescriptor->name());
             } else {
-                options.VariantFieldName = oneofDescriptor->name();
+                options.VariantFieldName = variantFieldName;
             }
             break;
     }
@@ -598,15 +600,15 @@ TString DeduceProtobufType(
 TString GetColumnName(const ::google::protobuf::FieldDescriptor& field)
 {
     const auto& options = field.options();
-    const auto columnName = options.GetExtension(column_name);
+    const auto columnName = FromProto<TString>(options.GetExtension(column_name));
     if (!columnName.empty()) {
         return columnName;
     }
-    const auto keyColumnName = options.GetExtension(key_column_name);
+    const auto keyColumnName = FromProto<TString>(options.GetExtension(key_column_name));
     if (!keyColumnName.empty()) {
         return keyColumnName;
     }
-    return field.name();
+    return FromProto<TString>(field.name());
 }
 
 TNode MakeProtoFormatMessageFieldsConfig(
@@ -680,7 +682,7 @@ TNode MakeProtoFormatFieldConfig(
     if (fieldDescriptor->type() == FieldDescriptor::TYPE_ENUM) {
         auto* enumeration = fieldDescriptor->enum_type();
         (*enumerations)[enumeration->full_name()] = MakeEnumerationConfig(enumeration);
-        fieldConfig["enumeration_name"] = enumeration->full_name();
+        fieldConfig["enumeration_name"] = FromProto<TString>(enumeration->full_name());
     }
 
     if (fieldOptions.SerializationMode != EProtobufSerializationMode::Yt) {
@@ -841,10 +843,10 @@ public:
         THashSet<TString> messageTypeNames;
         THashSet<TString> enumTypeNames;
         for (const auto* descriptor : AllDescriptors_) {
-            messageTypeNames.insert(descriptor->full_name());
+            messageTypeNames.insert(FromProto<TString>(descriptor->full_name()));
         }
         for (const auto* enumDescriptor : EnumDescriptors_) {
-            enumTypeNames.insert(enumDescriptor->full_name());
+            enumTypeNames.insert(FromProto<TString>(enumDescriptor->full_name()));
         }
         FileDescriptorSet fileDescriptorSetProto;
         for (const auto* file : fileTopoOrder) {
@@ -954,9 +956,9 @@ private:
         const THashSet<TString>& messageTypeNames,
         const THashSet<TString>& enumTypeNames)
     {
-        const auto prefix = fileProto->package().Empty()
+        const auto prefix = fileProto->package().empty()
             ? ""
-            : fileProto->package() + '.';
+            : FromProto<TString>(fileProto->package()) + '.';
 
         RemoveIf(fileProto->mutable_message_type(), [&] (const DescriptorProto& descriptorProto) {
             return !messageTypeNames.contains(prefix + descriptorProto.name());
@@ -992,10 +994,10 @@ TNode MakeProtoFormatConfigWithDescriptors(const TVector<const Descriptor*>& des
     auto typeNames = TNode::CreateList();
     for (const auto* descriptor : descriptors) {
         builder.AddDescriptor(descriptor);
-        typeNames.Add(descriptor->full_name());
+        typeNames.Add(FromProto<TString>(descriptor->full_name()));
     }
 
-    auto fileDescriptorSetText = builder.Build().ShortDebugString();
+    auto fileDescriptorSetText = FromProto<TString>(builder.Build().ShortDebugString());
     TNode config("protobuf");
     config.Attributes()
         ("file_descriptor_set_text", std::move(fileDescriptorSetText))

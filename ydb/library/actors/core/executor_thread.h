@@ -4,6 +4,7 @@
 #include "event.h"
 #include "callstack.h"
 #include "probes.h"
+#include "thread_context.h"
 #include "worker_context.h"
 #include "log_settings.h"
 
@@ -92,7 +93,8 @@ namespace NActors {
         ui64 CurrentActorScheduledEventsCounter = 0;
 
         // Thread-specific
-        TWorkerContext Ctx;
+        mutable TThreadContext TlsThreadCtx;
+        mutable TWorkerContext Ctx;
         ui64 RevolvingReadCounter = 0;
         ui64 RevolvingWriteCounter = 0;
         const TString ThreadName;
@@ -104,6 +106,7 @@ namespace NActors {
         ui64 SoftProcessingDurationTs;
 
         std::vector<TExecutorThreadStats> SharedStats;
+        const ui32 ActorSystemIndex;
     };
 
     class TExecutorThread: public TGenericExecutorThread {

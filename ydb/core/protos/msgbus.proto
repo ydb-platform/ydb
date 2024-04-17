@@ -313,23 +313,6 @@ message TSchemeInitRoot {
     repeated NKikimrStoragePool.TStoragePool StoragePools = 6;
 }
 
-message TBSAdm {
-    message TVDiskLocation {
-        optional uint32 NodeId = 1;
-        optional uint32 PDiskId = 2;
-        optional uint32 VSlotId = 3;
-    }
-
-    message TGroupReconfigureWipe {
-        optional TVDiskLocation Location = 1;
-    }
-
-    optional uint32 Domain = 1;
-
-    optional TGroupReconfigureWipe GroupReconfigureWipe = 6;
-    optional string SecurityToken = 7;
-}
-
 message THiveCreateTablet {
     message TCmdCreateTablet {
         optional uint64 OwnerId = 1; // mandatory, senders TabletId (use 0 for human/external system)
@@ -464,20 +447,6 @@ message TFlatDescribeResponse {
 message TSchemeOperationStatus {
     optional TFlatTxId FlatTxId = 1;
     optional TFlatTxPollOptions PollOptions = 10;
-};
-
-message TDsTestLoadRequest {
-    optional uint32 NodeId = 1;
-    optional NKikimrDataShardLoad.TEvYCSBTestLoadRequest Event = 2;
-};
-
-message TDsTestLoadResponse {
-    message TItem {
-        optional uint32 NodeId = 1;
-        optional uint32 Status = 2;
-        optional string ErrorReason = 3;
-    };
-    repeated TItem Items = 1;
 };
 
 message TBsTestLoadRequest {

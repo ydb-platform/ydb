@@ -11,6 +11,7 @@
 #include "json_tabletinfo.h"
 #include "json_vdiskinfo.h"
 #include "json_pdiskinfo.h"
+#include "query_autocomplete_helper.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -668,7 +669,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             exclusiveNodeStats->MutableNodeDomain()->SetSchemeShard(SERVERLESS_DOMAIN_KEY.OwnerId);
             exclusiveNodeStats->MutableNodeDomain()->SetPathId(SERVERLESS_DOMAIN_KEY.LocalPathId);
         }
-        
+
         if (exclusiveDynNodeWithTablet) {
             auto *exclusiveDynNodeWithTabletStats = record.MutableNodeStats()->Add();
             exclusiveDynNodeWithTabletStats->SetNodeId(exclusiveDynNodeWithTablet);
@@ -681,7 +682,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             stateStats->SetCount(1);
         }
     }
-    
+
     Y_UNIT_TEST(ServerlessNodesPage)
     {
         TPortManager tp;
@@ -713,7 +714,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
         size_t staticNodeId = 0;
-        size_t sharedDynNodeId = 0;    
+        size_t sharedDynNodeId = 0;
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
@@ -794,7 +795,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         size_t staticNodeId = 0;
         size_t sharedDynNodeId = 0;
-        size_t exclusiveDynNodeId = 0;    
+        size_t exclusiveDynNodeId = 0;
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
@@ -879,7 +880,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         size_t staticNodeId = 0;
         size_t sharedDynNodeId = 0;
-        size_t exclusiveDynNodeId = 0; 
+        size_t exclusiveDynNodeId = 0;
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
@@ -965,7 +966,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         size_t staticNodeId = 0;
         size_t sharedDynNodeId = 0;
         size_t exclusiveDynNodeId = 0;
-        size_t secondExclusiveDynNodeId = 0;    
+        size_t secondExclusiveDynNodeId = 0;
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
@@ -1025,5 +1026,82 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(tablet.at("Type"), "DataShard");
         UNIT_ASSERT_VALUES_EQUAL(tablet.at("State"), "Green");
         UNIT_ASSERT_VALUES_EQUAL(tablet.at("Count"), 1);
+    }
+
+    Y_UNIT_TEST(LevenshteinDistance)
+    {
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("", ""), 0);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("kitten", "sitting"), 3);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("book", "back"), 2);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("", "abc"), 3);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("abc", ""), 3);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("apple", "apple"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("apple", "aple"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("horse", "ros"), 3);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("intention", "execution"), 5);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("/slice/db", "/slice"), 3);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("/slice", "/slice/db"), 3);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("/slice/db26000", "/slice/db"), 5);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("/slice/db", "/slice/db26000"), 5);
+    }
+
+    Y_UNIT_TEST(FuzzySearcher)
+    {
+        TVector<TString> dictionary = { "/slice", "/slice/db", "/slice/db26000" };
+
+        {
+            TVector<TString> expectations = { "/slice/db" };
+            auto fuzzy = FuzzySearcher<TString>(dictionary);
+            auto result = fuzzy.Search("/slice/db", 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
+            for (ui32 i = 0; i < expectations.size(); i++) {
+                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+            }
+        }
+
+        {
+            TVector<TString> expectations = { "/slice/db", "/slice" };
+            auto fuzzy = FuzzySearcher<TString>(dictionary);
+            auto result = fuzzy.Search("/slice/db", 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
+            for (ui32 i = 0; i < expectations.size(); i++) {
+                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+            }
+        }
+
+        {
+            TVector<TString> expectations = { "/slice/db", "/slice", "/slice/db26000"};
+            auto fuzzy = FuzzySearcher<TString>(dictionary);
+            auto result = fuzzy.Search("/slice/db", 3);
+
+            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
+            for (ui32 i = 0; i < expectations.size(); i++) {
+                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+            }
+        }
+
+        {
+            TVector<TString> expectations = { "/slice/db", "/slice", "/slice/db26000" };
+            auto fuzzy = FuzzySearcher<TString>(dictionary);
+            auto result = fuzzy.Search("/slice/db", 4);
+
+            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
+            for (ui32 i = 0; i < expectations.size(); i++) {
+                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+            }
+        }
+
+        {
+            TVector<TString> expectations = { "/slice/db26000", "/slice/db", "/slice" };
+            auto fuzzy = FuzzySearcher<TString>(dictionary);
+            auto result = fuzzy.Search("/slice/db26001");
+
+            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
+            for (ui32 i = 0; i < expectations.size(); i++) {
+                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+            }
+        }
     }
 }

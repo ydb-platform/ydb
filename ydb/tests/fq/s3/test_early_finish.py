@@ -18,10 +18,11 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 class TestEarlyFinish(TestYdsBase):
     @yq_v1
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_early_finish(self, kikimr, s3, client):
+    def test_early_finish(self, kikimr, s3, client, unique_prefix):
         # Topics
         self.init_topics("select_early", create_output=False)
-        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+        yds_connection_name = unique_prefix + "myyds"
+        client.create_yds_connection(yds_connection_name, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
 
         # S3
         resource = boto3.resource(
@@ -43,14 +44,15 @@ class TestEarlyFinish(TestYdsBase):
 
         s3_client.put_object(Body="A", Bucket='rbucket', Key='A.txt', ContentType='text/plain')
         s3_client.put_object(Body="C", Bucket='rbucket', Key='C.txt', ContentType='text/plain')
-        client.create_storage_connection("rawbucket", "rbucket")
+        storage_connection_name = unique_prefix + "rawbucket"
+        client.create_storage_connection(storage_connection_name, "rbucket")
 
         sql = R'''
             SELECT S.Data as Data1, D.Data as Data2
-            FROM myyds.`{input_topic}` AS S
+            FROM `{yds_connection_name}`.`{input_topic}` AS S
             INNER JOIN (
                 SELECT Data
-                FROM rawbucket.`*`
+                FROM `{storage_connection_name}`.`*`
                 WITH (format=raw, SCHEMA (
                     Data String
                 ))
@@ -60,6 +62,8 @@ class TestEarlyFinish(TestYdsBase):
             LIMIT 2
             '''\
         .format(
+            yds_connection_name=yds_connection_name,
+            storage_connection_name=storage_connection_name,
             input_topic=self.input_topic
         )
 

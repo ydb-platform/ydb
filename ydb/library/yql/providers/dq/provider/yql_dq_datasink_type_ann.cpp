@@ -21,6 +21,7 @@ public:
         AddHandler({TDqPhyStage::CallableName()}, Hndl(&NDq::AnnotateDqPhyStage));
         AddHandler({TDqOutput::CallableName()}, Hndl(&NDq::AnnotateDqOutput));
         AddHandler({TDqCnUnionAll::CallableName()}, Hndl(&NDq::AnnotateDqConnection));
+        AddHandler({TDqCnStreamLookup::CallableName()}, Hndl(&NDq::AnnotateDqCnStreamLookup));
         AddHandler({TDqCnHashShuffle::CallableName()}, Hndl(&NDq::AnnotateDqCnHashShuffle));
         AddHandler({TDqCnResult::CallableName()}, Hndl(&NDq::AnnotateDqCnResult));
         AddHandler({TDqCnMap::CallableName()}, Hndl(&NDq::AnnotateDqConnection));

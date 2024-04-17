@@ -21,12 +21,12 @@
 
 (let dictOne (ToDict list2 keyExtractor payloadExtractor '('Hashed 'One 'Compact)))
 (let dictMany (ToDict list2 keyExtractor payloadExtractor '('Hashed 'Many 'Compact)))
-(let joinLeftSemi (MapJoinCore (ToFlow list1) dictOne 'LeftSemi '('key1) '('key2) '('key1 'a.key1 'value1 'a.value1) '()))
-(let joinLeftOnly (MapJoinCore (ToFlow list1) dictOne 'LeftOnly '('key1) '('key2) '('key1 'a.key1 'key1 'another_key 'key1 'yet_another_key) '()))
-(let joinInnerUnique (MapJoinCore (ToFlow list1) dictOne 'Inner '('key1) '('key2) '('key1 'a.key1 'value1 'a.value1) '('value2 'b.value2)))
-(let joinLeftUnique (MapJoinCore (ToFlow list1) dictOne 'Left '('key1) '('key2) '('key1 'a.key1) '('key2 'b.key2 'value2 'b.value2)))
-(let joinInner (MapJoinCore (ToFlow list1) dictMany 'Inner '('key1) '('key2) '('key1 'a.key1 'value1 'a.value1) '('key2 'b.key2)))
-(let joinLeft (MapJoinCore (ToFlow list1) dictMany 'Left '('key1) '('key2) '('key1 'a.key1) '('key2 'b.key2 'value2 'b.value2)))
+(let joinLeftSemi (MapJoinCore (ToFlow list1) dictOne 'LeftSemi '('key1) '('key2) '('key1 'a.key1 'value1 'a.value1) '() '() '()))
+(let joinLeftOnly (MapJoinCore (ToFlow list1) dictOne 'LeftOnly '('key1) '('key2) '('key1 'a.key1 'key1 'another_key 'key1 'yet_another_key) '() '() '()))
+(let joinInnerUnique (MapJoinCore (ToFlow list1) dictOne 'Inner '('key1) '('key2) '('key1 'a.key1 'value1 'a.value1) '('value2 'b.value2) '() '()))
+(let joinLeftUnique (MapJoinCore (ToFlow list1) dictOne 'Left '('key1) '('key2) '('key1 'a.key1) '('key2 'b.key2 'value2 'b.value2) '() '()))
+(let joinInner (MapJoinCore (ToFlow list1) dictMany 'Inner '('key1) '('key2) '('key1 'a.key1 'value1 'a.value1) '('key2 'b.key2) '() '()))
+(let joinLeft (MapJoinCore (ToFlow list1) dictMany 'Left '('key1) '('key2) '('key1 'a.key1) '('key2 'b.key2 'value2 'b.value2) '() '()))
 
 (let res_sink (DataSink 'result))
 (let world (Write! world res_sink (Key) (Collect joinLeftSemi) '('('type))))

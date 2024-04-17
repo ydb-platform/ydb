@@ -164,6 +164,7 @@ namespace NKikimr {
         }
     };
 
+    struct TEvReplCheckProgress : TEventLocal<TEvReplCheckProgress, TEvBlobStorage::EvReplCheckProgress> {};
 
     ////////////////////////////////////////////////////////////////////////////
     // REPL ACTOR CREATOR

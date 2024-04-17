@@ -26,12 +26,17 @@ protected:
     virtual void DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) = 0;
     virtual bool DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) = 0;
     virtual void RemoveBlobIdFromDB(const TTabletId tabletId, const TUnifiedBlobId& blobId, TBlobManagerDb& dbBlobs) = 0;
+    virtual bool DoIsEmpty() const = 0;
 public:
     void OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs);
     void OnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction);
 
     const TBlobsCategories& GetBlobsToRemove() const {
         return BlobsToRemove;
+    }
+
+    bool IsEmpty() const {
+        return BlobsToRemove.IsEmpty() && DoIsEmpty();
     }
 
     bool IsInProgress() const {

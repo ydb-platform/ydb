@@ -78,6 +78,7 @@ public:
             // TODO: report actuall error
             response->ErrorFields.push_back({'E', "ERROR"});
             response->ErrorFields.push_back({'M', record.GetError()});
+            //response->DropConnection = true; // it always closes connection on error on handshake
             Send(ConnectionEvent->Sender, response.Release(), 0, ev->Cookie);
             return PassAway();
         }

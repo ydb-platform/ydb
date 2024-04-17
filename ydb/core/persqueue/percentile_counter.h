@@ -30,6 +30,8 @@ private:
 };
 
 class TPercentileCounter {
+friend class TPartitionHistogramWrapper;
+
 public:
     TPercentileCounter() = default;
     TPercentileCounter(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
@@ -53,6 +55,50 @@ private:
 NKikimr::NPQ::TPercentileCounter CreateSLIDurationCounter(
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TVector<NPersQueue::TPQLabelsInfo> aggr,
         const TString name, ui32 border, TVector<ui32> durations);
+
+
+class TPartitionCounterWrapper {
+private:
+    bool DoSave;
+    bool DoReport;
+    TMaybe<NKikimr::NPQ::TMultiCounter> Counter;
+    ui64 CounterValue = 0;
+    bool Inited = false;
+
+public:
+    TPartitionCounterWrapper() = default;
+    explicit TPartitionCounterWrapper(NKikimr::NPQ::TMultiCounter&& counter, bool isSupportivePartition, bool doReport = true);
+    void Setup(bool isSupportivePartition, bool doReport, NKikimr::NPQ::TMultiCounter&& counter);
+    void Inc(ui64 value);
+    ui64 Value() const;
+    void SetSavedValue(ui64 value);
+    operator bool() const;
+};
+
+class TPartitionHistogramWrapper {
+private:
+    bool IsSupportivePartition;
+    THolder<NKikimr::NPQ::TPercentileCounter> Histogram;
+    TMap<ui32, ui64> Values;
+    bool Inited = false;
+
+public:
+    TPartitionHistogramWrapper() = default;
+    void Setup(bool isSupportivePartition, NKikimr::NPQ::TPercentileCounter* histogram);
+    void IncFor(ui64 key, ui64 value = 1);
+    TVector<ui64> GetValues() const;
+    template<class TIterable>
+    void SetValues(const TIterable& inputVector) {
+        auto iter = Values.begin();
+        for (auto inputVal: inputVector) {
+            if (iter == Values.end())
+                break;
+            iter->second = inputVal;
+            iter++;
+        }
+    }
+    operator bool() const;
+};
 
 }// NPQ
 }// NKikimr

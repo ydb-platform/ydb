@@ -76,6 +76,14 @@ ui32 GetStageOutputsCount(const TDqStageBase& stage) {
     return resultsTypeTuple->GetSize();
 }
 
+bool DqStageFirstInputIsBroadcast(const TDqStageBase& stage) {
+    if (stage.Inputs().Empty()) {
+        return false;
+    }
+
+    return TDqCnBroadcast::Match(stage.Inputs().Item(0).Raw());
+}
+
 bool IsDqPureNode(const TExprBase& node) {
     return !node.Maybe<TDqSource>() &&
            !node.Maybe<TDqConnection>() &&

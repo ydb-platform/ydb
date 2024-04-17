@@ -1,4 +1,4 @@
-<img width="64" src="ydb/docs/_assets/logo.svg"/><br/>
+<img width="64" src="ydb/docs/_assets/logo.svg" /><br/>
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ydb-platform/ydb/blob/main/LICENSE)
 [![Release](https://img.shields.io/github/v/release/ydb-platform/ydb.svg?style=flat-square)](https://github.com/ydb-platform/ydb/releases)

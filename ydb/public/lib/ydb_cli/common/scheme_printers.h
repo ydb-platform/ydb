@@ -13,6 +13,7 @@ public:
     struct TSettings {
         TString Path;
         bool Recursive;
+        bool Multithread;
         bool FromNewLine;
         NScheme::TListDirectorySettings ListDirectorySettings;
         NTable::TDescribeTableSettings DescribeTableSettings;
@@ -37,13 +38,14 @@ protected:
     NTable::TDescribeTableResult DescribeTable(const TString& relativePath);
 
 private:
-    void PrintDirectoryRecursive(const TString& fullPath, const TString& relativePath);
+    NThreading::TFuture<void> PrintDirectoryRecursive(const TString& fullPath, const TString& relativePath);
     static bool IsDirectoryLike(const NScheme::TSchemeEntry& entry);
 
 protected:
     NTable::TTableClient TableClient;
     NScheme::TSchemeClient SchemeClient;
     const TSettings Settings;
+    std::mutex Lock;
 };
 
 class TDefaultSchemePrinter : public TSchemePrinterBase {

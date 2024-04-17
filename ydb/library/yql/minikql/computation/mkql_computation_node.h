@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mkql_computation_node_list.h"
+#include "mkql_spiller_factory.h"
 
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/arrow/mkql_memory_pool.h>
@@ -121,6 +122,7 @@ struct TComputationContext : public TComputationContextLLVM {
     std::vector<NUdf::TUnboxedValue*> WideFields;
     TTypeEnvironment* TypeEnv = nullptr;
     const TComputationMutables Mutables;
+    std::shared_ptr<ISpillerFactory> SpillerFactory;
 
     TComputationContext(const THolderFactory& holderFactory,
         const NUdf::IValueBuilder* builder,

@@ -29,11 +29,9 @@ static const auto& Logger = ThreadingLogger;
 
 TThread::TThread(
     TString threadName,
-    EThreadPriority threadPriority,
-    int shutdownPriority)
+    TThreadOptions options)
     : ThreadName_(std::move(threadName))
-    , ThreadPriority_(threadPriority)
-    , ShutdownPriority_(shutdownPriority)
+    , Options_(std::move(options))
     , UniqueThreadId_(++UniqueThreadIdGenerator)
     , UnderlyingThread_(&StaticThreadMainTrampoline, this)
 { }
@@ -69,7 +67,7 @@ bool TThread::StartSlow()
     ShutdownCookie_ = RegisterShutdownCallback(
         Format("Thread(%v)", ThreadName_),
         BIND_NO_PROPAGATE(&TThread::Stop, MakeWeak(this)),
-        ShutdownPriority_);
+        Options_.ShutdownPriority);
     if (!ShutdownCookie_) {
         Stopping_ = true;
         return false;
@@ -237,6 +235,10 @@ void TThread::ThreadMainTrampoline()
 
     YT_THREAD_LOCAL(TExitInterceptor) Interceptor;
 
+    if (Options_.ThreadInitializer) {
+        Options_.ThreadInitializer();
+    }
+
     ThreadMain();
 
     GetTlsRef(Interceptor).Disarm();
@@ -261,7 +263,7 @@ void TThread::SetThreadPriority()
     YT_VERIFY(ThreadId_ != InvalidThreadId);
 
 #ifdef _linux_
-    if (ThreadPriority_ == EThreadPriority::RealTime) {
+    if (Options_.ThreadPriority == EThreadPriority::RealTime) {
         struct sched_param param{
             .sched_priority = 1
         };
@@ -275,7 +277,7 @@ void TThread::SetThreadPriority()
         }
     }
 #else
-    Y_UNUSED(ThreadPriority_);
+    Y_UNUSED(Options_);
     Y_UNUSED(Logger);
 #endif
 }

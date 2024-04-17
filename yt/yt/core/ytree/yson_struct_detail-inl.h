@@ -82,10 +82,10 @@ void LoadFromNode(
         parameterValue->SetUnrecognizedStrategy(*recursiveUnrecognizedStrategy);
     }
 
-    parameterValue->Load(node, false, false, path);
+    parameterValue->Load(node, /*postprocess*/ false, /*setDefaults*/ false, path);
 }
 
-// YsonStructLite or ExternalizedYsonStruct serializer
+// YsonStructLite
 template <std::derived_from<TYsonStructLite> T>
 void LoadFromNode(
     T& parameter,
@@ -94,7 +94,7 @@ void LoadFromNode(
     std::optional<EUnrecognizedStrategy> /*recursiveUnrecognizedStrategy*/)
 {
     try {
-        parameter.Load(node, /*postprocess*/ true, /*setDefaults*/ false);
+        parameter.Load(node, /*postprocess*/ false, /*setDefaults*/ false);
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error reading parameter %v", path)
             << ex;
@@ -110,7 +110,7 @@ void LoadFromNode(
     std::optional<EUnrecognizedStrategy> /*recursiveUnrecognizedStrategy*/)
 {
     try {
-        DeserializeExternalized(parameter, node, /*postprocess*/ true, /*setDefaults*/ false);
+        DeserializeExternalized(parameter, node, /*postprocess*/ false, /*setDefaults*/ false);
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error reading parameter %v", path)
             << ex;
@@ -196,7 +196,7 @@ void LoadFromNode(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Primitive type or YsonStructLite or ExternalizedYsonStruct
+// Primitive type or YsonStructLite
 // See LoadFromNode for further specialization.
 template <class T>
 void LoadFromCursor(
@@ -389,84 +389,79 @@ struct TGetRecursiveUnrecognized<TIntrusivePtr<T>>
 ////////////////////////////////////////////////////////////////////////////////
 
 // all
-template <class F>
-void InvokeForComposites(
-    const void* /*parameter*/,
-    const NYPath::TYPath& /*path*/,
-    const F& /*func*/)
-{ }
+template <class T>
+inline void PostprocessRecursive(
+    T&,
+    const NYPath::TYPath&)
+{
+    // Random class is not postprocessed.
+}
+
+template <CExternallySerializable T>
+inline void PostprocessRecursive(
+    T& parameter,
+    const NYPath::TYPath& path)
+{
+    using TTraits = TGetExternalizedYsonStructTraits<T>;
+    using TSerializer = typename TTraits::TExternalSerializer;
+    auto serializer = TSerializer::template CreateWritable<T, TSerializer>(parameter, false);
+    serializer.Postprocess(path);
+}
 
 // TYsonStruct
-template <CYsonStructDerived T, class F>
-inline void InvokeForComposites(
-    const TIntrusivePtr<T>* parameterValue,
-    const NYPath::TYPath& path,
-    const F& func)
+template <std::derived_from<TYsonStruct> T>
+inline void PostprocessRecursive(
+    TIntrusivePtr<T>& parameter,
+    const NYPath::TYPath& path)
 {
-    func(*parameterValue, path);
+    if (parameter) {
+        parameter->Postprocess(path);
+    }
+}
+
+// TYsonStructLite
+template <std::derived_from<TYsonStructLite> T>
+inline void PostprocessRecursive(
+    T& parameter,
+    const NYPath::TYPath& path)
+{
+    parameter.Postprocess(path);
+}
+
+// std::optional
+template <class T>
+inline void PostprocessRecursive(
+    std::optional<T>& parameter,
+    const NYPath::TYPath& path)
+{
+    if (parameter.has_value()) {
+        PostprocessRecursive(*parameter, path);
+    }
 }
 
 // std::vector
-template <class... T, class F>
-inline void InvokeForComposites(
-    const std::vector<T...>* parameter,
-    const NYPath::TYPath& path,
-    const F& func)
+template <class T>
+inline void PostprocessRecursive(
+    std::vector<T>& parameter,
+    const NYPath::TYPath& path)
 {
-    for (size_t i = 0; i < parameter->size(); ++i) {
-        InvokeForComposites(
-            &(*parameter)[i],
-            path + "/" + NYPath::ToYPathLiteral(i),
-            func);
+    for (size_t i = 0; i < parameter.size(); ++i) {
+        PostprocessRecursive(
+            parameter[i],
+            path + "/" + NYPath::ToYPathLiteral(i));
     }
 }
 
-// For any map.
-template <template <typename...> class Map, class... T, class F, class M = typename Map<T...>::mapped_type>
-inline void InvokeForComposites(
-    const Map<T...>* parameter,
-    const NYPath::TYPath& path,
-    const F& func)
+// any map
+template <template <typename...> class Map, class... T, class M = typename Map<T...>::mapped_type>
+inline void PostprocessRecursive(
+    Map<T...>& parameter,
+    const NYPath::TYPath& path)
 {
-    for (const auto& [key, value] : *parameter) {
-        InvokeForComposites(
-            &value,
-            path + "/" + NYPath::ToYPathLiteral(key),
-            func);
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-// all
-template <class F>
-void InvokeForComposites(
-    const void* /*parameter*/,
-    const F& /*func*/)
-{ }
-
-// TYsonStruct
-template <CYsonStructDerived T, class F>
-inline void InvokeForComposites(const TIntrusivePtr<T>* parameter, const F& func)
-{
-    func(*parameter);
-}
-
-// std::vector
-template <class... T, class F>
-inline void InvokeForComposites(const std::vector<T...>* parameter, const F& func)
-{
-    for (const auto& item : *parameter) {
-        InvokeForComposites(&item, func);
-    }
-}
-
-// For any map.
-template <template <typename...> class Map, class... T, class F, class M = typename Map<T...>::mapped_type>
-inline void InvokeForComposites(const Map<T...>* parameter, const F& func)
-{
-    for (const auto& [key, value] : *parameter) {
-        InvokeForComposites(&value, func);
+    for (auto& [key, value] : parameter) {
+        PostprocessRecursive(
+            value,
+            path + "/" + NYPath::ToYPathLiteral(key));
     }
 }
 
@@ -486,7 +481,7 @@ inline void ResetOnLoad(TIntrusivePtr<T>& parameter)
     parameter = New<T>();
 }
 
-// TYsonStructLite or TExternalizedYsonStruct Serializer
+// TYsonStructLite
 template <std::derived_from<TYsonStructLite> T>
 inline void ResetOnLoad(T& parameter)
 {
@@ -626,27 +621,20 @@ void TYsonStructParameter<TValue>::SafeLoad(
 }
 
 template <class TValue>
-void TYsonStructParameter<TValue>::Postprocess(const TYsonStructBase* self, const NYPath::TYPath& path) const
+void TYsonStructParameter<TValue>::PostprocessParameter(const TYsonStructBase* self, const NYPath::TYPath& path) const
 {
-    const auto& value = FieldAccessor_->GetValue(self);
-    for (const auto& postprocessor : Postprocessors_) {
+    TValue& value = FieldAccessor_->GetValue(self);
+    NPrivate::PostprocessRecursive(value, path);
+
+    for (const auto& validator : Validators_) {
         try {
-            postprocessor(value);
+            validator(value);
         } catch (const std::exception& ex) {
-            THROW_ERROR_EXCEPTION("Postprocess failed at %v",
+            THROW_ERROR_EXCEPTION("Validation failed at %v",
                 path.empty() ? "root" : path)
                     << ex;
         }
     }
-
-    NPrivate::InvokeForComposites(
-        &value,
-        path,
-        [] <CYsonStructDerived T> (TIntrusivePtr<T> obj, const NYPath::TYPath& subpath) {
-            if (obj) {
-                obj->Postprocess(subpath);
-            }
-        });
 }
 
 template <class TValue>
@@ -778,9 +766,9 @@ TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::DefaultNew(TArgs&&..
 }
 
 template <class TValue>
-TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::CheckThat(TPostprocessor postprocessor)
+TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::CheckThat(TValidator validator)
 {
-    Postprocessors_.push_back(std::move(postprocessor));
+    Validators_.push_back(std::move(validator));
     return *this;
 }
 

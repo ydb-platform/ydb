@@ -110,7 +110,8 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Filter", "Type": "TCoLambda"}
+                {"Index": 3, "Name": "Filter", "Type": "TCoLambda"},
+                {"Index": 4, "Name": "ReturningColumns", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -415,6 +416,21 @@
                 {"Index": 2, "Name": "ObjectId", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "TypeId", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "MissingOk", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKiCreateSequence",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiCreateSequence!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "Sequence", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "ValueType", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "Temporary", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "ExistingOk", "Type": "TCoAtom"},
+                {"Index": 6, "Name": "SequenceSettings", "Type": "TCoNameValueTupleList"},
+                {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         }
     ]

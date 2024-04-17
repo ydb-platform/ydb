@@ -8,6 +8,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/core/yql_cost_function.h>
 
 namespace NYql::NDq {
 
@@ -2648,12 +2649,13 @@ TMaybeNode<TDqJoin> DqFlipJoin(const TDqJoin& join, TExprContext& ctx) {
         .JoinKeys(joinKeysBuilder.Done())
         .LeftJoinKeyNames(join.RightJoinKeyNames())
         .RightJoinKeyNames(join.LeftJoinKeyNames())
+        .JoinAlgo(join.JoinAlgo())
         .Done();
 }
 
 
 TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationContext& optCtx,
-                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, EHashJoinMode hashJoin)
+                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, EHashJoinMode hashJoin, bool useCBO)
 {
     if (!node.Maybe<TDqJoin>()) {
         return node;
@@ -2663,10 +2665,21 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
     const auto joinType = join.JoinType().Value();
     const bool leftIsUnionAll = join.LeftInput().Maybe<TDqCnUnionAll>().IsValid();
     const bool rightIsUnionAll = join.RightInput().Maybe<TDqCnUnionAll>().IsValid();
-    const bool useHashJoin = EHashJoinMode::Off != hashJoin 
+
+    bool useHashJoin = EHashJoinMode::Off != hashJoin
         && joinType != "Cross"sv 
         && leftIsUnionAll 
         && rightIsUnionAll;
+
+    if (useCBO) {
+        auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
+        if (joinAlgo == EJoinAlgoType::MapJoin || joinAlgo == EJoinAlgoType::GraceJoin) {
+            useHashJoin = joinType != "Cross"sv && leftIsUnionAll && rightIsUnionAll;
+        }
+        else {
+            useHashJoin = false;
+        }
+    }
 
     if (DqValidateJoinInputs(join.LeftInput(), join.RightInput(), parentsMap, allowStageMultiUsage)) {
         // pass
@@ -2683,7 +2696,7 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
     }
 
     if (useHashJoin) {
-        return DqBuildHashJoin(join, hashJoin, ctx, optCtx);
+        return DqBuildHashJoin(join, hashJoin, useCBO, ctx, optCtx);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {

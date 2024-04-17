@@ -452,6 +452,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         {"Just", &TProgramBuilder::NewOptional},
         {"Exists", &TProgramBuilder::Exists},
+        {"BlockExists", &TProgramBuilder::BlockExists},
 
         {"Pickle", &TProgramBuilder::Pickle},
         {"StablePickle", &TProgramBuilder::StablePickle},
@@ -2243,6 +2244,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         "CallableTypeComponents",
         "CallableArgument",
         "CallableTypeHandle",
+        "PgTypeName",
+        "PgTypeHandle",
         "WorldCode",
         "AtomCode",
         "ListCode",
@@ -2720,6 +2723,12 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         auto arg = MkqlBuildExpr(*node.Child(0), ctx);
         auto targetType = BuildType(node, *node.Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder);
         return ctx.ProgramBuilder.BlockBitCast(arg, targetType);
+    });
+
+    AddCallable("BlockMember", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto structObj = MkqlBuildExpr(node.Head(), ctx);
+        const auto name = node.Tail().Content();
+        return ctx.ProgramBuilder.BlockMember(structObj, name);
     });
 
     AddCallable("BlockNth", [](const TExprNode& node, TMkqlBuildContext& ctx) {

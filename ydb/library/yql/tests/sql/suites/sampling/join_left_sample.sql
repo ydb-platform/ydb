@@ -1,5 +1,6 @@
 /* postgres can not */
 /* custom check: len(yt_res_yson[0]['Write'][0]['Data']) < 10 */
+/* ignore plan diff */
 use plato;
 pragma DisableSimpleColumns;
 

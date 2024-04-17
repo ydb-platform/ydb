@@ -45,7 +45,7 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNod
         return false;
     }
 
-    if (find_if(joinColumns.begin(), joinColumns.end(), [&] (const TString& s) { return node->Stats->KeyColumns[0] == s;})) {
+    if (find_if(joinColumns.begin(), joinColumns.end(), [&] (const TString& s) { return node->Stats->KeyColumns[0] == s;}) != joinColumns.end()) {
         return true;
     }
 
@@ -97,9 +97,9 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNod
         return false;
     }
 
-    if (prefixSize < node->Stats->KeyColumns.size() && !(find_if(joinColumns.begin(), joinColumns.end(), [&] (const TString& s) {
+    if (prefixSize < node->Stats->KeyColumns.size() && (find_if(joinColumns.begin(), joinColumns.end(), [&] (const TString& s) {
             return node->Stats->KeyColumns[prefixSize] == s;
-        }))){
+        }) == joinColumns.end())){
             return false;
         }
 
@@ -128,10 +128,10 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
     for (auto [leftCol, rightCol] : joinConditions) {
         // Fix for clang14, somehow structured binding does not create a variable in clang14
         auto r = rightCol;
-        if (! find_if(rightStats->KeyColumns.begin(), rightStats->KeyColumns.end(), 
-            [r] (const TString& s) {
+        if (find_if(rightStats->KeyColumns.begin(), rightStats->KeyColumns.end(), 
+            [&r] (const TString& s) {
             return r.AttributeName == s;
-        } )) {
+        } ) == rightStats->KeyColumns.end()) {
             return false;
         }
     }
@@ -150,34 +150,36 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
 
     switch( joinAlgo ) {
         case EJoinAlgoType::LookupJoin:
-            if (OptLevel==2 && left->Stats->Nrows > 10e3) {
+            if ((OptLevel >= 2) && (left->Stats->Nrows > 1000)) {
                 return false;
             }
             return IsLookupJoinApplicable(left, right, joinConditions, leftJoinKeys, rightJoinKeys, *this);
 
-        case EJoinAlgoType::DictJoin:
-            return right->Stats->Nrows < 10e5;
         case EJoinAlgoType::MapJoin:
-            return right->Stats->Nrows < 10e6;
+            return right->Stats->ByteSize < 5e8;
         case EJoinAlgoType::GraceJoin:
             return true;
+        default:
+            return false;
     }
 }
 
-double TKqpProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, EJoinAlgoType joinAlgo) const  {
-
+double TKqpProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgo) const  {
+    Y_UNUSED(outputByteSize);
+    
     switch(joinAlgo) {
         case EJoinAlgoType::LookupJoin:
             if (OptLevel==1) {
                 return -1;
             }
-            return leftStats.Nrows;
-        case EJoinAlgoType::DictJoin:
-            return leftStats.Nrows + 1.7 * rightStats.Nrows;
+            return leftStats.Nrows + outputRows;
         case EJoinAlgoType::MapJoin:
-            return leftStats.Nrows + 1.8 * rightStats.Nrows;
+            return leftStats.Nrows + 1.8 * rightStats.Nrows + outputRows;
         case EJoinAlgoType::GraceJoin:
-            return leftStats.Nrows + 2.0 * rightStats.Nrows;
+            return leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows;
+        default:
+            Y_ENSURE(false, "Illegal join type encountered");
+            return 0;
     }
 }
 

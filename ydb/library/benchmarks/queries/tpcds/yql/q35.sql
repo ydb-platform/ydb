@@ -32,17 +32,17 @@ select
   count(*) cnt1,
   avg(customer_demographics.cd_dep_count),
   min(customer_demographics.cd_dep_count),
-  stddev_samp(customer_demographics.cd_dep_count),
+  sum(customer_demographics.cd_dep_count),
   customer_demographics.cd_dep_employed_count,
   count(*) cnt2,
   avg(customer_demographics.cd_dep_employed_count),
   min(customer_demographics.cd_dep_employed_count),
-  stddev_samp(cd_dep_employed_count),
+  sum(cd_dep_employed_count),
   customer_demographics.cd_dep_college_count,
   count(*) cnt3,
   avg(customer_demographics.cd_dep_college_count),
   min(customer_demographics.cd_dep_college_count),
-  stddev_samp(customer_demographics.cd_dep_college_count)
+  sum(customer_demographics.cd_dep_college_count)
  from
   {{customer}} c 
   cross join {{customer_address}} ca 

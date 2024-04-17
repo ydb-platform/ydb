@@ -48,6 +48,7 @@ NKikimr::TConclusionStatus TTabletsByBlob::DeserializeFromProto(const NKikimrCol
         auto it = Data.emplace(*parse, THashSet<TTabletId>()).first;
         for (auto&& t : i.GetTabletIds()) {
             AFL_VERIFY(it->second.emplace((TTabletId)t).second);
+            ++Size;
         }
     }
     return TConclusionStatus::Success();

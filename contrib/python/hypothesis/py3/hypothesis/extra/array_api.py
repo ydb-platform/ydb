@@ -69,10 +69,10 @@ __all__ = [
 ]
 
 
-RELEASED_VERSIONS = ("2021.12", "2022.12")
+RELEASED_VERSIONS = ("2021.12", "2022.12", "2023.12")
 NOMINAL_VERSIONS = (*RELEASED_VERSIONS, "draft")
 assert sorted(NOMINAL_VERSIONS) == list(NOMINAL_VERSIONS)  # sanity check
-NominalVersion = Literal["2021.12", "2022.12", "draft"]
+NominalVersion = Literal["2021.12", "2022.12", "2023.12", "draft"]
 assert get_args(NominalVersion) == NOMINAL_VERSIONS  # sanity check
 
 
@@ -424,12 +424,12 @@ class ArrayStrategy(st.SearchStrategy):
             while elements.more():
                 i = data.draw_integer(0, self.array_size - 1)
                 if i in assigned:
-                    elements.reject()
+                    elements.reject("chose an array index we've already used")
                     continue
                 val = data.draw(self.elements_strategy)
                 if self.unique:
                     if val in seen:
-                        elements.reject()
+                        elements.reject("chose an element we've already used")
                         continue
                     else:
                         seen.add(val)
@@ -1091,7 +1091,7 @@ except ImportError:
 
         np = Mock()
     else:
-        np = None
+        np = None  # type: ignore[assignment]
 if np is not None:
 
     class FloatInfo(NamedTuple):
@@ -1112,7 +1112,7 @@ if np is not None:
         introduced it in v1.21.1, so we just use the equivalent tiny attribute
         to keep mocking with older versions working.
         """
-        _finfo = np.finfo(dtype)
+        _finfo = np.finfo(dtype)  # type: ignore[call-overload]
         return FloatInfo(
             int(_finfo.bits),
             float(_finfo.eps),

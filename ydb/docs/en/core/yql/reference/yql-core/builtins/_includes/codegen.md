@@ -22,12 +22,6 @@ In the text representation, S-expressions have the following format:
 * The lambda function argument is ```x```. Unlike an atom, a string without an apostrophe character (') references a name in the current scope. When declaring a lambda function, the names of arguments are added to the body's visibility scope, and, if needed, the name is hidden from the global scope.
 * The ```world```.
 
-{% note info %}
-
-To learn more about code generation, see a [separate introductory article](../../guides/codegen.md). Below follows a reference on specific functions.
-
-{% endnote %}
-
 ## FormatCode
 
 Serializing the code as [S-expressions](/docs/s_expressions). The code must not contain free arguments of functions, hence, to serialize the lambda function code, you must pass it completely, avoiding passing individual expressions that might contain lambda function arguments.

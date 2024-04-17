@@ -69,7 +69,9 @@ public:
         YQL_ENSURE(PhyTx);
         YQL_ENSURE(PhyTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME);
 
-        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(nullptr);
+        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(
+            nullptr,
+            TEvKqpExecuter::TEvTxResponse::EExecutionType::Scheme);
     }
 
     void StartBuildOperation() {
@@ -229,6 +231,12 @@ public:
 
             case NKqpProto::TKqpSchemeOperation::kDropTableStore: {
                 const auto& modifyScheme = schemeOp.GetDropTableStore();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kCreateSequence: {
+                const auto& modifyScheme = schemeOp.GetCreateSequence();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }

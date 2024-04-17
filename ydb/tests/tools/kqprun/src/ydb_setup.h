@@ -2,6 +2,7 @@
 
 #include "common.h"
 
+#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/query.h>
 
 
@@ -47,7 +48,7 @@ class TYdbSetup {
 public:
     explicit TYdbSetup(const TYdbSetupSettings& settings);
 
-    TRequestResult SchemeQueryRequest(const TString& query, TSchemeMeta& meta) const;
+    TRequestResult SchemeQueryRequest(const TString& query, const TString& traceId, TSchemeMeta& meta) const;
 
     TRequestResult ScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, TString& operation) const;
 
@@ -56,6 +57,8 @@ public:
     TRequestResult GetScriptExecutionOperationRequest(const TString& operation, TExecutionMeta& meta) const;
 
     TRequestResult FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId, Ydb::ResultSet& resultSet) const;
+
+    TRequestResult ForgetScriptExecutionOperationRequest(const TString& operation) const;
 
     void StartTraceOpt() const;
 

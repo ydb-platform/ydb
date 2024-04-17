@@ -80,6 +80,8 @@ message TActorSystemConfig {
         optional uint32 MaxThreads = 13; // Higher balancing bound, should be not lower than `Threads`
         optional int32 Priority = 16;
         optional int32 MaxAvgPingDeviation = 17;
+
+        optional bool HasSharedThread = 18;
     }
 
     message TScheduler {
@@ -114,6 +116,7 @@ message TActorSystemConfig {
     optional uint32 CpuCount = 13;
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
+    optional bool UseSharedThreads = 18;
 
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
@@ -419,6 +422,10 @@ message TInterconnectConfig {
     optional NKikimrConfigUnits.TDuration ForceConfirmPeriodDuration = 27;
     optional NKikimrConfigUnits.TDuration LostConnectionDuration = 28;
     optional NKikimrConfigUnits.TDuration BatchPeriodDuration = 29;
+
+    optional NKikimrConfigUnits.TDuration FirstErrorSleep = 46;
+    optional NKikimrConfigUnits.TDuration MaxErrorSleep = 47;
+    optional double ErrorSleepRetryMultiplier = 48;
 
     optional uint32 OutgoingHandshakeInflightLimit = 43;
 }
@@ -1370,6 +1377,7 @@ message THiveConfig {
     optional double MinStorageScatterToBalance = 71 [default = 999]; // storage balancer trigger is disabled by default
     optional double MinGroupUsageToBalance = 72 [default = 0.1];
     optional uint64 StorageBalancerInflight = 73 [default = 1];
+    optional bool EnableDestroyOperations = 74 [default = false];
 }
 
 message TColumnShardConfig {
@@ -1384,11 +1392,9 @@ message TColumnShardConfig {
             TMinimalTablesCountPolicy MinimalTables = 1;
             TIdentityGroupsPolicy IdentityGroups = 2;
         }
-
     }
     optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
     optional bool DisabledOnSchemeShard = 2 [default = true];
-    optional bool SkipOldGranules = 3 [default = true];
     optional bool IndexationEnabled = 4 [default = true];
     optional bool CompactionEnabled = 5 [default = true];
     optional bool TTLEnabled = 6 [default = true];
@@ -1397,6 +1403,16 @@ message TColumnShardConfig {
     optional bool UseChunkedMergeOnCompaction = 9 [default = true];
     optional uint64 CompactionMemoryLimit = 10 [default = 536870912];
     optional uint64 TieringsMemoryLimit = 11 [default = 536870912];
+    message TIndexMetadataMemoryLimit {
+        oneof Value {
+            double TotalRatio = 1 [default = 0.3];
+            uint64 AbsoluteValue = 2;
+        }
+    }
+
+    optional TIndexMetadataMemoryLimit IndexMetadataMemoryLimit = 12;
+    optional bool CleanupEnabled = 13 [default = true];
+    optional uint32 RemovedPortionLivetimeSeconds = 14 [default = 600];
 }
 
 message TSchemeShardConfig {
@@ -1558,7 +1574,8 @@ message TTracingConfig {
     }
 
     message TSelectors {
-        optional string RequestType = 1;
+        reserved 1;
+        repeated string RequestTypes = 3;
         optional string Database = 2;
     }
 

@@ -36,11 +36,10 @@ void TKafkaReadSessionActor::HandleWakeup(TEvKafka::TEvWakeup::TPtr, const TActo
         return;
     }
 
-    for (auto& topicToPartitions: NewPartitionsToLockOnTime) {
-        auto& partitions = topicToPartitions.second;
+    for (auto& [topicName, partitions]: NewPartitionsToLockOnTime) {
         for (auto partitionsIt = partitions.begin(); partitionsIt != partitions.end(); ) {
             if (partitionsIt->LockOn <= ctx.Now()) {
-                TopicPartitions[topicToPartitions.first].ToLock.emplace(partitionsIt->PartitionId);
+                TopicPartitions[topicName].ToLock.emplace(partitionsIt->PartitionId);
                 NeedRebalance = true;
                 partitionsIt = partitions.erase(partitionsIt);
             } else {
@@ -408,6 +407,8 @@ void TKafkaReadSessionActor::HandlePipeDestroyed(TEvTabletPipe::TEvClientDestroy
 }
 
 void TKafkaReadSessionActor::ProcessBalancerDead(ui64 tabletId, const TActorContext& ctx) {
+    NewPartitionsToLockOnTime.clear();
+    
     for (auto& [topicName, topicInfo] : TopicsInfo) {
         if (topicInfo.TabletID == tabletId) {
             auto partitionsIt = TopicPartitions.find(topicName);
@@ -579,8 +580,7 @@ void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePart
     auto newPartitionsToLockCount = newPartitionsToLockIt == NewPartitionsToLockOnTime.end() ? 0 : newPartitionsToLockIt->second.size();
 
     auto topicPartitionsIt = TopicPartitions.find(pathIt->second->GetInternalName());
-    Y_ABORT_UNLESS(topicPartitionsIt != TopicPartitions.end());
-    Y_ABORT_UNLESS(record.GetCount() <= topicPartitionsIt->second.ToLock.size() + topicPartitionsIt->second.ReadingNow.size() + newPartitionsToLockCount);
+    Y_ABORT_UNLESS(record.GetCount() <= (topicPartitionsIt.IsEnd() ? 0 : topicPartitionsIt->second.ToLock.size() + topicPartitionsIt->second.ReadingNow.size()) + newPartitionsToLockCount);
 
     for (ui32 c = 0; c < record.GetCount(); ++c) {   
         // if some partition not locked yet, then release it without rebalance
@@ -599,18 +599,19 @@ void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePart
         }
 
         NeedRebalance = true;
-        size_t partitionToReleaseIndex = 0;
-        size_t i = 0;
+        ui32 partitionToRelease = 0;
+        ui32 i = 0;
 
-        for (size_t partIndex = 0; partIndex < topicPartitionsIt->second.ReadingNow.size(); partIndex++) {
-            if (!topicPartitionsIt->second.ToRelease.contains(partIndex) && (group == 0 || partIndex + 1 == group)) {
+        for (auto curPartition : topicPartitionsIt->second.ReadingNow) {
+            if (!topicPartitionsIt->second.ToRelease.contains(curPartition) && (group == 0 || curPartition + 1 == group)) {
                 ++i;
-                if (rand() % i == 0) { // will lead to 1/n probability for each of n partitions
-                    partitionToReleaseIndex = partIndex;
+                if (rand() % i == 0) {
+                    partitionToRelease = curPartition;
                 }
             }
         }
-        topicPartitionsIt->second.ToRelease.emplace(partitionToReleaseIndex);
+
+        topicPartitionsIt->second.ToRelease.emplace(partitionToRelease);
     }
 }
 

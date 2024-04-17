@@ -68,7 +68,6 @@ public:
     }
 
     const TMaybe<TString> GetPeerMetaValues(const TString&) const override {
-        Y_ABORT("Unimplemented");
         return TMaybe<TString>{};
     }
 
@@ -119,20 +118,6 @@ public:
         }
         auto data = deferred->mutable_result();
         data->PackFrom(result);
-        CbWrapper(resp);
-    }
-
-    void SendResult(Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<NGRpcService::TYdbIssueMessageType>& message) override
-    {
-        TResp resp;
-        auto deferred = resp.mutable_operation();
-        deferred->set_ready(true);
-        deferred->set_status(status);
-        deferred->mutable_issues()->MergeFrom(message);
-        if (CostInfo) {
-            deferred->mutable_cost_info()->CopyFrom(*CostInfo);
-        }
         CbWrapper(resp);
     }
 

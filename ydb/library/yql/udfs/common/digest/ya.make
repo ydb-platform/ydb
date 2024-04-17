@@ -1,30 +1,42 @@
-YQL_UDF_YDB(digest_udf)
+IF (YQL_PACKAGED)
+    PACKAGE()
 
-YQL_ABI_VERSION(
-    2
-    28
-    0
-)
+    FROM_SANDBOX(
+        FILE {FILE_RESOURCE_ID} OUT_NOAUTO
+            libdigest_udf.so
+    )
 
-SRCS(
-    digest_udf.cpp
-)
+    END()
+ELSE()
+    YQL_UDF_YDB(digest_udf)
 
-PEERDIR(
-    contrib/libs/farmhash
-    contrib/libs/highwayhash
-    contrib/libs/openssl
-    contrib/libs/xxhash
-    library/cpp/digest/argonish
-    library/cpp/digest/crc32c
-    library/cpp/digest/md5
-    library/cpp/digest/old_crc
-    library/cpp/digest/sfh
-)
+    YQL_ABI_VERSION(
+        2
+        28
+        0
+    )
 
-ADDINCL(contrib/libs/highwayhash)
+    SRCS(
+        digest_udf.cpp
+    )
 
-END()
+    PEERDIR(
+        contrib/libs/farmhash
+        contrib/libs/highwayhash
+        contrib/libs/openssl
+        contrib/libs/xxhash
+        library/cpp/digest/argonish
+        library/cpp/digest/crc32c
+        library/cpp/digest/md5
+        library/cpp/digest/old_crc
+        library/cpp/digest/sfh
+    )
+
+    ADDINCL(contrib/libs/highwayhash)
+
+    END()
+
+ENDIF()
 
 RECURSE_FOR_TESTS(
     test

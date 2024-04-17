@@ -7,6 +7,6 @@ namespace NKikimr::NKqp::NOpt {
 struct TKqpOptimizeContext;
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpPhyOptTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    NYql::TTypeAnnotationContext& typesCtx);
+    NYql::TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config);
 
 } // namespace NKikimr::NKqp::NOpt

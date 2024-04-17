@@ -17,7 +17,7 @@ constexpr auto WaitTimeWarningThreshold = TDuration::Seconds(30);
 TNotifyManager::TNotifyManager(
     TIntrusivePtr<NThreading::TEventCount> eventCount,
     const NProfiling::TTagSet& tagSet,
-    const TDuration pollingPeriod)
+    TDuration pollingPeriod)
     : EventCount_(std::move(eventCount))
     , WakeupCounter_(NProfiling::TProfiler("/action_queue")
         .WithTags(tagSet)

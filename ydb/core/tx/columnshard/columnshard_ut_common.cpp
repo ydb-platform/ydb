@@ -1,11 +1,13 @@
 #include "columnshard_ut_common.h"
 
-#include "columnshard__stats_scan.h"
 #include "common/tests/shard_reader.h"
+#include "engines/reader/sys_view/chunks/chunks.h"
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/tiering/snapshot.h>
+#include <ydb/core/tx/tiering/tier/object.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NTxUT {
@@ -172,7 +174,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
 
     // Schema: pathId, kind, rows, bytes, rawBytes. PK: {pathId, kind}
     //record.SetSchemaVersion(0);
-    auto ydbSchema = PrimaryIndexStatsSchema;
+    auto ydbSchema = NOlap::NReader::NSysView::NChunks::TStatsIterator::StatsSchema;
     for (const auto& col : ydbSchema.Columns) {
         record.AddColumnTags(col.second.Id);
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(col.second.PType, col.second.PTypeMod);
@@ -262,6 +264,7 @@ TCell MakeTestCell(const TTypeInfo& typeInfo, ui32 value, std::vector<TString>& 
         const TString& str = mem.back();
         return TCell(str.data(), str.size());
     } else if (type == NTypeIds::Timestamp || type == NTypeIds::Interval ||
+                type == NTypeIds::Timestamp64 || type == NTypeIds::Interval64 ||
                 type == NTypeIds::Uint64 || type == NTypeIds::Int64) {
         return TCell::Make<ui64>(value);
     } else if (type == NTypeIds::Uint32 || type == NTypeIds::Int32 || type == NTypeIds::Datetime) {
@@ -296,8 +299,8 @@ std::vector<TCell> MakeTestCells(const std::vector<TTypeInfo>& types, ui32 value
 TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTest::TTestColumn>& columns,
                      const TTestBlobOptions& options, const std::set<std::string>& notNullColumns) {
     NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::LZ4_FRAME, notNullColumns);
-    batchBuilder.Start(NArrow::NTest::TTestColumn::ConvertToPairs(columns));
-
+    const auto startStatus = batchBuilder.Start(NArrow::NTest::TTestColumn::ConvertToPairs(columns));
+    UNIT_ASSERT_C(startStatus.ok(), startStatus.ToString());
     std::vector<ui32> nullPositions;
     std::vector<ui32> samePositions;
     for (size_t i = 0; i < columns.size(); ++i) {
@@ -408,7 +411,7 @@ namespace NKikimr::NColumnShard {
 
         auto storage = std::make_shared<NOlap::TTestStoragesManager>();
         storage->Initialize();
-        indexInfo.SetAllKeys(std::make_shared<NOlap::TTestStoragesManager>());
+        indexInfo.SetAllKeys(NOlap::TTestStoragesManager::GetInstance());
         return indexInfo;
     }
 

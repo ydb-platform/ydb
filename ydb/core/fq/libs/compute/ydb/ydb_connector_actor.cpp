@@ -24,12 +24,7 @@ public:
         : YqSharedResources(params.YqSharedResources)
         , CredentialsProviderFactory(params.CredentialsProviderFactory)
         , ComputeConnection(params.ComputeConnection)
-    {
-        StatsMode = params.Config.GetControlPlaneStorage().GetStatsMode();
-        if (StatsMode == Ydb::Query::StatsMode::STATS_MODE_UNSPECIFIED) {
-            StatsMode = Ydb::Query::StatsMode::STATS_MODE_FULL;
-        }
-    }
+    {}
 
     void Bootstrap() {
         auto querySettings = NFq::GetClientSettings<NYdb::NQuery::TClientSettings>(ComputeConnection, CredentialsProviderFactory);
@@ -55,10 +50,17 @@ public:
         settings.OperationTimeout(event.OperationTimeout);
         settings.Syntax(event.Syntax);
         settings.ExecMode(event.ExecMode);
-        settings.StatsMode(StatsMode);
+        settings.StatsMode(event.StatsMode);
         settings.TraceId(event.TraceId);
+
+        NYdb::TParamsBuilder paramsBuilder;
+        for (const auto& [k, v] : event.QueryParameters) {
+            paramsBuilder.AddParam(k, NYdb::TValue(NYdb::TType(v.type()), v.value()));
+        }
+
+        const NYdb::TParams params = paramsBuilder.Build();
         QueryClient
-            ->ExecuteScript(event.Sql, settings)
+            ->ExecuteScript(event.Sql, params, settings)
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie, database = ComputeConnection.database()](auto future) {
                 try {
                     auto response = future.ExtractValueSync();
@@ -91,17 +93,17 @@ public:
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie, database = ComputeConnection.database()](auto future) {
                 try {
                     auto response = future.ExtractValueSync();
-                    if (!response.Ready()) {
+                    if (response.Id().GetKind() != Ydb::TOperationId::UNUSED) {
                         actorSystem->Send(
-                            recipient,
-                            MakeResponse<TEvYdbCompute::TEvGetOperationResponse>(
-                                database,
-                                response.Status().GetIssues(),
-                                response.Status().GetStatus(), 
-                                false),
+                            recipient, 
+                            new TEvYdbCompute::TEvGetOperationResponse(
+                                response.Metadata().ExecStatus,
+                                static_cast<Ydb::StatusIds::StatusCode>(response.Status().GetStatus()),
+                                response.Metadata().ResultSetsMeta,
+                                response.Metadata().ExecStats,
+                                RemoveDatabaseFromIssues(response.Status().GetIssues(), database),
+                                response.Ready()),
                             0, cookie);
-                    } else if (response.Id().GetKind() != Ydb::TOperationId::UNUSED) {
-                        actorSystem->Send(recipient, new TEvYdbCompute::TEvGetOperationResponse(response.Metadata().ExecStatus, static_cast<Ydb::StatusIds::StatusCode>(response.Status().GetStatus()), response.Metadata().ResultSetsMeta, response.Metadata().ExecStats, RemoveDatabaseFromIssues(response.Status().GetIssues(), database)), 0, cookie);
                     } else {
                         actorSystem->Send(
                             recipient,
@@ -222,7 +224,6 @@ private:
     NConfig::TYdbStorageConfig ComputeConnection;
     std::unique_ptr<NYdb::NQuery::TQueryClient> QueryClient;
     std::unique_ptr<NYdb::NOperation::TOperationClient> OperationClient;
-    Ydb::Query::StatsMode StatsMode;
 };
 
 std::unique_ptr<NActors::IActor> CreateConnectorActor(const TRunActorParams& params) {

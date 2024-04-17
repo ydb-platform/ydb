@@ -19,7 +19,7 @@ from utils import get_config, get_parameters_json, DATA_PATH
 def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is_hybrid=False):
     config = None
 
-    if http_files or force_blocks:
+    if http_files or force_blocks or is_hybrid:
         config_message = gateways_config_pb2.TGatewaysConfig()
         if http_files:
             schema = config_message.Fs.CustomSchemes.add()

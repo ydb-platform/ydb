@@ -167,6 +167,8 @@ SELECT 'indio' LIKE 'in__o' AS "true";
 SELECT 'indio' NOT LIKE 'in__o' AS "false";
 SELECT 'indio' LIKE 'in_o' AS "false";
 SELECT 'indio' NOT LIKE 'in_o' AS "true";
+SELECT 'abc'::name LIKE '_b_' AS "true";
+SELECT 'abc'::name NOT LIKE '_b_' AS "false";
 -- unused escape character
 SELECT 'hawkeye' LIKE 'h%' ESCAPE '#' AS "true";
 SELECT 'hawkeye' NOT LIKE 'h%' ESCAPE '#' AS "false";
@@ -192,6 +194,8 @@ SELECT 'hawkeye' ILIKE 'H%Eye' AS "true";
 SELECT 'hawkeye' NOT ILIKE 'H%Eye' AS "false";
 SELECT 'Hawkeye' ILIKE 'h%' AS "true";
 SELECT 'Hawkeye' NOT ILIKE 'h%' AS "false";
+SELECT 'ABC'::name ILIKE '_b_' AS "true";
+SELECT 'ABC'::name NOT ILIKE '_b_' AS "false";
 SELECT 'jack' LIKE '%____%' AS t;
 --
 -- basic tests of LIKE with indexes

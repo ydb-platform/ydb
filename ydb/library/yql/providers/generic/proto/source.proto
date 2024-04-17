@@ -5,7 +5,6 @@ option cc_enable_arenas = true;
 package NYql.Generic;
 
 import "ydb/library/yql/providers/generic/connector/api/service/protos/connector.proto";
-import "ydb/library/yql/providers/generic/connector/api/common/data_source.proto";
 
 message TSource {
     // Prepared Select expression

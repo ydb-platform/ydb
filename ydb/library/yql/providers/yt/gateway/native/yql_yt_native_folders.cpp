@@ -149,11 +149,13 @@ IYtGateway::TBatchFolderResult ExecResolveLinks(const TExecContext<IYtGateway::T
                     })
             );
         }
-        if (batchRes.empty()) {
-            return {};
-        }
         IYtGateway::TBatchFolderResult res;
         res.SetSuccess();
+        if (batchRes.empty()) {
+            YQL_CLOG(INFO, ProviderYt) << "Batch get result is empty";
+            return res;
+        }
+
         res.Items.reserve(batchRes.size());
 
         batchGet->ExecuteBatch();

@@ -12,6 +12,7 @@ namespace NKikimr {
     class TReplCtx {
     public:
         TIntrusivePtr<TVDiskContext> VCtx;
+        TIntrusivePtr<THullCtx> HullCtx;
         TPDiskCtxPtr PDiskCtx;
         std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
         TIntrusivePtr<THullDs> HullDs;
@@ -26,6 +27,7 @@ namespace NKikimr {
 
         TReplCtx(
                 TIntrusivePtr<TVDiskContext> vctx,
+                TIntrusivePtr<THullCtx> hullCtx,
                 TPDiskCtxPtr pdiskCtx,
                 std::shared_ptr<THugeBlobCtx> hugeBlobCtx,
                 TIntrusivePtr<THullDs> hullDs,
@@ -35,6 +37,7 @@ namespace NKikimr {
                 std::shared_ptr<std::atomic_uint64_t> pdiskWriteBytes,
                 bool pausedAtStart = false)
             : VCtx(std::move(vctx))
+            , HullCtx(std::move(hullCtx))
             , PDiskCtx(std::move(pdiskCtx))
             , HugeBlobCtx(std::move(hugeBlobCtx))
             , HullDs(std::move(hullDs))
@@ -45,6 +48,8 @@ namespace NKikimr {
             , PDiskWriteBytes(std::move(pdiskWriteBytes))
             , PausedAtStart(pausedAtStart)
         {}
+
+        bool GetAddHeader() const { return !HullCtx || HullCtx->AddHeader; }
     };
 
 } // NKikimr

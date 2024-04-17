@@ -8,6 +8,8 @@ namespace NYT::NProfiling {
 
 inline const NLogging::TLogger SolomonLogger("Solomon");
 
+inline const int DefaultProducerCollectionBatchSize = 100;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NProfiling

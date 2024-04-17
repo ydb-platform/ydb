@@ -114,6 +114,10 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
         return false;
     }
 
+    if (!Options.ApplyUpdate(schemaUpdate.GetOptions(), errors)) {
+        return false;
+    }
+
     if (!HasEngine()) {
         Engine = schemaUpdate.GetEngineDef(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
     } else {
@@ -132,23 +136,23 @@ void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& ta
     Version = tableSchema.GetVersion();
     Y_ABORT_UNLESS(tableSchema.HasEngine());
     Engine = tableSchema.GetEngine();
-    CompositeMarksFlag = tableSchema.GetCompositeMarks();
 
     Columns.Parse(tableSchema);
     Indexes.Parse(tableSchema);
+    Options.Parse(tableSchema);
     Statistics.Parse(tableSchema);
 }
 
 void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {
     tableSchema.SetNextColumnId(NextColumnId);
     tableSchema.SetVersion(Version);
-    tableSchema.SetCompositeMarks(CompositeMarksFlag);
 
     Y_ABORT_UNLESS(HasEngine());
     tableSchema.SetEngine(GetEngineUnsafe());
 
     Columns.Serialize(tableSchema);
     Indexes.Serialize(tableSchema);
+    Options.Serialize(tableSchema);
     Statistics.Serialize(tableSchema);
 }
 
@@ -158,6 +162,10 @@ bool TOlapSchema::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, 
     }
 
     if (!Indexes.Validate(opSchema, errors)) {
+        return false;
+    }
+
+    if (!Options.Validate(opSchema, errors)) {
         return false;
     }
 

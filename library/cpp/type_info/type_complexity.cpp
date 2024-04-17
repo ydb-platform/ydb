@@ -37,6 +37,10 @@ int ComputeTypeComplexity(const TType* type)
         case ETypeName::Json:
         case ETypeName::Yson:
         case ETypeName::Uuid:
+        case ETypeName::Date32:
+        case ETypeName::Datetime64:
+        case ETypeName::Timestamp64:
+        case ETypeName::Interval64:
         case ETypeName::Void:
         case ETypeName::Null:
             return 1;

@@ -2135,7 +2135,10 @@ Y_UNIT_TEST(TestPlannedTimeoutSplit) {
     // Wait for query to return an error
     {
         auto response = AwaitResponse(runtime, fWrite1);
-        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::UNAVAILABLE);
+        UNIT_ASSERT_C(
+            response.operation().status() == Ydb::StatusIds::ABORTED ||
+            response.operation().status() == Ydb::StatusIds::UNAVAILABLE,
+            "Status: " << response.operation().status());
     }
 }
 
@@ -2273,6 +2276,7 @@ Y_UNIT_TEST(TestPlannedHalfOverloadedSplit) {
     {
         auto response = AwaitResponse(runtime, fWrite1);
         UNIT_ASSERT_C(
+            response.operation().status() == Ydb::StatusIds::ABORTED ||
             response.operation().status() == Ydb::StatusIds::OVERLOADED ||
             response.operation().status() == Ydb::StatusIds::UNAVAILABLE,
             "Status: " << response.operation().status());
@@ -3806,6 +3810,12 @@ Y_UNIT_TEST(TestSnapshotReadAfterStuckRW) {
 Y_UNIT_TEST(TestSnapshotReadPriority) {
     TPortManager pm;
     TServerSettings::TControls controls;
+    // This test needs to make sure mediator time does not advance while
+    // certain operations are running. Unfortunately, volatile planning
+    // may happen every 1ms, and it's too hard to guarantee time stays
+    // still for such a short time. We disable volatile planning to make
+    // coordinator ticks are 100ms apart.
+    controls.MutableCoordinatorControls()->SetVolatilePlanLeaseMs(0);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetControls(controls)

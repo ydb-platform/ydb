@@ -4,6 +4,9 @@
 {%- set kotlin_version = target.kotlin_version -%}
 {%- set hasJunit5Test = extra_targets|selectattr('junit5_test') -%}
 plugins {
+{%- if "lombok.launch.AnnotationProcessorHider$AnnotationProcessor" in target.annotation_processors %}
+    id("io.freefair.lombok") version "8.6"
+{%- endif -%}
 {%- if mainClass %}
     `application`
 {%- else %}
@@ -44,7 +47,7 @@ kotlin {
 {%- if publish %}
 
 group = "{{ target.publish_group }}"
-version = {% if target.publish_version and target.publish_version != "no" -%}"{{ target.publish_version }}"{%- else -%}project.properties["version"]{%- endif %}
+version = {% if target.publish_version and target.publish_version != "no" -%}"{{ target.publish_version }}"{%- else -%}project.properties["version"]!!{%- endif %}
 {%  endif %}
 
 {% if target.enable_preview %}
@@ -266,4 +269,4 @@ tasks.build.dependsOn(
 {% include 'publish.gradle.kts' ignore missing -%}
 {% endif -%}
 
-{{ dump }}
+{%- include "[generator]/debug.jinja" ignore missing -%}

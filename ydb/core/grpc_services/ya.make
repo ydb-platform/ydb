@@ -54,7 +54,6 @@ SRCS(
     rpc_login.cpp
     rpc_load_rows.cpp
     rpc_log_store.cpp
-    rpc_long_tx.cpp
     rpc_node_registration.cpp
     rpc_maintenance.cpp
     rpc_make_directory.cpp
@@ -82,6 +81,13 @@ SRCS(
     query/rpc_attach_session.cpp
     query/rpc_kqp_tx.cpp
     query/service_query.h
+
+    ydb_over_fq/create_session.cpp
+    ydb_over_fq/describe_table.cpp
+    ydb_over_fq/execute_data_query.cpp
+    ydb_over_fq/explain_data_query.cpp
+    ydb_over_fq/keep_alive.cpp
+    ydb_over_fq/list_directory.cpp
 )
 
 PEERDIR(
@@ -112,7 +118,6 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/datashard
     ydb/core/tx/sharding
-    ydb/core/tx/long_tx_service/public
     ydb/core/tx/data_events
     ydb/core/util
     ydb/core/ydb_convert

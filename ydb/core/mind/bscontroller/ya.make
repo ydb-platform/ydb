@@ -25,7 +25,6 @@ SRCS(
     group_mapper.cpp
     group_mapper.h
     group_metrics_exchange.cpp
-    group_reconfigure_wipe.cpp
     impl.h
     indir.h
     init_scheme.cpp

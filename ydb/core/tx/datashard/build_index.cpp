@@ -328,7 +328,7 @@ public:
 
     EScan Seek(TLead& lead, ui64 seq) noexcept override {
         auto ctx = TActivationContext::AsActorContext().MakeFor(SelfId());
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
                     "Seek no " << seq << " " << Debug());
         if (seq) {
             if (!WriteBuf.IsEmpty()) {
@@ -367,7 +367,7 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept override {
         auto ctx = TActivationContext::AsActorContext().MakeFor(SelfId());
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
                     "Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry)
                                 << " " << Debug());
 

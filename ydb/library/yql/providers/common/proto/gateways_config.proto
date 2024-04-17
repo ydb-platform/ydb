@@ -608,8 +608,13 @@ message TGenericGatewayConfig {
     // Database clusters supported by this particular instance
     repeated TGenericClusterConfig ClusterMapping = 3;
 
-    // MDB API endpoint (do not fill in case of on-prem deployment)
+    // MDB API endpoint (no need to fill in case of on-prem deployment).
     optional string MdbGateway = 4;
+
+    // YDB MVP API endpoint (no need to fill in case of on-prem deployment).
+    // Expected format:
+    // [http|https]://host:port/ydbc/cloud-prod/
+    optional string YdbMvpEndpoint = 7;
 
     repeated TAttr DefaultSettings = 6;
 
@@ -619,7 +624,8 @@ message TGenericGatewayConfig {
 /////////////////////////////// Db Resolver ///////////////////////////////////
 
 message TDbResolverConfig {
-    // Ydb / Yds MVP endpoint. Expected format: 
+    // Ydb / Yds MVP endpoint.
+    // Expected format: 
     // [http|https]://host:port/ydbc/cloud-prod/
     optional string YdbMvpEndpoint = 2;
 }

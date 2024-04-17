@@ -178,6 +178,14 @@ TString MakeCreateExternalDataSourceQuery(
     switch (connectionContent.setting().connection_case()) {
         case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         case FederatedQuery::ConnectionSetting::kYdbDatabase:
+            properties = fmt::format(
+                R"(
+                    SOURCE_TYPE="Ydb",
+                    DATABASE_ID={database_id},
+                    USE_TLS="{use_tls}"
+                )",
+                "database_id"_a = EncloseAndEscapeString(connectionContent.setting().ydb_database().database_id(), '"'),
+                "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true");
         break;
         case FederatedQuery::ConnectionSetting::kClickhouseCluster:
             properties = fmt::format(

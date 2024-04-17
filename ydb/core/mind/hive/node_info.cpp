@@ -55,6 +55,10 @@ void TNodeInfo::ChangeVolatileState(EVolatileState state) {
 }
 
 bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EVolatileState newState) {
+    if (Freeze) {
+        tablet->PreferredNodeId = Id;
+        FrozenTablets.push_back(tablet->GetFullTabletId());
+    }
     TTabletInfo::EVolatileState oldState = tablet->GetVolatileState();
     if (IsResourceDrainingState(oldState)) {
         if (Tablets[oldState].erase(tablet) != 0) {
@@ -202,12 +206,18 @@ bool TNodeInfo::IsAllowedToRunTablet(const TTabletInfo& tablet, TTabletDebugStat
 }
 
 i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet) const {
+    i32 priority = 0;
+
     auto it = TabletAvailability.find(tablet.GetTabletType());
-    if (it == TabletAvailability.end()) {
-        return 0;
+    if (it != TabletAvailability.end()) {
+        priority = it->second.FromLocal.GetPriority();
     }
 
-    return it->second.FromLocal.GetPriority();
+    if (tablet.FailedNodeId == Id) {
+        --priority;
+    }
+
+    return priority;
 }
 
 bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState) const {
@@ -366,7 +376,22 @@ void TNodeInfo::SetDown(bool down) {
 
 void TNodeInfo::SetFreeze(bool freeze) {
     Freeze = freeze;
-    if (!Freeze) {
+    if (Freeze) {
+        for (const auto& [state, tablets] : Tablets) {
+            FrozenTablets.reserve(FrozenTablets.size() + tablets.size());
+            for (auto* tablet : tablets) {
+                FrozenTablets.push_back(tablet->GetFullTabletId());
+                tablet->PreferredNodeId = Id;
+            }
+        }
+    } else {
+        for (auto tabletId : FrozenTablets) {
+            auto tablet = Hive.FindTablet(tabletId);
+            if (tablet) {
+                tablet->PreferredNodeId = 0;
+            }
+        }
+        FrozenTablets.clear();
         Hive.ProcessWaitQueue();
     }
 }

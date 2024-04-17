@@ -137,7 +137,7 @@ Release date: May 1, 2023. To update to version **2.3.0**, select the [Downloads
 **Features:**
 
 * Added the interactive mode of query execution. To switch to the interactive mode, run [ydb yql](reference/ydb-cli/yql.md) without arguments. This mode is experimental: backward compatibility is not guaranteed yet.
-* Added the [ydb index rename](reference/ydb-cli/commands/secondary_index.md#rename) command for [atomic replacement](best_practices/secondary_indexes.md#atomic-index-replacement) or renaming of a secondary index.
+* Added the [ydb index rename](reference/ydb-cli/commands/secondary_index.md#rename) command for [atomic replacement](dba/secondary-indexes.md#atomic-index-replacement) or renaming of a secondary index.
 * Added the `ydb workload topic` command for generating the load that reads messages from topics and writes messages to topics.
 * Added the [--recursive](reference/ydb-cli/commands/dir.md#rmdir-options) option for the `ydb scheme rmdir` command. Use it to delete a directory recursively, with all its content.
 * Added support for the `topic` and `coordination node` types in the [ydb scheme describe](reference/ydb-cli/commands/scheme-describe.md) command.

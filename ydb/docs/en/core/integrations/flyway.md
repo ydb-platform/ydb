@@ -151,7 +151,7 @@ db/migration:
   V3__create_episodes.sql
   V4__load_data.sql
   V5__create_series_title_index.sql
-  V6__rename_index_title_index.sql
+  V6__rename_series_title_index.sql
 ```
 
 The result of executing the `flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration info` will provide detailed information about the status of the migrations:
@@ -166,7 +166,7 @@ The result of executing the `flyway -url=jdbc:ydb:grpc://localhost:2136/local -l
 |           | 3       | << Flyway Baseline >>     | BASELINE | 2024-04-16 12:09:27 | Baseline           | No       |
 | Versioned | 4       | load data                 | SQL      | 2024-04-16 12:35:12 | Success            | No       |
 | Versioned | 5       | create series title index | SQL      | 2024-04-16 12:59:20 | Success            | No       |
-| Versioned | 6       | rename index title index  | SQL      |                     | Pending            | No       |
+| Versioned | 6       | rename series title index | SQL      |                     | Pending            | No       |
 +-----------+---------+---------------------------+----------+---------------------+--------------------+----------+
 ```
 

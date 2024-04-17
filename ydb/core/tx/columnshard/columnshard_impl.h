@@ -569,10 +569,6 @@ public:
         return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);
     }
 
-    NOlap::TSnapshot GetLastCompletedTx() const {
-        return LastCompletedTx;
-    }
-
     const std::shared_ptr<NOlap::NExport::TExportsManager>& GetExportsManager() const {
         return ExportsManager;
     }

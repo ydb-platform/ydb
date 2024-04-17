@@ -106,6 +106,10 @@ namespace NKikimr::NSchemeShard {
         NotNullFlag = columnSchema.GetNotNull();
     }
 
+    bool TOlapColumnAdd::IsAllowedPgType(ui32 /*pgTypeId*/) {
+        return false;
+    }
+
     void TOlapColumnAdd::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnSchema) const {
         columnSchema.SetName(Name);
         columnSchema.SetType(TypeName);

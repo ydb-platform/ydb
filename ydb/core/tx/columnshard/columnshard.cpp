@@ -154,8 +154,6 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
 
     ui64 txId = ev->Get()->TxId;
     if (ScanTxInFlight.contains(txId)) {
-        TDuration duration = TAppData::TimeProvider->Now() - ScanTxInFlight[txId];
-        IncCounter(COUNTER_SCAN_LATENCY, duration);
         ScanTxInFlight.erase(txId);
         SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
     }

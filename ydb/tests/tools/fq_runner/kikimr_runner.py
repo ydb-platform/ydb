@@ -161,13 +161,21 @@ class BaseTenant(abc.ABC):
         }
         rate_limiter_config['limiters'] = [{'coordination_node_path': 'rate_limiter'}]
 
-    def get_metering(self, node_index=None):
+    def get_metering(self, meterings_expected, node_index=None):
         result = []
         if node_index is None:
             for n in self.kikimr_cluster.nodes:
-                result += self.get_metering(n)
+                result += self.get_metering(meterings_expected, n)
         else:
-            with open(self.kikimr_cluster.nodes[node_index].cwd + "/metering.bill") as f:
+            max_waiting_time_sec = 5
+            deadline = time.time() + max_waiting_time_sec
+            bill_fname = self.kikimr_cluster.nodes[node_index].cwd + "/metering.bill"
+            while time.time() < deadline:
+                meterings_loaded = sum(1 for _ in open(bill_fname))
+                if meterings_loaded >= meterings_expected:
+                    break
+
+            with open(bill_fname) as f:
                 for line in f:
                     metering = json.loads(line)
                     result.append(metering["usage"]["quantity"])

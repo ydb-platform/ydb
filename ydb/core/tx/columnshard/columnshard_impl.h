@@ -36,7 +36,6 @@
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
-#include <ydb/core/tx/locks/locks.h>
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/metadata/abstract/common.h>
 
@@ -282,37 +281,6 @@ public:
         None /* "none" */
     };
 
-    void IncCounter(NColumnShard::EPercentileCounters counter, const TDuration& latency) const {
-        TabletCounters->Percentile()[counter].IncrementFor(latency.MicroSeconds());
-    }
-
-    void IncCounter(NDataShard::ESimpleCounters counter, ui64 num = 1) const {
-        TabletCounters->Simple()[counter].Add(num);
-    }
-
-    // For syslocks
-    void IncCounter(NDataShard::ECumulativeCounters counter, ui64 num = 1) const {
-        TabletCounters->Cumulative()[counter].Increment(num);
-    }
-
-    void IncCounter(NDataShard::EPercentileCounters counter, ui64 num) const {
-        TabletCounters->Percentile()[counter].IncrementFor(num);
-    }
-
-    void IncCounter(NDataShard::EPercentileCounters counter, const TDuration& latency) const {
-        TabletCounters->Percentile()[counter].IncrementFor(latency.MilliSeconds());
-    }
-
-    inline TRowVersion LastCompleteTxVersion() const {
-        return TRowVersion(LastCompletedTx.GetPlanStep(), LastCompletedTx.GetTxId());
-    }
-
-    ui32 Generation() const { return Executor()->Generation(); }
-
-    bool IsUserTable(const TTableId&) const {
-        return true;
-    }
-
 private:
     void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteData& writeData, const ui64 cookie, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
     EOverloadStatus CheckOverloaded(const ui64 tableId) const;
@@ -465,7 +433,6 @@ private:
     TWriteId LastWriteId = TWriteId{0};
     ui64 LastPlannedStep = 0;
     ui64 LastPlannedTxId = 0;
-    NOlap::TSnapshot LastCompletedTx = NOlap::TSnapshot::Zero();
     ui64 LastExportNo = 0;
 
     ui64 OwnerPathId = 0;
@@ -513,7 +480,6 @@ private:
     TSettings Settings;
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
-    NDataShard::TSysLocks SysLocks;
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();

@@ -30,10 +30,10 @@ class TestS3(object):
         storage_connection_name = unique_prefix + "sbucket"
         client.create_storage_connection(storage_connection_name, "egress_bucket")
 
-        sql = R'''
-            insert into `{2}`.`{0}_{1}/` with (format={0})
+        sql = f'''
+            insert into `{storage_connection_name}`.`{format}_{yq_version}/` with (format={format})
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
-            '''.format(format, yq_version, storage_connection_name)
+            '''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -44,11 +44,11 @@ class TestS3(object):
 
         file_size = 0
         for file in bucket.objects.all():
-            if file.key.startswith("{0}_{1}/".format(format, yq_version)):
+            if file.key.startswith(f"{format}_{yq_version}/"):
                 file_size += bucket.Object(file.key).content_length
 
-        assert file_size == egress_bytes, "File size {} mistmatches egress bytes {}".format(file_size, egress_bytes)
-        assert sum(kikimr.control_plane.get_metering()) == 10
+        assert file_size == egress_bytes, f"File size {file_size} mistmatches egress bytes {egress_bytes}"
+        assert sum(kikimr.control_plane.get_metering(1)) == 10
 
     @yq_all
     @pytest.mark.parametrize("format1", ["json_list", "json_each_row", "csv_with_names", "parquet"])
@@ -72,10 +72,10 @@ class TestS3(object):
         storage_connection_name = unique_prefix + "sbucket"
         client.create_storage_connection(storage_connection_name, "convert_bucket")
 
-        sql = R'''
-            insert into `{3}`.`{0}_1_{1}_{2}/` with (format={0})
+        sql = f'''
+            insert into `{storage_connection_name}`.`{format1}_1_{format2}_{yq_version}/` with (format={format1})
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
-            '''.format(format1, format2, yq_version, storage_connection_name)
+            '''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -84,13 +84,13 @@ class TestS3(object):
         graph_name = "Graph=0" if yq_version == "v1" else "Sink"
         egress_bytes_1 = stat[graph_name]["EgressBytes"]["sum"]
 
-        sql = R'''
-            insert into `{3}`.`{0}_2_{1}_{2}/` with (format={1})
-            select foo, bar from `{3}`.`{0}_1_{1}_{2}/*` with (format={0}, schema(
+        sql = f'''
+            insert into `{storage_connection_name}`.`{format1}_2_{format2}_{yq_version}/` with (format={format2})
+            select foo, bar from `{storage_connection_name}`.`{format1}_1_{format2}_{yq_version}/*` with (format={format1}, schema(
                 foo Int NOT NULL,
                 bar String NOT NULL
             ))
-            '''.format(format1, format2, yq_version, storage_connection_name)
+            '''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -100,12 +100,12 @@ class TestS3(object):
         ingress_bytes_1 = stat[graph_name]["IngressBytes"]["sum"]
         egress_bytes_2 = stat[graph_name]["EgressBytes"]["sum"]
 
-        sql = R'''
-            select foo, bar from `{3}`.`{0}_2_{1}_{2}/*` with (format={1}, schema(
+        sql = f'''
+            select foo, bar from `{storage_connection_name}`.`{format1}_2_{format2}_{yq_version}/*` with (format={format2}, schema(
                 foo Int NOT NULL,
                 bar String NOT NULL
             ))
-            '''.format(format1, format2, yq_version, storage_connection_name)
+            '''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -117,18 +117,18 @@ class TestS3(object):
         file_size_1 = 0
         file_size_2 = 0
         for file in bucket.objects.all():
-            if file.key.startswith("{0}_1_{1}_{2}/".format(format1, format2, yq_version)):
+            if file.key.startswith(f"{format1}_1_{format2}_{yq_version}/"):
                 file_size_1 += bucket.Object(file.key).content_length
-            if file.key.startswith("{0}_2_{1}_{2}/".format(format1, format2, yq_version)):
+            if file.key.startswith(f"{format1}_2_{format2}_{yq_version}/"):
                 file_size_2 += bucket.Object(file.key).content_length
 
-        assert file_size_1 == egress_bytes_1, "File {} size {} mistmatches egress bytes {}".format(format1, file_size_1, egress_bytes_1)
-        assert file_size_2 == egress_bytes_2, "File {} size {} mistmatches egress bytes {}".format(format2, file_size_2, egress_bytes_2)
+        assert file_size_1 == egress_bytes_1, f"File {format1} size {file_size_1} mistmatches egress bytes {egress_bytes_1}"
+        assert file_size_2 == egress_bytes_2, f"File {format2} size {file_size_2} mistmatches egress bytes {egress_bytes_2}"
         if format1 != "parquet":
-            assert file_size_1 == ingress_bytes_1, "File {} size {} mistmatches ingress bytes {}".format(format1, file_size_1, ingress_bytes_1)
+            assert file_size_1 == ingress_bytes_1, f"File {format1} size {file_size_1} mistmatches ingress bytes {egress_bytes_1}"
         if format2 != "parquet":
-            assert file_size_2 == ingress_bytes_2, "File {} size {} mistmatches ingress bytes {}".format(format2, file_size_2, ingress_bytes_2)
-        assert sum(kikimr.control_plane.get_metering()) == 30
+            assert file_size_2 == ingress_bytes_2, f"File {format2} size {file_size_2} mistmatches ingress bytes {egress_bytes_2}"
+        assert sum(kikimr.control_plane.get_metering(1)) == 30
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -147,7 +147,7 @@ class TestS3(object):
         storage_connection_name = unique_prefix + "pb"
         client.create_storage_connection(storage_connection_name, "pbucket")
 
-        sql = fR'''
+        sql = f'''
             insert into `{storage_connection_name}`.`path1/` with (format=json_list)
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
             '''
@@ -155,7 +155,7 @@ class TestS3(object):
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
-        sql = fR'''
+        sql = f'''
             insert into `{storage_connection_name}`.`path2/` with (format=csv_with_names)
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
             '''
@@ -163,7 +163,7 @@ class TestS3(object):
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
-        sql = fR'''
+        sql = f'''
             $c1 =
                 SELECT
                 count(*) as `count`
@@ -203,8 +203,8 @@ class TestS3(object):
         for file in bucket.objects.all():
             file_size += bucket.Object(file.key).content_length
 
-        assert file_size == ingress, "Total size {} mistmatches ingress bytes {}".format(file_size, ingress)
-        assert sum(kikimr.control_plane.get_metering()) == 30
+        assert file_size == ingress, f"Total size {file_size} mistmatches ingress bytes {ingress}"
+        assert sum(kikimr.control_plane.get_metering(1)) == 30
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -216,7 +216,7 @@ class TestS3(object):
             aws_secret_access_key="secret_key"
         )
 
-        bucket_name = "sum_bucket_{}".format(yq_version)
+        bucket_name = f"sum_bucket_{yq_version}"
         bucket = resource.Bucket(bucket_name)
         bucket.create(ACL='public-read-write')
 
@@ -224,7 +224,7 @@ class TestS3(object):
         storage_connection_name = unique_prefix + "sbucket"
         client.create_storage_connection(storage_connection_name, bucket_name)
 
-        sql = fR'''
+        sql = f'''
             insert into `{storage_connection_name}`.`file/` with (format="csv_with_names")
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
             '''
@@ -252,15 +252,15 @@ class TestS3(object):
         graph_name = "Graph=0" if yq_version == "v1" else "ResultSet"
         ingress_bytes = stat[graph_name]["IngressBytes"]["sum"]
 
-        assert files_size == ingress_bytes, "Files size {} mistmatches ingress bytes {}".format(files_size, ingress_bytes)
-        assert sum(kikimr.control_plane.get_metering()) == 110
+        assert files_size == ingress_bytes, f"Files size {files_size} mistmatches ingress bytes {ingress_bytes}"
+        assert sum(kikimr.control_plane.get_metering(1)) == 110
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_aborted_by_user(self, kikimr, client):
         kikimr.control_plane.wait_bootstrap()
 
-        sql = R'''
+        sql = '''
 SELECT * FROM AS_TABLE(()->(Yql::ToStream(ListReplicate(<|x:
 "0123456789ABCDEF"
 |>, 4000000000))));
@@ -269,4 +269,4 @@ SELECT * FROM AS_TABLE(()->(Yql::ToStream(ListReplicate(<|x:
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         client.abort_query(query_id)
         client.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_USER)
-        assert sum(kikimr.control_plane.get_metering()) == 10
+        assert sum(kikimr.control_plane.get_metering(1)) == 10

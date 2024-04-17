@@ -30,6 +30,14 @@ struct TEvController {
         : public TEventPB<TEvCreateReplicationResult, NKikimrReplication::TEvCreateReplicationResult, EvCreateReplicationResult>
     {};
 
+    struct TEvAlterReplication
+        : public TSensitiveEventPB<TEvAlterReplication, NKikimrReplication::TEvAlterReplication, EvAlterReplication>
+    {};
+
+    struct TEvAlterReplicationResult
+        : public TEventPB<TEvAlterReplicationResult, NKikimrReplication::TEvAlterReplicationResult, EvAlterReplicationResult>
+    {};
+
     struct TEvDropReplication
         : public TEventPB<TEvDropReplication, NKikimrReplication::TEvDropReplication, EvDropReplication>
     {};

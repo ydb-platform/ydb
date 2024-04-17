@@ -90,6 +90,7 @@ SRCS(
     schemeshard__operation_alter_kesus.cpp
     schemeshard__operation_alter_login.cpp
     schemeshard__operation_alter_pq.cpp
+    schemeshard__operation_alter_replication.cpp
     schemeshard__operation_alter_solomon.cpp
     schemeshard__operation_alter_subdomain.cpp
     schemeshard__operation_alter_table.cpp

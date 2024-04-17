@@ -47,6 +47,30 @@ message TReplicationConfig {
     optional bool InitialSync = 6;
 }
 
+message TReplicationState {
+    message TStandBy {
+    }
+
+    message TPaused {
+    }
+
+    message TDone {
+        enum EFailoverMode {
+            FAILOVER_MODE_UNSPECIFIED = 0;
+            FAILOVER_MODE_CONSISTENT = 1;
+            FAILOVER_MODE_FORCE = 2;
+        }
+
+        optional EFailoverMode FailoverMode = 1;
+    }
+
+    oneof State {
+        TStandBy StandBy = 1;
+        TPaused Paused = 2;
+        TDone Done = 3;
+    }
+}
+
 message TOperationId {
     optional uint64 TxId = 1;
     optional uint32 PartId = 2;
@@ -63,6 +87,23 @@ message TEvCreateReplicationResult {
         UNKNOWN = 0;
         SUCCESS = 1;
         ALREADY_EXISTS = 2;
+    }
+
+    optional TOperationId OperationId = 1;
+    optional uint64 Origin = 2;
+    optional EStatus Status = 3;
+}
+
+message TEvAlterReplication {
+    optional NKikimrProto.TPathID PathId = 1;
+    optional TOperationId OperationId = 2;
+    optional TReplicationState SwitchState = 3;
+}
+
+message TEvAlterReplicationResult {
+    enum EStatus {
+        UNKNOWN = 0;
+        SUCCESS = 1;
     }
 
     optional TOperationId OperationId = 1;

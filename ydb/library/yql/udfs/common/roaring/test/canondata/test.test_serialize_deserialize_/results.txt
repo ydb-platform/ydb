@@ -10,10 +10,13 @@
                             [
                                 "DeserializedList";
                                 [
-                                    "ListType";
+                                    "OptionalType";
                                     [
-                                        "DataType";
-                                        "Uint32"
+                                        "ListType";
+                                        [
+                                            "DataType";
+                                            "Uint32"
+                                        ]
                                     ]
                                 ]
                             ]
@@ -23,8 +26,10 @@
                 "Data" = [
                     [
                         [
-                            "10";
-                            "567"
+                            [
+                                "10";
+                                "567"
+                            ]
                         ]
                     ]
                 ]

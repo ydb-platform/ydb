@@ -4,32 +4,42 @@
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 
-#include <contrib/libs/croaring/cpp/roaring.hh>
+#include <contrib/libs/croaring/include/roaring/roaring.h>
 #include <contrib/libs/croaring/include/roaring/memory.h>
 
 #include <util/generic/vector.h>
+#include <util/string/builder.h>
 #include <util/system/yassert.h>
 
 using namespace NKikimr;
 using namespace NUdf;
 
 namespace {
-    using roaring::Roaring;
 
-    class TRoaringWrapper: public TBoxedValue {
-    public:
-        TRoaringWrapper(const TStringValue& binaryString)
-            : Roaring_(std::make_unique<class Roaring>(Roaring::readSafe(binaryString.Data(), binaryString.Size())))
+    using namespace roaring::api;
+
+    inline roaring_bitmap_t* DeserializePortable(TStringRef binaryString) {
+        auto bitmap = roaring_bitmap_portable_deserialize_safe(binaryString.Data(), binaryString.Size());
+        Y_ENSURE(bitmap);
+        return bitmap;
+    }
+
+    struct TRoaringWrapper: public TBoxedValue {
+        TRoaringWrapper(TStringRef binaryString)
+            : Roaring_(DeserializePortable(binaryString))
         {
         }
 
-        Roaring& GetDelegate() {
-            return *Roaring_;
+        ~TRoaringWrapper() {
+            roaring_bitmap_free(Roaring_);
         }
 
-    private:
-        const std::unique_ptr<Roaring> Roaring_;
+        roaring_bitmap_t* Roaring_;
     };
+
+    inline roaring_bitmap_t* GetBitmapFromArg(TUnboxedValuePod arg) {
+        return static_cast<TRoaringWrapper*>(arg.AsBoxed().Get())->Roaring_;
+    }
 
     class TRoaringUnionWithBinary: public TBoxedValue {
     public:
@@ -49,12 +59,11 @@ namespace {
                 return TUnboxedValuePod();
             }
             try {
-                auto wrapper = static_cast<TRoaringWrapper*>(
-                    args[0].GetOptionalValue().AsBoxed().Get());
-                auto binaryString = args[1].GetOptionalValue().AsStringValue();
-                auto bitmap = Roaring::readSafe(binaryString.Data(), binaryString.Size());
+                auto binaryString = args[1].AsStringRef();
+                auto bitmap = DeserializePortable(binaryString);
 
-                wrapper->GetDelegate() |= bitmap;
+                roaring_bitmap_or_inplace(GetBitmapFromArg(args[0]), bitmap);
+                roaring_bitmap_free(bitmap);
 
                 return args[0];
             } catch (const std::exception& e) {
@@ -81,12 +90,11 @@ namespace {
                 return TUnboxedValuePod();
             }
             try {
-                auto wrapper = static_cast<TRoaringWrapper*>(
-                    args[0].GetOptionalValue().AsBoxed().Get());
-                auto binaryString = args[1].GetOptionalValue().AsStringValue();
-                auto bitmap = Roaring::readSafe(binaryString.Data(), binaryString.Size());
+                auto binaryString = args[1].AsStringRef();
+                auto bitmap = DeserializePortable(binaryString);
 
-                wrapper->GetDelegate() &= bitmap;
+                roaring_bitmap_and_inplace(GetBitmapFromArg(args[0]), bitmap);
+                roaring_bitmap_free(bitmap);
 
                 return args[0];
             } catch (const std::exception& e) {
@@ -113,12 +121,7 @@ namespace {
                 return TUnboxedValuePod();
             }
             try {
-                auto leftWrapper = static_cast<TRoaringWrapper*>(
-                    args[0].GetOptionalValue().AsBoxed().Get());
-                auto rightWrapper = static_cast<TRoaringWrapper*>(
-                    args[1].GetOptionalValue().AsBoxed().Get());
-
-                leftWrapper->GetDelegate() &= rightWrapper->GetDelegate();
+                roaring_bitmap_and_inplace(GetBitmapFromArg(args[0]), GetBitmapFromArg(args[1]));
                 return args[0];
             } catch (const std::exception& e) {
                 UdfTerminate(CurrentExceptionMessage().c_str());
@@ -144,13 +147,7 @@ namespace {
                 return TUnboxedValuePod();
             }
             try {
-                auto leftWrapper = static_cast<TRoaringWrapper*>(
-                    args[0].GetOptionalValue().AsBoxed().Get());
-                auto rightWrapper = static_cast<TRoaringWrapper*>(
-                    args[1].GetOptionalValue().AsBoxed().Get());
-
-                leftWrapper->GetDelegate() |= rightWrapper->GetDelegate();
-
+                roaring_bitmap_or_inplace(GetBitmapFromArg(args[0]), GetBitmapFromArg(args[1]));
                 return args[0];
             } catch (const std::exception& e) {
                 UdfTerminate(CurrentExceptionMessage().c_str());
@@ -171,19 +168,20 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             if (!args[0]) {
-                return valueBuilder->NewEmptyList();
+                return TUnboxedValuePod();
             }
             try {
-                auto wrapper = static_cast<TRoaringWrapper*>(
-                    args[0].GetOptionalValue().AsBoxed().Get());
-
-                auto bitmap = wrapper->GetDelegate();
-                auto cardinality = bitmap.cardinality();
+                auto bitmap = GetBitmapFromArg(args[0]);
+                auto cardinality = roaring_bitmap_get_cardinality(bitmap);
                 auto resultList = TVector<TUnboxedValue>();
                 resultList.reserve(cardinality);
-                for (auto iter = bitmap.begin(); iter != bitmap.end(); iter++) {
-                    resultList.push_back(TUnboxedValuePod(iter.i.current_value));
+
+                auto i = roaring_iterator_create(bitmap);
+                while (i->has_value) {
+                    resultList.push_back(TUnboxedValuePod(i->current_value));
+                    roaring_uint32_iterator_advance(i);
                 }
+
                 return valueBuilder->NewList(resultList.data(), cardinality);
             } catch (const std::exception& e) {
                 UdfTerminate(CurrentExceptionMessage().c_str());
@@ -210,9 +208,7 @@ namespace {
             }
 
             try {
-                auto binaryString = args[0].GetOptionalValue().AsStringValue();
-
-                return TUnboxedValuePod(new TRoaringWrapper(binaryString));
+                return TUnboxedValuePod(new TRoaringWrapper(args[0].AsStringRef()));
             } catch (const std::exception& e) {
                 UdfTerminate(CurrentExceptionMessage().c_str());
             }
@@ -236,18 +232,14 @@ namespace {
             }
 
             try {
-                auto wrapper = static_cast<TRoaringWrapper*>(
-                    args[0].GetOptionalValue().AsBoxed().Get());
+                auto bitmap = GetBitmapFromArg(args[0]);
+                roaring_bitmap_run_optimize(bitmap);
 
-                auto bitmap = wrapper->GetDelegate();
-
-                bitmap.runOptimize();
-                char* buf = (char*)UdfAllocateWithSize(bitmap.getSizeInBytes());
-                bitmap.write(buf);
-
-                auto string =
-                    valueBuilder->NewString(TStringRef(buf, bitmap.getSizeInBytes()));
-                UdfFreeWithSize((void*)buf, bitmap.getSizeInBytes());
+                auto sizeInBytes = roaring_bitmap_portable_size_in_bytes(bitmap);
+                auto buf = (char*)UdfAllocateWithSize(sizeInBytes);
+                roaring_bitmap_portable_serialize(bitmap, buf);
+                auto string = valueBuilder->NewString(TStringRef(buf, sizeInBytes));
+                UdfFreeWithSize((void*)buf, sizeInBytes);
 
                 return string;
             } catch (const std::exception& e) {
@@ -274,12 +266,8 @@ namespace {
 
             Y_UNUSED(valueBuilder);
             try {
-                auto wrapper = static_cast<TRoaringWrapper*>(
-                    args[0].GetOptionalValue().AsBoxed().Get());
-
-                auto bitmap = wrapper->GetDelegate();
-
-                ui32 cardinality = bitmap.cardinality();
+                auto bitmap = GetBitmapFromArg(args[0]);
+                auto cardinality = (ui32)roaring_bitmap_get_cardinality(bitmap);
                 return TUnboxedValuePod(cardinality);
             } catch (const std::exception& e) {
                 UdfTerminate(CurrentExceptionMessage().c_str());
@@ -318,11 +306,6 @@ namespace {
                 Y_UNUSED(userType);
                 Y_UNUSED(typeConfig);
 
-                auto memoryHook = roaring_memory_t{
-                    RoaringMallocUdf, RoaringReallocUdf, RoaringCallocUdf,
-                    RoaringFreeUdf, RoaringAlignedMallocUdf, RoaringFreeUdf};
-                roaring_init_memory_hook(memoryHook);
-
                 auto typesOnly = (flags & TFlags::TypesOnly);
                 auto roaringType = builder.Resource(RoaringResourceName);
                 auto optionalRoaringType = builder.Optional()->Item(roaringType).Build();
@@ -353,8 +336,9 @@ namespace {
                         builder.Implementation(new TRoaringCardinality());
                     }
                 } else if (TRoaringUint32List::Name() == name) {
+                    auto ui32ListType = builder.List()->Item(builder.SimpleType<ui32>()).Build();
                     builder
-                        .Returns(builder.List()->Item(builder.SimpleType<ui32>()).Build())
+                        .Returns(builder.Optional()->Item(ui32ListType).Build())
                         .Args()
                         ->Add(optionalRoaringType);
 
@@ -398,7 +382,9 @@ namespace {
                         builder.Implementation(new TRoaringIntersect());
                     }
                 } else {
-                    Y_ENSURE(false, "unknown function name");
+                    TStringBuilder sb;
+                    sb << "Unknown function: " << name.Data();
+                    builder.SetError(sb);
                 }
             } catch (const std::exception& e) {
                 builder.SetError(CurrentExceptionMessage());
@@ -420,6 +406,15 @@ namespace {
         }
 
         static void* RoaringReallocUdf(void* oldPointer, size_t newSize) {
+            if (oldPointer == nullptr) {
+                return RoaringMallocUdf(newSize);
+            }
+
+            if (oldPointer != nullptr && newSize == 0) {
+                RoaringFreeUdf(oldPointer);
+                return nullptr;
+            }
+
             auto reallocatedPointer = RoaringMallocUdf(newSize);
             auto oldAllocatedMemPointer = (char*)((void**)oldPointer)[-1];
             auto oldSizePointer = (char*)((void**)oldPointer)[-2];
@@ -449,8 +444,9 @@ namespace {
             auto allocatedMemPointer = UdfAllocateWithSize(allocationSize);
 
             auto roaringMemPointer = ((char*)allocatedMemPointer) + 2 * sizeof(void*);
-            if ((size_t)roaringMemPointer & (alignment - 1))
+            if ((size_t)roaringMemPointer & (alignment - 1)) {
                 roaringMemPointer += alignment - ((size_t)roaringMemPointer & (alignment - 1));
+            }
 
             ((void**)roaringMemPointer)[-1] = allocatedMemPointer;
             ((void**)roaringMemPointer)[-2] = ((char*)allocatedMemPointer) + allocationSize;
@@ -461,3 +457,4 @@ namespace {
 } // namespace
 
 REGISTER_MODULES(TRoaringModule)
+

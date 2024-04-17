@@ -36,10 +36,13 @@
                             [
                                 "IntersectCardinality";
                                 [
-                                    "ListType";
+                                    "OptionalType";
                                     [
-                                        "DataType";
-                                        "Uint32"
+                                        "ListType";
+                                        [
+                                            "DataType";
+                                            "Uint32"
+                                        ]
                                     ]
                                 ]
                             ]
@@ -49,7 +52,9 @@
                 "Data" = [
                     [
                         [
-                            "1"
+                            [
+                                "1"
+                            ]
                         ]
                     ]
                 ]

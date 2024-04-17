@@ -1,4 +1,19 @@
 {
+    "test.test[cardinality]": [
+        {
+            "uri": "file://test.test_cardinality_/results.txt"
+        }
+    ],
+    "test.test[intersect]": [
+        {
+            "uri": "file://test.test_intersect_/results.txt"
+        }
+    ],
+    "test.test[intersect_binary]": [
+        {
+            "uri": "file://test.test_intersect_binary_/results.txt"
+        }
+    ],
     "test.test[serialize_deserialize]": [
         {
             "uri": "file://test.test_serialize_deserialize_/results.txt"
@@ -12,21 +27,6 @@
     "test.test[union_binary]": [
         {
             "uri": "file://test.test_union_binary_/results.txt"
-        }
-    ],
-    "test.test[intersect]": [
-        {
-            "uri": "file://test.test_intersect_/results.txt"
-        }
-    ],
-    "test.test[intersect_binary]": [
-        {
-            "uri": "file://test.test_intersect_binary_/results.txt"
-        }
-    ],
-    "test.test[cardinality]": [
-        {
-            "uri": "file://test.test_cardinality_/results.txt"
         }
     ]
 }

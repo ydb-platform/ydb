@@ -194,6 +194,14 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) 
     YQL_ENSURE(state->Generation == msg.GetGeneration());
 
     if (state->State == EShardState::Starting) {
+        ++TotalRetries;
+        if (TotalRetries >= MAX_TOTAL_SHARD_RETRIES) {
+            CA_LOG_E("TKqpScanFetcherActor: broken tablet for this request " << state->TabletId
+                << ", retries limit exceeded (" << state->TotalRetries << "/" << TotalRetries << ")");
+            SendGlobalFail(NDqProto::COMPUTE_STATE_FAILURE, YdbStatusToDqStatus(status), issues);
+            return PassAway();
+        }
+
         if (FindSchemeErrorInIssues(status, issues)) {
             return EnqueueResolveShard(state);
         }

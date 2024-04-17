@@ -343,7 +343,10 @@ void TWriteSessionActor::SetupCounters(const TString& cloudId, const TString& db
 
 
 void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
-    Y_VERIFY(State == ES_WAIT_SCHEME || State == ES_INITED);
+    if (State != ES_WAIT_SCHEME && State != ES_INITED) {
+        return CloseSession("erroneous internal state", NPersQueue::NErrorCode::ERROR, ctx);;
+    }
+
     auto& res = ev->Get()->Result;
     Y_VERIFY(res->ResultSet.size() == 1);
 
@@ -815,6 +818,11 @@ void TWriteSessionActor::ProceedPartition(const ui32 partition, const TActorCont
 }
 
 void TWriteSessionActor::CloseSession(const TString& errorReason, const NPersQueue::NErrorCode::EErrorCode errorCode, const NActors::TActorContext& ctx) {
+    if (SessionClosed) {
+        return;
+    }
+    SessionClosed = true;
+
     if (errorCode != NPersQueue::NErrorCode::OK) {
         if (InternalErrorCode(errorCode)) {
             SLIErrors.Inc();
@@ -1176,7 +1184,9 @@ void TWriteSessionActor::LogSession(const TActorContext& ctx) {
 }
 
 void TWriteSessionActor::HandleWakeup(const TActorContext& ctx) {
-    Y_VERIFY(State == ES_INITED);
+    if (State != ES_INITED) {
+        return CloseSession("erroneous internal state", NPersQueue::NErrorCode::ERROR, ctx);
+    }
     ctx.Schedule(CHECK_ACL_DELAY, new TEvents::TEvWakeup());
     const auto& pqConfig = AppData(ctx)->PQConfig;
     if (!ACLCheckInProgress && (ForceACLCheck || (ctx.Now() - LastACLCheckTimestamp > TDuration::Seconds(pqConfig.GetACLRetryTimeoutSec()) && RequestNotChecked))) {

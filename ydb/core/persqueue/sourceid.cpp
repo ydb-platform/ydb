@@ -202,7 +202,7 @@ void TSourceIdStorage::DeregisterSourceId(const TString& sourceId) {
         return;
     }
 
-    SourceIdsByOffset.erase(std::make_pair(it->second.Offset, sourceId));
+    SourceIdsByOffset[it->second.Explicit].erase(std::make_pair(it->second.Offset, sourceId));
     InMemorySourceIds.erase(it);
 
     auto jt = SourceIdOwners.find(sourceId);
@@ -226,16 +226,14 @@ bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInsta
     const auto ttl = TDuration::Seconds(config.GetSourceIdLifetimeSeconds());
     ui32 size = request->Record.ByteSize();
 
-    for (const auto& [offset, sourceId] : SourceIdsByOffset) {
+    for (const auto& [offset, sourceId] : SourceIdsByOffset[0]) {
         if (offset >= startOffset && toDelOffsets.size() >= maxDeleteSourceIds) {
             break;
         }
 
         auto it = InMemorySourceIds.find(sourceId);
         Y_VERIFY(it != InMemorySourceIds.end());
-        if (it->second.Explicit) {
-            continue;
-        }
+        Y_VERIFY(!it->second.Explicit);
 
         if (toDelOffsets.size() < maxDeleteSourceIds || it->second.IsExpired(ttl, now)) {
             toDelOffsets.emplace_back(offset, sourceId);
@@ -272,7 +270,7 @@ bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInsta
         size_t res = InMemorySourceIds.erase(t.second);
         Y_VERIFY(res == 1);
         // delete sourceID from offsets
-        res = SourceIdsByOffset.erase(t);
+        res = SourceIdsByOffset[0].erase(t);
         Y_VERIFY(res == 1);
         // save owners to drop and delete records from map
         auto it = SourceIdOwners.find(t.second);
@@ -321,7 +319,7 @@ void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdIn
     auto it = InMemorySourceIds.find(sourceId);
     if (it != InMemorySourceIds.end()) {
         if (!load || it->second.Offset < sourceIdInfo.Offset) {
-            const auto res = SourceIdsByOffset.erase(std::make_pair(it->second.Offset, sourceId));
+            const auto res = SourceIdsByOffset[sourceIdInfo.Explicit].erase(std::make_pair(it->second.Offset, sourceId));
             Y_VERIFY(res == 1);
         } else {
             return;
@@ -331,7 +329,7 @@ void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdIn
     const auto offset = sourceIdInfo.Offset;
     InMemorySourceIds[sourceId] = std::move(sourceIdInfo);
 
-    const bool res = SourceIdsByOffset.emplace(offset, sourceId).second;
+    const bool res = SourceIdsByOffset[sourceIdInfo.Explicit].emplace(offset, sourceId).second;
     Y_VERIFY(res);
 }
 
@@ -357,10 +355,12 @@ void TSourceIdStorage::MarkOwnersForDeletedSourceId(THashMap<TString, TOwnerInfo
 
 TInstant TSourceIdStorage::MinAvailableTimestamp(TInstant now) const {
     TInstant ds = now;
-    if (!SourceIdsByOffset.empty()) {
-        auto it = InMemorySourceIds.find(SourceIdsByOffset.begin()->second);
-        Y_VERIFY(it != InMemorySourceIds.end());
-        ds = Min(ds, it->second.WriteTimestamp);
+    for (auto& sibo: SourceIdsByOffset) {
+        if (!sibo.empty()) {
+            auto it = InMemorySourceIds.find(sibo.begin()->second);
+            Y_VERIFY(it != InMemorySourceIds.end());
+            ds = Min(ds, it->second.WriteTimestamp);
+        }
     }
 
     return ds;

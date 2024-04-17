@@ -87,7 +87,7 @@ private:
     TSourceIdMap InMemorySourceIds;
     THashMap<TString, TString> SourceIdOwners;
     TVector<TString> OwnersToDrop;
-    TSet<std::pair<ui64, TString>> SourceIdsByOffset;
+    TSet<std::pair<ui64, TString>> SourceIdsByOffset[2];
 
 }; // TSourceIdStorage
 

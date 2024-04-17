@@ -1068,6 +1068,10 @@ void TWriteSessionActor<UseMigrationProtocol>::ProceedPartition(const ui32 parti
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx) {
+    if (SessionClosed) {
+        return;
+    }
+    SessionClosed = true;
 
     if (errorCode != PersQueue::ErrorCode::OK) {
 
@@ -1794,7 +1798,11 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& 
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::RecheckACL(const TActorContext& ctx) {
-    Y_VERIFY(State == ES_INITED);
+    if (State != ES_INITED) {
+        LOG_ERROR_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "WRONG STATE: " << (int)State);
+        return CloseSession("erroneous internal state", PersQueue::ErrorCode::ERROR, ctx);
+    }
+
     ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetACLRetryTimeoutSec()), new TEvents::TEvWakeup(EWakeupTag::RecheckAcl));
     if (Token && !ACLCheckInProgress && RequestNotChecked && (ctx.Now() - LastACLCheckTimestamp > TDuration::Seconds(AppData(ctx)->PQConfig.GetACLRetryTimeoutSec()))) {
         RequestNotChecked = false;

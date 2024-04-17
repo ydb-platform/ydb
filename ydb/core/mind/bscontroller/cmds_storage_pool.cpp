@@ -564,6 +564,7 @@ namespace NKikimr::NBsController {
                 x->SetStatus(NKikimrBlobStorage::EVDiskStatus_Name(vslot.VDiskStatus));
             }
             if (const auto& ss = AppData()->StaticBlobStorageConfig) {
+                const TMonotonic mono = TActivationContext::Monotonic();
                 for (const auto& group : ss->GetGroups()) {
                     auto *x = pb->AddGroup();
                     x->SetGroupId(group.GetGroupID());
@@ -575,6 +576,45 @@ namespace NKikimr::NBsController {
                                 const TVSlotId vslotId(location.GetNodeID(), location.GetPDiskID(), location.GetVDiskSlotID());
                                 vslotId.Serialize(x->AddVSlotId());
                             }
+                        }
+
+                        TStringStream err;
+                        auto info = TBlobStorageGroupInfo::Parse(group, nullptr, &err);
+                        Y_VERIFY_DEBUG_S(info, "failed to parse static group, error# " << err.Str());
+                        if (info) {
+                            const auto *topology = &info->GetTopology();
+
+                            TBlobStorageGroupInfo::TGroupVDisks failed(topology);
+                            TBlobStorageGroupInfo::TGroupVDisks failedByPDisk(topology);
+
+                            ui32 realmIdx = 0;
+                            for (const auto& realm : group.GetRings()) {
+                                ui32 domainIdx = 0;
+                                for (const auto& domain : realm.GetFailDomains()) {
+                                    ui32 vdiskIdx = 0;
+                                    for (const auto& location : domain.GetVDiskLocations()) {
+                                        const TVSlotId vslotId(location.GetNodeID(), location.GetPDiskID(), location.GetVDiskSlotID());
+                                        const TVDiskIdShort vdiskId(realmIdx, domainIdx, vdiskIdx);
+
+                                        if (const auto it = StaticVSlots.find(vslotId); it != StaticVSlots.end()) {
+                                            if (mono <= it->second.ReadySince) { // VDisk can't be treated as READY one
+                                                failed |= {topology, vdiskId};
+                                            } else if (const TPDiskInfo *pdisk = PDisks.Find(vslotId.ComprisingPDiskId()); !pdisk || !pdisk->HasGoodExpectedStatus()) {
+                                                failedByPDisk |= {topology, vdiskId};
+                                            }
+                                        } else {
+                                            failed |= {topology, vdiskId};
+                                        }
+
+                                        ++vdiskIdx;
+                                    }
+                                    ++domainIdx;
+                                }
+                                ++realmIdx;
+                            }
+
+                            x->SetOperatingStatus(DeriveStatus(topology, failed));
+                            x->SetExpectedStatus(DeriveStatus(topology, failed | failedByPDisk));
                         }
                     }
                 }

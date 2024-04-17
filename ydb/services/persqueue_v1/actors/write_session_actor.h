@@ -322,6 +322,7 @@ private:
 
     TDeque<ui64> SeqNoInflight;
 
+    bool SessionClosed = false;
 };
 
 }

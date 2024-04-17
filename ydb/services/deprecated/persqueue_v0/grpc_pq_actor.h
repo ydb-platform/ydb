@@ -586,6 +586,8 @@ private:
 
     NPersQueue::TWriteRequest::TInit InitRequest;
     NPQ::ESourceIdTableGeneration SrcIdTableGeneration;
+
+    bool SessionClosed = false;
 };
 
 class TReadSessionActor : public TActorBootstrapped<TReadSessionActor> {

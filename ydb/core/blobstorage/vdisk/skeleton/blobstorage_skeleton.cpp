@@ -8,7 +8,7 @@
 #include "skeleton_loggedrec.h"
 #include "skeleton_vmultiput_actor.h"
 #include "skeleton_vmovedpatch_actor.h"
-#include "skeleton_vpatch_actor.h"
+#include "skeleton_vpatch_orchestrator.h"
 #include "skeleton_oos_logic.h"
 #include "skeleton_oos_tracker.h"
 #include "skeleton_overload_handler.h"
@@ -205,20 +205,12 @@ namespace NKikimr {
                     IFaceMonGroup->MovedPatchResMsgsPtr(), Db->GetVDiskIncarnationGuid(), VCtx));
         }
 
-        void UpdateVPatchCtx() {
-            if (!VPatchCtx) {
-                TIntrusivePtr<::NMonitoring::TDynamicCounters> patchGroup = VCtx->VDiskCounters->GetSubgroup("subsystem", "patch");
-                VPatchCtx = MakeIntrusive<TVPatchCtx>();
-                NBackpressure::TQueueClientId patchQueueClientId(NBackpressure::EQueueClientType::VPatch,
-                            VCtx->Top->GetOrderNumber(VCtx->ShortSelfVDisk));
-                CreateQueuesForVDisks(VPatchCtx->AsyncBlobQueues, SelfId(), GInfo, VCtx, GInfo->GetVDisks(), patchGroup,
-                        patchQueueClientId, NKikimrBlobStorage::EVDiskQueueId::PutAsyncBlob,
-                        "PeerVPatch",  TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA);
+        void UpdateVPatchOrchestrator() {
+            if (!VPatchOrchestrator) {
+                VPatchOrchestrator = Register(
+                    CreateSkeletonVPatchOrchestratorActor(GInfo, SkeletonFrontIDPtr, IFaceMonGroup, Db->GetVDiskIncarnationGuid(), VCtx)
+                );
             }
-        }
-
-        void Handle(TEvProxyQueueState::TPtr &/*ev*/, const TActorContext &/*ctx*/) {
-            // TODO(kruall): Make it better
         }
 
         template <typename TEvPtr>
@@ -246,24 +238,7 @@ namespace NKikimr {
                 ReplyError(NKikimrProto::ERROR, "VPatch is disabled", ev, ctx, TAppData::TimeProvider->Now());
                 return;
             }
-
-            TLogoBlobID patchedBlobId = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetPatchedBlobId());
-
-            if (VPatchActors.count(patchedBlobId)) {
-                ReplyError(NKikimrProto::ERROR, "The patching request already is running", ev, ctx, TAppData::TimeProvider->Now());
-                return;
-            }
-
-            LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVPatch: register actor;"
-                    << " Event# " << ev->Get()->ToString());
-            IFaceMonGroup->PatchStartMsgs()++;
-            UpdateVPatchCtx();
-            std::unique_ptr<IActor> actor{CreateSkeletonVPatchActor(SelfId(), GInfo->Type, ev, now, SkeletonFrontIDPtr,
-                    IFaceMonGroup->PatchFoundPartsMsgsPtr(), IFaceMonGroup->PatchResMsgsPtr(),
-                    VCtx->Histograms.GetHistogram(NKikimrBlobStorage::FastRead), VCtx->Histograms.GetHistogram(NKikimrBlobStorage::AsyncBlob),
-                    VPatchCtx, VCtx->VDiskLogPrefix, Db->GetVDiskIncarnationGuid(), VCtx)};
-            TActorId vPatchActor = Register(actor.release());
-            VPatchActors.emplace(patchedBlobId, vPatchActor);
+            TActivationContext::Send(ev->Forward(VPatchOrchestrator));
         }
 
         template <typename TEvDiffPtr>
@@ -271,31 +246,7 @@ namespace NKikimr {
             if (!CheckIfWriteAllowed(ev, ctx)) {
                 return;
             }
-            if constexpr (std::is_same_v<TEvDiffPtr, TEvBlobStorage::TEvVPatchDiff::TPtr>) {
-                LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVPatch: recieve diff;"
-                        << " Event# " << ev->Get()->ToString());
-                IFaceMonGroup->PatchDiffMsgs()++;
-            }
-            if constexpr (std::is_same_v<TEvDiffPtr, TEvBlobStorage::TEvVPatchXorDiff::TPtr>) {
-                LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVPatch: recieve xor diff;"
-                        << " Event# " << ev->Get()->ToString());
-                IFaceMonGroup->PatchXorDiffMsgs()++;
-            }
-            TLogoBlobID patchedBlobId = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetPatchedPartBlobId()).FullID();
-            auto it = VPatchActors.find(patchedBlobId);
-            if (it != VPatchActors.end()) {
-                TActivationContext::Send(ev->Forward(it->second));
-            } else {
-                ReplyError(NKikimrProto::ERROR, "VPatchActor doesn't exist", ev, ctx, TAppData::TimeProvider->Now());
-            }
-        }
-
-        void Handle(TEvVPatchDyingRequest::TPtr &ev) {
-            auto it = VPatchActors.find(ev->Get()->PatchedBlobId);
-            if (it != VPatchActors.end()) {
-                VPatchActors.erase(it);
-            }
-            Send(ev->Sender, new TEvVPatchDyingConfirm);
+            TActivationContext::Send(ev->Forward(VPatchOrchestrator));
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -2275,8 +2226,9 @@ namespace NKikimr {
             GInfo = msg->NewInfo;
             SelfVDiskId = msg->NewVDiskId;
 
-            // clear VPatchCtx
-            VPatchCtx = nullptr;
+            if (VPatchOrchestrator) {
+                Send(VPatchOrchestrator, new TEvVPatchUpdateSelfVDisk(SelfVDiskId));
+            }
 
             // send command to Synclog
             ctx.Send(Db->SyncLogID, ev->Get()->Clone());
@@ -2535,7 +2487,6 @@ namespace NKikimr {
             fFunc(TEvBlobStorage::EvScrubAwait, ForwardToScrubActor)
             fFunc(TEvBlobStorage::EvRecoverBlob, ForwardToScrubActor)
             fFunc(TEvBlobStorage::EvNonrestoredCorruptedBlobNotify, ForwardToScrubActor)
-            HFunc(TEvProxyQueueState, Handle)
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
             hFunc(TEvReplInvoke, HandleReplNotInProgress)
@@ -2588,7 +2539,6 @@ namespace NKikimr {
             HFunc(TEvReportScrubStatus, Handle)
             HFunc(TEvRestoreCorruptedBlob, Handle)
             HFunc(TEvBlobStorage::TEvCaptureVDiskLayout, Handle)
-            HFunc(TEvProxyQueueState, Handle)
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
             hFunc(TEvReplInvoke, HandleReplNotInProgress)
@@ -2599,7 +2549,6 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVPatchStart, Handle)
             HFunc(TEvBlobStorage::TEvVPatchDiff, HandleVPatchDiffResending)
             HFunc(TEvBlobStorage::TEvVPatchXorDiff, HandleVPatchDiffResending)
-            hFunc(TEvVPatchDyingRequest, Handle)
             HFunc(TEvBlobStorage::TEvVPut, Handle)
             HFunc(TEvBlobStorage::TEvVMultiPut, Handle)
             HFunc(TEvHullLogHugeBlob, Handle)
@@ -2655,7 +2604,6 @@ namespace NKikimr {
             HFunc(TEvReportScrubStatus, Handle)
             HFunc(TEvRestoreCorruptedBlob, Handle)
             HFunc(TEvBlobStorage::TEvCaptureVDiskLayout, Handle)
-            HFunc(TEvProxyQueueState, Handle)
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
             hFunc(TEvReplInvoke, Handle)
@@ -2682,8 +2630,6 @@ namespace NKikimr {
             HFunc(TEvReportScrubStatus, Handle)
             HFunc(TEvRestoreCorruptedBlob, Handle)
             HFunc(TEvBlobStorage::TEvCaptureVDiskLayout, Handle)
-            HFunc(TEvProxyQueueState, Handle)
-            hFunc(TEvVPatchDyingRequest, Handle)
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
             hFunc(TEvReplInvoke, HandleReplNotInProgress)
@@ -2744,7 +2690,6 @@ namespace NKikimr {
         std::shared_ptr<THull> Hull; // run it after local recovery
         std::shared_ptr<TOutOfSpaceLogic> OutOfSpaceLogic;
         std::shared_ptr<TQueryCtx> QueryCtx;
-        TIntrusivePtr<TVPatchCtx> VPatchCtx;
         TIntrusivePtr<TLocalRecoveryInfo> LocalRecovInfo; // just info we got after local recovery
         std::unique_ptr<TOverloadHandler> OverloadHandler;
         TActorIDPtr SkeletonFrontIDPtr;
@@ -2772,7 +2717,7 @@ namespace NKikimr {
         bool HasUnreadableBlobs = false;
         std::unique_ptr<TVDiskCompactionState> VDiskCompactionState;
         TMemorizableControlWrapper EnableVPatch;
-        THashMap<TLogoBlobID, TActorId> VPatchActors;
+        TActorId VPatchOrchestrator;
 
         std::unordered_map<TString, TSnapshotInfo> Snapshots;
         TSnapshotExpirationMap SnapshotExpirationMap;

@@ -48,6 +48,7 @@ SRCS(
     skeleton_vmovedpatch_actor.h
     skeleton_vpatch_actor.cpp
     skeleton_vpatch_actor.h
+    skeleton_vpatch_orchestrator.cpp
 )
 
 END()

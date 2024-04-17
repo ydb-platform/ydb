@@ -975,7 +975,12 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
     CheckChangesQueueNoOverflow();
 }
 
-void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records) {
+void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie) {
+    if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
+        ChangeQueueReservedCapacity -= it->second;
+        ChangeQueueReservations.erase(it);
+    }
+
     if (!records) {
         return;
     }
@@ -1021,6 +1026,31 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
 
     Y_ABORT_UNLESS(OutChangeSender);
     Send(OutChangeSender, new NChangeExchange::TEvChangeExchange::TEvEnqueueRecords(std::move(forward)));
+}
+
+ui32 TDataShard::GetFreeChangeQueueCapacity(ui64 cookie) {
+    const auto sizeLimit = AppData()->DataShardConfig.GetChangesQueueItemsLimit();
+    if (sizeLimit < ChangesQueue.size()) {
+        return 0;
+    }
+
+    ui32 reserved = ChangeQueueReservedCapacity;
+    if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
+        reserved -= it->second;
+    }
+
+    if (reserved > (sizeLimit - ChangesQueue.size())) {
+        return 0;
+    }
+
+    return sizeLimit - ChangesQueue.size() - reserved;
+}
+
+ui64 TDataShard::ReserveChangeQueueCapacity(ui32 capacity) {
+    const auto cookie = NextChangeQueueReservationCookie++;
+    ChangeQueueReservations.emplace(cookie, capacity);
+    ChangeQueueReservedCapacity += capacity;
+    return cookie;
 }
 
 void TDataShard::UpdateChangeExchangeLag(TInstant now) {
@@ -3471,19 +3501,31 @@ bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr
     return false;
 }
 
-bool TDataShard::CheckChangesQueueOverflow() const {
+bool TDataShard::CheckChangesQueueOverflow(ui64 cookie) const {
     const auto* appData = AppData();
     const auto sizeLimit = appData->DataShardConfig.GetChangesQueueItemsLimit();
     const auto bytesLimit = appData->DataShardConfig.GetChangesQueueBytesLimit();
-    return ChangesQueue.size() >= sizeLimit || ChangesQueueBytes >= bytesLimit;
+
+    ui32 reserved = ChangeQueueReservedCapacity;
+    if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
+        reserved -= it->second;
+    }
+
+    return (ChangesQueue.size() + reserved) >= sizeLimit || ChangesQueueBytes >= bytesLimit;
 }
 
-void TDataShard::CheckChangesQueueNoOverflow() {
+void TDataShard::CheckChangesQueueNoOverflow(ui64 cookie) {
     if (OverloadSubscribersByReason[RejectReasonIndex(ERejectReason::ChangesQueueOverflow)]) {
         const auto* appData = AppData();
         const auto sizeLimit = appData->DataShardConfig.GetChangesQueueItemsLimit();
         const auto bytesLimit = appData->DataShardConfig.GetChangesQueueBytesLimit();
-        if (ChangesQueue.size() < sizeLimit && ChangesQueueBytes < bytesLimit) {
+
+        ui32 reserved = ChangeQueueReservedCapacity;
+        if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
+            reserved -= it->second;
+        }
+
+        if ((ChangesQueue.size() + reserved) < sizeLimit && ChangesQueueBytes < bytesLimit) {
             NotifyOverloadSubscribers(ERejectReason::ChangesQueueOverflow);
         }
     }

@@ -114,10 +114,14 @@ public:
             ResignAndPassAway(response.Issues);
             return;
         }
-        ExecStatus = response.ExecStatus;
-        Params.Status = response.ComputeStatus;
+
+        if (!OperationIsFailing() || response.ExecStatus != NYdb::NQuery::EExecStatus::Completed) {
+            ExecStatus = response.ExecStatus;
+            Params.Status = response.ComputeStatus;
+        }
+
         LOG_I("StatusTrackerResponse (success) " << response.Status << " ExecStatus: " << static_cast<int>(response.ExecStatus) << " Issues: " << response.Issues.ToOneLineString());
-        if (response.ExecStatus == NYdb::NQuery::EExecStatus::Completed) {
+        if (ExecStatus == NYdb::NQuery::EExecStatus::Completed) {
             Register(ActorFactory->CreateResultWriter(SelfId(), Connector, Pinger, Params.OperationId, true).release());
         } else {
             CreateResourcesCleaner();
@@ -246,6 +250,12 @@ public:
 
         LOG_I(stage << "Stop task execution, cancel operation now is running");
         return true;
+    }
+
+    bool OperationIsFailing() const {
+        return Params.Status == FederatedQuery::QueryMeta::FAILING
+            || Params.Status == FederatedQuery::QueryMeta::ABORTING_BY_USER
+            || Params.Status == FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM;
     }
 
 private:

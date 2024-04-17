@@ -2,6 +2,7 @@
 
 #include "common.h"
 
+#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/query.h>
 
 
@@ -56,6 +57,8 @@ public:
     TRequestResult GetScriptExecutionOperationRequest(const TString& operation, TExecutionMeta& meta) const;
 
     TRequestResult FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId, Ydb::ResultSet& resultSet) const;
+
+    TRequestResult ForgetScriptExecutionOperationRequest(const TString& operation) const;
 
     void StartTraceOpt() const;
 

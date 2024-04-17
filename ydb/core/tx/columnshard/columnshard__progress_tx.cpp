@@ -39,7 +39,7 @@ public:
                 Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedTxId, LastCompletedTx->GetTxId());
             }
 
-            TxOperator->SetPlanQueueItem(plannedItem);
+            TxOperator->SetPlanQueueItem(plannedItem->GetPlanQueueItem());
             TxOperator = Self->ProgressTxController->GetVerifiedTxOperator(txId);
             AFL_VERIFY(TxOperator->Progress(*Self, NOlap::TSnapshot(step, txId), txc));
             Self->ProgressTxController->FinishPlannedTx(txId, txc);

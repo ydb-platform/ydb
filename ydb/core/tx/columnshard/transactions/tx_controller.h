@@ -24,6 +24,10 @@ public:
         inline bool operator<(const TPlanQueueItem& rhs) const {
             return Step < rhs.Step || (Step == rhs.Step && TxId < rhs.TxId);
         }
+
+        TString DebugString() const {
+            return TStringBuilder() << "step=" << Step << ";txId=" << TxId << ";";
+        }
     };
 
     struct TBasicTxInfo {
@@ -46,6 +50,10 @@ public:
         TTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId)
             : TBasicTxInfo(txKind, txId)
         {}
+
+        TPlanQueueItem GetPlanQueueItem() const {
+            return TPlanQueueItem(PlanStep, TxId);
+        }
     };
 
     class TProposeResult {

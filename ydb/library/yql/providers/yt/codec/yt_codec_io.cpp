@@ -1574,7 +1574,7 @@ void TMkqlReaderImpl::Next() {
         } catch (const TTimeoutException&) {
             throw;
         } catch (const yexception& e) {
-            OnError(std::current_exception(), e.AsStrBuf());
+            OnError(std::make_exception_ptr(e), e.AsStrBuf());
         } catch (...) {
             OnError(std::current_exception(), CurrentExceptionMessage());
         }

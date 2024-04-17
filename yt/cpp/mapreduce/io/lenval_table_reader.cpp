@@ -112,7 +112,7 @@ void TLenvalTableReader::Next()
             RowTaken_ = false;
             AtStart_ = false;
         } catch (const std::exception& ex) {
-            if (!PrepareRetry(std::current_exception())) {
+            if (!PrepareRetry(std::make_exception_ptr(ex))) {
                 throw;
             }
             continue;

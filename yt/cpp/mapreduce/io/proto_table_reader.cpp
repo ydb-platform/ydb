@@ -239,7 +239,7 @@ void TLenvalProtoTableReader::ReadRow(Message* row)
 
             break;
         } catch (const std::exception& ex) {
-            if (!TLenvalTableReader::Retry(std::current_exception())) {
+            if (!TLenvalTableReader::Retry(std::make_exception_ptr(ex))) {
                 throw;
             }
         }
@@ -300,8 +300,8 @@ void TLenvalProtoTableReader::SkipRow()
                 ythrow yexception() << "Premature end of stream";
             }
             break;
-        } catch (const std::exception&) {
-            if (!TLenvalTableReader::Retry(std::current_exception())) {
+        } catch (const std::exception& ex) {
+            if (!TLenvalTableReader::Retry(std::make_exception_ptr(ex))) {
                 throw;
             }
         }

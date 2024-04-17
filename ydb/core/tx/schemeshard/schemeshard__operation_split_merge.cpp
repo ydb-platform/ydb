@@ -763,7 +763,7 @@ public:
             }
         }
 
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) { //savnik: move version check option here?
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }

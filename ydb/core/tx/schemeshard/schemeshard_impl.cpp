@@ -1227,23 +1227,7 @@ bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme &scheme, TS
 
         if (item.HasPathVersion()) {
             const auto requiredVersion = item.GetPathVersion();
-            arc_ui64 actualVersion;
-            auto path = TPath::Init(pathId, this);
-            auto pathVersion = GetPathVersion(path);
-
-            if (item.HasCheckGeneralVersion() && !item.GetCheckGeneralVersion()) {
-                switch(path.Base()->PathType) { //savnik: fill
-                    case NKikimrSchemeOp::EPathTypePersQueueGroup:
-                        actualVersion = pathVersion.GetPQVersion();
-                        break;
-                    default:
-                        actualVersion = pathVersion.GetGeneralVersion();
-                        break;
-                }
-            } else {
-                actualVersion = pathVersion.GetGeneralVersion();
-            }
-
+            const auto actualVersion = GetPathVersion(TPath::Init(pathId, this)).GetGeneralVersion();
             if (requiredVersion != actualVersion) {
                 errStr = TStringBuilder()
                     << "fail user constraint in ApplyIf section:"

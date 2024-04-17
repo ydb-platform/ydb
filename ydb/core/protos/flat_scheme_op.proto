@@ -1482,7 +1482,6 @@ message TApplyIf {
     optional uint64 PathId = 1;
     optional uint64 PathVersion = 2;
     optional uint64 LockedTxId = 3;
-    optional bool CheckGeneralVersion = 4 [default = true];
 }
 
 message TUpgradeSubDomain {

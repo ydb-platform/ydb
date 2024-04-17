@@ -21,13 +21,12 @@ class Nodes(object):
     def nodes_list(self):
         return self._nodes
 
-    def _get_ssh_command_prefix(self, host):
+    def _get_ssh_command_prefix(self):
         command = []
         command.extend(['ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-A'])
         if (self._ssh_user):
             command.extend(['-l', self._ssh_user])
 
-        command.extend([host])
         return command
 
     def _check_async_execution(self, running_jobs, check_retcode=True, results=None):
@@ -82,7 +81,7 @@ class Nodes(object):
             if self._dry_run:
                 continue
 
-            actual_cmd = self._get_ssh_command_prefix(host) + [cmd]
+            actual_cmd = self._get_ssh_command_prefix() + [host, cmd]
             process = subprocess.Popen(actual_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             running_jobs.append((actual_cmd, process, host))
         return running_jobs
@@ -102,9 +101,9 @@ class Nodes(object):
         if self._dry_run:
             return
         destination = "{host}:{path}".format(host=host, path=remote_path)
-        user = self._ssh_user or os.getenv("USER")
+        rsh = " ".join(self._get_ssh_command_prefix())
         subprocess.check_call(["rsync", "-avqLW", "--del", "--no-o", "--no-g", 
-                               "--rsh=ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -l %s" % user, 
+                               "--rsh={}".format(rsh), 
                                "--rsync-path=sudo rsync", "--progress", local_path, destination])
 
     def _copy_between_nodes(self, hub, hub_path, hosts, remote_path):
@@ -127,11 +126,11 @@ class Nodes(object):
             )
             if self._dry_run:
                 continue
-            user = self._ssh_user or os.getenv("USER")
-            cmd = self._get_ssh_command_prefix(dst)
+            cmd = self._get_ssh_command_prefix() + [dst]
+            rsh = " ".join(self._get_ssh_command_prefix())
             cmd.extend([
                 "sudo", "rsync", "-avqW", "--del", "--no-o", "--no-g",
-                "--rsh='ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -l %s'" % user,
+                "--rsh='{}'".format(rsh),
                 src, remote_path
             ])
             process = subprocess.Popen(cmd)

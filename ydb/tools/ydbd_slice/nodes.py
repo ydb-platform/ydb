@@ -128,7 +128,7 @@ class Nodes(object):
             if self._dry_run:
                 continue
             user = self._ssh_user or os.getenv("USER")
-            cmd = self._get_ssh_command_prefix
+            cmd = self._get_ssh_command_prefix(dst)
             cmd.extend([
                 "sudo", "rsync", "-avqW", "--del", "--no-o", "--no-g",
                 "--rsh='ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -l %s'" % user,

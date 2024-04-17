@@ -102,10 +102,10 @@ class Nodes(object):
         if self._dry_run:
             return
         destination = "{host}:{path}".format(host=host, path=remote_path)
-        if self._ssh_user:
-            destination = self._ssh_user + "@" + destination
-        subprocess.check_call(["rsync", "-avqLW", "--del", "--no-o", "--no-g", "--rsync-path=sudo rsync", "--progress",
-                              local_path, destination])
+        user = self._ssh_user or os.getenv("USER")
+        subprocess.check_call(["rsync", "-avqLW", "--del", "--no-o", "--no-g", 
+                               "--rsh=ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -l %s" % user, 
+                               "--rsync-path=sudo rsync", "--progress", local_path, destination])
 
     def _copy_between_nodes(self, hub, hub_path, hosts, remote_path):
         if isinstance(hosts, str):

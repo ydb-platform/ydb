@@ -19,14 +19,15 @@ TPersQueueReadBalancer::TPartitionFamilty::TPartitionFamilty(TBalancingConsumerI
     InactivePartitionCount = inactivePartitionCount;
 
     UpdatePartitionMapping(Partitions);
+    UpdateSpecialSessions();
 }
 
 const TString& TPersQueueReadBalancer::TPartitionFamilty::Topic() const {
     return ConsumerInfo.Topic();
 }
 
-const TString& TPersQueueReadBalancer::TPartitionFamilty::Path() const {
-    return ConsumerInfo.Path();
+const TString& TPersQueueReadBalancer::TPartitionFamilty::TopicPath() const {
+    return ConsumerInfo.TopicPath();
 }
 
 ui32 TPersQueueReadBalancer::TPartitionFamilty::TabletGeneration() const {
@@ -91,6 +92,21 @@ bool TPersQueueReadBalancer::TPartitionFamilty::Unlock(const TActorId& sender, u
     Status = EStatus::Free;
     Session = nullptr;
 
+    if (!AttachedPartitions.empty()) {
+        auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(AttachedPartitions);
+        ActivePartitionCount -= activePartitionCount;
+        InactivePartitionCount -= inactivePartitionCount;
+
+        // The attached partitions are always at the end of the list.
+        Partitions.resize(Partitions.size() - AttachedPartitions.size());
+        for (auto partitionId : AttachedPartitions) {
+            ConsumerInfo.PartitionMapping.erase(partitionId);
+        }
+        AttachedPartitions.clear();
+
+        UpdateSpecialSessions();
+    }
+
     return true;
 }
 
@@ -113,7 +129,7 @@ void TPersQueueReadBalancer::TPartitionFamilty::StartReading(TPersQueueReadBalan
     LockedPartitions.insert(Partitions.begin(), Partitions.end());
 }
 
-void TPersQueueReadBalancer::TPartitionFamilty::AddPartitions(const std::vector<ui32>& partitions, const TActorContext& ctx) {
+void TPersQueueReadBalancer::TPartitionFamilty::AttachePartitions(const std::vector<ui32>& partitions, const TActorContext& ctx) {
     auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(partitions);
 
     ActivePartitionCount += activePartitionCount;
@@ -121,6 +137,8 @@ void TPersQueueReadBalancer::TPartitionFamilty::AddPartitions(const std::vector<
 
     Partitions.insert(Partitions.end(), partitions.begin(), partitions.end());
     UpdatePartitionMapping(partitions);
+
+    AttachedPartitions.insert(partitions.begin(), partitions.end());
 
     if (Status == EStatus::Active) {
         if (!Session->AllPartitionsReadable(Partitions)) {
@@ -141,7 +159,7 @@ void TPersQueueReadBalancer::TPartitionFamilty::AddPartitions(const std::vector<
 
     for (auto it = SpecialSessions.begin(); it != SpecialSessions.end();) {
         auto& session = it->second;
-        if (session->AllPartitionsReadable(Partitions)) {
+        if (session->AllPartitionsReadable(partitions)) {
             ++it;
         } else {
             it = SpecialSessions.erase(it);
@@ -149,7 +167,8 @@ void TPersQueueReadBalancer::TPartitionFamilty::AddPartitions(const std::vector<
     }
 }
 
-std::pair<size_t, size_t> TPersQueueReadBalancer::TPartitionFamilty::ClassifyPartitions(const std::vector<ui32>& partitions) {
+template<typename TPartitions>
+std::pair<size_t, size_t> TPersQueueReadBalancer::TPartitionFamilty::ClassifyPartitions(const TPartitions& partitions) {
     size_t activePartitionCount = 0;
     size_t inactivePartitionCount = 0;
 
@@ -175,13 +194,21 @@ void TPersQueueReadBalancer::TPartitionFamilty::UpdatePartitionMapping(const std
     }
 }
 
+void TPersQueueReadBalancer::TPartitionFamilty::UpdateSpecialSessions() {
+    for (auto& [_, readingSession] : ConsumerInfo.ReadingSessions) {
+        if (readingSession->WithGroups() && readingSession->AllPartitionsReadable(Partitions)) {
+            SpecialSessions[readingSession->Sender] = readingSession;
+        }
+    }
+}
+
 std::unique_ptr<TEvPersQueue::TEvReleasePartition> TPersQueueReadBalancer::TPartitionFamilty::MakeEvReleasePartition(ui32 partitionId) const {
     auto res = std::make_unique<TEvPersQueue::TEvReleasePartition>();
     auto& r = res->Record;
 
     r.SetSession(Session->Session);
     r.SetTopic(Topic());
-    r.SetPath(Path());
+    r.SetPath(TopicPath());
     r.SetGeneration(TabletGeneration());
     r.SetClientId(Session->ClientId);
     //if (count) { TODO always 1 or 0
@@ -200,7 +227,7 @@ std::unique_ptr<TEvPersQueue::TEvLockPartition> TPersQueueReadBalancer::TPartiti
     r.SetSession(Session->Session);
     r.SetPartition(partitionId);
     r.SetTopic(Topic());
-    r.SetPath(Path());
+    r.SetPath(TopicPath());
     r.SetGeneration(TabletGeneration());
     r.SetStep(step);
     r.SetClientId(Session->ClientId);
@@ -225,7 +252,7 @@ const TString& TPersQueueReadBalancer::TBalancingConsumerInfo::Topic() const {
     return Balancer.Topic;
 }
 
-const TString& TPersQueueReadBalancer::TBalancingConsumerInfo::Path() const {
+const TString& TPersQueueReadBalancer::TBalancingConsumerInfo::TopicPath() const {
     return Balancer.Path;
 }
 
@@ -255,13 +282,6 @@ ui32 TPersQueueReadBalancer::TBalancingConsumerInfo::NextStep() {
 
 void TPersQueueReadBalancer::TBalancingConsumerInfo::CreateFamily(std::vector<ui32>&& partitions) {
     auto family = std::make_unique<TPersQueueReadBalancer::TPartitionFamilty>(*this, ++NextFamilyId, std::move(partitions));
-
-    for (auto& [_, readingSession] : ReadingSessions) {
-        if (readingSession->WithGroups() && readingSession->AllPartitionsReadable(family->Partitions)) {
-            family->SpecialSessions[readingSession->Sender] = readingSession;
-        }
-    }
-
     Families[family->Id] = std::move(family);
 }
 

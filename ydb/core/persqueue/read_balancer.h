@@ -258,6 +258,8 @@ private:
 
         // Partitions that are in the family
         std::vector<ui32> Partitions;
+        // Partitions wich was added to the family.
+        std::set<ui32> AttachedPartitions;
 
         // The reading session in which the family is currently being read.
         TReadingSession* Session;
@@ -283,10 +285,10 @@ private:
         // Starts reading the family in the specified reading session.
         void StartReading(TReadingSession& session, const TActorContext& ctx);
         // Add partitions to the family.
-        void AddPartitions(const std::vector<ui32>& partitions, const TActorContext& ctx);
+        void AttachePartitions(const std::vector<ui32>& partitions, const TActorContext& ctx);
 
         const TString& Topic() const;
-        const TString& Path() const;
+        const TString& TopicPath() const;
         ui32 TabletGeneration() const;
 
         const TPartitionInfo& GetPartitionInfo(ui32 partitionId) const;
@@ -295,10 +297,13 @@ private:
         ui32 NextStep();
 
     private:
-        std::pair<size_t, size_t> ClassifyPartitions(const std::vector<ui32>& partitions);
+        template<typename TPartitions>
+        std::pair<size_t, size_t> ClassifyPartitions(const TPartitions& partitions);
         void UpdatePartitionMapping(const std::vector<ui32>& partitions);
+        void UpdateSpecialSessions();
         std::unique_ptr<TEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(ui32 partitionId) const;
         std::unique_ptr<TEvPersQueue::TEvLockPartition> MakeEvLockPartition(ui32 partitionId, ui32 step) const;
+        TString GetPrefix() const;
     };
 
     struct TBalancingConsumerInfo {
@@ -326,7 +331,7 @@ private:
         ~TBalancingConsumerInfo() = default;
 
         const TString& Topic() const;
-        const TString& Path() const;
+        const TString& TopicPath() const;
         ui32 TabletGeneration() const;
         const TPartitionInfo& GetPartitionInfo(ui32 partitionId) const;
         TReadingPartitionStatus* GetPartitionStatus(ui32 partitionId);

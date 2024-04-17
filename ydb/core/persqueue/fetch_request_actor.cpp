@@ -480,7 +480,7 @@ public:
         SetMeteringMode(it->second.PQInfo->Description.GetPQTabletConfig().GetMeteringMode());
 
         if (IsQuotaRequired()) {
-            PendingQuotaAmount = CalcRuConsumption(GetPayloadSize(record));
+            PendingQuotaAmount = 1 + CalcRuConsumption(GetPayloadSize(record));
             RequestDataQuota(PendingQuotaAmount, ctx);
         } else {
             ProceedFetchRequest(ctx);

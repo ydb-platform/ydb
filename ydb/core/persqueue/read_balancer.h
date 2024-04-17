@@ -533,7 +533,9 @@ public:
             HFunc(TEvPersQueue::TEvReadingPartitionStartedRequest, Handle);
             HFunc(TEvPersQueue::TEvReadingPartitionFinishedRequest, Handle);
             HFunc(TEvPQ::TEvWakeupReleasePartition, Handle);
+            // from PQ
             HFunc(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
+            // from TPartitionScaleRequest
             HFunc(TPartitionScaleRequest::TEvPartitionScaleRequestDone, Handle);
             default:
                 HandleDefaultEvents(ev, SelfId());

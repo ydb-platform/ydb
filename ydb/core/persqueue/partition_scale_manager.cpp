@@ -62,10 +62,14 @@ std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartition
         const auto& partition = itSplit->second;
 
         if (BalancerConfig.PartitionGraph.GetPartition(partitionId)->Children.empty()) {
+            auto mid = GetRangeMid(partition.KeyRange.FromBound ? *partition.KeyRange.FromBound : "", partition.KeyRange.ToBound ?*partition.KeyRange.ToBound : "");
+            if (mid.empty()) {
+                itSplit = PartitionsToSplit.erase(itSplit);
+            }
+
             TPartitionSplit split;
             split.set_partition(partition.Id);
-            split.set_splitboundary(GetRangeMid(partition.KeyRange.FromBound ? *partition.KeyRange.FromBound : "", partition.KeyRange.ToBound ?*partition.KeyRange.ToBound : ""));
-
+            split.set_splitboundary(mid);
             splitsToApply.push_back(split);
 
             allowedSplitsCount--;
@@ -106,6 +110,10 @@ void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath) {
 }
 
 TString TPartitionScaleManager::GetRangeMid(const TString& from, const TString& to) {
+    if (from > to) {
+        return "";
+    }
+
     TStringBuilder result;
 
     unsigned char fromPadding = 0;

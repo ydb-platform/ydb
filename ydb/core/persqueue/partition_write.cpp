@@ -529,7 +529,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 }
 
 NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& /*ctx*/) {
-    auto const writeSpeedUsagePercent = SplitMergeAvgWriteBytes->GetValue() / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / TotalPartitionWriteSpeed * 100;
+    auto const writeSpeedUsagePercent = SplitMergeAvgWriteBytes->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / TotalPartitionWriteSpeed;
 
     if (writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()) {
         return NKikimrPQ::EScaleStatus::NEED_SPLIT;

@@ -545,7 +545,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             Y_ABORT_UNLESS(group <= TotalGroups && group > prevGroups || TotalGroups == 0);
             Y_ABORT_UNLESS(p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId || NextPartitionId == 0);
             partitionsInfo[p.GetPartition()] = {p.GetTabletId(), EPS_FREE, TActorId(), group, {}};
-            if(SplitMergeEnabled(TabletConfig)) {
+            if (SplitMergeEnabled(TabletConfig)) {
                 partitionsInfo[p.GetPartition()].KeyRange.DeserializeFromProto(p.GetKeyRange());
             }
 

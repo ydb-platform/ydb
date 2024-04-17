@@ -310,6 +310,12 @@ namespace {
         return createSequenceSettings;
     }
 
+    TDropSequenceSettings ParseDropSequenceSettings(TKiDropSequence dropSequence) {
+        return TDropSequenceSettings{
+            .Name = TString(dropSequence.Sequence())
+        };
+    }
+
     [[nodiscard]] TString AddConsumerToTopicRequest(
             Ydb::Topic::Consumer* protoConsumer, const TCoTopicConsumer& consumer
     ) {
@@ -1687,6 +1693,27 @@ public:
                 auto resultNode = ctx.NewWorld(input->Pos());
                 return resultNode;
             }, "Executing CREATE SEQUENCE");
+        }
+
+        if (auto maybeDropSequence = TMaybeNode<TKiDropSequence>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeDropSequence.Cast().DataSink().Cluster());
+            TDropSequenceSettings dropSequenceSettings = ParseDropSequenceSettings(maybeDropSequence.Cast());
+
+            bool missingOk = (maybeDropSequence.MissingOk().Cast().Value() == "1");
+
+            auto future = Gateway->DropSequence(cluster, dropSequenceSettings, missingOk);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing DROP SEQUENCE");
         }
 
         if (auto maybeAlter = TMaybeNode<TKiAlterTopic>(input)) {

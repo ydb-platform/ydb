@@ -66,6 +66,7 @@ struct TKikimrData {
         DataSinkNames.insert(TPgDropObject::CallableName());
         DataSinkNames.insert(TKiReturningList::CallableName());
         DataSinkNames.insert(TKiCreateSequence::CallableName());
+        DataSinkNames.insert(TKiDropSequence::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);

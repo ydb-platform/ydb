@@ -126,6 +126,7 @@ private:
             Completed = subgroup->GetCounter("CompletedCheckpoints", true);
             Aborted = subgroup->GetCounter("AbortedCheckpoints", true);
             StorageError = subgroup->GetCounter("StorageError", true);
+            FailedToCreate = subgroup->GetCounter("FailedToCreate", true);
             RestoringError = subgroup->GetCounter("RestoringError", true);
             Total = subgroup->GetCounter("TotalCheckpoints", true);
             LastCheckpointBarrierDeliveryTimeMillis = subgroup->GetCounter("LastCheckpointBarrierDeliveryTimeMillis");
@@ -146,6 +147,7 @@ private:
         ::NMonitoring::TDynamicCounters::TCounterPtr Completed;
         ::NMonitoring::TDynamicCounters::TCounterPtr Aborted;
         ::NMonitoring::TDynamicCounters::TCounterPtr StorageError;
+        ::NMonitoring::TDynamicCounters::TCounterPtr FailedToCreate;
         ::NMonitoring::TDynamicCounters::TCounterPtr RestoringError;
         ::NMonitoring::TDynamicCounters::TCounterPtr Total;
         ::NMonitoring::TDynamicCounters::TCounterPtr LastCheckpointBarrierDeliveryTimeMillis;

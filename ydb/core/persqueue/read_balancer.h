@@ -199,6 +199,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 private:
     struct TClientInfo;
     struct TReadingSession;
+    struct TBalancingConsumerInfo;
 
     struct TReadingPartitionStatus {
         // Client had commited rad offset equals EndOffset of the partition
@@ -244,13 +245,13 @@ private:
 
     // Multiple partitions balancing together always in one reading session
     struct TPartitionFamilty {
-        TPartitionFamilty();
-
         enum class EStatus {
             Active,    // The family are reading
             Releasing, // The family is waiting for partition to be released
             Free       // The family isn't reading
         };
+
+        TBalancingConsumerInfo& ConsumerInfo;
 
         size_t Id;
         EStatus Status;
@@ -271,14 +272,37 @@ private:
         // Reading sessions that have a list of partitions to read and these sessions can read this family
         std::unordered_map<TActorId, TReadingSession*> SpecialSessions;
 
+        TPartitionFamilty(TBalancingConsumerInfo& consumerInfo, size_t id, std::vector<ui32>&& partitions);
+        ~TPartitionFamilty() = default;
+
+        // Releases all partitions of the family.
         void Release(const TActorContext& ctx);
-        void Release(ui32 partitionId, const TActorContext& ctx);
-        void Read(const TActorContext& ctx);
-        void AddPartition(ui32 partitionId, const TActorContext& ctx);
+        // Processes the signal from the reading session that the partition has been released.
+        // Return true if all partitions has been unlocked.
+        bool Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx);
+        // Starts reading the family in the specified reading session.
+        void StartReading(TReadingSession& session, const TActorContext& ctx);
+        // Add partitions to the family.
+        void AddPartitions(const std::vector<ui32>& partitions, const TActorContext& ctx);
+
+        const TString& Topic() const;
+        const TString& Path() const;
+        ui32 TabletGeneration() const;
+
+        const TPartitionInfo& GetPartitionInfo(ui32 partitionId) const;
+        TReadingPartitionStatus* GetPartitionStatus(ui32 partitionId);
+        bool IsReadeable(ui32 partitionId) const;
+        ui32 NextStep();
+
+    private:
+        std::pair<size_t, size_t> ClassifyPartitions(const std::vector<ui32>& partitions);
+        void UpdatePartitionMapping(const std::vector<ui32>& partitions);
+        std::unique_ptr<TEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(ui32 partitionId) const;
+        std::unique_ptr<TEvPersQueue::TEvLockPartition> MakeEvLockPartition(ui32 partitionId, ui32 step) const;
     };
 
     struct TBalancingConsumerInfo {
-        TBalancingConsumerInfo();
+        TPersQueueReadBalancer& Balancer;
 
         TString Consumer;
 
@@ -294,7 +318,24 @@ private:
         // Families is not reading now.
         std::unordered_map<size_t, TReadingSession*> UnreadableFamilies;
 
-        void CreateFamily(std::vector<ui32> partitions);
+        std::unordered_map<ui32, TReadingPartitionStatus> Partitions;
+
+        ui32 Step;
+
+        TBalancingConsumerInfo(TPersQueueReadBalancer& balancer);
+        ~TBalancingConsumerInfo() = default;
+
+        const TString& Topic() const;
+        const TString& Path() const;
+        ui32 TabletGeneration() const;
+        const TPartitionInfo& GetPartitionInfo(ui32 partitionId) const;
+        TReadingPartitionStatus* GetPartitionStatus(ui32 partitionId);
+        ui32 NextStep();
+
+        void CreateFamily(std::vector<ui32>&& partitions);
+
+
+        bool IsReadeable(ui32 partitionId) const;
 
     };
 
@@ -426,30 +467,23 @@ private:
 
 private:
     struct TReadingSession {
-        TReadingSession()
-            : ServerActors(0)
-            , ActivePartitionCount(0)
-            , InactivePartitionCount(0)
-        {}
+        TReadingSession();
 
         TString ClientId;         // The consumer name
         TString Session;
         TActorId Sender;
-        std::vector<ui32> Groups; // groups which are reading
+        std::unordered_set<ui32> Groups; // groups which are reading
         ui32 ServerActors;        // the number of pipes connected from SessionActor to ReadBalancer
 
         size_t ActivePartitionCount;
         size_t InactivePartitionCount;
 
-        // true if client connected to read from concret partitions
-        bool WithGroups() { return !Groups.empty(); }
+        void Init(const TString& clientId, const TString& session, const TActorId& sender, const std::vector<ui32>& groups);
 
-        void Init(const TString& clientId, const TString& session, const TActorId& sender, const std::vector<ui32>& groups) {
-            ClientId = clientId;
-            Session = session;
-            Sender = sender;
-            Groups = groups;
-        }
+        // true if client connected to read from concret partitions
+        bool WithGroups() const;
+        bool AllPartitionsReadable(const std::vector<ui32>& partitions) const;
+
     };
 
     std::unordered_map<TActorId, std::unique_ptr<TReadingSession>> ReadingSessions;

@@ -85,6 +85,19 @@ public:
         return true;
     }
 
+    bool ForgetExecutionOperation() {
+        TYdbSetup::StopTraceOpt();
+
+        TRequestResult status = YdbSetup_.ForgetScriptExecutionOperationRequest(ExecutionOperation_);
+
+        if (!status.IsSuccess()) {
+            Cerr << CerrColors_.Red() << "Failed to forget script execution operation, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+            return false;
+        }
+
+        return true;
+    }
+
     void PrintScriptResults() const {
         Cout << CoutColors_.Cyan() << "Writing script query results" << CoutColors_.Default() << Endl;
         for (size_t i = 0; i < ResultSets_.size(); ++i) {
@@ -213,6 +226,10 @@ bool TKqpRunner::ExecuteQuery(const TString& query, NKikimrKqp::EQueryAction act
 
 bool TKqpRunner::FetchScriptResults() {
     return Impl_->FetchScriptResults();
+}
+
+bool TKqpRunner::ForgetExecutionOperation() {
+    return Impl_->ForgetExecutionOperation();
 }
 
 void TKqpRunner::PrintScriptResults() const {

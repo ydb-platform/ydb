@@ -112,8 +112,6 @@ class Nodes(object):
         assert isinstance(hosts, list)
 
         src = "{hub}:{hub_path}".format(hub=hub, hub_path=hub_path)
-        if self._ssh_user:
-            src = self._ssh_user + "@" + src
         running_jobs = []
         for dst in hosts:
             self._logger.info(

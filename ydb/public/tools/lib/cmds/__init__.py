@@ -372,7 +372,7 @@ def deploy(arguments):
         extra_feature_flags=enable_feature_flags,
         extra_grpc_services=arguments.enabled_grpc_services,
         generic_connector_config=generic_connector_config(),
-        pgwire_tcp_not_delay = arguments.pgwire_tcp_not_delay,
+        pgwire_tcp_not_delay=arguments.pgwire_tcp_not_delay,
         **optionals
     )
 

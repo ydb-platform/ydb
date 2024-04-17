@@ -1,6 +1,7 @@
 #pragma once
 
 #include "event.h"
+#include "executor_pool_jail.h"
 #include "scheduler_queue.h"
 
 namespace NActors {
@@ -9,6 +10,7 @@ namespace NActors {
     struct TWorkerContext;
     struct TExecutorPoolStats;
     struct TExecutorThreadStats;
+    class TExecutorPoolJail;
     class ISchedulerCookie;
 
     struct TCpuConsumption {

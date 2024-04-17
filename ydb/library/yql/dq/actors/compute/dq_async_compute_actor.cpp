@@ -88,6 +88,7 @@ public:
         , SentStatsRequest(false)
         , QuoterServiceActorId(quoterServiceActorId)
     {
+        InitializeTask();
         InitExtraMonCounters(taskCounters);
         if (ownCounters) {
             CA_LOG_D("TDqAsyncComputeActor, make stat");

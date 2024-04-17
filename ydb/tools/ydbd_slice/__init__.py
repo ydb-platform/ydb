@@ -497,7 +497,7 @@ def ssh_args():
     args.add_argument(
         "--ssh-user",
         metavar="SSH_USER",
-        default=[current_user],
+        default=current_user,
         help="user for ssh interaction with slice. Default value is $USER "
              "(which equals {user} now)".format(user=current_user),
     )

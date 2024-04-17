@@ -2689,6 +2689,10 @@ void TLocalPgWireServiceInitializer::InitializeServices(NActors::TActorSystemSet
         settings.Address = Config.GetLocalPgWireConfig().GetAddress();
     }
 
+    if (Config.GetLocalPgWireConfig().HasTcpNotDelay()) {
+        settings.TcpNotDelay = Config.GetLocalPgWireConfig().GetTcpNotDelay();
+    }
+
     setup->LocalServices.emplace_back(
         TActorId(),
         TActorSetupCmd(NPG::CreatePGListener(MakePollerActorId(), NLocalPgWire::CreateLocalPgWireProxyId(), settings),

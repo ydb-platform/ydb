@@ -1,6 +1,6 @@
 #include "flat_page_btree_index.h"
-#include "flat_part_iter_btree_index.h"
-#include "flat_part_charge.h"
+#include "flat_part_charge_flat_index.h"
+#include "flat_part_index_iter_bree_index.h"
 #include "flat_part_charge_btree_index.h"
 #include "flat_part_charge_range.h"
 #include "test/libs/table/test_writer.h"

@@ -516,7 +516,9 @@ Y_UNIT_TEST_SUITE(NFwd_TLoadedPagesCircularBuffer){
             auto page = NFwd::TPage(pageId * 1, pageId * 10 + 1, pageId * 100, pageId * 1000);
             page.Data =  TSharedData::Copy(TString(page.Size, 'x'));
 
-            UNIT_ASSERT_VALUES_EQUAL(buffer.Emplace(page), pageId >= 5 ? (pageId - 5) * 10 + 1 : 0);
+            auto result = buffer.Emplace(page);
+            UNIT_ASSERT_VALUES_EQUAL(result.ReleasedPageId, pageId >= 5 ? (pageId - 5) : Max<TPageId>());
+            UNIT_ASSERT_VALUES_EQUAL(result.ReleasedSize, pageId >= 5 ? (pageId - 5) * 10 + 1 : 0);
 
             // has trace
             for (ui32 i = 0; i < Min(5u, pageId); i++) {

@@ -14,6 +14,11 @@ namespace NFwd {
     template<size_t Capacity>
     class TLoadedPagesCircularBuffer {
     public:
+        struct EmplaceResult {
+            TPageId ReleasedPageId = Max<TPageId>();
+            ui64 ReleasedSize = 0;
+        };
+
         const TSharedData* Get(TPageId pageId) const
         {
             if (pageId < FirstUnseenPageId) {
@@ -30,20 +35,20 @@ namespace NFwd {
             return nullptr;
         }
 
-        // returns released data size
-        ui64 Emplace(TPage &page)
+        // returns released page id and its size
+        EmplaceResult Emplace(TPage &page)
         {
             Y_ABORT_UNLESS(page, "Cannot push invalid page to trace cache");
 
             Offset = (Offset + 1) % Capacity;
 
-            const ui64 releasedDataSize = LoadedPages[Offset].Data.size();
+            EmplaceResult result{LoadedPages[Offset].PageId, LoadedPages[Offset].Data.size()};
 
             LoadedPages[Offset].Data = page.Release();
             LoadedPages[Offset].PageId = page.PageId;
             FirstUnseenPageId = Max(FirstUnseenPageId, page.PageId + 1);
 
-            return releasedDataSize;
+            return result;
         }
 
         ui64 GetDataSize() {
@@ -171,7 +176,7 @@ namespace NFwd {
                 if (page.Size == 0) {
                     Y_ABORT("Dropping page that has not been touched");
                 } else if (page.Usage == EUsage::Keep && page) {
-                    OnHold -= Trace.Emplace(page);
+                    OnHold -= Trace.Emplace(page).ReleasedSize;
                 } else {
                     OnHold -= page.Release().size();
                     *(page.Ready() ? &Stat.After : &Stat.Before) += page.Size;
@@ -344,7 +349,9 @@ namespace NFwd {
                 }
                 Y_ABORT_UNLESS(it != level.Pages.end() && it->PageId == one.PageId, "Got page that hasn't been requested for load");
                 
-                it->Settle(one); // settle of a dropped releases its data
+                if (!it->Settle(one)) { // settle of a dropped page returns 0 and releases its data
+                    ForgetPage(one.PageId);
+                }
                 ++it;
             }
 
@@ -370,7 +377,7 @@ namespace NFwd {
                 if (page.Size == 0) {
                     Y_ABORT("Dropping page that has not been touched");
                 } else if (page.Usage == EUsage::Keep && page) {
-                    level.Trace.Emplace(page);
+                    ForgetPage(level.Trace.Emplace(page).ReleasedPageId);
                 } else {
                     page.Release();
                     *(page.Ready() ? &Stat.After : &Stat.Before) += page.Size;
@@ -425,7 +432,13 @@ namespace NFwd {
             }
         }
 
-        ui64 GetDataSize(TLevel& level) {
+        void ForgetPage(TPageId pageId) noexcept
+        {
+            LevelsMap.erase(pageId);
+        }
+
+        ui64 GetDataSize(TLevel& level) noexcept
+        {
             if (&level == &*Levels.rbegin()) {
                 return 
                     level.Trace.GetDataSize() +

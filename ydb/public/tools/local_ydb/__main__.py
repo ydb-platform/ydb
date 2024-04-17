@@ -158,10 +158,6 @@ To update cluster (stop + start):
             help='Don\'t use log files (only STDOUT and STDERR output)'
         )
 
-        sub_parser.add_argument(
-            '--pgwire-tcp-not-delay', default=False, action='store_true',
-        )
-
     arguments = parser.parse_args()
     arguments.ydb_working_dir = cmds.wrap_path(arguments.ydb_working_dir)
     arguments.ydb_binary_path = cmds.wrap_path(arguments.ydb_binary_path)

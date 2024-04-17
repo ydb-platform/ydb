@@ -210,7 +210,7 @@ namespace NKikimr {
                 VPatchOrchestrator = Register(
                     CreateSkeletonVPatchOrchestratorActor(GInfo, SkeletonFrontIDPtr, IFaceMonGroup, Db->GetVDiskIncarnationGuid(), VCtx)
                 );
-                ActiveActors.Insert(VPatchOrchestrator, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+                ActiveActors.Insert(VPatchOrchestrator, __FILE__, __LINE__, TActivationContext::AsActorContext(), NKikimrServices::BLOBSTORAGE);
             }
         }
 

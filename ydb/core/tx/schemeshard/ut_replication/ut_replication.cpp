@@ -45,7 +45,11 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
 
         TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication"));
         env.TestWaitNotification(runtime, txId);
-        TestLs(runtime, "/MyRoot/Replication", false, NLs::PathExist);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {
+            NLs::PathExist,
+            NLs::ReplicationState(NKikimrReplication::TReplicationState::kStandBy),
+        });
     }
 
     Y_UNIT_TEST(CreateSequential) {
@@ -137,6 +141,52 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             TestDescribeResult(desc, {NLs::PathExist});
             UNIT_ASSERT_VALUES_UNEQUAL(controllerId, ExtractControllerId(desc.GetPathDescription()));
         }
+    }
+
+    Y_UNIT_TEST(Alter) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication"));
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto desc = DescribePath(runtime, "/MyRoot/Replication");
+            TestDescribeResult(desc, {NLs::PathExist});
+        }
+
+        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication"
+            State {
+              Paused {
+              }
+            }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication"
+            State {
+              Done {
+                FailoverMode: FAILOVER_MODE_FORCE
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {
+            NLs::PathExist,
+            NLs::ReplicationState(NKikimrReplication::TReplicationState::kDone),
+        });
+
+        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication"
+            State {
+              StandBy {
+              }
+            }
+        )", {NKikimrScheme::StatusInvalidParameter});
     }
 
     Y_UNIT_TEST(Describe) {

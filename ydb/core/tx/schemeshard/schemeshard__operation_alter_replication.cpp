@@ -16,7 +16,7 @@ namespace {
 class TConfigureParts: public TSubOperationState {
     TString DebugHint() const override {
         return TStringBuilder()
-            << "TCreateReplication TConfigureParts"
+            << "TAlterReplication TConfigureParts"
             << " opId# " << OperationId << " ";
     }
 
@@ -34,7 +34,7 @@ public:
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateReplication);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterReplication);
         const auto& pathId = txState->TargetPathId;
 
         Y_ABORT_UNLESS(context.SS->Replications.contains(pathId));
@@ -54,13 +54,13 @@ public:
                     << ": shardIdx# " << shard.Idx);
                 context.OnComplete.WaitShardCreated(shard.Idx, OperationId);
             } else {
-                auto ev = MakeHolder<NReplication::TEvController::TEvCreateReplication>();
+                auto ev = MakeHolder<NReplication::TEvController::TEvAlterReplication>();
                 PathIdFromPathId(pathId, ev->Record.MutablePathId());
                 ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
-                ev->Record.MutableConfig()->CopyFrom(alterData->Description.GetConfig());
+                ev->Record.MutableSwitchState()->CopyFrom(alterData->Description.GetState());
 
-                LOG_D(DebugHint() << "Send TEvCreateReplication to controller"
+                LOG_D(DebugHint() << "Send TEvAlterReplication to controller"
                     << ": tabletId# " << tabletId
                     << ", ev# " << ev->ToString());
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, pathId, ev.Release());
@@ -72,18 +72,17 @@ public:
         return false;
     }
 
-    bool HandleReply(NReplication::TEvController::TEvCreateReplicationResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NReplication::TEvController::TEvAlterReplicationResult::TPtr& ev, TOperationContext& context) override {
         LOG_I(DebugHint() << "HandleReply " << ev->Get()->ToString());
 
         const auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         const auto status = ev->Get()->Record.GetStatus();
 
         switch (status) {
-        case NKikimrReplication::TEvCreateReplicationResult::SUCCESS:
-        case NKikimrReplication::TEvCreateReplicationResult::ALREADY_EXISTS:
+        case NKikimrReplication::TEvAlterReplicationResult::SUCCESS:
             break;
         default:
-            LOG_W(DebugHint() << "Ignoring unexpected TEvCreateReplicationResult"
+            LOG_W(DebugHint() << "Ignoring unexpected TEvAlterReplicationResult"
                 << " tabletId# " << tabletId
                 << " status# " << static_cast<int>(status));
             return false;
@@ -91,12 +90,12 @@ public:
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateReplication);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterReplication);
         Y_ABORT_UNLESS(txState->State == TTxState::ConfigureParts);
 
         const auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         if (!txState->ShardsInProgress.erase(shardIdx)) {
-            LOG_W(DebugHint() << "Ignoring duplicate TEvCreateReplicationResult");
+            LOG_W(DebugHint() << "Ignoring duplicate TEvAlterReplicationResult");
             return false;
         }
 
@@ -121,7 +120,7 @@ private:
 class TPropose: public TSubOperationState {
     TString DebugHint() const override {
         return TStringBuilder()
-            << "TCreateReplication TPropose"
+            << "TAlterReplication TPropose"
             << " opId# " << OperationId << " ";
     }
 
@@ -131,7 +130,7 @@ public:
     {
         IgnoreMessages(DebugHint(), {
             TEvHive::TEvCreateTabletReply::EventType,
-            NReplication::TEvController::TEvCreateReplicationResult::EventType,
+            NReplication::TEvController::TEvAlterReplicationResult::EventType,
         });
     }
 
@@ -140,7 +139,7 @@ public:
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateReplication);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterReplication);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -154,7 +153,7 @@ public:
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateReplication);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterReplication);
         const auto& pathId = txState->TargetPathId;
 
         Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
@@ -167,22 +166,9 @@ public:
         Y_ABORT_UNLESS(alterData);
 
         NIceDb::TNiceDb db(context.GetDB());
-
-        path->StepCreated = step;
-        context.SS->PersistCreateStep(db, pathId, step);
-
         context.SS->Replications[pathId] = alterData;
         context.SS->PersistReplicationAlterRemove(db, pathId);
         context.SS->PersistReplication(db, pathId, *alterData);
-
-        Y_ABORT_UNLESS(context.SS->PathsById.contains(path->ParentPathId));
-        auto parentPath = context.SS->PathsById.at(path->ParentPathId);
-
-        ++parentPath->DirAlterVersion;
-        context.SS->PersistPathDirAlterVersion(db, parentPath);
-
-        context.SS->ClearDescribePathCaches(parentPath);
-        context.OnComplete.PublishToSchemeBoard(OperationId, parentPath->PathId);
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
@@ -196,7 +182,7 @@ private:
 
 }; // TPropose
 
-class TCreateReplication: public TSubOperation {
+class TAlterReplication: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
@@ -234,72 +220,42 @@ class TCreateReplication: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
-        auto desc = Transaction.GetReplication();
-        const auto& name = desc.GetName();
-        const auto& acl = Transaction.GetModifyACL().GetDiffACL();
-        const auto acceptExisted = !Transaction.GetFailOnExist();
+        const auto& op = Transaction.GetAlterReplication();
+        const auto& name = op.GetName();
+        const auto pathId = op.HasPathId()
+            ? PathIdFromPathId(op.GetPathId())
+            : InvalidPathId;
 
-        LOG_N("TCreateReplication Propose"
+        LOG_N("TAlterReplication Propose"
             << ": opId# " << OperationId
-            << ", path# " << workingDir << "/" << name);
+            << ", path# " << workingDir << "/" << name
+            << ", pathId# " << pathId);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
 
-        const auto parentPath = TPath::Resolve(workingDir, context.SS);
+        if (!op.HasName() && !op.HasPathId()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Neither name nor pathId in Alter");
+            return result;
+        }
+
+        const auto path = pathId
+            ? TPath::Init(pathId, context.SS)
+            : TPath::Resolve(workingDir, context.SS).Dive(name);
         {
-            const auto checks = parentPath.Check();
+            const auto checks = path.Check();
             checks
                 .NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .NotUnderDeleting()
-                .IsCommonSensePath()
-                .IsLikeDirectory();
+                .IsReplication()
+                .NotUnderOperation();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
-                return result;
-            }
-        }
-
-        auto path = parentPath.Child(name);
-        {
-            const auto checks = path.Check();
-            checks
-                .IsAtLocalSchemeShard();
-
-            if (path.IsResolved()) {
-                checks
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeReplication, acceptExisted);
-            } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
-            }
-
-            if (checks) {
-                checks
-                    .IsValidLeafName()
-                    .DepthLimit()
-                    .PathsLimit()
-                    .DirChildrenLimit()
-                    .ShardsLimit(1)
-                    .IsValidACL(acl);
-            }
-
-            if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
-                if (path.IsResolved()) {
-                    result->SetPathCreateTxId(ui64(path->CreateTxId));
-                    result->SetPathId(path->PathId.LocalPathId);
-                }
-
                 return result;
             }
         }
@@ -310,88 +266,66 @@ public:
             return result;
         }
 
-        TChannelsBindings channelsBindings;
-        if (!context.SS->ResolveTabletChannels(0, parentPath.GetPathIdForDomain(), channelsBindings)) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
-                "Unable to construct channel binding for replication controller with the storage pool");
+        Y_ABORT_UNLESS(context.SS->Replications.contains(path.Base()->PathId));
+        auto replication = context.SS->Replications.at(path.Base()->PathId);
+
+        if (replication->AlterVersion == 0) {
+            result->SetError(NKikimrScheme::StatusMultipleModifications, "Replication is not created yet");
             return result;
         }
 
-        if (desc.HasState()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot create replication with explicit state");
+        if (replication->AlterData) {
+            result->SetError(NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight");
             return result;
         }
 
-        path.MaterializeLeaf(owner);
-        path->CreateTxId = OperationId.GetTxId();
-        path->LastTxId = OperationId.GetTxId();
-        path->PathState = TPathElement::EPathState::EPathStateCreate;
-        path->PathType = TPathElement::EPathType::EPathTypeReplication;
-        result->SetPathId(path->PathId.LocalPathId);
+        if (op.HasConfig()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot alter replication config");
+            return result;
+        }
 
-        context.SS->IncrementPathDbRefCount(path->PathId);
-        parentPath->IncAliveChildren();
-        parentPath.DomainInfo()->IncPathsInside();
+        if (!op.HasState()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Empty alter");
+            return result;
+        }
 
-        desc.MutableState()->MutableStandBy();
-        auto replication = TReplicationInfo::Create(std::move(desc));
-        context.SS->Replications[path->PathId] = replication;
-        context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);
+        using TState = NKikimrReplication::TReplicationState;
+        switch (replication->Description.GetState().GetStateCase()) {
+        case NKikimrReplication::TReplicationState::kStandBy:
+            if (op.GetState().GetStateCase() != TState::kDone) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot switch state");
+                return result;
+            }
+            break;
+        case NKikimrReplication::TReplicationState::kPaused:
+            if (!THashSet<TState::StateCase>{TState::kStandBy, TState::kDone}.contains(op.GetState().GetStateCase())) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot switch state");
+                return result;
+            }
+            break;
+        case NKikimrReplication::TReplicationState::kDone:
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot switch state");
+            return result;
+        default:
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "State not set");
+            return result;
+        }
 
-        replication->AlterData->ControllerShardIdx = context.SS->RegisterShardInfo(
-            TShardInfo::ReplicationControllerInfo(OperationId.GetTxId(), path->PathId)
-                .WithBindedChannels(channelsBindings));
-        context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_CONTROLLER_COUNT].Add(1);
+        auto alterData = replication->CreateNextVersion();
+        alterData->Description.MutableState()->CopyFrom(op.GetState());
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
-        auto& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateReplication, path->PathId);
+        auto& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterReplication, path.Base()->PathId);
         txState.Shards.emplace_back(replication->AlterData->ControllerShardIdx,
-            ETabletType::ReplicationController, TTxState::CreateParts);
+            ETabletType::ReplicationController, TTxState::ConfigureParts);
         txState.State = TTxState::CreateParts;
 
-        path->IncShardsInside();
-        parentPath.DomainInfo()->AddInternalShards(txState);
-
-        if (parentPath->HasActiveChanges()) {
-            const auto parentTxId = parentPath->PlannedToCreate() ? parentPath->CreateTxId : parentPath->LastTxId;
-            context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
-        }
+        path.Base()->LastTxId = OperationId.GetTxId();
+        path.Base()->PathState = TPathElement::EPathState::EPathStateAlter;
 
         NIceDb::TNiceDb db(context.GetDB());
-
-        context.SS->PersistPath(db, path->PathId);
-        if (!acl.empty()) {
-            path->ApplyACL(acl);
-            context.SS->PersistACL(db, path.Base());
-        }
-
-        context.SS->PersistReplication(db, path->PathId, *replication);
-        context.SS->PersistReplicationAlter(db, path->PathId, *replication->AlterData);
-
-        Y_ABORT_UNLESS(txState.Shards.size() == 1);
-        for (const auto& shard : txState.Shards) {
-            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
-            const TShardInfo& shardInfo = context.SS->ShardInfos.at(shard.Idx);
-
-            if (shard.Operation == TTxState::CreateParts) {
-                context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, path->PathId, OperationId.GetTxId(), shard.TabletType);
-                context.SS->PersistChannelsBinding(db, shard.Idx, shardInfo.BindedChannels);
-            }
-        }
-
-        context.SS->ChangeTxState(db, OperationId, txState.State);
+        context.SS->PersistReplicationAlter(db, path.Base()->PathId, *replication->AlterData);
         context.SS->PersistTxState(db, OperationId);
-        context.SS->PersistUpdateNextPathId(db);
-        context.SS->PersistUpdateNextShardIdx(db);
-
-        ++parentPath->DirAlterVersion;
-        context.SS->PersistPathDirAlterVersion(db, parentPath.Base());
-
-        context.SS->ClearDescribePathCaches(parentPath.Base());
-        context.OnComplete.PublishToSchemeBoard(OperationId, parentPath->PathId);
-
-        context.SS->ClearDescribePathCaches(path.Base());
-        context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
 
         context.OnComplete.ActivateTx(OperationId);
 
@@ -400,26 +334,26 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TCreateReplication");
+        Y_ABORT("no AbortPropose for TAlterReplication");
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_N("TCreateReplication AbortUnsafe"
+        LOG_N("TAlterReplication AbortUnsafe"
             << ": opId# " << OperationId
             << ", txId# " << txId);
         context.OnComplete.DoneOperation(OperationId);
     }
 
-}; // TCreateReplication
+}; // TAlterReplication
 
 } // anonymous
 
-ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TCreateReplication>(id, tx);
+ISubOperation::TPtr CreateAlterReplication(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TAlterReplication>(id, tx);
 }
 
-ISubOperation::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state) {
-    return MakeSubOperation<TCreateReplication>(id, state);
+ISubOperation::TPtr CreateAlterReplication(TOperationId id, TTxState::ETxState state) {
+    return MakeSubOperation<TAlterReplication>(id, state);
 }
 
 }

@@ -360,7 +360,7 @@ void TPersQueueReadBalancer::TBalancingConsumerInfo::CreateFamily(std::vector<ui
 
 TPersQueueReadBalancer::TPartitionFamilty* TPersQueueReadBalancer::TBalancingConsumerInfo::FindFamily(ui32 partitionId) {
     auto it = PartitionMapping.find(partitionId);
-    if (it != PartitionMapping.end()) {
+    if (it == PartitionMapping.end()) {
         return nullptr;
     }
     return it->second;
@@ -393,6 +393,16 @@ void TPersQueueReadBalancer::TBalancingConsumerInfo::UnregisterReadingSession(TP
             UnreadableFamilies[family->Id] = family.get();
         }
     }
+}
+
+bool TPersQueueReadBalancer::TBalancingConsumerInfo::Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx) {
+    auto* family = FindFamily(partitionId);
+    if (!family) {
+        // TODO Messages
+        return false;
+    }
+
+    return family->Unlock(sender, partitionId, ctx);
 }
 
 bool TPersQueueReadBalancer::TBalancingConsumerInfo::IsReadeable(ui32 partitionId) {
@@ -444,7 +454,6 @@ bool TPersQueueReadBalancer::TBalancingConsumerInfo::ProccessReadingFinished(ui3
     }
 
     auto& partition = Partitions[partitionId];
-    bool oneFamily = partition.NeedReleaseChildren();
 
     auto* family = FindFamily(partitionId);
     if (!family) {
@@ -452,32 +461,28 @@ bool TPersQueueReadBalancer::TBalancingConsumerInfo::ProccessReadingFinished(ui3
     }
     family->InactivatePartition(partitionId);
 
-    bool hasChanges = false;
     std::vector<ui32> newPartitions;
-
     Balancer.PartitionGraph.Travers(partitionId, [&](ui32 id) {
         if (!IsReadeable(id)) {
             return false;
         }
 
-        if (oneFamily) {
-            newPartitions.push_back(id);
-        } else {
-            CreateFamily({id});
-        }
-
-        hasChanges = true;
+        newPartitions.push_back(id);
         return true;
     });
 
-    if (oneFamily) {
+    if (partition.NeedReleaseChildren()) {
         if (family->Status == TPartitionFamilty::EStatus::Active && !family->Session->AllPartitionsReadable(newPartitions)) {
             // TODO тут надо найти сессию, которая сможет читать все партиции
         }
         family->AttachePartitions(newPartitions, ctx);
+    } else {
+        for (auto p : newPartitions) {
+            CreateFamily({p});
+        }
     }
 
-    return hasChanges;
+    return !newPartitions.empty();
 
 }
 

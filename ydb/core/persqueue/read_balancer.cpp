@@ -133,6 +133,11 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
         }
     }
 
+    // NEW
+    for (auto& [_, consumer] : BalancingConsumers) {
+        consumer->Balance(ctx);
+    }
+
     for (auto &ev : UpdateEvents) {
         ctx.Send(ctx.SelfID, ev.Release());
     }
@@ -589,6 +594,11 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
     if (SubDomainPathId && (!WatchingSubDomainPathId || *WatchingSubDomainPathId != *SubDomainPathId)) {
         StartWatchingSubDomainPathId();
+    }
+
+    // NEW
+    for (auto& [_, balancingConsumer] : BalancingConsumers) {
+        balancingConsumer->Balance(ctx);
     }
 }
 
@@ -1263,6 +1273,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
     auto* pipeInfo = jt->second.get();
     pipeInfo->Init(record.GetClientId(), record.GetSession(), ev->Sender, partitions);
 
+    // NEW
     {
         auto it = BalancingConsumers.find(consumerName);
         if (it == BalancingConsumers.end()) {
@@ -1271,6 +1282,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
         }
         auto balancingConsumer = it->second.get();
         balancingConsumer->RegisterReadingSession(pipeInfo);
+        balancingConsumer->Balance(ctx);
     }
 
     auto cit = Consumers.find(record.GetClientId());
@@ -1495,6 +1507,16 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev
     clientInfo.UnlockPartition(partitionId, ctx);
 
     clientGroupsInfo.ScheduleBalance(ctx);
+
+
+    // NEW
+    auto bit = BalancingConsumers.find(clientId);
+    if (bit != BalancingConsumers.end()) {
+        auto& balancingConsumer = bit->second;
+        if (balancingConsumer->Unlock(sender, partitionId, ctx)) {
+            balancingConsumer->Balance(ctx);
+        }
+    }
 }
 
 void TPersQueueReadBalancer::TClientInfo::UnlockPartition(ui32 partitionId, const TActorContext& ctx) {
@@ -1627,6 +1649,7 @@ void TPersQueueReadBalancer::UnregisterSession(const TActorId& pipe, const TActo
     if (cit != BalancingConsumers.end()) {
         auto& balancingConsumer = cit->second;
         balancingConsumer->UnregisterReadingSession(readingSession.get());
+        balancingConsumer->Balance(ctx);
     }
 
     ReadingSessions.erase(it);

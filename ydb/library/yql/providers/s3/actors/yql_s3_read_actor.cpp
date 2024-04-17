@@ -3399,12 +3399,12 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         fileQueueActor = ActorIdFromProto(protoId);
     }
     
-    ui64 fileQueueBatchSizeLimit;
+    ui64 fileQueueBatchSizeLimit = 0;
     if (auto it = settings.find("fileQueueBatchSizeLimit"); it != settings.cend()) {
         fileQueueBatchSizeLimit = FromString<ui64>(it->second);
     }
 
-    ui64 fileQueueBatchObjectCountLimit;
+    ui64 fileQueueBatchObjectCountLimit = 0;
     if (auto it = settings.find("fileQueueBatchObjectCountLimit"); it != settings.cend()) {
         fileQueueBatchObjectCountLimit = FromString<ui64>(it->second);
     }

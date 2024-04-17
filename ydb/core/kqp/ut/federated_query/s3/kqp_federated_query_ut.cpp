@@ -1680,7 +1680,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         // Create external data source
         const TString externalDataSourceName = "/Root/external_data_source";
 
-        auto kikimr = MakeKikimrRunner(true);
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
         auto tableClient = kikimr->GetTableClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
         const TString schemeQuery = fmt::format(R"(

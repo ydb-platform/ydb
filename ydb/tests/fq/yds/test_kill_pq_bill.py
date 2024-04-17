@@ -13,16 +13,12 @@ class TestKillPqBill(TestYdsBase):
     def test_do_not_bill_pq(self, kikimr, client):
         self.init_topics("no_pq_bill")
 
-        sql = R'''
+        sql = f'''
             PRAGMA dq.MaxTasksPerStage="2";
 
-            INSERT INTO yds.`{output_topic}`
+            INSERT INTO yds.`{self.output_topic}`
             SELECT Data AS Data
-            FROM yds.`{input_topic}`;''' \
-            .format(
-            input_topic=self.input_topic,
-            output_topic=self.output_topic,
-        )
+            FROM yds.`{self.input_topic}`;'''
 
         client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING,
@@ -45,4 +41,4 @@ class TestKillPqBill(TestYdsBase):
         ingress_bytes = stat[graph_name]["IngressBytes"]["sum"]
 
         assert ingress_bytes >= 15 * 1024 * 1024, "Ingress must be >= 15MB"
-        assert sum(kikimr.control_plane.get_metering()) == 10
+        assert sum(kikimr.control_plane.get_metering(1)) == 10

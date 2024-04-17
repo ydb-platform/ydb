@@ -59,6 +59,8 @@ Video recordings of {{ ydb-short-name}} team speakers' presentations from confer
 
     {% include [Fossasia](./_includes/conferences/2023/Fossasia.md) %}
 
+    {% include [webinars](./_includes/webinars/2023/webinars.md) %}
+
   - 2022  
 
     {% include [Hydra](./_includes/conferences/2022/Hydra.md) %}

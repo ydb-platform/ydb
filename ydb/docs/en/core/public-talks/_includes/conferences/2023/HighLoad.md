@@ -10,4 +10,6 @@ Implementing a distributed database with strong consistency isn’t difficult; t
 
 The presentation will be of interest to developers of high-load systems and developers of platforms for various purposes.
 
-[Presentation slides](https://www.dropbox.com/scl/fi/p7yeo3ic06vcxjmfa7mua/4.Scale-it-easy-YDB-s-high-performance-in-a-nutshell_Evgeniy-Ivanov-Yandex-_ver.4.pdf?rlkey=r5dmdh614jz48wmdg8jbs6uw2&dl=0)
+[Presentation slides](https://presentations.ydb.tech/2023/en/highload_serbia/ydb_performance/presentation.pdf)
+
+

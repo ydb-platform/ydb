@@ -75,7 +75,7 @@ private:
     }
 
     void FetchSecrets() {
-        RegisterDescribeSecretsActor(SelfId(), UserToken_, SecretNames_, ActorContext(), MaximalSecretsSnapshotWaitTime_);
+        RegisterDescribeSecretsActor(SelfId(), UserToken_, SecretNames_, ActorContext().ActorSystem(), MaximalSecretsSnapshotWaitTime_);
     }
 
     void Handle(TEvDescribeSecretsResponse::TPtr& ev) {

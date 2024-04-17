@@ -34,7 +34,7 @@ void TCompactedWriteController::DoOnReadyResult(const NActors::TActorContext& ct
 
 TCompactedWriteController::~TCompactedWriteController() {
     if (WriteIndexEv && WriteIndexEv->IndexChanges) {
-        WriteIndexEv->IndexChanges->AbortEmergency();
+        WriteIndexEv->IndexChanges->AbortEmergency("TCompactedWriteController destructed with WriteIndexEv and WriteIndexEv->IndexChanges");
     }
 }
 
@@ -42,8 +42,10 @@ const NKikimr::NOlap::TBlobsAction& TCompactedWriteController::GetBlobsAction() 
     return WriteIndexEv->IndexChanges->GetBlobsAction();
 }
 
-void TCompactedWriteController::DoAbort() {
-    WriteIndexEv->IndexChanges->AbortEmergency();
+void TCompactedWriteController::DoAbort(const TString& reason) {
+    if (WriteIndexEv && WriteIndexEv->IndexChanges) {
+        WriteIndexEv->IndexChanges->AbortEmergency("TCompactedWriteController aborted: " + reason);
+    }
 }
 
 }

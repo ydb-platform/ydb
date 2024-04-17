@@ -12,7 +12,7 @@ private:
 public:
     ~TTxWriteDraft() {
         if (!Completed) {
-            WriteController->Abort();
+            WriteController->Abort("TTxWriteDraft aborted before complete");
         }
     }
 

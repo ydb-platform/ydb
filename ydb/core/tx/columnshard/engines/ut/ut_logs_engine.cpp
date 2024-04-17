@@ -311,7 +311,7 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
     changes->WriteIndexOnExecute(nullptr, contextExecute);
     NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
-    changes->AbortEmergency();
+    changes->AbortEmergency("testing");
     return result;
 }
 
@@ -348,7 +348,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
             }
         }
     }
-    changes->AbortEmergency();
+    changes->AbortEmergency("testing");
     return result;
 }
 
@@ -368,7 +368,7 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
     changes->WriteIndexOnExecute(nullptr, contextExecute);
     NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
-    changes->AbortEmergency();
+    changes->AbortEmergency("testing");
     return result;
 }
 
@@ -386,7 +386,7 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
     changes->WriteIndexOnExecute(nullptr, contextExecute);
     NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
-    changes->AbortEmergency();
+    changes->AbortEmergency("testing");
     return result;
 }
 

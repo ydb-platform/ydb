@@ -3,7 +3,7 @@
 #include "flat_page_conf.h"
 #include "flat_page_label.h"
 #include "flat_page_data.h"
-#include "flat_page_index.h"
+#include "flat_page_flat_index.h"
 #include "flat_part_iface.h"
 #include "flat_part_pinout.h"
 #include "flat_row_state.h"

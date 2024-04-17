@@ -1,7 +1,7 @@
 #pragma once
 #include "flat_iterator_ops.h"
 #include "flat_mem_iter.h"
-#include "flat_part_iter_multi.h"
+#include "flat_part_iter.h"
 #include "flat_row_remap.h"
 #include "flat_row_state.h"
 #include "flat_range_cache.h"

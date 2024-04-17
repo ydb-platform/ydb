@@ -1,7 +1,7 @@
 #pragma once
 
 #include "flat_part_iface.h"
-#include "flat_page_index.h"
+#include "flat_page_flat_index.h"
 #include "flat_part_index_iter_iface.h"
 #include "flat_table_part.h"
 #include "flat_stat_part_group_iter_iface.h"

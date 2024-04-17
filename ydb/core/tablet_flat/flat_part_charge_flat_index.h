@@ -2,7 +2,7 @@
 
 #include "flat_table_part.h"
 #include "flat_part_iface.h"
-#include "flat_part_index_iter.h"
+#include "flat_part_index_iter_flat_index.h"
 #include "flat_part_charge_iface.h"
 
 #include <util/generic/bitmap.h>

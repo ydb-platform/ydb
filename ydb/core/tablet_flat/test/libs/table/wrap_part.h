@@ -6,7 +6,7 @@
 #include <ydb/core/tablet_flat/test/libs/rows/rows.h>
 #include <ydb/core/tablet_flat/flat_table_part.h>
 #include <ydb/core/tablet_flat/flat_part_screen.h>
-#include <ydb/core/tablet_flat/flat_part_iter_multi.h>
+#include <ydb/core/tablet_flat/flat_part_iter.h>
 #include <ydb/core/tablet_flat/flat_stat_part.h>
 
 namespace NKikimr {

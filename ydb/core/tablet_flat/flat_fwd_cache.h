@@ -106,14 +106,14 @@ namespace NFwd {
 
             bool grow = OnHold + OnFetch <= lower;
 
-            if (PagesOffset == Pages.size()) { // isn't processed yet
+            if (PagesBeginOffset == Pages.size()) { // isn't processed yet
                 AdvanceNextPage(pageId);
                 RequestNextPage(head);
             }
 
             grow &= Iter && Iter->GetRowId() < EndRowId;
 
-            return {Pages.at(PagesOffset).Touch(pageId, Stat), grow, true};
+            return {Pages.at(PagesBeginOffset).Touch(pageId, Stat), grow, true};
         }
 
         void Forward(IPageLoadingQueue *head, ui64 upper) noexcept override
@@ -161,8 +161,8 @@ namespace NFwd {
     private:
         void DropPagesBefore(TPageId pageId) noexcept
         {
-            while (PagesOffset < Pages.size()) {
-                auto &page = Pages.at(PagesOffset);
+            while (PagesBeginOffset < Pages.size()) {
+                auto &page = Pages.at(PagesBeginOffset);
 
                 if (page.PageId >= pageId) {
                     break;
@@ -178,14 +178,15 @@ namespace NFwd {
                 }
 
                 // keep pending pages but increment offset
-                PagesOffset++;
+                PagesBeginOffset++;
             }
         }
 
         void ShrinkPages() noexcept
         {
-            for (; PagesOffset && Pages[0].Ready(); PagesOffset--) {
+            while (PagesBeginOffset && Pages.front().Ready()) {
                 Pages.pop_front();
+                PagesBeginOffset--;
             }
         }
 
@@ -230,7 +231,7 @@ namespace NFwd {
         /* Forward cache line state */
         ui64 OnHold = 0, OnFetch = 0;
         TDeque<TPage> Pages;
-        ui32 PagesOffset = 0;
+        ui32 PagesBeginOffset = 0;
     };
 
     class TBTreeIndexCache : public IPageLoadingLogic {
@@ -250,9 +251,8 @@ namespace NFwd {
         struct TLevel {
             TLoadedPagesCircularBuffer<TPart::Trace> Trace;
             TDeque<TPageEx> Pages;
-            ui32 PagesOffset = 0;
-            // TODO: remove set?
-            TSet<TNodeState> Queue;
+            ui32 PagesBeginOffset = 0, PagesPendingOffset = 0;
+            TDeque<TNodeState> Queue;
         };
 
     public:
@@ -269,11 +269,9 @@ namespace NFwd {
                 EndRowId = Max<TRowId>();
             }
 
-            // TODO: slices
-
             auto& meta = Part->IndexPages.GetBTree(groupId);
             Levels.resize(meta.LevelCount + 1);
-            Y_ABORT_UNLESS(Levels[0].Queue.emplace(meta.PageId, meta.DataSize).second);
+            Levels[0].Queue.emplace_back(meta.PageId, meta.DataSize);
             LevelsMap.emplace(meta.PageId, 0);
         }
 
@@ -301,14 +299,14 @@ namespace NFwd {
 
             bool grow = GetDataSize(level) <= lower;
 
-            if (level.PagesOffset == level.Pages.size()) { // isn't processed yet
+            if (level.PagesBeginOffset == level.Pages.size()) { // isn't processed yet
                 AdvanceNextPage(level, pageId);
                 RequestNextPage(level, head);
             }
 
             grow &= !level.Queue.empty();
 
-            return {level.Pages.at(level.PagesOffset).Touch(pageId, Stat), grow, true};
+            return {level.Pages.at(level.PagesBeginOffset).Touch(pageId, Stat), grow, true};
         }
 
         void Forward(IPageLoadingQueue *head, ui64 upper) noexcept override
@@ -346,23 +344,12 @@ namespace NFwd {
                 }
                 Y_ABORT_UNLESS(it != level.Pages.end() && it->PageId == one.PageId, "Got page that hasn't been requested for load");
                 
-                if (*levelId + 1 < Levels.size()) {
-                    Y_DEBUG_ABORT_UNLESS(Part->GetPageType(one.PageId) == EPage::BTreeIndex);
-                    NPage::TBtreeIndexNode node(one.Data);
-                    for (auto pos : xrange(node.GetChildrenCount())) {
-                        auto& child = node.GetShortChild(pos);
-                        if (child.RowCount <= BeginRowId) {
-                            continue;
-                        }
-                        Levels[*levelId + 1].Queue.emplace(child.PageId, child.DataSize);
-                        Y_ABORT_UNLESS(LevelsMap.emplace(child.PageId, *levelId + 1).second);
-                    }
-                    it->Settle(one);
-                } else {
-                    Y_DEBUG_ABORT_UNLESS(Part->GetPageType(one.PageId) == EPage::DataPage);
-                    it->Settle(one); // settle of a dropped releases its data
-                    ++it;
-                }
+                it->Settle(one); // settle of a dropped releases its data
+                ++it;
+            }
+
+            for (auto levelId : xrange<ui32>(Levels.size() - 1)) {
+                QueueChildren(levelId);
             }
 
             for (auto& level : Levels) {
@@ -373,8 +360,8 @@ namespace NFwd {
     private:
         void DropPagesBefore(TLevel& level, TPageId pageId) noexcept
         {
-            while (level.PagesOffset < level.Pages.size()) {
-                auto &page = level.Pages.at(level.PagesOffset);
+            while (level.PagesBeginOffset < level.Pages.size()) {
+                auto &page = level.Pages.at(level.PagesBeginOffset);
 
                 if (page.PageId >= pageId) {
                     break;
@@ -385,19 +372,56 @@ namespace NFwd {
                 } else if (page.Usage == EUsage::Keep && page) {
                     level.Trace.Emplace(page);
                 } else {
-                    page.Release().size();
+                    page.Release();
                     *(page.Ready() ? &Stat.After : &Stat.Before) += page.Size;
                 }
 
                 // keep pending pages but increment offset
-                level.PagesOffset++;
+                level.PagesBeginOffset++;
+            }
+        }
+
+        void QueueChildren(ui32 levelId) noexcept
+        {
+            Y_ABORT_UNLESS(levelId + 1 < Levels.size());
+
+            auto& level = Levels[levelId];
+
+            while (level.PagesPendingOffset < level.Pages.size()) {
+                auto &page = level.Pages.at(level.PagesPendingOffset);
+
+                if (!page.Ready()) {
+                    break;
+                }
+
+                if (page) {
+                    NPage::TBtreeIndexNode node(page.Data);
+                    for (auto pos : xrange(node.GetChildrenCount())) {
+                        auto& child = node.GetShortChild(pos);
+                        if (child.RowCount <= BeginRowId) {
+                            continue;
+                        }
+                        Y_ABORT_UNLESS(!Levels[levelId + 1].Queue || Levels[levelId + 1].Queue.back().PageId < child.PageId);
+                        Levels[levelId + 1].Queue.emplace_back(child.PageId, child.DataSize);
+                        Y_ABORT_UNLESS(LevelsMap.emplace(child.PageId, levelId + 1).second);
+                        if (child.RowCount >= EndRowId) {
+                            break;
+                        }
+                    }
+                }
+
+                level.PagesPendingOffset++;
             }
         }
 
         void ShrinkPages(TLevel& level) noexcept
         {
-            for (; level.PagesOffset && level.Pages[0].Ready(); level.PagesOffset--) {
+            while (level.PagesBeginOffset && level.Pages.front().Ready()) {
                 level.Pages.pop_front();
+                level.PagesBeginOffset--;
+                if (level.PagesPendingOffset) {
+                    level.PagesPendingOffset--;
+                }
             }
         }
 
@@ -421,29 +445,29 @@ namespace NFwd {
             auto& queue = level.Queue;
 
             Y_ABORT_UNLESS(!queue.empty());
-            Y_ABORT_UNLESS(queue.begin()->PageId <= pageId);
-            while (!queue.empty() && queue.begin()->PageId < pageId) {
-                queue.erase(queue.begin());
+            Y_ABORT_UNLESS(queue.front().PageId <= pageId);
+            while (!queue.empty() && queue.front().PageId < pageId) {
+                queue.pop_front();
             }
 
             Y_ABORT_UNLESS(!queue.empty());
-            Y_ABORT_UNLESS(queue.begin()->PageId == pageId);
+            Y_ABORT_UNLESS(queue.front().PageId == pageId);
         }
 
         void RequestNextPage(TLevel& level, IPageLoadingQueue *head) noexcept
         {
             Y_ABORT_UNLESS(!level.Queue.empty());
-            auto it = level.Queue.begin();
+            auto pageId = level.Queue.front().PageId;
 
-            auto size = head->AddToQueue(it->PageId, EPage::DataPage);
+            auto size = head->AddToQueue(pageId, EPage::DataPage);
 
             Stat.Fetch += size;
 
-            Y_ABORT_UNLESS(!level.Pages || level.Pages.back().PageId < it->PageId);
-            level.Pages.emplace_back(TPage(it->PageId, size, 0, Max<TPageId>()), it->EndDataSize);
+            Y_ABORT_UNLESS(!level.Pages || level.Pages.back().PageId < pageId);
+            level.Pages.emplace_back(TPage(pageId, size, 0, Max<TPageId>()), level.Queue.front().EndDataSize);
             level.Pages.back().Fetch = EFetch::Wait;
 
-            level.Queue.erase(it);
+            level.Queue.pop_front();
         }
 
     private:

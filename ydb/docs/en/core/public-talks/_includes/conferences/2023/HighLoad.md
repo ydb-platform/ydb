@@ -10,6 +10,6 @@ Implementing a distributed database with strong consistency isn’t difficult; t
 
 The presentation will be of interest to developers of high-load systems and developers of platforms for various purposes.
 
-[Presentation slides](https://presentations.ydb.tech/2023/en/highload_serbia/ydb_performance/presentation.pdf)
+[Slides](https://presentations.ydb.tech/2023/en/highload_serbia/ydb_performance/presentation.pdf)
 
 

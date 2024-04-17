@@ -8,4 +8,4 @@
 
 The presentation is suitable for everyone who is not yet familiar with {{ ydb-short-name }}.
 
-[Presentation slides](https://presentations.ydb.tech/2023/en/fossasia_summit/presentation.pdf)
+[Slides](https://presentations.ydb.tech/2023/en/fossasia_summit/presentation.pdf)

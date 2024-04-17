@@ -12352,6 +12352,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgLike"] = &PgLikeWrapper;
         Functions["PgILike"] = &PgLikeWrapper;
         Functions["PgIn"] = &PgInWrapper;
+        Functions["PgMixedIn"] = &PgMixedInWrapper;
         Functions["PgBetween"] = &PgBetweenWrapper;
         Functions["PgBetweenSym"] = &PgBetweenWrapper;
         Functions["PgSubLink"] = &PgSubLinkWrapper;

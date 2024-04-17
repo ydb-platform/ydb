@@ -5430,6 +5430,142 @@ IGraphTransformer::TStatus PgLikeWrapper(const TExprNode::TPtr& input, TExprNode
     return IGraphTransformer::TStatus::Ok;
 }
 
+TExprNodePtr BuildPgIn(TExprNodeList&& args, ui32 targetTypeId, bool castRequired, TContext& ctx) {
+    auto lhs = args[0];
+    if (castRequired) {
+        const auto lhsType = lhs->GetTypeAnn()->Cast<TPgExprType>();
+        if (lhsType->GetId() != targetTypeId) {
+            lhs = WrapWithPgCast(std::move(lhs), targetTypeId, ctx.Expr);
+        }
+    }
+    std::swap(args[0], args.back());
+    args.pop_back();
+
+    if (castRequired) {
+        for (size_t i = 0; i < args.size(); ++i) {
+            const auto argType = args[i]->GetTypeAnn()->Cast<TPgExprType>();
+            if (argType->GetId() != targetTypeId) {
+                args[i] = WrapWithPgCast(std::move(args[i]), targetTypeId, ctx.Expr);
+            }
+        }
+    }
+
+    const auto rhs = ctx.Expr.Builder(args[1]->Pos())
+        .Callable("AsList")
+            .Add(std::move(args))
+        .Seal()
+        .Build();
+
+    return ctx.Expr.Builder(lhs->Pos())
+        .Callable("PgIn")
+            .Add(0, lhs)
+            .Add(1, rhs)
+        .Seal()
+        .Build();
+}
+
+IGraphTransformer::TStatus PgMixedInWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "IN expects at least one element"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    TVector<ui32> pgTypes(input->ChildrenSize());
+    {
+        TExprNodeList convertedChildren;
+        convertedChildren.reserve(input->ChildrenSize());
+        bool convertionRequired = false;
+        bool hasConvertions = false;
+        for (size_t i = 0; i < input->ChildrenSize(); ++i) {
+            const auto child = input->Child(i);
+            if (!ExtractPgType(child->GetTypeAnn(), pgTypes[i], convertionRequired, child->Pos(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (convertionRequired) {
+                hasConvertions = true;
+
+                auto convertedChild = ctx.Expr.Builder(child->Pos())
+                    .Callable("ToPg")
+                        .Add(0, child)
+                    .Seal()
+                    .Build();
+                convertedChildren.push_back(std::move(convertedChild));
+            } else {
+                convertedChildren.push_back(std::move(child));
+            }
+        }
+        if (hasConvertions) {
+            output = ctx.Expr.Builder(input->Pos())
+                .Callable("PgMixedIn")
+                    .Add(std::move(convertedChildren))
+                .Seal()
+                .Build();
+
+            return IGraphTransformer::TStatus::Repeat;
+        }
+    }
+
+    auto posGetter = [&input, &ctx](size_t i) {
+        return ctx.Expr.GetPosition(input->Child(i)->Pos());
+    };
+
+    struct TPgListCommonTypeConversion {
+        bool conversionRequired = false;
+        ui32 targetType = 0;
+        TExprNodeList items;
+    };
+
+    bool castRequired = false;
+    const NPg::TTypeDesc* commonType;
+    if (NPg::LookupCommonType(pgTypes, posGetter, commonType, castRequired))
+    {
+        THashMap<ui32, TPgListCommonTypeConversion> elemsByType;
+        for (size_t i = 1; i < input->ChildrenSize(); ++i) {
+            auto& elemsOfType = elemsByType[pgTypes[i]];
+            if (elemsOfType.items.empty()) {
+                const NPg::TTypeDesc* elemCommonType;
+                if (const auto issue = NPg::LookupCommonType({pgTypes[0], pgTypes[i]},
+                    posGetter, elemCommonType, elemsOfType.conversionRequired))
+                {
+                    ctx.Expr.AddError(*issue);
+                    return IGraphTransformer::TStatus::Error;
+                }
+                elemsOfType.targetType = elemCommonType->TypeId;
+                // Clone IN's lhs expression as the leftmost elem in the new type-associated list
+                elemsOfType.items.push_back(ctx.Expr.ShallowCopy(input->Head()));
+                elemsOfType.items.back()->SetTypeAnn(input->Head().GetTypeAnn());
+            }
+            elemsOfType.items.push_back(input->Child(i));
+        }
+        TExprNodeList orClausesOfIn;
+        orClausesOfIn.reserve(elemsByType.size());
+
+        for (auto& elemsOfType: elemsByType) {
+            auto& conversion = elemsOfType.second;
+            orClausesOfIn.push_back(BuildPgIn(std::move(conversion.items), conversion.targetType, conversion.conversionRequired, ctx));
+        }
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable("Fold")
+                .Callable(0, "AsList")
+                    .Add(std::move(orClausesOfIn))
+                .Seal()
+                .Add(1, MakePgBool(input->Pos(), false, ctx.Expr))
+                .Lambda(2)
+                    .Param("item")
+                    .Param("state")
+                    .Callable("PgOr")
+                        .Arg(0, "state")
+                        .Arg(1, "item")
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    } else {
+        output = BuildPgIn(std::move(input->ChildrenList()), commonType->TypeId, castRequired, ctx);
+    }
+    return IGraphTransformer::TStatus::Repeat;
+}
+
 IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;

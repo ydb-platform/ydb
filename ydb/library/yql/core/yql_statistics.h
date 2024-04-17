@@ -13,6 +13,12 @@ enum EStatisticsType : ui32 {
     ManyManyJoin
 };
 
+// Providers may subclass this struct to associate specific statistics, useful to
+// derive stats for higher-level operators in the plan.
+struct IProviderStatistics {
+    virtual ~IProviderStatistics() {}
+};
+
 /**
  * Optimizer Statistics struct records per-table and per-column statistics
  * for the current operator in the plan. Currently, only Nrows and Ncols are
@@ -28,14 +34,19 @@ struct TOptimizerStatistics {
     double Cost = 0;
     double Selectivity = 1.0;
     const TVector<TString>& KeyColumns;
+    std::unique_ptr<const IProviderStatistics> Specific;
 
+    TOptimizerStatistics(TOptimizerStatistics&&) = default;
     TOptimizerStatistics() : KeyColumns(EmptyColumns) {}
-    TOptimizerStatistics(double nrows, int ncols): Nrows(nrows), Ncols(ncols), KeyColumns(EmptyColumns) {}
-    TOptimizerStatistics(double nrows, int ncols, double cost): Nrows(nrows), Ncols(ncols), Cost(cost), KeyColumns(EmptyColumns) {}
-    TOptimizerStatistics(EStatisticsType type, double nrows, int ncols, double cost): Type(type), Nrows(nrows), Ncols(ncols), Cost(cost), KeyColumns(EmptyColumns) {}
-    TOptimizerStatistics(EStatisticsType type, double nrows, int ncols, double byteSize, double cost): Type(type), Nrows(nrows), Ncols(ncols), ByteSize(byteSize), Cost(cost), KeyColumns(EmptyColumns) {}
-    TOptimizerStatistics(EStatisticsType type, double nrows, int ncols, double cost, const TVector<TString>& keyColumns): Type(type), Nrows(nrows), Ncols(ncols), Cost(cost), KeyColumns(keyColumns) {}
-    TOptimizerStatistics(EStatisticsType type, double nrows, int ncols, double byteSize, double cost, const TVector<TString>& keyColumns): Type(type), Nrows(nrows), Ncols(ncols), ByteSize(byteSize), Cost(cost), KeyColumns(keyColumns) {}
+
+    TOptimizerStatistics(
+        EStatisticsType type,
+        double nrows = 0.0,
+        int ncols = 0,
+        double byteSize = 0.0,
+        double cost = 0.0,
+        const TVector<TString>& keyColumns = EmptyColumns,
+        std::unique_ptr<IProviderStatistics> specific = nullptr);
 
     TOptimizerStatistics& operator+=(const TOptimizerStatistics& other);
     bool Empty() const;

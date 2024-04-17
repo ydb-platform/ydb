@@ -413,7 +413,7 @@ public:
 
     TMaybe<TOptimizerStatistics> ReadStatistics(const TExprNode::TPtr& read, TExprContext& ctx) override {
         Y_UNUSED(ctx);
-        TOptimizerStatistics stat(0, 0);
+        TOptimizerStatistics stat;
         if (auto maybeRead = TMaybeNode<TYtReadTable>(read)) {
             auto input = maybeRead.Cast().Input();
             for (auto section: input) {

@@ -200,7 +200,7 @@ public:
             }
 
             rows = size / 1024; // magic estimate
-            return TOptimizerStatistics(rows, cols, size);
+            return TOptimizerStatistics(BaseTable, rows, cols, size);
         } else {
             return Nothing();
         }

@@ -23,12 +23,22 @@ public:
             for (auto& p : Ctx_.DataSources) {
                 if (p->IsRead(node)) {
                     Reads_[&node] = p.Get();
+                    HasReads_.emplace(&node);
                 }
             }
 
             for (auto& p : Ctx_.DataSinks) {
                 if (p->IsWrite(node)) {
                     Writes_[&node] = p.Get();
+                }
+            }
+
+            return true;
+        }, [&](const TExprNode& node) {
+            for (const auto& child : node.Children()) {
+                if (HasReads_.contains(child.Get())) {
+                    HasReads_.emplace(&node);
+                    break;
                 }
             }
 
@@ -208,6 +218,27 @@ private:
             }
 
             return &lineage;
+        }
+
+        if (!HasReads_.contains(&node)) {
+            auto type = node.GetTypeAnn();
+            if (type->GetKind() == ETypeAnnotationKind::List) {
+                auto itemType = type->Cast<TListExprType>()->GetItemType();
+                if (itemType->GetKind() == ETypeAnnotationKind::Struct) {
+                    auto structType = itemType->Cast<TStructExprType>();
+                    lineage.Fields.ConstructInPlace();
+                    for (const auto& i : structType->GetItems()) {
+                        if (i->GetName().StartsWith("_yql_sys_")) {
+                            continue;
+                        }
+
+                        TString fieldName(i->GetName());
+                        (*lineage.Fields).emplace(fieldName, TFieldsLineage());
+                    }
+
+                    return &lineage;
+                }
+            }
         }
 
         if (node.IsCallable({
@@ -828,6 +859,7 @@ private:
     TNodeMap<TVector<ui32>> ReadIds_;
     TNodeMap<ui32> WriteIds_;
     TNodeMap<TLineage> Lineages_;
+    TNodeSet HasReads_;
 };
 
 }

@@ -31,7 +31,7 @@ inline TVector<TString> GetConditionUsedRelationNames(const std::shared_ptr<TJoi
 }
 
 template <typename TNodeSet>
-TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
+typename TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
     const std::shared_ptr<TJoinOptimizerNode>& joinNode,
     const TNodeSet& conditionUsedRels,
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet>& subtreeNodes

@@ -925,6 +925,7 @@ TString GetPrettyStatistics(const TString& statistics) {
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.ResultRows", "ResultRows");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressBytes", "EgressBytes");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressRows", "EgressRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.MkqlMaxMemoryUsage", "MaxMemoryUsage");
                 writer.OnEndMap();
             }
             // YQv2
@@ -944,6 +945,7 @@ TString GetPrettyStatistics(const TString& statistics) {
                     RemapNode(writer, p.second, "ResultRows", "ResultRows");
                     RemapNode(writer, p.second, "EgressBytes", "EgressBytes");
                     RemapNode(writer, p.second, "EgressRows", "EgressRows");
+                    RemapNode(writer, p.second, "MaxMemoryUsage", "MaxMemoryUsage");
                 writer.OnEndMap();
             }
         }

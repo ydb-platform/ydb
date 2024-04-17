@@ -81,6 +81,8 @@
 
     {% include [DevOpsConf](./_includes/conferences/2021/DevOpsConf.md) %}
 
+    {% include [About_cloud](./_includes/conferences/2021/about_cloud.md) %}
+
     {% include [Webinars](./_includes/webinars/2021/webinars.md) %}
 
   - 2020

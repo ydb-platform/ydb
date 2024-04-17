@@ -8,4 +8,4 @@
 
 Доклад будет интересен как разработчикам приложений, которым требуется надёжная СУБД, так и людям, интересующимся распределёнными системами и базами данных.
 
-[Презентация](https://github.com/ydb-platform/ydb-presentations/blob/main/2023/ru/yatalks/ydb_benchmarking/presentation.pdf)
+[Слайды](https://presentations.ydb.tech/2023/ru/yatalks/ydb_benchmarking/presentation.pdf)

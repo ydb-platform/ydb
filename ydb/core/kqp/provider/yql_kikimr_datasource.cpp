@@ -188,6 +188,8 @@ private:
                 return TStatus::Ok;
             case TKikimrKey::Type::PGObject:
                 return TStatus::Ok;
+            case TKikimrKey::Type::Replication:
+                return TStatus::Ok;
         }
 
         return TStatus::Error;

@@ -247,6 +247,24 @@ public:
                 break;
             }
 
+            case NKqpProto::TKqpSchemeOperation::kCreateReplication: {
+                const auto& modifyScheme = schemeOp.GetCreateReplication();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kAlterReplication: {
+                const auto& modifyScheme = schemeOp.GetAlterReplication();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kDropReplication: {
+                const auto& modifyScheme = schemeOp.GetDropReplication();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
             default:
                 InternalError(TStringBuilder() << "Unexpected scheme operation: "
                     << (ui32) schemeOp.GetOperationCase());

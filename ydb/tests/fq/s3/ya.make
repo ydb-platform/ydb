@@ -20,23 +20,23 @@ DEPENDS(
 )
 
 TEST_SRCS(
-    # test_bindings.py
-    # test_compressions.py
-    # test_early_finish.py
-    # test_empty.py
-    # test_explicit_partitioning.py
-    # test_format_setting.py
-    # test_formats.py
-    # test_inflight.py
-    # test_insert.py
-    # test_public_metrics.py
-    # test_push_down.py
-    # test_s3.py
-    # test_size_limit.py
+    test_bindings.py
+    test_compressions.py
+    test_early_finish.py
+    test_empty.py
+    test_explicit_partitioning.py
+    test_format_setting.py
+    test_formats.py
+    test_inflight.py
+    test_insert.py
+    test_public_metrics.py
+    test_push_down.py
+    test_s3.py
+    test_size_limit.py
     test_statistics.py
-    # test_test_connection.py
-    # test_ydb_over_fq.py
-    # test_yq_v2.py
+    test_test_connection.py
+    test_ydb_over_fq.py
+    test_yq_v2.py
 )
 
 PY_SRCS(

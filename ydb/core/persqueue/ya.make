@@ -48,6 +48,7 @@ SRCS(
     dread_cache_service/caching_service.cpp
 )
 
+GENERATE_ENUM_SERIALIZATION(read_balancer.h)
 GENERATE_ENUM_SERIALIZATION(sourceid_info.h)
 
 PEERDIR(

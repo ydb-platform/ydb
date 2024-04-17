@@ -43,10 +43,10 @@ namespace NTable {
                 if (!from && !to) /* [-inf, +inf) */ {
                     PartView.emplace_back(partView);
                 } else {
-                    TPartSimpleIt first(partView.Part.Get(), { }, KeyCellDefaults, Env);
+                    TPartIter first(partView.Part.Get(), { }, KeyCellDefaults, Env);
                     Skipped += EReady::Page == first.Seek(from, ESeek::Lower);
 
-                    TPartSimpleIt last(partView.Part.Get(), { }, KeyCellDefaults, Env);
+                    TPartIter last(partView.Part.Get(), { }, KeyCellDefaults, Env);
                     Skipped += EReady::Page == last.Seek(to, to ? ESeek::Lower : ESeek::Upper);
 
                     auto firstRowId = first.GetRowId();

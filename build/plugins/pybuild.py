@@ -217,7 +217,10 @@ def add_python_lint_checks(unit, py_ver, files):
             params = ["ruff", "tools/ruff_linter/bin/ruff_linter"]
             params += ["FILES"] + resolved_files
             params += ["GLOBAL_RESOURCES", resource]
-            configs = [unit.get('RUFF_CONFIG_PATHS_FILE'), 'build/config/tests/ruff/ruff.toml'] + get_ruff_configs(unit)
+            configs = [
+                rootrel_arc_src(unit.get('RUFF_CONFIG_PATHS_FILE'), unit),
+                'build/config/tests/ruff/ruff.toml',
+            ] + get_ruff_configs(unit)
             params += ['CONFIGS'] + configs
             unit.on_add_linter_check(params)
 

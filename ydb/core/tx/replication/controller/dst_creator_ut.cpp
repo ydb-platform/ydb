@@ -24,6 +24,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                 {.Name = "key", .Type = "Uint32"},
                 {.Name = "value", .Type = "Utf8"},
             },
+            .ReplicationConfig = Nothing(),
         };
 
         env.CreateTable("/Root", *MakeTableDescription(tableDesc));

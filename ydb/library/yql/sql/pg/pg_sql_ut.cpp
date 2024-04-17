@@ -282,6 +282,20 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
     }
 
+    Y_UNIT_TEST(DropSequenceStmt) {
+        auto res = PgSqlToYql("DROP SEQUENCE IF EXISTS seq;");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns)) (let world (Write! world (DataSink '"kikimr" '"") (Key '('pgObject (String '"seq") (String 'pgSequence))) (Void) '('('mode 'drop_if_exists))))
+                (let world (CommitAll! world))
+                (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
     Y_UNIT_TEST(VariableShowStmt) {
         auto res = PgSqlToYql("Show server_version_num");
         UNIT_ASSERT(res.Root);

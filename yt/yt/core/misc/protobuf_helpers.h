@@ -64,10 +64,11 @@ template <class T>
 void FromProto(T* original, ui64 serialized);
 
 ////////////////////////////////////////////////////////////////////////////////
-template <class TSerialized, class TOriginalArray>
+template <class TSerialized, class TOriginalArray, class... TArgs>
 void ToProto(
     ::google::protobuf::RepeatedPtrField<TSerialized>* serializedArray,
-    const TOriginalArray& originalArray);
+    const TOriginalArray& originalArray,
+    TArgs&&... args);
 
 template <class TSerialized, class TOriginalArray>
 void ToProto(

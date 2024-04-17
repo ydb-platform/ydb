@@ -333,6 +333,7 @@ public:
         NKikimrBlobStorage::EDriveStatus Status;
         TInstant StatusTimestamp;
         NKikimrBlobStorage::EDecommitStatus DecommitStatus;
+        Table::Mood::Type Mood;
         TString ExpectedSerial;
         TString LastSeenSerial;
         TString LastSeenPath;
@@ -350,6 +351,7 @@ public:
                     Table::PDiskConfig,
                     Table::Status,
                     Table::Timestamp,
+                    Table::Mood,
                     Table::ExpectedSerial,
                     Table::LastSeenSerial,
                     Table::LastSeenPath,
@@ -364,6 +366,7 @@ public:
                     &TPDiskInfo::PDiskConfig,
                     &TPDiskInfo::Status,
                     &TPDiskInfo::StatusTimestamp,
+                    &TPDiskInfo::Mood,
                     &TPDiskInfo::ExpectedSerial,
                     &TPDiskInfo::LastSeenSerial,
                     &TPDiskInfo::LastSeenPath,
@@ -385,6 +388,7 @@ public:
                    NKikimrBlobStorage::EDriveStatus status,
                    TInstant statusTimestamp,
                    NKikimrBlobStorage::EDecommitStatus decommitStatus,
+                   Table::Mood::Type mood,
                    const TString& expectedSerial,
                    const TString& lastSeenSerial,
                    const TString& lastSeenPath,
@@ -401,6 +405,7 @@ public:
             , Status(status)
             , StatusTimestamp(statusTimestamp)
             , DecommitStatus(decommitStatus)
+            , Mood(mood)
             , ExpectedSerial(expectedSerial)
             , LastSeenSerial(lastSeenSerial)
             , LastSeenPath(lastSeenPath)
@@ -870,6 +875,7 @@ public:
         std::map<TString, NPDisk::TDriveData> KnownDrives;
         THashSet<TGroupId> WaitingForGroups;
         THashSet<TGroupId> GroupsRequested;
+        bool DeclarativePDiskManagement = false;
 
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {

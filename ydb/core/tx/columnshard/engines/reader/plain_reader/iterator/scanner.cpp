@@ -56,12 +56,13 @@ void TScanHead::OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch
 }
 
 TConclusionStatus TScanHead::Start() {
+    const bool guaranteeExclusivePK = Context->GetCommonContext()->GetReadMetadata()->HasGuaranteeExclusivePK();
     TScanContext context;
     for (auto itPoint = BorderPoints.begin(); itPoint != BorderPoints.end(); ++itPoint) {
         auto& point = itPoint->second;
         context.OnStartPoint(point);
         if (context.GetIsSpecialPoint()) {
-            auto detectorResult = DetectSourcesFeatureInContextIntervalScan(context.GetCurrentSources(), false);
+            auto detectorResult = DetectSourcesFeatureInContextIntervalScan(context.GetCurrentSources(), guaranteeExclusivePK);
             for (auto&& i : context.GetCurrentSources()) {
                 i.second->IncIntervalsCount();
             }
@@ -82,7 +83,7 @@ TConclusionStatus TScanHead::Start() {
             for (auto&& i : context.GetCurrentSources()) {
                 i.second->IncIntervalsCount();
             }
-            auto detectorResult = DetectSourcesFeatureInContextIntervalScan(context.GetCurrentSources(), context.GetIsExclusiveInterval());
+            auto detectorResult = DetectSourcesFeatureInContextIntervalScan(context.GetCurrentSources(), guaranteeExclusivePK || context.GetIsExclusiveInterval());
             if (!detectorResult) {
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scanner_initializer_aborted")("reason", detectorResult.GetErrorMessage());
                 Abort();

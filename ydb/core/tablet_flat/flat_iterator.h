@@ -252,8 +252,8 @@ public:
 
     ~TTableItBase();
 
-    void Push(TAutoPtr<TMemIt>);
-    void Push(TAutoPtr<TRunIt>);
+    void Push(TAutoPtr<TMemIter>);
+    void Push(TAutoPtr<TRunIter>);
 
     void StopBefore(TArrayRef<const TCell> key);
     void StopAfter(TArrayRef<const TCell> key);
@@ -364,8 +364,8 @@ private:
 
     EStage Stage = EStage::Seek;
     EReady Ready = EReady::Gone;
-    THolderVector<TMemIt> MemIters;
-    THolderVector<TRunIt> RunIters;
+    THolderVector<TMemIter> MemIters;
+    THolderVector<TRunIter> RunIters;
     TOwnedCellVec StopKey;
     bool StopKeyInclusive = true;
 
@@ -455,23 +455,23 @@ private:
     bool SeekInternal(TArrayRef<const TCell> key, ESeek seek) noexcept;
 };
 
-class TTableIt;
-class TTableReverseIt;
+class TTableIter;
+class TTableReverseIter;
 
-class TTableIt : public TTableItBase<TTableItOps> {
+class TTableIter : public TTableItBase<TTableItOps> {
 public:
     using TTableItBase::TTableItBase;
 
-    typedef TTableReverseIt TReverseType;
+    typedef TTableReverseIter TReverseType;
 
     static constexpr EDirection Direction = EDirection::Forward;
 };
 
-class TTableReverseIt : public TTableItBase<TTableItReverseOps> {
+class TTableReverseIter : public TTableItBase<TTableItReverseOps> {
 public:
     using TTableItBase::TTableItBase;
 
-    typedef TTableIt TReverseType;
+    typedef TTableIter TReverseType;
 
     static constexpr EDirection Direction = EDirection::Reverse;
 };
@@ -516,7 +516,7 @@ inline void TTableItBase<TIteratorOps>::AddNotReadyIterator(TIteratorId itId) {
 }
 
 template<class TIteratorOps>
-inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TMemIt> it)
+inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TMemIter> it)
 {
     if (it && it->IsValid()) {
         TIteratorId itId = { EType::Mem, IteratorIndexFromSize(MemIters.size()), it->MemTable->Epoch };
@@ -528,7 +528,7 @@ inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TMemIt> it)
 }
 
 template<class TIteratorOps>
-inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TRunIt> it)
+inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TRunIter> it)
 {
     TIteratorId itId = { EType::Run, IteratorIndexFromSize(RunIters.size()), it->Epoch() };
 

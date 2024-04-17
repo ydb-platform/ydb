@@ -837,6 +837,14 @@ public:
         Send(ev->Sender, res.release());
     }
 
+    void Handle(TEvBlobStorage::TEvAskWardenRestartPDiskResult::TPtr &ev) {
+        bool restartAllowed = ev->Get()->RestartAllowed;
+
+        if (restartAllowed) {
+            Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(Impl.PDiskId));
+        }
+    }
+
     void Handle(NPDisk::TEvConfigureScheduler::TPtr ev) {
         auto *msg = ev->Get();
         auto res = std::make_unique<NPDisk::TEvConfigureSchedulerResult>(NKikimrProto::OK, TString());
@@ -944,6 +952,7 @@ public:
         hFunc(NPDisk::TEvSlay, Handle);
         hFunc(NPDisk::TEvHarakiri, Handle);
         hFunc(NPDisk::TEvConfigureScheduler, Handle);
+        hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
         cFunc(TEvents::TSystem::Wakeup, ReportMetrics);
 
         cFunc(EvBecomeError, HandleMoveToErrorState);

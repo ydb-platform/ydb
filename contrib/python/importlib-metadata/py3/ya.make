@@ -6,10 +6,6 @@ VERSION(7.1.0)
 
 LICENSE(Apache-2.0)
 
-PEERDIR(
-    library/python/resource
-)
-
 NO_LINT()
 
 PY_SRCS(

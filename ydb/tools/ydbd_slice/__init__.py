@@ -239,7 +239,6 @@ Example:
 '''
 
 
-KIKIMR_EXECUTABLE = 'kikimr/driver/kikimr'
 YDBD_EXECUTABLE = 'ydb/apps/ydbd/ydbd'
 
 
@@ -383,12 +382,9 @@ def arcadia_root(begin_path='.'):
 def deduce_kikimr_bin_from_args(args):
     if args.kikimr is not None:
         path = os.path.abspath(args.kikimr)
-    elif args.ydbd:
-        root = arcadia_root()
-        path = ya_build(root, YDBD_EXECUTABLE, args.build_args, args.dry_run)
     elif args.arcadia:
         root = arcadia_root()
-        path = ya_build(root, KIKIMR_EXECUTABLE, args.build_args, args.dry_run)
+        path = ya_build(root, YDBD_EXECUTABLE, args.build_args, args.dry_run)
     else:
         sys.exit("unable to deduce kikimr bin")
 
@@ -464,11 +460,6 @@ def binaries_args():
         "--kikimr-lz4",
         metavar="PATH",
         help="explicit path to compressed kikimr binary file used for transfer acceleration"
-    )
-    args.add_argument(
-        "--ydbd",
-        action='store_true',
-        help="build ydb/apps/ydbd/ydbd binary from arcadia, figure out root by finding .arcadia.root upstairs"
     )
     args.add_argument(
         "--arcadia",
@@ -564,7 +555,17 @@ def dispatch_run(func, args, walle_provider):
     )
 
     v = vars(args)
-    slice = handlers.Slice(components, nodes, cluster_details, configurator, v.get('clear_logs'), args, walle_provider)
+    clear_logs = v.get('clear_logs')
+    yav_version = v.get('yav_version')
+    slice = handlers.Slice(
+        components,
+        nodes,
+        cluster_details,
+        configurator,
+        clear_logs,
+        yav_version,
+        walle_provider
+    )
     func(slice)
 
     if clear_tmp:
@@ -603,12 +604,13 @@ def add_update_mode(modes, walle_provider):
 
 def add_update_raw_configs(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.Slice.slice_update_raw_configs, args, walle_provider)
+
+        dispatch_run(lambda self: handlers.Slice.slice_update_raw_configs(self, args.raw_cfg), args, walle_provider)
 
     mode = modes.add_parser(
         "update-raw-cfg",
         conflict_handler='resolve',
-        parents=[direct_nodes_args(), cluster_description_args(), component_args()],
+        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args()],
         description=""
     )
     mode.add_argument(
@@ -655,7 +657,7 @@ def add_clear_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "clear",
-        parents=[direct_nodes_args(), cluster_description_args(), component_args()],
+        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args()],
         description="Stop all kikimr instances at the nodes, format all kikimr drivers, shutdown dynamic slots. "
                     "And don't start nodes afrer it. "
                     "Use --hosts to specify particular hosts."
@@ -669,7 +671,7 @@ def add_format_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "format",
-        parents=[direct_nodes_args(), cluster_description_args(), component_args()],
+        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args()],
         description="Stop all kikimr instances at the nodes, format all kikimr drivers at the nodes, start the instances. "
                     "If you call format for all cluster, you will spoil it. "
                     "Additional dynamic configuration will required after it. "
@@ -684,10 +686,7 @@ def add_format_mode(modes, walle_provider):
 # docker and kube scenarios
 def build_and_push_docker_image(build_args, docker_package, build_ydbd, image, force_rebuild):
     if docker_package is None:
-        if build_ydbd:
-            docker_package = docker.DOCKER_IMAGE_YDBD_PACKAGE_SPEC
-        else:
-            docker_package = docker.DOCKER_IMAGE_KIKIMR_PACKAGE_SPEC
+        docker_package = docker.DOCKER_IMAGE_YDBD_PACKAGE_SPEC
 
     logger.debug(f'using docker package spec: {docker_package}')
 
@@ -716,11 +715,6 @@ def add_arguments_docker_build_with_remainder(mode, add_force_rebuild=False):
             action='store_true',
         )
     group.add_argument(
-        "--ydbd",
-        action='store_true',
-        help="build docker image with ydb/apps/ydbd/ydbd binary from arcadia, figure out root by finding .arcadia.root upstairs"
-    )
-    group.add_argument(
         '-d', '--docker-package',
         help='Optional: path to docker package description file relative from ARCADIA_ROOT.',
     )
@@ -746,7 +740,7 @@ def add_docker_build_mode(modes):
         logger.debug("starting docker-build cmd with args '%s'", args)
         try:
             image = docker.get_image_from_args(args)
-            build_and_push_docker_image(args.build_args, args.docker_package, args.ydbd, image, force_rebuild=True)
+            build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=True)
 
             logger.info('docker-build finished')
         except RuntimeError as e:
@@ -822,7 +816,7 @@ def add_kube_install_mode(modes):
         try:
             image = docker.get_image_from_args(args)
             if not args.use_prebuilt_image:
-                build_and_push_docker_image(args.build_args, args.docker_package, args.ydbd, image, force_rebuild=args.force_rebuild)
+                build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=args.force_rebuild)
 
             manifests = kube_handlers.get_all_manifests(args.path)
             kube_handlers.manifests_ydb_set_image(args.path, manifests, image)
@@ -869,7 +863,7 @@ def add_kube_update_mode(modes):
         try:
             image = docker.get_image_from_args(args)
             if not args.use_prebuilt_image:
-                build_and_push_docker_image(args.build_args, args.docker_package, args.ydbd, image, force_rebuild=args.force_rebuild)
+                build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=args.force_rebuild)
 
             manifests = kube_handlers.get_all_manifests(args.path)
             manifests = kube_handlers.manifests_ydb_filter_components(args.path, manifests, args.components)

@@ -28,7 +28,7 @@ public:
 
 public:
     TComparator() = default;
-    explicit TComparator(std::vector<ESortOrder> sortOrders);
+    TComparator(std::vector<ESortOrder> sortOrders, TCallback<TUUComparerSignature> CGComparator = {});
 
     void Persist(const TPersistenceContext& context);
 
@@ -85,6 +85,10 @@ public:
     explicit operator bool() const;
 
 private:
+    // Compiler generated comparer that is used in CompareKeys().
+    TCallback<TUUComparerSignature> CGComparator_;
+
+private:
     void ValidateKey(const TKey& key) const;
     void ValidateKeyBound(const TKeyBound& keyBound) const;
 };
@@ -96,7 +100,7 @@ void Serialize(const TComparator& comparator, NYson::IYsonConsumer* consumer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TPrefixComparer = int(const TUnversionedValue*, const TUnversionedValue*, int);
+using TPrefixComparer = TUUComparerSignature;
 
 ////////////////////////////////////////////////////////////////////////////////
 

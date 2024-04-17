@@ -8,7 +8,7 @@
                         "StructType";
                         [
                             [
-                                "UnionList";
+                                "OrList";
                                 [
                                     "DataType";
                                     "Uint32"

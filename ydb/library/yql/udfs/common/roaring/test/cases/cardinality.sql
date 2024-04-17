@@ -1,2 +1,2 @@
-SELECT Roaring::Cardinality(Roaring::UnionWithBinary(Roaring::Deserialize(left), right)) AS UnionCardinality FROM Input;
-SELECT Roaring::Uint32List(Roaring::IntersectWithBinary(Roaring::Deserialize(right), left)) AS IntersectCardinality FROM Input;
+SELECT Roaring::Cardinality(Roaring::OrWithBinary(Roaring::Deserialize(left), right)) AS OrCardinality FROM Input;
+SELECT Roaring::Uint32List(Roaring::AndWithBinary(Roaring::Deserialize(right), left)) AS AndCardinality FROM Input;

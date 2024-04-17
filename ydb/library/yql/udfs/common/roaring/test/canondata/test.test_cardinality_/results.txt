@@ -8,7 +8,7 @@
                         "StructType";
                         [
                             [
-                                "UnionCardinality";
+                                "OrCardinality";
                                 [
                                     "DataType";
                                     "Uint32"
@@ -34,7 +34,7 @@
                         "StructType";
                         [
                             [
-                                "IntersectCardinality";
+                                "AndCardinality";
                                 [
                                     "OptionalType";
                                     [

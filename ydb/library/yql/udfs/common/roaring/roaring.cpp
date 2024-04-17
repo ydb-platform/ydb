@@ -41,13 +41,13 @@ namespace {
         return static_cast<TRoaringWrapper*>(arg.AsBoxed().Get())->Roaring_;
     }
 
-    class TRoaringUnionWithBinary: public TBoxedValue {
+    class TRoaringOrWithBinary: public TBoxedValue {
     public:
-        TRoaringUnionWithBinary() {
+        TRoaringOrWithBinary() {
         }
 
         static TStringRef Name() {
-            return TStringRef::Of("UnionWithBinary");
+            return TStringRef::Of("OrWithBinary");
         }
 
     private:
@@ -72,13 +72,13 @@ namespace {
         }
     };
 
-    class TRoaringIntersectWithBinary: public TBoxedValue {
+    class TRoaringAndWithBinary: public TBoxedValue {
     public:
-        TRoaringIntersectWithBinary() {
+        TRoaringAndWithBinary() {
         }
 
         static TStringRef Name() {
-            return TStringRef::Of("IntersectWithBinary");
+            return TStringRef::Of("AndWithBinary");
         }
 
     private:
@@ -103,13 +103,13 @@ namespace {
         }
     };
 
-    class TRoaringIntersect: public TBoxedValue {
+    class TRoaringAnd: public TBoxedValue {
     public:
-        TRoaringIntersect() {
+        TRoaringAnd() {
         }
 
         static TStringRef Name() {
-            return TStringRef::Of("Intersect");
+            return TStringRef::Of("And");
         }
 
     private:
@@ -129,13 +129,13 @@ namespace {
         }
     };
 
-    class TRoaringUnion: public TBoxedValue {
+    class TRoaringOr: public TBoxedValue {
     public:
-        TRoaringUnion() {
+        TRoaringOr() {
         }
 
         static TStringRef Name() {
-            return TStringRef::Of("Union");
+            return TStringRef::Of("Or");
         }
 
     private:
@@ -289,11 +289,11 @@ namespace {
 
             sink.Add(TRoaringUint32List::Name());
 
-            sink.Add(TRoaringUnionWithBinary::Name());
-            sink.Add(TRoaringUnion::Name());
+            sink.Add(TRoaringOrWithBinary::Name());
+            sink.Add(TRoaringOr::Name());
 
-            sink.Add(TRoaringIntersectWithBinary::Name());
-            sink.Add(TRoaringIntersect::Name());
+            sink.Add(TRoaringAndWithBinary::Name());
+            sink.Add(TRoaringAnd::Name());
         }
 
         void CleanupOnTerminate() const final {
@@ -345,41 +345,41 @@ namespace {
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringUint32List());
                     }
-                } else if (TRoaringUnionWithBinary::Name() == name) {
+                } else if (TRoaringOrWithBinary::Name() == name) {
                     builder.Returns(optionalRoaringType)
                         .Args()
                         ->Add(optionalRoaringType)
                         .Add(optionalStringType);
 
                     if (!typesOnly) {
-                        builder.Implementation(new TRoaringUnionWithBinary());
+                        builder.Implementation(new TRoaringOrWithBinary());
                     }
-                } else if (TRoaringUnion::Name() == name) {
+                } else if (TRoaringOr::Name() == name) {
                     builder.Returns(optionalRoaringType)
                         .Args()
                         ->Add(optionalRoaringType)
                         .Add(optionalRoaringType);
 
                     if (!typesOnly) {
-                        builder.Implementation(new TRoaringUnion());
+                        builder.Implementation(new TRoaringOr());
                     }
-                } else if (TRoaringIntersectWithBinary::Name() == name) {
+                } else if (TRoaringAndWithBinary::Name() == name) {
                     builder.Returns(optionalRoaringType)
                         .Args()
                         ->Add(optionalRoaringType)
                         .Add(optionalStringType);
 
                     if (!typesOnly) {
-                        builder.Implementation(new TRoaringIntersectWithBinary());
+                        builder.Implementation(new TRoaringAndWithBinary());
                     }
-                } else if (TRoaringIntersect::Name() == name) {
+                } else if (TRoaringAnd::Name() == name) {
                     builder.Returns(optionalRoaringType)
                         .Args()
                         ->Add(optionalRoaringType)
                         .Add(optionalRoaringType);
 
                     if (!typesOnly) {
-                        builder.Implementation(new TRoaringIntersect());
+                        builder.Implementation(new TRoaringAnd());
                     }
                 } else {
                     TStringBuilder sb;

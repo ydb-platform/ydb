@@ -3,14 +3,21 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/save_load_stats.h>
 
+#include <thread>
+
 namespace NKikimr::NStat {
 
 Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
     Y_UNIT_TEST(Simple) {
         TTestEnv env(1, 1);
-        CreateDatabase(env, "Database");
+        auto init = [&] () {
+            CreateDatabase(env, "Database");
+        };
+        std::thread initThread(init);
 
         auto& runtime = *env.GetServer().GetRuntime();
+        runtime.SimulateSleep(TDuration::Seconds(5));
+        initThread.join();
 
         auto sender = runtime.AllocateEdgeActor(0);
         runtime.Register(CreateStatisticsTableCreator(std::make_unique<TEvStatistics::TEvStatTableCreationResponse>()),

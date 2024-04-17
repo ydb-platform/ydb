@@ -484,6 +484,31 @@ void TStatisticsAggregator::SaveStatisticsToTable() {
         std::move(columnNames), std::move(data)));
 }
 
+void TStatisticsAggregator::ScheduleNextScan() {
+    while (!ScanTablesByTime.empty()) {
+        auto& topTable = ScanTablesByTime.top();
+        auto schemeShardScanTables = ScanTablesBySchemeShard[topTable.SchemeShardId];
+        if (schemeShardScanTables.find(topTable.PathId) != schemeShardScanTables.end()) {
+            break;
+        }
+        ScanTablesByTime.pop();
+    }
+    if (ScanTablesByTime.empty()) {
+        return;
+    }
+
+    auto& topTable = ScanTablesByTime.top();
+    auto now = TInstant::Now();
+    auto updateTime = topTable.LastUpdateTime;
+    auto diff = now - updateTime;
+    if (diff >= ScanIntervalTime) {
+        Send(SelfId(), new TEvPrivate::TEvScheduleScan);
+    } else {
+        TInstant deadline = now + ScanIntervalTime - diff;
+        Schedule(deadline, new TEvPrivate::TEvScheduleScan);
+    }
+}
+
 void TStatisticsAggregator::PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value) {
     db.Table<Schema::SysParams>().Key(id).Update(
         NIceDb::TUpdate<Schema::SysParams::Value>(value));
@@ -492,6 +517,10 @@ void TStatisticsAggregator::PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const 
 void TStatisticsAggregator::PersistScanTableId(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_ScanTableOwnerId, ToString(ScanTableId.PathId.OwnerId));
     PersistSysParam(db, Schema::SysParam_ScanTableLocalPathId, ToString(ScanTableId.PathId.LocalPathId));
+}
+
+void TStatisticsAggregator::PersistScanStartTime(NIceDb::TNiceDb& db) {
+    PersistSysParam(db, Schema::SysParam_ScanStartTime, ToString(ScanStartTime.MicroSeconds()));
 }
 
 bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,

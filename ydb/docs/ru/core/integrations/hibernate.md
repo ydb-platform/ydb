@@ -2,9 +2,9 @@
 
 ## Введение {#overview}
 
-Это руководство использования Hibernate с {{ ydb-short-name }}. 
+Это руководство использования [Hibernate](https://hibernate.org/orm/) с {{ ydb-short-name }}. 
 
-[Hibernate](https://hibernate.org/orm/) - это фреймворк объектно-реляционного отображения (ORM) для Java, облегчающий процесс маппинга объектно-ориентированных моделей. 
+Hibernate - это фреймворк объектно-реляционного отображения (ORM) для Java, облегчающий процесс маппинга объектно-ориентированных моделей. 
 
 ## Установка диалекта {{ ydb-short-name }} {#install-dialect}
 
@@ -108,8 +108,8 @@ fun EmployeeRepository.findByIdOrNull(id: Long): Employee? = this.findById(id).o
 ```kotlin
 val employee = Employee(
     1,
-    "Kirill Kurdyukov",
-    "kurdyukov-kir@ydb.tech",
+    "Example",
+    "example@bk.com",
     LocalDate.parse("2023-12-20"),
     BigDecimal("500000.000000000"),
     true,

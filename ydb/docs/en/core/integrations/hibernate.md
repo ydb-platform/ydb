@@ -109,8 +109,8 @@ Example using:
 ```kotlin
 val employee = Employee(
     1,
-    "Kirill Kurdyukov",
-    "kurdyukov-kir@ydb.tech",
+    "Example",
+    "example@bk.com",
     LocalDate.parse("2023-12-20"),
     BigDecimal("500000.000000000"),
     true,

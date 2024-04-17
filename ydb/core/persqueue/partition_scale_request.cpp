@@ -42,7 +42,7 @@ void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransa
     auto applyIf = modifyScheme.AddApplyIf();
     applyIf->SetPathId(PathId);
     applyIf->SetPathVersion(PathVersion);
-    applyIf->SetCheckGeneralVersion(false);
+    //applyIf->SetCheckGeneralVersion(false);
 
     NKikimrSchemeOp::TPersQueueGroupDescription groupDescription;
     groupDescription.SetName(topicName);//savnik: check short/full name

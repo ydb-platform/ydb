@@ -197,13 +197,12 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
         ComputeStatistics(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), ctx);
     }
     join->Stats = std::make_shared<TOptimizerStatistics>(
-        ComputeJoinStats(
+        ctx.ComputeJoinStats(
             *join->LeftArg->Stats, 
             *join->RightArg->Stats,
             join->LeftJoinKeys, 
             join->RightJoinKeys, 
-            EJoinAlgoType::GraceJoin, 
-            ctx
+            EJoinAlgoType::GraceJoin
         )
     );
 }

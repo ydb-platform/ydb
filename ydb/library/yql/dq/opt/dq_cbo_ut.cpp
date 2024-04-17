@@ -32,12 +32,12 @@ TExprNode::TPtr MakeLabel(TExprContext& ctx, const std::vector<TStringBuf>& vars
 Y_UNIT_TEST_SUITE(DQCBO) {
 
 Y_UNIT_TEST(Empty) {
-    TDummyProviderContext pctx;
+    TBaseProviderContext pctx;
     std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000));
 }
 
 Y_UNIT_TEST(JoinSearch2Rels) {
-    TDummyProviderContext pctx;
+    TBaseProviderContext pctx;
     std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000));
 
     auto rel1 = std::make_shared<TRelOptimizerNode>("a", std::make_shared<TOptimizerStatistics>(100000, 1, 1000000));
@@ -71,7 +71,7 @@ Type: ManyManyJoin, Nrows: 2e+10, Ncols: 2, ByteSize: 0, Cost: 2.00112e+10
 }
 
 Y_UNIT_TEST(JoinSearch3Rels) {
-    TDummyProviderContext pctx;
+    TBaseProviderContext pctx;
     std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000));
 
     auto rel1 = std::make_shared<TRelOptimizerNode>("a", std::make_shared<TOptimizerStatistics>(100000, 1, 1000000));
@@ -227,7 +227,7 @@ void _DqOptimizeEquiJoinWithCosts(const std::function<IOptimizerNew*()>& optFact
 
 Y_UNIT_TEST(DqOptimizeEquiJoinWithCostsNative) {
     TExprContext ctx;
-    TDummyProviderContext pctx;
+    TBaseProviderContext pctx;
     std::function<IOptimizerNew*()> optFactory = [&]() {
         return MakeNativeOptimizerNew(pctx, 100000);
     };
@@ -236,7 +236,7 @@ Y_UNIT_TEST(DqOptimizeEquiJoinWithCostsNative) {
 
 Y_UNIT_TEST(DqOptimizeEquiJoinWithCostsPG) {
     TExprContext ctx;
-    TDummyProviderContext pctx;
+    TBaseProviderContext pctx;
     std::function<void(const TString&)> log = [&](auto str) {
         Cerr << str;
     };

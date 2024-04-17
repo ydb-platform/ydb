@@ -36,7 +36,7 @@ public:
             if (auto dqIntegration = (*datasource)->GetDqIntegration()) {
                 auto stat = dqIntegration->ReadStatistics(node, ctx);
                 if (stat) {
-                    State->TypeCtx->SetStats(input.Get(), std::move(std::make_shared<TOptimizerStatistics>(*stat)));
+                    State->TypeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(std::move(*stat)));
                 }
             }
         } else {

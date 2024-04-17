@@ -16,16 +16,28 @@ namespace NYql {
 
 struct IProviderContext;
 
-namespace NDq {    
+enum class EJoinAlgoType {
+    Undefined,
+    LookupJoin,
+    MapJoin,
+    GraceJoin,
+    StreamLookupJoin //Right part can be updated during an operation. Used mainly for joining streams with lookup tables. Currently impplemented in Dq by LookupInputTransform
+};
+
+//StreamLookupJoin is not a subject for CBO and not not included here
+static constexpr auto AllJoinAlgos = { EJoinAlgoType::MapJoin, EJoinAlgoType::GraceJoin, EJoinAlgoType::LookupJoin };
+
+namespace NDq {
+
 /**
- * Join column is a struct that records the relation label and 
+ * Join column is a struct that records the relation label and
  * attribute name, used in join conditions
 */
 struct TJoinColumn {
     TString RelName;
     TString AttributeName;
 
-    TJoinColumn(TString relName, TString attributeName) : RelName(relName), 
+    TJoinColumn(TString relName, TString attributeName) : RelName(relName),
         AttributeName(attributeName) {}
 
     bool operator == (const TJoinColumn& other) const {
@@ -43,26 +55,8 @@ struct TJoinColumn {
 
 bool operator < (const TJoinColumn& c1, const TJoinColumn& c2);
 
-}
-
-enum class EJoinAlgoType {
-    Undefined,
-    LookupJoin,
-    MapJoin,
-    GraceJoin,
-    StreamLookupJoin //Right part can be updated during an operation. Used mainly for joining streams with lookup tables. Currently impplemented in Dq by LookupInputTransform
-};
+}  // namespace NDq
 
 TString ConvertToJoinAlgoString(EJoinAlgoType joinAlgo);
 
-//StreamLookupJoin is not a subject for CBO and not not included here
-static constexpr auto AllJoinAlgos = { EJoinAlgoType::MapJoin, EJoinAlgoType::GraceJoin, EJoinAlgoType::LookupJoin };
-
-TOptimizerStatistics ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
-    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinAlgoType joinAlgo, const IProviderContext& ctx);
-
-TOptimizerStatistics ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
-    const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys, EJoinAlgoType joinAlgo, const IProviderContext& ctx);
-
-}
-
+}  // namespace NYql

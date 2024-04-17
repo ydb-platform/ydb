@@ -46,7 +46,7 @@ void DebugPrint(TYtJoinNode::TPtr node, TExprContext& ctx, int level) {
     }
 }
 
-class TYtProviderContext: public TDummyProviderContext {
+class TYtProviderContext: public TBaseProviderContext {
 public:
     TYtProviderContext() { }
 

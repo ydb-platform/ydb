@@ -141,7 +141,7 @@ protected:
             };
 
             std::unique_ptr<IOptimizerNew> opt;
-            TDummyProviderContext pctx;
+            TBaseProviderContext pctx;
 
             switch (TypesCtx.CostBasedOptimizer) {
             case ECostBasedOptimizerType::Native:

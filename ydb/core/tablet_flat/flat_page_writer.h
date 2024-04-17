@@ -573,7 +573,7 @@ namespace NPage {
         {
             Y_ABORT_UNLESS(key.size() == GroupInfo.KeyTypes.size());
 
-            TPgSize ret = TPgSizeOf<NPage::TIndex::TRecord>::Value;
+            TPgSize ret = TPgSizeOf<NPage::TFlatIndex::TRecord>::Value;
             ret += sizeof(TPgSize);
 
             ret += GroupInfo.IdxRecFixedSize;
@@ -611,12 +611,12 @@ namespace NPage {
         {
             DataPageBuilder.PushOffset(recordSize);
 
-            auto &rec = DataPageBuilder.Place<NPage::TIndex::TRecord>();
+            auto &rec = DataPageBuilder.Place<NPage::TFlatIndex::TRecord>();
             rec.SetRowId(row);
             rec.SetPageId(page);
 
             for (const auto &info: GroupInfo.ColsKeyIdx) {
-                DataPageBuilder.Place<NPage::TIndex::TItem>().Null = true;
+                DataPageBuilder.Place<NPage::TFlatIndex::TItem>().Null = true;
                 DataPageBuilder.Zero(info.FixedSize);
             }
 

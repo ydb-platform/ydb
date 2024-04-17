@@ -12,7 +12,7 @@ namespace NTable {
 
     class TChargeFlatIndex : public ICharge {
     public:
-        using TIter = NPage::TIndex::TIter;
+        using TIter = NPage::TFlatIndex::TIter;
         using TDataPage = NPage::TDataPage;
         using TGroupId = NPage::TGroupId;
 

@@ -428,7 +428,7 @@ Y_UNIT_TEST_SUITE(Charge) {
         const auto bar = *TSchemedCookRow(*lay).Col(777_u32, "bar");
         const auto baz = *TSchemedCookRow(*lay).Col(999_u32, "baz");
 
-        NPage::TIndex me(
+        NPage::TFlatIndex me(
             TCooker(*lay)
                 .Add(foo, 0, 1)
                 .Add(bar, 10, 2)

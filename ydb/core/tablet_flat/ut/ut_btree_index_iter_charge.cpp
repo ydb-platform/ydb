@@ -1,5 +1,5 @@
 #include "flat_page_btree_index.h"
-#include "flat_part_btree_index_iter.h"
+#include "flat_part_iter_btree_index.h"
 #include "flat_part_charge.h"
 #include "flat_part_charge_btree_index.h"
 #include "flat_part_charge_range.h"
@@ -452,7 +452,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                     for (TRowId rowId2 : xrange<TRowId>(rowId1, part.Stat.Rows - 1)) {
                         TTouchEnv bTreeEnv, flatEnv;
                         TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
-                        TCharge flat(&flatEnv, part, tags, true);
+                        TChargeFlatIndex flat(&flatEnv, part, tags, true);
                         StickSomePages(params, part, tags, *keyDefaults, bTreeEnv, flatEnv);
 
                         TString message = TStringBuilder() << (reverse ? "ChargeRowIdReverse " : "ChargeRowId ") << rowId1 << " " << rowId2 << " items " << itemsLimit;
@@ -478,7 +478,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
                                 TTouchEnv bTreeEnv, flatEnv;
                                 TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
-                                TCharge flat(&flatEnv, part, tags, true);
+                                TChargeFlatIndex flat(&flatEnv, part, tags, true);
                                 StickSomePages(params, part, tags, *keyDefaults, bTreeEnv, flatEnv);
 
                                 TStringBuilder message = TStringBuilder() << (reverse ? "ChargeKeysReverse " : "ChargeKeys ") << "(";

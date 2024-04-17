@@ -8,7 +8,7 @@
 #include <ydb/core/tablet_flat/test/libs/table/model/large.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_make.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_mixer.h>
-#include "ydb/core/tablet_flat/flat_part_btree_index_iter.h"
+#include "ydb/core/tablet_flat/flat_part_iter_btree_index.h"
 #include "ydb/core/tablet_flat/flat_stat_table.h"
 #include "ydb/core/tablet_flat/test/libs/table/wrap_iter.h"
 #include "ydb/core/tx/datashard/datashard.h"

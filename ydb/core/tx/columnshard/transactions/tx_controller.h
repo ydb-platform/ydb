@@ -70,6 +70,7 @@ public:
     class ITransactionOperatior {
     protected:
         TTxInfo TxInfo;
+        std::optional<TPlanQueueItem> PlanQueueItem;
     public:
         using TPtr = std::shared_ptr<ITransactionOperatior>;
         using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperatior, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
@@ -80,6 +81,15 @@ public:
 
         ui64 GetTxId() const {
             return TxInfo.TxId;
+        }
+
+        void SetPlanQueueItem(const TPlanQueueItem& item) {
+            AFL_VERIFY(!PlanQueueItem);
+            PlanQueueItem.emplace(item.Step, item.TxId);
+        }
+
+        const std::optional<TPlanQueueItem>& GetPlanQueueItemOptional() const {
+            return PlanQueueItem;
         }
 
         virtual ~ITransactionOperatior() {}

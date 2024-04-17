@@ -39,6 +39,7 @@ public:
                 Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedTxId, LastCompletedTx->GetTxId());
             }
 
+            TxOperator->SetPlanQueueItem(plannedItem);
             TxOperator = Self->ProgressTxController->GetVerifiedTxOperator(txId);
             AFL_VERIFY(TxOperator->Progress(*Self, NOlap::TSnapshot(step, txId), txc));
             Self->ProgressTxController->FinishPlannedTx(txId, txc);
@@ -56,6 +57,9 @@ public:
         NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "complete");
         if (TxOperator) {
             TxOperator->Complete(*Self, ctx);
+            if (TxOperator->GetPlanQueueItemOptional()) {
+                Self->GetProgressTxController().CompleteRunningTx(*TxOperator->GetPlanQueueItemOptional());
+            }
         }
         if (LastCompletedTx) {
             Self->LastCompletedTx = std::max(*LastCompletedTx, Self->LastCompletedTx);

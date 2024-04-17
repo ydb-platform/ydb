@@ -89,8 +89,8 @@ bool TValidatedWriteTx::ParseRecord(const TDataShard::TTableInfos& tableInfos) {
         return false;
     }
 
-    NEvWrite::TPayloadHelper<NEvents::TDataEvents::TEvWrite> payloadHelper(*Ev->Get());
-    TString payload = payloadHelper.GetDataFromPayload(RecordOperation().GetPayloadIndex());
+    NEvWrite::TPayloadReader<NEvents::TDataEvents::TEvWrite> payloadReader(*Ev->Get());
+    TString payload = payloadReader.GetDataFromPayload(RecordOperation().GetPayloadIndex());
 
     if (!TSerializedCellMatrix::TryParse(payload,Matrix))
     {

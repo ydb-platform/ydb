@@ -198,6 +198,18 @@ struct TEvSaveScriptResultMetaFinished : public NActors::TEventLocal<TEvSaveScri
     NYql::TIssues Issues;
 };
 
+struct TEvSaveScriptResultPartFinished : public NActors::TEventLocal<TEvSaveScriptResultPartFinished, TKqpScriptExecutionEvents::EvSaveScriptResultPartFinished> {
+    TEvSaveScriptResultPartFinished(Ydb::StatusIds::StatusCode status, i64 savedSize, NYql::TIssues issues = {})
+        : Status(status)
+        , SavedSize(savedSize)
+        , Issues(std::move(issues))
+    {}
+
+    Ydb::StatusIds::StatusCode Status;
+    i64 SavedSize;
+    NYql::TIssues Issues;
+};
+
 struct TEvSaveScriptResultFinished : public NActors::TEventLocal<TEvSaveScriptResultFinished, TKqpScriptExecutionEvents::EvSaveScriptResultFinished> {
     TEvSaveScriptResultFinished(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {})
         : Status(status)

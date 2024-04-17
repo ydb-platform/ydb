@@ -6,7 +6,7 @@ import logging
 from collections import defaultdict
 from kubernetes.client import Configuration
 
-from ydb.tools.ydbd_slice import nodes, handlers
+from ydb.tools.ydbd_slice import nodes
 from ydb.tools.ydbd_slice.kube import api, kubectl, yaml, generate, cms, dynconfig
 
 

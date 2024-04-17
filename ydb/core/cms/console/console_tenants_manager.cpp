@@ -1,6 +1,5 @@
 #include "console_tenants_manager.h"
 #include "console_impl.h"
-#include "http.h"
 #include "util.h"
 
 #include <ydb/core/base/path.h>
@@ -2447,6 +2446,38 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
 
         if (!tenantRowset.Next())
             return false;
+    }
+
+    {
+        TString name = TStringBuilder() << '/' << Domain->Name;
+        TTenant::TPtr tenant = new TTenant(name, TTenant::EState::RUNNING, {});
+        tenant->Coordinators = Domain->Coordinators.size();
+        tenant->Mediators = Domain->Mediators.size();
+        tenant->PlanResolution = Domain->DomainPlanResolution;
+        tenant->TimeCastBucketsPerMediator = Domain->TimecastBucketsPerMediator;
+        tenant->SubdomainVersion = 1;
+        tenant->ConfirmedSubdomain = 1;
+        tenant->DomainId = { Domain->SchemeRoot, 1 };
+        tenant->AreResourcesShared = true;
+
+        AddTenant(tenant);
+
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "Constructed tenant " << name);
+
+        for (const auto& [kind, cfg] : Domain->StoragePoolTypes) {
+            auto config = cfg;
+            if (config.GetName().empty()) {
+                config.SetName(TStringBuilder() << '/' << Domain->Name << ":" << kind);
+            }
+            if (config.GetNumGroups() == 0) {
+                config.SetNumGroups(1);
+            }
+            TStoragePool::TPtr pool = new TStoragePool(kind, config, false);
+            pool->AllocatedNumGroups = config.GetNumGroups();
+            pool->State = TStoragePool::EState::ALLOCATED;
+            tenant->StoragePools[kind] = pool;
+            LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "For tenant " << name << " added pool " << kind << " with config " << config.ShortDebugString());
+        }
     }
 
     for (auto [_, tenant] : Tenants) {

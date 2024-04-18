@@ -275,7 +275,7 @@ namespace NKikimr::NStorage {
             }
             DestroyLocalVDisk(record);
             LocalVDisks.erase(it);
-            ApplyServiceSetPDisks(); // delete unneeded PDisks
+            ApplyServiceSetPDisks(); // destroy unneeded PDisk actors
         } else if (vdisk.GetDoWipe()) {
             Slay(record);
         } else if (!record.RuntimeData) {

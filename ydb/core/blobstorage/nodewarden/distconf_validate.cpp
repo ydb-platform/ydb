@@ -30,21 +30,43 @@ namespace NKikimr::NStorage {
             }
         }
 
+        THashMap<ui32, ui32> currentGroupGens;
+        for (const auto& group : current.GetGroups()) {
+            currentGroupGens.emplace(group.GetGroupID(), group.GetGroupGeneration());
+        }
+
         // make a list of slots in current config
         THashMap<TVDiskID, std::tuple<ui32, ui32, ui32, ui64>> vdisks;
         for (const auto& vslot : current.GetVDisks()) {
+            TVDiskID vdiskId = VDiskIDFromVDiskID(vslot.GetVDiskID());
+            const auto it = currentGroupGens.find(vdiskId.GroupID);
+            if (it == currentGroupGens.end() || it->second != vdiskId.GroupGeneration) {
+                continue;
+            }
+            vdiskId.GroupGeneration = 0;
             const auto& l = vslot.GetVDiskLocation();
-            if (const auto [_, inserted] = vdisks.try_emplace(VDiskIDFromVDiskID(vslot.GetVDiskID()), l.GetNodeID(),
+            if (const auto [_, inserted] = vdisks.try_emplace(vdiskId, l.GetNodeID(),
                     l.GetPDiskID(), l.GetVDiskSlotID(), l.GetPDiskGuid()); !inserted) {
                 return "duplicate VDiskID in current config";
             }
         }
 
+        THashMap<ui32, ui32> proposedGroupGens;
+        for (const auto& group : proposed.GetGroups()) {
+            proposedGroupGens.emplace(group.GetGroupID(), group.GetGroupGeneration());
+        }
+
         // scan vslots in new config and check if they match
         THashSet<ui32> changedGroups;
         for (const auto& vslot : proposed.GetVDisks()) {
+            TVDiskID vdiskId = VDiskIDFromVDiskID(vslot.GetVDiskID());
+            const auto groupIt = proposedGroupGens.find(vdiskId.GroupID);
+            if (groupIt == proposedGroupGens.end() || groupIt->second != vdiskId.GroupGeneration) {
+                continue;
+            }
+            vdiskId.GroupGeneration = 0;
+
             const auto& l = vslot.GetVDiskLocation();
-            const TVDiskID vdiskId = VDiskIDFromVDiskID(vslot.GetVDiskID());
             const auto it = vdisks.find(vdiskId);
             if (it == vdisks.end()) { // this is new vslot from a new group
                 continue;
@@ -109,7 +131,8 @@ namespace NKikimr::NStorage {
     std::optional<TString> ValidateConfigUpdate(const NKikimrBlobStorage::TStorageConfig& current,
             const NKikimrBlobStorage::TStorageConfig& proposed) {
         if (current.GetGeneration() + 1 != proposed.GetGeneration()) {
-            return "invalid proposed config generation";
+            return TStringBuilder() << "invalid proposed config generation current# " << current.GetGeneration()
+                << " proposed# " << proposed.GetGeneration();
         }
 
         if (auto error = ValidateConfig(proposed)) {
@@ -211,6 +234,10 @@ namespace NKikimr::NStorage {
                 return "duplicate NodeID:PDiskID:VDiskSlotID for vdisk";
             }
 
+            if (vslot.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
+                continue;
+            }
+
             if (const auto [_, inserted] = vdisks.try_emplace(vdiskId, nodeId, pdiskId, vslotId, pdiskGuid); !inserted) {
                 return "duplicate VDiskID";
             }
@@ -270,7 +297,13 @@ namespace NKikimr::NStorage {
                         const TVDiskID vdiskId(groupId, groupGen, failRealmIdx, failDomainIdx, vdiskIdx);
 
                         if (const auto it = vdisks.find(vdiskId); it == vdisks.end()) {
-                            return "vslot with specific VDiskID is not found";
+                            return TStringBuilder() << "vslot with specific VDiskID is not found"
+                                << " GroupId# " << groupId
+                                << " VDiskId# " << vdiskId
+                                << " NodeId# " << nodeId
+                                << " PDiskId# " << pdiskId
+                                << " VSlotId# " << vslotId
+                                << " PDiskGuid# " << pdiskGuid;
                         } else if (it->second != std::make_tuple(nodeId, pdiskId, vslotId, pdiskGuid)) {
                             return "VDiskLocation mismatch";
                         } else {

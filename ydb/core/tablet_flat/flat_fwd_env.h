@@ -24,11 +24,11 @@ namespace NFwd {
 
     class TPageLoadingQueue : public IPageLoadingQueue, public TIntrusiveListItem<TPageLoadingQueue> {
     public:
-        TPageLoadingQueue(ui32 slot, ui64 cookie, TIntrusiveConstPtr<IPageCollection> pageCollection, TAutoPtr<IPageLoadingLogic> line)
-            : Cookie(cookie)
+        TPageLoadingQueue(ui32 partIndex, ui64 cookie, TIntrusiveConstPtr<IPageCollection> pageCollection, TAutoPtr<IPageLoadingLogic> line)
+            : PartIndex(partIndex)
+            , Cookie(cookie)
             , PageCollection(std::move(pageCollection))
             , PageLoadingLogic(line)
-            , Slot(slot)
         {
 
         }
@@ -48,7 +48,7 @@ namespace NFwd {
             const auto meta = PageCollection->Page(pageId);
 
             if (meta.Type != ui16(type) || meta.Size == 0)
-                Y_ABORT("Got a non-data page while part index traverse");
+                Y_ABORT("Got an invalid page");
 
             Fetch->Pages.emplace_back(pageId);
 
@@ -56,18 +56,15 @@ namespace NFwd {
         }
 
     public:
-        const ui64 Cookie = Max<ui64>();
+        const ui32 PartIndex;
+        const ui64 Cookie;
         const TIntrusiveConstPtr<IPageCollection> PageCollection;
         const THolder<IPageLoadingLogic> PageLoadingLogic;
-        const ui32 Slot = Max<ui32>();
         bool Grow = false;  /* Should call Forward(...) for preloading */
         TAutoPtr<TFetch> Fetch;
     };
 
     struct TEnv : public IPages {
-        using TSlot = ui32;
-        using TSlotVec = TSmallVec<TSlot>;
-
         struct TPages {
             THolder<IPageLoadingLogic> PageLoadingLogic;
             TIntrusiveConstPtr<IPageCollection> PageCollection;
@@ -105,9 +102,9 @@ namespace NFwd {
         const TSharedData* TryGetPage(const TPart* part, TPageId ref, TGroupId groupId) override
         {
             ui16 room = (groupId.Historic ? part->GroupsCount + 2 : 0) + groupId.Index;
-            TSlot slot = GetQueueSlot(part, room);
+            ui32 queueIndex = GetQueueIndex(part, room);
 
-            return Handle(Queues.at(slot), ref).Page;
+            return Handle(Queues.at(queueIndex), ref).Page;
         }
 
         TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
@@ -165,7 +162,7 @@ namespace NFwd {
             ++Epoch;
 
             Total = Stats();
-            Parts.clear();
+            PartQueues.clear();
             Queues.clear();
             ColdParts.clear();
 
@@ -186,7 +183,7 @@ namespace NFwd {
 
         TAutoPtr<TFetch> GrabFetches() noexcept
         {
-            while (auto *q = Queue ? Queue.PopFront() : nullptr) {
+            while (auto *q = FetchingQueues ? FetchingQueues.PopFront() : nullptr) {
                 if (std::exchange(q->Grow, false)) {
                     (*q)->Forward(q, Max(ui64(1), Conf.AheadHi));
                 }
@@ -205,14 +202,14 @@ namespace NFwd {
 
         TAutoPtr<TSeen> GrabTraces() noexcept
         {
-            TDeque<TSieve> sieves(Parts.size() - ColdParts.size() + 1);
+            TDeque<TSieve> sieves(PartQueues.size() - ColdParts.size() + 1);
 
             sieves.back() = MemTable->Traced(); /* blobs of memtable */
 
             ui64 total = sieves.back().Total();
             ui64 seen = sieves.back().Removed();
 
-            for (auto &it: Parts) {
+            for (auto &it: PartQueues) {
                 const auto *part = it.first;
                 if (ColdParts.contains(part)) {
                     continue; // we don't trace cold parts
@@ -221,16 +218,16 @@ namespace NFwd {
                     auto &q = GetQueue(part, part->GroupsCount + 1);
                     auto &line = dynamic_cast<TBlobs&>(*q.PageLoadingLogic);
 
-                    Y_ABORT_UNLESS(q.Slot < (sieves.size() - 1));
-                    sieves.at(q.Slot) = {
+                    Y_ABORT_UNLESS(q.PartIndex < (sieves.size() - 1));
+                    sieves.at(q.PartIndex) = {
                         blobs,
                         line.GetFrames(),
                         line.GetSlices(),
                         line.Traced()
                     };
 
-                    total += sieves[q.Slot].Total();
-                    seen += sieves[q.Slot].Removed();
+                    total += sieves[q.PartIndex].Total();
+                    seen += sieves[q.PartIndex].Removed();
                 }
             }
 
@@ -243,10 +240,10 @@ namespace NFwd {
             auto got = q->Handle(&q, ref, Conf.AheadLo);
 
             if ((q.Grow = got.Grow) || bool(q.Fetch)) {
-                Queue.PushBack(&q);
+                FetchingQueues.PushBack(&q);
             } else if (got.Need && got.Page == nullptr) {
                 // temporary hack for index pages as they are always stored in group 0 
-                Y_ABORT_UNLESS(!Queue.Empty(), "Cache line head don't want to do fetch but should");
+                Y_ABORT_UNLESS(!FetchingQueues.Empty(), "Cache line head don't want to do fetch but should");
             }
 
             return { got.Need, got.Page };
@@ -256,31 +253,31 @@ namespace NFwd {
         {
             const auto *part = partView.Part.Get();
 
-            auto it = Parts.find(part);
-            Y_ABORT_UNLESS(it == Parts.end(), "Cannot handle multiple part references in the same subset");
+            auto it = PartQueues.find(part);
+            Y_ABORT_UNLESS(it == PartQueues.end(), "Cannot handle multiple part references in the same subset");
 
-            ui32 partSlot = Parts.size();
+            ui32 partIndex = PartQueues.size();
 
-            auto& slots = Parts[part];
-            slots.reserve(part->GroupsCount + 2 + part->HistoricGroupsCount);
+            auto& indexes = PartQueues[part];
+            indexes.reserve(part->GroupsCount + 2 + part->HistoricGroupsCount);
 
             for (ui32 group : xrange(ui32(part->GroupsCount))) {
-                slots.push_back(Settle(MakeCache(part, NPage::TGroupId(group), partView.Slices), partSlot));
+                indexes.push_back(Settle(MakeCache(part, NPage::TGroupId(group), partView.Slices), partIndex));
             }
-            slots.push_back(Settle(MakeOuter(part, partView.Slices), partSlot));
-            slots.push_back(Settle(MakeExtern(part, partView.Slices), partSlot));
+            indexes.push_back(Settle(MakeOuter(part, partView.Slices), partIndex));
+            indexes.push_back(Settle(MakeExtern(part, partView.Slices), partIndex));
             for (ui32 group : xrange(ui32(part->HistoricGroupsCount))) {
-                slots.push_back(Settle(MakeCache(part, NPage::TGroupId(group, true), nullptr), partSlot));
+                indexes.push_back(Settle(MakeCache(part, NPage::TGroupId(group, true), nullptr), partIndex));
             }
 
-            Y_ABORT_UNLESS(Queues.at(slots[0]).PageCollection->Label() == part->Label,
+            Y_ABORT_UNLESS(Queues.at(indexes[0]).PageCollection->Label() == part->Label,
                 "Cannot handle multiple parts on the same page collection");
         }
 
-        TSlot GetQueueSlot(const TPart *part, ui16 room) noexcept
+        ui32 GetQueueIndex(const TPart *part, ui16 room) noexcept
         {
-            auto it = Parts.find(part);
-            Y_ABORT_UNLESS(it != Parts.end(),
+            auto it = PartQueues.find(part);
+            Y_ABORT_UNLESS(it != PartQueues.end(),
                 "NFwd cache trying to access part outside of subset");
             Y_ABORT_UNLESS(room < it->second.size(),
                 "NFwd cache trying to access room out of bounds");
@@ -294,19 +291,19 @@ namespace NFwd {
 
         TPageLoadingQueue& GetQueue(const TPart *part, ui16 room) noexcept
         {
-            return Queues.at(GetQueueSlot(part, room));
+            return Queues.at(GetQueueIndex(part, room));
         }
 
-        TSlot Settle(TPages pages, ui32 slot) noexcept
+        ui32 Settle(TPages pages, ui32 partIndex) noexcept
         {
             if (pages.PageLoadingLogic || pages.PageCollection) {
                 const ui64 cookie = (ui64(Queues.size()) << 32) | ui32(Salt + Epoch);
 
-                Queues.emplace_back(slot, cookie, std::move(pages.PageCollection), pages.PageLoadingLogic);
+                Queues.emplace_back(partIndex, cookie, std::move(pages.PageCollection), pages.PageLoadingLogic);
 
                 return Queues.size() - 1;
             } else {
-                return Max<TSlot>(); /* Will fail on access in GetQueue(...) */
+                return Max<ui32>(); /* Will fail on access in GetQueue(...) */
             }
         }
 
@@ -373,12 +370,11 @@ namespace NFwd {
         const TVector<ui32> Keys; /* Tags to expand ELargeObj references */
 
         TDeque<TPageLoadingQueue> Queues;
-        THashMap<const TPart*, TSlotVec> Parts;
+        THashMap<const TPart*, TSmallVec<ui32>> PartQueues;
         THashSet<const TPart*> ColdParts;
         // Wrapper for memtable blobs
         TAutoPtr<TMemTableHandler> MemTable;
-        // Waiting for read aheads
-        TIntrusiveList<TPageLoadingQueue> Queue;
+        TIntrusiveList<TPageLoadingQueue> FetchingQueues;
         // Pending pages to load
         ui64 Pending = 0;
         // Accumulated stats on resets

@@ -114,7 +114,6 @@ namespace NKikimr {
         struct THullHugeKeeperPersState {
             typedef THashSet<NHuge::THugeSlot> TAllocatedSlots;
             static const ui32 Signature;
-            static const ui32 MilestoneHugeBlobInBytes;
 
             TIntrusivePtr<TVDiskContext> VCtx;
             // current pos
@@ -135,21 +134,21 @@ namespace NKikimr {
                                      const ui32 chunkSize,
                                      const ui32 appendBlockSize,
                                      const ui32 minHugeBlobInBytes,
+                                     const ui32 oldMinHugeBlobInBytes,
                                      const ui32 milestoneHugeBlobInBytes,
                                      const ui32 maxBlobInBytes,
                                      const ui32 overhead,
                                      const ui32 freeChunksReservation,
-                                     const bool oldMapCompatible,
                                      std::function<void(const TString&)> logFunc);
             THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
                                      const ui32 chunkSize,
                                      const ui32 appendBlockSize,
                                      const ui32 minHugeBlobInBytes,
+                                     const ui32 oldMinHugeBlobInBytes,
                                      const ui32 milestoneHugeBlobInBytes,
                                      const ui32 maxBlobInBytes,
                                      const ui32 overhead,
                                      const ui32 freeChunksReservation,
-                                     const bool oldMapCompatible,
                                      const ui64 entryPointLsn,
                                      const TString &entryPointData,
                                      std::function<void(const TString&)> logFunc);
@@ -157,11 +156,11 @@ namespace NKikimr {
                                      const ui32 chunkSize,
                                      const ui32 appendBlockSize,
                                      const ui32 minHugeBlobInBytes,
+                                     const ui32 oldMinHugeBlobInBytes,
                                      const ui32 milestoneHugeBlobInBytes,
                                      const ui32 maxBlobInBytes,
                                      const ui32 overhead,
                                      const ui32 freeChunksReservation,
-                                     const bool oldMapCompatible,
                                      const ui64 entryPointLsn,
                                      const TContiguousSpan &entryPointData,
                                      std::function<void(const TString&)> logFunc);

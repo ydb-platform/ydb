@@ -1835,7 +1835,9 @@ bool IsStrict(const TExprNode::TPtr& root) {
     size_t insideAssumeStrict = 0;
 
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
-        if (node->IsCallable("AssumeStrict")) {
+        if (node->IsCallable("AssumeNonStrict")) {
+            isStrict = false;
+        } else if (node->IsCallable("AssumeStrict")) {
             ++insideAssumeStrict;
         } else if (isStrict && !insideAssumeStrict && node->IsCallable({"Udf", "ScriptUdf", "Unwrap", "Ensure"})) {
             if (!node->IsCallable("Udf") || !HasSetting(*node->Child(TCoUdf::idx_Settings), "strict")) {

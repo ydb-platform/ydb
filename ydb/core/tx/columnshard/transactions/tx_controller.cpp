@@ -195,7 +195,7 @@ void TTxController::FinishPlannedTx(const ui64 txId, NTabletFlatExecutor::TTrans
 }
 
 void TTxController::CompleteRunningTx(const TPlanQueueItem& txItem) {
-    RunningQueue.erase(txItem);
+    AFL_VERIFY(RunningQueue.erase(txItem))("info", txItem.DebugString());
 }
 
 std::optional<TTxController::TPlanQueueItem> TTxController::GetPlannedTx() const {

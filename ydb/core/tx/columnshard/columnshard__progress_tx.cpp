@@ -30,6 +30,7 @@ public:
         // Process a single transaction at the front of the queue
         auto plannedItem = Self->ProgressTxController->StartPlannedTx();
         if (!!plannedItem) {
+            PlannedQueueItem.emplace(plannedItem->PlanStep, plannedItem->TxId);
             ui64 step = plannedItem->PlanStep;
             ui64 txId = plannedItem->TxId;
             LastCompletedTx = NOlap::TSnapshot(step, txId);
@@ -57,6 +58,9 @@ public:
         if (TxOperator) {
             TxOperator->Complete(*Self, ctx);
         }
+        if (PlannedQueueItem) {
+            Self->GetProgressTxController().CompleteRunningTx(*PlannedQueueItem);
+        }
         if (LastCompletedTx) {
             Self->LastCompletedTx = std::max(*LastCompletedTx, Self->LastCompletedTx);
         }
@@ -67,6 +71,7 @@ private:
     TTxController::ITransactionOperatior::TPtr TxOperator;
     const ui32 TabletTxNo;
     std::optional<NOlap::TSnapshot> LastCompletedTx;
+    std::optional<TTxController::TPlanQueueItem> PlannedQueueItem;
 };
 
 void TColumnShard::EnqueueProgressTx(const TActorContext& ctx) {

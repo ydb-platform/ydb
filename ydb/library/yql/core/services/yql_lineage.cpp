@@ -23,12 +23,22 @@ public:
             for (auto& p : Ctx_.DataSources) {
                 if (p->IsRead(node)) {
                     Reads_[&node] = p.Get();
+                    HasReads_.emplace(&node);
                 }
             }
 
             for (auto& p : Ctx_.DataSinks) {
                 if (p->IsWrite(node)) {
                     Writes_[&node] = p.Get();
+                }
+            }
+
+            return true;
+        }, [&](const TExprNode& node) {
+            for (const auto& child : node.Children()) {
+                if (HasReads_.contains(child.Get())) {
+                    HasReads_.emplace(&node);
+                    break;
                 }
             }
 
@@ -210,6 +220,27 @@ private:
             return &lineage;
         }
 
+        if (!HasReads_.contains(&node)) {
+            auto type = node.GetTypeAnn();
+            if (type->GetKind() == ETypeAnnotationKind::List) {
+                auto itemType = type->Cast<TListExprType>()->GetItemType();
+                if (itemType->GetKind() == ETypeAnnotationKind::Struct) {
+                    auto structType = itemType->Cast<TStructExprType>();
+                    lineage.Fields.ConstructInPlace();
+                    for (const auto& i : structType->GetItems()) {
+                        if (i->GetName().StartsWith("_yql_sys_")) {
+                            continue;
+                        }
+
+                        TString fieldName(i->GetName());
+                        (*lineage.Fields).emplace(fieldName, TFieldsLineage());
+                    }
+
+                    return &lineage;
+                }
+            }
+        }
+
         if (node.IsCallable({
             "Unordered", 
             "UnorderedSubquery", 
@@ -234,6 +265,10 @@ private:
             HandleWindow(lineage, node);
         } else if (node.IsCallable("EquiJoin")) {
             HandleEquiJoin(lineage, node);
+        } else if (node.IsCallable("LMap")) {
+            HandleLMap(lineage, node);
+        } else if (node.IsCallable("PartitionsByKeys")) {
+            HandlePartitionByKeys(lineage, node);
         } else {
             Warning(node, TStringBuilder() << node.Content() << " is not supported");
         }
@@ -398,7 +433,7 @@ private:
     void FillStructLineage(TLineage& lineage, const TExprNode* value, const TExprNode& arg, const TLineage& innerLineage,
         const TTypeAnnotationNode* extType) {
         TMaybe<TString> oneField;
-        if (value->IsCallable("Member") && &value->Head() == &arg) {
+        if (value && value->IsCallable("Member") && &value->Head() == &arg) {
             TString field(value->Tail().Content());
             auto f = innerLineage.Fields->FindPtr(field);
             if (f->StructItems) {
@@ -414,7 +449,7 @@ private:
             oneField = field;
         }
 
-        if (value->IsCallable("If")) {
+        if (value && value->IsCallable("If")) {
             TLineage left, right;
             left.Fields.ConstructInPlace();
             right.Fields.ConstructInPlace();
@@ -433,7 +468,7 @@ private:
             return;
         }
         
-        if (value->IsCallable("AsStruct")) {
+        if (value && value->IsCallable("AsStruct")) {
             for (const auto& child : value->Children()) {
                 TString field(child->Head().Content());
                 auto& res = (*lineage.Fields)[field];
@@ -549,6 +584,42 @@ private:
                 (*lineage.Fields)[field] = source;
             }
         }
+    }
+
+    void HandleLMap(TLineage& lineage, const TExprNode& node) {
+        auto innerLineage = *CollectLineage(node.Head());
+        if (!innerLineage.Fields.Defined()) {
+            return;
+        }
+
+        const auto& lambda = node.Tail();
+        const auto& arg = lambda.Head().Head();
+        const auto& body = lambda.Tail();
+        if (&body == &arg) {
+            lineage.Fields = *innerLineage.Fields;
+            return;
+        }
+
+        lineage.Fields.ConstructInPlace();
+        FillStructLineage(lineage, nullptr, arg, innerLineage, GetSeqItemType(body.GetTypeAnn()));
+    }
+
+    void HandlePartitionByKeys(TLineage& lineage, const TExprNode& node) {
+        auto innerLineage = *CollectLineage(node.Head());
+        if (!innerLineage.Fields.Defined()) {
+            return;
+        }
+
+        const auto& lambda = node.Tail();
+        const auto& arg = lambda.Head().Head();
+        const auto& body = lambda.Tail();
+        if (&body == &arg) {
+            lineage.Fields = *innerLineage.Fields;
+            return;
+        }
+
+        lineage.Fields.ConstructInPlace();
+        FillStructLineage(lineage, nullptr, arg, innerLineage, GetSeqItemType(body.GetTypeAnn()));
     }
 
     void HandleExtend(TLineage& lineage, const TExprNode& node) {
@@ -788,6 +859,7 @@ private:
     TNodeMap<TVector<ui32>> ReadIds_;
     TNodeMap<ui32> WriteIds_;
     TNodeMap<TLineage> Lineages_;
+    TNodeSet HasReads_;
 };
 
 }

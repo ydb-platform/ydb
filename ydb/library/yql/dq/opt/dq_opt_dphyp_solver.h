@@ -58,7 +58,7 @@ private:
 
     void EnumerateCmpRec(const TNodeSet& s1, const TNodeSet& s2, const TNodeSet& x);
 
-    void EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge);
+    void EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge);
 
 private:
     // Create an exclusion set that contains all the nodes of the graph that are smaller or equal to
@@ -437,7 +437,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
 /* 
  * Emit a single CSG + CMP pair
  */
-template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge) {
+template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge) {
     // Here we actually build the join and choose and compare the
     // new plan to what's in the dpTable, if it there
 

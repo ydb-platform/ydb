@@ -86,9 +86,6 @@
 <body>
 {% for status in status_order %}
 <h1 id="{{ status.name}}">{{ status.name }} ({{ tests[status] | length }})</h1>
-<p>
-    To copy the test name to the clipboard, simply click on the test name while holding down the CMD or CTRL key.
-</p>
 <table style="width:100%;" border="1" class="result-table">
     <thead>
     <tr>

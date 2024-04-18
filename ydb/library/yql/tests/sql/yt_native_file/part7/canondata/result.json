@@ -1385,6 +1385,39 @@
             "uri": "https://{canondata_backend}/1871102/ae8b5d002551349280cb6bef50e922859b127b33/resource.tar.gz#test.test_limit-limit_skip_take-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[lineage-list_literal3-default.txt-Debug]": [
+        {
+            "checksum": "865e07122c0458b067ccbe651c77b588",
+            "size": 4129,
+            "uri": "https://{canondata_backend}/1130705/85c8665d91f0155a4ee02c4fb1744edb35184fe1/resource.tar.gz#test.test_lineage-list_literal3-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[lineage-list_literal3-default.txt-Lineage]": [
+        {
+            "checksum": "8b3b7ee46f2ca502787d24c9f5a22f6f",
+            "size": 1295,
+            "uri": "https://{canondata_backend}/1130705/85c8665d91f0155a4ee02c4fb1744edb35184fe1/resource.tar.gz#test.test_lineage-list_literal3-default.txt-Lineage_/results.txt"
+        }
+    ],
+    "test.test[lineage-list_literal3-default.txt-Plan]": [
+        {
+            "checksum": "f7dab291ac4301eb960026dba2d6086e",
+            "size": 10246,
+            "uri": "https://{canondata_backend}/1130705/85c8665d91f0155a4ee02c4fb1744edb35184fe1/resource.tar.gz#test.test_lineage-list_literal3-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[lineage-list_literal3-default.txt-Results]": [
+        {
+            "checksum": "110f479c92fbd5ead46466e177f57781",
+            "size": 46,
+            "uri": "https://{canondata_backend}/1130705/85c8665d91f0155a4ee02c4fb1744edb35184fe1/resource.tar.gz#test.test_lineage-list_literal3-default.txt-Results_/Output.txt"
+        },
+        {
+            "checksum": "aa9b2083e6a57435ef0983500a93ba38",
+            "size": 486,
+            "uri": "https://{canondata_backend}/1130705/85c8665d91f0155a4ee02c4fb1744edb35184fe1/resource.tar.gz#test.test_lineage-list_literal3-default.txt-Results_/Output.yqlrun.txt.attr"
+        }
+    ],
     "test.test[lineage-select_all-default.txt-Debug]": [
         {
             "checksum": "a9699e58a7528c39aec215dc164d4a47",

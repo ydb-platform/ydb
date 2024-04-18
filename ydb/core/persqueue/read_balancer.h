@@ -250,13 +250,15 @@ public:
         enum class EStatus {
             Active,    // The family are reading
             Releasing, // The family is waiting for partition to be released
-            Free       // The family isn't reading
+            Free,      // The family isn't reading
+            Destroyed  // The family will destroyed after releasing
         };
 
         TBalancingConsumerInfo& ConsumerInfo;
 
         size_t Id;
         EStatus Status;
+        EStatus TargetStatus;
 
         // Partitions that are in the family
         std::vector<ui32> Partitions;
@@ -280,7 +282,7 @@ public:
         ~TPartitionFamilty() = default;
 
         // Releases all partitions of the family.
-        void Release(const TActorContext& ctx);
+        void Release(const TActorContext& ctx, EStatus targetStatus = EStatus::Free);
         // Processes the signal from the reading session that the partition has been released.
         // Return true if all partitions has been unlocked.
         bool Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx);
@@ -313,6 +315,7 @@ public:
         std::pair<size_t, size_t> ClassifyPartitions(const TPartitions& partitions);
         void UpdatePartitionMapping(const std::vector<ui32>& partitions);
         void UpdateSpecialSessions();
+        void LockPartition(ui32 partitionId, const TActorContext& ctx);
         std::unique_ptr<TEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(ui32 partitionId) const;
         std::unique_ptr<TEvPersQueue::TEvLockPartition> MakeEvLockPartition(ui32 partitionId, ui32 step) const;
         TString GetPrefix() const;
@@ -320,7 +323,13 @@ public:
 
     struct TPartitionFamilyComparator {
         bool operator()(const TPartitionFamilty* lhs, const TPartitionFamilty* rhs) const {
-            return (lhs->ActivePartitionCount < rhs->ActivePartitionCount) && (lhs->InactivePartitionCount < rhs->InactivePartitionCount);
+            if (lhs->ActivePartitionCount != rhs->ActivePartitionCount) {
+                return lhs->ActivePartitionCount < rhs->ActivePartitionCount;
+            }
+            if (lhs->InactivePartitionCount != rhs->InactivePartitionCount) {
+                return lhs->InactivePartitionCount < rhs->InactivePartitionCount;
+            }
+            return (lhs->Id < rhs->Id);
         }
     };
 
@@ -365,7 +374,7 @@ public:
         void CreateFamily(std::vector<ui32>&& partitions, const TActorContext& ctx);
         TPartitionFamilty* FindFamily(ui32 partitionId);
 
-        void RegisterReadingSession(TReadingSession* session);
+        void RegisterReadingSession(TReadingSession* session, const TActorContext& ctx);
         void UnregisterReadingSession(TReadingSession* session);
 
         bool Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx);
@@ -376,6 +385,7 @@ public:
         void FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx);
 
         void Balance(const TActorContext& ctx);
+        void Release(ui32 partitionId, const TActorContext& ctx);
 
         bool IsReadable(ui32 partitionId);
         bool IsFinished(ui32 partitionId);
@@ -383,6 +393,8 @@ public:
         bool ScalingSupport() const;
 
     private:
+        void Release(TPartitionFamilty* family, const TActorContext& ctx);
+
         TString GetPrefix() const;
     };
 
@@ -515,12 +527,13 @@ public:
 
 public:
     struct TReadingSession {
-        TReadingSession();
+        TReadingSession(const TActorId& pipeClient);
 
         TString ClientId;         // The consumer name
         TString Session;
         TActorId Sender;
-        std::unordered_set<ui32> Partitions; // groups which are reading
+        TActorId PipeClient;
+        std::unordered_set<ui32> Partitions; // partitions which are reading
         ui32 ServerActors;        // the number of pipes connected from SessionActor to ReadBalancer
 
         size_t ActivePartitionCount;

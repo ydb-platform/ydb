@@ -291,12 +291,14 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         auto p1 = readSession1.Wait({}, "Must release all partitions becase readSession2 read not from EndOffset");
         auto p2 = readSession2.Wait({0}, "Must read partition 0 because it defined in the readSession");
 
+        p2.Wait(TDuration::Seconds(5));
+        readSession2.Assert({0}, p2, "");
+        readSession2.Run();
+
         p1.Wait(TDuration::Seconds(5));
         readSession1.Assert({}, p1, "");
         readSession1.Run();
 
-        p2.Wait(TDuration::Seconds(5));
-        readSession2.Assert({0}, p2, "");
 
         readSession2.WaitAndAssertPartitions({}, "Partition must be released because reding finished");
         readSession2.Run();

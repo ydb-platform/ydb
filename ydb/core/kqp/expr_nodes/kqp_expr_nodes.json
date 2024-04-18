@@ -618,6 +618,18 @@
             ]
         },
         {
+            "Name": "TKqpOlapFilterTernaryOp",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple", "Name": "KqpOlapFilterBinaryOp"},
+            "Children": [
+                {"Index": 0, "Name": "Operator", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "First", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Second", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Third", "Type": "TExprBase"}
+
+            ]
+        },
+        {
             "Name": "TKqpOlapFilterExists",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple", "Name": "KqpOlapFilterExists"},

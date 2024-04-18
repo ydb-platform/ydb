@@ -7,7 +7,6 @@
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
 #include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 
 #include <yt/cpp/mapreduce/interface/node.h>

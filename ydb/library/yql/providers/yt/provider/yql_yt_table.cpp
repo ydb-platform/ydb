@@ -2774,9 +2774,7 @@ bool TYtPathInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected " << TYtPath::CallableName()));
         return false;
     }
-    if (node.ChildrenSize() != 4 && node.ChildrenSize() != 5) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected 4 or 5 argument(s), but got " <<
-            node.ChildrenSize()));
+    if (!EnsureMinMaxArgsCount(node, 4, 5, ctx)) {
         return false;
     }
 
@@ -2809,8 +2807,7 @@ bool TYtPathInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         return false;
     }
 
-    if (node.ChildrenSize() > TYtPath::idx_AdditionalAttributes && !node.Child(TYtPath::idx_AdditionalAttributes)->IsAtom()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Child(TYtPath::idx_AdditionalAttributes)->Pos()), TStringBuilder() << "Atom expected"));
+    if (node.ChildrenSize() > TYtPath::idx_AdditionalAttributes && !EnsureAtom(*node.Child(TYtPath::idx_AdditionalAttributes), ctx)) {
         return false;
     }
 
@@ -2859,7 +2856,7 @@ TExprBase TYtPathInfo::ToExprNode(TExprContext& ctx, const TPositionHandle& pos,
     }
     if (AdditionalAttributes) {
         pathBuilder.AdditionalAttributes<TCoAtom>()
-            .Value(*AdditionalAttributes)
+            .Value(*AdditionalAttributes, TNodeFlags::MultilineContent)
         .Build();
     }
     

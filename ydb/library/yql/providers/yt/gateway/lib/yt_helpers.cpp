@@ -135,14 +135,6 @@ THashSet<TString> SUPPORTED_RICH_YPATH_ATTRS = {
     "timestamp"
 };
 
-void CheckRichYPathAttrs(const NYT::TNode& attrsNode) {
-    for (const auto& [attr, _] : attrsNode.AsMap()) {
-        if (!SUPPORTED_RICH_YPATH_ATTRS.contains(attr)) {
-            throw yexception() << "Unsupported rich YPath attribute: '" << attr << "'";
-        }
-    }
-}
-
 }
 
 TMaybe<TString> SerializeRichYPathAttrs(const NYT::TRichYPath& richPath) {
@@ -152,13 +144,20 @@ TMaybe<TString> SerializeRichYPathAttrs(const NYT::TRichYPath& richPath) {
     if (!pathNode.HasAttributes() || pathNode.GetAttributes().Empty()) {
         return Nothing();
     }
-    CheckRichYPathAttrs(pathNode.GetAttributes());
+    auto attrMap = pathNode.GetAttributes().AsMap();
+    attrMap.erase("columns");
+    attrMap.erase("ranges");
+    for (const auto& [attr, _] : attrMap) {
+        if (!SUPPORTED_RICH_YPATH_ATTRS.contains(attr)) {
+            throw yexception() << "Unsupported YPath attribute: '" << attr << "'";
+        }
+    }
+    pathNode.Attributes() = attrMap;
     return NYT::NodeToYsonString(pathNode.GetAttributes());
 }
 
 void DeserializeRichYPathAttrs(const TString& serializedAttrs, NYT::TRichYPath& richPath) {
     NYT::TNode attrsNode = NYT::NodeFromYsonString(serializedAttrs);
-    CheckRichYPathAttrs(attrsNode);
     auto originalYPath = richPath.Path_;
     NYT::TNode pathNode = "";
     pathNode.Attributes() = attrsNode;

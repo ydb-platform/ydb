@@ -136,6 +136,8 @@ public:
     ui32 StatementResultIndex = 0;
     ui32 StatementResultSize = 0;
 
+    TMaybe<TString> CommandTagName;
+
     NKikimrKqp::EQueryAction GetAction() const {
         return RequestEv->GetAction();
     }

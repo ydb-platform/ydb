@@ -26,11 +26,43 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
 
         Self->BaseStats[schemeShardId] = stats;
 
+        NKikimrStat::TSchemeShardStats statRecord;
+        Y_PROTOBUF_SUPPRESS_NODISCARD statRecord.ParseFromString(stats);
+
+        auto& oldPathIds = Self->ScanTablesBySchemeShard[schemeShardId];
+        std::unordered_set<TPathId> newPathIds;
+
+        for (auto& entry : statRecord.GetEntries()) {
+            auto pathId = PathIdFromPathId(entry.GetPathId());
+            newPathIds.insert(pathId);
+            if (oldPathIds.find(pathId) == oldPathIds.end()) {
+                TStatisticsAggregator::TScanTable scanTable;
+                scanTable.PathId = pathId;
+                scanTable.SchemeShardId = schemeShardId;
+                scanTable.LastUpdateTime = TInstant::MicroSeconds(0);
+                Self->ScanTablesByTime.push(scanTable);
+
+                db.Table<Schema::ScanTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+                    NIceDb::TUpdate<Schema::ScanTables::SchemeShardId>(schemeShardId),
+                    NIceDb::TUpdate<Schema::ScanTables::LastUpdateTime>(0));
+            }
+        }
+
+        for (auto& pathId : oldPathIds) {
+            if (newPathIds.find(pathId) == newPathIds.end()) {
+                db.Table<Schema::ScanTables>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+            }
+        }
+
+        oldPathIds.swap(newPathIds);
+
         return true;
     }
 
     void Complete(const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxSchemeShardStats::Complete");
+
+        Self->ScheduleNextScan();
     }
 };
 

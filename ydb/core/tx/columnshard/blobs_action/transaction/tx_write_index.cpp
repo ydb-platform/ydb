@@ -38,7 +38,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
             auto& portion = changes->GetWritePortionInfo(i)->GetPortionResult();
             LOG_S_WARN(TxPrefix() << "(" << changes->TypeString() << ":" << portion.DebugString() << ") blob cannot apply changes: " << TxSuffix());
         }
-        NOlap::TChangesFinishContext context("cannot write index blobs");
+        NOlap::TChangesFinishContext context("cannot write index blobs: " + ::ToString(Ev->Get()->GetPutStatus()));
         changes->Abort(*Self, context);
         LOG_S_ERROR(TxPrefix() << " (" << changes->TypeString() << ") cannot write index blobs" << TxSuffix());
     }
@@ -71,7 +71,7 @@ TTxWriteIndex::~TTxWriteIndex() {
     if (Ev) {
         auto changes = Ev->Get()->IndexChanges;
         if (!CompleteReady && changes) {
-            changes->AbortEmergency();
+            changes->AbortEmergency("TTxWriteIndex destructor withno CompleteReady flag");
         }
     }
 }

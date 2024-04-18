@@ -499,6 +499,11 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     for (auto& avg : AvgQuotaBytes) {
         avg.Update(WriteNewSize, now);
     }
+    if (SplitMergeEnabled(Config)) {
+        SplitMergeAvgWriteBytes->Update(WriteNewSize, now);
+        auto needScaling = CheckScaleStatus(ctx);
+        ChangeScaleStatusIfNeeded(needScaling);
+    }
 
     WriteCycleSize = 0;
     WriteNewSize = 0;
@@ -521,6 +526,26 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     ProcessHasDataRequests(ctx);
 
     ProcessTimestampsForNewData(prevEndOffset, ctx);
+}
+
+NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& /*ctx*/) {
+    auto const writeSpeedUsagePercent = SplitMergeAvgWriteBytes->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / TotalPartitionWriteSpeed;
+
+    if (writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()) {
+        return NKikimrPQ::EScaleStatus::NEED_SPLIT;
+    } else if (writeSpeedUsagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
+        return NKikimrPQ::EScaleStatus::NEED_MERGE;
+    }
+    return NKikimrPQ::EScaleStatus::NORMAL;
+}
+
+void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) {
+    if (scaleStatus == ScaleStatus || LastScaleRequestTime + TDuration::Seconds(SCALE_REQUEST_REPEAT_MIN_SECONDS) > TInstant::Now()) {
+        return;
+    }
+    Send(Tablet, new TEvPQ::TEvPartitionScaleStatusChanged(Partition.OriginalPartitionId, scaleStatus));
+    LastScaleRequestTime = TInstant::Now();
+    ScaleStatus = scaleStatus;
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {

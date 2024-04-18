@@ -339,7 +339,7 @@ class QueryResult(Closable):
 
 
 BS = '\\'
-must_escape = (BS, '\'', '`')
+must_escape = (BS, '\'', '`', '\t', '\n')
 
 
 def quote_identifier(identifier: str):

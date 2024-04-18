@@ -1345,6 +1345,39 @@
             "uri": "https://{canondata_backend}/1871182/250608c52d287add59fe1b9e093f0d10967d8d55/resource.tar.gz#test.test_key_filter-decimal--Results_/results.txt"
         }
     ],
+    "test.test[lineage-reduce_all-default.txt-Debug]": [
+        {
+            "checksum": "5627f1783f39bbcfe4ec3bd2f0c0b746",
+            "size": 1286,
+            "uri": "https://{canondata_backend}/1946324/81f08e28b5e6654f7f3c9fdd58adb6cef828cf02/resource.tar.gz#test.test_lineage-reduce_all-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[lineage-reduce_all-default.txt-Lineage]": [
+        {
+            "checksum": "b0b905172b61d319b738ba2351f072b5",
+            "size": 1512,
+            "uri": "https://{canondata_backend}/1946324/81f08e28b5e6654f7f3c9fdd58adb6cef828cf02/resource.tar.gz#test.test_lineage-reduce_all-default.txt-Lineage_/results.txt"
+        }
+    ],
+    "test.test[lineage-reduce_all-default.txt-Plan]": [
+        {
+            "checksum": "032e4e283082c836384b1eb64d3f019f",
+            "size": 5489,
+            "uri": "https://{canondata_backend}/1946324/81f08e28b5e6654f7f3c9fdd58adb6cef828cf02/resource.tar.gz#test.test_lineage-reduce_all-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[lineage-reduce_all-default.txt-Results]": [
+        {
+            "checksum": "90649d6b580a4253a508c4aeb0eb89b1",
+            "size": 254,
+            "uri": "https://{canondata_backend}/1946324/81f08e28b5e6654f7f3c9fdd58adb6cef828cf02/resource.tar.gz#test.test_lineage-reduce_all-default.txt-Results_/Output.txt"
+        },
+        {
+            "checksum": "99a23a80241cdd0057583910f9155f61",
+            "size": 600,
+            "uri": "https://{canondata_backend}/1946324/81f08e28b5e6654f7f3c9fdd58adb6cef828cf02/resource.tar.gz#test.test_lineage-reduce_all-default.txt-Results_/Output.yqlrun.txt.attr"
+        }
+    ],
     "test.test[lineage-select_field_limit_offset-default.txt-Debug]": [
         {
             "checksum": "21b189cf0083e0c844aaad0fef10274b",

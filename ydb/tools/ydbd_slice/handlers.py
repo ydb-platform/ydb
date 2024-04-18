@@ -60,14 +60,7 @@ class Slice:
     def _format_drives(self):
         tasks = []
         for (host_name, drive_path) in self._get_all_drives():
-            cmd = "dd if=/dev/zero of={} bs=1M count=1 status=none conv=notrunc".format(drive_path)
-            tasks.extend(self.nodes.execute_async_ret(cmd, nodes=[host_name]))
-        self.nodes._check_async_execution(tasks)
-
-    def _check_drives_exist(self):
-        tasks = []
-        for (host_name, drive_path) in self._get_all_drives():
-            cmd = "echo 'Check existance of drive' && test -f {}".format(drive_path)
+            cmd = "sudo dd if=/dev/zero of={} bs=1M count=1 status=none conv=notrunc".format(drive_path)
             tasks.extend(self.nodes.execute_async_ret(cmd, nodes=[host_name]))
         self.nodes._check_async_execution(tasks)
 
@@ -132,7 +125,6 @@ class Slice:
             self._clear_logs()
 
         if 'kikimr' in self.components:
-            self._check_drives_exist()
             self._format_drives()
 
             if 'bin' in self.components.get('kikimr', []):

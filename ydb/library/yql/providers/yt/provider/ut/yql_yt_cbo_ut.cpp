@@ -84,7 +84,17 @@ Y_UNIT_TEST(NonReordable) {
     TDummyProviderContext optCtx;
     std::unique_ptr<IOptimizerNew> opt = std::unique_ptr<IOptimizerNew>(NDq::MakeNativeOptimizerNew(optCtx, 1024));
     auto result = opt->JoinSearch(root);
-    UNIT_ASSERT(root == result);
+
+    // Join tree is built from scratch with DPhyp, check the structure by comapring with Stats 
+    UNIT_ASSERT(root->LeftArg->Kind == RelNodeType);
+    UNIT_ASSERT(
+        std::static_pointer_cast<TRelOptimizerNode>(root->LeftArg)->Stats == left->Stats
+    );
+
+    UNIT_ASSERT(root->RightArg->Kind == RelNodeType);
+    UNIT_ASSERT(
+        std::static_pointer_cast<TRelOptimizerNode>(root->RightArg)->Stats == right->Stats
+    );
 }
 
 Y_UNIT_TEST(BuildOptimizerTree2Tables) {

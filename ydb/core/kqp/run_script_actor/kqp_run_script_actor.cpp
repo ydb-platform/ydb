@@ -51,6 +51,7 @@ class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
     struct TPendingSaveResult {
         ui32 ResultSetIndex;
         ui64 FirstRow;
+        ui64 AccumulatedSize;
         Ydb::ResultSet ResultSet;
 
         TActorId ReplyActorId;
@@ -272,7 +273,7 @@ private:
         }
 
         TPendingSaveResult& result = PendingSaveResults.back();
-        Register(CreateSaveScriptExecutionResultActor(SelfId(), Database, ExecutionId, result.ResultSetIndex, ExpireAt, result.FirstRow, std::move(result.ResultSet)));
+        Register(CreateSaveScriptExecutionResultActor(SelfId(), Database, ExecutionId, result.ResultSetIndex, ExpireAt, result.FirstRow, result.AccumulatedSize, std::move(result.ResultSet)));
         SendStreamDataResponse(result.ReplyActorId, std::move(result.SaveResultResponse));
 
         PendingSaveResults.pop_back();
@@ -313,6 +314,7 @@ private:
             auto& rowCount = ResultSetRowCount[resultSetIndex];
             auto& byteCount = ResultSetByteCount[resultSetIndex];
             auto firstRow = rowCount;
+            auto accumulatedSize = byteCount;
 
             Ydb::ResultSet resultSet;
             for (auto& row : *ev->Get()->Record.MutableResultSet()->mutable_rows()) {
@@ -365,6 +367,7 @@ private:
                 PendingSaveResults.push_back({
                     resultSetIndex,
                     firstRow,
+                    accumulatedSize,
                     std::move(resultSet),
                     ev->Sender,
                     std::move(resp)

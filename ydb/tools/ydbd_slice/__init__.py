@@ -299,7 +299,7 @@ def deduce_components_from_args(args, cluster_details):
     return result
 
 
-def deduce_nodes_from_args(args, walle_provider):
+def deduce_nodes_from_args(args, walle_provider, ssh_user):
     cluster_hosts = safe_load_cluster_details(args.cluster, walle_provider).hosts_names
     result = cluster_hosts
 
@@ -315,7 +315,7 @@ def deduce_nodes_from_args(args, walle_provider):
         sys.exit("unable to deduce hosts")
 
     logger.info("use nodes '%s'", result)
-    return nodes.Nodes(result, args.dry_run)
+    return nodes.Nodes(result, args.dry_run, ssh_user=ssh_user)
 
 
 def ya_build(arcadia_root, artifact, opts, dry_run):
@@ -491,6 +491,19 @@ def component_args():
     return args
 
 
+def ssh_args():
+    current_user = os.environ["USER"]
+    args = argparse.ArgumentParser(add_help=False)
+    args.add_argument(
+        "--ssh-user",
+        metavar="SSH_USER",
+        default=current_user,
+        help="user for ssh interaction with slice. Default value is $USER "
+             "(which equals {user} now)".format(user=current_user),
+    )
+    return args
+
+
 def add_explain_mode(modes, walle_provider):
     def _run(args):
         logger.debug("run func explain with cmd args is '%s'", args)
@@ -539,7 +552,7 @@ def dispatch_run(func, args, walle_provider):
     cluster_details = safe_load_cluster_details(args.cluster, walle_provider)
     components = deduce_components_from_args(args, cluster_details)
 
-    nodes = deduce_nodes_from_args(args, walle_provider)
+    nodes = deduce_nodes_from_args(args, walle_provider, args.ssh_user)
 
     temp_dir = deduce_temp_dir_from_args(args)
     clear_tmp = not args.dry_run and args.temp_dir is None
@@ -564,7 +577,7 @@ def dispatch_run(func, args, walle_provider):
         configurator,
         clear_logs,
         yav_version,
-        walle_provider
+        walle_provider,
     )
     func(slice)
 
@@ -580,7 +593,7 @@ def add_install_mode(modes, walle_provider):
     mode = modes.add_parser(
         "install",
         conflict_handler='resolve',
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), log_args()],
+        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), log_args(), ssh_args()],
         description="Full installation of the cluster from scratch. "
                     "You can use --hosts to specify particular hosts. But it is tricky."
     )
@@ -594,7 +607,7 @@ def add_update_mode(modes, walle_provider):
     mode = modes.add_parser(
         "update",
         conflict_handler='resolve',
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), log_args()],
+        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), log_args(), ssh_args()],
         description="Minor cluster update, just binary and cfg. No additional configuration is performed."
                     "Stop all kikimr instances at the nodes, sync binary and cfg, start the instances. "
                     "Use --hosts to specify particular hosts."
@@ -610,7 +623,7 @@ def add_update_raw_configs(modes, walle_provider):
     mode = modes.add_parser(
         "update-raw-cfg",
         conflict_handler='resolve',
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args()],
+        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
         description=""
     )
     mode.add_argument(
@@ -628,7 +641,7 @@ def add_stop_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "stop",
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args()],
+        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
         description="Stop kikimr static instaneces at the nodes. "
                     "If option components specified, try to stop particular component. "
                     "Use --hosts to specify particular hosts."
@@ -642,7 +655,7 @@ def add_start_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "start",
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args()],
+        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
         description="Start all kikimr instances at the nodes. "
                     "If option components specified, try to start particular component. "
                     "Otherwise only kikimr-multi-all will be started. "
@@ -657,7 +670,7 @@ def add_clear_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "clear",
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args()],
+        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
         description="Stop all kikimr instances at the nodes, format all kikimr drivers, shutdown dynamic slots. "
                     "And don't start nodes afrer it. "
                     "Use --hosts to specify particular hosts."
@@ -671,7 +684,7 @@ def add_format_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "format",
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args()],
+        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
         description="Stop all kikimr instances at the nodes, format all kikimr drivers at the nodes, start the instances. "
                     "If you call format for all cluster, you will spoil it. "
                     "Additional dynamic configuration will required after it. "

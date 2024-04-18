@@ -191,7 +191,6 @@ namespace NActors {
             Ctx.HPStart = GetCycleCountFast();
             Ctx.ExecutedEvents = 0;
         }
-        NHPTimer::STime hpprev = Ctx.HPStart;
 
         IActor* actor = nullptr;
         const std::type_info* actorType = nullptr;
@@ -200,10 +199,14 @@ namespace NActors {
         bool firstEvent = true;
         bool preempted = false;
         bool wasWorking = false;
+        NHPTimer::STime  hpnow = Ctx.HPStart;
+        NHPTimer::STime hpprev = TlsThreadContext->StartOfElapsingTime.exchange(hpnow, std::memory_order_acq_rel);
+        Ctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
+        hpprev = Ctx.HPStart;
+
         for (; Ctx.ExecutedEvents < Ctx.EventsPerMailbox; ++Ctx.ExecutedEvents) {
             if (TAutoPtr<IEventHandle> evExt = mailbox->Pop()) {
                 mailbox->ProcessEvents(mailbox);
-                NHPTimer::STime hpnow;
                 recipient = evExt->GetRecipientRewrite();
                 TActorContext ctx(*mailbox, *this, hpprev, recipient);
                 TlsActivationContext = &ctx; // ensure dtor (if any) is called within actor system

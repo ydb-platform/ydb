@@ -160,9 +160,6 @@ namespace NTest {
     };
 
     class TForwardEnv : public IPages {
-        using TSlot = ui32;
-        using TSlotVec = TSmallVec<TSlot>;
-
         struct TPageLoadingQueue : private NFwd::IPageLoadingQueue {
             TPageLoadingQueue(TIntrusiveConstPtr<TStore> store, ui32 room, THolder<NFwd::IPageLoadingLogic> line)
                 : Room(room)
@@ -268,40 +265,40 @@ namespace NTest {
         {
             auto* partStore = CheckedCast<const TPartStore*>(part);
 
-            auto& slots = Parts[part];
-            if (slots.empty()) {
-                slots.reserve(partStore->Store->GetRoomCount() + part->HistoricGroupsCount);
+            auto& indexes = PartQueues[part];
+            if (indexes.empty()) {
+                indexes.reserve(partStore->Store->GetRoomCount() + part->HistoricGroupsCount);
                 for (ui32 room : xrange(partStore->Store->GetRoomCount())) {
                     if (room < partStore->Store->GetGroupCount()) {
                         NPage::TGroupId groupId(room);
-                        slots.push_back(Settle(partStore, room, NFwd::CreateCache(part, groupId)));
+                        indexes.push_back(Settle(partStore, room, NFwd::CreateCache(part, PartIndexPageLocator[part], groupId)));
                     } else if (room == partStore->Store->GetOuterRoom()) {
-                        slots.push_back(Settle(partStore, room, MakeOuter(partStore)));
+                        indexes.push_back(Settle(partStore, room, MakeOuter(partStore)));
                     } else if (room == partStore->Store->GetExternRoom()) {
-                        slots.push_back(Settle(partStore, room, MakeExtern(partStore)));
+                        indexes.push_back(Settle(partStore, room, MakeExtern(partStore)));
                     } else {
                         Y_ABORT("Don't know how to work with room %" PRIu32, room);
                     }
                 }
                 for (ui32 group : xrange(part->HistoricGroupsCount)) {
                     NPage::TGroupId groupId(group, true);
-                    slots.push_back(Settle(partStore, group, NFwd::CreateCache(part, groupId)));
+                    indexes.push_back(Settle(partStore, group, NFwd::CreateCache(part, PartIndexPageLocator[part], groupId)));
                 }
             }
 
-            Y_ABORT_UNLESS(room < slots.size());
+            Y_ABORT_UNLESS(room < indexes.size());
 
-            return Queues.at(slots[room]);
+            return Queues.at(indexes[room]);
         }
 
-        TSlot Settle(const TPartStore *part, ui16 room, THolder<NFwd::IPageLoadingLogic> line)
+        ui32 Settle(const TPartStore *part, ui16 room, THolder<NFwd::IPageLoadingLogic> line)
         {
             if (line) {
                 Queues.emplace_back(part->Store, room, std::move(line));
 
                 return Queues.size() - 1;
             } else {
-                return Max<TSlot>(); /* Will fail on access in Head(...) */
+                return Max<ui32>(); /* Will fail on access in Head(...) */
             }
         }
 
@@ -332,7 +329,8 @@ namespace NTest {
         const ui64 AheadHi = 0;
         const ui32 Edge = Max<ui32>();
         TDeque<TPageLoadingQueue> Queues;
-        TMap<const TPart*, TSlotVec> Parts;
+        TMap<const TPart*, TVector<ui32>> PartQueues;
+        THashMap<const TPart*, NFwd::TIndexPageLocator> PartIndexPageLocator;
         TAutoPtr<NFwd::TMemTableHandler> MemTable;   /* Wrapper for memable blobs    */
     };
 

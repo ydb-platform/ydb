@@ -55,6 +55,6 @@ END()
 
 RECURSE(
     compilation
-    simple
     events
+    simple
 )

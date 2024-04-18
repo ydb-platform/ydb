@@ -267,7 +267,12 @@ public:
                 if (path.EndsWith("libyqlplugin.so")) {
                     continue;
                 }
-                FuncRegistry_->LoadUdfs(path, emptyRemappings, 0);
+                ui32 flags = 0;
+                // System Python UDFs are not used locally so we only need types.
+                if (path.Contains("systempython") && path.Contains(TString("udf") + MKQL_UDF_LIB_SUFFIX)) {
+                    flags |= NUdf::IRegistrator::TFlags::TypesOnly;
+                }
+                FuncRegistry_->LoadUdfs(path, emptyRemappings, flags);
                 if (DqManagerConfig_) {
                     DqManagerConfig_->UdfsWithMd5.emplace(path, MD5::File(path));
                 }

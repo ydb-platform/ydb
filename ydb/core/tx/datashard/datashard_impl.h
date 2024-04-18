@@ -2732,9 +2732,11 @@ private:
         TInstant EnqueuedAt;
         ui64 LockId;
         ui64 LockOffset;
+        ui64 ReservationCookie;
 
         explicit TEnqueuedRecord(ui64 bodySize, const TPathId& tableId,
-                ui64 schemaVersion, TInstant created, TInstant enqueued, ui64 lockId = 0, ui64 lockOffset = 0)
+                ui64 schemaVersion, TInstant created, TInstant enqueued,
+                ui64 lockId = 0, ui64 lockOffset = 0, ui64 cookie = 0)
             : BodySize(bodySize)
             , TableId(tableId)
             , SchemaVersion(schemaVersion)
@@ -2743,12 +2745,13 @@ private:
             , EnqueuedAt(enqueued)
             , LockId(lockId)
             , LockOffset(lockOffset)
+            , ReservationCookie(cookie)
         {
         }
 
-        explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record, TInstant now)
+        explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record, TInstant now, ui64 cookie)
             : TEnqueuedRecord(record.BodySize, record.TableId, record.SchemaVersion, record.CreatedAt(), now,
-                record.LockId, record.LockOffset)
+                record.LockId, record.LockOffset, cookie)
         {
         }
     };
@@ -2768,7 +2771,7 @@ private:
     THashMap<ui64, TEnqueuedRecord> ChangesQueue; // ui64 is order
     TIntrusiveList<TEnqueuedRecord, TEnqueuedRecordTag> ChangesList;
     ui64 ChangesQueueBytes = 0;
-    TMap<ui64, ui32> ChangeQueueReservations;
+    THashMap<ui64, ui32> ChangeQueueReservations;
     ui64 NextChangeQueueReservationCookie = 1;
     ui32 ChangeQueueReservedCapacity = 0;
     TActorId OutChangeSender;

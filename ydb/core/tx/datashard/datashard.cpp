@@ -966,6 +966,13 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
         }
     }
 
+    if (auto rIt = ChangeQueueReservations.find(record.ReservationCookie); rIt != ChangeQueueReservations.end()) {
+        --ChangeQueueReservedCapacity;
+        if (!--rIt->second) {
+            ChangeQueueReservations.erase(rIt);
+        }
+    }
+
     UpdateChangeExchangeLag(AppData()->TimeProvider->Now());
     ChangesQueue.erase(it);
 
@@ -976,11 +983,6 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
 }
 
 void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie) {
-    if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
-        ChangeQueueReservedCapacity -= it->second;
-        ChangeQueueReservations.erase(it);
-    }
-
     if (!records) {
         return;
     }
@@ -1005,7 +1007,7 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
         auto res = ChangesQueue.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(record.Order),
-            std::forward_as_tuple(record, now)
+            std::forward_as_tuple(record, now, cookie)
         );
         if (res.second) {
             ChangesList.PushBack(&res.first->second);
@@ -1034,19 +1036,26 @@ ui32 TDataShard::GetFreeChangeQueueCapacity(ui64 cookie) {
         return 0;
     }
 
+    const auto free = Min(sizeLimit - ChangesQueue.size(), sizeLimit / 2);
+
     ui32 reserved = ChangeQueueReservedCapacity;
     if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
         reserved -= it->second;
     }
 
-    if (reserved > (sizeLimit - ChangesQueue.size())) {
+    if (free < reserved) {
         return 0;
     }
 
-    return sizeLimit - ChangesQueue.size() - reserved;
+    return free - reserved;
 }
 
 ui64 TDataShard::ReserveChangeQueueCapacity(ui32 capacity) {
+    const auto sizeLimit = AppData()->DataShardConfig.GetChangesQueueItemsLimit();
+    if (sizeLimit / 2 < ChangeQueueReservedCapacity) {
+        return 0;
+    }
+
     const auto cookie = NextChangeQueueReservationCookie++;
     ChangeQueueReservations.emplace(cookie, capacity);
     ChangeQueueReservedCapacity += capacity;

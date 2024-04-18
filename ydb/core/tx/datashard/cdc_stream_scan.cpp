@@ -239,15 +239,24 @@ public:
 
         ChangeRecords.clear();
 
+        if (!ev.ReservationCookie) {
+            ev.ReservationCookie = Self->ReserveChangeQueueCapacity(ev.Rows.size());
+        }
+
+        if (!ev.ReservationCookie) {
+            LOG_I("Cannot reserve change queue capacity");
+            Reschedule = true;
+            return true;
+        }
+
         if (Self->GetFreeChangeQueueCapacity(ev.ReservationCookie) < ev.Rows.size()) {
-            if (!ev.ReservationCookie) {
-                ev.ReservationCookie = Self->ReserveChangeQueueCapacity(ev.Rows.size());
-            }
+            LOG_I("Not enough change queue capacity");
             Reschedule = true;
             return true;
         }
 
         if (Self->CheckChangesQueueOverflow(ev.ReservationCookie)) {
+            LOG_I("Change queue overflow");
             Reschedule = true;
             return true;
         }

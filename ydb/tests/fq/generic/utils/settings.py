@@ -4,7 +4,7 @@ from typing import Optional
 
 import yatest.common
 
-from ydb.tests.tools.docker_compose_helpers.endpoint_determiner import EndpointDeterminer
+from ydb.tests.fq.generic.utils.endpoint_determiner import EndpointDeterminer
 
 
 @dataclass
@@ -21,6 +21,12 @@ class Settings:
         endpoint: str
 
     mdb_mock: MdbMock
+
+    @dataclass
+    class YdbMvpMock:
+        endpoint: str
+
+    ydb_mvp_mock: YdbMvpMock
 
     @dataclass
     class TokenAccessorMock:
@@ -46,6 +52,14 @@ class Settings:
 
     postgresql: PostgreSQL
 
+    @dataclass
+    class Ydb:
+        dbname: str
+        username: str
+        password: str
+
+    ydb: Ydb
+
     @classmethod
     def from_env(cls) -> 'Settings':
         docker_compose_file = yatest.common.source_path('ydb/tests/fq/generic/docker-compose.yml')
@@ -54,10 +68,13 @@ class Settings:
         s = cls(
             connector=cls.Connector(
                 grpc_host='localhost',
-                grpc_port=endpoint_determiner.get_port('connector', 50051),
+                grpc_port=endpoint_determiner.get_port('fq-connector-go', 2130),
             ),
             mdb_mock=cls.MdbMock(
                 endpoint=environ['MDB_MOCK_ENDPOINT'],
+            ),
+            ydb_mvp_mock=cls.YdbMvpMock(
+                endpoint=environ['YDB_MVP_MOCK_ENDPOINT'],
             ),
             token_accessor_mock=cls.TokenAccessorMock(
                 endpoint=environ['TOKEN_ACCESSOR_MOCK_ENDPOINT'],
@@ -74,6 +91,7 @@ class Settings:
                 username='user',
                 password='password',
             ),
+            ydb=cls.Ydb(dbname='local', username='user', password='password'),
         )
 
         return s

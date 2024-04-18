@@ -206,7 +206,18 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TStorageConfig *configToPropose = nullptr;
         std::optional<NKikimrBlobStorage::TStorageConfig> propositionBase;
 
-        if (proposedConfig) { // we have proposition in progress, resume
+        bool canPropose = false;
+        if (StorageConfig->HasBlobStorageConfig()) {
+            if (const auto& bsConfig = StorageConfig->GetBlobStorageConfig(); bsConfig.HasAutoconfigSettings()) {
+                if (const auto& settings = bsConfig.GetAutoconfigSettings(); settings.HasDefineBox()) {
+                    canPropose = true;
+                }
+            }
+        }
+
+        if (!canPropose) {
+            // we can't propose any configuration here, just ignore
+        } else if (proposedConfig) { // we have proposition in progress, resume
             configToPropose = proposedConfig;
         } else if (committedConfig) { // we have committed config, check if we need to update it
             propositionBase.emplace(*committedConfig);

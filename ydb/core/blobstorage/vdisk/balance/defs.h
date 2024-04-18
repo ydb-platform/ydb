@@ -18,6 +18,8 @@ namespace NKikimr {
         TIntrusivePtr<TVDiskConfig> VDiskCfg;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
 
+        THashMap<TLogoBlobID, TInstant> LastBalancingTime;
+
         TBalancingCtx(
             TIntrusivePtr<TVDiskContext> vCtx,
             TPDiskCtxPtr pDiskCtx,

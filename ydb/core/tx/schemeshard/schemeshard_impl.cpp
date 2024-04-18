@@ -4513,6 +4513,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         // replication
         HFuncTraced(NReplication::TEvController::TEvCreateReplicationResult, Handle);
+        HFuncTraced(NReplication::TEvController::TEvAlterReplicationResult, Handle);
         HFuncTraced(NReplication::TEvController::TEvDropReplicationResult, Handle);
 
         // conditional erase
@@ -5805,6 +5806,17 @@ void TSchemeShard::Handle(NSequenceShard::TEvSequenceShard::TEvGetSequenceResult
 void TSchemeShard::Handle(NReplication::TEvController::TEvCreateReplicationResult::TPtr &ev, const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Handle TEvCreateReplicationResult"
+                << ", at schemeshard: " << TabletID()
+                << ", message: " << ev->Get()->Record.ShortDebugString());
+
+    const auto txId = TTxId(ev->Get()->Record.GetOperationId().GetTxId());
+    const auto partId = TSubTxId(ev->Get()->Record.GetOperationId().GetPartId());
+    Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
+}
+
+void TSchemeShard::Handle(NReplication::TEvController::TEvAlterReplicationResult::TPtr &ev, const TActorContext &ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Handle TEvAlterReplicationResult"
                 << ", at schemeshard: " << TabletID()
                 << ", message: " << ev->Get()->Record.ShortDebugString());
 

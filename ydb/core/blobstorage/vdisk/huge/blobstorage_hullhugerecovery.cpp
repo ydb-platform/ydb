@@ -159,19 +159,18 @@ namespace NKikimr {
                                                            const ui32 chunkSize,
                                                            const ui32 appendBlockSize,
                                                            const ui32 minHugeBlobInBytes,
+                                                           const ui32 oldMinHugeBlobInBytes,
                                                            const ui32 milestoneHugeBlobInBytes,
                                                            const ui32 maxBlobInBytes,
                                                            const ui32 overhead,
                                                            const ui32 freeChunksReservation,
-                                                           const bool oldMapCompatible,
                                                            std::function<void(const TString&)> logFunc)
             : VCtx(std::move(vctx))
             , LogPos(THullHugeRecoveryLogPos::Default())
             , CommittedLogPos(LogPos)
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
-                                    minHugeBlobInBytes, milestoneHugeBlobInBytes,
-                                    maxBlobInBytes, overhead, freeChunksReservation,
-                                    oldMapCompatible))
+                                    minHugeBlobInBytes, oldMinHugeBlobInBytes, milestoneHugeBlobInBytes,
+                                    maxBlobInBytes, overhead, freeChunksReservation))
             , AllocatedSlots()
             , Guid(TAppData::RandomProvider->GenRand64())
         {
@@ -184,11 +183,11 @@ namespace NKikimr {
                                                            const ui32 chunkSize,
                                                            const ui32 appendBlockSize,
                                                            const ui32 minHugeBlobInBytes,
+                                                           const ui32 oldMinHugeBlobInBytes,
                                                            const ui32 milestoneHugeBlobInBytes,
                                                            const ui32 maxBlobInBytes,
                                                            const ui32 overhead,
                                                            const ui32 freeChunksReservation,
-                                                           const bool oldMapCompatible,
                                                            const ui64 entryPointLsn,
                                                            const TString &entryPointData,
                                                            std::function<void(const TString&)> logFunc)
@@ -196,9 +195,8 @@ namespace NKikimr {
             , LogPos(THullHugeRecoveryLogPos::Default())
             , CommittedLogPos(LogPos)
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
-                                    minHugeBlobInBytes, milestoneHugeBlobInBytes,
-                                    maxBlobInBytes, overhead, freeChunksReservation,
-                                    oldMapCompatible))
+                                    minHugeBlobInBytes, oldMinHugeBlobInBytes, milestoneHugeBlobInBytes,
+                                    maxBlobInBytes, overhead, freeChunksReservation))
             , AllocatedSlots()
             , Guid(TAppData::RandomProvider->GenRand64())
         {
@@ -214,11 +212,11 @@ namespace NKikimr {
                                                            const ui32 chunkSize,
                                                            const ui32 appendBlockSize,
                                                            const ui32 minHugeBlobInBytes,
+                                                           const ui32 oldMinHugeBlobInBytes,
                                                            const ui32 milestoneHugeBlobInBytes,
                                                            const ui32 maxBlobInBytes,
                                                            const ui32 overhead,
                                                            const ui32 freeChunksReservation,
-                                                           const bool oldMapCompatible,
                                                            const ui64 entryPointLsn,
                                                            const TContiguousSpan &entryPointData,
                                                            std::function<void(const TString&)> logFunc)
@@ -226,9 +224,8 @@ namespace NKikimr {
             , LogPos(THullHugeRecoveryLogPos::Default())
             , CommittedLogPos(LogPos)
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
-                                    minHugeBlobInBytes, milestoneHugeBlobInBytes,
-                                    maxBlobInBytes, overhead, freeChunksReservation,
-                                    oldMapCompatible))
+                                    minHugeBlobInBytes, oldMinHugeBlobInBytes, milestoneHugeBlobInBytes,
+                                    maxBlobInBytes, overhead, freeChunksReservation))
             , AllocatedSlots()
             , Guid(TAppData::RandomProvider->GenRand64())
         {
@@ -404,10 +401,6 @@ namespace NKikimr {
                 str << " empty<br>";
             }
             Heap->RenderHtml(str);
-        }
-
-        ui32 THullHugeKeeperPersState::GetMinREALHugeBlobInBytes() const {
-            return Heap->GetMinREALHugeBlobInBytes();
         }
 
         ui64 THullHugeKeeperPersState::FirstLsnToKeep() const {

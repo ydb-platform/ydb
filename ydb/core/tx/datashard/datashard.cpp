@@ -1036,7 +1036,7 @@ ui32 TDataShard::GetFreeChangeQueueCapacity(ui64 cookie) {
         return 0;
     }
 
-    const auto free = Min(sizeLimit - ChangesQueue.size(), sizeLimit / 2);
+    const auto free = Min(sizeLimit - ChangesQueue.size(), Max(sizeLimit / 2, 1ul));
 
     ui32 reserved = ChangeQueueReservedCapacity;
     if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
@@ -1052,7 +1052,7 @@ ui32 TDataShard::GetFreeChangeQueueCapacity(ui64 cookie) {
 
 ui64 TDataShard::ReserveChangeQueueCapacity(ui32 capacity) {
     const auto sizeLimit = AppData()->DataShardConfig.GetChangesQueueItemsLimit();
-    if (sizeLimit / 2 < ChangeQueueReservedCapacity) {
+    if (Max(sizeLimit / 2, 1ul) < ChangeQueueReservedCapacity) {
         return 0;
     }
 

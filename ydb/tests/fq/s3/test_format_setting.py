@@ -2,8 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import boto3
-import logging
 import io
+import logging
+import uuid
 import yatest
 
 import pyarrow as pa
@@ -890,7 +891,8 @@ Pear;15;33'''
 
 
     @yq_all
-    def test_parquet_converters_to_timestamp(self, kikimr, s3, client, unique_prefix):
+    def test_parquet_converters_to_timestamp(self, kikimr, s3, client):
+        unique_prefix = str(uuid.uuid4())
         # timestamp[ms] -> Timestamp
         # 2024-04-02T12:01:00.000Z
         data = [['apple'], [1712059260000]]
@@ -1395,7 +1397,8 @@ Pear;15;33'''
         assert len(data.result.result_set.rows) == 1, "invalid count rows"
 
     @yq_all
-    def test_parquet_converters_to_datetime(self, kikimr, s3, client, unique_prefix):
+    def test_parquet_converters_to_datetime(self, kikimr, s3, client):
+        unique_prefix = str(uuid.uuid4())
         # timestamp[ms] -> Datetime
         # 2024-04-02T12:01:00.000Z
         data = [['apple'], [1712059260000]]

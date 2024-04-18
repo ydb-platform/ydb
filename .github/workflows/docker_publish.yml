@@ -73,7 +73,7 @@ jobs:
         with:
           images: |
             ghcr.io/${{ github.repository_owner }}/local-ydb
-            ydbplatform/local-ydb
+            ${{ vars.DOCKER_HUB_REPOSITORY && vars.DOCKER_HUB_REPOSITORY || '' }}
           labels: |
             ydb.revision=${{ steps.get-sha.outputs.SHA }}
             org.opencontainers.image.revision=${{ steps.get-sha.outputs.SHA }}

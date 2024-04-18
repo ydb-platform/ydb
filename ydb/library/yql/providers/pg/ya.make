@@ -1,4 +1,4 @@
 RECURSE(
-    provider
     expr_nodes
+    provider
 )

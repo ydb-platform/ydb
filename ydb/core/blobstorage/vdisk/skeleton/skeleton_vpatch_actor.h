@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include "skeleton_vpatch_orchestrator.h"
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
@@ -10,28 +11,6 @@
 
 
 namespace NKikimr {
-
-struct TEvVPatchDyingRequest : TEventLocal<
-    TEvVPatchDyingRequest,
-    TEvBlobStorage::EvVPatchDyingRequest>
-{
-    TEvVPatchDyingRequest(TLogoBlobID id)
-        : PatchedBlobId(id)
-    {}
-
-    TLogoBlobID PatchedBlobId;
-};
-
-struct TEvVPatchDyingConfirm : TEventLocal<
-    TEvVPatchDyingConfirm,
-    TEvBlobStorage::EvVPatchDyingConfirm>
-{};
-
-struct TVPatchCtx : public TThrRefBase, TNonCopyable  {
-    TQueueActorMap AsyncBlobQueues;
-
-    TVPatchCtx() = default;
-};
 
 IActor* CreateSkeletonVPatchActor(TActorId leaderId, const TBlobStorageGroupType &gType, TEvBlobStorage::TEvVPatchStart::TPtr &ev,
         TInstant now, TActorIDPtr skeletonFrontIDPtr, const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchFoundPartsMsgsPtr,

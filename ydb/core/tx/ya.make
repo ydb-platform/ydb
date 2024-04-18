@@ -35,11 +35,11 @@ RECURSE(
     schemeshard
     sequenceproxy
     sequenceshard
+    sharding
+    tiering
     time_cast
+    tracing
     tx_allocator
     tx_allocator_client
     tx_proxy
-    tiering
-    sharding
-    tracing
 )

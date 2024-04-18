@@ -10,8 +10,8 @@ RECURSE(
     ip_base
     json
     json2
-    math
     knn
+    math
     pire
     protobuf
     re2

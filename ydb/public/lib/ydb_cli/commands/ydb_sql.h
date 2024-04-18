@@ -11,7 +11,7 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-class TCommandSql : public TYdbOperationCommand, public TCommandWithParameters,
+class TCommandSql : public TYdbCommand, public TCommandWithParameters,
     public TInterruptibleCommand
 {
 public:
@@ -30,6 +30,7 @@ private:
     TString QueryFile;
     TString Syntax;
     bool ExplainMode = false;
+    bool ExplainAnalyzeMode = false;
 };
 
 }

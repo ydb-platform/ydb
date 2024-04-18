@@ -97,21 +97,14 @@ namespace NKikimr::NStorage {
         // Query execution logic
 
         void ExecuteQuery() {
-            STLOG(PRI_DEBUG, BS_NODE, NWDC43, "ExecuteQuery", (SelfId, SelfId()));
-
             auto& record = Event->Get()->Record;
+            STLOG(PRI_DEBUG, BS_NODE, NWDC43, "ExecuteQuery", (SelfId, SelfId()), (Record, record));
             switch (record.GetRequestCase()) {
                 case TQuery::kUpdateConfig: {
                     auto *request = record.MutableUpdateConfig();
 
-                    if (!request->HasConfig()) {
-                        return FinishWithError(TResult::ERROR, "Config field is not filled in");
-                    } else if (!Self->StorageConfig) {
-                        return FinishWithError(TResult::ERROR, "no agreed StorageConfig");
-                    } else if (Self->CurrentProposedStorageConfig) {
-                        return FinishWithError(TResult::ERROR, "config proposition request in flight");
-                    } else if (Self->RootState != ERootState::RELAX) {
-                        return FinishWithError(TResult::ERROR, "something going on with default FSM");
+                    if (!RunCommonChecks()) {
+                        return;
                     }
 
                     auto *config = request->MutableConfig();
@@ -122,18 +115,7 @@ namespace NKikimr::NStorage {
                         return FinishWithError(TResult::ERROR, TStringBuilder() << "config validation failed: " << *error);
                     }
 
-                    config->MutablePrevConfig()->CopyFrom(*Self->StorageConfig);
-                    config->MutablePrevConfig()->ClearPrevConfig();
-                    UpdateFingerprint(config);
-
-                    Self->CurrentProposedStorageConfig.emplace();
-                    Self->CurrentProposedStorageConfig->Swap(config);
-
-                    TEvScatter task;
-                    auto *propose = task.MutableProposeStorageConfig();
-                    propose->MutableConfig()->CopyFrom(*Self->CurrentProposedStorageConfig);
-
-                    return Self->IssueScatterTask(SelfId(), std::move(task));
+                    return StartProposition(config);
                 }
 
                 case TQuery::kQueryConfig: {
@@ -148,6 +130,12 @@ namespace NKikimr::NStorage {
                     }
                     return Finish(Sender, SelfId(), ev.release(), 0, Cookie);
                 }
+
+                case TQuery::kReassignGroupDisk:
+                    return ReassignGroupDisk(record.GetReassignGroupDisk());
+
+                case TQuery::kStaticVDiskSlain:
+                    return StaticVDiskSlain(record.GetStaticVDiskSlain());
 
                 case TQuery::REQUEST_NOT_SET:
                     return FinishWithError(TResult::ERROR, "Request field not set");
@@ -176,7 +164,174 @@ namespace NKikimr::NStorage {
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Reassign group disk logic
+
+        void ReassignGroupDisk(const NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot::TReassignGroupDisk& /*cmd*/) {
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryBaseConfig);
+        }
+
+        void Handle(TEvNodeWardenBaseConfig::TPtr ev) {
+            const auto& record = Event->Get()->Record;
+            const auto& cmd = record.GetReassignGroupDisk();
+
+            if (!RunCommonChecks()) {
+                return;
+            }
+
+            NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+
+            const auto& vdiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
+
+            if (!config.HasBlobStorageConfig()) {
+                return FinishWithError(TResult::ERROR, "no BlobStorageConfig defined");
+            }
+            const auto& bsConfig = config.GetBlobStorageConfig();
+
+            if (!bsConfig.HasServiceSet()) {
+                return FinishWithError(TResult::ERROR, "no ServiceSet defined");
+            }
+            const auto& ss = bsConfig.GetServiceSet();
+
+            if (!bsConfig.HasAutoconfigSettings()) {
+                return FinishWithError(TResult::ERROR, "no AutoconfigSettings defined");
+            }
+            const auto& settings = bsConfig.GetAutoconfigSettings();
+
+            THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
+            for (const auto& vdisk : ss.GetVDisks()) {
+                if (VDiskIDFromVDiskID(vdisk.GetVDiskID()) == vdiskId) {
+                    NBsController::TPDiskId pdiskId;
+                    if (cmd.HasPDiskId()) {
+                        const auto& target = cmd.GetPDiskId();
+                        pdiskId = {target.GetNodeId(), target.GetPDiskId()};
+                    }
+                    replacedDisks.emplace(vdiskId, pdiskId);
+                }
+            }
+
+            for (const auto& group : ss.GetGroups()) {
+                if (group.GetGroupID() == vdiskId.GroupID) {
+                    try {
+                        Self->AllocateStaticGroup(&config, vdiskId.GroupID, vdiskId.GroupGeneration + 1,
+                            TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies()),
+                            settings.GetGeometry(), settings.GetPDiskFilter(), replacedDisks, {}, 0, &ev->Get()->BaseConfig);
+                    } catch (const TExConfigError& ex) {
+                        STLOG(PRI_NOTICE, BS_NODE, NW49, "ReassignGroupDisk failed to allocate group", (Config, config),
+                            (BaseConfig, ev->Get()->BaseConfig),
+                            (Error, ex.what()));
+                        return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to allocate group: " << ex.what());
+                    }
+
+                    config.SetGeneration(config.GetGeneration() + 1);
+                    return StartProposition(&config);
+                }
+            }
+
+            return FinishWithError(TResult::ERROR, TStringBuilder() << "group not found");
+        }
+
+        void StaticVDiskSlain(const NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot::TStaticVDiskSlain& cmd) {
+            if (!RunCommonChecks()) {
+                return;
+            }
+
+            const TVDiskID slainVDiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
+            const auto& slainVSlotId = cmd.GetVSlotId();
+            const ui32 nodeId = slainVSlotId.GetNodeId();
+            const ui32 pdiskId = slainVSlotId.GetPDiskId();
+            NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+
+            if (!config.HasBlobStorageConfig()) {
+                return FinishWithError(TResult::ERROR, "no BlobStorageConfig defined");
+            }
+            auto *bsConfig = config.MutableBlobStorageConfig();
+
+            if (!bsConfig->HasServiceSet()) {
+                return FinishWithError(TResult::ERROR, "no ServiceSet defined");
+            }
+            auto *ss = bsConfig->MutableServiceSet();
+
+            bool pdiskIsUsed = false;
+            bool changes = false;
+
+            for (size_t i = 0; i < ss->VDisksSize(); ++i) {
+                if (const auto& vdisk = ss->GetVDisks(i); vdisk.HasVDiskID() && vdisk.HasVDiskLocation()) {
+                    const auto& loc = vdisk.GetVDiskLocation();
+                    if (loc.GetNodeID() != nodeId || loc.GetPDiskID() != pdiskId) {
+                        continue;
+                    }
+
+                    const TVDiskID vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
+                    if (vdiskId == slainVDiskId && loc.GetVDiskSlotID() == slainVSlotId.GetVSlotId() &&
+                            vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
+                        ss->MutableVDisks()->DeleteSubrange(i--, 1);
+                        changes = true;
+                    } else {
+                        pdiskIsUsed = true;
+                    }
+                }
+            }
+
+            if (!pdiskIsUsed) {
+                for (size_t i = 0; i < ss->PDisksSize(); ++i) {
+                    if (const auto& pdisk = ss->GetPDisks(i); pdisk.HasNodeID() && pdisk.HasPDiskID() &&
+                            pdisk.GetNodeID() == nodeId && pdisk.GetPDiskID() == pdiskId) {
+                        ss->MutablePDisks()->DeleteSubrange(i--, 1);
+                        changes = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!changes) { // no configuration updates required
+                return Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
+            }
+
+            config.SetGeneration(config.GetGeneration() + 1);
+            StartProposition(&config);
+        }
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Configuration proposition
+
+        void StartProposition(NKikimrBlobStorage::TStorageConfig *config) {
+            config->MutablePrevConfig()->CopyFrom(*Self->StorageConfig);
+            config->MutablePrevConfig()->ClearPrevConfig();
+            UpdateFingerprint(config);
+
+            if (auto error = ValidateConfigUpdate(*Self->StorageConfig, *config)) {
+                STLOG(PRI_DEBUG, BS_NODE, NW51, "proposed config validation failed", (Error, *error),
+                    (Config, config));
+                return FinishWithError(TResult::ERROR, TStringBuilder() << "config validation failed: " << *error);
+            }
+
+            Self->CurrentProposedStorageConfig.emplace();
+            Self->CurrentProposedStorageConfig->Swap(config);
+
+            TEvScatter task;
+            auto *propose = task.MutableProposeStorageConfig();
+            propose->MutableConfig()->CopyFrom(*Self->CurrentProposedStorageConfig);
+
+            return Self->IssueScatterTask(SelfId(), std::move(task));
+        }
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Query termination and result delivery
+
+        bool RunCommonChecks() {
+            if (!Self->StorageConfig) {
+                FinishWithError(TResult::ERROR, "no agreed StorageConfig");
+            } else if (Self->CurrentProposedStorageConfig) {
+                FinishWithError(TResult::ERROR, "config proposition request in flight");
+            } else if (Self->RootState != ERootState::RELAX) {
+                FinishWithError(TResult::ERROR, "something going on with default FSM");
+            } else if (auto error = ValidateConfig(*Self->StorageConfig)) {
+                FinishWithError(TResult::ERROR, TStringBuilder() << "current config validation failed: " << *error);
+            } else {
+                return true;
+            }
+            return false;
+        }
 
         std::unique_ptr<TEvNodeConfigInvokeOnRootResult> PrepareResult(TResult::EStatus status,
                 std::optional<std::reference_wrapper<const TString>> errorReason) {
@@ -219,6 +374,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeConfigGather, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
+            hFunc(TEvNodeWardenBaseConfig, Handle);
             cFunc(TEvents::TSystem::Poison, PassAway);
         )
     };

@@ -387,18 +387,48 @@ void TNodeWarden::SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, co
     SendToController(std::move(ev));
 }
 
-void TNodeWarden::SendVDiskReport(TVSlotId vslotId, const TVDiskID &vDiskId, NKikimrBlobStorage::TEvControllerNodeReport::EVDiskPhase phase) {
-    STLOG(PRI_DEBUG, BS_NODE, NW32, "SendVDiskReport", (VSlotId, vslotId), (Phase, phase));
+void TNodeWarden::SendVDiskReport(TVSlotId vslotId, const TVDiskID &vDiskId,
+        NKikimrBlobStorage::TEvControllerNodeReport::EVDiskPhase phase, TDuration backoff) {
+    STLOG(PRI_DEBUG, BS_NODE, NW32, "SendVDiskReport", (VSlotId, vslotId), (VDiskId, vDiskId), (Phase, phase));
 
-    auto report = std::make_unique<TEvBlobStorage::TEvControllerNodeReport>(vslotId.NodeId);
-    auto *vReport = report->Record.AddVDiskReports();
-    auto *id = vReport->MutableVSlotId();
-    id->SetNodeId(vslotId.NodeId);
-    id->SetPDiskId(vslotId.PDiskId);
-    id->SetVSlotId(vslotId.VDiskSlotId);
-    VDiskIDFromVDiskID(vDiskId, vReport->MutableVDiskId());
-    vReport->SetPhase(phase);
-    SendToController(std::move(report));
+    if (TGroupID groupId(vDiskId.GroupID); groupId.ConfigurationType() == EGroupConfigurationType::Static &&
+            phase == NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED) {
+        auto ev = std::make_unique<TEvNodeConfigInvokeOnRoot>();
+        auto *record = &ev->Record;
+        auto *cmd = record->MutableStaticVDiskSlain();
+        VDiskIDFromVDiskID(vDiskId, cmd->MutableVDiskId());
+        auto *slot = cmd->MutableVSlotId();
+        slot->SetNodeId(vslotId.NodeId);
+        slot->SetPDiskId(vslotId.PDiskId);
+        slot->SetVSlotId(vslotId.VDiskSlotId);
+        const ui64 cookie = NextInvokeCookie++;
+        if (backoff != TDuration::Zero()) {
+            TActivationContext::Schedule(backoff, new IEventHandle(DistributedConfigKeeperId, SelfId(), ev.release(), 0, cookie));
+        } else {
+            Send(DistributedConfigKeeperId, ev.release(), 0, cookie);
+        }
+        InvokeCallbacks.emplace(cookie, [=](TEvNodeConfigInvokeOnRootResult& msg) {
+            if (msg.Record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+                SendVDiskReport(vslotId, vDiskId, phase, TDuration::Seconds(3));
+            }
+        });
+    } else {
+        auto report = std::make_unique<TEvBlobStorage::TEvControllerNodeReport>(vslotId.NodeId);
+        auto *vReport = report->Record.AddVDiskReports();
+        auto *id = vReport->MutableVSlotId();
+        id->SetNodeId(vslotId.NodeId);
+        id->SetPDiskId(vslotId.PDiskId);
+        id->SetVSlotId(vslotId.VDiskSlotId);
+        VDiskIDFromVDiskID(vDiskId, vReport->MutableVDiskId());
+        vReport->SetPhase(phase);
+        SendToController(std::move(report));
+    }
+}
+
+void TNodeWarden::Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
+    if (auto nh = InvokeCallbacks.extract(ev->Cookie)) {
+        nh.mapped()(*ev->Get());
+    }
 }
 
 void TNodeWarden::Handle(TEvBlobStorage::TEvAskWardenRestartPDisk::TPtr ev) {
@@ -426,17 +456,8 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvNotifyWardenPDiskRestarted::TPtr ev)
 }
 
 void TNodeWarden::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
-    // Can be a response to RestartPDisk or DropDonorDisk. We are only interested in RestartPDisk.
-    auto it = PDiskRestartRequests.find(ev->Cookie);
-    // If cookie is in PDiskRestartRequests, then it's a RestartPDisk.
-    if (it != PDiskRestartRequests.end()) {
-        auto res = ev->Get()->Record.GetResponse();
-        ui32 pdiskId = it->second;
-        PDiskRestartRequests.erase(it);
-
-        if (!res.GetSuccess()) {
-            OnUnableToRestartPDisk(pdiskId, res.GetErrorDescription());
-        }
+    if (auto nh = ConfigInFlight.extract(ev->Cookie)) {
+        nh.mapped()(ev->Get());
     }
 }
 

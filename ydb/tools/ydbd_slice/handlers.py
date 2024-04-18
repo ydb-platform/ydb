@@ -422,7 +422,7 @@ mon={mon}""".format(
 
         self.slice_start()
 
-    def slice_create_systemd_service(self):
+    def slice_create_systemd_unit(self):
         # TODO: config need proper review
         systemd_unit = """[Unit]
 Description=YDB storage node
@@ -469,6 +469,6 @@ WantedBy=multi-user.target
         tasks = []
         for (host_name, drive_path) in self._get_all_drives():
             # TODO: customize disk size somehow
-            cmd = "fallocate -l 32GB {}".format(drive_path)
+            cmd = "sudo fallocate -l 32GB {path} && sudo chmod 0666 {path}".format(path=drive_path)
             tasks.extend(self.nodes.execute_async_ret(cmd, nodes=[host_name]))
         self.nodes._check_async_execution(tasks)

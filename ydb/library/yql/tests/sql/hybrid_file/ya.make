@@ -1,7 +1,6 @@
 RECURSE(
     part0
     part1
-    part10
     part2
     part3
     part4
@@ -10,4 +9,5 @@ RECURSE(
     part7
     part8
     part9
+    part10
 )

@@ -102,8 +102,8 @@ class Nodes(object):
             return
         destination = "{host}:{path}".format(host=host, path=remote_path)
         rsh = " ".join(self._get_ssh_command_prefix())
-        subprocess.check_call(["rsync", "-avqLW", "--del", "--no-o", "--no-g", 
-                               "--rsh={}".format(rsh), 
+        subprocess.check_call(["rsync", "-avqLW", "--del", "--no-o", "--no-g",
+                               "--rsh={}".format(rsh),
                                "--rsync-path=sudo rsync", "--progress", local_path, destination])
 
     def _copy_between_nodes(self, hub, hub_path, hosts, remote_path):

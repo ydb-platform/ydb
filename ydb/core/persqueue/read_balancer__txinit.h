@@ -77,19 +77,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
             }
             Self->PartitionsInfo.insert(partitionsInfo.rbegin(), partitionsInfo.rend());
 
-            while (!groupsRowset.EndOfSet()) { //found out tablets for partitions
-                ui32 groupId = groupsRowset.GetValue<Schema::Groups::GroupId>();
-                ui32 partition = groupsRowset.GetValue<Schema::Groups::Partition>();
-                Y_ABORT_UNLESS(groupId > 0);
-                auto jt = Self->PartitionsInfo.find(partition);
-                Y_ABORT_UNLESS(jt != Self->PartitionsInfo.end());
-
-                if (!groupsRowset.Next())
-                    return false;
-            }
-
-            Self->TotalGroups = Self->GroupsInfo.size();
-
+            Self->TotalGroups =Self->PartitionsInfo.size();
 
             while (!tabletsRowset.EndOfSet()) { //found out tablets for partitions
                 ui64 tabletId = tabletsRowset.GetValue<Schema::Tablets::TabletId>();

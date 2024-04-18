@@ -1039,7 +1039,10 @@ bool TBalancer::SetCommittedState(const TString& consumerName, ui32 partitionId,
 
     if (consumer->IsReadable(partitionId) && consumer->SetCommittedState(partitionId, generation, cookie)) {
         consumer->ProccessReadingFinished(partitionId, ctx);
+        return true;
     }
+
+    return false;
 }
 
 void TBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {

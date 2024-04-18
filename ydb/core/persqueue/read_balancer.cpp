@@ -518,7 +518,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
             ++NumActiveParts;
         } else { //group is already defined
-            partitionsInfo[p.GetPartition()] = {p.GetTabletId()};
+            partitionsInfo[p.GetPartition()] = it->second;
         }
     }
 
@@ -658,6 +658,10 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
 
     for (const auto& partRes : record.GetPartResult()) {
         ui32 partitionId = partRes.GetPartition();
+        if (!PartitionsInfo.contains(partitionId)) {
+            continue;
+        }
+
         auto generation = partRes.GetGeneration();
         auto cookie = partRes.GetCookie();
         for (const auto& consumer : partRes.GetConsumerResult()) {
@@ -666,17 +670,13 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
             }
         }
 
-        if (!PartitionsInfo.contains(partRes.GetPartition())) {
-            continue;
-        }
         if (SplitMergeEnabled(TabletConfig) && PartitionsScaleManager) {
             TPartitionScaleManager::TPartitionInfo scalePartitionInfo = {
                 .Id = partitionId,
-                .KeyRange = PartitionsInfo[partRes.GetPartition()].KeyRange
+                .KeyRange = PartitionsInfo[partitionId].KeyRange
             };
             PartitionsScaleManager->HandleScaleStatusChange(scalePartitionInfo, partRes.GetScaleStatus(), ctx);
         }
-        partRes.GetScaleStatus();
 
         AggregatedStats.AggrStats(partitionId, partRes.GetPartitionSize(), partRes.GetUsedReserveSize());
         AggregatedStats.AggrStats(partRes.GetAvgWriteSpeedPerSec(), partRes.GetAvgWriteSpeedPerMin(),
@@ -1034,7 +1034,6 @@ struct TTxWriteSubDomainPathId : public ITransaction {
 };
 
 static constexpr TDuration MaxFindSubDomainPathIdDelay = TDuration::Minutes(1);
-
 
 void TPersQueueReadBalancer::StopFindSubDomainPathId() {
     if (FindSubDomainPathIdActor) {

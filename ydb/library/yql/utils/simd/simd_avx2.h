@@ -77,9 +77,20 @@ struct TSimd8 {
         crc = _mm_crc32_u64(crc, *((ui64*) &this->Value + 3));
         return crc;
     }
-    
-    inline void Add64(const TSimd8<T>& another) {
-        Value = _mm256_add_epi64(Value, another.Value);
+
+    inline void Add64(const TSimd8<T>& other) {
+        Value = _mm256_add_epi64(Value, other.Value);
+    }
+
+    inline void SetMask(T* ptr) {
+        Value = _mm256_setr_epi8(ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], 
+                                 ptr[5], ptr[6], ptr[7], ptr[8], ptr[9],
+                                 ptr[10], ptr[11], ptr[12], ptr[13], ptr[14],
+                                 ptr[15], ptr[16], ptr[17], ptr[18], ptr[19],
+                                 ptr[20], ptr[21], ptr[22], ptr[23], ptr[24],
+                                 ptr[25], ptr[26], ptr[27], ptr[28], ptr[29],
+                                 ptr[30], ptr[31]
+                                );
     }
 
     inline int ToBitMask() const {
@@ -104,6 +115,10 @@ struct TSimd8 {
 
     static inline TSimd8<T> Load(const T values[32]) {
         return TSimd8<T>(values);
+    }
+
+    inline void Get(const T* ptr) {
+        Value = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(ptr));
     }
 
     static inline TSimd8<T> LoadAligned(const T values[32]) {
@@ -163,6 +178,10 @@ struct TSimd8 {
 
     inline TSimd8<T> BlendVar(const TSimd8<T>& other, const TSimd8<T>& mask) const {
         return _mm256_blendv_epi8(this->Value, other.Value, mask.Value);
+    }
+
+    inline TSimd8<T> Blend(const TSimd8<T>& other, const TSimd8<T>& mask) const {
+        return _mm256_blendv_epi8(Value, other.Value, mask.Value);
     }
 
     template<int N>
@@ -408,6 +427,7 @@ struct TSimd8 {
     inline TSimd8<T> operator+(const TSimd8<T>& other) const {
         return _mm256_add_epi8(this->Value, other.Value);
     }
+
     inline TSimd8<T> operator-(const TSimd8<T>& other) const {
         return _mm256_sub_epi8(this->Value, other.Value);
     }

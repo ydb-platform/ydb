@@ -226,35 +226,35 @@ namespace NTest {
             if (type == EPage::DataPage) {
                 DataBytes[group] += page.size();
             }
-            TPageId id = PageCollections[group].size();
+            TPageId pageId = PageCollections[group].size();
             PageCollections[group].push_back(std::move(page));
             PageTypes[group].push_back(type);
 
             if (group == 0) {
                 switch (type) {
                     case EPage::FlatIndex:
-                        Indexes.push_back(id);
+                        Indexes.push_back(pageId);
                         break;
                     case EPage::Frames:
-                        Large = id;
+                        Large = pageId;
                         break;
                     case EPage::Globs:
-                        Globs = id;
+                        Globs = pageId;
                         break;
                     case EPage::Scheme:
                     case EPage::Schem2:
-                        Scheme = id;
+                        Scheme = pageId;
                         Rooted = (type == EPage::Schem2);
                         break;
                     case EPage::Bloom:
-                        ByKey = id;
+                        ByKey = pageId;
                         break;
                     default:
                         break;
                 }
             }
 
-            return id;
+            return pageId;
         }
 
         void WriteInplace(TPageId page, TArrayRef<const char> body) noexcept

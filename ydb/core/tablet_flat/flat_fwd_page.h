@@ -22,8 +22,8 @@ namespace NFwd {
     };
 
     struct TPage {
-        TPage(TPageId id, ui64 size, ui16 tag, TPageId refer)
-            : Size(size), PageId(id), Refer(refer), Tag(tag)
+        TPage(TPageId pageId, ui64 size, ui16 tag, TPageId refer)
+            : Size(size), PageId(pageId), Refer(refer), Tag(tag)
         {
 
         }

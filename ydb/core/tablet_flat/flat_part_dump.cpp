@@ -2,6 +2,7 @@
 #include "flat_part_iface.h"
 #include "flat_part_index_iter_iface.h"
 #include "flat_page_data.h"
+#include "flat_page_index.h"
 #include "flat_page_frames.h"
 #include "flat_page_blobs.h"
 #include "flat_page_bloom.h"
@@ -106,7 +107,7 @@ namespace {
         TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
         auto indexPageId = part.IndexPages.GetFlat({});
-        auto indexPage = Env->TryGetPage(&part, indexPageId);
+        auto indexPage = Env->TryGetPage(&part, indexPageId, {});
 
         if (!indexPage) {
             Out
@@ -142,7 +143,7 @@ namespace {
                 << " | " << (Printf(Out, " %4u", record->GetPageId()), " ")
                 << (Printf(Out, " %6lu", record->GetRowId()), " ");
 
-            if (auto *page = Env->TryGetPage(&part, record->GetPageId())) {
+            if (auto *page = Env->TryGetPage(&part, record->GetPageId(), {})) {
                 Printf(Out, " %6zub  ", page->size());
             } else {
                 Out << "~none~  ";
@@ -189,7 +190,7 @@ namespace {
         TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
         // TODO: need to join with other column groups
-        auto data = NPage::TDataPage(Env->TryGetPage(&part, page));
+        auto data = NPage::TDataPage(Env->TryGetPage(&part, page, {}));
 
         if (data) {
             auto label = data.Label();
@@ -304,14 +305,14 @@ namespace {
         }
 
         auto dumpChild = [&] (NPage::TBtreeIndexNode::TChild child) {
-            if (part.GetPageType(child.PageId) == EPage::BTreeIndex) {
+            if (part.GetPageType(child.PageId, {}) == EPage::BTreeIndex) {
                 BTreeIndexNode(part, child, level + 1);
             } else {
                 Out << intend << " | " << child.ToString() << Endl;
             }
         };
 
-        auto page = Env->TryGetPage(&part, meta.PageId);
+        auto page = Env->TryGetPage(&part, meta.PageId, {});
         if (!page) {
             Out << intend << " | -- the rest of the index pages aren't loaded" << Endl;
             return;

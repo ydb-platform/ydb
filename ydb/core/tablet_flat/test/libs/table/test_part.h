@@ -47,14 +47,14 @@ namespace NTest {
             return Store->PageCollectionBytes(0) + Store->PageCollectionBytes(Store->GetOuterRoom());
         }
 
-        ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId) const override
+        ui64 GetPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const override
         {
-            return Store->GetPageSize(groupId.Index, id);
+            return Store->GetPageSize(groupId.Index, pageId);
         }
 
-        NPage::EPage GetPageType(NPage::TPageId id, NPage::TGroupId groupId) const override
+        NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const override
         {
-            return Store->GetPageType(groupId.Index, id);
+            return Store->GetPageType(groupId.Index, pageId);
         }
 
         ui8 GetGroupChannel(NPage::TGroupId groupId) const override

@@ -348,7 +348,7 @@ private:
             return true;
         }
 
-        auto page = Env->TryGetPage(Part, state.PageId);
+        auto page = Env->TryGetPage(Part, state.PageId, {});
         if (page) {
             state.Node.emplace(*page);
             return true;

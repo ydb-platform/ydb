@@ -1,5 +1,6 @@
 #pragma once
 
+#include "flat_page_index.h"
 #include "flat_part_iface.h"
 #include "flat_fwd_iface.h"
 #include "flat_fwd_misc.h"
@@ -71,7 +72,8 @@ namespace NFwd {
 
         TFlatIndexCache(const TPart* part, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices = nullptr)
             : Part(part)
-            , IndexPage(Part->IndexPages.GetFlat(groupId), Part->GetPageSize(Part->IndexPages.GetFlat(groupId)), 0, Max<TPageId>())
+            , GroupId(groupId)
+            , IndexPage(Part->IndexPages.GetFlat(groupId), Part->GetPageSize(Part->IndexPages.GetFlat(groupId), {}), 0, Max<TPageId>())
         { 
             if (slices && !slices->empty()) {
                 BeginRowId = slices->front().BeginRowId();
@@ -100,7 +102,7 @@ namespace NFwd {
                 return {IndexPage.Touch(pageId, Stat), false, true};
             }
 
-            Y_DEBUG_ABORT_UNLESS(Part->GetPageType(pageId) == EPage::DataPage);
+            Y_DEBUG_ABORT_UNLESS(Part->GetPageType(pageId, GroupId) == EPage::DataPage);
 
             if (auto *page = Trace.Get(pageId)) {
                 return {page, false, true};
@@ -138,14 +140,14 @@ namespace NFwd {
                 Stat.Saved += one.Data.size();
 
                 if (one.PageId == IndexPage.PageId) {
-                    Y_DEBUG_ABORT_UNLESS(Part->GetPageType(one.PageId) == EPage::Index);
+                    Y_DEBUG_ABORT_UNLESS(Part->GetPageType(one.PageId, {}) == EPage::Index);
                     Index.emplace(one.Data);
                     Iter = Index->LookupRow(BeginRowId);
                     IndexPage.Settle(one);
                     continue;
                 }
 
-                Y_DEBUG_ABORT_UNLESS(Part->GetPageType(one.PageId) == EPage::DataPage);
+                Y_DEBUG_ABORT_UNLESS(Part->GetPageType(one.PageId, GroupId) == EPage::DataPage);
                 if (it == Pages.end() || it->PageId > one.PageId) {
                     it = std::lower_bound(Pages.begin(), it, one.PageId);
                 } else if (it->PageId < one.PageId) {
@@ -225,6 +227,7 @@ namespace NFwd {
 
     private:
         const TPart* Part;
+        const TGroupId GroupId;
         TRowId BeginRowId, EndRowId;
         
         TPage IndexPage;

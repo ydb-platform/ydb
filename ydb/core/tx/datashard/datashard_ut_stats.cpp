@@ -1,6 +1,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 #include "ydb/core/tablet_flat/shared_sausagecache.h"
+#include <ydb/core/tablet_flat/test/libs/table/test_make.h>
 
 namespace NKikimr {
 
@@ -344,7 +345,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         UNIT_ASSERT_LE(counters->ActiveBytes->Val(), 800*1024); // one index
     }
 
-    Y_UNIT_TEST(SharedCacheGarbage2) {
+    Y_UNIT_TEST(CollectStatsForSeveralParts) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -359,39 +360,47 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         InitRoot(server, sender);
 
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+
+        NLocalDb::TCompactionPolicyPtr policy = NLocalDb::CreateDefaultUserTablePolicy();
+        policy->InMemForceStepsToSnapshot = 1;
+
+        for (auto& gen : policy->Generations) {
+            gen.ExtraCompactionPercent = 0;
+            gen.ExtraCompactionMinSize = 100;
+            gen.ExtraCompactionExpPercent = 0;
+            gen.ExtraCompactionExpMaxSize = 0;
+            gen.UpliftPartSize = 0;
+        }
+
         auto opts = TShardedTableOptions()
             .Columns({
                 {"key", "Uint32", true, false}, 
-                {"value", "String", true, false}});
+                {"value", "Uint32", true, false}})
+            .Policy(policy.Get());
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
         const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
 
-        const int batches = 10;
-        const int batchItems = 10;
-        for (auto batch : xrange(batches)) {
-            TString query = "UPSERT INTO `/Root/table-1` (key, value) VALUES ";
-            for (auto item = 0; item < batchItems; item++) {
-                if (item != 0)
-                    query += ", ";
-                query += "(" + ToString(batch * batchItems + item) + ", \"" + TString(7000, 'x') + ToString(batch * batchItems + item) + "\") ";
-            }
-            Cerr << query << Endl << Endl;
-            ExecSQL(server, sender, query);
-            CompactTable(runtime, shard1, tableId1, false);
-
-            Cerr << "... waiting for stats after compaction" << Endl;
-            auto stats = WaitTableStats(runtime, shard1, 1, (batch + 1) * batchItems);
-            Cerr << "... GetRowCount: " << stats.GetTableStats().GetRowCount() << Endl;
-            Cerr << "... GetPartCount: " << stats.GetTableStats().GetPartCount() << Endl;
-            Cerr << "... GetDataSize: " << stats.GetTableStats().GetDataSize() << Endl;
-            Cerr << "... GetIndexSize: " << stats.GetTableStats().GetIndexSize() << Endl;
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3)");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        {
+            Cerr << "... waiting for stats" << Endl;
+            auto stats = WaitTableStats(runtime, shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3u);
         }
 
-        // each batch ~70KB, ~700KB in total
-        // auto counters = MakeIntrusive<TSharedPageCacheCounters>(runtime.GetDynamicCounters());
-        // Cerr << "ActiveBytes = " << counters->ActiveBytes->Val() << " PassiveBytes = " << counters->PassiveBytes->Val() << Endl;
-        // UNIT_ASSERT_LE(counters->ActiveBytes->Val(), 800*1024); // one index
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 5), (6, 6), (7, 7), (8, 8)");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        {
+            Cerr << "... waiting for stats" << Endl;
+            auto stats = WaitTableStats(runtime, shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 7u);
+        }
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardStats)

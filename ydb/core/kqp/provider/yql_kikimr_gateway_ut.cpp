@@ -507,10 +507,11 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         TString secretId = "unexisting_secret_name";
         auto query = TStringBuilder() << R"(
             CREATE EXTERNAL DATA SOURCE `/Root/ExternalDataSource` WITH (
-                SOURCE_TYPE="YT",
+                SOURCE_TYPE="ObjectStorage",
                 LOCATION="localhost",
-                AUTH_METHOD="TOKEN",
-                TOKEN_SECRET_NAME=")" << secretId << R"("
+                AUTH_METHOD="SERVICE_ACCOUNT",
+                SERVICE_ACCOUNT_ID="",
+                SERVICE_ACCOUNT_SECRET_NAME=")" << secretId << R"("
             );)";
 
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();

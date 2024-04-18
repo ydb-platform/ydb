@@ -30,6 +30,7 @@ public:
         // Process a single transaction at the front of the queue
         auto plannedItem = Self->ProgressTxController->StartPlannedTx();
         if (!!plannedItem) {
+            PlannedQueueItem.emplace(plannedItem->PlanStep, plannedItem->TxId);
             ui64 step = plannedItem->PlanStep;
             ui64 txId = plannedItem->TxId;
             LastCompletedTx = NOlap::TSnapshot(step, txId);
@@ -39,7 +40,6 @@ public:
                 Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedTxId, LastCompletedTx->GetTxId());
             }
 
-            TxOperator->SetPlanQueueItem(plannedItem->GetPlanQueueItem());
             TxOperator = Self->ProgressTxController->GetVerifiedTxOperator(txId);
             AFL_VERIFY(TxOperator->Progress(*Self, NOlap::TSnapshot(step, txId), txc));
             Self->ProgressTxController->FinishPlannedTx(txId, txc);
@@ -57,9 +57,9 @@ public:
         NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "complete");
         if (TxOperator) {
             TxOperator->Complete(*Self, ctx);
-            if (TxOperator->GetPlanQueueItemOptional()) {
-                Self->GetProgressTxController().CompleteRunningTx(*TxOperator->GetPlanQueueItemOptional());
-            }
+        }
+        if (PlannedQueueItem) {
+            Self->GetProgressTxController().CompleteRunningTx(*PlannedQueueItem);
         }
         if (LastCompletedTx) {
             Self->LastCompletedTx = std::max(*LastCompletedTx, Self->LastCompletedTx);
@@ -71,6 +71,7 @@ private:
     TTxController::ITransactionOperatior::TPtr TxOperator;
     const ui32 TabletTxNo;
     std::optional<NOlap::TSnapshot> LastCompletedTx;
+    std::optional<TTxController::TPlanQueueItem> PlannedQueueItem;
 };
 
 void TColumnShard::EnqueueProgressTx(const TActorContext& ctx) {

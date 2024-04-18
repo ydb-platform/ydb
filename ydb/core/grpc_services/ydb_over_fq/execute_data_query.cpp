@@ -22,7 +22,7 @@ public:
 
     using TBase::TBase;
     using TBase::SelfId;
-    using TBase::LogCtx;
+    using typename TBase::TLogCtx;
 
     void Bootstrap(const TActorContext& ctx) {
         CreateQuery(ctx);
@@ -56,7 +56,7 @@ public:
     // WaitForExecutionImpl
 
     void OnQueryTermination(const TString& queryId, FederatedQuery::QueryMeta_ComputeStatus status, const TActorContext& ctx) {
-        SRC_LOG_I("finished query execution with status " << FederatedQuery::QueryMeta::ComputeStatus_Name(status), queryId);
+        SRC_LOG_I(queryId, "finished query execution with status " << FederatedQuery::QueryMeta::ComputeStatus_Name(status));
 
         // Whether query is successful or not, we want to call DescribeQuery
         //   to get either ResultSet size or issues
@@ -183,6 +183,7 @@ public:
 
     using TBase::TBase;
     using TBase::Handle;
+    using typename TBase::TLogCtx;
 
     // StreamResultSetsImpl
 
@@ -197,7 +198,7 @@ public:
             issues.AddIssue("Scan query should have a single result set.");
             issues.back().SetCode(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, NYql::TSeverityIds::S_ERROR);
             Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
-            SRC_LOG_I("failed: got " << ResultSetSizes_.size() << " result sets", queryId);
+            SRC_LOG_I(queryId, "failed: got " << ResultSetSizes_.size() << " result sets");
             return;
         }
 
@@ -228,12 +229,12 @@ public:
 
         if (SentRowsInCurrRS_ < ResultSetSizes_[CurrentResultSet_]) {
             SRC_LOG_T("RS[" << CurrentResultSet_ << "][" << (SentRowsInCurrRS_ - result.result_set().rows_size()) <<
-                ":" << SentRowsInCurrRS_ << "], still got " << (ResultSetSizes_[CurrentResultSet_] - CurrentResultSet_), QueryId_
+                ":" << SentRowsInCurrRS_ << "], still got " << (ResultSetSizes_[CurrentResultSet_] - CurrentResultSet_)
             );
             MakeLocalCall(CreateResultSetRequest(QueryId_, CurrentResultSet_, SentRowsInCurrRS_), ctx);
         } else {
             SRC_LOG_T("RS[" << CurrentResultSet_ << "][" <<
-                (SentRowsInCurrRS_ - result.result_set().rows_size()) << ":" << SentRowsInCurrRS_ << "], fully sent", QueryId_
+                (SentRowsInCurrRS_ - result.result_set().rows_size()) << ":" << SentRowsInCurrRS_ << "], fully sent"
             );
 
             Y_ABORT_UNLESS(SentRowsInCurrRS_ == ResultSetSizes_[CurrentResultSet_]);
@@ -242,7 +243,7 @@ public:
             if (CurrentResultSet_ < static_cast<i64>(ResultSetSizes_.size())) {
                 MakeLocalCall(CreateResultSetRequest(QueryId_, CurrentResultSet_, SentRowsInCurrRS_), ctx);
             } else {
-                SRC_LOG_T("finish", QueryId_);
+                SRC_LOG_T("finish");
                 Request_->FinishStream(Ydb::StatusIds::SUCCESS);
                 this->Die(ctx);
             }

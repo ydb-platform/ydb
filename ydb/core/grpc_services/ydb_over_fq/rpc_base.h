@@ -7,13 +7,24 @@
 #include <ydb/core/grpc_services/local_grpc/local_grpc.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 
-#define SRC_LOG_T(s, ...) LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, LogCtx(__VA_ARGS__) << s)
-#define SRC_LOG_D(s, ...) LOG_DEBUG_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, LogCtx(__VA_ARGS__) << s)
-#define SRC_LOG_I(s, ...) LOG_INFO_S(ctx,  NKikimrServices::FQ_INTERNAL_SERVICE, LogCtx(__VA_ARGS__) << s)
-#define SRC_LOG_W(s, ...) LOG_WARN_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, LogCtx(__VA_ARGS__) << s)
-#define SRC_LOG_N(s, ...) LOG_NOTICE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, LogCtx(__VA_ARGS__) << s)
-#define SRC_LOG_E(s, ...) LOG_ERROR_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, LogCtx(__VA_ARGS__) << s)
-#define SRC_LOG_C(s, ...) LOG_CRIT_S(ctx,  NKikimrServices::FQ_INTERNAL_SERVICE, LogCtx(__VA_ARGS__) << s)
+#define LOG_WITH_QUERY_ID(LEVEL, QUERY_ID, STRM) LOG_LOG_S(ctx, NActors::NLog::PRI_ ## LEVEL, NKikimrServices::FQ_INTERNAL_SERVICE, (TLogCtx{.Owner_ = *this, .QueryId_ = QUERY_ID}) << STRM)
+
+#define LOG_WITHOUT_QUERY_ID(LEVEL, STRM) LOG_LOG_S(ctx, NActors::NLog::PRI_ ## LEVEL, NKikimrServices::FQ_INTERNAL_SERVICE, TLogCtx{.Owner_ = *this} << STRM)
+
+#define SRC_LOG_CHOICE(_1, _2, _3, NAME, ...) NAME
+
+#define SRC_LOG(...) SRC_LOG_CHOICE(__VA_ARGS__, LOG_WITH_QUERY_ID, LOG_WITHOUT_QUERY_ID)(__VA_ARGS__)
+
+// both should work:
+// * SRC_LOG_T(queryId, some << stream)
+// * SRC_LOG_T(some << stream)
+#define SRC_LOG_T(...) SRC_LOG(TRACE, __VA_ARGS__)
+#define SRC_LOG_D(...) SRC_LOG(DEBUG, __VA_ARGS__)
+#define SRC_LOG_I(...) SRC_LOG(INFO, __VA_ARGS__)
+#define SRC_LOG_W(...) SRC_LOG(WARN, __VA_ARGS__)
+#define SRC_LOG_N(...) SRC_LOG(NOTICE, __VA_ARGS__)
+#define SRC_LOG_E(...) SRC_LOG(ERROR, __VA_ARGS__)
+#define SRC_LOG_C(...) SRC_LOG(CRIT, __VA_ARGS__)
 
 namespace NKikimr::NGRpcService::NYdbOverFq {
 
@@ -103,16 +114,6 @@ public:
     using TBase::Request_;
 
 protected:
-    TStringBuilder LogCtx(TStringBuf queryId = "") {
-        auto builder = TStringBuilder{} << "YdbOverFq::" << TDerived::RpcName << " actorId: " << SelfId().ToString();
-        if (!queryId.empty()) {
-            builder << " queryId: " << queryId;
-        } else if (!QueryId_.empty()) {
-            builder << " queryId: " << QueryId_;
-        }
-        builder << ' ';
-        return builder;
-    }
 
     // create query
 
@@ -251,8 +252,29 @@ protected:
         TCaller::MakeLocalCall(std::forward<TRequest>(req), Request_, ctx);
     }
 
+    struct TLogCtx {
+        TRpcBase& Owner_;
+        TStringBuf QueryId_ = "";
+    };
+
+    friend TStringBuilder& operator<<(TStringBuilder& out, const TLogCtx& ctx) {
+        if (ctx.Owner_.LogCtx_.empty()) {
+            ctx.Owner_.LogCtx_ = TStringBuilder{} << "YdbOverFq::" << TDerived::RpcName << " actorId: " << ctx.Owner_.SelfId().ToString();
+        }
+
+        out << ctx.Owner_.LogCtx_;
+        if (!ctx.QueryId_.empty()) {
+            out << " queryId: " << ctx.QueryId_;
+        } else if (!ctx.Owner_.QueryId_.empty()) {
+            out << " queryId: " << ctx.Owner_.QueryId_;
+        }
+        out << ' ';
+        return out;
+    }
+
 private:
     WaitRetryPolicy::IRetryState::TPtr WaitRetryState_;
+    TString LogCtx_;
     TString QueryId_;
 };
 

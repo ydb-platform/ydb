@@ -21,14 +21,14 @@ public:
     }
 
     void Handle(const FederatedQuery::CreateQueryResult& result, const TActorContext& ctx) {
-        SRC_LOG_T("created query", result.query_id());
+        SRC_LOG_T(result.query_id(), "created query");
 
         WaitForTermination(result.query_id(), ctx);
     }
 
     // WaitForTermination
     void OnQueryTermination(const TString& queryId, FederatedQuery::QueryMeta_ComputeStatus status, const TActorContext& ctx) {
-        SRC_LOG_I("finished query execution with status " << FederatedQuery::QueryMeta::ComputeStatus_Name(status), queryId);
+        SRC_LOG_I(queryId, "finished query execution with status " << FederatedQuery::QueryMeta::ComputeStatus_Name(status));
 
         // Whether query is successful or not, we want to call DescribeQuery
         //   to get either AST and statistics or for issues
@@ -41,7 +41,7 @@ public:
         if (status != FederatedQuery::QueryMeta_ComputeStatus_COMPLETED) {
             TString errorMsg = TStringBuilder{} << "created query " << result.query().meta().common().id() <<
                 " finished with non-success status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(status);
-            SRC_LOG_I("error: " << errorMsg, result.query().meta().common().id());
+            SRC_LOG_I(result.query().meta().common().id(), "error: " << errorMsg);
 
             NYql::TIssues issues;
             issues.AddIssue(std::move(errorMsg));

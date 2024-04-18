@@ -33,28 +33,6 @@
 
 namespace NYql {
 
-static TString JoinStrings(const TVector<TString>& parts) {
-    TString result;
-    for (int i = 0; i < std::ssize(parts); ++i) {
-        if (i > 0) {
-            result += ",";
-        }
-        result += parts[i];
-    }
-    return result;
-}
-
-static TVector<TString> SplitString(const TStringBuf& data) {
-    TVector<TString> result;
-    const char* pos = data.begin();
-    while (pos < data.end()) {
-        const char* nextPtr = std::find(pos, data.end(), ',');
-        result.push_back(TString(pos, nextPtr - pos));
-        pos = nextPtr + 1;
-    }
-    return result;
-}
-
 using namespace NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NUdf;
@@ -291,11 +269,6 @@ bool TYtTableStatInfo::Validate(const TExprNode& node, TExprContext& ctx) {
             VALIDATE_FIELD(ModifyTime)
         else
             VALIDATE_FIELD(Revision)
-        else if (name->Content() == TStringBuf("PrimaryKey")) {
-            if (!EnsureAtom(*value, ctx)) {
-                return false;
-            }
-        }
         else {
             ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Unsupported table stat option: " << name->Content()));
             return false;
@@ -329,9 +302,6 @@ void TYtTableStatInfo::Parse(TExprBase node) {
             HANDLE_FIELD(ModifyTime)
         else
             HANDLE_FIELD(Revision)
-        else if (setting.Name().Value() == TStringBuf("PrimaryKey")) {
-            PrimaryKey = SplitString(setting.Value().Cast<TCoAtom>().Value());
-        }
         else {
             YQL_ENSURE(false, "Unexpected option " << setting.Name().Value());
         }
@@ -358,19 +328,8 @@ TExprBase TYtTableStatInfo::ToExprNode(TExprContext& ctx, const TPositionHandle&
         ADD_FIELD(DataSize)
         ADD_FIELD(ChunkCount)
         ADD_FIELD(ModifyTime)
-        ADD_FIELD(Revision);
-
-    if (PrimaryKey) {
-        statBuilder
-        .Add()
-            .Name()
-                .Value(TStringBuf("PrimaryKey"), TNodeFlags::Default)
-            .Build()
-            .Value<TCoAtom>()
-                .Value(JoinStrings(*PrimaryKey))
-            .Build()
-        .Build();
-    }
+        ADD_FIELD(Revision)
+        ;
 
 #undef ADD_FIELD
 

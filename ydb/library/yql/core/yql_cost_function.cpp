@@ -32,13 +32,13 @@ bool NDq::operator < (const NDq::TJoinColumn& c1, const NDq::TJoinColumn& c2) {
 
 /**
  * Compute the cost and output cardinality of a join
- *
+ * 
  * Currently a very basic computation targeted at GraceJoin
- *
+ * 
  * The build is on the right side, so we make the build side a bit more expensive than the probe
 */
 
-TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats,
+TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
     const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys, EJoinAlgoType joinAlgo, const IProviderContext& ctx) {
 
     double newCard;
@@ -82,14 +82,14 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
     double cost = ctx.ComputeJoinCost(leftStats, rightStats, newCard, newByteSize, joinAlgo)
         + leftStats.Cost + rightStats.Cost;
 
-    auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost,
+    auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost, 
         leftKeyColumns ? leftStats.KeyColumns : ( rightKeyColumns ? rightStats.KeyColumns : TOptimizerStatistics::EmptyColumns));
     result.Selectivity = selectivity;
     return result;
 }
 
 
-TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats,
+TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinAlgoType joinAlgo, const IProviderContext& ctx) {
 
     TVector<TString> leftJoinKeys;

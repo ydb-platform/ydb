@@ -1109,7 +1109,6 @@ public:
                         .AddAttribute(TString("data_weight"))
                         .AddAttribute(TString("chunk_count"))
                         .AddAttribute(TString("modification_time"))
-                        .AddAttribute(TString("schema"))
                         .AddAttribute(TString("sorted_by"))
                         .AddAttribute(TString("revision"))
                         .AddAttribute(TString("content_revision"))
@@ -1126,7 +1125,6 @@ public:
                     statInfo->ModifyTime = TInstant::ParseIso8601(strModifyTime).Seconds();
                     statInfo->TableRevision = attrs["revision"].IntCast<ui64>();
                     statInfo->Revision = GetContentRevision(attrs);
-                    statInfo->PrimaryKey = GetPrimaryKey(attrs);
                     TRunResult result;
                     result.OutTableStats.emplace_back(statInfo->Id, statInfo);
                     result.SetSuccess();
@@ -2463,7 +2461,6 @@ private:
                 auto rowCount = attrs[isDynamic ? "chunk_row_count" : "row_count"].AsInt64();
                 statInfo->RecordsCount = rowCount;
                 statInfo->DataSize = GetDataWeight(attrs).GetOrElse(0);
-                statInfo->PrimaryKey = GetPrimaryKey(attrs);
                 statInfo->ChunkCount = attrs["chunk_count"].AsInt64();
                 TString strModifyTime = attrs["modification_time"].AsString();
                 statInfo->ModifyTime = TInstant::ParseIso8601(strModifyTime).Seconds();
@@ -4629,7 +4626,6 @@ private:
                     statInfo->Id = attrs["id"].AsString();
                     statInfo->RecordsCount = GetTableRowCount(attrs);
                     statInfo->DataSize = GetDataWeight(attrs).GetOrElse(0);
-                    statInfo->PrimaryKey = GetPrimaryKey(attrs);
                     statInfo->ChunkCount = attrs["chunk_count"].AsInt64();
                     TString strModifyTime = attrs["modification_time"].AsString();
                     statInfo->ModifyTime = TInstant::ParseIso8601(strModifyTime).Seconds();

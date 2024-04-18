@@ -244,9 +244,9 @@ private:
             }
         } else {
             if (section.Paths().Size() == 1) {
-                auto tableStat = TYtTableBaseInfo::GetStat(section.Paths().Item(0).Table());
-                if (tableStat->PrimaryKey) {
-                    Ctx->PrimaryKeyHolder.push_back(std::make_unique<TVector<TString>>(*tableStat->PrimaryKey));
+                auto rowSpec = TYtTableBaseInfo::GetRowSpec(section.Paths().Item(0).Table());
+                if (rowSpec) {
+                    Ctx->PrimaryKeyHolder.push_back(std::make_unique<TVector<TString>>(rowSpec->SortMembers));
                     stat = std::make_shared<TOptimizerStatistics>(BaseTable, 0.0, 0, 0.0, 0.0, *Ctx->PrimaryKeyHolder.back());
                 } else {
                     stat = std::make_shared<TOptimizerStatistics>();

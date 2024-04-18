@@ -295,21 +295,6 @@ TMaybe<ui64> GetDataWeight(const NYT::TNode& tableAttrs) {
     return Nothing();
 }
 
-TMaybe<TVector<TString>> GetPrimaryKey(const NYT::TNode& tableAttrs) {
-    if (!tableAttrs.AsMap().contains("schema")) {
-        return Nothing();
-    }
-
-    TVector<TString> key;
-    for (auto& schemaNode : tableAttrs["schema"].AsList()) {
-        if (schemaNode.AsMap().contains("sort_order")) {
-            key.push_back(schemaNode["name"].AsString());
-        }
-    }
-    return key;
-}
-
-
 ui64 GetTableRowCount(const NYT::TNode& tableAttrs) {
     return NYT::GetBool(tableAttrs[TStringBuf("dynamic")])
         ? tableAttrs[TStringBuf("chunk_row_count")].AsInt64()

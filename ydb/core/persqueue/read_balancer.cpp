@@ -514,6 +514,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
                 partitionsInfo[p.GetPartition()].KeyRange.DeserializeFromProto(p.GetKeyRange());
             }
 
+            newPartitionsIds.push_back(p.GetPartition());
             newPartitions.push_back(TPartInfo{p.GetPartition(), p.GetTabletId(), 0, partitionsInfo[p.GetPartition()].KeyRange});
 
             ++NumActiveParts;

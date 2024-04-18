@@ -53,7 +53,7 @@ struct TPartition {
 };
 
 // Multiple partitions balancing together always in one reading session
-struct TPartitionFamilty {
+struct TPartitionFamily {
     enum class EStatus {
         Active,    // The family are reading
         Releasing, // The family is waiting for partition to be released
@@ -85,8 +85,10 @@ struct TPartitionFamilty {
     // Reading sessions that have a list of partitions to read and these sessions can read this family
     std::unordered_map<TActorId, TSession*> SpecialSessions;
 
-    TPartitionFamilty(TConsumer& consumerInfo, size_t id, std::vector<ui32>&& partitions);
-    ~TPartitionFamilty() = default;
+    TPartitionFamily(TConsumer& consumerInfo, size_t id, std::vector<ui32>&& partitions);
+    ~TPartitionFamily() = default;
+
+    bool IsLonely() const;
 
     // Releases all partitions of the family.
     void Release(const TActorContext& ctx, EStatus targetStatus = EStatus::Free);
@@ -94,7 +96,7 @@ struct TPartitionFamilty {
     // Return true if all partitions has been unlocked.
     bool Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx);
     // Processes the signal that the reading session has ended.
-    void Reset();
+    bool Reset(const TActorContext& ctx);
     // Starts reading the family in the specified reading session.
     void StartReading(TSession& session, const TActorContext& ctx);
     // Add partitions to the family.
@@ -104,6 +106,8 @@ struct TPartitionFamilty {
     void ActivatePartition(ui32 partitionId);
     // The partition became inactive
     void InactivatePartition(ui32 partitionId);
+
+    void ClassifyPartitions();
 
     TString DebugStr() const;
 
@@ -129,7 +133,7 @@ private:
 };
 
 struct TPartitionFamilyComparator {
-    bool operator()(const TPartitionFamilty* lhs, const TPartitionFamilty* rhs) const {
+    bool operator()(const TPartitionFamily* lhs, const TPartitionFamily* rhs) const {
         if (lhs->ActivePartitionCount != rhs->ActivePartitionCount) {
             return lhs->ActivePartitionCount < rhs->ActivePartitionCount;
         }
@@ -140,23 +144,25 @@ struct TPartitionFamilyComparator {
     }
 };
 
-using TOrderedPartitionFamilies = std::set<TPartitionFamilty*, TPartitionFamilyComparator>;
+using TOrderedPartitionFamilies = std::set<TPartitionFamily*, TPartitionFamilyComparator>;
 
 struct TConsumer {
+    friend struct TPartitionFamily;
+
     TBalancer& Balancer;
 
     TString ConsumerName;
 
     size_t NextFamilyId;
-    std::unordered_map<size_t, const std::unique_ptr<TPartitionFamilty>> Families;
+    std::unordered_map<size_t, const std::unique_ptr<TPartitionFamily>> Families;
 
     // Mapping the IDs of the partitions to the families they belong to
-    std::unordered_map<ui32, TPartitionFamilty*> PartitionMapping;
+    std::unordered_map<ui32, TPartitionFamily*> PartitionMapping;
     // All reading sessions in which the family is currently being read.
-    std::unordered_map<TActorId, TSession*> ReadingSessions;
+    std::unordered_map<TActorId, TSession*> Session;
 
     // Families is not reading now.
-    std::unordered_map<size_t, TPartitionFamilty*> UnreadableFamilies;
+    std::unordered_map<size_t, TPartitionFamily*> UnreadableFamilies;
 
     std::unordered_map<ui32, TPartition> Partitions;
 
@@ -173,14 +179,15 @@ struct TConsumer {
     ui32 NextStep();
 
     void RegisterPartition(ui32 partitionId, const TActorContext& ctx);
-    void UnregisterPartition(ui32 partitionId);
+    void UnregisterPartition(ui32 partitionId, const TActorContext& ctx);
     void InitPartitions(const TActorContext& ctx);
 
-    void CreateFamily(std::vector<ui32>&& partitions, const TActorContext& ctx);
-    TPartitionFamilty* FindFamily(ui32 partitionId);
+    TPartitionFamily* CreateFamily(std::vector<ui32>&& partitions, const TActorContext& ctx);
+    TPartitionFamily* CreateFamily(std::vector<ui32>&& partitions, TPartitionFamily::EStatus status, const TActorContext& ctx);
+    TPartitionFamily* FindFamily(ui32 partitionId);
 
     void RegisterReadingSession(TSession* session, const TActorContext& ctx);
-    void UnregisterReadingSession(TSession* session);
+    void UnregisterReadingSession(TSession* session, const TActorContext& ctx);
 
     bool Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx);
 
@@ -198,8 +205,6 @@ struct TConsumer {
     bool ScalingSupport() const;
 
 private:
-    void Release(TPartitionFamilty* family, const TActorContext& ctx);
-
     TString GetPrefix() const;
 };
 
@@ -264,6 +269,7 @@ struct TStatistics {
 };
 
 class TBalancer {
+    friend struct TConsumer;
 public:
     TBalancer(TPersQueueReadBalancer& topicActor);
 

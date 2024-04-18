@@ -7,7 +7,7 @@ namespace NYql::NDq {
 EJoinKind GetEquivalentJoinByAlgebraicProperties(EJoinKind joinKind) {
     switch (joinKind) {
         case EJoinKind::Exclusion:
-            return EJoinKind::InnerJoin;
+            return EJoinKind::OuterJoin;
         case EJoinKind::LeftOnly:
             return EJoinKind::LeftJoin;
         default:

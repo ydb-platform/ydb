@@ -245,7 +245,7 @@ class BaseTenant(abc.ABC):
         for n in self.kikimr_cluster.nodes:
             if n not in self.bootstraped_nodes:
                 self.wait_bootstrap(n)
-            assert self.get_actor_count(n, "GRPC_PROXY") > 0, "Node {} is died".format(n)
+            assert self.get_actor_count(n, "GRPC_PROXY") > 0, "Node {} died".format(n)
 
     def wait_bootstrap(self, node_index=None, wait_time=yatest_common.plain_or_under_sanitizer(90, 400)):
         if node_index is None:

@@ -4675,6 +4675,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
+            CREATE OBJECT mysasignature (TYPE SECRET) WITH (value = "mysasignaturevalue");
+
             CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="my-bucket",

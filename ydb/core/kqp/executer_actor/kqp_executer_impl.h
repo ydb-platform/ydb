@@ -1581,7 +1581,7 @@ protected:
     }
 
     void GetSecretsSnapshot() {
-        RegisterDescribeSecretsActor(this->SelfId(), UserToken ? UserToken->GetUserSID() : "", SecretNames, this->ActorContext(), MaximalSecretsSnapshotWaitTime);
+        RegisterDescribeSecretsActor(this->SelfId(), UserToken ? UserToken->GetUserSID() : "", SecretNames, this->ActorContext().ActorSystem(), MaximalSecretsSnapshotWaitTime);
     }
 
     void GetResourcesSnapshot() {

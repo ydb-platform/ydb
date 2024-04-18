@@ -23,6 +23,10 @@ class TestStatus(Enum):
     SKIP = 3
     MUTE = 4
 
+    @property
+    def is_error(self):
+        return self in (TestStatus.FAIL, TestStatus.ERROR)
+
     def __lt__(self, other):
         return self.value < other.value
 

@@ -4,7 +4,7 @@
         th {
             text-transform: uppercase;
         }
-        
+
         th, td {
             padding: 5px;
         }
@@ -27,6 +27,13 @@
 
         span.test_mute {
             color: blue;
+        }
+        button.copy {
+            float: right;
+            cursor: pointer;
+        }
+        button.copy:after {
+            content: "Copy"
         }
         table > tbody > tr > td:nth-child(2),
         table > tbody > tr > td:nth-child(3),
@@ -64,18 +71,12 @@
             );
         }
         function copyOnPress(event) {
-            // ctrl or cmd
-            if (!event.ctrlKey && !event.metaKey) {
-                return;
-            }
-            if (event.target.matches("td") && event.target.cellIndex === 0) {
-                event.preventDefault();
-                copyTestNameToClipboard(event.target.textContent)
-            }
+            event.preventDefault();
+            copyTestNameToClipboard(event.target.previousElementSibling.textContent)
         }
 
         document.addEventListener("DOMContentLoaded", function() {
-            const els = document.getElementsByClassName("result-table");
+            const els = document.getElementsByClassName("copy");
             for (let i = 0; i < els.length; i++) {
                 els[i].addEventListener('click', copyOnPress);
             }
@@ -102,7 +103,10 @@
     <tbody>
     {% for t in tests[status] %}
     <tr>
-        <td>{{ t.full_name }}</td>
+        <td>
+            <span>{{ t.full_name }}</span>
+            {% if status.is_error %}<button class="copy" title="Copy to clipboard"></button>{% endif %}
+        </td>
         <td><span title="{{ t.elapsed }}s">{{ t.elapsed_display }}</span></td>
         <td>
             <span class="test_status test_{{ t.status_display }}">{{ t.status_display }}</span>

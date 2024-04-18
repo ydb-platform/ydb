@@ -212,7 +212,16 @@ public:
         *response.mutable_result()->mutable_result_set() = result.result_set();
 
         TString respSerialized;
-        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&respSerialized);
+        if (!response.SerializeToString(&respSerialized)) {
+            NYql::TIssues issues;
+            auto issueMsg = TStringBuilder{} << "failed to serialize ResultSet[" << CurrentResultSet_ << "][" <<
+                SentRowsInCurrRS_ << ":" << (SentRowsInCurrRS_ + result.result_set().rows_size()) << "]";
+            issues.AddIssue(issueMsg);
+            issues.back().SetCode(NYql::TIssuesIds::CORE_EXEC, NYql::TSeverityIds::S_ERROR);
+            SRC_LOG_I("error: " << issueMsg);
+            Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
+            return;
+        }
 
         Request_->SendSerializedResult(std::move(respSerialized), Ydb::StatusIds::SUCCESS);
         SentRowsInCurrRS_ += result.result_set().rows_size();

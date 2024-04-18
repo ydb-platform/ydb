@@ -45,7 +45,13 @@ public:
         NYql::IssuesToMessage(issues, response.mutable_issues());
 
         TString serialized;
-        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&serialized);
+        if (!response.SerializeToString(&serialized)) {
+            LOG_ERROR_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "YdbOverFq::" << TDerived::RpcName << " actorId: " << TActorBootstrapped<TDerived>::SelfId().ToString() <<
+                " couldn't serialize response, status: " << Ydb::StatusIds::StatusCode_Name(status) << ", issues: " << issues.ToOneLineString()
+            );
+            FinishStream(Ydb::StatusIds::INTERNAL_ERROR, ctx);
+            return;
+        }
         Request_->SendSerializedResult(std::move(serialized), status);
         FinishStream(status, ctx);
     }

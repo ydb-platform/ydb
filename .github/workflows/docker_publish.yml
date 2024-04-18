@@ -61,12 +61,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Log in to the Docker Hub
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          username: ${{ vars.DOCKER_HUB_USER_NAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v4
         with:
           images: |
             ghcr.io/${{ github.repository_owner }}/local-ydb
+            ydbplatform/local-ydb
           labels: |
             ydb.revision=${{ steps.get-sha.outputs.SHA }}
             org.opencontainers.image.revision=${{ steps.get-sha.outputs.SHA }}

@@ -389,18 +389,18 @@ class FederatedQueryClient(object):
         response.operation.result.Unpack(result)
         return FederatedQueryClient.Response(response.operation.issues, result, check_issues)
 
-    @retry.retry_intrusive
-    def create_ydb_connection(self, name, database, endpoint, visibility=fq.Acl.Visibility.PRIVATE,
-                              auth_method=AuthMethod.no_auth(), check_issues=True):
-        request = fq.CreateConnectionRequest()
-        request.content.name = name
-        ydb = request.content.setting.ydb_database
-        ydb.database = database
-        ydb.endpoint = endpoint
+    # @retry.retry_intrusive
+    # def create_ydb_connection(self, name, database, endpoint, visibility=fq.Acl.Visibility.PRIVATE,
+    #                           auth_method=AuthMethod.no_auth(), check_issues=True):
+    #     request = fq.CreateConnectionRequest()
+    #     request.content.name = name
+    #     ydb = request.content.setting.ydb_database
+    #     ydb.database = database
+    #     ydb.endpoint = endpoint
 
-        ydb.auth.CopyFrom(auth_method)
-        request.content.acl.visibility = visibility
-        return self.create_connection(request, check_issues)
+    #     ydb.auth.CopyFrom(auth_method)
+    #     request.content.acl.visibility = visibility
+    #     return self.create_connection(request, check_issues)
 
     @retry.retry_intrusive
     def create_yds_connection(self, name, database=None, endpoint=None, database_id=None,
@@ -453,16 +453,13 @@ class FederatedQueryClient(object):
         request.content.acl.visibility = visibility
         return self.create_connection(request, check_issues)
 
-    def create_ydb_connection(self, name, database_name, database_id, login, password,
+    def create_ydb_connection(self, name, database_id, 
                               secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
         request = fq.CreateConnectionRequest()
         request.content.name = name
         ydb = request.content.setting.ydb_database
-        #ydb.database_name = database_name
         ydb.database_id = database_id
         ydb.secure = secure
-        #ydb.login = login
-        #ydb.password = password
 
         ydb.auth.CopyFrom(auth_method)
         request.content.acl.visibility = visibility

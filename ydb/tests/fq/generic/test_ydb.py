@@ -19,10 +19,7 @@ class TestYdb:
 
         fq_client.create_ydb_connection(
             name=conn_name,
-            database_name=settings.ydb.dbname,
-            database_id='/local',
-            login=settings.ydb.username,
-            password=settings.ydb.password,
+            database_id=settings.ydb.dbname,
         )
 
         sql = fR'''

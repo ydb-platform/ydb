@@ -322,7 +322,7 @@ message StreamReadMessage {
         string reader_name = 3;
         // Direct reading from a partition node.
         bool direct_read = 4;
-        // Indicates that the SDK supports autoscaling
+        // Indicates that the SDK supports autoscaling.
         bool autoscaling_support = 5;
 
         message TopicReadSettings {
@@ -562,8 +562,8 @@ message StreamReadMessage {
         int64 direct_read_id = 2;
     }
 
-    // Signal from server that client has finished reading the partition and all messages has been read.
-    // Once a partition has been finished no further messages will ever arrive on that partition.
+    // Signal from server that client has finished reading the partition and all messages have been read.
+    // Once a partition has been finished no further messages will ever arrive to that partition.
     // This command is a hint to the client to commit offsets, after which the child partitions will be balanced independently in different reading sessions.
     // Unlike StopPartitionSessionRequest, the client does not have to close the reading session.
     // Client should not send a response to the command.
@@ -571,7 +571,7 @@ message StreamReadMessage {
         // Partition session identifier.
         int64 partition_session_id = 1;
 
-        // Ids of partitions which was merged with the ended partition.
+        // Ids of partitions which were merged with the ended partition.
         repeated int64 adjacent_partition_ids = 2;
         // Ids of partitions which was formed when the ended partition was split or merged.
         repeated int64 child_partition_ids = 3;
@@ -817,49 +817,50 @@ message AlterConsumer {
 enum AutoscalingStrategy {
     // The autoscaling algorithm is not specified. The default value will be used.
     UNSPECIFIED = 0;
-    // Autoscaling is disabled.
+    // The autoscaling is disabled.
     DISABLED = 1;
-    // The autoscaling algorithm will increase the number of partitions and will never decrease them.
+    // The autoscaling algorithm will increase partitions count depending on the load characteristics.
+    // The autoscaling algorithm will never decrease the number of partitions.
     SCALE_UP = 2;
-    // The autoscaling algorithm will both increase and decrease the number of partitions depending on the current load.
+    // The autoscaling algorithm will both increase and decrease partitions count depending on the load characteristics.
     SCALE_UP_AND_DOWN = 3;
 }
 
 // Partitioning settings for topic.
 message PartitioningSettings {
-    // Minimum partition count auto merge would stop working at.
+    // Auto merge would stop working when the partitions count reaches min_active_partitions
     // Zero value means default - 1.
     int64 min_active_partitions = 1 [(Ydb.value) = ">= 0"];
-    // Maximum partition count auto merge would stop working at.
+    // Auto split would stop working when the partitions count reaches max_active_partitions
     // Zero value means default - 1.
     int64 max_active_partitions = 3 [(Ydb.value) = ">= 0"];
     // Limit for total partition count, including active (open for write) and read-only partitions.
     // Zero value means default - 100.
     // Use max_active_partitions
     int64 partition_count_limit = 2 [(Ydb.value) = ">= 0", deprecated = true];
-    // Settings for autoscaling the partition number
+    // Settings for the partitions count autoscaling.
     AutoscalingSettings autoscaling_settings = 4;
 }
 
 message AutoscalingSettings {
-    // Strategy of autoscaling
+    // Strategy of autoscaling.
     AutoscalingStrategy strategy = 1;
-    // Autoscaling partition write speed options.
+    // Partition write speed autoscaling options.
     AutoscalingPartitionWriteSpeedStrategy partition_write_speed = 2;
 }
 
 message AutoscalingPartitionWriteSpeedStrategy {
-    // The time of exceeding the threshold value, after which the partition will be
-    // autoscaling.
+    //Partition will be autoscaled up (divided into 2 partitions)
+    //after write speed to the partition exceeds scale_up_threshold_percent (in percentage of maximum write speed to the partition) for the period of time threshold_time_seconds
+
+    //Partition will become a candidate to the autoscaling down
+    //after write speed doesn’t reach scale_down_threshold_percent (in percentage of maximum write speed to the partition) for the period of time threshold_time_seconds
+    //This candidate partition will be autoscaled down when other neighbour partition will become a candidate to the autoscaling down and not earlier than a retention period.
+
     // Zero value means default - 300.
     google.protobuf.Duration threshold_time = 1;
-    // The threshold value of the write speed to the partition as a percentage, when exceeded,
-    // the partition will be auto split.
     // Zero value means default - 90.
     int32 scale_up_threshold_percent = 2 [(Ydb.value) = ">= 0"];
-    // The threshold value of the write speed to the partition as a percentage, if it is not reached,
-    // the partition will be auto merged. There is no guarantee that the automatic merge will occur
-    // immediately after the threshold_time expires.
     // Zero value means default - 30.
     int32 scale_down_threshold_percent = 3 [(Ydb.value) = ">= 0"];
 }

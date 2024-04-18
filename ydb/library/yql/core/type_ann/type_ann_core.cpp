@@ -6218,6 +6218,95 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Repeat;
     }
 
+    template<bool WithInitVal>
+    IGraphTransformer::TStatus StaticFoldWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto collection = input->HeadPtr();
+        const auto reduceFunc = input->ChildPtr(2);
+
+        if (HasError(collection->GetTypeAnn(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!collection->GetTypeAnn()) {
+            YQL_ENSURE(collection->Type() == TExprNode::Lambda);
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "Expected either struct or tuple, but got lambda"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        TExprNode::TPtr result = nullptr;
+        if constexpr (WithInitVal) {
+            result = input->ChildPtr(1);
+        }
+
+        TExprNode::TPtr initFunc = nullptr;
+        if constexpr (!WithInitVal) {
+            initFunc = input->ChildPtr(1);
+        }
+
+        if (collection->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct) {
+            for (const auto member : collection->GetTypeAnn()->Cast<TStructExprType>()->GetItems()) {
+                if (!result) {
+                    result = ctx.Expr.Builder(input->Pos())
+                        .Apply(initFunc)
+                            .With(0).Callable("Member")
+                                .Add(0, collection)
+                                .Atom(1, member->GetName())
+                            .Seal().Done()
+                        .Seal()
+                    .Build();
+                } else {
+                    result = ctx.Expr.Builder(input->Pos())
+                        .Apply(reduceFunc)
+                            .With(0, result)
+                            .With(1).Callable("Member")
+                                .Add(0, collection)
+                                .Atom(1, member->GetName())
+                            .Seal().Done()
+                        .Seal()
+                    .Build();
+                }                        
+            }
+        } else if (collection->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
+            for (size_t idx = 0; idx < collection->GetTypeAnn()->Cast<TTupleExprType>()->GetSize(); idx++) {
+                if (!result) {
+                    result = ctx.Expr.Builder(input->Pos())
+                        .Apply(initFunc)
+                            .With(0).Callable("Nth")
+                                .Add(0, collection)
+                                .Atom(1, ToString(idx))
+                            .Seal().Done()
+                        .Seal()
+                    .Build();
+                } else {
+                    result = ctx.Expr.Builder(input->Pos())
+                        .Apply(reduceFunc)
+                            .With(0, result)
+                            .With(1).Callable("Nth")
+                                .Add(0, collection)
+                                .Atom(1, ToString(idx))
+                            .Seal().Done()
+                        .Seal()
+                    .Build();
+                }
+            }
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "Expected either struct or tuple, but got: "
+                << *input->Head().GetTypeAnn()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (result) { 
+            output = result;
+        } else {
+            output = ctx.Expr.Builder(input->Pos()).Callable("Null").Seal().Build();
+        }
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     IGraphTransformer::TStatus TryRemoveAllOptionalsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -11937,6 +12026,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["IfPresent"] = &IfPresentWrapper;
         Functions["StaticMap"] = &StaticMapWrapper;
         Functions["StaticZip"] = &StaticZipWrapper;
+        Functions["StaticFold"] = &StaticFoldWrapper<true>;
+        Functions["StaticFold1"] = &StaticFoldWrapper<false>;
         Functions["TryRemoveAllOptionals"] = &TryRemoveAllOptionalsWrapper;
         Functions["HasNull"] = &HasNullWrapper;
         Functions["TypeOf"] = &TypeOfWrapper;

@@ -88,6 +88,9 @@ void TPersQueueReadBalancer::Die(const TActorContext& ctx) {
         NTabletPipe::CloseClient(ctx, pipe.second.PipeActor);
     }
     TabletPipes.clear();
+    if (PartitionsScaleManager) {
+        PartitionsScaleManager->Die(ctx);
+    }
     TActor<TPersQueueReadBalancer>::Die(ctx);
 }
 
@@ -149,13 +152,21 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
     ctx.Send(ctx.SelfID, new TEvPersQueue::TEvUpdateACL());
 }
 
-void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx) {
+void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext &ctx) {
     LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, TStringBuilder() << "TPersQueueReadBalancer::HandleWakeup");
 
-    GetStat(ctx); //TODO: do it only on signals from outerspace right now
-
-    auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
-    ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
+    switch (ev->Get()->Tag) {
+        case TPartitionScaleManager::TRY_SCALE_REQUEST_WAKE_UP_TAG: {
+            if (PartitionsScaleManager && SplitMergeEnabled(TabletConfig)) {
+                PartitionsScaleManager->TrySendScaleRequest(ctx);
+            }
+        }
+        default: {
+            GetStat(ctx); //TODO: do it only on signals from outerspace right now
+            auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
+            ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
+        }
+    }
 }
 
 void TPersQueueReadBalancer::HandleUpdateACL(TEvPersQueue::TEvUpdateACL::TPtr&, const TActorContext &ctx) {
@@ -494,6 +505,14 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     std::vector<std::pair<ui64, TTabletInfo>> newTablets;
     std::vector<std::pair<ui32, ui32>> newGroups;
     std::vector<std::pair<ui64, TTabletInfo>> reallocatedTablets;
+    
+    if (SplitMergeEnabled(TabletConfig)) {
+        if (!PartitionsScaleManager) {
+            PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Topic, DatabasePath, record);
+        } else {
+            PartitionsScaleManager->UpdateBalancerConfig(record);
+        }
+    }
 
     for (auto& p : record.GetTablets()) {
         auto it = TabletsInfo.find(p.GetTabletId());
@@ -525,8 +544,12 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         if (it == PartitionsInfo.end()) {
             Y_ABORT_UNLESS(group <= TotalGroups && group > prevGroups || TotalGroups == 0);
             Y_ABORT_UNLESS(p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId || NextPartitionId == 0);
-            partitionsInfo[p.GetPartition()] = {p.GetTabletId(), EPS_FREE, TActorId(), group};
-            newPartitions.push_back(TPartInfo{p.GetPartition(), p.GetTabletId(), group});
+            partitionsInfo[p.GetPartition()] = {p.GetTabletId(), EPS_FREE, TActorId(), group, {}};
+            if (SplitMergeEnabled(TabletConfig)) {
+                partitionsInfo[p.GetPartition()].KeyRange.DeserializeFromProto(p.GetKeyRange());
+            }
+
+            newPartitions.push_back(TPartInfo{p.GetPartition(), p.GetTabletId(), group, partitionsInfo[p.GetPartition()].KeyRange});
 
             if (!NoGroupsInBase)
                 newGroups.push_back(std::make_pair(group, p.GetPartition()));
@@ -564,7 +587,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             }
             auto& group = it->second;
             group.FreePartition(newPartition.PartitionId);
-            group.PartitionsInfo[newPartition.PartitionId] = {newPartition.TabletId, EPS_FREE, TActorId(), groupId};
+            group.PartitionsInfo[newPartition.PartitionId] = {newPartition.TabletId, EPS_FREE, TActorId(), groupId, newPartition.KeyRange};
             group.ScheduleBalance(ctx);
         }
     }
@@ -717,7 +740,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
     AggregatedStats.Cookies.erase(tabletId);
 
     for (const auto& partRes : record.GetPartResult()) {
-        auto partitionId = partRes.GetPartition();
+        ui32 partitionId = partRes.GetPartition();
         auto generation = partRes.GetGeneration();
         auto cookie = partRes.GetCookie();
         for (const auto& consumer : partRes.GetConsumerResult()) {
@@ -735,12 +758,20 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
         if (!PartitionsInfo.contains(partRes.GetPartition())) {
             continue;
         }
+        if (SplitMergeEnabled(TabletConfig) && PartitionsScaleManager) {
+            TPartitionScaleManager::TPartitionInfo scalePartitionInfo = {
+                .Id = partitionId,
+                .KeyRange = PartitionsInfo[partRes.GetPartition()].KeyRange
+            };
+            PartitionsScaleManager->HandleScaleStatusChange(scalePartitionInfo, partRes.GetScaleStatus(), ctx);
+        }
+        partRes.GetScaleStatus();
 
-        AggregatedStats.AggrStats(partRes.GetPartition(), partRes.GetPartitionSize(), partRes.GetUsedReserveSize());
-        AggregatedStats.AggrStats(partRes.GetAvgWriteSpeedPerSec(), partRes.GetAvgWriteSpeedPerMin(),
+        AggregatedStats.AggrStats(partitionId, partRes.GetPartitionSize(), partRes.GetUsedReserveSize());
+        AggregatedStats.AggrStats(partRes.GetAvgWriteSpeedPerSec(), partRes.GetAvgWriteSpeedPerMin(), 
             partRes.GetAvgWriteSpeedPerHour(), partRes.GetAvgWriteSpeedPerDay());
-        AggregatedStats.Stats[partRes.GetPartition()].Counters = partRes.GetAggregatedCounters();
-        AggregatedStats.Stats[partRes.GetPartition()].HasCounters = true;
+        AggregatedStats.Stats[partitionId].Counters = partRes.GetAggregatedCounters();
+        AggregatedStats.Stats[partitionId].HasCounters = true;
     }
 
     if (AggregatedStats.Cookies.empty()) {
@@ -1965,6 +1996,10 @@ void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated
         }
     }
 
+    if (PartitionsScaleManager) {
+        PartitionsScaleManager->UpdateDatabasePath(DatabasePath);
+    }
+
     if (SubDomainPathId && msg->PathId == *SubDomainPathId) {
         const bool outOfSpace = msg->Result->GetPathDescription()
             .GetDomainDescription()
@@ -2115,6 +2150,34 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvWakeupReleasePartition::TPtr &ev, 
     }
 
     group->ReleasePartition(msg->PartitionId, ctx);
+}
+
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx) {
+    if (!SplitMergeEnabled(TabletConfig)) {
+        return;
+    }
+    auto& record = ev->Get()->Record;
+    auto partitionInfoIt = PartitionsInfo.find(record.GetPartitionId());
+    if (partitionInfoIt == PartitionsInfo.end()) {
+        return;
+    }
+
+    if (PartitionsScaleManager) {
+        TPartitionScaleManager::TPartitionInfo scalePartitionInfo = {
+            .Id = record.GetPartitionId(),
+            .KeyRange = partitionInfoIt->second.KeyRange
+        };
+        PartitionsScaleManager->HandleScaleStatusChange(scalePartitionInfo, record.GetScaleStatus(), ctx);
+    }
+}
+
+void TPersQueueReadBalancer::Handle(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx) {
+    if (!SplitMergeEnabled(TabletConfig)) {
+        return;
+    }
+    if (PartitionsScaleManager) {
+        PartitionsScaleManager->HandleScaleRequestResult(ev, ctx);
+    }
 }
 
 } // NPQ

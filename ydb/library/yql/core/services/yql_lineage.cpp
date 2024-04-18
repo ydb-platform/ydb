@@ -249,6 +249,7 @@ private:
             "Skip", 
             "Take", 
             "Sort", 
+            "TopSort", 
             "AssumeSorted", 
             "SkipNullMembers"})) {
             lineage = *CollectLineage(node.Head());

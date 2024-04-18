@@ -10,14 +10,19 @@ set -ex
       (2),
       (3);
     COMMIT;
-
-    CREATE TABLE join_table (number Int32, data UTF8 PRIMARY KEY (number));
-    COMMIT;
-    INSERT INTO join_table (number) VALUES
-      (1, 'ydb10'),
-      (2, 'ydb20'),
-      (3, 'ydb30');
-    COMMIT;
   '
+    # CREATE TABLE join_table (number Int32, data UTF8 PRIMARY KEY (number));
+    # COMMIT;
+    # INSERT INTO join_table (number) VALUES
+    #   (1, 'ydb10'),
+    #   (2, 'ydb20'),
+    #   (3, 'ydb30');
+    # COMMIT;
+
+retVal=$?
+if [ $retVal -ne 0 ]; then
+  echo $retVal
+  exit $retVal
+fi
 
 echo $(date +"%T.%6N") "SUCCESS"

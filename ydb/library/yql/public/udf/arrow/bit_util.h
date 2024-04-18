@@ -16,14 +16,16 @@ inline ui8* CompressAsSparseBitmap(const ui8* src, size_t srcOffset, const ui8* 
 }
 
 inline ui8* DecompressToSparseBitmap(ui8* dstSparse, const ui8* src, size_t srcOffset, size_t count) {
-    if (srcOffset % 8 != 0) {
+    if (srcOffset != 0) {
         size_t offsetBytes = srcOffset >> 3;
         size_t offsetTail = srcOffset & 7;
         src += offsetBytes;
-        for (ui8 i = offsetTail; count > 0 && i < 8; i++, count--) {
-            *dstSparse++ = (*src >> i) & 1u;
+        if (offsetTail != 0) {
+            for (ui8 i = offsetTail; count > 0 && i < 8; i++, count--) {
+                *dstSparse++ = (*src >> i) & 1u;
+            }
+            src++;
         }
-        src++;
     }
     while (count >= 8) {
         ui8 slot = *src++;

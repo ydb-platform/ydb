@@ -696,7 +696,7 @@ TExprNode::TPtr RemoveOptionalReduceOverData(const TExprNode::TPtr& node, TExprC
 }
 
 TExprNode::TPtr PropagateCoalesceWithConstIntoLogicalOps(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (node->Head().IsCallable({"Likely", "AssumeStrict"})) {
+    if (node->Head().IsCallable({"Likely", "AssumeStrict", "AssumeNonStrict"})) {
         const auto value = FromString<bool>(node->Child(1)->Head().Content());
         if (!value) {
             YQL_CLOG(DEBUG, Core) << "PropagateCoalesceWithConst over " << node->Head().Content() << " (false)";
@@ -4387,6 +4387,23 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         if (node->Head().IsCallable("Nothing")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return ctx.ChangeChild(node->Head(), 0U, ExpandType(node->Pos(), *node->GetTypeAnn(), ctx));
+        }
+
+        if (node->Head().IsCallable("If") && node->Head().ChildrenSize() == 3) {
+            TCoIf childIf(node->HeadPtr());
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return Build<TCoIf>(ctx, node->Pos())
+                .InitFrom(childIf)
+                .ThenValue<TCoNth>()
+                    .InitFrom(TCoNth(node))
+                    .Tuple(childIf.ThenValue())
+                .Build()
+                .ElseValue<TCoNth>()
+                    .InitFrom(TCoNth(node))
+                    .Tuple(childIf.ElseValue())
+                .Build()
+                .Done()
+                .Ptr();
         }
 
         return node;

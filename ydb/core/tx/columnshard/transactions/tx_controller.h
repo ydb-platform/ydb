@@ -24,6 +24,10 @@ public:
         inline bool operator<(const TPlanQueueItem& rhs) const {
             return Step < rhs.Step || (Step == rhs.Step && TxId < rhs.TxId);
         }
+
+        TString DebugString() const {
+            return TStringBuilder() << "step=" << Step << ";txId=" << TxId << ";";
+        }
     };
 
     struct TBasicTxInfo {
@@ -140,6 +144,7 @@ public:
     NEvents::TDataEvents::TCoordinatorInfo BuildCoordinatorInfo(const TTxInfo& txInfo) const;
 
     size_t CleanExpiredTxs(NTabletFlatExecutor::TTransactionContext& txc);
+    TDuration GetTxCompleteLag(ui64 timecastStep) const;
 
     enum class EPlanResult {
         Skipped,

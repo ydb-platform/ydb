@@ -538,6 +538,16 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     }
     result.SocketBacklogSize = config.GetSocketBacklogSize();
 
+    if (config.HasFirstErrorSleep()) {
+        result.FirstErrorSleep = DurationFromProto(config.GetFirstErrorSleep());
+    }
+    if (config.HasMaxErrorSleep()) {
+        result.MaxErrorSleep = DurationFromProto(config.GetMaxErrorSleep());
+    }
+    if (config.HasErrorSleepRetryMultiplier()) {
+        result.ErrorSleepRetryMultiplier = config.GetErrorSleepRetryMultiplier();
+    }
+
     return result;
 }
 
@@ -2677,6 +2687,10 @@ void TLocalPgWireServiceInitializer::InitializeServices(NActors::TActorSystemSet
 
     if (Config.GetLocalPgWireConfig().HasAddress()) {
         settings.Address = Config.GetLocalPgWireConfig().GetAddress();
+    }
+
+    if (Config.GetLocalPgWireConfig().HasTcpNotDelay()) {
+        settings.TcpNotDelay = Config.GetLocalPgWireConfig().GetTcpNotDelay();
     }
 
     setup->LocalServices.emplace_back(

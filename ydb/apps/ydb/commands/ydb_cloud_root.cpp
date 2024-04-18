@@ -2,7 +2,7 @@
 #include "ydb_update.h"
 #include "ydb_version.h"
 
-#include <ydb/public/sdk/cpp/client/iam/iam.h>
+#include <ydb/public/sdk/cpp/client/iam/common/iam.h>
 #include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
 
 #include <filesystem>

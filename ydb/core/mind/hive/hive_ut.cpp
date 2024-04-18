@@ -972,6 +972,91 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(tabletStates[NKikimrWhiteboard::TTabletStateInfo::Dead], drainMovements);
     }
 
+    Y_UNIT_TEST(TestDownAfterDrain) {
+        // 1. Drain node
+        // 2. Create some more tablets
+        // 3. Ensure none of them started on the node
+        // 4. Restart the node
+        // 5. Create more tablets
+        // 6. Ensure that now there are tablets on the node
+
+        const int NUM_NODES = 3;
+        const int NUM_TABLETS = 10;
+        TTestBasicRuntime runtime(NUM_NODES, false);
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NUM_NODES);
+            runtime.DispatchEvents(options);
+        }
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        std::unordered_set<TTabletId> tablets;
+        TActorId senderA = runtime.AllocateEdgeActor(0);
+        auto createTablets = [&] {
+            for (int i = 0; i < NUM_TABLETS; ++i) {
+                THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + tablets.size() + i, tabletType, BINDED_CHANNELS));
+                runtime.SendToPipe(hiveTablet, senderA, ev.Release(), 0, GetPipeConfigWithRetries());
+            }
+            for (int i = 0; i < NUM_TABLETS; ++i) {
+                TAutoPtr<IEventHandle> handle;
+                auto createTabletReply = runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(handle);
+                ui64 tabletId = createTabletReply->Record.GetTabletID();
+                tablets.insert(tabletId);
+            }
+            NTabletPipe::TClientConfig pipeConfig;
+            pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+            for (TTabletId tabletId : tablets) {
+                Ctest << "wait for tablet " << tabletId << Endl;
+                MakeSureTabletIsUp(runtime, tabletId, 0, &pipeConfig);
+            }
+        };
+
+        createTablets();
+
+        ui32 nodeId = runtime.GetNodeId(0);
+        {
+            runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvDrainNode(nodeId));
+            TAutoPtr<IEventHandle> handle;
+            auto drainResponse = runtime.GrabEdgeEventRethrow<TEvHive::TEvDrainNodeResult>(handle, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(drainResponse->Record.GetStatus(), NKikimrProto::EReplyStatus::OK);
+        }
+
+        auto isNodeEmpty = [&](ui32 nodeId) -> bool {
+            bool empty = true;
+            TAutoPtr<IEventHandle> handle;
+            TActorId whiteboard = NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId);
+            runtime.Send(new IEventHandle(whiteboard, senderA, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest()));
+            NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse* wbResponse = runtime.GrabEdgeEventRethrow<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse>(handle);
+            for (const NKikimrWhiteboard::TTabletStateInfo& tabletInfo : wbResponse->Record.GetTabletStateInfo()) {
+                if (tablets.contains(tabletInfo.GetTabletId()) && tabletInfo.GetState() != NKikimrWhiteboard::TTabletStateInfo::Dead) {
+                    Ctest << "Tablet " << tabletInfo.GetTabletId() << "." << tabletInfo.GetFollowerId()
+                        << " is not dead yet (" << NKikimrWhiteboard::TTabletStateInfo::ETabletState_Name(tabletInfo.GetState()) << ")" << Endl;
+                    empty = false;
+                }
+            }
+            return empty;
+        };
+
+        createTablets();
+
+        UNIT_ASSERT(isNodeEmpty(nodeId));
+
+        SendKillLocal(runtime, 0);
+        CreateLocal(runtime, 0);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, 2);
+            runtime.DispatchEvents(options);
+        }
+
+        createTablets();
+
+        UNIT_ASSERT(!isNodeEmpty(nodeId));
+    }
+
     Y_UNIT_TEST(TestCreateSubHiveCreateTablet) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
@@ -6217,6 +6302,45 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         MakeSureTabletIsUp(runtime, dummyTabletId, 0);
         AssertTabletStartedOnNode(runtime, dummyTabletId, 0); // started in allowed domain
+    }
+
+    Y_UNIT_TEST(TestSkipBadNode) {
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        TVector<TTabletId> tablets;
+        TActorId senderB = runtime.AllocateEdgeActor(0);
+        ui32 badNode = runtime.GetNodeId(0);
+
+        TTestActorRuntime::TEventObserver prevObserverFunc;
+        prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvLocal::EvBootTablet) {
+                const auto& record = event->Get<TEvLocal::TEvBootTablet>()->Record;
+                if (event->Recipient.NodeId() == badNode) {
+                    auto* response = new TEvLocal::TEvTabletStatus(
+                        TEvLocal::TEvTabletStatus::EStatus::StatusBootFailed,
+                        TEvTablet::TEvTabletDead::EReason::ReasonBootBSError,
+                        {record.GetInfo().GetTabletID(), record.GetFollowerId()},
+                        record.GetSuggestedGeneration()
+                    );
+                    runtime.Send(new IEventHandle(event->Sender, event->Recipient, response));
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return prevObserverFunc(event);
+        });
+
+        for (int i = 0; i < 3; ++i) {
+            runtime.SendToPipe(hiveTablet, senderB, new TEvHive::TEvCreateTablet(testerTablet, i, tabletType, BINDED_CHANNELS), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            auto createTabletReply = runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(handle);
+            ui64 tabletId = createTabletReply->Record.GetTabletID();
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
     }
 }
 

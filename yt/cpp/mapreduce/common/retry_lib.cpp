@@ -220,10 +220,11 @@ static TMaybe<TDuration> TryGetBackoffDuration(const TErrorResponse& errorRespon
         // chunk client errors
         return config->ChunkErrorsRetryInterval;
     }
-    for (auto code : TVector<int>{
+    for (auto code : {
         NRpc::TransportError,
         NRpc::Unavailable,
         NApi::RetriableArchiveError,
+        NSequoiaClient::SequoiaRetriableError,
         Canceled,
     }) {
         if (allCodes.contains(code)) {

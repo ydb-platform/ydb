@@ -1,6 +1,8 @@
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/public/api/protos/draft/persqueue_common.proto";
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
+
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/node_limits.proto";
@@ -219,11 +221,11 @@ message TMirrorPartitionConfig {
     message TCredentials {
         message IamCredentials {
             optional string Endpoint = 1;
-            optional string ServiceAccountKey = 2;
+            optional string ServiceAccountKey = 2 [(Ydb.sensitive) = true];
         }
         oneof Credentials {
-            string OauthToken = 1;
-            string JwtParams = 2;
+            string OauthToken = 1 [(Ydb.sensitive) = true];
+            string JwtParams = 2 [(Ydb.sensitive) = true];
             IamCredentials Iam = 3;
         }
     }
@@ -785,6 +787,9 @@ message TStatusResponse {
 
         optional int64 UsedReserveSize = 31;
         optional TAggregatedCounters AggregatedCounters = 32;
+
+        optional uint32 Generation = 33;
+        optional uint64 Cookie = 34;
     }
 
     message TConsumerResult {
@@ -985,8 +990,24 @@ message TEvCheckPartitionStatusResponse {
     optional uint64 SeqNo = 2;
 };
 
-// The consumer's reading of the partition is finished
+// The consumer's reading of the partition is finished  (from the partition)
 message TEvReadingPartitionStatusRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+    optional uint32 Generation = 3;
+    optional uint32 Cookie = 4;
+};
+
+// The consumer's reading of the partition is finished (from ReadSession)
+message TEvReadingPartitionFinishedRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+    optional bool ScaleAwareSDK = 3;
+    optional bool StartedReadingFromEndOffset = 4;
+};
+
+// The consumer's reading of the partition is started (from ReadSession)
+message TEvReadingPartitionStartedRequest {
     optional string Consumer = 1;
     optional uint32 PartitionId = 2;
 };

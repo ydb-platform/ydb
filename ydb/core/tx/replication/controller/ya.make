@@ -30,6 +30,7 @@ SRCS(
     target_table.cpp
     target_with_stream.cpp
     tenant_resolver.cpp
+    tx_alter_replication.cpp
     tx_assign_stream_name.cpp
     tx_create_dst_result.cpp
     tx_create_replication.cpp

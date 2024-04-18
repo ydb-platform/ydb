@@ -14,8 +14,8 @@ public:
     explicit TAffinity(const TCpuMask& mask);
     ~TAffinity();
 
-    void Current();
-    void Set() const;
+    void Current(size_t pid = 0);
+    void Set(size_t pid = 0) const;
     bool Empty() const;
 
     operator TCpuMask() const;
@@ -23,17 +23,37 @@ public:
 
 // Scoped affinity setter
 class TAffinityGuard : TNonCopyable {
-    bool Stacked;
+    bool Stacked = false;
     TAffinity OldAffinity;
+    size_t PId;
 
 public:
-    TAffinityGuard(const TAffinity* affinity) {
-        Stacked = false;
+    TAffinityGuard(const TAffinity* affinity, ui64 pid = 0)
+        : PId(pid)
+    {
+        SetAffinity(affinity);
+    }
+
+    TAffinityGuard(ui64 pid = 0)
+        : PId(pid)
+    {
+    }
+
+    bool SetAffinity(const TAffinity* affinity) {
         if (affinity && !affinity->Empty()) {
-            OldAffinity.Current();
-            affinity->Set();
+            if (!Stacked) {
+                OldAffinity.Current(PId);
+            }
+            affinity->Set(PId);
             Stacked = true;
+            return true;
         }
+        return false;
+    }
+
+    bool SetCpuMask(const TCpuMask &cpuMask) {
+        TAffinity affinity(cpuMask);
+        return SetAffinity(&affinity);
     }
 
     ~TAffinityGuard() {
@@ -42,7 +62,7 @@ public:
 
     void Release() {
         if (Stacked) {
-            OldAffinity.Set();
+            OldAffinity.Set(PId);
             Stacked = false;
         }
     }

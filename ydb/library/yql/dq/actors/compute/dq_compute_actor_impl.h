@@ -190,11 +190,9 @@ protected:
                     false
         );
         InitMonCounters(taskCounters);
-        InitializeTask();
         if (ownMemoryQuota) {
             MemoryQuota = InitMemoryQuota();
         }
-        InitializeWatermarks();
     }
 
     void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
@@ -723,6 +721,7 @@ protected:
             }
         } catch (const std::exception& e) {
             error = e.what();
+            CA_LOG_E("Exception: " << error);
         }
         TString& blob = *state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->MutableBlob();
         if (blob && !error.Defined()) {
@@ -821,6 +820,7 @@ protected:
         IDqOutputChannel::TPtr Channel;
         bool HasPeer = false;
         bool Finished = false; // != Channel->IsFinished() // If channel is in finished state, it sends only checkpoints.
+        bool EarlyFinish = false;
         bool PopStarted = false;
         bool IsTransformOutput = false; // Is this channel output of a transform.
         NDqProto::EWatermarksMode WatermarksMode = NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED;
@@ -1470,7 +1470,7 @@ protected:
             : MemoryLimits.MkqlLightProgramMemoryLimit;
     }
 
-private:
+protected:
     void InitializeTask() {
         for (ui32 i = 0; i < Task.InputsSize(); ++i) {
             const auto& inputDesc = Task.GetInputs(i);
@@ -1541,8 +1541,11 @@ private:
         }
 
         RequestContext = MakeIntrusive<NYql::NDq::TRequestContext>(Task.GetRequestContext());
+
+        InitializeWatermarks();
     }
 
+private:
     void InitializeWatermarks() {
         for (const auto& [id, source] : SourcesMap) {
             if (source.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT) {

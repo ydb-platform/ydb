@@ -56,6 +56,18 @@ struct TWriteTableSettings {
         : Other(other) {}
 };
 
+struct TWriteSequenceSettings {
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TMaybeNode<NNodes::TCoAtom> ValueType;
+    NNodes::TMaybeNode<NNodes::TCoAtom> Temporary;
+    NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> SequenceSettings;
+
+    NNodes::TCoNameValueTupleList Other;
+
+    TWriteSequenceSettings(const NNodes::TCoNameValueTupleList& other)
+        : Other(other) {}
+};
+
 struct TWriteTopicSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> TopicSettings;
@@ -151,6 +163,8 @@ TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx);
 
 TPgObjectSettings ParsePgObjectSettings(NNodes::TExprList node, TExprContext& ctx);
 
+TWriteSequenceSettings ParseSequenceSettings(NNodes::TExprList node, TExprContext& ctx);
+
 TString FullTableName(const TStringBuf& cluster, const TStringBuf& table);
 
 IDataProvider::TFillSettings GetFillSettings(const TExprNode& node);
@@ -187,7 +201,7 @@ void WriteStatistics(NYson::TYsonWriter& writer, const TOperationStatistics& sta
 bool ValidateCompressionForInput(std::string_view format, std::string_view compression, TExprContext& ctx);
 bool ValidateCompressionForOutput(std::string_view format, std::string_view compression, TExprContext& ctx);
 
-bool ValidateFormatForInput(std::string_view format, TExprContext& ctx);
+bool ValidateFormatForInput(std::string_view format, const TStructExprType* schemaStructRowType, const std::function<bool(TStringBuf)>& excludeFields, TExprContext& ctx);
 bool ValidateFormatForOutput(std::string_view format, TExprContext& ctx);
 
 bool ValidateIntervalUnit(std::string_view unit, TExprContext& ctx);

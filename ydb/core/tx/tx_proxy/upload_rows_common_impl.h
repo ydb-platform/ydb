@@ -4,7 +4,6 @@
 
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
-#include <ydb/core/grpc_services/rpc_long_tx.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/io_formats/arrow/csv_arrow.h>
@@ -41,15 +40,12 @@ class TUploadCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
-    NMonitoring::TDynamicCounters::TCounterPtr RepliesCount;
     NMonitoring::THistogramPtr ReplyDuration;
 
     NMonitoring::TDynamicCounters::TCounterPtr RowsCount;
     NMonitoring::THistogramPtr PackageSize;
 
-    NMonitoring::TDynamicCounters::TCounterPtr FailsCount;
-    NMonitoring::THistogramPtr FailDuration;
-
+    THashMap<TString, NMonitoring::TDynamicCounters::TCounterPtr> CodesCount;
 public:
     TUploadCounters();
 
@@ -59,15 +55,7 @@ public:
         PackageSize->Collect(rowsCount);
     }
 
-    void OnReply( const TDuration d) const {
-        RepliesCount->Add(1);
-        ReplyDuration->Collect(d.MilliSeconds());
-    }
-
-    void OnFail(const TDuration d) const {
-        FailsCount->Add(1);
-        FailDuration->Collect(d.MilliSeconds());
-    }
+    void OnReply(const TDuration d, const ::Ydb::StatusIds::StatusCode code) const;
 };
 
 
@@ -131,6 +119,12 @@ private:
 }
 
 namespace NTxProxy {
+
+TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
+    const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
+    const TString& databaseName, const TString& path,
+    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult,
+    std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NYql::TIssues> issues);
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -695,7 +689,7 @@ private:
                     if (!ColumnsToConvertInplace.empty()) {
                         auto convertResult = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
                         if (!convertResult.ok()) {
-                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot upsert arrow batch:" << convertResult.status().ToString(), ctx);
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot convert arrow batch inplace:" << convertResult.status().ToString(), ctx);
                         }
                         Batch = *convertResult;
                     }
@@ -703,7 +697,7 @@ private:
                     if (!ColumnsToConvert.empty()) {
                         auto convertResult = NArrow::ConvertColumns(Batch, ColumnsToConvert);
                         if (!convertResult.ok()) {
-                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot upsert arrow batch:" << convertResult.status().ToString(), ctx);
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot convert arrow batch:" << convertResult.status().ToString(), ctx);
                         }
                         Batch = *convertResult;
                     }
@@ -866,7 +860,7 @@ private:
         TBase::Become(&TThis::StateWaitWriteBatchResult);
         ui32 batchNo = 0;
         TString dedupId = ToString(batchNo);
-        NGRpcService::DoLongTxWriteSameMailbox(ctx, ctx.SelfID, LongTxId, dedupId,
+        DoLongTxWriteSameMailbox(ctx, ctx.SelfID, LongTxId, dedupId,
             GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues);
     }
 
@@ -1269,7 +1263,7 @@ private:
     }
 
     void ReplyWithResult(::Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
-        UploadCounters.OnReply(TAppData::TimeProvider->Now() - StartTime);
+        UploadCounters.OnReply(TAppData::TimeProvider->Now() - StartTime, status);
         SendResult(ctx, status);
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << "completed with status " << status);

@@ -6,10 +6,10 @@ ydb/core/client/ut TFlatTest.AutoSplitMergeQueue
 ydb/core/cms/ut_sentinel TSentinelTests.BSControllerCantChangeStatus
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
-ydb/core/kqp/ut/olap KqpOlap.IndexesActualization
-ydb/core/kqp/ut/olap KqpOlap.BlobsSharing*
+ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesActualization
+ydb/core/kqp/ut/olap KqpOlapBlobsSharing.*
 ydb/core/kqp/ut/olap KqpOlap.ScanQueryOltpAndOlap
-ydb/core/kqp/ut/olap KqpOlap.StatsUsageWithTTL
+ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
 ydb/core/kqp/ut/olap KqpOlap.YqlScriptOltpAndOlap
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
@@ -34,7 +34,10 @@ ydb/core/viewer/ut Viewer.TabletMerging
 ydb/core/viewer/ut Viewer.TabletMergingPacked
 ydb/library/actors/http/ut HttpProxy.TooLongHeader
 ydb/library/actors/http/ut sole*
-ydb/library/yql/providers/generic/connector/tests *
+ydb/library/yql/dq/opt/ut DQCBO.JoinSearch3Rels
+ydb/library/yql/providers/generic/connector/tests* *
+ydb/library/yql/providers/yt/provider/ut TYqlCBO.NonReordable
+ydb/library/yql/tests/sql/dq_file/part17 *dq-join_cbo_native_3_tables--*
 ydb/public/lib/ydb_cli/topic/ut TTopicReaderTests.TestRun_ReadOneMessage
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut RetryPolicy.RetryWithBatching
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut RetryPolicy.TWriteSession_TestBrokenPolicy
@@ -73,8 +76,6 @@ ydb/tests/fq/plans test_stats_mode.py.TestStatsMode.test_mode[v1-STATS_MODE_FULL
 ydb/tests/fq/yds *
 ydb/tests/functional/audit *
 ydb/tests/functional/blobstorage test_replication.py.TestReplicationAfterNodesRestart.test_replication*
-ydb/tests/functional/clickbench test.py.test_plans*
-ydb/tests/functional/clickbench test.py.test_run*
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/restarts test_restarts.py.*
@@ -82,7 +83,5 @@ ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quota
 ydb/tests/functional/tenants test_dynamic_tenants.py.*
 ydb/tests/functional/tenants test_storage_config.py.TestStorageConfig.*
 ydb/tests/functional/tenants test_tenants.py.*
-ydb/tests/functional/ydb_cli test_ydb_scripting.py.TestScriptingServiceHelp.test_help
-ydb/tests/functional/ydb_cli test_ydb_scripting.py.TestScriptingServiceHelp.test_help_ex
 ydb/tests/tools/pq_read/test test_timeout.py.TestTimeout.test_timeout
 ydb/tests/functional/rename [test_rename.py */10] chunk chunk

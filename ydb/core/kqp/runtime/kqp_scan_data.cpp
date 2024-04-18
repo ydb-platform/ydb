@@ -3,6 +3,7 @@
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/formats/arrow/common/accessor.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
@@ -215,11 +216,11 @@ template <class TArrayTypeExt, class TValueType = typename TArrayTypeExt::value_
 class TElementAccessor {
 public:
     using TArrayType = TArrayTypeExt;
-    static NYql::NUdf::TUnboxedValue ExtractValue(TArrayType& array, const ui32 rowIndex) {
+    static NYql::NUdf::TUnboxedValue ExtractValue(const TArrayType& array, const ui32 rowIndex) {
         return NUdf::TUnboxedValuePod(static_cast<TValueType>(array.Value(rowIndex)));
     }
 
-    static void Validate(TArrayType& /*array*/) {
+    static void Validate(const TArrayType& /*array*/) {
 
     }
 
@@ -232,13 +233,13 @@ template <>
 class TElementAccessor<arrow::Decimal128Array, NYql::NDecimal::TInt128> {
 public:
     using TArrayType = arrow::Decimal128Array;
-    static void Validate(arrow::Decimal128Array& array) {
+    static void Validate(const arrow::Decimal128Array& array) {
         const auto& type = arrow::internal::checked_cast<const arrow::Decimal128Type&>(*array.type());
         YQL_ENSURE(type.precision() == NScheme::DECIMAL_PRECISION, "Unsupported Decimal precision.");
         YQL_ENSURE(type.scale() == NScheme::DECIMAL_SCALE, "Unsupported Decimal scale.");
     }
 
-    static NYql::NUdf::TUnboxedValue ExtractValue(arrow::Decimal128Array& array, const ui32 rowIndex) {
+    static NYql::NUdf::TUnboxedValue ExtractValue(const arrow::Decimal128Array& array, const ui32 rowIndex) {
         auto data = array.GetView(rowIndex);
         YQL_ENSURE(data.size() == sizeof(NYql::NDecimal::TInt128), "Wrong data size");
         NYql::NDecimal::TInt128 val;
@@ -254,10 +255,10 @@ template <>
 class TElementAccessor<arrow::BinaryArray, NUdf::TStringRef> {
 public:
     using TArrayType = arrow::BinaryArray;
-    static void Validate(arrow::BinaryArray& /*array*/) {
+    static void Validate(const arrow::BinaryArray& /*array*/) {
     }
 
-    static NYql::NUdf::TUnboxedValue ExtractValue(arrow::BinaryArray& array, const ui32 rowIndex) {
+    static NYql::NUdf::TUnboxedValue ExtractValue(const arrow::BinaryArray& array, const ui32 rowIndex) {
         auto data = array.GetView(rowIndex);
         return MakeString(NUdf::TStringRef(data.data(), data.size()));
     }
@@ -270,10 +271,10 @@ template <>
 class TElementAccessor<arrow::FixedSizeBinaryArray, NUdf::TStringRef> {
 public:
     using TArrayType = arrow::FixedSizeBinaryArray;
-    static void Validate(arrow::FixedSizeBinaryArray& /*array*/) {
+    static void Validate(const arrow::FixedSizeBinaryArray& /*array*/) {
     }
 
-    static NYql::NUdf::TUnboxedValue ExtractValue(arrow::FixedSizeBinaryArray& array, const ui32 rowIndex) {
+    static NYql::NUdf::TUnboxedValue ExtractValue(const arrow::FixedSizeBinaryArray& array, const ui32 rowIndex) {
         auto data = array.GetView(rowIndex);
         return MakeString(NUdf::TStringRef(data.data(), data.size() - 1));
     }
@@ -286,33 +287,56 @@ public:
 
 template <class TElementAccessor, class TAccessor>
 TBytesStatistics WriteColumnValuesFromArrowSpecImpl(TAccessor editAccessor,
-    const TBatchDataAccessor& batch, const ui32 columnIndex, arrow::ChunkedArray* chunkedArrayExt, NScheme::TTypeInfo columnType) {
+    const TBatchDataAccessor& batch, const ui32 columnIndex, const std::shared_ptr<arrow::ChunkedArray>& chunkedArrayExt, NScheme::TTypeInfo columnType) {
     auto statAccumulator = TElementAccessor::BuildStatAccumulator(columnType);
-    for (auto&& i : chunkedArrayExt->chunks()) {
-        auto& arrayExt = *i;
-        auto& array = *reinterpret_cast<typename TElementAccessor::TArrayType*>(&arrayExt);
-        TElementAccessor::Validate(array);
 
-        const auto applyToIndex = [&](const ui32 rowIndexFrom, const ui32 rowIndexTo) {
-            auto& rowItem = editAccessor(rowIndexTo, columnIndex);
-            if (array.IsNull(rowIndexFrom)) {
-                statAccumulator.AddNull();
-                rowItem = NUdf::TUnboxedValue();
-            } else {
-                rowItem = TElementAccessor::ExtractValue(array, rowIndexFrom);
-                statAccumulator.AddValue(rowItem);
-            }
-        };
+    auto trivialChunkedArray = std::make_shared<NArrow::NAccessor::TTrivialChunkedArray>(chunkedArrayExt);
+    NArrow::NAccessor::IChunkedArray::TReader reader(trivialChunkedArray);
 
-        if (batch.HasDataIndexes()) {
-            ui32 idx = 0;
-            for (const i64 rowIndex : batch.GetDataIndexes()) {
-                applyToIndex(rowIndex, idx++);
-            }
+    std::optional<ui32> chunkIdx;
+    std::optional<ui32> currentIdxFrom;
+    std::optional<NArrow::NAccessor::IChunkedArray::TAddress> address;
+    const typename TElementAccessor::TArrayType* currentArray = nullptr;
+    const auto applyToIndex = [&](const ui32 rowIndexFrom, const ui32 rowIndexTo) {
+        if (!currentIdxFrom) {
+            address = reader.GetReadChunk(rowIndexFrom);
+            AFL_ENSURE(rowIndexFrom == 0)("real", rowIndexFrom);
         } else {
-            for (i64 rowIndex = 0; rowIndex < batch.GetRecordsCount(); ++rowIndex) {
-                applyToIndex(rowIndex, rowIndex);
+            AFL_ENSURE(rowIndexFrom == *currentIdxFrom + 1)("next", rowIndexFrom)("current", *currentIdxFrom);
+            if (!address->NextPosition()) {
+                address = reader.GetReadChunk(rowIndexFrom);
             }
+        }
+        currentIdxFrom = rowIndexFrom;
+
+        if (!chunkIdx || *chunkIdx != address->GetChunkIdx()) {
+            currentArray = static_cast<const typename TElementAccessor::TArrayType*>(address->GetArray().get());
+            TElementAccessor::Validate(*currentArray);
+            chunkIdx = address->GetChunkIdx();
+        }
+
+        auto& rowItem = editAccessor(rowIndexTo, columnIndex);
+        if (currentArray->IsNull(address->GetPosition())) {
+            statAccumulator.AddNull();
+            rowItem = NUdf::TUnboxedValue();
+        } else {
+            rowItem = TElementAccessor::ExtractValue(*currentArray, address->GetPosition());
+            statAccumulator.AddValue(rowItem);
+        }
+    };
+
+    if (batch.HasDataIndexes()) {
+        ui32 idx = 0;
+        std::map<ui64, ui64> remapIndexes;
+        for (const i64 rowIndex : batch.GetDataIndexes()) {
+            YQL_ENSURE(remapIndexes.emplace(rowIndex, idx++).second);
+        }
+        for (auto&& i : remapIndexes) {
+            applyToIndex(i.first, i.second);
+        }
+    } else {
+        for (i64 rowIndex = 0; rowIndex < batch.GetRecordsCount(); ++rowIndex) {
+            applyToIndex(rowIndex, rowIndex);
         }
     }
     return statAccumulator.Finish();
@@ -322,8 +346,7 @@ TBytesStatistics WriteColumnValuesFromArrowSpecImpl(TAccessor editAccessor,
 template <class TAccessor>
 TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
     const TBatchDataAccessor& batch, i64 columnIndex, NScheme::TTypeInfo columnType) {
-    std::shared_ptr<arrow::ChunkedArray> columnSharedPtr = batch.GetBatch()->column(columnIndex);
-    arrow::ChunkedArray* columnPtr = columnSharedPtr.get();
+    const std::shared_ptr<arrow::ChunkedArray> columnPtr = batch.GetBatch()->column(columnIndex);
     namespace NTypeIds = NScheme::NTypeIds;
     switch (columnType.GetTypeId()) {
         case NTypeIds::Bool:

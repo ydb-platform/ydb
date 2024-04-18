@@ -9,7 +9,7 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-class TPlainReadData: public IDataReader, TNonCopyable {
+class TPlainReadData: public IDataReader, TNonCopyable, NColumnShard::TMonitoringObjectsCounter<TPlainReadData> {
 private:
     using TBase = IDataReader;
     std::shared_ptr<TScanHead> Scanner;
@@ -18,6 +18,10 @@ private:
     ui32 ReadyResultsCount = 0;
     bool AbortedFlag = false;
 protected:
+    virtual TConclusionStatus DoStart() override {
+        return Scanner->Start();
+    }
+
     virtual TString DoDebugString(const bool verbose) const override {
         TStringBuilder sb;
         sb << SpecialReadContext->DebugString() << ";";

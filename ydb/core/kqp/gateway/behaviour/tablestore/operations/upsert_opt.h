@@ -12,6 +12,7 @@ private:
     static inline const auto Registrator = TFactory::TRegistrator<TUpsertOptionsOperation>(GetTypeName());
 private:
     bool SchemeNeedActualization = false;
+    std::optional<bool> ExternalGuaranteeExclusivePK;
 public:
     TConclusionStatus DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) override;
 

@@ -950,6 +950,22 @@ public:
         }
     }
 
+    TFuture<TGenericResult> CreateSequence(const TString& cluster,
+            const NYql::TCreateSequenceSettings& settings, bool existingOk) override {
+        Y_UNUSED(cluster);
+        Y_UNUSED(settings);
+        Y_UNUSED(existingOk);
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> DropSequence(const TString& cluster,
+            const NYql::TDropSequenceSettings& settings, bool missingOk) override {
+        Y_UNUSED(cluster);
+        Y_UNUSED(settings);
+        Y_UNUSED(missingOk);
+        return NotImplemented<TGenericResult>();
+    }
+
     TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request) override {
         try {
             if (!CheckCluster(cluster)) {

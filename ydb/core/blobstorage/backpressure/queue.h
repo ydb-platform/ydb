@@ -71,9 +71,11 @@ class TBlobStorageQueue {
             , Cost(0)
             , DirtyCost(true)
         {
-            Span
-                .Attribute("event", TypeName<TEvent>())
-                .Attribute("local", local);
+            if (Span) {
+                Span
+                    .Attribute("event", TypeName<TEvent>())
+                    .Attribute("local", local);
+            }
         }
 
         ~TItem() {

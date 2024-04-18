@@ -19,8 +19,9 @@ static const TLogger Logger("TableClientComparator");
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TComparator::TComparator(std::vector<ESortOrder> sortOrders)
+TComparator::TComparator(std::vector<ESortOrder> sortOrders, TCallback<TUUComparerSignature> CGComparator)
     : SortOrders_(std::move(sortOrders))
+    , CGComparator_(CGComparator)
 { }
 
 void TComparator::Persist(const TPersistenceContext& context)
@@ -248,6 +249,19 @@ int TComparator::CompareKeys(const TKey& lhs, const TKey& rhs) const
 {
     ValidateKey(lhs);
     ValidateKey(rhs);
+
+    if (CGComparator_) {
+        // Compare keys with code generated comparator.
+        int comparisonResult = CGComparator_.Run(lhs.Begin(), rhs.Begin(), GetLength());
+
+        if (comparisonResult == 0) {
+            return comparisonResult;
+        }
+
+        int differentColumnIdx = abs(comparisonResult) - 1;
+        int orderSign = SortOrders_[differentColumnIdx] == ESortOrder::Ascending ? +1 : -1;
+        return comparisonResult * orderSign;
+    }
 
     for (int index = 0; index < lhs.GetLength(); ++index) {
         auto valueComparisonResult = CompareValues(index, lhs[index], rhs[index]);

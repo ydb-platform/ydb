@@ -1,0 +1,21 @@
+{
+    "get": {
+        "tags": ["LB UI v2"],
+        "security": { "Bearer": [] },
+        "produces": ["application/json"],
+        "summary": "Lists directory or account content with configuration properties collected from Configuration manager",
+        "parameters": [{
+            "name": "installation",
+            "in": "path",
+            "description": "Logbroker installation, such as logbroker and logbroker-prestable",
+            "required": true,
+            "type" : "string"
+        },{
+            "name": "path",
+            "in": "query",
+            "description": "Path for a directory or account to browse",
+            "required": false,
+            "type": "string"
+        }]
+    }
+}

@@ -320,9 +320,23 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
     // TODO(babenko): check flags; forbid comparing hunks and aggregates.
 
     if (lhs.Type == EValueType::Any || rhs.Type == EValueType::Any) {
-        if (!IsSentinel(lhs.Type) && !IsSentinel(rhs.Type)) {
-            // Never compare composite values with non-sentinels.
-            ThrowIncomparableTypes(lhs, rhs);
+        if (lhs.Type != rhs.Type) {
+            if (lhs.Type == EValueType::Composite || rhs.Type == EValueType::Composite) {
+                ThrowIncomparableTypes(lhs, rhs);
+            }
+            return static_cast<int>(lhs.Type) - static_cast<int>(rhs.Type);
+        }
+        try {
+            auto lhsData = TYsonStringBuf(lhs.AsStringBuf());
+            auto rhsData = TYsonStringBuf(rhs.AsStringBuf());
+            return CompareCompositeValues(lhsData, rhsData);
+        } catch (const std::exception& ex) {
+            THROW_ERROR_EXCEPTION(
+                NTableClient::EErrorCode::IncomparableComplexValues,
+                "Cannot compare complex values")
+                << TErrorAttribute("lhs_value", lhs)
+                << TErrorAttribute("rhs_value", rhs)
+                << ex;
         }
     }
 
@@ -649,6 +663,7 @@ public:
     void OnBeginMap() override
     {
         ++Depth_;
+        MapFound_ = true;
     }
 
     void OnKeyedItem(TStringBuf /*key*/) override
@@ -664,6 +679,7 @@ public:
         if (Depth_ == 0) {
             THROW_ERROR_EXCEPTION("Table values cannot have top-level attributes");
         }
+        AttributesFound_ = true;
     }
 
     void OnEndAttributes() override
@@ -672,14 +688,29 @@ public:
     void OnRaw(TStringBuf /*yson*/, EYsonType /*type*/) override
     { }
 
+    bool CanBeSorted() const
+    {
+        return !MapFound_ && !AttributesFound_;
+    }
+
 private:
     int Depth_ = 0;
+    bool MapFound_ = false;
+    bool AttributesFound_ = false;
 };
 
 void ValidateAnyValue(TStringBuf yson)
 {
     TYsonAnyValidator validator;
     ParseYsonStringBuffer(yson, EYsonType::Node, &validator);
+}
+
+bool ValidateSortedAnyValue(TStringBuf yson)
+{
+    TYsonAnyValidator validator;
+    ParseYsonStringBuffer(yson, EYsonType::Node, &validator);
+
+    return validator.CanBeSorted();
 }
 
 void ValidateDynamicValue(const TUnversionedValue& value, bool isKey)
@@ -1036,8 +1067,18 @@ void ValidateValueType(
                             "Cannot write value of type %Qlv into type any column",
                             value.Type);
                     }
-                    if (IsAnyOrComposite(value.Type) && validateAnyIsValidYson) {
-                        ValidateAnyValue(value.AsStringBuf());
+                    if (IsAnyOrComposite(value.Type)) {
+                        if (columnSchema.SortOrder()) {
+                            bool canBeSorted = ValidateSortedAnyValue(value.AsStringBuf());
+                            if (!canBeSorted) {
+                                THROW_ERROR_EXCEPTION(
+                                    NTableClient::EErrorCode::SchemaViolation,
+                                    "Cannot write value of type %Qlv, which contains a YSON map, into type any sorted column",
+                                    value.Type);
+                            }
+                        } else if (validateAnyIsValidYson) {
+                            ValidateAnyValue(value.AsStringBuf());
+                        }
                     }
                 } else {
                     ValidateColumnType(EValueType::Composite, value);

@@ -658,6 +658,26 @@ struct TCreateExternalTableSettings {
     TVector<std::pair<TString, TString>> SourceTypeParameters;
 };
 
+struct TSequenceSettings {
+    TMaybe<i64> MinValue;
+    TMaybe<i64> MaxValue;
+    TMaybe<i64> StartValue;
+    TMaybe<ui64> Cache;
+    TMaybe<i64> Increment;
+    TMaybe<bool> Cycle;
+    TMaybe<TString> OwnedBy;
+};
+
+struct TCreateSequenceSettings {
+    TString Name;
+    bool Temporary = false;
+    TSequenceSettings SequenceSettings;
+};
+
+struct TDropSequenceSettings {
+    TString Name;
+};
+
 struct TAlterExternalTableSettings {
     TString ExternalTable;
 };
@@ -747,6 +767,7 @@ public:
         google::protobuf::RepeatedPtrField<NKqpProto::TResultSetMeta> ResultSetsMeta;
         bool NeedToSplit = false;
         bool AllowCache = true;
+        TMaybe<TString> CommandTagName = {};
     };
 
     struct TExecuteLiteralResult : public TGenericResult {
@@ -840,6 +861,11 @@ public:
     virtual NThreading::TFuture<TGenericResult> RenameGroup(const TString& cluster, TRenameGroupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropGroup(const TString& cluster, const TDropGroupSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> CreateSequence(const TString& cluster,
+        const TCreateSequenceSettings& settings, bool existingOk) = 0;
+    virtual NThreading::TFuture<TGenericResult> DropSequence(const TString& cluster,
+        const TDropSequenceSettings& settings, bool missingOk) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateColumnTable(
         TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false) = 0;

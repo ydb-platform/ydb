@@ -215,7 +215,7 @@ void TNodeWarden::Bootstrap() {
     if (Cfg->BlobStorageConfig.HasServiceSet()) {
         const auto& serviceSet = Cfg->BlobStorageConfig.GetServiceSet();
         if (serviceSet.GroupsSize()) {
-            ApplyServiceSet(Cfg->BlobStorageConfig.GetServiceSet(), true, false, false);
+            ApplyServiceSet(Cfg->BlobStorageConfig.GetServiceSet(), true, false, false, "initial");
         } else {
             Groups.try_emplace(0); // group is gonna be configured soon by DistributedConfigKeeper
         }
@@ -272,7 +272,7 @@ void TNodeWarden::HandleReadCache() {
                     InstanceId.emplace(proto.GetInstanceId());
                 }
 
-                ApplyServiceSet(proto.GetServiceSet(), false, false, false);
+                ApplyServiceSet(proto.GetServiceSet(), false, false, false, "cache");
             } catch (...) {
                 STLOG(PRI_INFO, BS_NODE, NW16, "Bootstrap failed to fetch cache", (Error, CurrentExceptionMessage()));
                 // ignore exception
@@ -360,7 +360,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
         const bool comprehensive = record.GetComprehensive();
         IgnoreCache |= comprehensive;
         STLOG(PRI_DEBUG, BS_NODE, NW17, "Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate)", (Msg, record));
-        ApplyServiceSet(record.GetServiceSet(), false, comprehensive, true);
+        ApplyServiceSet(record.GetServiceSet(), false, comprehensive, true, "controller");
     }
 
     for (const auto& item : record.GetGroupMetadata()) {
@@ -401,15 +401,43 @@ void TNodeWarden::SendVDiskReport(TVSlotId vslotId, const TVDiskID &vDiskId, NKi
     SendToController(std::move(report));
 }
 
-void TNodeWarden::Handle(TEvBlobStorage::TEvAskRestartPDisk::TPtr ev) {
-    const auto id = ev->Get()->PDiskId;
-    if (auto it = LocalPDisks.find(TPDiskKey{LocalNodeId, id}); it != LocalPDisks.end()) {
-        RestartLocalPDiskStart(id, CreatePDiskConfig(it->second.Record));
+void TNodeWarden::Handle(TEvBlobStorage::TEvAskWardenRestartPDisk::TPtr ev) {
+    auto pdiskId = ev->Get()->PDiskId;
+    auto requestCookie = ev->Cookie;
+
+    for (auto it = PDiskRestartRequests.begin(); it != PDiskRestartRequests.end(); it++) {
+        if (it->second == pdiskId) {
+            const TActorId actorId = MakeBlobStoragePDiskID(LocalNodeId, pdiskId);
+
+            Cfg->PDiskKey.Initialize();
+            Send(actorId, new TEvBlobStorage::TEvAskWardenRestartPDiskResult(pdiskId, Cfg->PDiskKey, false, nullptr, "Restart already requested"));
+
+            return;
+        }
     }
+
+    PDiskRestartRequests[requestCookie] = pdiskId;
+
+    AskBSCToRestartPDisk(pdiskId, requestCookie);
 }
 
-void TNodeWarden::Handle(TEvBlobStorage::TEvRestartPDiskResult::TPtr ev) {
-    RestartLocalPDiskFinish(ev->Get()->PDiskId, ev->Get()->Status);
+void TNodeWarden::Handle(TEvBlobStorage::TEvNotifyWardenPDiskRestarted::TPtr ev) {
+    OnPDiskRestartFinished(ev->Get()->PDiskId, ev->Get()->Status);
+}
+
+void TNodeWarden::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
+    // Can be a response to RestartPDisk or DropDonorDisk. We are only interested in RestartPDisk.
+    auto it = PDiskRestartRequests.find(ev->Cookie);
+    // If cookie is in PDiskRestartRequests, then it's a RestartPDisk.
+    if (it != PDiskRestartRequests.end()) {
+        auto res = ev->Get()->Record.GetResponse();
+        ui32 pdiskId = it->second;
+        PDiskRestartRequests.erase(it);
+
+        if (!res.GetSuccess()) {
+            OnUnableToRestartPDisk(pdiskId, res.GetErrorDescription());
+        }
+    }
 }
 
 void TNodeWarden::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev) {
@@ -489,7 +517,6 @@ void TNodeWarden::Handle(TEvPrivate::TEvUpdateNodeDrives::TPtr&) {
     });
     Schedule(TDuration::Seconds(10), new TEvPrivate::TEvUpdateNodeDrives());
 }
-
 
 void TNodeWarden::SendDiskMetrics(bool reportMetrics) {
     STLOG(PRI_TRACE, BS_NODE, NW45, "SendDiskMetrics", (ReportMetrics, reportMetrics));

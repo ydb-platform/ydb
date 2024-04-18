@@ -423,6 +423,10 @@ message TInterconnectConfig {
     optional NKikimrConfigUnits.TDuration LostConnectionDuration = 28;
     optional NKikimrConfigUnits.TDuration BatchPeriodDuration = 29;
 
+    optional NKikimrConfigUnits.TDuration FirstErrorSleep = 46;
+    optional NKikimrConfigUnits.TDuration MaxErrorSleep = 47;
+    optional double ErrorSleepRetryMultiplier = 48;
+
     optional uint32 OutgoingHandshakeInflightLimit = 43;
 }
 
@@ -1391,7 +1395,6 @@ message TColumnShardConfig {
     }
     optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
     optional bool DisabledOnSchemeShard = 2 [default = true];
-    optional bool SkipOldGranules = 3 [default = true];
     optional bool IndexationEnabled = 4 [default = true];
     optional bool CompactionEnabled = 5 [default = true];
     optional bool TTLEnabled = 6 [default = true];
@@ -1408,6 +1411,8 @@ message TColumnShardConfig {
     }
 
     optional TIndexMetadataMemoryLimit IndexMetadataMemoryLimit = 12;
+    optional bool CleanupEnabled = 13 [default = true];
+    optional uint32 RemovedPortionLivetimeSeconds = 14 [default = 600];
 }
 
 message TSchemeShardConfig {
@@ -1662,6 +1667,7 @@ message TLocalPgWireConfig {
     optional int32 ListeningPort = 1 [default = 5432];
     optional string SslCertificate = 5;
     optional string Address = 6 [default = "::"];
+    optional bool TcpNotDelay = 7 [default = true];
 }
 
 message TKafkaProxyConfig {

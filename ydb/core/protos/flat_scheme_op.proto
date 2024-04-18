@@ -495,6 +495,7 @@ message TStorageTierConfig {
 
 message TColumnTableSchemeOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
+    optional bool ExternalGuaranteeExclusivePK = 2 [default = false];
 }
 
 message TColumnTableSchema {
@@ -515,7 +516,7 @@ message TColumnTableSchema {
     //optional int32 DefaultCompressionLevel = 7; // deprecated, not used before replace
     optional TCompressionOptions DefaultCompression = 8;
 
-    optional bool CompositeMarks = 9 [ default = false ];
+    optional bool CompositeMarksDeprecated = 9 [ default = false ];
     repeated TOlapIndexDescription Indexes = 10;
     repeated NKikimrColumnShardStatisticsProto.TOperatorContainer Statistics = 11;
     optional TColumnTableSchemeOptions Options = 12;
@@ -523,6 +524,7 @@ message TColumnTableSchema {
 
 message TColumnTableRequestedOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
+    optional bool ExternalGuaranteeExclusivePK = 2;
 }
 
 message TAlterColumnTableSchema {
@@ -1326,6 +1328,7 @@ message TReplicationDescription {
     optional NKikimrProto.TPathID PathId = 3; // path id assigned by schemeshard
     optional uint64 Version = 4;
     optional uint64 ControllerId = 5; // replication controller's tablet id
+    optional NKikimrReplication.TReplicationState State = 6;
 }
 
 message TBlobDepotDescription {
@@ -1600,6 +1603,7 @@ message TModifyScheme {
     optional NActorsProto.TActorId TempTableOwnerActorId = 65;
 
     optional TCopySequence CopySequence = 66;
+    optional TReplicationDescription AlterReplication = 67;
 }
 
 message TCopySequence {

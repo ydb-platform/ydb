@@ -299,7 +299,7 @@ public:
             const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false);
             ui64 chunksCount = 0ull;
             for (auto section: maybeRead.Cast().Input()) {
-                if (HasSettingsExcept(maybeRead.Cast().Input().Item(0).Settings().Ref(), DqReadSupportedSettings)) {
+                if (HasSettingsExcept(maybeRead.Cast().Input().Item(0).Settings().Ref(), DqReadSupportedSettings) || HasNonEmptyKeyFilter(maybeRead.Cast().Input().Item(0))) {
                     TStringBuilder info;
                     info << "unsupported path settings: ";
                     if (maybeRead.Cast().Input().Item(0).Settings().Size() > 0) {

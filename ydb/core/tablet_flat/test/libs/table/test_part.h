@@ -148,9 +148,9 @@ namespace NTest {
     namespace IndexTools {
         using TGroupId = NPage::TGroupId;
 
-        inline const TPartIndexIt::TRecord * GetFlatRecord(const TPart& part, ui32 pageIndex) {
+        inline const TPartGroupFlatIndexIter::TRecord * GetFlatRecord(const TPart& part, ui32 pageIndex) {
             TTestEnv env;
-            TPartIndexIt index(&part, &env, { });
+            TPartGroupFlatIndexIter index(&part, &env, { });
 
             Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
             for (TPageId p = 0; p < pageIndex; p++) {
@@ -160,9 +160,9 @@ namespace NTest {
             return index.GetRecord();
         }
 
-        inline const TPartIndexIt::TRecord * GetFlatLastRecord(const TPart& part) {
+        inline const TPartGroupFlatIndexIter::TRecord * GetFlatLastRecord(const TPart& part) {
             TTestEnv env;
-            TPartIndexIt index(&part, &env, { });
+            TPartGroupFlatIndexIter index(&part, &env, { });
             Y_ABORT_UNLESS(index.SeekLast() == EReady::Data);
             return index.GetLastRecord();
         }
@@ -179,6 +179,23 @@ namespace NTest {
                     break;
                 }
                 result++;
+            }
+
+            return result;
+        }
+
+        inline ui64 CountDataSize(const TPart& part, TGroupId groupId) {
+            size_t result = 0;
+
+            TTestEnv env;
+            auto index = CreateIndexIter(&part, &env, groupId);
+            for (size_t i = 0; ; i++) {
+                auto ready = i == 0 ? index->Seek(0) : index->Next();
+                if (ready != EReady::Data) {
+                    Y_ABORT_UNLESS(ready != EReady::Page, "Unexpected page fault");
+                    break;
+                }
+                result += part.GetPageSize(index->GetPageId(), groupId);
             }
 
             return result;

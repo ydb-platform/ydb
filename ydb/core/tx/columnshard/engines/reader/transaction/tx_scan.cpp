@@ -117,6 +117,7 @@ static bool FillPredicatesFromRange(TReadDescription& read, const ::NKikimrTx::T
 }
 
 bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
+    TMemoryProfileGuard mpg("TTxScan::Execute");
     auto& record = Ev->Get()->Record;
     TSnapshot snapshot(record.GetSnapshot().GetStep(), record.GetSnapshot().GetTxId());
     const auto scanId = record.GetScanId();
@@ -158,7 +159,7 @@ bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/
 
     if (!record.RangesSize()) {
         auto range = scannerConstructor->BuildReadMetadata(Self, read);
-        if (range) {
+        if (range.IsSuccess()) {
             ReadMetadataRange = range.DetachResult();
         } else {
             ErrorDescription = range.GetErrorMessage();
@@ -204,7 +205,7 @@ struct TContainerPrinter {
 };
 
 void TTxScan::Complete(const TActorContext& ctx) {
-
+    TMemoryProfileGuard mpg("TTxScan::Complete");
     auto& request = Ev->Get()->Record;
     auto scanComputeActor = Ev->Sender;
     const auto& snapshot = request.GetSnapshot();

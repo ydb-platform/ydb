@@ -156,6 +156,7 @@ struct TKqpScriptExecutionEvents {
         EvSaveScriptFinalStatusResponse,
         EvGetScriptExecutionOperationQueryResponse,
         EvDescribeSecretsResponse,
+        EvSaveScriptResultPartFinished,
     };
 };
 

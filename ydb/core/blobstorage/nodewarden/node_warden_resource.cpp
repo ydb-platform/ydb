@@ -33,44 +33,33 @@ void TNodeWarden::IssuePendingMessages(const TActorId& actorId) {
     PendingMessageQ.erase(it);
 }
 
-void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet &serviceSet, bool isStatic, bool comprehensive, bool updateCache) {
+void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet &serviceSet, bool isStatic,
+        bool comprehensive, bool updateCache, const char *origin) {
     if (Cfg->IsCacheEnabled() && updateCache) {
         Y_ABORT_UNLESS(!isStatic);
         return EnqueueSyncOp(WrapCacheOp(UpdateServiceSet(serviceSet, comprehensive, [=] {
-            return ApplyServiceSet(serviceSet, false, comprehensive, false);
+            ApplyServiceSet(serviceSet, false, comprehensive, false, origin);
         })));
     }
 
-    STLOG(PRI_DEBUG, BS_NODE, NW18, "ApplyServiceSet", (IsStatic, isStatic), (Comprehensive, comprehensive));
+    STLOG(PRI_DEBUG, BS_NODE, NW18, "ApplyServiceSet", (IsStatic, isStatic), (Comprehensive, comprehensive),
+        (Origin, origin), (ServiceSet, serviceSet));
 
     // apply proxy information before we try to start VDisks/PDisks
     ApplyGroupInfoFromServiceSet(serviceSet);
 
+    // merge new configuration into current one
+    NKikimrBlobStorage::TNodeWardenServiceSet *target = isStatic ? &StaticServices : &DynamicServices;
+    NProtoBuf::RepeatedPtrField<TServiceSetPDisk> *to = target->MutablePDisks();
+    if (comprehensive) {
+        to->Clear();
+    }
+    MergeServiceSetPDisks(to, serviceSet.GetPDisks());
+
     if (!EnableProxyMock) {
         // in mock mode we don't need PDisk/VDisk instances
-        ApplyServiceSetPDisks(serviceSet);
+        ApplyServiceSetPDisks();
         ApplyServiceSetVDisks(serviceSet);
-    }
-
-    // for comprehensive configuration -- stop created, but missing entities
-    if (comprehensive) {
-        std::set<TPDiskKey> pdiskQ;
-        for (const auto& [pdiskId, _] : LocalPDisks) { // insert all running PDisk ids in the set
-            pdiskQ.insert(pdiskId);
-        }
-        for (const auto& item : serviceSet.GetPDisks()) { // remove enumerated ids
-            if (item.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::INITIAL ||
-                    item.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::CREATE) {
-                pdiskQ.erase({item.GetNodeID(), item.GetPDiskID()});
-            }
-        }
-        for (const auto& [vslotId, _] : LocalVDisks) { // remove ids for PDisks with active VSlots
-            pdiskQ.erase({vslotId.NodeId, vslotId.PDiskId});
-        }
-        for (const TPDiskKey& pdiskId : pdiskQ) { // terminate excessive PDisks
-            Y_ABORT_UNLESS(pdiskId.NodeId == LocalNodeId);
-            DestroyLocalPDisk(pdiskId.PDiskId);
-        }
     }
 
     for (auto& [vslotId, vdisk] : LocalVDisks) {
@@ -116,7 +105,7 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, nullptr));
     }
     TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, 0, ev->Sender, SelfId(),
-        nullptr, 0));
+        nullptr, ev->Cookie));
 }
 
 void TNodeWarden::HandleUnsubscribe(STATEFN_SIG) {
@@ -286,7 +275,7 @@ void TNodeWarden::HandleGone(STATEFN_SIG) {
 }
 
 void TNodeWarden::ApplyStaticServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& ss) {
-    ApplyServiceSet(ss, true, false, false);
+    ApplyServiceSet(ss, true /*isStatic*/, true /*comprehensive*/, false /*updateCache*/, "distconf");
 }
 
 void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {

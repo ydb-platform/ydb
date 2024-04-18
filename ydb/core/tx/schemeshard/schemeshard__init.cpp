@@ -1791,6 +1791,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (const auto replicationConfig = std::get<9>(rec)) {
                     bool parseOk = ParseFromStringNoSizeLimit(tableInfo->MutableReplicationConfig(), replicationConfig);
                     Y_ABORT_UNLESS(parseOk);
+
+                    if (tableInfo->IsAsyncReplica()) {
+                        Self->PathsById.at(pathId)->SetAsyncReplica();
+                    }
                 }
 
                 tableInfo->IsBackup = std::get<8>(rec);

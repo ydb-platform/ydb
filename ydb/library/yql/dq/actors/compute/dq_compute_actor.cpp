@@ -41,7 +41,9 @@ public:
         ::NMonitoring::TDynamicCounterPtr taskCounters)
         : TBase(executerId, txId, task, std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, true, false, taskCounters)
         , TaskRunnerFactory(taskRunnerFactory)
-    {}
+    {
+        InitializeTask();
+    }
 
     void DoBootstrap() {
         const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();

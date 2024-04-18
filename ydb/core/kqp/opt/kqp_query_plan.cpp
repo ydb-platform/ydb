@@ -2057,7 +2057,7 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
         }
 
         // Sometimes we have multiple inputs for these operators, break after the first one
-        if (opName == "Filter" || opName == "TopSort") {
+        if (opName == "Filter" || opName == "TopSort" || opName == "Aggregate") {
             break;
         }
     }
@@ -2226,11 +2226,6 @@ TString AddSimplifiedPlan(const TString& planText, bool analyzeMode) {
 
     planJson["SimplifiedPlan"] = SimplifyQueryPlan(planCopy.GetMapSafe().at("Plan"));
 
-    // Don't print the OLAP plan yet, there are some non UTF-8 symbols there that need to be fixed
-    //TTempBufOutput stringStream;
-    //NYdb::NConsoleClient::TQueryPlanPrinter printer(NYdb::NConsoleClient::EOutputFormat::PrettyTable, analyzeMode, stringStream);
-    //printer.Print(planJson.GetStringRobust());
-    //planJson["OLAPText"] = stringStream.Data();
     return planJson.GetStringRobust();
 }
 

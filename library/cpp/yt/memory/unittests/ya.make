@@ -12,6 +12,7 @@ SRCS(
     chunked_memory_pool_allocator_ut.cpp
     chunked_memory_pool_output_ut.cpp
     free_list_ut.cpp
+    function_view_ut.cpp
     intrusive_ptr_ut.cpp
     shared_range_ut.cpp
     weak_ptr_ut.cpp

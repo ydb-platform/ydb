@@ -12,6 +12,8 @@
 #include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/delayed_executor.h>
 
+#include <yt/yt/core/actions/invoker_util.h>
+
 #include <library/cpp/yt/system/handle_eintr.h>
 
 #include <util/folder/dirut.h>
@@ -142,6 +144,20 @@ TErrorOr<TString> ResolveBinaryPath(const TString& binary)
     }
 
     return failure();
+}
+
+std::vector<TString> GetEnviron()
+{
+    std::vector<TString> env;
+    size_t size = 0;
+    for (char** envIt = environ; *envIt; ++envIt) {
+        ++size;
+    }
+    env.reserve(size);
+    for (char** envIt = environ; *envIt; ++envIt) {
+        env.emplace_back(*envIt);
+    }
+    return env;
 }
 
 bool TryKillProcessByPid(int pid, int signal)

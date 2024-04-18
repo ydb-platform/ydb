@@ -73,6 +73,8 @@ namespace NBalancing {
 
                 if (Stats.SendPartsLeft != 0 || Stats.DeletePartsLeft != 0) {
                     // sender or deleter has not finished yet
+                    Stats.SendCompleted = Stats.SendPartsLeft == 0;
+                    Stats.DeleteCompleted = Stats.DeletePartsLeft == 0;
                     ContinueBalancing();
                     return;
                 }

@@ -63,6 +63,9 @@ private:
     virtual TStatus HandleEffects(NNodes::TKiEffects node, TExprContext& ctx) = 0;
     virtual TStatus HandlePgDropObject(NNodes::TPgDropObject node, TExprContext& ctx) = 0;
 
+    virtual TStatus HandleCreateSequence(NNodes::TKiCreateSequence node, TExprContext& ctx) = 0;
+    virtual TStatus HandleDropSequence(NNodes::TKiDropSequence node, TExprContext& ctx) = 0;
+
     virtual TStatus HandleModifyPermissions(NNodes::TKiModifyPermissions node, TExprContext& ctx) = 0;
 
     virtual TStatus HandleReturningList(NNodes::TKiReturningList node, TExprContext& ctx) = 0;

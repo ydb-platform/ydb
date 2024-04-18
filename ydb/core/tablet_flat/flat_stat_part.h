@@ -257,8 +257,8 @@ private:
     TSmallVec<TCell> CurrentKey;
     ui64 LastRowId = 0;
     
-    TVector<THolder<IStatsPartGroupIterator>> Groups;
-    TVector<THolder<IStatsPartGroupIterator>> HistoricGroups;
+    TVector<THolder<IStatsPartGroupIter>> Groups;
+    TVector<THolder<IStatsPartGroupIter>> HistoricGroups;
     TIntrusiveConstPtr<TScreen> Screen;
     TIntrusiveConstPtr<TFrames> Small;    /* Inverted index for small blobs   */
     TIntrusiveConstPtr<TFrames> Large;    /* Inverted index for large blobs   */

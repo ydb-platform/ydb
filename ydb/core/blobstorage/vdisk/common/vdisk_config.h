@@ -118,7 +118,6 @@ namespace NKikimr {
         ui32 MinHugeBlobInBytes;
         ui32 MilestoneHugeBlobInBytes;
         ui32 HugeBlobOverhead;
-        bool HugeBlobOldMapCompatible;
         ui32 HullCompLevel0MaxSstsAtOnce;
         ui32 HullCompSortedPartsNum;
         double HullCompLevelRateThreshold;

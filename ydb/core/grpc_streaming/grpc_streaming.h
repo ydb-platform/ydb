@@ -349,7 +349,7 @@ private:
         LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] read finished Name# %s ok# %s data# %s peer# %s",
             this, Name,
             status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
-            NYdbGrpc::FormatMessage(ReadInProgress->Record, status == NYdbGrpc::EQueueEventStatus::OK).c_str(),
+            NYdbGrpc::FormatMessage<TIn>(ReadInProgress->Record, status == NYdbGrpc::EQueueEventStatus::OK).c_str(),
             this->GetPeerName().c_str());
 
         // Take current in-progress read first
@@ -390,14 +390,14 @@ private:
         if (status) {
             LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade write Name# %s data# %s peer# %s grpc status# (%d) message# %s",
                 this, Name,
-                NYdbGrpc::FormatMessage(message).c_str(),
+                NYdbGrpc::FormatMessage<TOut>(message).c_str(),
                 this->GetPeerName().c_str(),
                 static_cast<int>(status->error_code()),
                 status->error_message().c_str());
         } else {
             LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade write Name# %s data# %s peer# %s",
                 this, Name,
-                NYdbGrpc::FormatMessage(message).c_str(),
+                NYdbGrpc::FormatMessage<TOut>(message).c_str(),
                 this->GetPeerName().c_str());
         }
 

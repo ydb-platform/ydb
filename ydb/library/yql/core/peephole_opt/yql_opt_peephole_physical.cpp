@@ -2452,11 +2452,6 @@ TExprNode::TPtr OptimizeMultiMap(const TExprNode::TPtr& node, TExprContext& ctx)
     return node;
 }
 
-TExprNode::TPtr ReplaceWithFirstArg(const TExprNode::TPtr& node, TExprContext&) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Exclude " << node->Content();
-    return node->HeadPtr();
-}
-
 TExprNode::TPtr WrapIteratorForOptionalList(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Wrap " << node->Content() << " for optional list.";
@@ -2964,6 +2959,111 @@ TExprNode::TPtr ExpandAggrMinMax(const TExprNode::TPtr& node, TExprContext& ctx)
             .Add(1, node->HeadPtr())
             .Add(2, node->TailPtr())
         .Seal().Build();
+}
+
+template<typename T>
+TExprNode::TPtr DoExpandMinMax(TStringBuf name, bool usePlainCompare, TPositionHandle pos, T argsBegin, T argsEnd, TExprContext& ctx) {
+    const size_t size = argsEnd - argsBegin;
+    YQL_ENSURE(size > 0);
+    if (size == 1) {
+        return *argsBegin;
+    }
+
+    TExprNode::TPtr left;
+    TExprNode::TPtr right;
+
+    if (size > 2) {
+        const size_t half = size / 2;
+        left = DoExpandMinMax(name, usePlainCompare, pos, argsBegin, argsBegin + half, ctx);
+        right = DoExpandMinMax(name, usePlainCompare, pos, argsBegin + half, argsEnd, ctx);
+    } else {
+        left = *argsBegin;
+        right = *(argsBegin + 1);
+    }
+
+    return ctx.Builder(pos)
+        .Callable("If")
+            .Callable(0, usePlainCompare ? (name == "Min" ? "<=" : ">=") :
+                                           (name == "Min" ? "AggrLessOrEqual" : "AggrGreaterOrEqual"))
+                .Add(0, left)
+                .Add(1, right)
+            .Seal()
+            .Add(1, left)
+            .Add(2, right)
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr ExpandMinMax(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_ENSURE(node->ChildrenSize() >= 2);
+    if (IsDataOrOptionalOfData(node->GetTypeAnn())) {
+        return node;
+    }
+
+    const auto& children = node->ChildrenList();
+    if (!node->GetTypeAnn()->IsOptionalOrNull()) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " with complex non-nullable types";
+        return DoExpandMinMax(node->Content(), true, node->Pos(), children.begin(), children.end(), ctx);
+    }
+
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " with complex nullable types";
+    TExprNodeList childrenWithPositions;
+    for (ui32 i = 0; i < children.size(); ++i) {
+        const auto& child = children[i];
+        childrenWithPositions.push_back(ctx.Builder(child->Pos())
+            .List()
+                .Add(0, child)
+                .Callable(1, "Uint32")
+                    .Atom(0, i)
+                .Seal()
+            .Seal()
+            .Build()
+        );
+    }
+    auto candidateTuple = DoExpandMinMax(node->Content(), false, node->Pos(), childrenWithPositions.begin(), childrenWithPositions.end(), ctx);
+
+    TExprNodeList compareWithCandidate;
+    for (ui32 i = 0; i < children.size(); ++i) {
+        const auto& child = children[i];
+        compareWithCandidate.push_back(ctx.Builder(child->Pos())
+            .Callable("If")
+                .Callable(0, "==")
+                    .Callable(0, "Nth")
+                        .Add(0, candidateTuple)
+                        .Atom(1, 1)
+                    .Seal()
+                    .Callable(1, "Uint32")
+                        .Atom(0, i)
+                    .Seal()
+                .Seal()
+                .Add(1, MakeBool<true>(child->Pos(), ctx))
+                .Callable(2, node->IsCallable("Min") ? "<=" : ">=")
+                    .Callable(0, "Nth")
+                        .Add(0, candidateTuple)
+                        .Atom(1, 0)
+                    .Seal()
+                    .Add(1, child)
+                .Seal()
+            .Seal()
+            .Build()
+        );
+    }
+
+    return ctx.Builder(node->Pos())
+        .Callable("If")
+            .Callable(0, "Coalesce")
+                .Add(0, ctx.NewCallable(node->Pos(), "And", std::move(compareWithCandidate)))
+                .Add(1, MakeBool<false>(node->Pos(), ctx))
+            .Seal()
+            .Callable(1, "Nth")
+                .Add(0, candidateTuple)
+                .Atom(1, 0)
+            .Seal()
+            .Callable(2, "Nothing")
+                .Add(0, ExpandType(node->Pos(), *node->GetTypeAnn(), ctx))
+            .Seal()
+        .Seal()
+        .Build();
 }
 
 template <bool Ordered>
@@ -5468,7 +5568,9 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
 
         TExprNode::TListType funcArgs;
         std::string_view arrowFunctionName;
-        if (node->IsList() || node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
+        const bool rewriteAsIs = node->IsCallable({"AssumeStrict", "AssumeNonStrict", "Likely"});
+        if (node->IsList() || rewriteAsIs ||
+            node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
         {
             if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), ctx, types)) {
                 return true;
@@ -5507,7 +5609,8 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                 }
             }
 
-            TString blockFuncName = TString("Block") + (node->IsList() ? "AsTuple" : node->Content());
+            const TString blockFuncName = rewriteAsIs ? ToString(node->Content()) :
+                (TString("Block") + (node->IsList() ? "AsTuple" : node->Content()));
             if (node->IsCallable({"And", "Or", "Xor"}) && funcArgs.size() > 2) {
                 // Split original argument list by pairs (since the order is not important balanced tree is used)
                 rewrites[node.Get()] = SplitByPairs(node->Pos(), blockFuncName, funcArgs, 0, funcArgs.size(), ctx);
@@ -5584,6 +5687,16 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                     .Add(3, node->Head().ChildPtr(3))
                 .Seal()
                 .Build());
+
+            if (HasSetting(*node->Head().Child(7), "strict")) {
+                auto newArg = ctx.Builder(node->Head().Pos())
+                    .Callable("EnsureStrict")
+                        .Add(0, funcArgs.back())
+                        .Atom(1, TStringBuilder() << "Block version of " << node->Head().Child(0)->Content() << " is not marked as strict")
+                    .Seal()
+                    .Build();
+                funcArgs.back() = std::move(newArg);
+            }
         } else {
             auto fit = funcs.find(node->Content());
             if (fit == funcs.end()) {
@@ -5709,7 +5822,8 @@ bool CanRewriteToBlocksWithInput(const TExprNode& input, const TTypeAnnotationCo
 
 TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     const auto lambda = node->TailPtr();
-    if (node->Head().IsCallable("WideFromBlocks")) {
+    // Swap trivial WideMap and WideFromBlocks.
+    if (node->IsCallable("WideMap") && node->Head().IsCallable("WideFromBlocks")) {
         if (auto newLambda = RebuildArgumentsOnlyLambdaForBlocks(*lambda, ctx, types)) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Head().Content() << " with " << node->Content();
             return ctx.Builder(node->Pos())
@@ -6629,6 +6743,36 @@ TExprNode::TPtr AggrEqualOpt(const TExprNode& node, TExprContext& ctx) {
             .Seal()
             .Add(2, std::move(stub))
         .Seal().Build();
+}
+
+template <bool Asc, bool Equals>
+TExprNode::TPtr AggrComparePg(const TExprNode& node, TExprContext& ctx) {
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand '" << node.Content() << "' over Pg.";
+    auto op = Asc ? ( Equals ? "<=" : "<") : ( Equals ? ">=" : ">");
+    auto finalPart = (Equals == Asc) ? MakeBool<true>(node.Pos(), ctx) : 
+        ctx.NewCallable(node.Pos(), "Exists", { node.TailPtr() });
+    if (!Asc) {
+        finalPart = ctx.NewCallable(node.Pos(), "Not", { finalPart });
+    }
+
+    return ctx.Builder(node.Pos())
+        .Callable("If")
+            .Callable(0, "Exists")
+                .Add(0, node.HeadPtr())
+            .Seal()
+            .Callable(1, "Coalesce")
+                .Callable(0, "FromPg")
+                    .Callable(0, "PgOp")
+                        .Atom(0, op)
+                        .Add(1, node.HeadPtr())
+                        .Add(2, node.TailPtr())
+                    .Seal()
+                .Seal()
+                .Add(1, MakeBool<!Asc>(node.Pos(), ctx))
+            .Seal()
+            .Add(2, finalPart)
+        .Seal()
+        .Build();
 }
 
 template <bool Asc, bool Equals>
@@ -7752,6 +7896,8 @@ TExprNode::TPtr ExpandAggrCompare(const TExprNode::TPtr& node, TExprContext& ctx
             return AggrCompareVariants<false, Asc>(*node, ctx);
         case ETypeAnnotationKind::Tagged:
             return CompareTagged(*node, ctx);
+        case ETypeAnnotationKind::Pg:
+            return AggrComparePg<Asc, Equals>(*node, ctx);
         case ETypeAnnotationKind::Optional:
             if (type->Cast<TOptionalExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Data)
                 return AggrCompareOpt<Asc, Equals>(*node, ctx);
@@ -7923,6 +8069,8 @@ struct TPeepHoleRules {
         {"OptionalReduce", &ExpandOptionalReduce},
         {"AggrMin", &ExpandAggrMinMax<true>},
         {"AggrMax", &ExpandAggrMinMax<false>},
+        {"Min", &ExpandMinMax},
+        {"Max", &ExpandMinMax},
         {"And", &OptimizeLogicalDups<true>},
         {"Or", &OptimizeLogicalDups<false>},
         {"CombineByKey", &ExpandCombineByKey},
@@ -7938,6 +8086,12 @@ struct TPeepHoleRules {
         {">", &ExpandSqlCompare<false, false>},
         {"<=", &ExpandSqlCompare<true, true>},
         {">=", &ExpandSqlCompare<false, true>},
+        {"AggrEquals", &ExpandAggrEqual<true>},
+        {"AggrNotEquals", &ExpandAggrEqual<false>},
+        {"AggrLess", &ExpandAggrCompare<true, false>},
+        {"AggrGreater", &ExpandAggrCompare<false, false>},
+        {"AggrLessOrEqual", &ExpandAggrCompare<true, true>},
+        {"AggrGreaterOrEqual", &ExpandAggrCompare<false, true>},
         {"RangeEmpty", &ExpandRangeEmpty},
         {"AsRange", &ExpandAsRange},
         {"RangeFor", &ExpandRangeFor},
@@ -7982,8 +8136,6 @@ struct TPeepHoleRules {
     const TPeepHoleOptimizerMap FinalStageRules = {
         {"Take", &OptimizeTake},
         {"Skip", &OptimizeSkip},
-        {"Likely", &ReplaceWithFirstArg},
-        {"AssumeStrict", &ReplaceWithFirstArg},
         {"GroupByKey", &PeepHoleConvertGroupBySingleKey},
         {"PartitionByKey", &PeepHolePlainKeyForPartitionByKey},
         {"ExtractMembers", &PeepHoleExpandExtractItems},
@@ -8035,12 +8187,6 @@ struct TPeepHoleRules {
         {"Top", &OptimizeTopOrSort<false, true>},
         {"TopSort", &OptimizeTopOrSort<true, true>},
         {"Sort", &OptimizeTopOrSort<true, false>},
-        {"AggrEquals", &ExpandAggrEqual<true>},
-        {"AggrNotEquals", &ExpandAggrEqual<false>},
-        {"AggrLess", &ExpandAggrCompare<true, false>},
-        {"AggrGreater", &ExpandAggrCompare<false, false>},
-        {"AggrLessOrEqual", &ExpandAggrCompare<true, true>},
-        {"AggrGreaterOrEqual", &ExpandAggrCompare<false, true>},
         {"ToFlow", &OptimizeToFlow},
     };
 

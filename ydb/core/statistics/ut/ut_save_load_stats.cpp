@@ -3,14 +3,21 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/save_load_stats.h>
 
+#include <thread>
+
 namespace NKikimr::NStat {
 
 Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
     Y_UNIT_TEST(Simple) {
         TTestEnv env(1, 1);
-        CreateDatabase(env, "Database");
+        auto init = [&] () {
+            CreateDatabase(env, "Database");
+        };
+        std::thread initThread(init);
 
         auto& runtime = *env.GetServer().GetRuntime();
+        runtime.SimulateSleep(TDuration::Seconds(5));
+        initThread.join();
 
         auto sender = runtime.AllocateEdgeActor(0);
         runtime.Register(CreateStatisticsTableCreator(std::make_unique<TEvStatistics::TEvStatTableCreationResponse>()),
@@ -28,14 +35,14 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         auto saveResponse = runtime.GrabEdgeEvent<TEvStatistics::TEvSaveStatisticsQueryResponse>(sender);
         UNIT_ASSERT(saveResponse->Get()->Success);
 
-        runtime.Register(CreateLoadStatisticsQuery(pathId, statType, "colA"),
+        runtime.Register(CreateLoadStatisticsQuery(pathId, statType, "colA", 1),
             0, 0, TMailboxType::Simple, 0, sender);
         auto loadResponseA = runtime.GrabEdgeEvent<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
         UNIT_ASSERT(loadResponseA->Get()->Success);
         UNIT_ASSERT(loadResponseA->Get()->Data);
         UNIT_ASSERT_VALUES_EQUAL(*loadResponseA->Get()->Data, "dataA");
 
-        runtime.Register(CreateLoadStatisticsQuery(pathId, statType, "colB"),
+        runtime.Register(CreateLoadStatisticsQuery(pathId, statType, "colB", 1),
             0, 0, TMailboxType::Simple, 0, sender);
         auto loadResponseB = runtime.GrabEdgeEvent<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
         UNIT_ASSERT(loadResponseB->Get()->Success);

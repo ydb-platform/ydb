@@ -91,11 +91,7 @@ class Settings:
                 username='user',
                 password='password',
             ),
-            ydb=cls.Ydb(
-                dbname='local',
-                username='user',
-                password='password'
-            )
+            ydb=cls.Ydb(dbname='local', username='user', password='password'),
         )
 
         return s

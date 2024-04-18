@@ -268,18 +268,19 @@ private:
             HandleEquiJoin(lineage, node);
         } else if (node.IsCallable("LMap")) {
             HandleLMap(lineage, node);
-        } else if (node.IsCallable("PartitionsByKeys")) {
+        } else if (node.IsCallable({"PartitionsByKeys", "PartitionByKey"})) {
             HandlePartitionByKeys(lineage, node);
         } else if (node.IsCallable({"AsList","List","ListIf"})) {
             HandleListLiteral(lineage, node);
         } else {
-            Warning(node, TStringBuilder() << node.Content() << " is not supported");
+            Warning(node);
         }
 
         return &lineage;
     }
 
-    void Warning(const TExprNode& node, const TString& message) {
+    void Warning(const TExprNode& node) {
+        auto message = TStringBuilder() << node.Type() << " : " << node.Content() << " is not supported";
         auto issue = TIssue(ExprCtx_.GetPosition(node.Pos()), message);
         SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_LINEAGE_INTERNAL_ERROR, issue);
         ExprCtx_.AddWarning(issue);
@@ -526,13 +527,14 @@ private:
         const auto& arg = lambda.Head().Head();
         const auto& body = lambda.Tail();
         const TExprNode* value;
-        if (body.IsCallable("OptionalIf")) {
+        if (body.IsCallable({"OptionalIf", "FlatListIf"})) {
             value = &body.Tail();
         } else if (body.IsCallable("Just")) {
             value = &body.Head();
         } else if (body.IsCallable({"FlatMap", "OrderedFlatMap"})) {
             value = &body.Head();
         } else {
+            Warning(body);
             return;
         }
 
@@ -583,6 +585,7 @@ private:
                     bool produceStruct = payload->Child(1)->Head().Content() == "some";
                     MergeLineageFromUsedFields(extractHandler->Tail(), extractHandler->Head().Head(), innerLineage, source, produceStruct);
                 } else {
+                    Warning(*payload->Child(1));
                     lineage.Fields.Clear();
                     return;
                 }

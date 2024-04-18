@@ -163,6 +163,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
         TableSpilledBuckets[bucket].DataUi64Adapter.AddData(std::move(TempTuple));
         TableSpilledBuckets[bucket].SpilledTuplesCount++;
         TableSpilledBuckets[bucket].BucketState = TTableSpilledBucket::EBucketState::Spilled;
+        return;
     } else {
         WaitingBucket = bucket;
         HasWaitingBucket = true;
@@ -581,6 +582,9 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
     ui64 tuplesFound = 0;
 
     ui64 bucket = NextBucketToJoin++;
+    // TODO: think of self join. +=2 maybe?
+    JoinTable1->NextBucketToJoin++;
+    JoinTable2->NextBucketToJoin++;
     tuplesFound = JoinBuckets(&JoinTable1->TableBuckets[bucket], &JoinTable2->TableBuckets[bucket], bucket);
 
     HasMoreLeftTuples_ = hasMoreLeftTuples;
@@ -1216,7 +1220,11 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
 
 bool TTable::HasRunningAsyncIoOperation() {
     for (size_t i = 0; i < NumberOfBuckets; ++i) {
-        if (!TableSpilledBuckets[i].DataUi64Adapter.IsAcceptingData() && !TableSpilledBuckets[i].DataUi64Adapter.IsAcceptingDataRequests()) {
+        TableSpilledBuckets[i].DataUi64Adapter.Update();
+    }
+
+    for (size_t i = 0; i < NumberOfBuckets; ++i) {
+        if (!TableSpilledBuckets[i].DataUi64Adapter.IsAcceptingData() && !TableSpilledBuckets[i].DataUi64Adapter.IsAcceptingDataRequests() && !TableSpilledBuckets[i].DataUi64Adapter.IsDataReady()) {
             return true;
         }
     }

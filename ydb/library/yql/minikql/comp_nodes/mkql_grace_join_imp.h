@@ -210,9 +210,10 @@ class TTable {
 
     std::shared_ptr<ISpillerFactory> SpillerFactory;
 
-    ui64 NextBucketToJoin = 0;
+
 
 public:
+    ui64 NextBucketToJoin = 0;
 
     ui64 WaitingBucket;
 

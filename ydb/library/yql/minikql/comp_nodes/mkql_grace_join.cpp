@@ -564,7 +564,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
 
     TablePtr = std::make_unique<GraceJoin::TTable>(
         PackedKeyIntColumnsNum, KeyStrColumnsNum, PackedDataIntColumnsNum,
-        DataStrColumnsNum, KeyIColumnsNum, DataIColumnsNum, NullsBitmapSize, cti_p, IsAny );
+        DataStrColumnsNum, KeyIColumnsNum, DataIColumnsNum, NullsBitmapSize, cti_p, IsAny, SpillerFactory);
 
 }
 
@@ -834,93 +834,98 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
 
         }
 
-        if (!*HaveMoreRightRows && !*HaveMoreLeftRows) {
+        if (!*HaveMoreRightRows && !*HaveMoreLeftRows && JoinedTablePtr->IsJoinCompleted()) {
             *JoinCompleted = true;
             break;
         }
 
-        const NKikimr::NMiniKQL::EFetchResult resultLeft = FlowLeft->FetchValues(ctx, LeftPacker->TuplePtrs.data());
+        if (*HaveMoreRightRows || *HaveMoreLeftRows) {
+            const NKikimr::NMiniKQL::EFetchResult resultLeft = FlowLeft->FetchValues(ctx, LeftPacker->TuplePtrs.data());
 
-        NKikimr::NMiniKQL::EFetchResult resultRight;
+            NKikimr::NMiniKQL::EFetchResult resultRight;
 
-        if (IsSelfJoin_) {
-            resultRight = resultLeft;
-            if (!SelfJoinSameKeys_) {
-                std::copy_n(LeftPacker->TupleHolder.begin(), LeftPacker->TotalColumnsNum, RightPacker->TupleHolder.begin());
+            if (IsSelfJoin_) {
+                resultRight = resultLeft;
+                if (!SelfJoinSameKeys_) {
+                    std::copy_n(LeftPacker->TupleHolder.begin(), LeftPacker->TotalColumnsNum, RightPacker->TupleHolder.begin());
+                }
+            } else {
+                resultRight = FlowRight->FetchValues(ctx, RightPacker->TuplePtrs.data());
             }
-        } else {
-            resultRight = FlowRight->FetchValues(ctx, RightPacker->TuplePtrs.data());
-        }
 
-        if (resultLeft == EFetchResult::One) {
-            if (LeftPacker->TuplesPacked == 0) {
-                LeftPacker->StartTime = std::chrono::system_clock::now();
+            if (resultLeft == EFetchResult::One) {
+                if (LeftPacker->TuplesPacked == 0) {
+                    LeftPacker->StartTime = std::chrono::system_clock::now();
+                }
+                LeftPacker->Pack();
+                LeftPacker->TablePtr->AddTuple(LeftPacker->TupleIntVals.data(), LeftPacker->TupleStrings.data(), LeftPacker->TupleStrSizes.data(), LeftPacker->IColumnsHolder.data());
+                if (LeftPacker->TablePtr->HasRunningAsyncIoOperation()) {
+                    return EFetchResult::Yield;
+                }
             }
-            LeftPacker->Pack();
-            LeftPacker->TablePtr->AddTuple(LeftPacker->TupleIntVals.data(), LeftPacker->TupleStrings.data(), LeftPacker->TupleStrSizes.data(), LeftPacker->IColumnsHolder.data());
-            if (LeftPacker->TablePtr->HasRunningAsyncIoOperation()) {
+
+            if (resultRight == EFetchResult::One) {
+                if (RightPacker->TuplesPacked == 0) {
+                    RightPacker->StartTime = std::chrono::system_clock::now();
+                }
+
+                if ( !SelfJoinSameKeys_ ) {
+                    RightPacker->Pack();
+                    RightPacker->TablePtr->AddTuple(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
+                }
+
+                if (RightPacker->TablePtr->HasRunningAsyncIoOperation()) {
+                    return EFetchResult::Yield;
+                }
+            }
+
+            if (resultLeft == EFetchResult::Finish ) {
+                *HaveMoreLeftRows = false;
+                LeftPacker->TablePtr->Finalize();
+                if (LeftPacker->TablePtr->HasRunningAsyncIoOperation()) {
+                    return EFetchResult::Yield;
+                }
+            }
+
+
+            if (resultRight == EFetchResult::Finish ) {
+                *HaveMoreRightRows = false;
+                RightPacker->TablePtr->Finalize();
+                if (RightPacker->TablePtr->HasRunningAsyncIoOperation()) {
+                    return EFetchResult::Yield;
+                }
+            }
+
+            if ((resultLeft == EFetchResult::Yield && (!*HaveMoreRightRows || resultRight == EFetchResult::Yield)) ||
+                (resultRight == EFetchResult::Yield && !*HaveMoreLeftRows))
+            {
                 return EFetchResult::Yield;
             }
         }
 
-        if (resultRight == EFetchResult::One) {
-            if (RightPacker->TuplesPacked == 0) {
-                RightPacker->StartTime = std::chrono::system_clock::now();
+        if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {
+            if (!RightPacker->TablePtr->IsNextBucketInMemory()) {
+                RightPacker->TablePtr->ProcessLoadingNextSpilledBucket(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
+                if (RightPacker->TablePtr->HasRunningAsyncIoOperation()) return EFetchResult::Yield;
             }
-
-            if ( !SelfJoinSameKeys_ ) {
-                RightPacker->Pack();
-                RightPacker->TablePtr->AddTuple(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
+            if (!LeftPacker->TablePtr->IsNextBucketInMemory()) {
+                LeftPacker->TablePtr->ProcessLoadingNextSpilledBucket(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
+                if (LeftPacker->TablePtr->HasRunningAsyncIoOperation()) return EFetchResult::Yield;
             }
-
-            if (RightPacker->TablePtr->HasRunningAsyncIoOperation()) {
-                return EFetchResult::Yield;
-            }
-        }
-
-        if (resultLeft == EFetchResult::Finish ) {
-            *HaveMoreLeftRows = false;
-            LeftPacker->TablePtr->Finalize();
-            if (LeftPacker->TablePtr->HasRunningAsyncIoOperation()) {
-                return EFetchResult::Yield;
-            }
-        }
-
-
-        if (resultRight == EFetchResult::Finish ) {
-            *HaveMoreRightRows = false;
-            RightPacker->TablePtr->Finalize();
-            if (RightPacker->TablePtr->HasRunningAsyncIoOperation()) {
-                return EFetchResult::Yield;
-            }
-        }
-
-        if ((resultLeft == EFetchResult::Yield && (!*HaveMoreRightRows || resultRight == EFetchResult::Yield)) ||
-            (resultRight == EFetchResult::Yield && !*HaveMoreLeftRows))
-        {
-            return EFetchResult::Yield;
-        }
-
-        if (!RightPacker->TablePtr->IsNextBucketInMemory()) {
-            RightPacker->TablePtr->ProcessLoadingNextSpilledBucket(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
-            if (RightPacker->TablePtr->HasRunningAsyncIoOperation()) return EFetchResult::Yield;
-        }
-        if (!LeftPacker->TablePtr->IsNextBucketInMemory()) {
-            LeftPacker->TablePtr->ProcessLoadingNextSpilledBucket(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
-            if (LeftPacker->TablePtr->HasRunningAsyncIoOperation()) return EFetchResult::Yield;
-        }
-
-        if (LeftPacker->TablePtr->HasRunningAsyncIoOperation() || RightPacker->TablePtr->HasRunningAsyncIoOperation()) {
-            return EFetchResult::Yield;
-        }
-
-        if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) { 
             JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
             *PartialJoinCompleted = true;
             JoinedTablePtr->ResetIterator();
         }
 
         if (!*HaveMoreLeftRows && !*PartialJoinCompleted && RightPacker->TuplesBatchPacked >= RightPacker->BatchSize ) {
+             if (!RightPacker->TablePtr->IsNextBucketInMemory()) {
+                RightPacker->TablePtr->ProcessLoadingNextSpilledBucket(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
+                if (RightPacker->TablePtr->HasRunningAsyncIoOperation()) return EFetchResult::Yield;
+            }
+            if (!LeftPacker->TablePtr->IsNextBucketInMemory()) {
+                LeftPacker->TablePtr->ProcessLoadingNextSpilledBucket(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
+                if (LeftPacker->TablePtr->HasRunningAsyncIoOperation()) return EFetchResult::Yield;
+            }
             JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
 
             *PartialJoinCompleted = true;
@@ -928,6 +933,14 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
         }
 
         if (!*HaveMoreRightRows && !*HaveMoreLeftRows && !*PartialJoinCompleted) {
+            if (!RightPacker->TablePtr->IsNextBucketInMemory()) {
+                RightPacker->TablePtr->ProcessLoadingNextSpilledBucket(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
+                if (RightPacker->TablePtr->HasRunningAsyncIoOperation()) return EFetchResult::Yield;
+            }
+            if (!LeftPacker->TablePtr->IsNextBucketInMemory()) {
+                LeftPacker->TablePtr->ProcessLoadingNextSpilledBucket(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
+                if (LeftPacker->TablePtr->HasRunningAsyncIoOperation()) return EFetchResult::Yield;
+            }
             // TODO: set only once
             LeftPacker->StartTime = std::chrono::system_clock::now();
             RightPacker->StartTime = std::chrono::system_clock::now();

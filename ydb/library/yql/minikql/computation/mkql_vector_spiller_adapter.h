@@ -150,7 +150,7 @@ private:
             State = EState::DataReady;
         } else {
             CopyRopeToTheEndOfVector(CurrentVector, Buffer);
-            ReadOperation = Spiller->Extract(StoredChunks.front());
+            ReadOperation = Spiller->Get(StoredChunks.front());
         }
     }
 

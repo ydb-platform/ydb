@@ -36,7 +36,7 @@ services:
     image: "ghcr.io/ydb-platform/fq-connector-go:v0.2.20@sha256:a1771f348dc8be6219865e332f788429907cdfec3677b3e98f0bc6f7dd542dc6"
     container_name: tests-fq-generic-fq-connector-go
     ports:
-      - '50051'
+      - '2130'
     command: >
       sh -c "
         echo \"$$(dig fq-tests-ydb-ydb +short) fq-tests-ydb-ydb\" >> /etc/hosts; cat /etc/hosts;

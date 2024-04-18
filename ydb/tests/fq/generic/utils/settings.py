@@ -54,7 +54,7 @@ class Settings:
         s = cls(
             connector=cls.Connector(
                 grpc_host='localhost',
-                grpc_port=endpoint_determiner.get_port('fq-connector-go', 50051),
+                grpc_port=endpoint_determiner.get_port('fq-connector-go', 2130),
             ),
             mdb_mock=cls.MdbMock(
                 endpoint=environ['MDB_MOCK_ENDPOINT'],

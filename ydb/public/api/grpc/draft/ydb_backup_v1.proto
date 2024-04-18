@@ -1,0 +1,22 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.Backup.V1;
+
+option java_package = "com.yandex.ydb.backup.v1";
+
+import "ydb/public/api/protos/draft/ydb_backup.proto";
+
+service BackupService {
+  rpc FetchBackupCollections(FetchBackupCollectionsRequest) returns (FetchBackupCollectionsResponse) {}
+
+  rpc ListBackupCollections(ListBackupCollectionsRequest) returns (ListBackupCollectionsResponse) {}
+
+  rpc CreateBackupCollection(CreateBackupCollectionRequest) returns (CreateBackupCollectionResponse) {}
+
+  rpc ReadBackupCollection(ReadBackupCollectionRequest) returns (ReadBackupCollectionResponse) {}
+
+  rpc UpdateBackupCollection(UpdateBackupCollectionRequest) returns (UpdateBackupCollectionResponse) {}
+
+  rpc DeleteBackupCollection(DeleteBackupCollectionRequest) returns (DeleteBackupCollectionResponse) {}
+}

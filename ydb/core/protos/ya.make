@@ -12,6 +12,7 @@ SRCS(
     alloc.proto
     auth.proto
     base.proto
+    backup.proto
     bind_channel_storage_pool.proto
     blob_depot.proto
     blob_depot_config.proto

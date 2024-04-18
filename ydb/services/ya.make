@@ -1,5 +1,6 @@
 RECURSE(
     auth
+    backup
     bg_tasks
     cms
     datastreams

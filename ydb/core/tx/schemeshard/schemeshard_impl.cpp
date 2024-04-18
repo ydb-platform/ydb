@@ -4574,6 +4574,11 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvImportSchemeReady, Handle);
         // } // NImport
 
+        // namespace NBackup {
+        HFuncTraced(TEvBackup::TEvFetchBackupCollectionsRequest, Handle);
+        // } // NBackup
+
+
         //namespace NIndexBuilder {
         HFuncTraced(TEvIndexBuilder::TEvCreateRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvGetRequest, Handle);

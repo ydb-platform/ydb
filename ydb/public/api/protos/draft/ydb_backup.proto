@@ -1,0 +1,153 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.Backup;
+option java_package = "com.yandex.ydb.backup";
+
+import "google/protobuf/timestamp.proto";
+
+import "ydb/public/api/protos/ydb_operation.proto";
+
+message S3Settings {}
+
+message PathList {
+        repeated string path = 1;
+}
+
+message S3Storage {
+        S3Settings s3_settings = 1;
+        string prefix = 2;
+        // and some additional storage settings, maybe different storage classes
+}
+
+message LocalStorage {}
+
+message BackupStorage {
+    oneof storage {
+        LocalStorage local = 1;
+        S3Storage s3 = 2;
+        // + file_storage
+    }
+}
+
+message FetchBackupCollectionsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    BackupStorage backup_storage = 2;
+}
+
+message ListBackupCollectionsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message ChangeStreamChunk {
+    enum State {
+        Unspecified = 0;
+        Working = 1;
+        Finished = 2;
+        Broken = 3;
+        Deleting = 4;
+    }
+
+    /*required*/ string uuid = 1;
+    State state = 2;
+    google.protobuf.Timestamp start_time = 3;
+    google.protobuf.Timestamp end_time = 4;
+}
+
+message FullBackup {
+    enum State {
+        Unspecified = 0;
+        Working = 1;
+        Finished = 2;
+        Broken = 3;
+        Deleting = 4;
+    }
+
+    /*required*/ string uuid = 1;
+    State state = 2;
+    google.protobuf.Timestamp time = 3;
+}
+
+message BackupTarget {
+    oneof target {
+        PathList explicit_paths = 1;
+    }
+}
+
+message Restore {
+    enum State {
+        Unspecified = 0;
+        Working = 1;
+        Finished = 2;
+        // Stopped
+        // Cancelled
+    }
+
+    /*required*/ string uuid = 1;
+}
+
+// Look at this as a Binding in YQ
+// Or as a View in C++
+message BackupCollection {
+    enum AccessFlags {
+        Unspecified = 0x00;
+        READ        = 0x01;
+        WRITE       = 0x02;
+        READ_WRITE  = 0x03;
+    }
+
+    /*required*/ string uuid = 1;
+    string description = 2;
+    uint32 access_flags = 3;
+    optional BackupTarget backup_target = 4;
+    repeated Restore restores = 5;
+    BackupStorage storage = 6;
+    repeated FullBackup full_backups = 7;
+    repeated ChangeStreamChunk change_stream_chunks = 8;
+}
+
+message FetchBackupCollectionsResponse {
+    Ydb.Operations.Operation operation = 1;
+    repeated BackupCollection backup_collection = 2;
+}
+
+message ListBackupCollectionsResponse {
+    Ydb.Operations.Operation operation = 1;
+    repeated BackupCollection backup_collection = 2;
+}
+
+message CreateBackupCollectionRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message CreateBackupCollectionResponse {
+    Ydb.Operations.Operation operation = 1;
+    BackupCollection backup_collection = 2;
+}
+
+message ReadBackupCollectionRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message ReadBackupCollectionResponse {
+    Ydb.Operations.Operation operation = 1;
+    BackupCollection backup_collection = 2;
+}
+
+message UpdateBackupCollectionRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message UpdateBackupCollectionResponse {
+    Ydb.Operations.Operation operation = 1;
+    BackupCollection backup_collection = 2;
+}
+
+message DeleteBackupCollectionRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message DeleteBackupCollectionResponse {
+    Ydb.Operations.Operation operation = 1;
+    BackupCollection backup_collection = 2;
+}

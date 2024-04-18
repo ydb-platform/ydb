@@ -174,6 +174,7 @@ SRCS(
     schemeshard_audit_log_fragment.cpp
     schemeshard_audit_log.cpp
     schemeshard_impl.cpp
+    schemeshard_backup.cpp
     schemeshard_impl.h
     schemeshard_billing_helpers.cpp
     schemeshard_cdc_stream_scan.cpp

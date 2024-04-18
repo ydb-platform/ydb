@@ -4,7 +4,7 @@ from typing import Optional
 
 import yatest.common
 
-from ydb.tests.tools.docker_compose_helpers.endpoint_determiner import EndpointDeterminer
+from ydb.tests.fq.generic.utils.endpoint_determiner import EndpointDeterminer
 
 
 @dataclass
@@ -54,7 +54,7 @@ class Settings:
         s = cls(
             connector=cls.Connector(
                 grpc_host='localhost',
-                grpc_port=endpoint_determiner.get_port('connector', 50051),
+                grpc_port=endpoint_determiner.get_port('fq-connector-go', 50051),
             ),
             mdb_mock=cls.MdbMock(
                 endpoint=environ['MDB_MOCK_ENDPOINT'],

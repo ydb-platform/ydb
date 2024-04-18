@@ -5,6 +5,8 @@
 #include <ydb/library/yql/public/udf/udf_type_builder.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 
+#include <ydb/library/yql/minikql/computation/mkql_vector_spiller_adapter.h>
+
 #include <contrib/libs/xxhash/xxhash.h>
 
 namespace NKikimr {
@@ -53,6 +55,32 @@ struct KeysHashTable {
     std::vector<ui64, TMKQLAllocator<ui64>> SpillData; // Vector to store long data which cannot be fit in single hash table slot.
 };
 
+struct TTableSpilledBucket {
+    TTableSpilledBucket(ISpiller::TPtr spiller, size_t sizeLimit)
+        : StateUi64Adapter(spiller, sizeLimit)
+        , StateUi32Adapter(spiller, sizeLimit)
+        , StateCharAdapter(spiller, sizeLimit)
+        , DataUi64Adapter(spiller, sizeLimit) {
+    }
+
+    TVectorSpillerAdapter<ui64, TMKQLAllocator<ui64>> StateUi64Adapter;
+    TVectorSpillerAdapter<ui32, TMKQLAllocator<ui32>> StateUi32Adapter;
+    TVectorSpillerAdapter<char, TMKQLAllocator<char>> StateCharAdapter;
+
+    TVectorSpillerAdapter<ui64, TMKQLAllocator<ui64>> DataUi64Adapter;
+
+    enum class EBucketState {
+        InMemory,
+        SpillingState,
+        SpillingData,
+        Spilled
+    };
+
+    EBucketState BucketState = EBucketState::InMemory;
+
+    ui64 SpilledTuplesCount = 0;
+};
+
 struct TTableBucket {
     ui64 TuplesNum = 0;  // Total number of tuples in bucket
     std::vector<ui64, TMKQLAllocator<ui64>> KeyIntVals;  // Vector to store table key values
@@ -70,18 +98,8 @@ struct TTableBucket {
     std::set<ui32> AllRightMatchedIds; // All row ids of right join table which matching rows in left table. To process streaming join mode. 
     KeysHashTable AnyHashTable; // Hash table to process join only for unique keys (any join attribute)
 
-    ISpiller::TPtr SpillerPtr;
-
-    enum class EBucketState {
-        InMemory,
-        SpillingState,
-        SpillingData
-    };
-
-    EBucketState BucketState = EBucketState::InMemory;
 
  };
-
 
 struct TupleData {
     ui64 * IntColumns = nullptr; // Array of packed int  data of the table. Caller should allocate array of NumberOfIntColumns size
@@ -131,9 +149,11 @@ class TTable {
     // Table data is partitioned in buckets based on key value
     std::vector<TTableBucket> TableBuckets;
     std::vector<bool> IsBucketSpilled;
+    std::vector<TTableSpilledBucket> TableSpilledBuckets;
 
     // Temporary vector for tuples manipulation;
-    std::vector<ui64> TempTuple;
+    std::vector<ui64, TMKQLAllocator<ui64>> TempTuple;
+
 
     // Hashes for interface - based columns values
     std::vector<ui64> IColumnsHashes;
@@ -165,6 +185,7 @@ class TTable {
 
     inline XXH64_hash_t GetTemporaryTupleHash();
     void FillTemporaryTuple(ui64 * intColumns, char ** stringColumns, ui32 * stringsSizes, NYql::NUdf::TUnboxedValue * iColumns);
+    void FillBucketWithDataFromTTuple(TTableBucket& bucket, std::vector<ui64, TMKQLAllocator<ui64>> tuple, ui64 * intColumns, char ** stringColumns, ui32 * stringsSizes, NYql::NUdf::TUnboxedValue * iColumns, XXH64_hash_t& hash);
 
     // True if current iterator of tuple in joinedTable has corresponding joined tuple in second table. Id of joined tuple in second table returns in tupleId2.
     inline bool HasJoinedTupleId(TTable* joinedTable, ui32& tupleId2);
@@ -189,7 +210,14 @@ class TTable {
 
     std::shared_ptr<ISpillerFactory> SpillerFactory;
 
+    ui64 NextBucketToJoin = 0;
+
 public:
+
+    ui64 WaitingBucket;
+
+    bool HasWaitingBucket = false;
+
 
     // Adds new tuple to the table.  intColumns, stringColumns - data of columns, 
     // stringsSizes - sizes of strings columns.  Indexes of null-value columns
@@ -207,12 +235,26 @@ public:
     // hasMoreLeftTuples, hasMoreRightTuples is true if join is partial and more rows are coming.  For final batch hasMoreLeftTuples = false, hasMoreRightTuples = false
     void Join(TTable& t1, TTable& t2, EJoinKind joinKind = EJoinKind::Inner, bool hasMoreLeftTuples = false, bool hasMoreRightTuples = false );
 
+    ui64 JoinBuckets(TTableBucket * bucket1, TTableBucket * bucket2, ui64 bucket);
+
 
     // Returns next jointed tuple data. Returs true if there are more tuples
     bool NextJoinedData(TupleData& td1, TupleData& td2);
 
     // Clears table content
     void Clear();
+
+    bool HasRunningAsyncIoOperation();
+
+    void Finalize();
+
+    bool IsNextBucketInMemory();
+
+    void ProcessLoadingNextSpilledBucket(ui64 * intColumns, char ** stringColumns, ui32 * stringsSizes, NYql::NUdf::TUnboxedValue * iColumns);
+
+    bool IsJoinCompleted() {
+        return NextBucketToJoin > NumberOfBuckets;
+    }
 
     // Creates new table with key columns and data columns
     TTable(ui64 numberOfKeyIntColumns = 0, ui64 numberOfKeyStringColumns = 0,

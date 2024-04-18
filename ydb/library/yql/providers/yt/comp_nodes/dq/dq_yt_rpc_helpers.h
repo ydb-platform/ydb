@@ -25,7 +25,7 @@ class TPayloadRPCReader : public NYT::TRawTableReader {
 public:
     TPayloadRPCReader(NYT::TSharedRef&& payload) : Payload_(std::move(payload)), PayloadStream_(Payload_.Begin(), Payload_.Size()) {}
 
-    bool Retry(const TMaybe<ui32>&, const TMaybe<ui64>&) override {
+    bool Retry(const TMaybe<ui32>&, const TMaybe<ui64>&, const std::exception_ptr&) override {
         return false;
     }
 

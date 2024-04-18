@@ -6218,14 +6218,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    template<bool WithInitVal>
     IGraphTransformer::TStatus StaticFoldWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         const auto collection = input->HeadPtr();
-        const auto reduceFunc = input->ChildPtr(2);
 
         if (HasError(collection->GetTypeAnn(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -6238,13 +6236,22 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         TExprNode::TPtr result = nullptr;
-        if constexpr (WithInitVal) {
+        TExprNode::TPtr initFunc = nullptr;
+        if (input->Content() == "StaticFold1") {
+            initFunc = input->ChildPtr(1);
+
+            auto status = ConvertToLambda(initFunc, ctx.Expr, 1);
+            if (status.Level != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
+        } else {
             result = input->ChildPtr(1);
         }
 
-        TExprNode::TPtr initFunc = nullptr;
-        if constexpr (!WithInitVal) {
-            initFunc = input->ChildPtr(1);
+        auto reduceFunc = input->ChildPtr(2);
+        auto status = ConvertToLambda(reduceFunc, ctx.Expr, 2);
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
         }
 
         if (collection->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct) {
@@ -12026,8 +12033,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["IfPresent"] = &IfPresentWrapper;
         Functions["StaticMap"] = &StaticMapWrapper;
         Functions["StaticZip"] = &StaticZipWrapper;
-        Functions["StaticFold"] = &StaticFoldWrapper<true>;
-        Functions["StaticFold1"] = &StaticFoldWrapper<false>;
+        Functions["StaticFold"] = &StaticFoldWrapper;
+        Functions["StaticFold1"] = &StaticFoldWrapper;
         Functions["TryRemoveAllOptionals"] = &TryRemoveAllOptionalsWrapper;
         Functions["HasNull"] = &HasNullWrapper;
         Functions["TypeOf"] = &TypeOfWrapper;

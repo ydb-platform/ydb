@@ -12,6 +12,7 @@ PEERDIR(
     ydb/library/db_pool/protos
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/generic/connector/libcpp
+    ydb/services/metadata/secret
 )
 
 YQL_LAST_ABI_VERSION()

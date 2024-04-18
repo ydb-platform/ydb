@@ -296,7 +296,17 @@ message TBlobStorageConfig {
         repeated TCostMetricsConfig VDiskTypes = 1;
     };
 
+    message TVDiskPerformanceConfig {
+        optional NKikimrBlobStorage.EPDiskType PDiskType = 1;
+        optional uint32 MinHugeBlobSizeInBytes = 4;
+    }
+
+    message TVDiskPerformanceSettings {
+        repeated TVDiskPerformanceConfig VDiskTypes = 1;
+    };
+
     optional TCostMetricsSettings CostMetricsSettings = 7;
+    optional TVDiskPerformanceSettings VDiskPerformanceSettings = 8;
  }
 
 message TBlobStorageFormatConfig {

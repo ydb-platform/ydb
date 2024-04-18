@@ -7,6 +7,14 @@
 #include <ydb/core/grpc_services/local_grpc/local_grpc.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 
+#define SRC_LOG_T(s, ...) LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, LogCtx(__VA_ARGS__) << s)
+#define SRC_LOG_D(s, ...) LOG_DEBUG_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, LogCtx(__VA_ARGS__) << s)
+#define SRC_LOG_I(s, ...) LOG_INFO_S(ctx,  NKikimrServices::FQ_INTERNAL_SERVICE, LogCtx(__VA_ARGS__) << s)
+#define SRC_LOG_W(s, ...) LOG_WARN_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, LogCtx(__VA_ARGS__) << s)
+#define SRC_LOG_N(s, ...) LOG_NOTICE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, LogCtx(__VA_ARGS__) << s)
+#define SRC_LOG_E(s, ...) LOG_ERROR_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, LogCtx(__VA_ARGS__) << s)
+#define SRC_LOG_C(s, ...) LOG_CRIT_S(ctx,  NKikimrServices::FQ_INTERNAL_SERVICE, LogCtx(__VA_ARGS__) << s)
+
 namespace NKikimr::NGRpcService::NYdbOverFq {
 
 template<typename TDerived, typename TReq>
@@ -94,8 +102,9 @@ protected:
         if (!queryId.empty()) {
             builder << " queryId: " << queryId;
         } else if (!QueryId_.empty()) {
-            builder << "queryId: " << QueryId_;
+            builder << " queryId: " << QueryId_;
         }
+        builder << ' ';
         return builder;
     }
 
@@ -116,7 +125,7 @@ protected:
         auto& acl = *queryContent.mutable_acl();
         acl.set_visibility(FederatedQuery::Acl_Visibility::Acl_Visibility_SCOPE);
 
-        LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, LogCtx() << ", creating query");
+        SRC_LOG_T("creating query");
 
         Become(&TRpcBase::CreateQueryState);
         MakeLocalCall(std::move(req), ctx);
@@ -165,8 +174,7 @@ protected:
         resp.operation().result().UnpackTo(&result);
 
         if (!NFq::IsTerminalStatus(result.status())) {
-            LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                LogCtx() << ", still waiting for query: " << QueryId_ <<
+            SRC_LOG_T("still waiting for query: " << QueryId_ <<
                 ", current status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()));
             auto delay = WaitRetryState_->GetNextRetryDelay(result.status());
             if (!delay) {
@@ -208,8 +216,7 @@ protected:
         NYql::IssuesFromMessage(operation.issues(), issues);
 
         TString errorMsg = TStringBuilder{} << "failed to " << opName << " with status: " << Ydb::StatusIds::StatusCode_Name(operation.status());
-        LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-            LogCtx() << ' ' << errorMsg << ", issues: " << issues.ToOneLineString());
+        SRC_LOG_I(errorMsg << ", issues: " << issues.ToOneLineString());
         issues.AddIssue(errorMsg);
 
         TBase::Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR, issues, ctx);

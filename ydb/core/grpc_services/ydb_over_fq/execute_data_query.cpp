@@ -34,8 +34,7 @@ public:
 
     void CreateQuery(const TActorContext& ctx) {
         if (!TBase::GetProtoRequest()->query().has_yql_text()) {
-            LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                            LogCtx() << ", got request with id instead of text");
+            SRC_LOG_I("got request with id instead of text");
             TBase::Reply(
                 Ydb::StatusIds::BAD_REQUEST,
                 TStringBuilder {} << "query id in " << TDerived::RpcName << " is not supported",
@@ -49,8 +48,7 @@ public:
     }
 
     void Handle(const FederatedQuery::CreateQueryResult& result, const TActorContext& ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-            LogCtx() << ", created query: " << result.query_id());
+        SRC_LOG_T("created query: " << result.query_id());
 
         TBase::WaitForTermination(result.query_id(), ctx);
     }
@@ -58,8 +56,7 @@ public:
     // WaitForExecutionImpl
 
     void OnQueryTermination(const TString& queryId, FederatedQuery::QueryMeta_ComputeStatus status, const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-            LogCtx(queryId) << " finished query execution with status " << FederatedQuery::QueryMeta::ComputeStatus_Name(status));
+        SRC_LOG_I("finished query execution with status " << FederatedQuery::QueryMeta::ComputeStatus_Name(status), queryId);
 
         // Whether query is successful or not, we want to call DescribeQuery
         //   to get either ResultSet size or issues
@@ -73,8 +70,7 @@ public:
         if (status != FederatedQuery::QueryMeta_ComputeStatus_COMPLETED) {
             TString errorMsg = TStringBuilder{} << "created query " << result.query().meta().common().id() <<
                 " finished with non-success status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(status);
-            LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                LogCtx() << " error: " << errorMsg);
+            SRC_LOG_I("error: " << errorMsg);
 
             NYql::TIssues issues;
             issues.AddIssue(std::move(errorMsg));
@@ -201,8 +197,7 @@ public:
             issues.AddIssue("Scan query should have a single result set.");
             issues.back().SetCode(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, NYql::TSeverityIds::S_ERROR);
             Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
-            LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, LogCtx(queryId) <<
-                " failed: got " << ResultSetSizes_.size() << " result sets");
+            SRC_LOG_I("failed: got " << ResultSetSizes_.size() << " result sets", queryId);
             return;
         }
 
@@ -223,15 +218,13 @@ public:
         SentRowsInCurrRS_ += result.result_set().rows_size();
 
         if (SentRowsInCurrRS_ < ResultSetSizes_[CurrentResultSet_]) {
-            LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                LogCtx(QueryId_) << " RS[" << CurrentResultSet_ << "][" <<
-                (SentRowsInCurrRS_ - result.result_set().rows_size()) << ":" << SentRowsInCurrRS_ << "], still got " << (ResultSetSizes_[CurrentResultSet_] - CurrentResultSet_)
+            SRC_LOG_T("RS[" << CurrentResultSet_ << "][" << (SentRowsInCurrRS_ - result.result_set().rows_size()) <<
+                ":" << SentRowsInCurrRS_ << "], still got " << (ResultSetSizes_[CurrentResultSet_] - CurrentResultSet_), QueryId_
             );
             MakeLocalCall(CreateResultSetRequest(QueryId_, CurrentResultSet_, SentRowsInCurrRS_), ctx);
         } else {
-            LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                LogCtx(QueryId_) << " RS[" << CurrentResultSet_ << "][" <<
-                (SentRowsInCurrRS_ - result.result_set().rows_size()) << ":" << SentRowsInCurrRS_ << "], fully sent"
+            SRC_LOG_T("RS[" << CurrentResultSet_ << "][" <<
+                (SentRowsInCurrRS_ - result.result_set().rows_size()) << ":" << SentRowsInCurrRS_ << "], fully sent", QueryId_
             );
 
             Y_ABORT_UNLESS(SentRowsInCurrRS_ == ResultSetSizes_[CurrentResultSet_]);
@@ -240,9 +233,7 @@ public:
             if (CurrentResultSet_ < static_cast<i64>(ResultSetSizes_.size())) {
                 MakeLocalCall(CreateResultSetRequest(QueryId_, CurrentResultSet_, SentRowsInCurrRS_), ctx);
             } else {
-                LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                    LogCtx(QueryId_) << " finish"
-                );
+                SRC_LOG_T("finish", QueryId_);
                 Request_->FinishStream(Ydb::StatusIds::SUCCESS);
                 this->Die(ctx);
             }

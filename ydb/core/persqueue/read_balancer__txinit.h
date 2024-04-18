@@ -54,11 +54,6 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
 
                     Migrate(Self->TabletConfig);
                     Self->Consumers.clear();
-
-                    for (auto& consumer : Self->TabletConfig.GetConsumers()) {
-                        Self->Consumers[consumer.GetName()].ScalingSupport = consumer.HasScalingSupport() ? consumer.GetScalingSupport() : DefaultScalingSupport();
-                    }
-
                     Self->PartitionGraph = MakePartitionGraph(Self->TabletConfig);
                 }
                 Self->Inited = true;
@@ -72,7 +67,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 ui32 part = partsRowset.GetValue<Schema::Partitions::Partition>();
                 ui64 tabletId = partsRowset.GetValue<Schema::Partitions::TabletId>();
 
-                partitionsInfo[part] = {tabletId, EPartitionState::EPS_FREE, TActorId(), part + 1};
+                partitionsInfo[part] = {tabletId};
                 Self->AggregatedStats.AggrStats(part, partsRowset.GetValue<Schema::Partitions::DataSize>(),
                                                 partsRowset.GetValue<Schema::Partitions::UsedReserveSize>());
 
@@ -87,21 +82,11 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 Y_ABORT_UNLESS(groupId > 0);
                 auto jt = Self->PartitionsInfo.find(partition);
                 Y_ABORT_UNLESS(jt != Self->PartitionsInfo.end());
-                jt->second.GroupId = groupId;
-
-                Self->NoGroupsInBase = false;
 
                 if (!groupsRowset.Next())
                     return false;
             }
 
-            Y_ABORT_UNLESS(Self->ClientsInfo.empty());
-
-            for (auto& p : Self->PartitionsInfo) {
-                ui32 groupId = p.second.GroupId;
-                Self->GroupsInfo[groupId].push_back(p.first);
-
-            }
             Self->TotalGroups = Self->GroupsInfo.size();
 
 

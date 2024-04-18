@@ -34,5 +34,41 @@
                 ]
             }
         ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "AndWithBinaryList";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "ListType";
+                                        [
+                                            "DataType";
+                                            "Uint32"
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            [
+                                "1"
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        ]
     }
 ]

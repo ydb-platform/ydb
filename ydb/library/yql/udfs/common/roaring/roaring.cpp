@@ -4,8 +4,8 @@
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 
-#include <contrib/libs/croaring/include/roaring/roaring.h>
 #include <contrib/libs/croaring/include/roaring/memory.h>
+#include <contrib/libs/croaring/include/roaring/roaring.h>
 
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
@@ -157,10 +157,9 @@ namespace {
 
     class TRoaringUint32List: public TBoxedValue {
     public:
-        TRoaringUint32List(ui32 indexLimit, ui32 indexOffset, bool hasLimitOffset)
-            : indexLimit_(indexLimit)
-            , indexOffset_(indexOffset)
-            , hasLimitOffset_(hasLimitOffset)
+        TRoaringUint32List(ui32 indexLimit, ui32 indexOffset)
+            : IndexLimit_(indexLimit)
+            , IndexOffset_(indexOffset)
         {
         }
 
@@ -179,15 +178,15 @@ namespace {
                 auto bitmap = GetBitmapFromArg(args[0]);
                 auto cardinality = roaring_bitmap_get_cardinality(bitmap);
                 auto resultList = TVector<TUnboxedValue>();
-                resultList.reserve(cardinality);
 
                 auto limit = cardinality;
                 auto offset = 0;
 
-                if (hasLimitOffset_) {
-                    limit = args[1].GetElement(indexLimit_).Get<ui32>();
-                    offset = args[1].GetElement(indexOffset_).Get<ui32>();
+                if (args[1]) {
+                    limit = args[1].GetElement(IndexLimit_).Get<ui32>();
+                    offset = args[1].GetElement(IndexOffset_).Get<ui32>();
                 }
+                resultList.reserve(limit);
 
                 auto i = roaring_iterator_create(bitmap);
                 while (i->has_value && limit > 0) {
@@ -209,8 +208,7 @@ namespace {
             }
         }
 
-        ui32 indexLimit_, indexOffset_;
-        bool hasLimitOffset_;
+        ui32 IndexLimit_, IndexOffset_;
     };
 
     class TRoaringDeserialize: public TBoxedValue {
@@ -328,6 +326,7 @@ namespace {
                                    IFunctionTypeInfoBuilder& builder) const final {
             try {
                 Y_UNUSED(typeConfig);
+                Y_UNUSED(userType);
 
                 auto typesOnly = (flags & TFlags::TypesOnly);
                 auto roaringType = builder.Resource(RoaringResourceName);
@@ -359,7 +358,6 @@ namespace {
                         builder.Implementation(new TRoaringCardinality());
                     }
                 } else if (TRoaringUint32List::Name() == name) {
-                    Y_ENSURE(userType);
                     auto ui32ListType =
                         builder.List()->Item(builder.SimpleType<ui32>()).Build();
 
@@ -369,28 +367,16 @@ namespace {
                                           .AddField<ui32>("listOffset", &indexOffset)
                                           .Build();
 
-                    auto typeHelper = builder.TypeInfoHelper();
-                    builder.UserType(userType);
+                    builder.Returns(builder.Optional()->Item(ui32ListType).Build())
+                        .Args()
+                        ->Add(optionalRoaringType)
+                        .Add(builder.Optional()->Item(structType).Build())
+                        .Done()
+                        .OptionalArgs(1);
 
-                    auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType);
-                    auto argsTypeTuple = userTypeInspector.GetElementType(0);
-                    auto argsTypeInspector =
-                        TTupleTypeInspector(*typeHelper, argsTypeTuple);
-                    bool hasLimitOffset = argsTypeInspector.GetElementsCount() == 2;
-                    if (hasLimitOffset) {
-                        builder.Returns(builder.Optional()->Item(ui32ListType).Build())
-                            .Args()
-                            ->Add(optionalRoaringType)
-                            .Add(builder.Optional()->Item(structType).Build());
-
-                    } else {
-                        builder.Returns(builder.Optional()->Item(ui32ListType).Build())
-                            .Args()
-                            ->Add(optionalRoaringType);
-                    }
                     if (!typesOnly) {
                         builder.Implementation(
-                            new TRoaringUint32List(indexLimit, indexOffset, hasLimitOffset));
+                            new TRoaringUint32List(indexLimit, indexOffset));
                     }
                 } else if (TRoaringOrWithBinary::Name() == name) {
                     builder.Returns(optionalRoaringType)

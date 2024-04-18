@@ -1038,13 +1038,18 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             "DELETE FROM `" JOBS_TABLE_NAME "` ON\n"
             "SELECT * FROM $to_delete;\n"
             "UPDATE `" QUERIES_TABLE_NAME "` SET \n"
-            "   `" LAST_JOB_ID_COLUMN_NAME "` = $job_id, `" VISIBILITY_COLUMN_NAME "` = $visibility, `" AUTOMATIC_COLUMN_NAME "` = $automatic,\n"
+            "   `" VISIBILITY_COLUMN_NAME "` = $visibility, `" AUTOMATIC_COLUMN_NAME "` = $automatic,\n"
             "   `" NAME_COLUMN_NAME "` = $name, `" EXECUTE_MODE_COLUMN_NAME "` = $execute_mode,\n"
             "   `" REVISION_COLUMN_NAME "` = $revision, `" STATUS_COLUMN_NAME "` = $status, "
         );
-        writeQueryBuilder.AddText(
-            (request.execute_mode() != FederatedQuery::SAVE ? "`" INTERNAL_COLUMN_NAME "` = $internal,\n" : TString{"\n"})
-        );
+
+        if (request.execute_mode() != FederatedQuery::SAVE) {
+            writeQueryBuilder.AddText(
+                "   `" LAST_JOB_ID_COLUMN_NAME "` = $job_id, "
+                "   `" INTERNAL_COLUMN_NAME "` = $internal,\n"
+            );
+        }
+
         writeQueryBuilder.AddText(
             "   `" QUERY_TYPE_COLUMN_NAME "` = $query_type, `" QUERY_COLUMN_NAME "` = $query,\n"
             "   `" RESULT_ID_COLUMN_NAME "` = $result_id, `" META_REVISION_COLUMN_NAME "` = `" META_REVISION_COLUMN_NAME "` + 1,\n"

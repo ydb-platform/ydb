@@ -202,7 +202,7 @@ bool TYdbUpdater::GetLatestVersion() {
         return true;
     }
 
-    TShellCommand curlCmd(TStringBuilder() << "curl --silent --max-time 5 " << VersionUrl);
+    TShellCommand curlCmd(TStringBuilder() << "curl --silent --max-time 10 " << VersionUrl);
     curlCmd.Run().Wait();
 
     if (curlCmd.GetExitCode() == 0) {

@@ -15,11 +15,13 @@ struct TPartInfo {
     ui32 PartitionId;
     ui32 Group;
     ui64 TabletId;
+    NSchemeShard::TTopicTabletInfo::TKeyRange KeyRange;
 
-    TPartInfo(const ui32 partitionId, const ui64 tabletId, const ui32 group)
+    TPartInfo(const ui32 partitionId, const ui64 tabletId, const ui32 group, NSchemeShard::TTopicTabletInfo::TKeyRange keyRange)
         : PartitionId(partitionId)
         , Group(group)
         , TabletId(tabletId)
+        , KeyRange(keyRange)
     {}
 };
 

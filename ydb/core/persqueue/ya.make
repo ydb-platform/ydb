@@ -21,6 +21,8 @@ SRCS(
     partition_init.cpp
     partition_monitoring.cpp
     partition_read.cpp
+    partition_scale_request.cpp
+    partition_scale_manager.cpp
     partition_sourcemanager.cpp
     partition_write.cpp
     partition.cpp

@@ -7,6 +7,7 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
+#include <ydb/library/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/public/udf/tz/udf_tz.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
@@ -2856,9 +2857,9 @@ TExprBase TYtPathInfo::ToExprNode(TExprContext& ctx, const TPositionHandle& pos,
     } else {
         pathBuilder.Stat<TCoVoid>().Build();
     }
-    if (!AdditionalAttributes.Empty()) {
+    if (AdditionalAttributes) {
         pathBuilder.AdditionalAttributes<TCoAtom>()
-            .Value(AdditionalAttributes)
+            .Value(*AdditionalAttributes)
         .Build();
     }
     
@@ -2866,8 +2867,8 @@ TExprBase TYtPathInfo::ToExprNode(TExprContext& ctx, const TPositionHandle& pos,
 }
 
 void TYtPathInfo::FillRichYPath(NYT::TRichYPath& path) const {
-    if (!AdditionalAttributes.Empty()) {
-        NYT::Deserialize(path, NYT::NodeFromYsonString(AdditionalAttributes));
+    if (AdditionalAttributes) {
+        DeserializeRichYPathAttrs(*AdditionalAttributes, path);
     }
     if (Columns) {
         // Should have the same criteria as in TYtPathInfo::GetCodecSpecNode()

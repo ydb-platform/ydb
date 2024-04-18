@@ -504,7 +504,7 @@ public:
                     const auto& value = compGraph->GetValue();
                     const auto it = value.GetListIterator();
                     for (NUdf::TUnboxedValue current; it.Next(current);) {
-                        res.Tables.push_back(TCanonizedPath{TString(current.AsStringRef()), Nothing(), {}, ""});
+                        res.Tables.push_back(TCanonizedPath{TString(current.AsStringRef()), Nothing(), {}, Nothing()});
                     }
                 }
                 else {
@@ -512,7 +512,7 @@ public:
                         uniqueTables.begin(), uniqueTables.end(),
                         std::back_inserter(res.Tables),
                         [] (const TString& path) {
-                            return TCanonizedPath{path, Nothing(), {}, ""};
+                            return TCanonizedPath{path, Nothing(), {}, Nothing()};
                         });
                 }
             }

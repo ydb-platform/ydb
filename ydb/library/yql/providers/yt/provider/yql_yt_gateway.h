@@ -174,7 +174,7 @@ public:
         TString Path;
         TMaybe<TVector<TString>> Columns;
         TMaybe<TVector<NYT::TReadRange>> Ranges;
-        TString AdditionalAttributes;
+        TMaybe<TString> AdditionalAttributes;
     };
 
     struct TCanonizePathsResult: public NCommon::TOperationResult {

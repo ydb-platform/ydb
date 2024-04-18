@@ -63,7 +63,8 @@ static TResult ResultFromCurrentException(TPosition pos = {}, bool shortErrors =
     return result;
 }
 
-TString SerializeRichYPathAttrs(const NYT::TRichYPath& richPath);
+TMaybe<TString> SerializeRichYPathAttrs(const NYT::TRichYPath& richPath);
+void DeserializeRichYPathAttrs(const TString& serializedAttrs, NYT::TRichYPath& richPath);
 
 IYtGateway::TCanonizedPath CanonizedPath(const TString& path);
 

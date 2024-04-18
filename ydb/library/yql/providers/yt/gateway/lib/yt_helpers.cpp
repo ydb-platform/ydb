@@ -131,13 +131,39 @@ THashSet<TStringBuf> SERVICE_YQL_ATTRS = {
     TStringBuf("_yql_query_name"),
 };
 
+THashSet<TString> SUPPORTED_RICH_YPATH_ATTRS = {
+    "timestamp"
+};
+
+void CheckRichYPathAttrs(const NYT::TNode& attrsNode) {
+    for (const auto& [attr, _] : attrsNode.AsMap()) {
+        if (!SUPPORTED_RICH_YPATH_ATTRS.contains(attr)) {
+            throw yexception() << "Unsupported rich YPath attribute: '" << attr << "'";
+        }
+    }
 }
 
-TString SerializeRichYPathAttrs(const NYT::TRichYPath& richPath) {
-    NYT::TNode node;
-    NYT::TNodeBuilder builder(&node);
+}
+
+TMaybe<TString> SerializeRichYPathAttrs(const NYT::TRichYPath& richPath) {
+    NYT::TNode pathNode;
+    NYT::TNodeBuilder builder(&pathNode);
     NYT::Serialize(richPath, &builder);
-    return NYT::NodeToYsonString(node);
+    if (!pathNode.HasAttributes() || pathNode.GetAttributes().Empty()) {
+        return Nothing();
+    }
+    CheckRichYPathAttrs(pathNode.GetAttributes());
+    return NYT::NodeToYsonString(pathNode.GetAttributes());
+}
+
+void DeserializeRichYPathAttrs(const TString& serializedAttrs, NYT::TRichYPath& richPath) {
+    NYT::TNode attrsNode = NYT::NodeFromYsonString(serializedAttrs);
+    CheckRichYPathAttrs(attrsNode);
+    auto originalYPath = richPath.Path_;
+    NYT::TNode pathNode = "";
+    pathNode.Attributes() = attrsNode;
+    NYT::Deserialize(richPath, pathNode);
+    richPath.Path_ = originalYPath;
 }
 
 IYtGateway::TCanonizedPath CanonizedPath(const TString& path) {
@@ -145,6 +171,7 @@ IYtGateway::TCanonizedPath CanonizedPath(const TString& path) {
     if (path.StartsWith('<')) {
         NYT::Deserialize(richYPath, NYT::NodeFromYsonString(path));
     }
+    const auto additionalAttrs = SerializeRichYPathAttrs(richYPath);
     size_t pos = 0;
     if ((pos = richYPath.Path_.find('{')) != TString::npos) {
         size_t end = richYPath.Path_.find('}');
@@ -219,7 +246,7 @@ IYtGateway::TCanonizedPath CanonizedPath(const TString& path) {
         richYPath.Path_,
         richYPath.Columns_.Defined() ? richYPath.Columns_->Parts_ : TMaybe<TVector<TString>>(),
         richYPath.GetRanges(),
-        NYT::NodeToYsonString(NYT::NodeFromYsonString(path))
+        additionalAttrs
     };
 };
 

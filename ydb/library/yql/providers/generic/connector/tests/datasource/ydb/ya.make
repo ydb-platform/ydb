@@ -7,15 +7,13 @@ DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/datasource/ydb/do
 DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/fq-connector-go)
 ENV(COMPOSE_PROJECT_NAME=ydb)
 
-# This requirement forces tests to be launched consequently,
-# otherwise CI system would be overloaded due to simultaneous launch of many Docker containers.
-# See DEVTOOLSSUPPORT-44103 for details
-REQUIREMENTS(cpu:all)
-
 IF (AUTOCHECK) 
+    # Temporarily disable these tests due to infrastructure incompatibility
+    SKIP_TEST("DEVTOOLSUPPORT-44637")
+
     # Split tests to chunks only when they're running on different machines with distbuild,
     # otherwise this directive will slow down local test execution.
-    # Look through https://st.yandex-team.ru/DEVTOOLSSUPPORT-39642 for more information.
+    # Look through DEVTOOLSSUPPORT-39642 for more information.
     FORK_SUBTESTS()
 
     # TAG and REQUIREMENTS are copied from: https://docs.yandex-team.ru/devtools/test/environment#docker-compose
@@ -26,6 +24,7 @@ IF (AUTOCHECK)
     )
 
     REQUIREMENTS(
+        cpu:all
         container:4467981730
         dns:dns64
     )
@@ -40,6 +39,12 @@ IF (OPENSOURCE)
     SIZE(MEDIUM)
     SET(TEST_TAGS_VALUE)
     SET(TEST_REQUIREMENTS_VALUE)
+
+    # This requirement forces tests to be launched consequently,
+    # otherwise CI system would be overloaded due to simultaneous launch of many Docker containers.
+    # See DEVTOOLSSUPPORT-44103, YA-1759 for details.
+    TAG(ya:not_autocheck)
+    REQUIREMENTS(cpu:all)
 ENDIF()
 
 TEST_SRCS(

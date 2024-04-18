@@ -112,6 +112,7 @@ DEFINE_ENUM(EObjectType,
     ((TransactionMap)                               (407))
     ((TopmostTransactionMap)                        (418))
     ((LockMap)                                      (422))
+    ((ForeignTransactionMap)                        (437))
 
     // Chunk Manager stuff
     ((Chunk)                                        (100))

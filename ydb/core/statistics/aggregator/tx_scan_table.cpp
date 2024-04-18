@@ -25,6 +25,9 @@ struct TStatisticsAggregator::TTxScanTable : public TTxBase {
         Self->ScanTableId.PathId = PathIdFromPathId(Record.GetPathId());
         Self->PersistScanTableId(db);
 
+        Self->ScanStartTime = TInstant::Now();
+        Self->PersistScanStartTime(db);
+
         return true;
     }
 
@@ -37,8 +40,15 @@ struct TStatisticsAggregator::TTxScanTable : public TTxBase {
 };
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvScanTable::TPtr& ev) {
+    if (ScanTableId.PathId) {
+        return; // scan is in progress
+    }
+    TActorId sender;
+    if (ev->Sender != SelfId()) {
+        sender = ev->Sender;
+    }
     auto& record = ev->Get()->Record;
-    Execute(new TTxScanTable(this, std::move(record), ev->Sender),
+    Execute(new TTxScanTable(this, std::move(record), sender),
         TActivationContext::AsActorContext());
 }
 

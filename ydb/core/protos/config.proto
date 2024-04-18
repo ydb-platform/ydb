@@ -296,7 +296,17 @@ message TBlobStorageConfig {
         repeated TCostMetricsConfig VDiskTypes = 1;
     };
 
+    message TVDiskPerformanceConfig {
+        optional NKikimrBlobStorage.EPDiskType PDiskType = 1;
+        optional uint32 MinHugeBlobSizeInBytes = 4;
+    }
+
+    message TVDiskPerformanceSettings {
+        repeated TVDiskPerformanceConfig VDiskTypes = 1;
+    };
+
     optional TCostMetricsSettings CostMetricsSettings = 7;
+    optional TVDiskPerformanceSettings VDiskPerformanceSettings = 8;
  }
 
 message TBlobStorageFormatConfig {
@@ -1667,6 +1677,7 @@ message TLocalPgWireConfig {
     optional int32 ListeningPort = 1 [default = 5432];
     optional string SslCertificate = 5;
     optional string Address = 6 [default = "::"];
+    optional bool TcpNotDelay = 7 [default = true];
 }
 
 message TKafkaProxyConfig {

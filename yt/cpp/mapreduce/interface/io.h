@@ -142,7 +142,8 @@ public:
     /// from the stream.
     virtual bool Retry(
         const TMaybe<ui32>& rangeIndex,
-        const TMaybe<ui64>& rowIndex) = 0;
+        const TMaybe<ui64>& rowIndex,
+        const std::exception_ptr& error) = 0;
 
     /// Resets retry attempt count to the initial value (then `Retry()` can be called again).
     virtual void ResetRetries() = 0;

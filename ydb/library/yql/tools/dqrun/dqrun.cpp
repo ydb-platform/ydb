@@ -124,6 +124,7 @@ struct TRunOptions {
     IOutputStream* ResultOut = &Cout;
     IOutputStream* ErrStream = &Cerr;
     IOutputStream* TracePlan = &Cerr;
+    bool UseMetaFromGraph = false;
 };
 
 class TStoreMappingFunctor: public NLastGetopt::IOptHandler {
@@ -312,6 +313,7 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
 }
 
 int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<TString, TString>& clusters, const THashSet<TString>& sqlFlags) {
+    program->SetUseTableMetaFromGraph(options.UseMetaFromGraph);
     bool fail = true;
     if (options.Sql) {
         Cout << "Parse SQL..." << Endl;
@@ -566,6 +568,10 @@ int RunMain(int argc, const char* argv[])
         .Optional()
         .RequiredArgument("VALUE")
         .StoreResult(&folderId);
+    opts.AddLongOption("use-graph-meta", "Use tables metadata from graph")
+        .Optional()
+        .NoArgument()
+        .SetFlag(&runOptions.UseMetaFromGraph);
     opts.AddLongOption("stat", "Print execution statistics")
         .Optional()
         .OptionalArgument("FILE")

@@ -674,6 +674,10 @@ struct TCreateSequenceSettings {
     TSequenceSettings SequenceSettings;
 };
 
+struct TDropSequenceSettings {
+    TString Name;
+};
+
 struct TAlterExternalTableSettings {
     TString ExternalTable;
 };
@@ -763,6 +767,7 @@ public:
         google::protobuf::RepeatedPtrField<NKqpProto::TResultSetMeta> ResultSetsMeta;
         bool NeedToSplit = false;
         bool AllowCache = true;
+        TMaybe<TString> CommandTagName = {};
     };
 
     struct TExecuteLiteralResult : public TGenericResult {
@@ -859,6 +864,8 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> CreateSequence(const TString& cluster,
         const TCreateSequenceSettings& settings, bool existingOk) = 0;
+    virtual NThreading::TFuture<TGenericResult> DropSequence(const TString& cluster,
+        const TDropSequenceSettings& settings, bool missingOk) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateColumnTable(
         TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false) = 0;

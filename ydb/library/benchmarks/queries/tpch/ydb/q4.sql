@@ -25,7 +25,7 @@ where
 );
 
 select
-    o.o_orderpriority,
+    o.o_orderpriority as o_orderpriority,
     count(*) as order_count
 from
     $o as o
@@ -36,4 +36,4 @@ on
 group by
     o.o_orderpriority
 order by
-    o.o_orderpriority;
+    o_orderpriority;

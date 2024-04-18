@@ -52,8 +52,8 @@ void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self
 }
 
 void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
-    Y_ABORT_UNLESS(Stage != EStage::Aborted);
-    Y_ABORT_UNLESS(Stage == EStage::Constructed);
+    AFL_VERIFY(Stage != EStage::Aborted);
+    AFL_VERIFY(Stage == EStage::Constructed);
 
     DoCompile(context);
     DoOnAfterCompile();
@@ -66,7 +66,7 @@ TColumnEngineChanges::~TColumnEngineChanges() {
 }
 
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
-    Y_ABORT_UNLESS(Stage != EStage::Finished && Stage != EStage::Created && Stage != EStage::Aborted);
+    AFL_VERIFY(Stage != EStage::Finished && Stage != EStage::Created && Stage != EStage::Aborted)("stage", Stage)("reason", context.ErrorMessage);
     Stage = EStage::Aborted;
     OnFinish(self, context);
 }
@@ -91,8 +91,8 @@ void TColumnEngineChanges::StartEmergency() {
     }
 }
 
-void TColumnEngineChanges::AbortEmergency() {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "AbortEmergency");
+void TColumnEngineChanges::AbortEmergency(const TString& reason) {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "AbortEmergency")("reason", reason);
     Stage = EStage::Aborted;
     OnAbortEmergency();
 }

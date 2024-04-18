@@ -1,5 +1,5 @@
-#ifndef BITSET_UTIL_H
-#define BITSET_UTIL_H
+#ifndef CROARING_BITSET_UTIL_H
+#define CROARING_BITSET_UTIL_H
 
 #include <stdint.h>
 
@@ -383,7 +383,7 @@ inline static uint64_t avx2_harley_seal_popcount256(const __m256i *data,
 }
 CROARING_UNTARGET_AVX2
 
-#define AVXPOPCNTFNC(opname, avx_intrinsic)                                    \
+#define CROARING_AVXPOPCNTFNC(opname, avx_intrinsic)                           \
     static inline uint64_t avx2_harley_seal_popcount256_##opname(              \
         const __m256i *data1, const __m256i *data2, const uint64_t size) {     \
         __m256i total = _mm256_setzero_si256();                                \
@@ -564,27 +564,27 @@ CROARING_UNTARGET_AVX2
     }
 
 CROARING_TARGET_AVX2
-AVXPOPCNTFNC(or, _mm256_or_si256)
+CROARING_AVXPOPCNTFNC(or, _mm256_or_si256)
 CROARING_UNTARGET_AVX2
 
 CROARING_TARGET_AVX2
-AVXPOPCNTFNC(union, _mm256_or_si256)
+CROARING_AVXPOPCNTFNC(union, _mm256_or_si256)
 CROARING_UNTARGET_AVX2
 
 CROARING_TARGET_AVX2
-AVXPOPCNTFNC(and, _mm256_and_si256)
+CROARING_AVXPOPCNTFNC(and, _mm256_and_si256)
 CROARING_UNTARGET_AVX2
 
 CROARING_TARGET_AVX2
-AVXPOPCNTFNC(intersection, _mm256_and_si256)
+CROARING_AVXPOPCNTFNC(intersection, _mm256_and_si256)
 CROARING_UNTARGET_AVX2
 
 CROARING_TARGET_AVX2
-AVXPOPCNTFNC(xor, _mm256_xor_si256)
+CROARING_AVXPOPCNTFNC(xor, _mm256_xor_si256)
 CROARING_UNTARGET_AVX2
 
 CROARING_TARGET_AVX2
-AVXPOPCNTFNC(andnot, _mm256_andnot_si256)
+CROARING_AVXPOPCNTFNC(andnot, _mm256_andnot_si256)
 CROARING_UNTARGET_AVX2
 
 #define VPOPCNT_AND_ADD(ptr, i, accu)                                  \
@@ -631,7 +631,7 @@ static inline uint64_t avx512_vpopcount(const __m512i *data,
 CROARING_UNTARGET_AVX512
 #endif
 
-#define AVXPOPCNTFNC512(opname, avx_intrinsic)                                \
+#define CROARING_AVXPOPCNTFNC512(opname, avx_intrinsic)                       \
     static inline uint64_t avx512_harley_seal_popcount512_##opname(           \
         const __m512i *data1, const __m512i *data2, const uint64_t size) {    \
         __m512i total = _mm512_setzero_si512();                               \
@@ -693,12 +693,12 @@ CROARING_UNTARGET_AVX512
 
 #if CROARING_COMPILER_SUPPORTS_AVX512
 CROARING_TARGET_AVX512
-AVXPOPCNTFNC512(or, _mm512_or_si512)
-AVXPOPCNTFNC512(union, _mm512_or_si512)
-AVXPOPCNTFNC512(and, _mm512_and_si512)
-AVXPOPCNTFNC512(intersection, _mm512_and_si512)
-AVXPOPCNTFNC512(xor, _mm512_xor_si512)
-AVXPOPCNTFNC512(andnot, _mm512_andnot_si512)
+CROARING_AVXPOPCNTFNC512(or, _mm512_or_si512)
+CROARING_AVXPOPCNTFNC512(union, _mm512_or_si512)
+CROARING_AVXPOPCNTFNC512(and, _mm512_and_si512)
+CROARING_AVXPOPCNTFNC512(intersection, _mm512_and_si512)
+CROARING_AVXPOPCNTFNC512(xor, _mm512_xor_si512)
+CROARING_AVXPOPCNTFNC512(andnot, _mm512_andnot_si512)
 CROARING_UNTARGET_AVX512
 #endif
 /***

@@ -18,6 +18,7 @@ namespace NActors {
     struct TExecutorThreadCtx;
     struct TSharedExecutorThreadCtx;
     class TExecutorPoolBaseMailboxed;
+    class TMailboxTable;
 
     class TGenericExecutorThread: public ISimpleThread {
     protected:

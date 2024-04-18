@@ -43,6 +43,7 @@ STFUNC(TController::StateInit) {
 STFUNC(TController::StateWork) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvController::TEvCreateReplication, Handle);
+        HFunc(TEvController::TEvAlterReplication, Handle);
         HFunc(TEvController::TEvDropReplication, Handle);
         HFunc(TEvPrivate::TEvDropReplication, Handle);
         HFunc(TEvPrivate::TEvDiscoveryTargetsResult, Handle);
@@ -104,6 +105,11 @@ void TController::Reset() {
 void TController::Handle(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxCreateReplication(ev, ctx);
+}
+
+void TController::Handle(TEvController::TEvAlterReplication::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxAlterReplication(ev, ctx);
 }
 
 void TController::Handle(TEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx) {

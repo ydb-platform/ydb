@@ -203,12 +203,13 @@ def on_peerdir_ts_resource(unit, *resources):
 
 
 @_with_report_configure_error
-def on_ts_configure(unit, *tsconfig_paths):
+def on_ts_configure(unit):
     # type: (Unit, *str) -> None
     from lib.nots.package_manager.base import PackageJson
     from lib.nots.package_manager.base.utils import build_pj_path
     from lib.nots.typescript import TsConfig
 
+    tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
     # for use in CMD as inputs
     __set_append(
         unit, "TS_CONFIG_FILES", _build_cmd_input_paths(tsconfig_paths, hide=True, disable_include_processor=True)

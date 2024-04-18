@@ -53,6 +53,7 @@
     action(NSequenceShard::TEvSequenceShard::TEvGetSequenceResult, NSchemeShard::TXTYPE_SEQUENCESHARD_GET_SEQUENCE_RESULT) \
 \
     action(NReplication::TEvController::TEvCreateReplicationResult, NSchemeShard::TXTYPE_CREATE_REPLICATION_RESULT) \
+    action(NReplication::TEvController::TEvAlterReplicationResult,  NSchemeShard::TXTYPE_ALTER_REPLICATION_RESULT)  \
     action(NReplication::TEvController::TEvDropReplicationResult,   NSchemeShard::TXTYPE_DROP_REPLICATION_RESULT)   \
 \
     action(TEvSubDomain::TEvConfigureStatus,     NSchemeShard::TXTYPE_SUBDOMAIN_CONFIGURE_RESULT)        \
@@ -590,6 +591,8 @@ ISubOperation::TPtr CreateCopySequence(TOperationId id, TTxState::ETxState state
 
 ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateAlterReplication(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterReplication(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateDropReplication(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropReplication(TOperationId id, TTxState::ETxState state);
 

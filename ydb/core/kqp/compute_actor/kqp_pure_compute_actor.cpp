@@ -12,14 +12,14 @@ bool TKqpComputeActor::IsDebugLogEnabled(const TActorSystem* actorSystem) {
 
 TKqpComputeActor::TKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask* task,
     IDqAsyncIoFactory::TPtr asyncIoFactory,
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
-    : TBase(executerId, txId, task, std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena))
+    : TBase(executerId, txId, task, std::move(asyncIoFactory), settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena))
     , ComputeCtx(settings.StatsMode)
     , FederatedQuerySetup(federatedQuerySetup)
 {
+    InitializeTask();
     if (GetTask().GetMeta().Is<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta>()) {
         Meta.ConstructInPlace();
         YQL_ENSURE(GetTask().GetMeta().UnpackTo(Meta.Get()), "Invalid task meta: " << GetTask().GetMeta().DebugString());
@@ -278,13 +278,12 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) {
 
 IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask* task,
     IDqAsyncIoFactory::TPtr asyncIoFactory,
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
 {
     return new TKqpComputeActor(executerId, txId, task, std::move(asyncIoFactory),
-        functionRegistry, settings, memoryLimits, std::move(traceId), std::move(arena), federatedQuerySetup);
+        settings, memoryLimits, std::move(traceId), std::move(arena), federatedQuerySetup);
 }
 
 } // namespace NKqp

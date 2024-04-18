@@ -35,7 +35,6 @@ namespace NKikimr {
         HugeBlobsFreeChunkReservation = 1;
         SetupHugeBytes();
         HugeBlobOverhead = 8u;
-        HugeBlobOldMapCompatible = false;
         HullCompLevel0MaxSstsAtOnce = 8u;
         HullCompSortedPartsNum = 8u;
         HullCompLevelRateThreshold = 1.0;

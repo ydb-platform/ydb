@@ -27,7 +27,7 @@ protected:
 
     void CheckValidity() const;
 
-    bool Retry();
+    bool Retry(const std::exception_ptr& error);
 
     template <class T>
     bool ReadInteger(T* result, bool acceptEndOfStream = false)
@@ -60,7 +60,7 @@ protected:
     ui32 Length_ = 0;
 
 private:
-    bool PrepareRetry();
+    bool PrepareRetry(const std::exception_ptr& error);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

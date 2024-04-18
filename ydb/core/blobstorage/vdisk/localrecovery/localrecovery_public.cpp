@@ -417,12 +417,12 @@ namespace NKikimr {
                             LocRecCtx->VCtx,
                             LocRecCtx->PDiskCtx->Dsk->ChunkSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
+                            LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MinHugeBlobInBytes,
                             Config->MilestoneHugeBlobInBytes,
                             Config->MaxLogoBlobDataSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
-                            Config->HugeBlobOldMapCompatible,
                             logFunc);
             } else {
                 // read existing one
@@ -439,16 +439,17 @@ namespace NKikimr {
                             LocRecCtx->VCtx,
                             LocRecCtx->PDiskCtx->Dsk->ChunkSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
+                            LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MinHugeBlobInBytes,
                             Config->MilestoneHugeBlobInBytes,
                             Config->MaxLogoBlobDataSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
-                            Config->HugeBlobOldMapCompatible,
                             lsn, entryPoint, logFunc);
             }
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(
-                    LocRecCtx->RepairedHuge->GetMinREALHugeBlobInBytes(),
+                    Config->MinHugeBlobInBytes,
+                    LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                     LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(),
                     Config->AddHeader);
             HugeKeeperInitialized = true;

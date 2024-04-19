@@ -1541,6 +1541,39 @@
             "uri": "https://{canondata_backend}/1775059/f7233eab470e14ecb29d15fd37372b772f337134/resource.tar.gz#test.test_limit-yql-9617_empty_lambda-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[lineage-flatten_where-default.txt-Debug]": [
+        {
+            "checksum": "e3d80d5a0302277e4c060ab11585a94e",
+            "size": 1663,
+            "uri": "https://{canondata_backend}/1942278/dbf88a5abef7abc209d707f694b2ff4f8a12aef9/resource.tar.gz#test.test_lineage-flatten_where-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[lineage-flatten_where-default.txt-Lineage]": [
+        {
+            "checksum": "ec10decac1e29de86dc6695463c14d1c",
+            "size": 1558,
+            "uri": "https://{canondata_backend}/1942278/dbf88a5abef7abc209d707f694b2ff4f8a12aef9/resource.tar.gz#test.test_lineage-flatten_where-default.txt-Lineage_/results.txt"
+        }
+    ],
+    "test.test[lineage-flatten_where-default.txt-Plan]": [
+        {
+            "checksum": "91b900016829dbf694444ac448afe520",
+            "size": 4977,
+            "uri": "https://{canondata_backend}/1942278/dbf88a5abef7abc209d707f694b2ff4f8a12aef9/resource.tar.gz#test.test_lineage-flatten_where-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[lineage-flatten_where-default.txt-Results]": [
+        {
+            "checksum": "7a6ca95ef1494e3c1f2699e0f6996a43",
+            "size": 356,
+            "uri": "https://{canondata_backend}/1942278/dbf88a5abef7abc209d707f694b2ff4f8a12aef9/resource.tar.gz#test.test_lineage-flatten_where-default.txt-Results_/Output.txt"
+        },
+        {
+            "checksum": "ec1e96fbfbcf8c6c6f351c6ee281b863",
+            "size": 487,
+            "uri": "https://{canondata_backend}/1942278/dbf88a5abef7abc209d707f694b2ff4f8a12aef9/resource.tar.gz#test.test_lineage-flatten_where-default.txt-Results_/Output.yqlrun.txt.attr"
+        }
+    ],
     "test.test[lineage-window_member_struct-default.txt-Debug]": [
         {
             "checksum": "23c3731f5e9e3b2882f5b346973e79a8",

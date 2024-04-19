@@ -10,23 +10,23 @@ RECURSE(
     encryption
     hive
     kqp
+    kv_workload
     large_serializable
     limits
-    kv_workload
     open_source
     postgresql
+    query_cache
     rename
     restarts
     scheme_shard
     scheme_tests
+    script_execution
+    sdk/cpp/sdk_credprovider
     serializable
     serverless
-    sdk/cpp/sdk_credprovider
     sqs
     suite_tests
     tenants
     ttl
     ydb_cli
-    query_cache
-    script_execution
 )

@@ -9848,6 +9848,13 @@
             "uri": "https://{canondata_backend}/1924537/1ab444909086b08bd4fe21c5a43f5e183c647e0a/resource.tar.gz#test_sql2yql.test_lineage-flatten_list_nested_lambda_/sql.yql"
         }
     ],
+    "test_sql2yql.test[lineage-flatten_where]": [
+        {
+            "checksum": "12199251e908592b34ef75ce9b50014e",
+            "size": 2040,
+            "uri": "https://{canondata_backend}/995452/686fce56a91b74643cca782a2a73c0370221c2af/resource.tar.gz#test_sql2yql.test_lineage-flatten_where_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[lineage-group_by_asstruct_key]": [
         {
             "checksum": "6fc73dcd0b3de4c4faff9b573bd85932",
@@ -9874,6 +9881,34 @@
             "checksum": "9fda95e8ba4e26de0dc24caa99de6d16",
             "size": 3631,
             "uri": "https://{canondata_backend}/1871002/ba7501739621731b8f5b85f57d8e4868dadf87e3/resource.tar.gz#test_sql2yql.test_lineage-join_as_struct_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[lineage-list_literal1]": [
+        {
+            "checksum": "2dce3b5c0aa3fb678f81e227b3bcbfa9",
+            "size": 1874,
+            "uri": "https://{canondata_backend}/1937429/608518ad847270ef656d5979dfaa6d8093a7d057/resource.tar.gz#test_sql2yql.test_lineage-list_literal1_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[lineage-list_literal2]": [
+        {
+            "checksum": "62318ecb33e99cd6168c45a2d04864c6",
+            "size": 2496,
+            "uri": "https://{canondata_backend}/1937429/608518ad847270ef656d5979dfaa6d8093a7d057/resource.tar.gz#test_sql2yql.test_lineage-list_literal2_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[lineage-list_literal3]": [
+        {
+            "checksum": "bd79794aadce543665ca4d77a831c386",
+            "size": 3809,
+            "uri": "https://{canondata_backend}/1937429/608518ad847270ef656d5979dfaa6d8093a7d057/resource.tar.gz#test_sql2yql.test_lineage-list_literal3_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[lineage-list_literal4]": [
+        {
+            "checksum": "aaaddcb5e5dace7c3365d0103b3ad71b",
+            "size": 3927,
+            "uri": "https://{canondata_backend}/1937429/608518ad847270ef656d5979dfaa6d8093a7d057/resource.tar.gz#test_sql2yql.test_lineage-list_literal4_/sql.yql"
         }
     ],
     "test_sql2yql.test[lineage-member_over_if_struct]": [
@@ -9909,6 +9944,13 @@
             "checksum": "54cac061bd2ed55e0cf4779cdfc5b8dd",
             "size": 1130,
             "uri": "https://{canondata_backend}/1937027/014b1b1f2a6444dee0079b144376cfe027937f42/resource.tar.gz#test_sql2yql.test_lineage-reduce_all_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[lineage-reduce_all_row]": [
+        {
+            "checksum": "34fdbe53548fab3e06a8b6d33732baef",
+            "size": 1321,
+            "uri": "https://{canondata_backend}/1937001/17904a5011471d554231c1fa2d5f2867653f21a9/resource.tar.gz#test_sql2yql.test_lineage-reduce_all_row_/sql.yql"
         }
     ],
     "test_sql2yql.test[lineage-scalar_context]": [
@@ -28181,6 +28223,13 @@
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_lineage-flatten_list_nested_lambda_/formatted.sql"
         }
     ],
+    "test_sql_format.test[lineage-flatten_where]": [
+        {
+            "checksum": "30f3c1e1c497eb026b5f970b4490b705",
+            "size": 176,
+            "uri": "https://{canondata_backend}/995452/686fce56a91b74643cca782a2a73c0370221c2af/resource.tar.gz#test_sql_format.test_lineage-flatten_where_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[lineage-group_by_asstruct_key]": [
         {
             "checksum": "de9d484c7fe4b6ed05c8a61bea813834",
@@ -28207,6 +28256,34 @@
             "checksum": "a5223ab2032510ed8523fb48abf94904",
             "size": 371,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_lineage-join_as_struct_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[lineage-list_literal1]": [
+        {
+            "checksum": "db38cbbb16677866c81618988d50e832",
+            "size": 107,
+            "uri": "https://{canondata_backend}/1937429/608518ad847270ef656d5979dfaa6d8093a7d057/resource.tar.gz#test_sql_format.test_lineage-list_literal1_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[lineage-list_literal2]": [
+        {
+            "checksum": "4eab86432f7450a7359cd4a4b0c3cd6a",
+            "size": 152,
+            "uri": "https://{canondata_backend}/1937429/608518ad847270ef656d5979dfaa6d8093a7d057/resource.tar.gz#test_sql_format.test_lineage-list_literal2_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[lineage-list_literal3]": [
+        {
+            "checksum": "8312dba24efdf5c6b0a499e3c8476c0e",
+            "size": 240,
+            "uri": "https://{canondata_backend}/1937429/608518ad847270ef656d5979dfaa6d8093a7d057/resource.tar.gz#test_sql_format.test_lineage-list_literal3_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[lineage-list_literal4]": [
+        {
+            "checksum": "e09d960109150512dbfd98718f93adb4",
+            "size": 255,
+            "uri": "https://{canondata_backend}/1937429/608518ad847270ef656d5979dfaa6d8093a7d057/resource.tar.gz#test_sql_format.test_lineage-list_literal4_/formatted.sql"
         }
     ],
     "test_sql_format.test[lineage-member_over_if_struct]": [
@@ -28242,6 +28319,13 @@
             "checksum": "b940d0c558e682090bc405fcf5070c39",
             "size": 101,
             "uri": "https://{canondata_backend}/1937027/014b1b1f2a6444dee0079b144376cfe027937f42/resource.tar.gz#test_sql_format.test_lineage-reduce_all_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[lineage-reduce_all_row]": [
+        {
+            "checksum": "48e3dbc46584bd30483da117bd6fbf0f",
+            "size": 130,
+            "uri": "https://{canondata_backend}/1937001/17904a5011471d554231c1fa2d5f2867653f21a9/resource.tar.gz#test_sql_format.test_lineage-reduce_all_row_/formatted.sql"
         }
     ],
     "test_sql_format.test[lineage-scalar_context]": [

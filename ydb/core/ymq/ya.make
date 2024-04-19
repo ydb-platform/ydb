@@ -3,8 +3,8 @@ RECURSE(
     base
     client
     http
-    queues
     proto
+    queues
 )
 
 RECURSE_FOR_TESTS(

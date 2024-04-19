@@ -151,6 +151,27 @@ namespace NKikimr::NStorage {
                     }
                 }
 
+                auto outputConfig = [&](const char *name, auto *config) {
+                    DIV_CLASS("panel panel-info") {
+                        DIV_CLASS("panel-heading") {
+                            out << name;
+                        }
+                        DIV_CLASS("panel-body") {
+                            if (config) {
+                                TString s;
+                                NProtoBuf::TextFormat::PrintToString(*config, &s);
+                                out << "<pre>" << s << "</pre>";
+                            } else {
+                                out << "not defined";
+                            }
+                        }
+                    }
+                };
+                outputConfig("StorageConfig", StorageConfig ? &StorageConfig.value() : nullptr);
+                outputConfig("BaseConfig", &BaseConfig);
+                outputConfig("InitialConfig", &InitialConfig);
+                outputConfig("ProposedStorageConfig", ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr);
+
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
                         out << "Outgoing binding";

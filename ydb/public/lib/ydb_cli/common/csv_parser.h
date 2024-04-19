@@ -27,6 +27,7 @@ public:
     void GetParams(TString&& data, TParamsBuilder& builder) const;
     void GetValue(TString&& data, TValueBuilder& builder, const TType& type) const;
     TType GetColumnsType() const;
+    TStringBuf Consume(NCsvFormat::CsvSplitter& splitter) const;
 
 private:
     TValue FieldToValue(TTypeParser& parser, TStringBuf token) const;

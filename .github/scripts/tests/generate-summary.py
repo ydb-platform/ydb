@@ -25,7 +25,7 @@ class TestStatus(Enum):
 
     @property
     def is_error(self):
-        return self in (TestStatus.FAIL, TestStatus.ERROR)
+        return self in (TestStatus.FAIL, TestStatus.ERROR, TestStatus.MUTE)
 
     def __lt__(self, other):
         return self.value < other.value

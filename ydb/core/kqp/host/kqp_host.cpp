@@ -1724,6 +1724,7 @@ private:
                 .RandomProvider(TAppData::RandomProvider)
                 .TimeProvider(TAppData::TimeProvider)
                 .StatWriter(statWriter)
+                .CreateOperationTracker(false)
         );
 
         TypesCtx->AddDataSource(YtProviderName, CreateYtDataSource(ytState));

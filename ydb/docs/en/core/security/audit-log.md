@@ -18,7 +18,7 @@ You can use any of the listed destinations or their combinations.
 
 If you forward the stream to a file, access to the audit log is set by file-system rights. Saving the audit log to a file is recommended for production installations.
 
-Forwarding the audit log to the standard error stream (`stderr`) is recommended for test installations. Further stream processing is determined by the {{ ydb-short-name }} cluster [logging](./logs.md) settings.
+Forwarding the audit log to the standard error stream (`stderr`) is recommended for test installations. Further stream processing is determined by the {{ ydb-short-name }} cluster [logging](../cluster/logs.md) settings.
 
 ## Audit log events {#events}
 

@@ -2,7 +2,7 @@ items:
 - name: Deployment
   include: { mode: link, path: ../deploy/toc_p.yaml }
 - name: Access management
-  href: access.md
+  href: ../security/access-management.md
 - name: Managing a cluster's disk subsystem
   include: { mode: link, path: ../maintenance/manual/toc_p.yaml }
 - name: Embedded UI
@@ -10,9 +10,9 @@ items:
 - name: Cluster system views
   href: ../devops/manual/system-views.md
 - name: Audit log
-  href: audit-log.md
+  href: ../security/audit-log.md
 - name: Short access control notation
-  href: short-access-control-notation.md
+  href: ../security/short-access-control-notation.md
 - name: Monitoring
   items:
     - name: Setting up monitoring for a local YDB cluster

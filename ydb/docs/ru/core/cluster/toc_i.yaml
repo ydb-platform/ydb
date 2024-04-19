@@ -2,15 +2,15 @@ items:
 - name: Развертывание
   include: { mode: link, path: ../deploy/toc_p.yaml }
 - name: Управление доступом
-  href: access.md
+  href: ../security/access-management.md
 - name: Управление дисковой подсистемой кластера
   include: { mode: link, path: ../maintenance/manual/toc_p.yaml }
 - name: Встроенный UI
   include: { mode: link, path: ../reference/embedded-ui/toc_p.yaml }
 - name: Аудитный лог
-  href: audit-log.md
+  href: ../security/audit-log.md
 - name: Краткая запись управления доступом
-  href: short-access-control-notation.md
+  href: ../security/short-access-control-notation.md
 - name: Мониторинг
   items:
     - name: Настройка мониторинга локального кластера YDB

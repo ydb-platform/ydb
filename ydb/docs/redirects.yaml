@@ -136,6 +136,14 @@ common:
   - from: /reference/ydb-sdk/example/python/index.md
     to: /dev/example-app/python/index.md
 
+# Security-related redirects
+  - from: /cluster/access.md
+    to: /security/acess-management.md
+  - from: /cluster/audit-log.md
+    to: /security/audit-log.md
+  - from: /cluster/short-access-control-notation.md
+    to: /security/short-access-control-notation.md
+
 # Contributors-related redirects
   - from: /development/build-ya.md
     to: /contributor/build-ya.md

@@ -167,12 +167,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
         CreateShardedTableForIndex(server, sender, "/Root", "table-2", 1, false);
 
-        std::vector<std::unique_ptr<IEventHandle>> blockedEvents;
         auto observer = runtime.AddObserver<TEvDataShard::TEvCompactBorrowed>([&](TEvDataShard::TEvCompactBorrowed::TPtr& event) {
             IActor *actor = runtime.FindActor(event->Sender);
             if (actor && actor->GetActivityType() == 186) {
                 Cerr << "Ignore SchemeShard TEvCompactBorrowed from " << event->Sender << "(" << actor->GetActivityType() << ")" << " to " << event->Recipient << Endl;
-                blockedEvents.emplace_back(event.Release());
+                event.Reset();
             }
         });
 
@@ -236,12 +235,6 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
                 Cerr << "OK " << shards2.at(shardIndex) << Endl;
             }
         }
-
-        observer.Remove();
-        for (auto& ev : blockedEvents) {
-            runtime.Send(ev.release(), 0, true);
-        }
-        blockedEvents.clear();
 
         // Alter table: disable shadow data and change compaction policy
         auto policy = NLocalDb::CreateDefaultUserTablePolicy();

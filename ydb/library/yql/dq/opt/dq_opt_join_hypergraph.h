@@ -204,6 +204,19 @@ private:
     TVector<TEdge> Edges_;
 };
 
+/* 
+ *  This class construct transitive closure between nodes in hypergraph. 
+ *  Transitive closure means that if we have an edge from (1,2) with join
+ *  condition R.A = S.A and we have an edge from (2,3) with join condition
+ *  S.A = T.A, we will find out that the join conditions form an equivalence set
+ *  and add an edge (1,3) with join condition R.A = T.A.
+ *  Algorithm works as follows:
+ *      1) We leave only edges that do not conflict with themselves and 
+ *      in join condition equality attributes on left and right side must be equal by name.
+ *      (e.g. a.id = b.id && a.kek = b.kek)
+ *      2) We group edges by attribute names in equality and joinKind
+ *      3) In each group we build connected components and in each components we add missing edges. 
+ */
 template <typename TNodeSet>
 class TTransitiveClosureConstructor {
 private:
@@ -269,17 +282,17 @@ private:
             groupConditionUsedAttributes.push_back(lhs.AttributeName);
         }
 
-        TDisjointSets connectedComplements(nodeSetSize);
+        TDisjointSets connectedComponents(nodeSetSize);
         for (size_t edgeId = groupBegin; edgeId < groupEnd; ++edgeId) {
             const auto& edge = edges[edgeId];
-            connectedComplements.UnionSets(GetLowestSetBit(edge.Left), GetLowestSetBit(edge.Right));
+            connectedComponents.UnionSets(GetLowestSetBit(edge.Left), GetLowestSetBit(edge.Right));
         }
 
         for (size_t i = 0; i < nodeSetSize; ++i) {
             for (size_t j = 0; j < i; ++j) {
                 if (
-                    connectedComplements.CanonicSetElement(i) == 
-                    connectedComplements.CanonicSetElement(j)
+                    connectedComponents.CanonicSetElement(i) == 
+                    connectedComponents.CanonicSetElement(j)
                 ) {
                     TNodeSet lhs;
                     lhs[i] = 1;

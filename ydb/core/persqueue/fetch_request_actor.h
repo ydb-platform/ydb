@@ -35,11 +35,12 @@ struct TFetchRequestSettings {
     ui64 MaxWaitTimeMs;
     ui64 TotalMaxBytes;
     TRlContext RlCtx;
+    bool ChargeExtraRu;
 
     ui64 RequestId = 0;
     TFetchRequestSettings(
             const TString& database, const TVector<TPartitionFetchRequest>& partitions, ui64 maxWaitTimeMs, ui64 totalMaxBytes, TRlContext rlCtx,
-            const TMaybe<NACLib::TUserToken>& user = {}, ui64 requestId = 0
+            const TMaybe<NACLib::TUserToken>& user = {}, ui64 requestId = 0, bool chargeExtraRu = false
     )
         : Database(database)
         , Partitions(partitions)
@@ -47,6 +48,7 @@ struct TFetchRequestSettings {
         , MaxWaitTimeMs(maxWaitTimeMs)
         , TotalMaxBytes(totalMaxBytes)
         , RlCtx(rlCtx)
+        , ChargeExtraRu(chargeExtraRu)
         , RequestId(requestId)
     {}
 };

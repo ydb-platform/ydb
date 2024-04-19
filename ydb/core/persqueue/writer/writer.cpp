@@ -526,7 +526,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
             if (needToRequestQuota) {
                 ++processed;
-                PendingQuotaAmount += CalcRuConsumption(it->second.ByteSize());
+                PendingQuotaAmount += CalcRuConsumption(it->second.ByteSize()) + Opts.ChargeExtraRu ? 1 : 0;
                 PendingQuota.emplace_back(it->first);
             }
 

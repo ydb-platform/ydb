@@ -319,12 +319,13 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
     pendingRequest->StartTime = ctx.Now();
 
     size_t position = 0;
+    bool chargeExtraRu = true;
     for(const auto& topicData : r->TopicData) {
         const TString& topicPath = NormalizePath(Context->DatabasePath, *topicData.Name);
         for(const auto& partitionData : topicData.PartitionData) {
             const auto partitionId = partitionData.Index;
-
-            auto writer = PartitionWriter(topicPath, partitionId, ctx);
+            auto writer = PartitionWriter(topicPath, partitionId, chargeExtraRu, ctx);
+            chargeExtraRu = false;
             if (OK == writer.first) {
                 auto ownCookie = ++Cookie;
                 auto& cookieInfo = Cookies[ownCookie];
@@ -555,7 +556,7 @@ void TKafkaProduceActor::ProcessInitializationRequests(const TActorContext& ctx)
     ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(request.release()));
 }
 
-std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::PartitionWriter(const TString& topicPath, ui32 partitionId, const TActorContext& ctx) {
+std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::PartitionWriter(const TString& topicPath, ui32 partitionId, bool chargeExtraRu, const TActorContext& ctx) {
     auto it = Topics.find(topicPath);
     if (it == Topics.end()) {
         KAFKA_LOG_ERROR("Produce actor: Internal error: topic '" << topicPath << "' isn`t initialized");
@@ -584,7 +585,8 @@ std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::Partit
     opts.WithDeduplication(false)
         .WithSourceId(SourceId)
         .WithTopicPath(topicPath)
-        .WithCheckRequestUnits(topicInfo.MeteringMode, Context->RlContext);
+        .WithCheckRequestUnits(topicInfo.MeteringMode, Context->RlContext)
+        .WithChargeExtraRu(chargeExtraRu);
     auto* writerActor = CreatePartitionWriter(SelfId(), partition->TabletId, partitionId, opts);
 
     auto& writerInfo = partitionWriters[partitionId];

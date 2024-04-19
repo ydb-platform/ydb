@@ -286,6 +286,42 @@
             "uri": "https://{canondata_backend}/1925821/dbf7e45bd25c73ba757e166a0254ae4690dfd12e/resource.tar.gz#test.test_Builtins-SkipAfterTake-Results_/Output.txt"
         }
     ],
+    "test.test[Builtins-StaticFold1-Debug]": [
+        {
+            "checksum": "8820001fe14075a1236009ce07e505e2",
+            "size": 1694,
+            "uri": "https://{canondata_backend}/1880306/5a3574a67855026d7d11e5c1a8ed444112ab71f7/resource.tar.gz#test.test_Builtins-StaticFold1-Debug_/opt.yql"
+        },
+        {
+            "checksum": "07c9a29b97af84872e35770b894daefd",
+            "size": 775,
+            "uri": "https://{canondata_backend}/1880306/5a3574a67855026d7d11e5c1a8ed444112ab71f7/resource.tar.gz#test.test_Builtins-StaticFold1-Debug_/Output.yqlrun.txt.attr"
+        },
+        {
+            "checksum": "3ed0fdec2c9a8e13a72f32f60b5a9a8f",
+            "size": 238,
+            "uri": "https://{canondata_backend}/1880306/5a3574a67855026d7d11e5c1a8ed444112ab71f7/resource.tar.gz#test.test_Builtins-StaticFold1-Debug_/bb686f68-2245bd5f-2318fa4e-1.tmp"
+        },
+        {
+            "checksum": "07c9a29b97af84872e35770b894daefd",
+            "size": 775,
+            "uri": "https://{canondata_backend}/1880306/5a3574a67855026d7d11e5c1a8ed444112ab71f7/resource.tar.gz#test.test_Builtins-StaticFold1-Debug_/bb686f68-2245bd5f-2318fa4e-1.tmp.attr"
+        }
+    ],
+    "test.test[Builtins-StaticFold1-Plan]": [
+        {
+            "checksum": "cba7e58389a05cb15afa140efdd359a0",
+            "size": 5552,
+            "uri": "https://{canondata_backend}/1880306/5a3574a67855026d7d11e5c1a8ed444112ab71f7/resource.tar.gz#test.test_Builtins-StaticFold1-Plan_/plan.txt"
+        }
+    ],
+    "test.test[Builtins-StaticFold1-Results]": [
+        {
+            "checksum": "3ed0fdec2c9a8e13a72f32f60b5a9a8f",
+            "size": 238,
+            "uri": "https://{canondata_backend}/1880306/5a3574a67855026d7d11e5c1a8ed444112ab71f7/resource.tar.gz#test.test_Builtins-StaticFold1-Results_/Output.txt"
+        }
+    ],
     "test.test[Builtins-TypeConstructors-Debug]": [
         {
             "checksum": "f36b77981c19d9d64ff207bc1d071529",

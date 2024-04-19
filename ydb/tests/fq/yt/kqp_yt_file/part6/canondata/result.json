@@ -60,9 +60,9 @@
         "uri": "https://{canondata_backend}/1937367/a07a3e054bb004f5edf7939c51b550c59012adfa/resource.tar.gz#test.test_blocks-sort_two_asc-_/results.txt"
     },
     "test.test[blocks-top_sort_two_asc-]": {
-        "checksum": "5ccc17a0d53f817c211c085e3c88ce3e",
+        "checksum": "55a50a4cdea80a44fb5efb91ef24dab6",
         "size": 68,
-        "uri": "https://{canondata_backend}/1937367/a07a3e054bb004f5edf7939c51b550c59012adfa/resource.tar.gz#test.test_blocks-top_sort_two_asc-_/results.txt"
+        "uri": "https://{canondata_backend}/1871182/afe490faba7529524edec3c46f40130d3abc97ff/resource.tar.gz#test.test_blocks-top_sort_two_asc-_/results.txt"
     },
     "test.test[column_order-select_distinct_star-default.txt]": {
         "checksum": "0900bbef31d5a04659bb075842e06909",

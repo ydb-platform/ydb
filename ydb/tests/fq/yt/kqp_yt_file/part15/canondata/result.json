@@ -85,9 +85,9 @@
         "uri": "https://{canondata_backend}/1917492/e8a582ce795724f177c2cd4954c52ee3ceab1ba7/resource.tar.gz#test.test_blocks-sort_two_desc-_/results.txt"
     },
     "test.test[blocks-top_sort_two_desc-]": {
-        "checksum": "114b79024b6dd7c83a7601628c7a7b9b",
+        "checksum": "d0f301671eadaa2571016a53ac740f5a",
         "size": 68,
-        "uri": "https://{canondata_backend}/1917492/e8a582ce795724f177c2cd4954c52ee3ceab1ba7/resource.tar.gz#test.test_blocks-top_sort_two_desc-_/results.txt"
+        "uri": "https://{canondata_backend}/1925821/2645cf662fd7d1580f211daf808fed0c995d6ba4/resource.tar.gz#test.test_blocks-top_sort_two_desc-_/results.txt"
     },
     "test.test[column_order-join_nosimple-]": {
         "checksum": "0536529118bddcae237c43eefffb7138",

@@ -1,6 +1,16 @@
 items:
 - name: Overview
   href: index.md
+- name: Getting started
+  href: getting-started.md
+- name: YQL tutorial
+  include:
+    mode: link
+    path: yql-tutorial/toc_p.yaml
+- name: Example applications
+  include:
+    mode: link
+    path: example-app/toc_p.yaml
 - name: Batch upload
   href: batch-upload.md
 - name: Paging

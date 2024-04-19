@@ -101,11 +101,26 @@ class TNewCdcStream: public TSubOperation {
         }
     }
 
+    const TString IndexName;
+
+    TString CreateWorkingDir() {
+        if (!IndexName) {
+            return Transaction.GetWorkingDir();
+        } else {
+            return Transaction.GetWorkingDir() + "/" + IndexName + "/indexImplTable";
+        }
+
+    }
+
 public:
+    TNewCdcStream(TOperationId id, const TTxTransaction& tx, const TString& indexName)
+        : TSubOperation(id, tx)
+        , IndexName(indexName)
+    {}
     using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
-        const auto& workingDir = Transaction.GetWorkingDir();
+        const auto& workingDir = CreateWorkingDir();
         const auto& op = Transaction.GetCreateCdcStream();
         const auto& streamDesc = op.GetStreamDescription();
         const auto& streamName = streamDesc.GetName();
@@ -126,10 +141,15 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .NotUnderDeleting();
+
+            if (IndexName) {
+                checks.IsInsideTableIndexPath();
+            } else {
+                checks.IsTable()
+                    .IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -496,6 +516,13 @@ public:
     {
     }
 
+    explicit TNewCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool initialScan, const TString& indexName)
+        : TSubOperation(id, tx)
+        , InitialScan(initialScan)
+        , IndexName(indexName)
+    {
+    }
+
     explicit TNewCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool initialScan)
         : TSubOperation(id, state)
         , InitialScan(initialScan)
@@ -503,10 +530,15 @@ public:
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        const auto& workingDir = Transaction.GetWorkingDir();
+        auto workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetCreateCdcStream();
-        const auto& tableName = op.GetTableName();
+        auto tableName = op.GetTableName();
         const auto& streamName = op.GetStreamDescription().GetName();
+
+        if (IndexName) {
+            workingDir += ("/" + tableName + "/" + IndexName);
+            tableName = "indexImplTable";
+        }
 
         LOG_N("TNewCdcStreamAtTable Propose"
             << ": opId# " << OperationId
@@ -522,9 +554,12 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .IsCommonSensePath()
                 .IsLikeDirectory()
                 .NotUnderDeleting();
+
+            if (checks && !IndexName) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -543,10 +578,12 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .NotUnderDeleting();
 
             if (checks) {
+                if (!IndexName) {
+                    checks.IsCommonSensePath();
+                }
                 if (InitialScan) {
                     checks.IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
                 } else {
@@ -628,8 +665,164 @@ public:
 
 private:
     const bool InitialScan;
+    const TString IndexName;
 
 }; // TNewCdcStreamAtTable
+
+ISubOperation::TPtr CreateNewCdcStreamImpl(TOperationId id, const TTxTransaction& tx, const TString& indexName) {
+    return MakeSubOperation<TNewCdcStream>(id, tx, indexName);
+}
+
+ISubOperation::TPtr CreateNewCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool initialScan, const TString& indexName) {
+    return MakeSubOperation<TNewCdcStreamAtTable>(id, tx, initialScan, indexName);
+}
+
+void DoCreateLock(const TOperationId opId, const TPath& workingDirPath, const TPath& tablePath,
+    TVector<ISubOperation::TPtr>& result)
+{
+    auto outTx = TransactionTemplate(workingDirPath.PathString(),
+        NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock);
+    outTx.SetFailOnExist(false);
+    outTx.SetInternal(true);
+    outTx.MutableLockConfig()->SetName(tablePath.LeafName());
+
+    result.push_back(CreateLock(NextPartId(opId, result), outTx));
+}
+
+void DoCreatePqPart(const TOperationId opId, const TPath& streamPath, const TString& streamName,
+    const TIntrusivePtr<TTableInfo> table, const NKikimrSchemeOp::TCreateCdcStream& op,
+    const TVector<TString>& boundaries, const bool acceptExisted, TVector<ISubOperation::TPtr>& result)
+{
+    auto outTx = TransactionTemplate(streamPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
+    outTx.SetFailOnExist(!acceptExisted);
+
+    auto& desc = *outTx.MutableCreatePersQueueGroup();
+    desc.SetName("streamImpl");
+    desc.SetTotalGroupCount(op.HasTopicPartitions() ? op.GetTopicPartitions() : table->GetPartitions().size());
+    desc.SetPartitionPerTablet(2);
+
+    auto& pqConfig = *desc.MutablePQTabletConfig();
+    pqConfig.SetTopicName(streamName);
+    pqConfig.SetTopicPath(streamPath.Child("streamImpl").PathString());
+    pqConfig.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+
+    auto& partitionConfig = *pqConfig.MutablePartitionConfig();
+    partitionConfig.SetLifetimeSeconds(op.GetRetentionPeriodSeconds());
+    partitionConfig.SetWriteSpeedInBytesPerSecond(1_MB); // TODO: configurable write speed
+    partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
+    partitionConfig.SetMaxCountInPartition(Max<i32>());
+
+    for (const auto& tag : table->KeyColumnIds) {
+        Y_ABORT_UNLESS(table->Columns.contains(tag));
+        const auto& column = table->Columns.at(tag);
+
+        auto& keyComponent = *pqConfig.AddPartitionKeySchema();
+        keyComponent.SetName(column.Name);
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.PType, column.PTypeMod);
+        keyComponent.SetTypeId(columnType.TypeId);
+        if (columnType.TypeInfo) {
+            *keyComponent.MutableTypeInfo() = *columnType.TypeInfo;
+        }
+    }
+
+    for (const auto& serialized : boundaries) {
+        TSerializedCellVec endKey(serialized);
+        Y_ABORT_UNLESS(endKey.GetCells().size() <= table->KeyColumnIds.size());
+
+        TString errStr;
+        auto& boundary = *desc.AddPartitionBoundaries();
+        for (ui32 ki = 0; ki < endKey.GetCells().size(); ++ki) {
+            const auto& cell = endKey.GetCells()[ki];
+            const auto tag = table->KeyColumnIds.at(ki);
+            Y_ABORT_UNLESS(table->Columns.contains(tag));
+            const auto typeId = table->Columns.at(tag).PType;
+            const bool ok = NMiniKQL::CellToValue(typeId, cell, *boundary.AddTuple(), errStr);
+            Y_ABORT_UNLESS(ok, "Failed to build key tuple at position %" PRIu32 " error: %s", ki, errStr.data());
+        }
+    }
+
+    result.push_back(CreateNewPQ(NextPartId(opId, result), outTx));
+}
+
+void DoCreateStream(const NKikimrSchemeOp::TCreateCdcStream& op, const TOperationId& opId, const TPath& workingDirPath, const TPath& tablePath,
+    const bool acceptExisted, const bool initialScan, const TString& indexName,
+    TVector<ISubOperation::TPtr>& result)
+{
+    {
+        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl);
+        outTx.SetFailOnExist(!acceptExisted);
+        outTx.MutableCreateCdcStream()->CopyFrom(op);
+
+        if (initialScan) {
+            outTx.MutableLockGuard()->SetOwnerTxId(ui64(opId.GetTxId()));
+        }
+
+        result.push_back(CreateNewCdcStreamImpl(NextPartId(opId, result), outTx, indexName));
+    }
+
+    {
+        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable);
+        outTx.SetFailOnExist(!acceptExisted);
+        outTx.MutableCreateCdcStream()->CopyFrom(op);
+
+        if (initialScan) {
+            outTx.MutableLockGuard()->SetOwnerTxId(ui64(opId.GetTxId()));
+        }
+
+        result.push_back(CreateNewCdcStreamAtTable(NextPartId(opId, result), outTx, initialScan, indexName));
+    }
+}
+
+ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& streamPath, const bool acceptExisted) {
+    const auto checks = streamPath.Check();
+    checks
+        .IsAtLocalSchemeShard();
+
+    if (streamPath.IsResolved()) {
+        checks
+            .IsResolved()
+            .NotUnderDeleting()
+            .FailOnExist(TPathElement::EPathType::EPathTypeCdcStream, acceptExisted);
+    } else {
+        checks
+            .NotEmpty()
+            .NotResolved();
+    }
+
+    if (checks) {
+        checks
+            .IsValidLeafName()
+            .PathsLimit()
+            .DirChildrenLimit();
+    }
+
+    if (!checks) {
+        return CreateReject(opId, checks.GetStatus(), checks.GetError());
+    }
+
+    return {};
+}
+
+ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPath& tablePath) {
+    const auto checks = tablePath.Check();
+    checks
+        .NotEmpty()
+        .NotUnderDomainUpgrade()
+        .IsAtLocalSchemeShard()
+        .IsResolved()
+        .NotDeleted()
+        .IsTable()
+        .NotAsyncReplicaTable()
+        .IsCommonSensePath()
+        .NotUnderDeleting()
+        .NotUnderOperation();
+
+    if (!checks) {
+        return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+    }
+
+    return {};
+}
 
 } // anonymous
 
@@ -665,52 +858,15 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
     const auto tablePath = workingDirPath.Child(tableName);
-    {
-        const auto checks = tablePath.Check();
-        checks
-            .NotEmpty()
-            .NotUnderDomainUpgrade()
-            .IsAtLocalSchemeShard()
-            .IsResolved()
-            .NotDeleted()
-            .IsTable()
-            .NotAsyncReplicaTable()
-            .IsCommonSensePath()
-            .NotUnderDeleting()
-            .NotUnderOperation();
 
-        if (!checks) {
-            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
-        }
+    if (auto reject = RejectOnTablePathChecks(opId, tablePath)) {
+        return {reject};
     }
 
     const auto streamPath = tablePath.Child(streamName);
-    {
-        const auto checks = streamPath.Check();
-        checks
-            .IsAtLocalSchemeShard();
 
-        if (streamPath.IsResolved()) {
-            checks
-                .IsResolved()
-                .NotUnderDeleting()
-                .FailOnExist(TPathElement::EPathType::EPathTypeCdcStream, acceptExisted);
-        } else {
-            checks
-                .NotEmpty()
-                .NotResolved();
-        }
-
-        if (checks) {
-            checks
-                .IsValidLeafName()
-                .PathsLimit()
-                .DirChildrenLimit();
-        }
-
-        if (!checks) {
-            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
-        }
+    if (auto reject = RejectOnCdcChecks(opId, streamPath, acceptExisted)) {
+        return {reject};
     }
 
     switch (streamDesc.GetMode()) {
@@ -786,90 +942,42 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
 
     TVector<ISubOperation::TPtr> result;
 
+    if (op.GetIndexModeCase() == NKikimrSchemeOp::TCreateCdcStream::kAllIndexes && op.GetAllIndexes()) {
+        for (const auto& child : tablePath->GetChildren()) {
+            const auto& name = child.first;
+
+            const TPath indexPath = tablePath.Child(name);
+            if (!indexPath.IsTableIndex()) {
+                continue;
+            }
+
+            const TPath indexImplPath = indexPath.Child("indexImplTable");
+            if (!indexImplPath) {
+                return {CreateReject(opId, NKikimrScheme::StatusSchemeError,
+                    "indexImplTable hasn't been found")}; 
+            }
+
+            const TPath indexStreamPath = indexImplPath.Child(streamName);
+            if (auto reject = RejectOnCdcChecks(opId, indexStreamPath, acceptExisted)) {
+                return {reject};
+            }
+
+            if (initialScan) {
+                return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
+                    << "Initial scan for index table is not supported yet")};
+            }
+
+            DoCreateStream(op, opId, workingDirPath, tablePath, acceptExisted, initialScan, name, result);
+            DoCreatePqPart(opId, indexStreamPath, streamName, table, op, boundaries, acceptExisted, result);
+        }
+    }
+
     if (initialScan) {
-        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock);
-        outTx.SetFailOnExist(false);
-        outTx.SetInternal(true);
-        outTx.MutableLockConfig()->SetName(tablePath.LeafName());
-
-        result.push_back(CreateLock(NextPartId(opId, result), outTx));
+        DoCreateLock(opId, workingDirPath, tablePath, result);
     }
 
-    {
-        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl);
-        outTx.SetFailOnExist(!acceptExisted);
-        outTx.MutableCreateCdcStream()->CopyFrom(op);
-
-        if (initialScan) {
-            outTx.MutableLockGuard()->SetOwnerTxId(ui64(opId.GetTxId()));
-        }
-
-        result.push_back(CreateNewCdcStreamImpl(NextPartId(opId, result), outTx));
-    }
-
-    {
-        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable);
-        outTx.SetFailOnExist(!acceptExisted);
-        outTx.MutableCreateCdcStream()->CopyFrom(op);
-
-        if (initialScan) {
-            outTx.MutableLockGuard()->SetOwnerTxId(ui64(opId.GetTxId()));
-        }
-
-        result.push_back(CreateNewCdcStreamAtTable(NextPartId(opId, result), outTx, initialScan));
-    }
-
-    {
-        auto outTx = TransactionTemplate(streamPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
-        outTx.SetFailOnExist(!acceptExisted);
-
-        auto& desc = *outTx.MutableCreatePersQueueGroup();
-        desc.SetName("streamImpl");
-        desc.SetTotalGroupCount(op.HasTopicPartitions() ? op.GetTopicPartitions() : table->GetPartitions().size());
-        desc.SetPartitionPerTablet(2);
-
-        auto& pqConfig = *desc.MutablePQTabletConfig();
-        pqConfig.SetTopicName(streamName);
-        pqConfig.SetTopicPath(streamPath.Child("streamImpl").PathString());
-        pqConfig.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
-
-        auto& partitionConfig = *pqConfig.MutablePartitionConfig();
-        partitionConfig.SetLifetimeSeconds(op.GetRetentionPeriodSeconds());
-        partitionConfig.SetWriteSpeedInBytesPerSecond(1_MB); // TODO: configurable write speed
-        partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
-        partitionConfig.SetMaxCountInPartition(Max<i32>());
-
-        for (const auto& tag : table->KeyColumnIds) {
-            Y_ABORT_UNLESS(table->Columns.contains(tag));
-            const auto& column = table->Columns.at(tag);
-
-            auto& keyComponent = *pqConfig.AddPartitionKeySchema();
-            keyComponent.SetName(column.Name);
-            auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.PType, column.PTypeMod);
-            keyComponent.SetTypeId(columnType.TypeId);
-            if (columnType.TypeInfo) {
-                *keyComponent.MutableTypeInfo() = *columnType.TypeInfo;
-            }
-        }
-
-        for (const auto& serialized : boundaries) {
-            TSerializedCellVec endKey(serialized);
-            Y_ABORT_UNLESS(endKey.GetCells().size() <= table->KeyColumnIds.size());
-
-            TString errStr;
-            auto& boundary = *desc.AddPartitionBoundaries();
-            for (ui32 ki = 0; ki < endKey.GetCells().size(); ++ki) {
-                const auto& cell = endKey.GetCells()[ki];
-                const auto tag = table->KeyColumnIds.at(ki);
-                Y_ABORT_UNLESS(table->Columns.contains(tag));
-                const auto typeId = table->Columns.at(tag).PType;
-                const bool ok = NMiniKQL::CellToValue(typeId, cell, *boundary.AddTuple(), errStr);
-                Y_ABORT_UNLESS(ok, "Failed to build key tuple at position %" PRIu32 " error: %s", ki, errStr.data());
-            }
-        }
-
-        result.push_back(CreateNewPQ(NextPartId(opId, result), outTx));
-    }
+    DoCreateStream(op, opId, workingDirPath, tablePath, acceptExisted, initialScan, {}, result);
+    DoCreatePqPart(opId, streamPath, streamName, table, op, boundaries, acceptExisted, result);
 
     return result;
 }

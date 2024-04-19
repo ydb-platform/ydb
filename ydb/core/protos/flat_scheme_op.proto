@@ -828,6 +828,9 @@ message TCreateCdcStream {
     optional TCdcStreamDescription StreamDescription = 2;
     optional uint64 RetentionPeriodSeconds = 3 [default = 86400]; // 1d by default
     optional uint32 TopicPartitions = 4;
+    oneof IndexMode {
+        bool AllIndexes = 5; // Create topic per each index
+    }
 }
 
 message TAlterCdcStream {

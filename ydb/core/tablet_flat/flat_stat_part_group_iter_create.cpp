@@ -1,6 +1,6 @@
 #include "flat_stat_part_group_iter_iface.h"
 #include "flat_stat_part_group_btree_index.h"
-#include "flat_part_index_iter.h"
+#include "flat_part_index_iter_flat_index.h"
 
 namespace NKikimr::NTable {
 

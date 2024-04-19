@@ -116,7 +116,7 @@ namespace {
             return;
         }
         
-        auto index = NPage::TIndex(*indexPage);
+        auto index = NPage::TFlatIndex(*indexPage);
         auto label = index.Label();
 
         Out
@@ -133,7 +133,7 @@ namespace {
 
         Out << ")" << Endl;
 
-        auto printIndexKey = [&](const NPage::TIndex::TRecord* record) {
+        auto printIndexKey = [&](const NPage::TFlatIndex::TRecord* record) {
             key.clear();
             for (const auto &info: part.Scheme->Groups[0].ColsKeyIdx)
                 key.push_back(record->Cell(info));

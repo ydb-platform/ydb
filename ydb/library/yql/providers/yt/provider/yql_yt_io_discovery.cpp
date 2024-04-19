@@ -503,6 +503,7 @@ public:
                         pathInfo.Ranges = MakeIntrusive<TYtRangesInfo>();
                         pathInfo.Ranges->Parse(*oneTable.Ranges, ctx, key.GetNode()->Pos());
                     }
+                    pathInfo.AdditionalAttributes = oneTable.AdditionalAttributes;
                     tables.push_back(pathInfo.ToExprNode(ctx, key.GetNode()->Pos(), tableInfo.ToExprNode(ctx, key.GetNode()->Pos())));
                 }
             }

@@ -61,15 +61,18 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
 
     LOG_T("Parsing write transaction for " << globalTxId << " at " << TabletId << ", record: " << record.ShortDebugString());
 
-    if (record.operations().size() != 0) {
-        Y_ABORT_UNLESS(record.operations().size() == 1, "Only one operation is supported now");
+    Operations.reserve(record.operations().size());
+    for (const auto& recordOperation : record.operations()) {
+        TValidatedWriteTxOperation validatedOperation;
 
-        const NKikimrDataEvents::TEvWrite::TOperation& recordOperation = record.operations(0);
-
-        ColumnIds = {recordOperation.GetColumnIds().begin(), recordOperation.GetColumnIds().end()};
-
-        if (!ParseOperation(ev, recordOperation, self->TableInfos))
+        auto [errCode, errStr] = validatedOperation.ParseOperation(ev, recordOperation, self->TableInfos, TabletId, KeyValidator);
+        if (errCode != NKikimrTxDataShard::TError::OK) {
+            ErrCode = errCode;
+            ErrStr = std::move(errStr);
             return;
+        }
+
+        Operations.push_back(std::move(validatedOperation));
     }
 
     if (record.HasLocks()) {
@@ -83,8 +86,7 @@ TValidatedWriteTx::~TValidatedWriteTx() {
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
 }
 
-bool TValidatedWriteTx::ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos) {
-    
+std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperation::ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos, ui64 tabletId, TKeyValidator& keyValidator) {
     OperationType = recordOperation.GetType();
     switch (OperationType) {
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
@@ -92,77 +94,47 @@ bool TValidatedWriteTx::ParseOperation(const NEvents::TDataEvents::TEvWrite& ev,
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
             break;
-        default: {
-            ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
-            ErrStr = TStringBuilder() << OperationType << " operation is not supported now";
-            return false;
-        }
+        default:
+            return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << OperationType << " operation is not supported now"};
     }
+
+    ColumnIds = {recordOperation.GetColumnIds().begin(), recordOperation.GetColumnIds().end()};
 
     const NKikimrDataEvents::TTableId& tableIdRecord = recordOperation.GetTableId();
 
     auto tableInfoPtr = tableInfos.FindPtr(tableIdRecord.GetTableId());
-    if (!tableInfoPtr) {
-        ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR;
-        ErrStr = TStringBuilder() << "Table '" << tableIdRecord.GetTableId() << "' doesn't exist.";
-        return false;
-    }
+    if (!tableInfoPtr)
+        return {NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Table '" << tableIdRecord.GetTableId() << "' doesn't exist."};
 
     const TUserTable& tableInfo = *tableInfoPtr->Get();
 
     if (tableInfo.GetTableSchemaVersion() != 0 && tableIdRecord.GetSchemaVersion() != tableInfo.GetTableSchemaVersion())
-    {
-        ErrCode = NKikimrTxDataShard::TError::SCHEME_CHANGED;
-        ErrStr = TStringBuilder() << "Table '" << tableInfo.Path << "' scheme changed.";
-        return false;
-    }
+        return {NKikimrTxDataShard::TError::SCHEME_CHANGED, TStringBuilder() << "Table '" << tableInfo.Path << "' scheme changed."};
 
     if (recordOperation.GetPayloadFormat() != NKikimrDataEvents::FORMAT_CELLVEC)
-    {
-        ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
-        ErrStr = TStringBuilder() << "Only FORMAT_CELLVEC is supported now. Got: " << recordOperation.GetPayloadFormat();
-        return false;
-    }
+        return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Only FORMAT_CELLVEC is supported now. Got: " << recordOperation.GetPayloadFormat()};
 
     ::NKikimr::NEvWrite::TPayloadReader<NEvents::TDataEvents::TEvWrite> payloadReader(ev);
     TString payload = payloadReader.GetDataFromPayload(recordOperation.GetPayloadIndex());
 
     if (!TSerializedCellMatrix::TryParse(payload, Matrix))
-    {
-        ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
-        ErrStr = TStringBuilder() << "Can't parse TSerializedCellVec in payload";
-        return false;
-    }
+        return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Can't parse TSerializedCellVec in payload"};
 
     if ((size_t)ColumnIds.size() != Matrix.GetColCount())
-    {
-        ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
-        ErrStr = TStringBuilder() << "Column count mismatch: got columnids " << ColumnIds.size() << ", got cells count " <<Matrix.GetColCount();
-        return false;
-    }
+        return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Column count mismatch: got columnids " << ColumnIds.size() << ", got cells count " <<Matrix.GetColCount()};
 
     if ((size_t)ColumnIds.size() < tableInfo.KeyColumnIds.size())
-    {
-        ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR;
-        ErrStr = TStringBuilder() << "Column count mismatch: got " << ColumnIds.size() << ", expected greater or equal than key column count " << tableInfo.KeyColumnIds.size();
-        return false;
-    }
+        return {NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Column count mismatch: got " << ColumnIds.size() << ", expected greater or equal than key column count " << tableInfo.KeyColumnIds.size()};
 
     for (size_t i = 0; i < tableInfo.KeyColumnIds.size(); ++i) {
-        if (ColumnIds[i] != tableInfo.KeyColumnIds[i]) {
-            ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR;
-            ErrStr = TStringBuilder() << "Key column schema at position " << i;
-            return false;
-        }
+        if (ColumnIds[i] != tableInfo.KeyColumnIds[i])
+            return {NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Key column schema at position " << i};
     }
 
     for (ui32 columnTag : ColumnIds) {
         auto* col = tableInfo.Columns.FindPtr(columnTag);
-        if (!col) {
-            ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR;
-            ErrStr = TStringBuilder() << "Missing column with id " << columnTag;
-            return false;
-        }
+        if (!col)
+            return {NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Missing column with id " << columnTag};
     }
 
     for (ui32 rowIdx = 0; rowIdx < Matrix.GetRowCount(); ++rowIdx)
@@ -171,38 +143,30 @@ bool TValidatedWriteTx::ParseOperation(const NEvents::TDataEvents::TEvWrite& ev,
         for (ui16 keyColIdx = 0; keyColIdx < tableInfo.KeyColumnIds.size(); ++keyColIdx) {
             const auto& cellType = tableInfo.KeyColumnTypes[keyColIdx];
             const TCell& cell = Matrix.GetCell(rowIdx, keyColIdx);
-            if (cellType.GetTypeId() == NScheme::NTypeIds::Uint8 && !cell.IsNull() && cell.AsValue<ui8>() > 127) {
-                ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
-                ErrStr = TStringBuilder() << "Keys with Uint8 column values >127 are currently prohibited";
-                return false;
-            }
+            if (cellType.GetTypeId() == NScheme::NTypeIds::Uint8 && !cell.IsNull() && cell.AsValue<ui8>() > 127)
+                return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Keys with Uint8 column values >127 are currently prohibited"};
+
             keyBytes += cell.IsNull() ? 1 : cell.Size();
         }
 
-        if (keyBytes > NLimits::MaxWriteKeySize) {
-            ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
-            ErrStr = TStringBuilder() << "Row key size of " << keyBytes << " bytes is larger than the allowed threshold " << NLimits::MaxWriteKeySize;
-            return false;
-        }
+        if (keyBytes > NLimits::MaxWriteKeySize)
+            return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Row key size of " << keyBytes << " bytes is larger than the allowed threshold " << NLimits::MaxWriteKeySize};
 
         for (ui16 valueColIdx = tableInfo.KeyColumnIds.size(); valueColIdx < Matrix.GetColCount(); ++valueColIdx) {
             const TCell& cell = Matrix.GetCell(rowIdx, valueColIdx);
-            if (cell.Size() > NLimits::MaxWriteValueSize) {
-                ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
-                ErrStr = TStringBuilder() << "Row cell size of " << cell.Size() << " bytes is larger than the allowed threshold " << NLimits::MaxWriteValueSize;
-                return false;
-            }
+            if (cell.Size() > NLimits::MaxWriteValueSize)
+                return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Row cell size of " << cell.Size() << " bytes is larger than the allowed threshold " << NLimits::MaxWriteValueSize};
         }
-    }    
+    }
 
     TableId = TTableId(tableIdRecord.GetOwnerId(), tableIdRecord.GetTableId(), tableIdRecord.GetSchemaVersion());
 
-    SetTxKeys(tableInfo);
+    SetTxKeys(tableInfo, tabletId, keyValidator);
 
-    return true;
+    return {NKikimrTxDataShard::TError::OK, {}};
 }
 
-TVector<TKeyValidator::TColumnWriteMeta> TValidatedWriteTx::GetColumnWrites() const {
+TVector<TKeyValidator::TColumnWriteMeta> TValidatedWriteTxOperation::GetColumnWrites() const {
     TVector<TKeyValidator::TColumnWriteMeta> writeColumns;
     writeColumns.reserve(ColumnIds.size());
     for (ui32 columnTag : ColumnIds) {
@@ -214,7 +178,7 @@ TVector<TKeyValidator::TColumnWriteMeta> TValidatedWriteTx::GetColumnWrites() co
     return writeColumns;
 }
 
-void TValidatedWriteTx::SetTxKeys(const TUserTable& tableInfo)
+void TValidatedWriteTxOperation::SetTxKeys(const TUserTable& tableInfo, ui64 tabletId, TKeyValidator& keyValidator)
 {
     auto columnsWrites = GetColumnWrites();
 
@@ -223,11 +187,11 @@ void TValidatedWriteTx::SetTxKeys(const TUserTable& tableInfo)
     {
         Matrix.GetSubmatrix(rowIdx, rowIdx, 0, tableInfo.KeyColumnIds.size() - 1, keyCells);
 
-        LOG_T("Table " << tableInfo.Path << ", shard: " << TabletId << ", "
+        LOG_T("Table " << tableInfo.Path << ", shard: " << tabletId << ", "
             << "write point " << DebugPrintPoint(tableInfo.KeyColumnTypes, keyCells, *AppData()->TypeRegistry));
 
         TTableRange tableRange(keyCells);
-        KeyValidator.AddWriteRange(TableId, tableRange, tableInfo.KeyColumnTypes, columnsWrites, false);
+        keyValidator.AddWriteRange(TableId, tableRange, tableInfo.KeyColumnTypes, columnsWrites, false);
     }
 }
 
@@ -272,8 +236,7 @@ bool TValidatedWriteTx::CheckCancelled() {
 }
 
 void TValidatedWriteTx::ReleaseTxData() {
-    Matrix.ReleaseBuffer();
-    ColumnIds.clear();
+    Operations.clear();
     KqpLocks.reset();
     IsReleased = true;
 
@@ -282,10 +245,18 @@ void TValidatedWriteTx::ReleaseTxData() {
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize);
 }
 
+ui64 TValidatedWriteTxOperation::ComputeTxSize() const {
+    ui64 txSize = sizeof(TValidatedWriteTxOperation);
+    txSize += Matrix.GetBuffer().size();
+    txSize += ColumnIds.size() * sizeof(ui32);
+    return txSize;
+}
+
 void TValidatedWriteTx::ComputeTxSize() {
     TxSize = sizeof(TValidatedWriteTx);
-    TxSize += Matrix.GetBuffer().size();
-    TxSize += ColumnIds.size() * sizeof(ui32);
+
+    for(const auto& validatedOperation: Operations)
+        TxSize += validatedOperation.ComputeTxSize();
 
     if (KqpLocks)
         TxSize += KqpLocks->ByteSize();

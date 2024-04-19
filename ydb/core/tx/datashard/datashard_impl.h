@@ -535,6 +535,7 @@ class TDataShard
             const TRowVersion ReadVersion;
             const TVector<ui32> ValueTags;
             TVector<std::pair<TSerializedCellVec, TSerializedCellVec>> Rows;
+            ui64 ReservationCookie = 0;
             const TCdcStreamScanManager::TStats Stats;
         };
 
@@ -1859,7 +1860,9 @@ public:
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 order, const TPathId& pathId);
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 lockId, ui64 lockOffset, const TPathId& pathId);
     void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
-    void EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records);
+    void EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie = 0);
+    ui32 GetFreeChangeQueueCapacity(ui64 cookie);
+    ui64 ReserveChangeQueueCapacity(ui32 capacity);
     void UpdateChangeExchangeLag(TInstant now);
     void CreateChangeSender(const TActorContext& ctx);
     void KillChangeSender(const TActorContext& ctx);
@@ -1998,8 +2001,8 @@ public:
     void WaitPredictedPlanStep(ui64 step);
     void SchedulePlanPredictedTxs();
 
-    bool CheckChangesQueueOverflow() const;
-    void CheckChangesQueueNoOverflow();
+    bool CheckChangesQueueOverflow(ui64 cookie = 0) const;
+    void CheckChangesQueueNoOverflow(ui64 cookie = 0);
 
     void DeleteReadIterator(TReadIteratorsMap::iterator it);
     void CancelReadIterators(Ydb::StatusIds::StatusCode code, const TString& issue, const TActorContext& ctx);
@@ -2729,9 +2732,11 @@ private:
         TInstant EnqueuedAt;
         ui64 LockId;
         ui64 LockOffset;
+        ui64 ReservationCookie;
 
         explicit TEnqueuedRecord(ui64 bodySize, const TPathId& tableId,
-                ui64 schemaVersion, TInstant created, TInstant enqueued, ui64 lockId = 0, ui64 lockOffset = 0)
+                ui64 schemaVersion, TInstant created, TInstant enqueued,
+                ui64 lockId = 0, ui64 lockOffset = 0, ui64 cookie = 0)
             : BodySize(bodySize)
             , TableId(tableId)
             , SchemaVersion(schemaVersion)
@@ -2740,12 +2745,13 @@ private:
             , EnqueuedAt(enqueued)
             , LockId(lockId)
             , LockOffset(lockOffset)
+            , ReservationCookie(cookie)
         {
         }
 
-        explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record, TInstant now)
+        explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record, TInstant now, ui64 cookie)
             : TEnqueuedRecord(record.BodySize, record.TableId, record.SchemaVersion, record.CreatedAt(), now,
-                record.LockId, record.LockOffset)
+                record.LockId, record.LockOffset, cookie)
         {
         }
     };
@@ -2765,6 +2771,9 @@ private:
     THashMap<ui64, TEnqueuedRecord> ChangesQueue; // ui64 is order
     TIntrusiveList<TEnqueuedRecord, TEnqueuedRecordTag> ChangesList;
     ui64 ChangesQueueBytes = 0;
+    THashMap<ui64, ui32> ChangeQueueReservations;
+    ui64 NextChangeQueueReservationCookie = 1;
+    ui32 ChangeQueueReservedCapacity = 0;
     TActorId OutChangeSender;
     bool OutChangeSenderSuspended = false;
 

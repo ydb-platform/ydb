@@ -1,8 +1,8 @@
 items:
 - name: Обзор
   href: reference/index.md
-- include: { mode: link, path: reference/toc_i.yaml }
-- name: Туториал YQL
-  include: { mode: link, path: tutorial/toc_i.yaml }
+- include:
+    mode: link
+    path: reference/toc_i.yaml
 - name: Планы запросов
   href: query_plans.md

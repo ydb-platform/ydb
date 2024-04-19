@@ -19,7 +19,7 @@ namespace NKikimr::NStorage {
                     }
 
                     AllocateStaticGroup(config, 0 /*groupId*/, 1 /*groupGeneration*/, TBlobStorageGroupType(species),
-                        settings.GetGeometry(), settings.GetPDiskFilter(), {}, {}, 0, nullptr);
+                        settings.GetGeometry(), settings.GetPDiskFilter(), {}, {}, 0, nullptr, false);
                     changes = true;
                     STLOG(PRI_DEBUG, BS_NODE, NWDC33, "Allocated static group", (Group, bsConfig.GetServiceSet().GetGroups(0)));
                 } catch (const TExConfigError& ex) {
@@ -53,7 +53,7 @@ namespace NKikimr::NStorage {
             const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TPDiskFilter>& pdiskFilters,
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid, i64 requiredSpace,
-            NKikimrBlobStorage::TBaseConfig *baseConfig) {
+            NKikimrBlobStorage::TBaseConfig *baseConfig, bool convertToDonor) {
         using TPDiskId = NBsController::TPDiskId;
 
         NKikimrConfig::TBlobStorageConfig *bsConfig = config->MutableBlobStorageConfig();
@@ -361,18 +361,33 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TGroupInfo::TFailRealm *sRealm = nullptr;
         NKikimrBlobStorage::TGroupInfo::TFailRealm::TFailDomain *sDomain = nullptr;
 
+        THashMap<TVDiskIdShort, NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk::TDonor>> donors;
+
         for (size_t i = 0; i < sSet->VDisksSize(); ++i) {
             const auto& vdisk = sSet->GetVDisks(i);
             const TVDiskID vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-            if (vdiskId.GroupID != groupId) {
-                continue;
-            }
-            if (vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
+            if (vdiskId.GroupID != groupId || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
                 continue;
             }
             auto *m = sSet->MutableVDisks(i);
             if (replacedDisks.contains(vdiskId)) {
-                m->SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+                if (m->HasDonorMode()) {
+                    // this disk is already a donor, nothing to do about it
+                } else if (convertToDonor) {
+                    // make this disk a donor
+                    auto *donorMode = m->MutableDonorMode();
+                    donorMode->SetNumFailRealms(groupDefinition.size());
+                    donorMode->SetNumFailDomainsPerFailRealm(groupDefinition.front().size());
+                    donorMode->SetNumVDisksPerFailDomain(groupDefinition.front().front().size());
+                    donorMode->SetErasureSpecies(sGroup->GetErasureSpecies());
+                    m->ClearDonors();
+                } else {
+                    m->SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+                    continue;
+                }
+                auto *donor = donors[vdiskId].Add();
+                donor->MutableVDiskId()->CopyFrom(m->GetVDiskID());
+                donor->MutableVDiskLocation()->CopyFrom(m->GetVDiskLocation());
             } else {
                 m->MutableVDiskID()->SetGroupGeneration(groupGeneration);
             }
@@ -409,6 +424,9 @@ namespace NKikimr::NStorage {
                 VDiskIDFromVDiskID(TVDiskID(groupId, groupGeneration, vdiskId), sDisk->MutableVDiskID());
                 sDisk->SetVDiskKind(NKikimrBlobStorage::TVDiskKind::Default);
                 sDisk->MutableVDiskLocation()->CopyFrom(*sLoc);
+                if (const auto it = donors.find(vdiskId); it != donors.end()) {
+                    sDisk->MutableDonors()->Swap(&it->second);
+                }
             }
         });
     }

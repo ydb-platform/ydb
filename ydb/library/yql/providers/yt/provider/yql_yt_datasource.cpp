@@ -648,10 +648,9 @@ private:
                 || withQB;
 
             path = Build<TYtPath>(ctx, path.Pos())
+                .InitFrom(path)
                 .Table(table)
                 .Columns(needRewrite ? Build<TCoVoid>(ctx, path.Columns().Pos()).Done() : origColumnList)
-                .Ranges(path.Ranges())
-                .Stat(path.Stat())
                 .Done();
 
             bool tableSysColumns = useSysColumns && !tableDesc.View && (view.empty() || view == "raw");

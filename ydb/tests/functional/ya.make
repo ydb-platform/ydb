@@ -29,5 +29,4 @@ RECURSE(
     tenants
     ttl
     ydb_cli
-    example
 )

@@ -22,6 +22,8 @@
 
 #include <library/cpp/yt/misc/hash.h>
 
+#include <library/cpp/yt/memory/tls_scratch.h>
+
 #include <library/cpp/yt/farmhash/farm_hash.h>
 
 #include <library/cpp/yt/coding/varint.h>
@@ -1235,13 +1237,9 @@ void ValidateClientDataRow(
 void ValidateDuplicateAndRequiredValueColumns(
     TUnversionedRow row,
     const TTableSchema& schema,
-    const TNameTableToSchemaIdMapping& idMapping,
-    std::vector<bool>* columnPresenceBuffer)
+    const TNameTableToSchemaIdMapping& idMapping)
 {
-    auto& columnSeen = *columnPresenceBuffer;
-    YT_VERIFY(std::ssize(columnSeen) >= schema.GetColumnCount());
-    std::fill(columnSeen.begin(), columnSeen.end(), 0);
-
+    auto columnSeenFlags = GetTlsScratchBuffer<bool>(schema.GetColumnCount());
     for (const auto& value : row) {
         int mappedId = ApplyIdMapping(value, &idMapping);
         if (mappedId < 0) {
@@ -1249,17 +1247,17 @@ void ValidateDuplicateAndRequiredValueColumns(
         }
         const auto& column = schema.Columns()[mappedId];
 
-        if (columnSeen[mappedId]) {
+        if (columnSeenFlags[mappedId]) {
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::DuplicateColumnInSchema,
                 "Duplicate column %v in table schema",
                 column.GetDiagnosticNameString());
         }
-        columnSeen[mappedId] = true;
+        columnSeenFlags[mappedId] = true;
     }
 
     for (int index = schema.GetKeyColumnCount(); index < schema.GetColumnCount(); ++index) {
-        if (!columnSeen[index] && schema.Columns()[index].Required()) {
+        if (!columnSeenFlags[index] && schema.Columns()[index].Required()) {
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::MissingRequiredColumnInSchema,
                 "Missing required column %v in table schema",

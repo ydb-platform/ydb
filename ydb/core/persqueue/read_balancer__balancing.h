@@ -112,6 +112,9 @@ struct TPartitionFamily {
     TString DebugStr() const;
 
 private:
+    void Destroy(const TActorContext& ctx);
+
+private:
     const TString& Topic() const;
     const TString& TopicPath() const;
     ui32 TabletGeneration() const;

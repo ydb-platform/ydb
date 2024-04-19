@@ -160,8 +160,7 @@ void TPartitionFamily::Release(const TActorContext& ctx, EStatus targetStatus) {
 }
 
 bool TPartitionFamily::Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx) {
-    if (!Session || Session->Sender != sender) {
-        // TODO error. Не должно быть заблоченных партиции
+    if (!Session || Session->PipeClient != sender) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 GetPrefix() << "try unlock the partition " << partitionId << " from other sender");
         return false;
@@ -181,6 +180,8 @@ bool TPartitionFamily::Unlock(const TActorId& sender, ui32 partitionId, const TA
     }
 
     if (!LockedPartitions.empty()) {
+        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "partition " << partitionId << " was unlocked but wait else [" << JoinRange(", ", LockedPartitions.begin(), LockedPartitions.end()) << "]");
         return false;
     }
 
@@ -196,21 +197,16 @@ bool TPartitionFamily::Reset(const TActorContext& ctx) {
     Session = nullptr;
 
     if (Status == EStatus::Destroyed) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << " destroyed.");
-
-        for (auto partitionId : Partitions) {
-            Consumer.PartitionMapping.erase(partitionId);
-        }
-        Consumer.UnreadableFamilies.erase(Id);
-        Consumer.Families.erase(Id);
-
+        Destroy(ctx);
         return false;
+    } else if (Status == EStatus::Free) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << " is free.");
+
+        Consumer.UnreadableFamilies[Id] = this;
     }
 
     if (!AttachedPartitions.empty()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << " is released.");
 
         auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(AttachedPartitions);
         ActivePartitionCount -= activePartitionCount;
@@ -228,6 +224,17 @@ bool TPartitionFamily::Reset(const TActorContext& ctx) {
     }
 
     return true;
+}
+
+void TPartitionFamily::Destroy(const TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            GetPrefix() << " destroyed.");
+
+    for (auto partitionId : Partitions) {
+        Consumer.PartitionMapping.erase(partitionId);
+    }
+    Consumer.UnreadableFamilies.erase(Id);
+    Consumer.Families.erase(Id);
 }
 
 void TPartitionFamily::StartReading(TSession& session, const TActorContext& ctx) {
@@ -479,7 +486,6 @@ ui32 TConsumer::NextStep() {
 
 void TConsumer::RegisterPartition(ui32 partitionId, const TActorContext& ctx) {
     auto [_, inserted] = Partitions.try_emplace(partitionId, TPartition());
-    Cerr << ">>>>> RegisterPartition partition=" << partitionId << " inserted=" << inserted << " IsReadable(partitionId)=" << IsReadable(partitionId) << Endl;
     if (inserted && IsReadable(partitionId)) {
         // TODO to existed family?
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
@@ -633,7 +639,8 @@ void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext&
 bool TConsumer::Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx) {
     auto* family = FindFamily(partitionId);
     if (!family) {
-        // TODO Messages
+        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            GetPrefix() << "unlocking the partition " << partitionId << " from unknown family.");
         return false;
     }
 
@@ -940,7 +947,6 @@ void TConsumer::Balance(const TActorContext& ctx) {
 
     // We try to balance the partitions by sessions that clearly want to read them, even if the distribution is not uniform.
     for (auto& [_, family] : Families) {
-        Cerr << ">>>>> " << family->DebugStr() << " Status=" << family->Status << Endl;
         if (family->Status != TPartitionFamily::EStatus::Active || family->SpecialSessions.empty()) {
             continue;
         }
@@ -1146,8 +1152,21 @@ bool TBalancer::SetCommittedState(const TString& consumerName, ui32 partitionId,
         return false;
     }
 
-    if (consumer->IsReadable(partitionId) && consumer->SetCommittedState(partitionId, generation, cookie)) {
-        consumer->ProccessReadingFinished(partitionId, ctx);
+    if (!consumer->IsReadable(partitionId)) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "The offset of the partition " << partitionId << " was commited by " << consumerName
+                << " but the partition isn't readable");
+        return false;
+    }
+
+    if (consumer->SetCommittedState(partitionId, generation, cookie)) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "The offset of the partition " << partitionId << " was commited by " << consumerName);
+
+        if (consumer->ProccessReadingFinished(partitionId, ctx)) {
+            consumer->Balance(ctx);
+        }
+
         return true;
     }
 
@@ -1156,28 +1175,8 @@ bool TBalancer::SetCommittedState(const TString& consumerName, ui32 partitionId,
 
 void TBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
     auto& r = ev->Get()->Record;
-    auto partitionId = r.GetPartitionId();
 
-    auto* consumer = GetConsumer(r.GetConsumer());
-    if (!consumer) {
-        return;
-    }
-
-    if (!consumer->IsReadable(partitionId)) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "The offset of the partition " << partitionId << " was commited by " << r.GetConsumer()
-                << " but the partition isn't readable");
-        return;
-    }
-
-    if (consumer->SetCommittedState(partitionId, r.GetGeneration(), r.GetCookie())) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "The offset of the partition " << partitionId << " was commited by " << r.GetConsumer());
-
-        if (consumer->ProccessReadingFinished(partitionId, ctx)) {
-            consumer->Balance(ctx);
-        }
-    }
+    SetCommittedState(r.GetConsumer(), r.GetPartitionId(), r.GetGeneration(), r.GetCookie(), ctx);
 }
 
 void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx) {

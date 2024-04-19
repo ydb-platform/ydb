@@ -26,7 +26,7 @@ using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
 using namespace NSchemeShardUT_Private;
 
-Y_UNIT_TEST_SUITE(TopicSplitMerge) {
+Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(Simple) {
         TTopicSdkTestSetup setup = CreateSetup();

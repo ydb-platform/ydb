@@ -1145,8 +1145,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedReq
     Balancer->Handle(ev, ctx);
 }
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx)
-{
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx) {
     Balancer->Handle(ev, ctx);
 }
 

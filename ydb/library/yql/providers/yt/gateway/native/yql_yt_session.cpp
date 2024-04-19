@@ -31,7 +31,7 @@ TSession::TSession(IYtGateway::TOpenSessionOptions&& options, size_t numThreads)
     }
 }
 
-void TSession::CloseQueueAndTracker() {
+void TSession::StopQueueAndTracker() {
     if (OpTracker_) {
         OpTracker_->Stop();
     }
@@ -47,11 +47,11 @@ void TSession::Close() {
         TxCache_.AbortAll();
     } catch (...) {
         YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
-        CloseQueueAndTracker();
+        StopQueueAndTracker();
         throw;
     }
 
-    CloseQueueAndTracker();
+    StopQueueAndTracker();
 }
 
 NYT::TNode TSession::CreateSpecWithDesc(const TVector<std::pair<TString, TString>>& code) const {

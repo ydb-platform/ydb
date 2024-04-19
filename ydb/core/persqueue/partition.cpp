@@ -94,6 +94,16 @@ void TPartition::EnsureUserActionAndTransactionEventsFrontIs() const
     Y_ABORT_UNLESS(ptr);
 }
 
+TEvPersQueue::TEvProposeTransaction* TPartition::TryGetCurrentImmediateTransaction()
+{
+    Y_ABORT_UNLESS(!UserActionAndTransactionEvents.empty());
+    auto* ptr = get_if<TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>>(&UserActionAndTransactionEvents.front());
+    if (!ptr) {
+        return nullptr;
+    }
+    return ptr->Get();
+}
+
 const TString& TPartition::TopicName() const {
     return TopicConverter->GetClientsideName();
 }
@@ -892,7 +902,7 @@ void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
     Y_ABORT_UNLESS(event.HasData());
     const NKikimrPQ::TDataTransaction& txBody = event.GetData();
 
-    if (!txBody.GetImmediate() || txBody.HasWriteId()) {
+    if (!txBody.GetImmediate()) {
         ReplyPropose(ctx,
                      event,
                      NKikimrPQ::TEvProposeTransactionResult::ABORTED);
@@ -969,8 +979,6 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorCo
                 "TEvGetWriteInfoResponse Cookie: " << ev->Get()->Cookie);
 
     Y_ABORT_UNLESS(TxInProgress);
-    auto& t = GetCurrentTransaction();
-    Y_ABORT_UNLESS(t.Tx);
 
     bool predicate = true;
     for (auto& [k, v] : ev->Get()->SrcIdInfo) {
@@ -985,12 +993,25 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorCo
         }
     }
 
-    WriteInfoResponse = nullptr;
-    if (ev->Get()->BodyKeys.empty()) {
-        t.Predicate = predicate && BeginTransaction(*t.Tx, ctx);
-        if (*t.Predicate) {
-            WriteInfoResponse = ev->Release();
+    WriteInfoResponse = ev->Release();
+
+    if (auto* t = TryGetCurrentImmediateTransaction()) {
+        if (!WriteInfoResponse->BodyKeys.empty()) {
+            predicate = false;
         }
+
+        ProcessImmediateTx(t->Record, predicate, ctx);
+        TxInProgress = false;
+        ContinueProcessTxsAndUserActs(ctx);
+
+        return;
+    }
+
+    auto& t = GetCurrentTransaction();
+    Y_ABORT_UNLESS(t.Tx);
+
+    if (WriteInfoResponse->BodyKeys.empty()) {
+        t.Predicate = predicate && BeginTransaction(*t.Tx, ctx);
     } else {
         t.Predicate = false;
     }
@@ -1008,11 +1029,26 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorConte
                 "TEvGetWriteInfoError Cookie: " << ev->Get()->Cookie);
 
     Y_ABORT_UNLESS(TxInProgress);
+
+    WriteInfoResponse = nullptr;
+
+    if (auto* t = TryGetCurrentImmediateTransaction()) {
+        ScheduleReplyPropose(t->Record,
+                             NKikimrPQ::TEvProposeTransactionResult::ABORTED);
+
+        UserActionAndTransactionEvents.pop_front();
+        --ImmediateTxCount;
+
+        TxInProgress = false;
+        ContinueProcessTxsAndUserActs(ctx);
+
+        return;
+    }
+
     auto& t = GetCurrentTransaction();
     Y_ABORT_UNLESS(t.Tx);
 
     t.Predicate = false;
-    WriteInfoResponse = nullptr;
 
     ctx.Send(Tablet,
              MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(t.Tx->Step,
@@ -1632,6 +1668,9 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
             ctx.Send(Tablet, request.Release());
             KVWriteInProgress = true;
             HaveWriteMsg = true;
+        } else {
+            AnswerCurrentWrites(ctx);
+            AnswerCurrentReplies(ctx);
         }
 
         return;
@@ -1885,35 +1924,42 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
 
     RemoveDistrTx();
 
-    if (WriteInfoResponse) {
-        for (auto i = WriteInfoResponse->BlobsFromHead.rbegin(); i != WriteInfoResponse->BlobsFromHead.rend(); ++i) {
-            auto& blob = *i;
+    CommitWriteOperations(ctx);
+}
 
-            TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
-                .SourceId = blob.SourceId,
-                    .SeqNo = blob.SeqNo,
-                    .PartNo = (ui16)(blob.PartData ? blob.PartData->PartNo : 0),
-                    .TotalParts = (ui16)(blob.PartData ? blob.PartData->TotalParts : 1),
-                    .TotalSize = (ui32)(blob.PartData ? blob.PartData->TotalSize : blob.UncompressedSize),
-                    .CreateTimestamp = blob.CreateTimestamp.MilliSeconds(),
-                    .ReceiveTimestamp = blob.CreateTimestamp.MilliSeconds(),
-                    .DisableDeduplication = false,
-                    .WriteTimestamp = blob.WriteTimestamp.MilliSeconds(),
-                    .Data = blob.Data,
-                    .UncompressedSize = blob.UncompressedSize,
-                    .PartitionKey = blob.PartitionKey,
-                    .ExplicitHashKey = blob.ExplicitHashKey,
-                    .External = false,
-                    .IgnoreQuotaDeadline = true,
-                    .HeartbeatVersion = std::nullopt,
-            }, std::nullopt};
-            TMessage message(std::move(msg), ctx.Now() - TInstant::Zero());
-
-            UserActionAndTransactionEvents.emplace_front(std::move(message));
-        }
-
-        WriteInfoResponse = nullptr;
+void TPartition::CommitWriteOperations(const TActorContext& ctx)
+{
+    if (!WriteInfoResponse) {
+        return;
     }
+
+    for (auto i = WriteInfoResponse->BlobsFromHead.rbegin(); i != WriteInfoResponse->BlobsFromHead.rend(); ++i) {
+        auto& blob = *i;
+
+        TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
+            .SourceId = blob.SourceId,
+                .SeqNo = blob.SeqNo,
+                .PartNo = (ui16)(blob.PartData ? blob.PartData->PartNo : 0),
+                .TotalParts = (ui16)(blob.PartData ? blob.PartData->TotalParts : 1),
+                .TotalSize = (ui32)(blob.PartData ? blob.PartData->TotalSize : blob.UncompressedSize),
+                .CreateTimestamp = blob.CreateTimestamp.MilliSeconds(),
+                .ReceiveTimestamp = blob.CreateTimestamp.MilliSeconds(),
+                .DisableDeduplication = false,
+                .WriteTimestamp = blob.WriteTimestamp.MilliSeconds(),
+                .Data = blob.Data,
+                .UncompressedSize = blob.UncompressedSize,
+                .PartitionKey = blob.PartitionKey,
+                .ExplicitHashKey = blob.ExplicitHashKey,
+                .External = false,
+                .IgnoreQuotaDeadline = true,
+                .HeartbeatVersion = std::nullopt,
+        }, std::nullopt};
+        TMessage message(std::move(msg), ctx.Now() - TInstant::Zero());
+
+        UserActionAndTransactionEvents.emplace_front(std::move(message));
+    }
+
+    WriteInfoResponse = nullptr;
 }
 
 void TPartition::EndTransaction(const TEvPQ::TEvTxRollback& event,
@@ -2120,26 +2166,58 @@ TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(const TEvP
 {
     Y_UNUSED(request);
 
+    Y_ABORT_UNLESS(event.Record.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
+    Y_ABORT_UNLESS(event.Record.HasData());
+
     if (AffectedUsers.size() >= MAX_USERS) {
         return EProcessResult::Break;
     }
 
-    ProcessImmediateTx(event.Record, ctx);
-    --ImmediateTxCount;
+    EProcessResult result = EProcessResult::Continue;
 
-    return EProcessResult::Continue;
+    if (event.Record.GetData().HasWriteId()) {
+        if (!FirstEvent) {
+            result = EProcessResult::Break;
+        } else {
+            Y_ABORT_UNLESS(event.Record.HasSupportivePartitionActor());
+
+            ctx.Send(ActorIdFromProto(event.Record.GetSupportivePartitionActor()),
+                     MakeHolder<TEvPQ::TEvGetWriteInfoRequest>(0).Release());
+
+            TxInProgress = true;
+
+            result = EProcessResult::Abort;
+        }
+    } else {
+        ProcessImmediateTx(event.Record, true, ctx);
+        --ImmediateTxCount;
+
+        result = EProcessResult::Continue;
+    }
+
+    return result;
 }
 
 void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
+                                    bool predicate,
                                     const TActorContext& ctx)
 {
-    Y_UNUSED(ctx);
 
     Y_ABORT_UNLESS(tx.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     Y_ABORT_UNLESS(tx.HasData());
 
+    if (!predicate) {
+        ScheduleReplyPropose(tx,
+                             NKikimrPQ::TEvProposeTransactionResult::ABORTED);
+        return;
+    }
+
     for (auto& operation : tx.GetData().GetOperations()) {
-        Y_ABORT_UNLESS(operation.HasBegin() && operation.HasEnd() && operation.HasConsumer());
+        if (!operation.HasBegin()) {
+            continue;
+        }
+
+        Y_ABORT_UNLESS(operation.HasEnd() && operation.HasConsumer());
 
         Y_ABORT_UNLESS(operation.GetBegin() <= (ui64)Max<i64>(), "Unexpected begin offset: %" PRIu64, operation.GetBegin());
         Y_ABORT_UNLESS(operation.GetEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetEnd());
@@ -2174,6 +2252,13 @@ void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
 
         userInfo.Offset = operation.GetEnd();
     }
+
+    if (WriteInfoResponse) {
+        UserActionAndTransactionEvents.pop_front();
+        --ImmediateTxCount;
+    }
+
+    CommitWriteOperations(ctx);
 
     ScheduleReplyPropose(tx,
                          NKikimrPQ::TEvProposeTransactionResult::COMPLETE);

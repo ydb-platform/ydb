@@ -3173,8 +3173,15 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         return;
     }
 
-    if (txBody.GetImmediate() && !txBody.HasWriteId()) {
-        const TPartitionInfo& partition = Partitions.at(*partitionId);
+    if (txBody.GetImmediate()) {
+        TPartitionId originalPartitionId(txBody.GetOperations(0).GetPartitionId());
+        const TPartitionInfo& partition = Partitions.at(originalPartitionId);
+
+        if (txBody.HasWriteId()) {
+            Y_ABORT_UNLESS(Partitions.contains(*partitionId));
+            const TPartitionInfo& partition = Partitions.at(*partitionId);
+            ActorIdToProto(partition.Actor, event.MutableSupportivePartitionActor());
+        }
 
         ctx.Send(partition.Actor, ev.Release());
     } else {

@@ -9,7 +9,6 @@ RECURSE(
     log_backend
     memory_log
     prof
-    protos
     testlib
     util
     wilson

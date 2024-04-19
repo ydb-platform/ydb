@@ -5,7 +5,6 @@ RECURSE(
     expr_nodes
     integration
     opt
-    proto
     runtime
     state
     tasks

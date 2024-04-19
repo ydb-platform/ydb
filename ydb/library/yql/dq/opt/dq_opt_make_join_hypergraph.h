@@ -4,6 +4,7 @@
 #include "dq_opt_conflict_rules_collector.h"
 
 #include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
+#include <ydb/library/yql/utils/log/log.h>
 
 #include <memory.h>
 
@@ -93,8 +94,18 @@ TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet> subtreeNodes{};
     MakeJoinHypergraphRec(graph, joinTree, subtreeNodes);
 
+    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+        YQL_CLOG(TRACE, CoreDq) << "Hypergraph build: ";
+        YQL_CLOG(TRACE, CoreDq) << graph.String();
+    }
+
     TTransitiveClosureConstructor transitveClosure(graph);
     transitveClosure.Construct();
+
+    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+        YQL_CLOG(TRACE, CoreDq) << "Hypergraph after transitive closure: ";
+        YQL_CLOG(TRACE, CoreDq) << graph.String();
+    }
 
     return graph;
 }

@@ -94,6 +94,50 @@ public:
     };
 
 public:
+    /* For debug purposes */
+    TString String() {
+        TString res;
+
+        res.append("Edges: ").append("\n");
+        for (const auto& edge: Edges_) {
+            res.append("{");
+
+            auto left = TSetBitsIt(edge.Left);
+            while (left.HasNext()) {
+                res.append(ToString(left.Next())).append(", ");
+            }
+            res.pop_back();
+            res.pop_back();
+
+            res.append("}");
+            
+            res.append(" -> ");
+
+            res.append("{");
+
+            auto right = TSetBitsIt(edge.Right);
+            while (right.HasNext()) {
+                res.append(ToString(right.Next())).append(", ");
+            }
+            res.pop_back();
+            res.pop_back();
+
+            res.append("}, ");
+
+            for (auto l : edge.LeftJoinKeys) {
+                res.append(l).append(",");
+            }
+            res.append("=");
+            for (auto r : edge.RightJoinKeys) {
+                res.append(r).append(",");
+            }
+
+            res.append("\n");
+        }
+        
+        return res;
+    }
+
     /* Add node to the hypergraph and returns its id */
     size_t AddNode(const std::shared_ptr<IBaseOptimizerNode>& relationNode) {
         Y_ASSERT(relationNode->Labels().size() == 1);
@@ -125,6 +169,7 @@ public:
         reversedEdge.JoinConditions = std::move(reversedJoinConditions);
         reversedEdge.IsReversed = true;
         reversedEdge.ReversedEdgeId = edgeId;
+        reversedEdge.BuildCondVectors();
     
         AddEdgeImpl(reversedEdge);
     }

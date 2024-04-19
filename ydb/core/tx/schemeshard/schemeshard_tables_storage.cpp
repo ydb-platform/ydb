@@ -144,7 +144,6 @@ bool TTablesStorage::TTableCreateOperator::InitShardingTablets(const TColumnTabl
     for (ui64 columnShard : Object->ColumnShards) {
         Object->Sharding.AddColumnShards(columnShard);
     }
-    Object->Sharding.ClearAdditionalColumnShards();
     return true;
 }
 

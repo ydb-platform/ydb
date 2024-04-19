@@ -445,18 +445,19 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const TString& endpoin
         }
         ++ConnectionGeneration;
         auto subclient = Client->GetClientForEndpoint(endpoint);
-        connectionFactory = subclient->CreateWriteSessionConnectionProcessorFactory();
+
         auto clientContext = subclient->CreateContext();
-        ConnectionFactory = connectionFactory;
-
-        ClientContext = std::move(clientContext);
-        ServerMessage = std::make_shared<TServerMessage>();
-
-        if (!ClientContext) {
+        if (!clientContext) {
             AbortImpl();
             // Grpc and WriteSession is closing right now.
             return;
         }
+        auto prevClientContext = std::exchange(ClientContext, clientContext);
+
+        ServerMessage = std::make_shared<TServerMessage>();
+
+        connectionFactory = subclient->CreateWriteSessionConnectionProcessorFactory();
+        ConnectionFactory = connectionFactory;
 
         connectContext = ClientContext->CreateContext();
         if (delay)
@@ -477,8 +478,10 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const TString& endpoin
         if (prevConnectDelayContext)
             Cancel(prevConnectDelayContext);
         Cancel(prevConnectTimeoutContext);
+        Cancel(prevClientContext);
         Y_ASSERT(connectContext);
         Y_ASSERT(connectTimeoutContext);
+
         reqSettings = TRpcRequestSettings::Make(Settings);
 
         connectCallback = [cbContext = SelfContext,

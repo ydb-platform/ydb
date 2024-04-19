@@ -55,31 +55,6 @@ struct KeysHashTable {
     std::vector<ui64, TMKQLAllocator<ui64>> SpillData; // Vector to store long data which cannot be fit in single hash table slot.
 };
 
-struct TTableSpilledBucket {
-    TTableSpilledBucket(ISpiller::TPtr spiller, size_t sizeLimit)
-        : StateUi64Adapter(spiller, sizeLimit)
-        , StateUi32Adapter(spiller, sizeLimit)
-        , StateCharAdapter(spiller, sizeLimit)
-        , DataUi64Adapter(spiller, sizeLimit) {
-    }
-
-    TVectorSpillerAdapter<ui64, TMKQLAllocator<ui64>> StateUi64Adapter;
-    TVectorSpillerAdapter<ui32, TMKQLAllocator<ui32>> StateUi32Adapter;
-    TVectorSpillerAdapter<char, TMKQLAllocator<char>> StateCharAdapter;
-
-    TVectorSpillerAdapter<ui64, TMKQLAllocator<ui64>> DataUi64Adapter;
-
-    enum class EBucketState {
-        InMemory,
-        SpillingState,
-        SpillingData,
-        Spilled
-    };
-
-    EBucketState BucketState = EBucketState::InMemory;
-
-    ui64 SpilledTuplesCount = 0;
-};
 
 struct TTableBucket {
     ui64 TuplesNum = 0;  // Total number of tuples in bucket
@@ -100,6 +75,158 @@ struct TTableBucket {
 
 
  };
+
+ struct TTableSpilledBucket {
+    TTableSpilledBucket(ISpiller::TPtr spiller, size_t sizeLimit)
+        : StateUi64Adapter(spiller, sizeLimit)
+        , StateUi32Adapter(spiller, sizeLimit)
+        , StateCharAdapter(spiller, sizeLimit)
+        , DataUi64Adapter(spiller, sizeLimit) {
+    }
+
+    TVectorSpillerAdapter<ui64, TMKQLAllocator<ui64>> StateUi64Adapter;
+    TVectorSpillerAdapter<ui32, TMKQLAllocator<ui32>> StateUi32Adapter;
+    TVectorSpillerAdapter<char, TMKQLAllocator<char>> StateCharAdapter;
+
+    TVectorSpillerAdapter<ui64, TMKQLAllocator<ui64>> DataUi64Adapter;
+
+    bool HasRunningAsyncIoOperation() {
+        return StateUi64Adapter.HasRunningAsyncIoOperatrion()
+            || StateUi32Adapter.HasRunningAsyncIoOperatrion()
+            || StateCharAdapter.HasRunningAsyncIoOperatrion()
+            || DataUi64Adapter.HasRunningAsyncIoOperatrion(); 
+    }
+
+    void Update() {
+        StateUi64Adapter.Update();
+        StateUi32Adapter.Update();
+        StateCharAdapter.Update();
+        DataUi64Adapter.Update(); 
+    }
+
+    void Finalize() {
+        StateUi64Adapter.Finalize();
+        StateUi32Adapter.Finalize();
+        StateCharAdapter.Finalize();
+        DataUi64Adapter.Finalize(); 
+    }
+
+    bool IsProcessingFinished() const {
+        return NextVectorToProcess == ENextVectorToProcess::None;
+    }
+
+    void ProcessBucketSpilling(TTableBucket& bucket) {
+        while (NextVectorToProcess != ENextVectorToProcess::None) {
+            if (HasRunningAsyncIoOperation()) return;
+
+            switch (NextVectorToProcess) {
+                case ENextVectorToProcess::KeyAndVals:
+                    StateUi64Adapter.AddData(std::move(bucket.KeyIntVals));
+                    NextVectorToProcess = ENextVectorToProcess::DataIntVals;
+                    break;
+                case ENextVectorToProcess::DataIntVals:
+                    StateUi64Adapter.AddData(std::move(bucket.DataIntVals));
+                    NextVectorToProcess = ENextVectorToProcess::StringsValues;
+                    break;
+                case ENextVectorToProcess::StringsValues:
+                    StateCharAdapter.AddData(std::move(bucket.StringsValues));
+                    NextVectorToProcess = ENextVectorToProcess::StringsOffsets;
+                    break;
+                case ENextVectorToProcess::StringsOffsets:
+                    StateUi32Adapter.AddData(std::move(bucket.StringsOffsets));
+                    NextVectorToProcess = ENextVectorToProcess::InterfaceValues;
+                    break;
+                case ENextVectorToProcess::InterfaceValues:
+                    StateCharAdapter.AddData(std::move(bucket.InterfaceValues));
+                    NextVectorToProcess = ENextVectorToProcess::InterfaceOffsets;
+                    break;
+                case ENextVectorToProcess::InterfaceOffsets:
+                    StateUi32Adapter.AddData(std::move(bucket.InterfaceOffsets));
+                    NextVectorToProcess = ENextVectorToProcess::None;
+                    break;
+                default:
+                    return;
+            }
+        }
+    }
+
+    void ProcessBucketRestoration(TTableBucket& bucket) {
+        while (NextVectorToProcess != ENextVectorToProcess::None) {
+            if (HasRunningAsyncIoOperation()) return;
+
+            switch (NextVectorToProcess) {
+                case ENextVectorToProcess::KeyAndVals:
+                    if (!StateUi64Adapter.IsDataReady()) {
+                        StateUi64Adapter.RequestNextVector();
+                    }
+                    bucket.KeyIntVals = StateUi64Adapter.ExtractVector();
+                    NextVectorToProcess = ENextVectorToProcess::DataIntVals;
+                    break;
+                case ENextVectorToProcess::DataIntVals:
+                    if (!StateUi64Adapter.IsDataReady()) {
+                        StateUi64Adapter.RequestNextVector();
+                    }
+                    bucket.DataIntVals = StateUi64Adapter.ExtractVector();
+                    NextVectorToProcess = ENextVectorToProcess::StringsValues;
+                    break;
+                case ENextVectorToProcess::StringsValues:
+                    if (!StateCharAdapter.IsDataReady()) {
+                        StateCharAdapter.RequestNextVector();
+                    }
+                    bucket.StringsValues = StateCharAdapter.ExtractVector();
+                    NextVectorToProcess = ENextVectorToProcess::StringsOffsets;
+                    break;
+                case ENextVectorToProcess::StringsOffsets:
+                    if (!StateUi32Adapter.IsDataReady()) {
+                        StateUi32Adapter.RequestNextVector();
+                    }
+                    bucket.StringsOffsets = StateUi32Adapter.ExtractVector();
+                    NextVectorToProcess = ENextVectorToProcess::InterfaceValues;
+                    break;
+                case ENextVectorToProcess::InterfaceValues:
+                    if (!StateCharAdapter.IsDataReady()) {
+                        StateCharAdapter.RequestNextVector();
+                    }
+                    bucket.InterfaceValues = StateCharAdapter.ExtractVector();
+                    NextVectorToProcess = ENextVectorToProcess::InterfaceOffsets;
+                    break;
+                case ENextVectorToProcess::InterfaceOffsets:
+                    if (!StateUi32Adapter.IsDataReady()) {
+                        StateUi32Adapter.RequestNextVector();
+                    }
+                    bucket.InterfaceOffsets = StateUi32Adapter.ExtractVector();
+                    NextVectorToProcess = ENextVectorToProcess::None;
+                    break;
+                default:
+                    return;
+
+            }
+        }
+    }
+
+    enum class EBucketState {
+        InMemory,
+        Spilling,
+        Restoring,
+        Spilled
+    };
+
+    enum class ENextVectorToProcess {
+        KeyAndVals,
+        DataIntVals,
+        StringsValues,
+        StringsOffsets,
+        InterfaceValues,
+        InterfaceOffsets,
+
+        None
+    };
+
+    EBucketState BucketState = EBucketState::InMemory;
+    ENextVectorToProcess NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
+
+    ui64 SpilledTuplesCount = 0;
+};
 
 struct TupleData {
     ui64 * IntColumns = nullptr; // Array of packed int  data of the table. Caller should allocate array of NumberOfIntColumns size
@@ -186,6 +313,7 @@ class TTable {
     inline XXH64_hash_t GetTemporaryTupleHash();
     void FillTemporaryTuple(ui64 * intColumns, char ** stringColumns, ui32 * stringsSizes, NYql::NUdf::TUnboxedValue * iColumns);
     void FillBucketWithDataFromTTuple(TTableBucket& bucket, std::vector<ui64, TMKQLAllocator<ui64>> tuple, ui64 * intColumns, char ** stringColumns, ui32 * stringsSizes, NYql::NUdf::TUnboxedValue * iColumns, XXH64_hash_t& hash);
+    void SpillNextBucket();
 
     // True if current iterator of tuple in joinedTable has corresponding joined tuple in second table. Id of joined tuple in second table returns in tupleId2.
     inline bool HasJoinedTupleId(TTable* joinedTable, ui32& tupleId2);
@@ -214,6 +342,7 @@ class TTable {
 
 public:
     ui64 NextBucketToJoin = 0;
+    ui64 NextBucketToSpill = 0;
 
     ui64 WaitingBucket;
 

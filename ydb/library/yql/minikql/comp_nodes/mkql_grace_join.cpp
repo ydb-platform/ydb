@@ -772,9 +772,6 @@ bool IsSwitchToSpillingModeCondition() {
 }*/
 
 EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-
-
-
     // Collecting data for join and perform join (batch or full)
     while (!*JoinCompleted ) {
 
@@ -902,6 +899,11 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                 return EFetchResult::Yield;
             }
         }
+
+        //LeftPacker->TablePtr->SpillNextBucket();
+        //RightPacker->TablePtr->SpillNextBucket();
+        //if (RightPacker->TablePtr->HasRunningAsyncIoOperation() || RightPacker->TablePtr->HasRunningAsyncIoOperation()) return EFetchResult::Yield;
+
 
         if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {
             if (!RightPacker->TablePtr->IsNextBucketInMemory()) {

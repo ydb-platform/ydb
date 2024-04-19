@@ -159,7 +159,8 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     ui64 bucket = hash & BucketsMask;
 
     // TODO: If spilling enabled
-    if (TableSpilledBuckets[bucket].DataUi64Adapter.IsAcceptingData()) {
+
+    /* if (TableSpilledBuckets[bucket].DataUi64Adapter.IsAcceptingData()) {
         TableSpilledBuckets[bucket].DataUi64Adapter.AddData(std::move(TempTuple));
         TableSpilledBuckets[bucket].SpilledTuplesCount++;
         TableSpilledBuckets[bucket].BucketState = TTableSpilledBucket::EBucketState::Spilled;
@@ -168,7 +169,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
         WaitingBucket = bucket;
         HasWaitingBucket = true;
         return;
-    }
+    }*/
 
     FillBucketWithDataFromTTuple(TableBuckets[bucket], TempTuple, intColumns, stringColumns, stringsSizes, iColumns, hash);
 }
@@ -1230,6 +1231,9 @@ bool TTable::HasRunningAsyncIoOperation() {
     }
 
     return false;
+}
+
+void TTable::SpillNextBucket() {
 }
 
 bool TTable::IsNextBucketInMemory() {

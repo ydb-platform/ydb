@@ -27,6 +27,10 @@ public:
     {
     }
 
+    bool HasRunningAsyncIoOperatrion() const {
+        return State == EState::SpillingData || State == EState::RestoringData;
+    }
+
     ///Returns current stete of the adapter
     EState GetState() const {
         return State;

@@ -28,6 +28,9 @@ ui32 TKernelRequestBuilder::AddUnaryOp(EUnaryOp op, const TTypeAnnotationNode* a
     case EUnaryOp::Not:
         Items_.emplace_back(Pb_.BlockNot(arg));
         break;
+    case EUnaryOp::Just:
+        Items_.emplace_back(Pb_.BlockJust(arg));
+        break;
     case EUnaryOp::Size:
     case EUnaryOp::Minus:
     case EUnaryOp::Abs:
@@ -74,6 +77,16 @@ ui32 TKernelRequestBuilder::AddBinaryOp(EBinaryOp op, const TTypeAnnotationNode*
         break;
     }
 
+    return Items_.size() - 1;
+}
+
+ui32 TKernelRequestBuilder::AddIf(const TTypeAnnotationNode* conditionType, const TTypeAnnotationNode* thenType, const TTypeAnnotationNode* elseType) {
+    const TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(Alloc_);
+    const auto arg1 = MakeArg(conditionType);
+    const auto arg2 = MakeArg(thenType);
+    const auto arg3 = MakeArg(elseType);
+
+    Items_.emplace_back(Pb_.BlockIf(arg1, arg2, arg3));
     return Items_.size() - 1;
 }
 

@@ -49,6 +49,10 @@ common:
     to: /devops/kubernetes/initial-deployment.md
   - from: /cluster/system-requirements.md
     to: /devops/system-requirements.md
+  - from: /cluster/index.md
+    to: /devops/index.md
+  - from: /cluster/logs.md
+    to: /devops/manual/logging.md
 
 # DBA-related redirects
   - from: /db/index.md

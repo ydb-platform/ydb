@@ -1,6 +1,6 @@
 # {{ ydb-short-name }} system requirements and recommendations
 
-This section provides recommendations for deploying {{ ydb-short-name }} clusters that are relevant regardless of the chosen deployment method ([Ansible](./ansible/index.md), [Kubernetes](./kubernetes/index.md), or [manual](../cluster/index.md)).
+This section provides recommendations for deploying {{ ydb-short-name }} clusters that are relevant regardless of the chosen deployment method ([Ansible](./ansible/index.md), [Kubernetes](./kubernetes/index.md), or [manual](./manual/index.md)).
 
 ## Hardware configuration {#hardware}
 

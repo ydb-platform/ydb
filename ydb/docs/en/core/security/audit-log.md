@@ -4,7 +4,7 @@ _An audit log_ is a stream that includes data about all the operations that trie
 
 * Database: Creating, editing, and deleting databases.
 * Directory: Creating and deleting.
-* Table: Creating or editing table scheme, changing the number of partitions, backup and recovery, copying and renaming, and deleting tables.
+* Table: Creating or editing table schema, changing the number of partitions, backup and recovery, copying and renaming, and deleting tables.
 * Topic: Creating, editing, and deleting.
 * ACL: Editing.
 
@@ -18,7 +18,7 @@ You can use any of the listed destinations or their combinations.
 
 If you forward the stream to a file, access to the audit log is set by file-system rights. Saving the audit log to a file is recommended for production installations.
 
-Forwarding the audit log to the standard error stream (`stderr`) is recommended for test installations. Further stream processing is determined by the {{ ydb-short-name }} cluster [logging](../cluster/logs.md) settings.
+Forwarding the audit log to the standard error stream (`stderr`) is recommended for test installations. Further stream processing is determined by the {{ ydb-short-name }} cluster [logging](../devops/manual/logging.md) settings.
 
 ## Audit log events {#events}
 

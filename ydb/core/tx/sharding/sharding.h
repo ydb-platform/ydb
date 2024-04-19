@@ -5,21 +5,21 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/formats/arrow/hash/calcer.h>
+#include <ydb/core/formats/arrow/size_calcer.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/conclusion/result.h>
+#include <ydb/library/conclusion/status.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 #include <contrib/libs/xxhash/xxhash.h>
 
-#include <type_traits>
+#include <util/random/random.h>
 
-namespace NYql::NUdf {
-class TUnboxedValue;
-}
+#include <type_traits>
 
 namespace NKikimr::NSharding {
 
-class TUnboxedValueReader;
 struct TExternalTableColumn;
 
 class TShardingBase {
@@ -28,14 +28,34 @@ private:
 public:
     using TColumn = TExternalTableColumn;
 public:
-    static std::unique_ptr<TShardingBase> BuildShardingOperator(const NKikimrSchemeOp::TColumnTableSharding& shardingInfo);
-
-    virtual const std::vector<TString>& GetShardingColumns() const = 0;
-    virtual ui32 CalcShardId(const NYql::NUdf::TUnboxedValue& value, const TUnboxedValueReader& readerInfo) const = 0;
-    virtual ui64 CalcHash(const NYql::NUdf::TUnboxedValue& value, const TUnboxedValueReader& readerInfo) const = 0;
+    static TConclusion<std::unique_ptr<TShardingBase>> BuildShardingOperator(const NKikimrSchemeOp::TColumnTableSharding& shardingInfo);
 
     virtual std::vector<ui32> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const = 0;
-    virtual std::vector<ui64> MakeHashes(const std::shared_ptr<arrow::RecordBatch>& batch) const = 0;
+
+    TConclusion<THashMap<ui64, std::vector<NArrow::TSerializedBatch>>> SplitByShards(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui64>& shardIds, const ui64 chunkBytesLimit) {
+        auto sharding = MakeSharding(batch);
+        std::vector<std::shared_ptr<arrow::RecordBatch>> chunks;
+        if (ShardsCount == 1) {
+            chunks = {batch};
+        } else {
+            chunks = NArrow::ShardingSplit(batch, sharding, shardIds.size());
+        }
+        AFL_VERIFY(chunks.size() == ShardsCount);
+        AFL_VERIFY(shardIds.size() == ShardsCount);
+        NArrow::TBatchSplitttingContext context(chunkBytesLimit);
+        THashMap<ui64, std::vector<NArrow::TSerializedBatch>> result;
+        for (ui32 i = 0; i < chunks.size(); ++i) {
+            if (!chunks[i]) {
+                continue;
+            }
+            auto blobsSplittedConclusion = NArrow::SplitByBlobSize(chunks[i], context);
+            if (blobsSplittedConclusion.IsFail()) {
+                return TConclusionStatus::Fail("cannot split batch in according to limits: " + blobsSplittedConclusion.GetErrorMessage());
+            }
+            result.emplace(shardIds[i], blobsSplittedConclusion.DetachResult());
+        }
+        return result;
+    }
 
     virtual TString DebugString() const;
 
@@ -62,8 +82,11 @@ public:
         , ShardingColumns(columnNames) {
     }
 
-    virtual ui64 CalcHash(const NYql::NUdf::TUnboxedValue& value, const TUnboxedValueReader& readerInfo) const override;
-    virtual std::vector<ui64> MakeHashes(const std::shared_ptr<arrow::RecordBatch>& batch) const override {
+    virtual TString DebugString() const override {
+        return TBase::DebugString() + ";Columns: " + JoinSeq(", ", GetShardingColumns());
+    }
+
+    virtual std::vector<ui64> MakeHashes(const std::shared_ptr<arrow::RecordBatch>& batch) const {
         return HashCalcer.Execute(batch).value_or(Default<std::vector<ui64>>());
     }
 
@@ -73,7 +96,7 @@ public:
         return XXH64(&value, sizeof(value), seed);
     }
 
-    virtual const std::vector<TString>& GetShardingColumns() const override {
+    virtual const std::vector<TString>& GetShardingColumns() const {
         return ShardingColumns;
     }
 };
@@ -86,10 +109,6 @@ public:
         : TBase(shardsCount, columnNames, seed)
     {}
 
-    virtual ui32 CalcShardId(const NYql::NUdf::TUnboxedValue& value, const TUnboxedValueReader& readerInfo) const override {
-        return CalcHash(value, readerInfo) % GetShardsCount();
-    }
-
     virtual std::vector<ui32> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
 
     template <typename T>
@@ -97,6 +116,18 @@ public:
         Y_ASSERT(shardsCount);
         return CalcHash(value, seed) % shardsCount;
     }
+};
+
+class TRandomSharding: public TShardingBase {
+private:
+    using TBase = TShardingBase;
+public:
+    using TBase::TBase;
+
+    virtual std::vector<ui32> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const override {
+        return std::vector<ui32>(batch->num_rows(), RandomNumber<ui32>(GetShardsCount()));
+    }
+
 };
 
 class TConsistencySharding64: public THashSharding {
@@ -110,10 +141,6 @@ private:
 public:
     TConsistencySharding64(ui32 shardsCount, const std::vector<TString>& columnNames, ui64 seed = 0)
         : TBase(shardsCount, columnNames, seed){
-    }
-
-    virtual ui32 CalcShardId(const NYql::NUdf::TUnboxedValue& value, const TUnboxedValueReader& readerInfo) const override {
-        return CalcShardIdImpl(CalcHash(value, readerInfo), GetShardsCount());
     }
 
     virtual std::vector<ui32> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const override {
@@ -161,11 +188,6 @@ public:
         ui32 tsInterval = (timestamp - TsMin) / ChangePeriod;
         ui32 numIntervals = GetShardsCount() / NumActive;
         return ((uidHash % NumActive) + (tsInterval % numIntervals) * NumActive) % GetShardsCount();
-    }
-
-    virtual ui32 CalcShardId(const NYql::NUdf::TUnboxedValue& /*value*/, const TUnboxedValueReader& /*readerInfo*/) const override {
-        Y_ABORT_UNLESS(false);
-        return 0;
     }
 
     virtual std::vector<ui32> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const override;

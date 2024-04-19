@@ -21,6 +21,8 @@ target_link_libraries(cpp-regex-pire PUBLIC
   bison-bison-induced
 )
 target_sources(cpp-regex-pire PRIVATE
+  ${CMAKE_BINARY_DIR}/library/cpp/regex/pire/__/__/__/__/contrib/libs/pire/pire/re_parser.h
+  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/minimize.h
   ${CMAKE_SOURCE_DIR}/library/cpp/regex/pire/pcre2pire.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/classes.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/encoding.cpp

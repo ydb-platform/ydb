@@ -48,7 +48,7 @@ bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataSto
 
 std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
     auto& indexInfo = ResultIndexSchema->GetIndexInfo();
-    std::set<ui32> result = GetPKRangesFilter().GetColumnIds(indexInfo);
+    std::set<ui32> result;
     for (auto&& i : GetProgram().GetEarlyFilterColumns()) {
         auto id = indexInfo.GetColumnIdOptional(i);
         if (id) {

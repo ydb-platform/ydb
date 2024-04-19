@@ -14,7 +14,7 @@ target_compile_options(providers-clickhouse-actors PRIVATE
 target_link_libraries(providers-clickhouse-actors PUBLIC
   contrib-libs-cxxsupp
   yutil
-  minikql-computation-llvm
+  yql-minikql-computation
   common-token_accessor-client
   yql-public-types
   dq-actors-compute

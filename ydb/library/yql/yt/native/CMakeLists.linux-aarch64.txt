@@ -7,11 +7,11 @@
 
 
 
-add_library(yql-plugin-native)
-target_compile_options(yql-plugin-native PRIVATE
+add_library(yql-yt-native)
+target_compile_options(yql-yt-native PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_link_libraries(yql-plugin-native PUBLIC
+target_link_libraries(yql-yt-native PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
@@ -47,18 +47,18 @@ target_link_libraries(yql-plugin-native PUBLIC
   yt-lib-log
   yt-lib-yt_download
   providers-yt-provider
-  yt-yql-plugin
+  library-yql-yt
 )
-target_sources(yql-plugin-native PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yql/plugin/native/error_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yql/plugin/native/progress_merger.cpp
+target_sources(yql-yt-native PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/yt/native/error_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/yt/native/progress_merger.cpp
 )
 
-add_global_library_for(yql-plugin-native.global yql-plugin-native)
-target_compile_options(yql-plugin-native.global PRIVATE
+add_global_library_for(yql-yt-native.global yql-yt-native)
+target_compile_options(yql-yt-native.global PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_link_libraries(yql-plugin-native.global PUBLIC
+target_link_libraries(yql-yt-native.global PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
@@ -94,8 +94,8 @@ target_link_libraries(yql-plugin-native.global PUBLIC
   yt-lib-log
   yt-lib-yt_download
   providers-yt-provider
-  yt-yql-plugin
+  library-yql-yt
 )
-target_sources(yql-plugin-native.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yql/plugin/native/plugin.cpp
+target_sources(yql-yt-native.global PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/yt/native/plugin.cpp
 )

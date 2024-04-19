@@ -31,6 +31,7 @@ target_link_libraries(contrib-libs-lua PUBLIC
   library-cpp-archive
 )
 target_sources(contrib-libs-lua PRIVATE
+  ${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc
   ${CMAKE_SOURCE_DIR}/contrib/libs/lua/lib.cpp
   ${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc
 )

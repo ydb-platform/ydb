@@ -33,7 +33,7 @@ namespace NKikimr::NPQ {
 #define INFO(message)  LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 #define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 
-static const ui64 WRITE_BLOCK_SIZE = 4_KB;    
+static const ui64 WRITE_BLOCK_SIZE = 4_KB;
 
 TString TEvPartitionWriter::TEvInitResult::TSuccess::ToString() const {
     auto out = TStringBuilder() << "Success {"
@@ -106,7 +106,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     using EErrorCode = TEvPartitionWriter::TEvWriteResponse::EErrorCode;
 
     static constexpr size_t MAX_QUOTA_INFLIGHT = 3;
-    
+
     static void FillHeader(NKikimrClient::TPersQueuePartitionRequest& request,
             ui32 partitionId, const TActorId& pipeClient)
     {
@@ -272,12 +272,9 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     void GetOwnership() {
         auto ev = MakeRequest(PartitionId, PipeClient);
 
-        auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetOwnership();
-        if (Opts.UseDeduplication) {
-            cmd.SetOwner(SourceId);
-        } else {
-            cmd.SetOwner(CreateGuidAsString());
-        }
+        auto& request = *ev->Record.MutablePartitionRequest();
+        auto& cmd = *request.MutableCmdGetOwnership();
+        cmd.SetOwner(SourceId);
         cmd.SetForce(true);
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
@@ -470,7 +467,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             return;
         }
 
-        const bool checkQuota = Opts.CheckRequestUnits() && IsQuotaRequired();
+        const bool needToRequestQuota = Opts.CheckRequestUnits() && IsQuotaRequired();
 
         size_t processed = 0;
         PendingQuotaAmount = 0;
@@ -490,7 +487,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             cmd.SetSize(it->second.ByteSize());
             cmd.SetLastRequest(false);
 
-            if (checkQuota) {
+            if (needToRequestQuota) {
                 ++processed;
                 PendingQuotaAmount += CalcRuConsumption(it->second.ByteSize());
                 PendingQuota.emplace_back(it->first);
@@ -498,15 +495,15 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
             NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
 
-            PendingReserve.emplace(it->first, RequestHolder{ std::move(it->second), checkQuota });
+            PendingReserve.emplace(it->first, RequestHolder{ std::move(it->second), needToRequestQuota });
             Pending.erase(it);
 
-            if (checkQuota && processed == MAX_QUOTA_INFLIGHT) {
+            if (needToRequestQuota && processed == MAX_QUOTA_INFLIGHT) {
                 break;
             }
         }
 
-        if (checkQuota) {
+        if (needToRequestQuota) {
             RequestDataQuota(PendingQuotaAmount, ctx);
         }
     }
@@ -527,18 +524,18 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         ReceivedReserve.emplace(it->first, std::move(it->second));
 
-        ProcessQuota();
+        ProcessQuotaAndWrite();
     }
 
-    void ProcessQuota() {
+    void ProcessQuotaAndWrite() {
         auto rit = ReceivedReserve.begin();
         auto qit = ReceivedQuota.begin();
 
         while(rit != ReceivedReserve.end() && qit != ReceivedQuota.end()) {
             auto& request = rit->second;
             const auto cookie = rit->first;
-            TRACE("processing quota for request cookie=" << cookie << ", QuotaChecked=" << request.QuotaChecked << ", QuotaAccepted=" << request.QuotaAccepted);
-            if (!request.QuotaChecked || request.QuotaAccepted) {
+            TRACE("processing quota for request cookie=" << cookie << ", QuotaCheckEnabled=" << request.QuotaCheckEnabled << ", QuotaAccepted=" << request.QuotaAccepted);
+            if (!request.QuotaCheckEnabled || request.QuotaAccepted) {
                 // A situation when a quota was not requested or was received while waiting for a reserve
                 Write(cookie, std::move(request.Request));
                 ReceivedReserve.erase(rit++);
@@ -559,8 +556,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         while(rit != ReceivedReserve.end()) {
             auto& request = rit->second;
             const auto cookie = rit->first;
-            TRACE("processing quota for request cookie=" << cookie << ", QuotaChecked=" << request.QuotaChecked << ", QuotaAccepted=" << request.QuotaAccepted);
-            if (request.QuotaChecked && !request.QuotaAccepted) {
+            TRACE("processing quota for request cookie=" << cookie << ", QuotaCheckEnabled=" << request.QuotaCheckEnabled << ", QuotaAccepted=" << request.QuotaAccepted);
+            if (request.QuotaCheckEnabled && !request.QuotaAccepted) {
                 break;
             }
 
@@ -585,27 +582,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         }
 
         ReceivedQuota.clear();
-    }
-
-    void Write(ui64 cookie) {
-        if (PendingReserve.empty()) {
-            ERROR("The state of the PartitionWriter is invalid. PendingReserve is empty. Marker #02");
-            Disconnected(EErrorCode::InternalError);
-            return;
-        }
-        auto it = PendingReserve.begin();
-
-        auto cookieReserveValid = (it->first == cookie);
-        auto cookieWriteValid = (PendingWrite.empty() || PendingWrite.back() < cookie);
-        if (!(cookieReserveValid && cookieWriteValid)) {
-            ERROR("The cookie of Write is invalid. Cookie=" << cookie);
-            Disconnected(EErrorCode::InternalError);
-            return;
-        }
-
-        Write(cookie, std::move(it->second.Request));
-
-        PendingReserve.erase(it);
     }
 
     void Write(ui64 cookie, NKikimrClient::TPersQueueRequest&& req) {
@@ -651,24 +627,26 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
                 return WriteResult(EErrorCode::InternalError, error, std::move(record));
             }
 
-            WriteAccepted(cookie);
-
-            if (PendingReserve.empty()) {
-                ERROR("The state of the PartitionWriter is invalid. PendingReserve is empty. Marker #03");
+            auto cookieWriteValid = (PendingWrite.empty() || PendingWrite.back() < cookie);
+            if (!cookieWriteValid) {
+                ERROR("The cookie of Write is invalid. Cookie=" << cookie);
                 Disconnected(EErrorCode::InternalError);
                 return;
             }
+
+            WriteAccepted(cookie);
             auto it = PendingReserve.begin();
             auto& holder = it->second;
 
-            if ((holder.QuotaChecked && !holder.QuotaAccepted)|| !ReceivedReserve.empty()) {
+            if ((holder.QuotaCheckEnabled && !holder.QuotaAccepted) || !ReceivedReserve.empty()) {
                 // There may be two situations:
                 // - a quota has been requested, and the quota has not been received yet
                 // - the quota was not requested, for example, due to a change in the metering option, but the previous quota requests have not yet been processed
                 EnqueueReservedAndProcess(cookie);
             } else {
-                Write(cookie);
+                Write(cookie, std::move(it->second.Request));
             }
+            PendingReserve.erase(it);
         } else {
             if (PendingWrite.empty()) {
                 return WriteResult(EErrorCode::InternalError, "Unexpected Write response", std::move(record));
@@ -739,17 +717,15 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             case EWakeupTag::RlAllowed:
                 ReceivedQuota.insert(ReceivedQuota.end(), PendingQuota.begin(), PendingQuota.end());
                 PendingQuota.clear();
-
-                ProcessQuota();                
-
+                ProcessQuotaAndWrite();
                 break;
 
             case EWakeupTag::RlNoResource:
-                // Re-requesting the quota. We do this until we get a quota. 
+                // Re-requesting the quota. We do this until we get a quota.
                 // We do not request a quota with a long waiting time because the writer may already be a destroyer, and the quota will still be waiting to be received.
                 RequestDataQuota(PendingQuotaAmount, ctx);
                 break;
-            
+
             default:
                 Y_VERIFY_DEBUG_S(false, "Unsupported tag: " << static_cast<ui64>(tag));
         }
@@ -770,7 +746,7 @@ public:
         , TabletId(tabletId)
         , PartitionId(partitionId)
         , ExpectedGeneration(opts.ExpectedGeneration)
-        , SourceId(opts.SourceId)
+        , SourceId(opts.UseDeduplication ? opts.SourceId : CreateGuidAsString())
         , Opts(opts)
     {
         if (Opts.MeteringMode) {
@@ -829,12 +805,12 @@ private:
 
     struct RequestHolder {
         NKikimrClient::TPersQueueRequest Request;
-        bool QuotaChecked;
+        bool QuotaCheckEnabled;
         bool QuotaAccepted;
 
-        RequestHolder(NKikimrClient::TPersQueueRequest&& request, bool quotaChecked)
+        RequestHolder(NKikimrClient::TPersQueueRequest&& request, bool quotaCheckEnabled)
             : Request(std::move(request))
-            , QuotaChecked(quotaChecked)
+            , QuotaCheckEnabled(quotaCheckEnabled)
             , QuotaAccepted(false) {
         }
     };
@@ -856,7 +832,7 @@ private:
 IActor* CreatePartitionWriter(const TActorId& client,
                              // const NKikimrSchemeOp::TPersQueueGroupDescription& config,
                               ui64 tabletId,
-                              ui32 partitionId, 
+                              ui32 partitionId,
                               const TPartitionWriterOpts& opts) {
     return new TPartitionWriter(client, tabletId, partitionId, opts);
 }

@@ -16,7 +16,8 @@ target_link_libraries(behaviour-tablestore-operations PUBLIC
   contrib-libs-cxxsupp
   yutil
   services-metadata-manager
-  formats-arrow-compression
+  formats-arrow-serializer
+  kqp-gateway-utils
   ydb-core-protos
 )
 target_sources(behaviour-tablestore-operations PRIVATE
@@ -32,11 +33,14 @@ target_link_libraries(behaviour-tablestore-operations.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   services-metadata-manager
-  formats-arrow-compression
+  formats-arrow-serializer
+  kqp-gateway-utils
   ydb-core-protos
 )
 target_sources(behaviour-tablestore-operations.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/add_column.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/alter_column.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/drop_column.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/upsert_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/drop_index.cpp
 )

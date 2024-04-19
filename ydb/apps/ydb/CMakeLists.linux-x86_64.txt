@@ -30,9 +30,6 @@ target_link_options(ydb PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/apps/ydb/main.cpp

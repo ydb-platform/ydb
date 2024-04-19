@@ -411,27 +411,25 @@ public:
                     const auto localPathId = entry.DomainInfo->DomainKey.LocalPathId;
                     FilterSubDomainKey = TSubDomainKey(ownerId, localPathId);
                 }
+
+                if (FilterTenant.empty()) {
+                    RequestForTenant(path);
+                }
+                
                 if (entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
                     TPathId resourceDomainKey(entry.DomainInfo->ResourcesDomainKey);
                     BLOG_TRACE("Requesting navigate for resource domain " << resourceDomainKey);
                     RequestSchemeCacheNavigate(resourceDomainKey);
                     ++RequestsBeforeNodeList;
-                } else {
-                    if (FilterTenant.empty()) {
-                        RequestForTenant(path);
-                    }
-                    if (Storage) {
-                        if (entry.DomainDescription) {
-                            for (const auto& storagePool : entry.DomainDescription->Description.GetStoragePools()) {
-                                TString storagePoolName = storagePool.GetName();
-                                THolder<TEvBlobStorage::TEvControllerSelectGroups> request = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
-                                request->Record.SetReturnAllMatchingGroups(true);
-                                request->Record.AddGroupParameters()->MutableStoragePoolSpecifier()->SetName(storagePoolName);
-                                BLOG_TRACE("Requesting BSControllerSelectGroups for " << storagePoolName);
-                                RequestBSControllerSelectGroups(std::move(request));
-                                ++RequestsBeforeNodeList;
-                            }
-                        }
+                } else if (Storage && entry.DomainDescription) {
+                    for (const auto& storagePool : entry.DomainDescription->Description.GetStoragePools()) {
+                        TString storagePoolName = storagePool.GetName();
+                        THolder<TEvBlobStorage::TEvControllerSelectGroups> request = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
+                        request->Record.SetReturnAllMatchingGroups(true);
+                        request->Record.AddGroupParameters()->MutableStoragePoolSpecifier()->SetName(storagePoolName);
+                        BLOG_TRACE("Requesting BSControllerSelectGroups for " << storagePoolName);
+                        RequestBSControllerSelectGroups(std::move(request));
+                        ++RequestsBeforeNodeList;
                     }
                 }
             } else {

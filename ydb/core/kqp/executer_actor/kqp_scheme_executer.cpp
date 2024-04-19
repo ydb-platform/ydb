@@ -69,7 +69,9 @@ public:
         YQL_ENSURE(PhyTx);
         YQL_ENSURE(PhyTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME);
 
-        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(nullptr);
+        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(
+            nullptr,
+            TEvKqpExecuter::TEvTxResponse::EExecutionType::Scheme);
     }
 
     void StartBuildOperation() {
@@ -199,6 +201,36 @@ public:
 
             case NKqpProto::TKqpSchemeOperation::kModifyPermissions: {
                 const auto& modifyScheme = schemeOp.GetModifyPermissions();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kCreateColumnTable: {
+                const auto& modifyScheme = schemeOp.GetCreateColumnTable();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kAlterColumnTable: {
+                const auto& modifyScheme = schemeOp.GetAlterColumnTable();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kCreateTableStore: {
+                const auto& modifyScheme = schemeOp.GetCreateTableStore();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kAlterTableStore: {
+                const auto& modifyScheme = schemeOp.GetAlterTableStore();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kDropTableStore: {
+                const auto& modifyScheme = schemeOp.GetDropTableStore();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }

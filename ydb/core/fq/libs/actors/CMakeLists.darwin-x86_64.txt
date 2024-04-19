@@ -54,7 +54,7 @@ target_link_libraries(fq-libs-actors PUBLIC
   yql-core-facade
   core-services-mounts
   dq-integration-transform
-  minikql-comp_nodes-llvm
+  yql-minikql-comp_nodes
   providers-common-codec
   providers-common-comp_nodes
   providers-common-db_id_async_resolver

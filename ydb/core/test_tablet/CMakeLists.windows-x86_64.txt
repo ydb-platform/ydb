@@ -18,6 +18,15 @@ target_link_libraries(ydb-core-test_tablet PUBLIC
   ydb-core-util
 )
 target_sources(ydb-core-test_tablet PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/test_tablet/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/test_tablet/events.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/test_tablet/load_actor_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/test_tablet/processor.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/test_tablet/scheme.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/test_tablet/state_server_interface.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/test_tablet/test_shard_context.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/test_tablet/test_shard_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/test_tablet/test_tablet.h
   ${CMAKE_SOURCE_DIR}/ydb/core/test_tablet/load_actor_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/test_tablet/load_actor_delete.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/test_tablet/load_actor_mon.cpp

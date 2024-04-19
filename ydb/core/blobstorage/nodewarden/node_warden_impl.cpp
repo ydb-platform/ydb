@@ -231,7 +231,7 @@ void TNodeWarden::Bootstrap() {
 
     StartInvalidGroupProxy();
 
-    StartDistributedConfigKeeper();
+    // StartDistributedConfigKeeper(); // disabled in 24-1
 }
 
 void TNodeWarden::HandleReadCache() {

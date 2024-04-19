@@ -51,13 +51,32 @@ protected:
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
     virtual ui64 DoCalcMemoryForUsage() const override {
+        auto predictor = BuildMemoryPredictor();
         ui64 result = 0;
         for (auto& p : PortionsToEvict) {
-            result += 2 * p.GetPortionInfo().GetBlobBytes();
+            result = predictor->AddPortion(p.GetPortionInfo());
         }
         return result;
     }
 public:
+    class TMemoryPredictorSimplePolicy: public IMemoryPredictor {
+    private:
+        ui64 SumBlobsMemory = 0;
+        ui64 MaxRawMemory = 0;
+    public:
+        virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
+            if (MaxRawMemory < portionInfo.GetRawBytes()) {
+                MaxRawMemory = portionInfo.GetRawBytes();
+            }
+            SumBlobsMemory += portionInfo.GetBlobBytes();
+            return SumBlobsMemory + MaxRawMemory;
+        }
+    };
+
+    static std::shared_ptr<IMemoryPredictor> BuildMemoryPredictor() {
+        return std::make_shared<TMemoryPredictorSimplePolicy>();
+    }
+
     virtual bool NeedConstruction() const override {
         return PortionsToEvict.size();
     }

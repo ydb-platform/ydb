@@ -30,6 +30,7 @@ target_proto_messages(library-cpp-tdigest PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/tdigest/tdigest.proto
 )
 target_sources(library-cpp-tdigest PRIVATE
+  ${CMAKE_BINARY_DIR}/library/cpp/tdigest/tdigest.pb.h
   ${CMAKE_SOURCE_DIR}/library/cpp/tdigest/tdigest.cpp
 )
 target_proto_addincls(library-cpp-tdigest

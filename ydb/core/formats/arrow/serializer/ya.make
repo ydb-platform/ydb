@@ -3,15 +3,16 @@ LIBRARY()
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/formats/arrow/common
+    ydb/services/metadata/abstract
     ydb/library/actors/core
     ydb/core/protos
 )
 
 SRCS(
     abstract.cpp
-    full.cpp
-    batch_only.cpp
+    GLOBAL native.cpp
     stream.cpp
+    parsing.cpp
 )
 
 END()

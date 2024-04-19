@@ -77,8 +77,6 @@ target_link_options(string_udf.dyn PRIVATE
   -undefined
   dynamic_lookup
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(string_udf.dyn PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/string/string_udf.cpp

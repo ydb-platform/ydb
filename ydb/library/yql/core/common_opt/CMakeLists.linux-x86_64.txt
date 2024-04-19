@@ -20,6 +20,9 @@ target_link_libraries(yql-core-common_opt PUBLIC
   yql-parser-pg_catalog
 )
 target_sources(yql-core-common_opt PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_co.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_co_pgselect.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_co_transformer.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_co_extr_members.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_flatmap_over_join.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_co_finalizers.cpp

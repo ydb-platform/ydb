@@ -320,7 +320,7 @@ bool TDiscoveryConverter::BuildFromFederationPath(const TString& rootPrefix) {
     auto res = topic.TrySplit("/", fst, snd);
     CHECK_SET_VALID(res, TStringBuilder() << "Could not split federation path: " << OriginalTopic, return false);
     Account_ = fst;
-    
+
     if (!ParseModernPath(snd))
         return false;
     if (!BuildFromShortModernName()) {
@@ -341,7 +341,7 @@ bool TDiscoveryConverter::BuildFromFederationPath(const TString& rootPrefix) {
 
 bool TDiscoveryConverter::TryParseModernMirroredPath(TStringBuf path) {
     if (!path.Contains("-mirrored-from-")) {
-        CHECK_SET_VALID(!path.Contains("mirrored-from"), "Federation topics cannot contain 'mirrored-from' in name unless this is a mirrored topic", return false); 
+        CHECK_SET_VALID(!path.Contains("mirrored-from"), "Federation topics cannot contain 'mirrored-from' in name unless this is a mirrored topic", return false);
         return false;
     }
     TStringBuf fst, snd;
@@ -447,7 +447,7 @@ bool TDiscoveryConverter::BuildFromLegacyName(const TString& rootPrefix, bool fo
                         return false);
     }
     if (Dc.empty() && !hasDcInName) {
-        CHECK_SET_VALID(!FstClass, TStringBuilder() << "Internal error: FirstClass mode enabled, but trying to parse Legacy-style name: " 
+        CHECK_SET_VALID(!FstClass, TStringBuilder() << "Internal error: FirstClass mode enabled, but trying to parse Legacy-style name: "
                                                     << OriginalTopic, return false;);
         CHECK_SET_VALID(!LocalDc.empty(),
                         "Cannot determine DC: should specify either in topic name, Dc option or LocalDc option",
@@ -466,7 +466,7 @@ bool TDiscoveryConverter::BuildFromLegacyName(const TString& rootPrefix, bool fo
         Dc = fst;
         topic = snd;
     } else {
-        CHECK_SET_VALID(!Dc.empty(), TStringBuilder() << "Internal error: Could not determine DC (despite beleiving the name contins one) for topic " 
+        CHECK_SET_VALID(!Dc.empty(), TStringBuilder() << "Internal error: Could not determine DC (despite beleiving the name contins one) for topic "
                                                     << OriginalTopic, return false;);
         TStringBuilder builder;
         builder << "rt3." << Dc << "--" << topic;
@@ -513,7 +513,7 @@ bool TDiscoveryConverter::BuildFromLegacyName(const TString& rootPrefix, bool fo
         topicName = topic;
     }
     modernName << topicName;
-    CHECK_SET_VALID(!Dc.empty(), TStringBuilder() << "Internal error: Could not determine DC for topic: " 
+    CHECK_SET_VALID(!Dc.empty(), TStringBuilder() << "Internal error: Could not determine DC for topic: "
                                                     << OriginalTopic, return false);
 
     bool isMirrored = (!LocalDc.empty() && Dc != LocalDc);
@@ -522,7 +522,7 @@ bool TDiscoveryConverter::BuildFromLegacyName(const TString& rootPrefix, bool fo
     } else {
         fullModernName << topicName;
     }
-    CHECK_SET_VALID(!fullLegacyName.empty(), TStringBuilder() << "Could not form a full legacy name for topic: " 
+    CHECK_SET_VALID(!fullLegacyName.empty(), TStringBuilder() << "Could not form a full legacy name for topic: "
                                                               << OriginalTopic, return false);
 
     ShortLegacyName = shortLegacyName;
@@ -669,21 +669,7 @@ TTopicConverterPtr TTopicNameConverter::ForFederation(
         if (!res->IsValid()) {
             return res;
         }
-        if (parsed) {
-            Y_ABORT_UNLESS(!res->Dc.empty());
-            if (!localDc.empty() && localDc == res->Dc) {
-                res->Valid = false;
-                res->Reason = TStringBuilder() << "Topic in modern mirrored-like style: " << schemeName
-                                               << " cannot be created in the same cluster " << res->Dc;
-                return res;
-            }
-        }
         if (isLocal) {
-            if(parsed) {
-                res->Valid = false;
-                res->Reason = TStringBuilder() << "Topic in modern mirrored-like style: " << schemeName << ", created as local";
-                return res;
-            }
             if (localDc.empty()) {
                 res->Valid = false;
                 res->Reason = "Local DC option is mandatory when creating local modern-style topic";
@@ -694,7 +680,8 @@ TTopicConverterPtr TTopicNameConverter::ForFederation(
             if (!ok) {
                 return res;
             }
-        } else {
+        }
+        else {
             if (!parsed) {
                 res->Valid = false;
                 res->Reason = TStringBuilder() << "Topic in modern style with non-mirrored-name: " << schemeName
@@ -943,4 +930,3 @@ TConverterFactoryPtr TTopicsListController::GetConverterFactory() const {
 };
 
 } // namespace NPersQueue
-

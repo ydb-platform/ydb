@@ -21,6 +21,7 @@ target_link_libraries(ydb-core-tx-scheme_board-ut_replica PUBLIC
   cpp-testing-unittest_main
   core-tx-scheme_board
   cpp-testing-unittest
+  minikql-comp_nodes-llvm14
   testlib-basics-default
 )
 target_sources(ydb-core-tx-scheme_board-ut_replica PRIVATE
@@ -52,6 +53,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

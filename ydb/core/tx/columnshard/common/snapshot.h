@@ -1,6 +1,13 @@
 #pragma once
+#include <ydb/library/conclusion/status.h>
+
 #include <util/stream/output.h>
 #include <util/string/cast.h>
+#include <util/datetime/base.h>
+
+namespace NKikimrColumnShardProto {
+class TSnapshot;
+}
 
 namespace NKikimr::NOlap {
 
@@ -13,6 +20,10 @@ public:
     constexpr TSnapshot(const ui64 planStep, const ui64 txId) noexcept
         : PlanStep(planStep)
         , TxId(txId) {
+    }
+
+    constexpr TInstant GetPlanInstant() const noexcept {
+        return TInstant::MilliSeconds(PlanStep);
     }
 
     constexpr ui64 GetPlanStep() const noexcept {
@@ -45,6 +56,27 @@ public:
 
     friend IOutputStream& operator<<(IOutputStream& out, const TSnapshot& s) {
         return out << "{" << s.PlanStep << ':' << (s.TxId == std::numeric_limits<ui64>::max() ? "max" : ::ToString(s.TxId)) << "}";
+    }
+
+    template <class TProto>
+    void SerializeToProto(TProto& result) const {
+        result.SetPlanStep(PlanStep);
+        result.SetTxId(TxId);
+    }
+
+    NKikimrColumnShardProto::TSnapshot SerializeToProto() const;
+
+    template <class TProto>
+    TConclusionStatus DeserializeFromProto(const TProto& proto) {
+        PlanStep = proto.GetPlanStep();
+        TxId = proto.GetTxId();
+        if (!PlanStep) {
+            return TConclusionStatus::Fail("incorrect planStep in proto");
+        }
+        if (!TxId) {
+            return TConclusionStatus::Fail("incorrect txId in proto");
+        }
+        return TConclusionStatus::Success();
     }
 
     TString DebugString() const;

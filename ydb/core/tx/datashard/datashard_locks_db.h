@@ -23,6 +23,7 @@ public:
     // Persist adding/removing a lock info
     void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0) override;
     void PersistLockCounter(ui64 lockId, ui64 counter) override;
+    void PersistLockFlags(ui64 lockId, ui64 flags) override;
     void PersistRemoveLock(ui64 lockId) override;
 
     // Persist adding/removing info on locked ranges

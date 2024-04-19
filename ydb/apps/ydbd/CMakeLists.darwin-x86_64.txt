@@ -16,6 +16,7 @@ target_link_libraries(ydbd PUBLIC
   yutil
   library-cpp-cpuid_check
   udfs-common-hyperscan
+  version_definition
   run
   ydb-core-protos
   ydb-core-security
@@ -55,10 +56,9 @@ target_link_options(ydbd PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(ydbd PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/export.h
   ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/export.cpp
   ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/main.cpp
 )

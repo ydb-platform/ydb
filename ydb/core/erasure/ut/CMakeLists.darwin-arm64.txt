@@ -22,8 +22,6 @@ target_link_options(ydb-core-erasure-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(ydb-core-erasure-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/erasure/erasure_ut.cpp
@@ -54,6 +52,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

@@ -7,6 +7,12 @@
 
 
 add_subdirectory(common)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(tx-columnshard-counters)
 target_link_libraries(tx-columnshard-counters PUBLIC
@@ -16,6 +22,7 @@ target_link_libraries(tx-columnshard-counters PUBLIC
   cpp-monlib-dynamic_counters
   columnshard-counters-common
   ydb-core-base
+  tools-enum_parser-enum_serialization_runtime
 )
 target_sources(tx-columnshard-counters PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/indexation.cpp
@@ -26,4 +33,9 @@ target_sources(tx-columnshard-counters PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/insert_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/common_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/splitter.cpp
+)
+generate_enum_serilization(tx-columnshard-counters
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/columnshard.h
+  INCLUDE_HEADERS
+  ydb/core/tx/columnshard/counters/columnshard.h
 )

@@ -244,7 +244,6 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/external_sources
     ydb/core/filestore/core
-    ydb/core/formats/arrow/compression
     ydb/core/kesus/tablet
     ydb/core/metering
     ydb/core/persqueue
@@ -269,6 +268,7 @@ PEERDIR(
     ydb/library/aclib/protos
     ydb/library/login
     ydb/library/login/protos
+    ydb/library/protobuf_printer
     ydb/library/yql/minikql
     ydb/services/bg_tasks
 )

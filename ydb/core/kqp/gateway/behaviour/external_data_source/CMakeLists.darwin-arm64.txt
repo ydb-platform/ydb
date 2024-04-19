@@ -17,6 +17,7 @@ target_link_libraries(gateway-behaviour-external_data_source PUBLIC
   services-metadata-initializer
   services-metadata-abstract
   kqp-gateway-actors
+  kqp-gateway-utils
   behaviour-tablestore-operations
 )
 target_sources(gateway-behaviour-external_data_source PRIVATE
@@ -33,6 +34,7 @@ target_link_libraries(gateway-behaviour-external_data_source.global PUBLIC
   services-metadata-initializer
   services-metadata-abstract
   kqp-gateway-actors
+  kqp-gateway-utils
   behaviour-tablestore-operations
 )
 target_sources(gateway-behaviour-external_data_source.global PRIVATE

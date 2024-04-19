@@ -64,9 +64,6 @@ target_link_options(hyperscan_udf.dyn PRIVATE
   -Wl,-z,notext
   -Wl,-Bsymbolic
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(hyperscan_udf.dyn PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/hyperscan/hyperscan_udf.cpp

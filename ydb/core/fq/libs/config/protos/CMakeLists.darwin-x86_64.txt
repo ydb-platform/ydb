@@ -331,6 +331,32 @@ target_proto_messages(libs-config-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/config/protos/test_connection.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/config/protos/token_accessor.proto
 )
+target_sources(libs-config-protos PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/activation.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/audit.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/checkpoint_coordinator.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/common.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/compute.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/control_plane_proxy.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/control_plane_storage.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/db_pool.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/fq_config.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/gateways.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/health_config.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/issue_id.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/nodes_manager.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/pending_fetcher.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/pinger.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/private_api.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/private_proxy.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/quotas_manager.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/rate_limiter.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/read_actors_factory.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/resource_manager.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/storage.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/test_connection.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/core/fq/libs/config/protos/token_accessor.pb.h
+)
 target_proto_addincls(libs-config-protos
   ./
   ${CMAKE_SOURCE_DIR}/

@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(no_llvm)
+add_subdirectory(ut)
 
 add_library(yql-public-embedded)
 target_compile_options(yql-public-embedded PRIVATE
@@ -30,6 +32,9 @@ target_link_libraries(yql-public-embedded PUBLIC
   core-services-mounts
   yql-core-user_data
   library-yql-minikql
+  minikql-invoke_builtins-llvm14
+  minikql-comp_nodes-llvm14
+  minikql-computation-llvm14
   library-yql-protos
   udf-service-exception_policy
   yql-utils-backtrace
@@ -44,7 +49,10 @@ target_link_libraries(yql-public-embedded PUBLIC
   yt-lib-yt_download
   yt-lib-yt_url_lister
   providers-yt-provider
+  yt-codec-codegen
+  yt-comp_nodes-llvm14
 )
 target_sources(yql-public-embedded PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/embedded/yql_embedded.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/embedded/yql_embedded.cpp
 )

@@ -222,6 +222,7 @@ public:
         bool AllowOver = false;
         bool AllowReturnSet = false;
         bool AllowSubLinks = false;
+        bool AutoParametrizeEnabled = true;
         TVector<TAstNode*>* WindowItems = nullptr;
         TString Scope;
     };
@@ -1702,6 +1703,7 @@ private:
                         TExprSettings settings;
                         settings.AllowColumns = false;
                         settings.Scope = "DEFAULT";
+                        settings.AutoParametrizeEnabled = false;
                         cinfo.Default = ParseExpr(constraintNode->raw_expr, settings);
                         if (!cinfo.Default) {
                             return false;
@@ -3094,7 +3096,7 @@ public:
             ? L(A("PgType"), QA(TPgConst::ToString(valueNType->type)))
             : L(A("PgType"), QA("unknown"));
 
-        if (Settings.AutoParametrizeEnabled && !Settings.AutoParametrizeExprDisabledScopes.contains(settings.Scope)) {
+        if (Settings.AutoParametrizeEnabled && settings.AutoParametrizeEnabled) {
             return AutoParametrizeConst(std::move(valueNType.GetRef()), pgTypeNode);
         }
 

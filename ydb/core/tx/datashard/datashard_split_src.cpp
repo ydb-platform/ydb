@@ -529,6 +529,15 @@ public:
             }
         }
 
+        if (!Self->MediatorDelayedReplies.empty()) {
+            // We have some pending mediator replies, which must not be replied.
+            // Unfortunately we may linger around for a long time, and clients
+            // would keep awaiting replies for all that time. We have to make
+            // sure those clients receive an appropriate disconnection error
+            // instead.
+            ctx.Send(Self->SelfId(), new TEvents::TEvPoison);
+        }
+
         // TODO: properly check if there are no loans
         Self->CheckStateChange(ctx);
     }

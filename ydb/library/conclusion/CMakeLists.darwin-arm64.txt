@@ -11,6 +11,7 @@ add_library(ydb-library-conclusion)
 target_link_libraries(ydb-library-conclusion PUBLIC
   contrib-libs-cxxsupp
   yutil
+  api-protos
 )
 target_sources(ydb-library-conclusion PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/conclusion/result.cpp

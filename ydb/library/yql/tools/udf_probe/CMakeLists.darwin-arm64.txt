@@ -22,8 +22,6 @@ target_link_options(udf_probe PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(udf_probe PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/udf_probe/udf_probe.cpp

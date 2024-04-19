@@ -183,6 +183,40 @@ void TOperation::ClearImmediateConflicts() {
     ImmediateConflicts.clear();
 }
 
+void TOperation::AddRepeatableReadConflict(const TOperation::TPtr &op) {
+    Y_ABORT_UNLESS(this != op.Get());
+    Y_DEBUG_ABORT_UNLESS(IsImmediate());
+    Y_DEBUG_ABORT_UNLESS(!op->IsImmediate());
+
+    if (IsMvccSnapshotRepeatable()) {
+        AddDependency(this);
+        return;
+    }
+
+    if (RepeatableReadConflicts.insert(op).second) {
+        op->RepeatableReadConflicts.insert(this);
+    }
+}
+
+void TOperation::PromoteRepeatableReadConflicts() {
+    Y_ABORT_UNLESS(IsImmediate());
+
+    for (auto& op : RepeatableReadConflicts) {
+        Y_DEBUG_ABORT_UNLESS(op->RepeatableReadConflicts.contains(this));
+        op->RepeatableReadConflicts.erase(this);
+        AddDependency(op);
+    }
+    RepeatableReadConflicts.clear();
+}
+
+void TOperation::ClearRepeatableReadConflicts() {
+    for (auto& op : RepeatableReadConflicts) {
+        Y_DEBUG_ABORT_UNLESS(op->RepeatableReadConflicts.contains(this));
+        op->RepeatableReadConflicts.erase(this);
+    }
+    RepeatableReadConflicts.clear();
+}
+
 void TOperation::AddVolatileDependency(ui64 txId) {
     VolatileDependencies.insert(txId);
 }

@@ -24,11 +24,13 @@ target_compile_options(yql-parser-pg_wrapper PRIVATE
   -Wno-duplicate-decl-specifier
   -Wno-unused-function
   -Wno-unused-variable
+  -Wno-unused-but-set-variable
   -Wno-unused-private-field
   -Wno-register
   -Wno-unguarded-availability-new
   -Wno-int-conversion
   -Wno-deprecated-declarations
+  -Wno-null-pointer-subtraction
   -Darray_length=yql_array_length
   -Dpg_encoding_max_length=yql_pg_encoding_max_length
   -Dpg_encoding_mblen=yql_pg_encoding_mblen
@@ -109,8 +111,8 @@ target_compile_options(yql-parser-pg_wrapper PRIVATE
   -Dpg_hmac_init=yql_pg_hmac_init
   -Dpg_hmac_create=yql_pg_hmac_create
   -Dpg_pwritev_with_retry=yql_pg_pwritev_with_retry
+  -DMKQL_DISABLE_CODEGEN
   -DUSE_CURRENT_UDF_ABI_VERSION
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(yql-parser-pg_wrapper PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/lz4
@@ -132,8 +134,9 @@ target_link_libraries(yql-parser-pg_wrapper PUBLIC
   library-cpp-yson
   library-yql-core
   yql-minikql-arrow
-  minikql-computation-llvm
+  yql-minikql-computation
   yql-parser-pg_catalog
+  parser-pg_wrapper-interface
   providers-common-codec
   yql-public-issue
   yql-public-udf
@@ -159,6 +162,7 @@ target_sources(yql-parser-pg_wrapper PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/cost_mocks.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/syscache.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/pg_utils_wrappers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/pg_crc32c_sse42.c
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/pg_crc32c_sse42_choose.c
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/brin/brin.c
@@ -935,28 +939,4 @@ target_sources(yql-parser-pg_wrapper PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/pg_kernels.19.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/port/posix_sema.c
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/port/sysv_shmem.c
-)
-copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/copy_src.py
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/copy_src.py
-)
-copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/copy_src.sh
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/copy_src.sh
-)
-copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/generate_kernels.py
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/generate_kernels.py
-)
-copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/generate_patch.sh
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/generate_patch.sh
-)
-copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/vars.txt
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/vars.txt
-)
-copy_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/verify.sh
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/verify.sh
 )

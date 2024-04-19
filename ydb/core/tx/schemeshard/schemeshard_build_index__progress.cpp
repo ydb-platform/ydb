@@ -98,6 +98,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
             col->SetType(NScheme::TypeName(typeInfo, typeMod));
             col->SetName(colInfo.ColumnName);
             col->MutableDefaultFromLiteral()->CopyFrom(colInfo.DefaultFromLiteral);
+            col->SetIsBuildInProgress(true);
 
             if (!colInfo.FamilyName.empty()) {
                 col->SetFamilyName(colInfo.FamilyName);
@@ -1057,7 +1058,7 @@ public:
             }
 
             ReplyOnCreation(buildInfo, statusCode);
-            break;            
+            break;
         }
 
         case TIndexBuildInfo::EState::Locking:
@@ -1296,7 +1297,7 @@ public:
                 buildInfo->AlterMainTableTxId = txId;
                 NIceDb::TNiceDb db(txc.DB);
                 Self->PersistBuildIndexAlterMainTableTxId(db, buildInfo);
-        
+
             }
             break;
 

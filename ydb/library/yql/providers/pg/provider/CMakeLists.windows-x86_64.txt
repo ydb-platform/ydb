@@ -25,6 +25,8 @@ target_link_libraries(providers-pg-provider PUBLIC
   yql-utils-log
 )
 target_sources(providers-pg-provider PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pg/provider/yql_pg_provider.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pg/provider/yql_pg_provider_impl.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pg/provider/yql_pg_datasink.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pg/provider/yql_pg_datasink_execution.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pg/provider/yql_pg_datasink_type_ann.cpp

@@ -38,6 +38,10 @@ target_link_libraries(ydb-library-services PUBLIC
 target_proto_messages(ydb-library-services PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/services/services.proto
 )
+target_sources(ydb-library-services PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/services/services.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/library/services/services.grpc.pb.h
+)
 target_proto_addincls(ydb-library-services
   ./
   ${CMAKE_SOURCE_DIR}/

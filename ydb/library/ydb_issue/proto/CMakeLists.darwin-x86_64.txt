@@ -39,6 +39,10 @@ target_link_libraries(library-ydb_issue-proto PUBLIC
 target_proto_messages(library-ydb_issue-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/ydb_issue/proto/issue_id.proto
 )
+target_sources(library-ydb_issue-proto PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/ydb_issue/proto/issue_id.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/library/ydb_issue/proto/issue_id.grpc.pb.h
+)
 target_proto_addincls(library-ydb_issue-proto
   ./
   ${CMAKE_SOURCE_DIR}/

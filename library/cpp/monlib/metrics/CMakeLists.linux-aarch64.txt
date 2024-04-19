@@ -21,6 +21,7 @@ target_link_libraries(cpp-monlib-metrics PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(cpp-monlib-metrics PRIVATE
+  ${CMAKE_BINARY_DIR}/library/cpp/monlib/metrics/metric_value_type.h_serialized.h
   ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/ewma.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/fake.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/histogram_collector_explicit.cpp

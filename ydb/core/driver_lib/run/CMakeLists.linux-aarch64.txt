@@ -59,6 +59,8 @@ target_link_libraries(run PUBLIC
   ydb-core-formats
   fq-libs-init
   fq-libs-logs
+  core-graph-service
+  core-graph-shard
   ydb-core-grpc_services
   core-grpc_services-base
   core-grpc_services-auth_processor
@@ -123,7 +125,7 @@ target_link_libraries(run PUBLIC
   library-folder_service-proto
   ydb-library-pdisk_io
   ydb-library-security
-  minikql-comp_nodes-llvm
+  minikql-comp_nodes-llvm14
   providers-pq-cm_client
   udf-service-exception_policy
   public-lib-base
@@ -152,6 +154,16 @@ target_link_libraries(run PUBLIC
   ydb-services-ydb
 )
 target_sources(run PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/config.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/config_parser.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/driver.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/dummy.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/factories.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/kikimr_services_initializers.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/main.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/run.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/service_initializer.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/cert_auth_props.h
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/auto_config_initializer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/config_parser.cpp

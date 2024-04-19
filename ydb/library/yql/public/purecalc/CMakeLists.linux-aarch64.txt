@@ -10,6 +10,7 @@ add_subdirectory(common)
 add_subdirectory(examples)
 add_subdirectory(helpers)
 add_subdirectory(io_specs)
+add_subdirectory(no_llvm)
 add_subdirectory(ut)
 
 add_library(yql-public-purecalc)

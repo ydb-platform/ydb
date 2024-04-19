@@ -14,6 +14,7 @@ target_link_libraries(yql-sql-settings PUBLIC
   cpp-deprecated-split
   library-cpp-json
   yql-core-issue
+  yql-core-pg_settings
   core-issue-protos
   library-yql-utils
 )

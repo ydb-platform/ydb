@@ -23,9 +23,6 @@ target_link_options(perf PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(perf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/perf/parse.cpp

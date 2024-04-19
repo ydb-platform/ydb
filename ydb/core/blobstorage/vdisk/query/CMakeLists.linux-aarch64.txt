@@ -20,6 +20,19 @@ target_link_libraries(blobstorage-vdisk-query PUBLIC
   vdisk-hulldb-base
 )
 target_sources(blobstorage-vdisk-query PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/assimilation.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_base.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_dumpdb.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_public.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_readactor.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_readbatch.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_spacetracker.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_statalgo.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_statdb.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_stathuge.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_stattablet.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_stream.h
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/assimilation.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_barrier.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_extr.cpp

@@ -29,9 +29,6 @@ target_link_options(ydb-core-tx-schemeshard-ut_replication PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-tx-schemeshard-ut_replication PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_replication/ut_replication.cpp
@@ -61,6 +58,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

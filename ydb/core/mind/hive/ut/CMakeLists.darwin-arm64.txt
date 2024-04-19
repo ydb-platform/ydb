@@ -30,8 +30,6 @@ target_link_options(ydb-core-mind-hive-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(ydb-core-mind-hive-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/object_distribution_ut.cpp
@@ -65,6 +63,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

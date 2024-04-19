@@ -29,6 +29,9 @@ target_link_libraries(protobuf-json-proto PUBLIC
 target_proto_messages(protobuf-json-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/json/proto/enum_options.proto
 )
+target_sources(protobuf-json-proto PRIVATE
+  ${CMAKE_BINARY_DIR}/library/cpp/protobuf/json/proto/enum_options.pb.h
+)
 target_proto_addincls(protobuf-json-proto
   ./
   ${CMAKE_SOURCE_DIR}/

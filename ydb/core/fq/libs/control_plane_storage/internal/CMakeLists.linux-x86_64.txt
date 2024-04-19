@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(libs-control_plane_storage-internal)
 target_compile_options(libs-control_plane_storage-internal PRIVATE
@@ -15,6 +16,7 @@ target_link_libraries(libs-control_plane_storage-internal PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-fmt
   library-actors-core
   cpp-lwtrace-mon
   monlib-service-pages

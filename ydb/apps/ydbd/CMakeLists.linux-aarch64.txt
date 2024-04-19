@@ -15,6 +15,7 @@ target_link_libraries(ydbd PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  version_definition
   run
   ydb-core-protos
   ydb-core-security
@@ -56,11 +57,9 @@ target_link_options(ydbd PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydbd PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/export.h
   ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/export.cpp
   ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/main.cpp
 )

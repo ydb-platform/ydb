@@ -404,7 +404,7 @@ TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
     if (!DataTx) {
         Y_ABORT_UNLESS(TxBody);
         DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                    GetReceivedAt(), TxBody, MvccSnapshotRepeatable);
+                                                    GetReceivedAt(), TxBody, IsMvccSnapshotRepeatable());
         if (DataTx->HasStreamResponse())
             SetStreamSink(DataTx->GetSink());
     }
@@ -635,7 +635,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
 
     bool extractKeys = DataTx->IsTxInfoLoaded();
     DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                GetReceivedAt(), TxBody, MvccSnapshotRepeatable);
+                                                GetReceivedAt(), TxBody, IsMvccSnapshotRepeatable());
     if (DataTx->Ready() && extractKeys) {
         DataTx->ExtractKeys(true);
     }

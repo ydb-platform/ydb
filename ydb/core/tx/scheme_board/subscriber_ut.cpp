@@ -152,7 +152,7 @@ void TSubscriberTest::InvalidNotification() {
 
     // send notification directly to subscriber
     auto* notify = new TSchemeBoardEvents::TEvNotifyBuilder(TPathId(1, 1));
-    notify->Record.MutableDescribeSchemeResult()->CopyFrom(GenerateDescribe("another/path", TPathId(1, 1)));
+    notify->SetPathDescription(MakeOpaquePathDescription("", GenerateDescribe("another/path", TPathId(1, 1))));
     Context->Send(subscriber, edge, notify);
 
     size_t counter = Context->CountEdgeEvents<TSchemeBoardEvents::TEvNotifyUpdate>();

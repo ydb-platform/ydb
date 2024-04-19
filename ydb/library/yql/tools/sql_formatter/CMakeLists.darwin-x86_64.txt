@@ -20,8 +20,6 @@ target_link_options(sql_formatter PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(sql_formatter PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/sql_formatter/sql_formatter.cpp

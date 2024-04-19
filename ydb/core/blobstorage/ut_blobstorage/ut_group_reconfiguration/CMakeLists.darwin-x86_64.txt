@@ -22,8 +22,6 @@ target_link_options(ut_group_reconfiguration PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(ut_group_reconfiguration PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/race.cpp
@@ -53,6 +51,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   LARGE
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

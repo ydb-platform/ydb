@@ -21,7 +21,7 @@ target_link_libraries(ydb-library-binary_json-ut PUBLIC
   cpp-testing-unittest_main
   ydb-library-binary_json
   yql-minikql-dom
-  minikql-invoke_builtins-llvm
+  minikql-invoke_builtins-llvm14
   udf-service-exception_policy
   core-issue-protos
   yql-sql-pg_dummy
@@ -32,9 +32,6 @@ target_link_options(ydb-library-binary_json-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-library-binary_json-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/container_ut.cpp
@@ -68,6 +65,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

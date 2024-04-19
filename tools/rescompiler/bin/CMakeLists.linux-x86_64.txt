@@ -21,9 +21,6 @@ target_link_options(rescompiler PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(rescompiler PRIVATE
   ${CMAKE_SOURCE_DIR}/tools/rescompiler/main.cpp

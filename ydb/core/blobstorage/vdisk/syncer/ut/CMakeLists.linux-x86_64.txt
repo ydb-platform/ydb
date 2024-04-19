@@ -18,6 +18,7 @@ target_link_libraries(ydb-core-blobstorage-vdisk-syncer-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   blobstorage-vdisk-syncer
+  version_definition
   library-cpp-getopt
   library-cpp-svnversion
   ydb-core-base
@@ -29,9 +30,6 @@ target_link_options(ydb-core-blobstorage-vdisk-syncer-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-blobstorage-vdisk-syncer-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data_ut.cpp
@@ -63,6 +61,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

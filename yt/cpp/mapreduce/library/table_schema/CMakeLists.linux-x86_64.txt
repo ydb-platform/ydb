@@ -18,5 +18,6 @@ target_link_libraries(mapreduce-library-table_schema PUBLIC
   cpp-mapreduce-interface
 )
 target_sources(mapreduce-library-table_schema PRIVATE
+  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/library/table_schema/protobuf.h
   ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/library/table_schema/protobuf.cpp
 )

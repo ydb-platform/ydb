@@ -34,6 +34,10 @@ set(
   PROTOBUF_HEADER_PATH
   ydb/library/yql/parser/proto_ast/gen/jsonpath
 )
+set(
+  PROTOBUF_SUFFIX_PATH
+  .pb.h
+)
 
 add_library(proto_ast-gen-jsonpath)
 target_compile_options(proto_ast-gen-jsonpath PRIVATE
@@ -53,6 +57,11 @@ target_proto_messages(proto_ast-gen-jsonpath PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.proto
 )
 target_sources(proto_ast-gen-jsonpath PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/Cpp/Cpp.stg
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf/protobuf.stg
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.h
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathLexer.h
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.pb.h
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathLexer.cpp
 )

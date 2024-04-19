@@ -7,15 +7,22 @@
 
 
 
-add_library(udf-service-stub)
-target_compile_options(udf-service-stub PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(udf-service-stub PUBLIC
+add_library(udf-service-stub INTERFACE)
+target_link_libraries(udf-service-stub INTERFACE
   contrib-libs-cxxsupp
   yutil
   yql-public-udf
 )
-target_sources(udf-service-stub PRIVATE
+
+add_global_library_for(udf-service-stub.global udf-service-stub)
+target_compile_options(udf-service-stub.global PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(udf-service-stub.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+)
+target_sources(udf-service-stub.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/service/stub/udf_service.cpp
 )

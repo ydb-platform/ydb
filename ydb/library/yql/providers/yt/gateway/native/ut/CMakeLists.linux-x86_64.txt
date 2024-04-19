@@ -19,11 +19,15 @@ target_link_libraries(ydb-library-yql-providers-yt-gateway-native-ut PUBLIC
   cpp-testing-unittest_main
   yt-gateway-native
   yt-gateway-file
+  yt-codec-codegen
+  yt-comp_nodes-llvm14
   yql-core-ut_common
   cpp-testing-mock_server
   cpp-testing-common
   udf-service-terminate_policy
   yql-sql-pg
+  minikql-comp_nodes-llvm14
+  minikql-invoke_builtins-llvm14
 )
 target_link_options(ydb-library-yql-providers-yt-gateway-native-ut PRIVATE
   -ldl
@@ -31,10 +35,6 @@ target_link_options(ydb-library-yql-providers-yt-gateway-native-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
-  -lutil
 )
 target_sources(ydb-library-yql-providers-yt-gateway-native-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/ut/yql_yt_native_folders_ut.cpp
@@ -64,6 +64,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

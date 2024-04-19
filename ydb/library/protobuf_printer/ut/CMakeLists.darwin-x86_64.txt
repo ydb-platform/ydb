@@ -35,13 +35,12 @@ target_link_options(ydb-library-protobuf_printer-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_proto_messages(ydb-library-protobuf_printer-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/protobuf_printer/ut/test_proto.proto
 )
 target_sources(ydb-library-protobuf_printer-ut PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/protobuf_printer/ut/test_proto.pb.h
   ${CMAKE_SOURCE_DIR}/ydb/library/protobuf_printer/protobuf_printer_ut.cpp
 )
 set_property(
@@ -69,6 +68,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

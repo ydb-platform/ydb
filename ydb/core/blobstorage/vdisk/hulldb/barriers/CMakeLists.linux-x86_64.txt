@@ -19,6 +19,13 @@ target_link_libraries(vdisk-hulldb-barriers PUBLIC
   ydb-core-protos
 )
 target_sources(vdisk-hulldb-barriers PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_chain.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_essence.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_public.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_tree.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/hullds_cache_barrier.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/hullds_gcessence_defs.h
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_chain.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_essence.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_public.cpp

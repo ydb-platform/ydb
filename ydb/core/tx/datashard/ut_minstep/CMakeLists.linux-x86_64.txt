@@ -38,9 +38,6 @@ target_link_options(ydb-core-tx-datashard-ut_minstep PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-tx-datashard-ut_minstep PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_minstep.cpp
@@ -70,6 +67,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

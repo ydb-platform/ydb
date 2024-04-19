@@ -8,4 +8,5 @@
 
 add_subdirectory(controller)
 add_subdirectory(service)
+add_subdirectory(ut_helpers)
 add_subdirectory(ydb_proxy)

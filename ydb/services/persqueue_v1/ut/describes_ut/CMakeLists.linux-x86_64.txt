@@ -31,9 +31,6 @@ target_link_options(ydb-services-persqueue_v1-ut-describes_ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-services-persqueue_v1-ut-describes_ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/describes_ut/ic_cache_ut.cpp
@@ -64,6 +61,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

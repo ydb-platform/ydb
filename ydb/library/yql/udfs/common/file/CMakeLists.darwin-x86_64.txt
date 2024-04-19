@@ -30,8 +30,6 @@ target_link_options(file_udf.dyn PRIVATE
   -undefined
   dynamic_lookup
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(file_udf.dyn PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/file/file_udf.cpp

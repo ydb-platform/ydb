@@ -42,6 +42,7 @@ target_proto_messages(core-rpc-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/grpc/proto/grpc.proto
 )
 target_sources(core-rpc-grpc PRIVATE
+  ${CMAKE_BINARY_DIR}/yt/yt/core/rpc/grpc/proto/grpc.pb.h
   ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/grpc/config.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/grpc/public.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/rpc/grpc/dispatcher.cpp

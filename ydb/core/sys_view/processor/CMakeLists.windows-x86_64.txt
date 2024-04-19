@@ -24,6 +24,9 @@ target_link_libraries(core-sys_view-processor PUBLIC
   core-tx-scheme_cache
 )
 target_sources(core-sys_view-processor PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/processor.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/processor_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/schema.h
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/processor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/processor_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/schema.cpp

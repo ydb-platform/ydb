@@ -52,6 +52,32 @@ target_link_libraries(ydb-core-cms PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ydb-core-cms PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/base_handler.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/cluster_info.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_state.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/downtime.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/erasure_checkers.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/http.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/info_collector.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/json_proxy.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/json_proxy_config_items.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/json_proxy_config_updates.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/json_proxy_config_validators.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/json_proxy_console_log.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/json_proxy_log.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/json_proxy_operations.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/json_proxy_proto.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/json_proxy_sentinel.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/json_proxy_toggle_config_validator.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/logger.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/node_checkers.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/log_formatter.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/pdiskid.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/scheme.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/walle.h
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/api_adapters.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/audit_log.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cluster_info.cpp

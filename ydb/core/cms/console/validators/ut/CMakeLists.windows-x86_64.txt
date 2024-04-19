@@ -20,6 +20,7 @@ target_link_libraries(ydb-core-cms-console-validators-ut PUBLIC
   cpp-testing-unittest
 )
 target_sources(ydb-core-cms-console-validators-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_ut_common.h
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/registry_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_bootstrap_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_nameservice_ut.cpp
@@ -49,6 +50,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

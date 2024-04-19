@@ -13,6 +13,7 @@ target_link_libraries(pdiskfit PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
+  version_definition
   library-cpp-getopt
   cpp-string_utils-parse_size
   ydb-core-blobstorage
@@ -25,9 +26,6 @@ target_link_options(pdiskfit PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(pdiskfit PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_pdiskfit/pdiskfit/pdiskfit.cpp

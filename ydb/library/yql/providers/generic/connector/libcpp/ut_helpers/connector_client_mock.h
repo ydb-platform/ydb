@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/formats/arrow/serializer/full.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
@@ -677,10 +677,10 @@ namespace NYql::NConnector::NTest {
             TBuilder& AddResponse(
                 const std::shared_ptr<arrow::RecordBatch>& recordBatch,
                 const NApi::TError& error) {
-                NKikimr::NArrow::NSerialization::TFullDataSerializer ser(arrow::ipc::IpcWriteOptions::Defaults());
+                NKikimr::NArrow::NSerialization::TSerializerContainer ser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
                 auto& response = this->Result_->Responses().emplace_back();
                 response.mutable_error()->CopyFrom(error);
-                response.set_arrow_ipc_streaming(ser.Serialize(recordBatch));
+                response.set_arrow_ipc_streaming(ser->SerializeFull(recordBatch));
                 return static_cast<TBuilder&>(*this);
             }
 

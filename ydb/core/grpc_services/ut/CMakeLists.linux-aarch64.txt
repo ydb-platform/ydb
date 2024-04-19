@@ -29,9 +29,6 @@ target_link_options(ydb-core-grpc_services-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-grpc_services-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_calls_ut.cpp
@@ -62,6 +59,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

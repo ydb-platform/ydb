@@ -23,13 +23,14 @@ private:
     TSnapshot MinSnapshot = TSnapshot::Zero();  // {PlanStep, TxId} is min snapshot for {Granule, Portion}
     TSnapshot RemoveSnapshot = TSnapshot::Zero(); // {XPlanStep, XTxId} is snapshot where the blob has been removed (i.e. compacted into another one)
 
-    bool HasPkMinMax() const;
     TPortionMeta Meta;
     std::shared_ptr<NOlap::IBlobsStorageOperator> BlobsOperator;
     ui64 DeprecatedGranuleId = 0;
     YDB_READONLY_DEF(std::vector<TIndexChunk>, Indexes);
 
 public:
+    ui64 GetTxVolume() const; // fake-correct method for determ volume on rewrite this portion in transaction progress
+
     class TPage {
     private:
         YDB_READONLY_DEF(std::vector<const TColumnRecord*>, Records);
@@ -188,7 +189,7 @@ public:
 
     bool Empty() const { return Records.empty(); }
     bool Produced() const { return Meta.GetProduced() != TPortionMeta::EProduced::UNSPECIFIED; }
-    bool Valid() const { return MinSnapshot.Valid() && PathId && Portion && !Empty() && Produced() && HasPkMinMax() && Meta.IndexKeyStart && Meta.IndexKeyEnd; }
+    bool Valid() const { return MinSnapshot.Valid() && PathId && Portion && !Empty() && Produced() && Meta.IndexKeyStart && Meta.IndexKeyEnd; }
     bool ValidSnapshotInfo() const { return MinSnapshot.Valid() && PathId && Portion; }
     bool IsInserted() const { return Meta.GetProduced() == TPortionMeta::EProduced::INSERTED; }
     bool IsEvicted() const { return Meta.GetProduced() == TPortionMeta::EProduced::EVICTED; }
@@ -336,7 +337,6 @@ public:
     void AddMetadata(const ISnapshotSchema& snapshotSchema, const NArrow::TFirstLastSpecialKeys& primaryKeys, const NArrow::TMinMaxSpecialKeys& snapshotKeys,
         const TString& tierName);
 
-    std::shared_ptr<arrow::Scalar> MinValue(ui32 columnId) const;
     std::shared_ptr<arrow::Scalar> MaxValue(ui32 columnId) const;
 
     const NArrow::TReplaceKey& IndexKeyStart() const {
@@ -363,6 +363,9 @@ public:
         THashSet<TUnifiedBlobId> result;
         for (auto&& i : Records) {
             result.emplace(i.BlobRange.BlobId);
+        }
+        for (auto&& i : Indexes) {
+            result.emplace(i.GetBlobRange().BlobId);
         }
         return result;
     }
@@ -409,48 +412,7 @@ public:
         return GetRawBytes();
     }
 
-private:
-    class TMinGetter {
-    public:
-        static std::shared_ptr<arrow::Scalar> Get(const TPortionInfo& portionInfo, const ui32 columnId) {
-            return portionInfo.MinValue(columnId);
-        }
-    };
-
-    class TMaxGetter {
-    public:
-        static std::shared_ptr<arrow::Scalar> Get(const TPortionInfo& portionInfo, const ui32 columnId) {
-            return portionInfo.MaxValue(columnId);
-        }
-    };
-
-    template <class TSelfGetter, class TItemGetter = TSelfGetter>
-    int CompareByColumnIdsImpl(const TPortionInfo& item, const std::vector<ui32>& columnIds) const {
-        for (auto&& i : columnIds) {
-            std::shared_ptr<arrow::Scalar> valueSelf = TSelfGetter::Get(*this, i);
-            std::shared_ptr<arrow::Scalar> valueItem = TItemGetter::Get(item, i);
-            if (!!valueSelf && !!valueItem) {
-                const int cmpResult = NArrow::ScalarCompare(valueSelf, valueItem);
-                if (cmpResult) {
-                    return cmpResult;
-                }
-            } else if (!!valueSelf) {
-                return 1;
-            } else if (!!valueItem) {
-                return -1;
-            }
-        }
-        return 0;
-    }
 public:
-    int CompareSelfMaxItemMinByPk(const TPortionInfo& item, const TIndexInfo& info) const;
-
-    int CompareMinByPk(const TPortionInfo& item, const TIndexInfo& info) const;
-
-    int CompareMinByColumnIds(const TPortionInfo& item, const std::vector<ui32>& columnIds) const {
-        return CompareByColumnIdsImpl<TMinGetter>(item, columnIds);
-    }
-
     class TAssembleBlobInfo {
     private:
         ui32 NullRowsCount = 0;

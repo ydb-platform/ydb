@@ -157,6 +157,28 @@ target_proto_messages(client-yc_private-iam PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/user_account.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/yandex_passport_cookie.proto
 )
+target_sources(client-yc_private-iam PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/iam_token_service_subject.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/iam_token_service_subject.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/iam_token_service.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/iam_token_service.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/iam_token.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/iam_token.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/oauth_request.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/oauth_request.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/reference.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/reference.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/service_account_service.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/service_account_service.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/service_account.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/service_account.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/user_account_service.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/user_account_service.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/user_account.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/user_account.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/yandex_passport_cookie.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/iam/yandex_passport_cookie.grpc.pb.h
+)
 target_proto_addincls(client-yc_private-iam
   ./
   ${CMAKE_SOURCE_DIR}/

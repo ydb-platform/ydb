@@ -14,7 +14,7 @@ target_compile_options(mt_param PRIVATE
 target_link_libraries(mt_param PUBLIC
   contrib-libs-cxxsupp
   yutil
-  minikql-comp_nodes-llvm
+  minikql-comp_nodes-llvm14
   yql-public-udf
   udf-service-exception_policy
   yql-sql-pg_dummy
@@ -23,8 +23,6 @@ target_link_options(mt_param PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(mt_param PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/mt_param/mt_param.cpp

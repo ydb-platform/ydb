@@ -13,6 +13,7 @@ target_compile_options(ydb-library-yql-minikql-ut PRIVATE
 )
 target_include_directories(ydb-library-yql-minikql-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
 )
 target_link_libraries(ydb-library-yql-minikql-ut PUBLIC
   contrib-libs-linux-headers
@@ -21,7 +22,7 @@ target_link_libraries(ydb-library-yql-minikql-ut PUBLIC
   cpp-testing-unittest_main
   library-yql-minikql
   libs-apache-arrow
-  minikql-invoke_builtins-llvm
+  minikql-invoke_builtins-llvm14
   yql-parser-pg_wrapper
   udf-service-exception_policy
 )
@@ -31,9 +32,6 @@ target_link_options(ydb-library-yql-minikql-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-library-yql-minikql-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/aligned_page_pool_ut.cpp
@@ -76,6 +74,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

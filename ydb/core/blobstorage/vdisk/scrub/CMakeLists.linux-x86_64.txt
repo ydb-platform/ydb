@@ -17,6 +17,13 @@ target_link_libraries(blobstorage-vdisk-scrub PUBLIC
   blobstorage-vdisk-skeleton
 )
 target_sources(blobstorage-vdisk-scrub PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/scrub/blob_recovery.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/scrub/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/scrub/scrub_actor.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/scrub/scrub_actor_huge_blob_merger.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/scrub/scrub_actor_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/scrub/scrub_actor_sst_blob_merger.h
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/scrub/blob_recovery.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/scrub/blob_recovery_process.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/scrub/blob_recovery_queue.cpp

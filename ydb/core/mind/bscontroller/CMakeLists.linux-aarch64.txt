@@ -30,6 +30,29 @@ target_link_libraries(core-mind-bscontroller PUBLIC
   core-tx-tx_proxy
 )
 target_sources(core-mind-bscontroller PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/bsc.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/config.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/diff.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/error.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/grouper.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/group_layout_checker.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/group_mapper.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/indir.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/layout_helpers.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/mood.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/mv_object_map.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/resources.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/scheme.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/select_groups.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/self_heal.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/stat_processor.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/storage_pool_stat.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/sys_view.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/table_merger.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/types.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/vdisk_status_tracker.h
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/bsc.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/cmds_box.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/cmds_drive_status.cpp

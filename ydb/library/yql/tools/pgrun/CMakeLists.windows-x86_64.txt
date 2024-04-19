@@ -17,6 +17,7 @@ target_link_libraries(pgrun PUBLIC
   library-cpp-cpuid_check
   contrib-libs-protobuf
   library-cpp-getopt
+  cpp-string_utils-base64
   contrib-libs-fmt
   library-cpp-yson
   yql-sql-pg
@@ -25,7 +26,7 @@ target_link_libraries(pgrun PUBLIC
   core-file_storage-proto
   core-file_storage-http_download
   core-services-mounts
-  minikql-comp_nodes-llvm
+  minikql-comp_nodes-llvm14
   library-yql-protos
   udf-service-exception_policy
   yql-utils-backtrace
@@ -38,6 +39,9 @@ target_link_libraries(pgrun PUBLIC
   providers-common-udf_resolve
   providers-dq-provider
   yt-gateway-file
+  yt-comp_nodes-llvm14
+  yt-codec-codegen
+  providers-pg-provider
   yql-core-url_preprocessing
   yql-parser-pg_wrapper
 )

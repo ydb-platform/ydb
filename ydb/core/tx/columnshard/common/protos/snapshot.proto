@@ -1,0 +1,6 @@
+package NKikimrColumnShardProto;
+
+message TSnapshot {
+    optional uint64 PlanStep = 1;
+    optional uint64 TxId = 2;
+}

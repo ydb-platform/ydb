@@ -20,9 +20,9 @@ target_link_libraries(ydb-core-tx-replication-ydb_proxy-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   tx-replication-ydb_proxy
-  cpp-testing-unittest
-  core-testlib-default
+  tx-replication-ut_helpers
   cpp-client-ydb_topic
+  cpp-testing-unittest
 )
 target_sources(ydb-core-tx-replication-ydb_proxy-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy/ydb_proxy_ut.cpp
@@ -52,6 +52,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

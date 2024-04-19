@@ -463,10 +463,14 @@ bool TKikimrKey::Extract(const TExprNode& key) {
 }
 
 TCoAtomList BuildColumnsList(const TKikimrTableDescription& table, TPositionHandle pos,
-    TExprContext& ctx, bool withSystemColumns)
+    TExprContext& ctx, bool withSystemColumns, bool ignoreWriteOnlyColumns)
 {
     TVector<TExprBase> columnsToSelect;
     for (const auto& pair : table.Metadata->Columns) {
+        if (pair.second.IsBuildInProgress && ignoreWriteOnlyColumns) {
+            continue;
+        }
+
         auto atom = Build<TCoAtom>(ctx, pos)
             .Value(pair.second.Name)
             .Done();

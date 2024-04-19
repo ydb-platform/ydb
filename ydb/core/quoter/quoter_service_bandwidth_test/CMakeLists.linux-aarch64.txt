@@ -28,9 +28,6 @@ target_link_options(quoter_service_bandwidth_test PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(quoter_service_bandwidth_test PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/main.cpp

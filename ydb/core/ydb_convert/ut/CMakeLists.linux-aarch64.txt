@@ -26,9 +26,6 @@ target_link_options(ydb-core-ydb_convert-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-ydb_convert-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/compression_ut.cpp
@@ -60,6 +57,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

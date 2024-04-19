@@ -8,6 +8,9 @@
 
 
 add_library(columnshard-engines-predicate)
+target_compile_options(columnshard-engines-predicate PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
 target_link_libraries(columnshard-engines-predicate PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

@@ -22,9 +22,6 @@ target_link_options(pagination PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(pagination PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/pagination/main.cpp

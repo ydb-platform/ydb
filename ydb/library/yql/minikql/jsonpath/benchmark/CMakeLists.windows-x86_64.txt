@@ -18,7 +18,7 @@ target_link_libraries(jsonpath-benchmark PUBLIC
   testing-benchmark-main
   library-cpp-json
   yql-minikql-dom
-  minikql-invoke_builtins-llvm
+  minikql-invoke_builtins-llvm14
   yql-minikql-jsonpath
   yql-public-issue
   udf-service-exception_policy

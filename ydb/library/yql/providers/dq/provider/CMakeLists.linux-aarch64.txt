@@ -50,6 +50,16 @@ target_link_libraries(providers-dq-provider PUBLIC
   library-yql-minikql
 )
 target_sources(providers-dq-provider PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_control.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasink_type_ann.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_gateway.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_provider.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasink.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasource.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_recapture.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_statistics.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_statistics_json.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_control.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasink_constraints.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasink_type_ann.cpp

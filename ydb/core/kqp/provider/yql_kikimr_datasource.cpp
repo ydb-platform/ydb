@@ -351,6 +351,18 @@ public:
                 if (!AddCluster(table, res, input, ctx)) {
                     return TStatus::Error;
                 }
+
+                if (const auto& preparingQuery = SessionCtx->Query().PreparingQuery;
+                        preparingQuery
+                        && res.Metadata->Kind == EKikimrTableKind::View
+                ) {
+                    const auto& viewMetadata = *res.Metadata;
+                    auto* viewInfo = preparingQuery->MutablePhysicalQuery()->MutableViewInfos()->Add();
+                    auto* pathId = viewInfo->MutableTableId();
+                    pathId->SetOwnerId(viewMetadata.PathId.OwnerId());
+                    pathId->SetTableId(viewMetadata.PathId.TableId());
+                    viewInfo->SetSchemaVersion(viewMetadata.SchemaVersion);
+                }
             } else {
                 TIssueScopeGuard issueScope(ctx.IssueManager, [input, &table, &ctx]() {
                     return MakeIntrusive<TIssue>(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()

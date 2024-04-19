@@ -6,11 +6,6 @@
 namespace NKafka {
 using namespace NKikimr::NGRpcProxy::V1;
 
-static constexpr int ProxyNodeId = 1;
-static constexpr char UnderlayPrefix[] = "u-";
-
-static_assert(sizeof(UnderlayPrefix) == 3);
-
 NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context,
                                           const ui64 correlationId,
                                           const TMessagePtr<TMetadataRequestData>& message) {

@@ -13,12 +13,26 @@ target_link_libraries(formats-arrow-serializer PUBLIC
   yutil
   libs-apache-arrow
   formats-arrow-common
+  services-metadata-abstract
   library-actors-core
   ydb-core-protos
 )
 target_sources(formats-arrow-serializer PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/serializer/abstract.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/serializer/full.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/serializer/batch_only.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/serializer/stream.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/serializer/parsing.cpp
+)
+
+add_global_library_for(formats-arrow-serializer.global formats-arrow-serializer)
+target_link_libraries(formats-arrow-serializer.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  libs-apache-arrow
+  formats-arrow-common
+  services-metadata-abstract
+  library-actors-core
+  ydb-core-protos
+)
+target_sources(formats-arrow-serializer.global PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/serializer/native.cpp
 )

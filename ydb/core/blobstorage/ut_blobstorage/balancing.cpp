@@ -303,9 +303,11 @@ struct TRandomTest {
                 ui32 pos = random() % Env->Settings.NodeCount;
                 if (Env.RunningNodes.contains(pos)) {
                     auto baseConfig = Env->FetchBaseConfig();
-                    const auto& somePDisk = baseConfig.GetPDisk(pos);
                     const auto& someVSlot = baseConfig.GetVSlot(pos);
-                    Env->Wipe(somePDisk.GetNodeId(), somePDisk.GetPDiskId(), someVSlot.GetVSlotId().GetVSlotId());
+                    const auto& loc = someVSlot.GetVSlotId();
+                    Env->Wipe(loc.GetNodeId(), loc.GetPDiskId(), loc.GetVSlotId(),
+                        TVDiskID(someVSlot.GetGroupId(), someVSlot.GetGroupGeneration(), someVSlot.GetFailRealmIdx(),
+                        someVSlot.GetFailDomainIdx(), someVSlot.GetVDiskIdx()));
                     Env->Sim(TDuration::Seconds(10));
                 }
             }

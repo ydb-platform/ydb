@@ -33,9 +33,6 @@ target_link_options(streaming_udf.dyn PRIVATE
   -Wl,-z,notext
   -Wl,-Bsymbolic
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(streaming_udf.dyn PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/streaming/streaming_udf.cpp

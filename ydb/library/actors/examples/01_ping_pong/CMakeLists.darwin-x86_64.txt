@@ -18,8 +18,6 @@ target_link_options(example_01_ping_pong PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(example_01_ping_pong PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/examples/01_ping_pong/main.cpp

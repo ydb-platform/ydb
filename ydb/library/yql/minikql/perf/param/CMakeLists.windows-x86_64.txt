@@ -15,7 +15,7 @@ target_link_libraries(param PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
-  minikql-comp_nodes-llvm
+  minikql-comp_nodes-llvm14
   yql-public-udf
   udf-service-exception_policy
   yql-sql-pg_dummy

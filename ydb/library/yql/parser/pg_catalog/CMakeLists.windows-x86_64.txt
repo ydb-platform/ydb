@@ -67,6 +67,12 @@ get_built_tool_path(
   tools/rescompiler/bin
   rescompiler
 )
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
 add_library(yql-parser-pg_catalog)
 target_link_libraries(yql-parser-pg_catalog PUBLIC
@@ -96,6 +102,7 @@ target_sources(yql-parser-pg_catalog.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/69148841cb58a458173a42fc4a2d34a5.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/ec0b500b671e1ef6896201d71c27c3a9.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/35d2aa467812d7360a78c1fae061c821.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/c5119519d22b2b93be0e714cfac07bca.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/d248668b32b6a4d36f76898f91cda187.cpp
 )
 resources(yql-parser-pg_catalog.global
@@ -160,6 +167,13 @@ resources(yql-parser-pg_catalog.global
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_amop.dat
   KEYS
   pg_amop.dat
+)
+resources(yql-parser-pg_catalog.global
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/c5119519d22b2b93be0e714cfac07bca.cpp
+  INPUTS
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_am.dat
+  KEYS
+  pg_am.dat
 )
 resources(yql-parser-pg_catalog.global
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/d248668b32b6a4d36f76898f91cda187.cpp

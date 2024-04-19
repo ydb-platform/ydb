@@ -30,9 +30,6 @@ target_link_options(ydb-library-yql-dq-runtime-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-library-yql-dq-runtime-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_arrow_helpers_ut.cpp
@@ -64,6 +61,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

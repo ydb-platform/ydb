@@ -57,6 +57,8 @@ TReadSession::TReadSession(const TReadSessionSettings& settings,
 }
 
 TReadSession::~TReadSession() {
+    Close(TDuration::Zero());
+
     {
         TDeferredActions<true> deferred;
         NYql::TIssues issues;

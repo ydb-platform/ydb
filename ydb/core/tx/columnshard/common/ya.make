@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    limits.h
     reverse_accessor.cpp
     scalars.cpp
     snapshot.cpp
@@ -11,6 +12,7 @@ PEERDIR(
     ydb/core/protos
     contrib/libs/apache/arrow
     ydb/core/formats/arrow
+    ydb/core/tx/columnshard/common/protos
 )
 
 GENERATE_ENUM_SERIALIZATION(portion.h)

@@ -42,6 +42,10 @@ target_proto_messages(connector-api-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/api/common/data_source.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/api/common/endpoint.proto
 )
+target_sources(connector-api-common PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/generic/connector/api/common/endpoint.pb.h
+)
 target_proto_addincls(connector-api-common
   ./
   ${CMAKE_SOURCE_DIR}/

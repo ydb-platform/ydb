@@ -18,8 +18,6 @@ target_link_options(persqueue_reader_eventloop PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(persqueue_reader_eventloop PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/topic_reader/eventloop/main.cpp

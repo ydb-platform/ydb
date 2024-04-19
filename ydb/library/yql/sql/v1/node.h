@@ -1046,6 +1046,7 @@ namespace NSQLTranslationV1 {
         TVector<TChangefeedDescription> Changefeeds;
         TTableSettings TableSettings;
         ETableType TableType = ETableType::Table;
+        bool Temporary = false;
     };
 
     struct TAlterTableParameters {

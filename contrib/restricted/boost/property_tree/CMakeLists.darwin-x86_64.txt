@@ -18,7 +18,6 @@ target_link_libraries(restricted-boost-property_tree INTERFACE
   restricted-boost-bind
   restricted-boost-config
   restricted-boost-core
-  restricted-boost-format
   restricted-boost-iterator
   restricted-boost-mpl
   restricted-boost-multi_index

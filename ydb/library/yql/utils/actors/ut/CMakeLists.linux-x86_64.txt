@@ -19,6 +19,7 @@ target_link_libraries(ydb-library-yql-utils-actors-ut PUBLIC
   cpp-testing-unittest_main
   yql-utils-actors
   testlib-basics-default
+  minikql-comp_nodes-llvm14
 )
 target_link_options(ydb-library-yql-utils-actors-ut PRIVATE
   -ldl
@@ -26,9 +27,6 @@ target_link_options(ydb-library-yql-utils-actors-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-library-yql-utils-actors-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/actors/http_sender_actor_ut.cpp
@@ -58,6 +56,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

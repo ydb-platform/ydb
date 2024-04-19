@@ -27,9 +27,6 @@ target_link_options(ydb-core-tx-scheme_board-ut_double_indexed PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-tx-scheme_board-ut_double_indexed PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/double_indexed_ut.cpp
@@ -59,6 +56,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

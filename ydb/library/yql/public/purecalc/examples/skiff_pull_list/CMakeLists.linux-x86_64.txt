@@ -25,9 +25,6 @@ target_link_options(skiff_pull_list PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(skiff_pull_list PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/examples/skiff_pull_list/main.cpp

@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(jaeger)
 
 add_library(yt-library-tracing)
 target_link_libraries(yt-library-tracing PUBLIC

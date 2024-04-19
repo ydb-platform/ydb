@@ -33,8 +33,8 @@ target_link_libraries(dqrun PUBLIC
   yql-dq-comp_nodes
   dq-integration-transform
   yql-dq-transform
-  minikql-comp_nodes-llvm
-  minikql-invoke_builtins-llvm
+  minikql-comp_nodes-llvm14
+  minikql-invoke_builtins-llvm14
   providers-clickhouse-actors
   providers-clickhouse-provider
   providers-common-comp_nodes
@@ -67,8 +67,10 @@ target_link_libraries(dqrun PUBLIC
   providers-yt-dq_task_preprocessor
   yt-gateway-file
   yt-gateway-native
+  yt-codec-codegen
   providers-yt-mkql_dq
   providers-yt-provider
+  yt-comp_nodes-llvm14
   yt-lib-yt_download
   yt-lib-yt_url_lister
   yt-lib-config_clusters
@@ -83,8 +85,6 @@ target_link_options(dqrun PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(dqrun PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/dqrun/dqrun.cpp

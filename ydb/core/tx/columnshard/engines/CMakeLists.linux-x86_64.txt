@@ -37,7 +37,6 @@ target_link_libraries(tx-columnshard-engines PUBLIC
   columnshard-engines-insert_table
   columnshard-engines-changes
   columnshard-engines-portions
-  formats-arrow-compression
   core-tx-program
   udf-service-exception_policy
 )

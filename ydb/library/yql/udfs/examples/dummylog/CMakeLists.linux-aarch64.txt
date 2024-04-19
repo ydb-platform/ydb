@@ -32,9 +32,6 @@ target_link_options(dummylog.dyn PRIVATE
   -Wl,-z,notext
   -Wl,-Bsymbolic
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(dummylog.dyn PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/examples/dummylog/dummylog_udf.cpp

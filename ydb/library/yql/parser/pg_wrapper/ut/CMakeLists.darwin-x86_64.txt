@@ -19,11 +19,13 @@ target_compile_options(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   -Wno-duplicate-decl-specifier
   -Wno-unused-function
   -Wno-unused-variable
+  -Wno-unused-but-set-variable
   -Wno-unused-private-field
   -Wno-register
   -Wno-unguarded-availability-new
   -Wno-int-conversion
   -Wno-deprecated-declarations
+  -Wno-null-pointer-subtraction
   -Darray_length=yql_array_length
   -Dpg_encoding_max_length=yql_pg_encoding_max_length
   -Dpg_encoding_mblen=yql_pg_encoding_mblen
@@ -105,7 +107,6 @@ target_compile_options(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   -Dpg_hmac_create=yql_pg_hmac_create
   -Dpg_pwritev_with_retry=yql_pg_pwritev_with_retry
   -DUSE_CURRENT_UDF_ABI_VERSION
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper
@@ -120,19 +121,18 @@ target_link_libraries(ydb-library-yql-parser-pg_wrapper-ut PUBLIC
   yql-minikql-arrow
   yql-public-udf
   udf-service-exception_policy
-  minikql-comp_nodes-llvm
+  minikql-comp_nodes-llvm14
   yql-parser-pg_catalog
-  yql-minikql-codegen
+  minikql-codegen-llvm14
   library-cpp-resource
 )
 target_link_options(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/arrow_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/codegen_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/error_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/parser_ut.cpp
@@ -165,6 +165,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

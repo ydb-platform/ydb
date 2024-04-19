@@ -173,6 +173,12 @@ protected:
     const TString TaskIdentifier = TGUID::Create().AsGuidString();
     virtual ui64 DoCalcMemoryForUsage() const = 0;
 public:
+    class IMemoryPredictor {
+    public:
+        virtual ui64 AddPortion(const TPortionInfo& portionInfo) = 0;
+        virtual ~IMemoryPredictor() = default;
+    };
+
     ui64 CalcMemoryForUsage() const {
         return DoCalcMemoryForUsage();
     }

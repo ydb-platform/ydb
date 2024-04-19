@@ -28,9 +28,6 @@ target_link_options(dq_cli PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(dq_cli PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/dq/dq_cli/main.cpp

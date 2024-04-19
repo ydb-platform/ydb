@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(accessservice)
 add_subdirectory(compute)
 add_subdirectory(iam)
 add_subdirectory(kms)

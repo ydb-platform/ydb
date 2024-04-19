@@ -21,6 +21,7 @@ target_link_libraries(ydb-core-tablet PUBLIC
   cpp-deprecated-enum_codegen
   library-cpp-yson
   ydb-core-base
+  graph-shard-protos
   ydb-core-mon
   ydb-core-mon_alloc
   ydb-core-node_whiteboard
@@ -33,6 +34,29 @@ target_link_libraries(ydb-core-tablet PUBLIC
   ydb-library-services
 )
 target_sources(ydb-core-tablet PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/labeled_counters_merger.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/labeled_db_counters.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/node_tablet_monitor.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/pipe_tracker.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/resource_broker.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/resource_broker_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_counters.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_counters_aggregator.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_counters_app.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_counters_protobuf.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_exception.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_list_renderer.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_metrics.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_monitoring_proxy.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_pipe_client_cache.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_responsiveness_pinger.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_setup.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_sys.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_tracing_signals.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/private/aggregated_counters.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/private/labeled_db_counters.h
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet/bootstrapper.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet/labeled_counters_merger.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet/labeled_db_counters.cpp

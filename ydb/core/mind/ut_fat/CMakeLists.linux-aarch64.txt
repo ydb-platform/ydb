@@ -37,9 +37,6 @@ target_link_options(ydb-core-mind-ut_fat PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-mind-ut_fat PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/ut_fat/blobstorage_node_warden_ut_fat.cpp
@@ -69,6 +66,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

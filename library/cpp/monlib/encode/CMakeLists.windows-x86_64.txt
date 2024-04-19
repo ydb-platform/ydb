@@ -27,6 +27,7 @@ target_link_libraries(cpp-monlib-encode PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(cpp-monlib-encode PRIVATE
+  ${CMAKE_BINARY_DIR}/library/cpp/monlib/encode/encoder_state_enum.h_serialized.h
   ${CMAKE_SOURCE_DIR}/library/cpp/monlib/encode/encoder.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/monlib/encode/encoder_state.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/monlib/encode/format.cpp

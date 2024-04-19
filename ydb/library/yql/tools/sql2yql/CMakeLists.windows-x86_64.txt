@@ -8,9 +8,6 @@
 
 
 add_executable(sql2yql)
-target_compile_options(sql2yql PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
 target_link_libraries(sql2yql PUBLIC
   contrib-libs-cxxsupp
   yutil

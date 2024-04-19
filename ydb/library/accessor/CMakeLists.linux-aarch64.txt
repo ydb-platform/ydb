@@ -12,7 +12,9 @@ target_link_libraries(ydb-library-accessor PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  library-actors-core
 )
 target_sources(ydb-library-accessor PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/accessor/accessor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/accessor/validator.cpp
 )

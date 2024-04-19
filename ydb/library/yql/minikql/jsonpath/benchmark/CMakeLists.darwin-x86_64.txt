@@ -18,7 +18,7 @@ target_link_libraries(jsonpath-benchmark PUBLIC
   testing-benchmark-main
   library-cpp-json
   yql-minikql-dom
-  minikql-invoke_builtins-llvm
+  minikql-invoke_builtins-llvm14
   yql-minikql-jsonpath
   yql-public-issue
   udf-service-exception_policy
@@ -28,8 +28,6 @@ target_link_options(jsonpath-benchmark PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(jsonpath-benchmark PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/benchmark/main.cpp

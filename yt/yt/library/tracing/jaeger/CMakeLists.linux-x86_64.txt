@@ -36,6 +36,7 @@ target_proto_messages(library-tracing-jaeger PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/library/tracing/jaeger/model.proto
 )
 target_sources(library-tracing-jaeger PRIVATE
+  ${CMAKE_BINARY_DIR}/yt/yt/library/tracing/jaeger/model.pb.h
   ${CMAKE_SOURCE_DIR}/yt/yt/library/tracing/jaeger/sampler.cpp
 )
 target_proto_addincls(library-tracing-jaeger

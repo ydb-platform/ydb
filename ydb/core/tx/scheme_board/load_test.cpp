@@ -57,14 +57,14 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
             TDescription& dirDesc = dirDescTwoPart.Record;
 
             dirDesc.SetStatus(NKikimrScheme::StatusSuccess);
-            dirDesc.SetPathOwner(owner);
+            dirDesc.SetPathOwnerId(owner);
             dirDesc.SetPathId(nextPathId++);
             dirDesc.SetPath(dirPath);
 
             auto& dirSelf = *dirDesc.MutablePathDescription()->MutableSelf();
             dirSelf.SetName(dirName);
             dirSelf.SetPathId(dirDesc.GetPathId());
-            dirSelf.SetSchemeshardId(dirDesc.GetPathOwner());
+            dirSelf.SetSchemeshardId(dirDesc.GetPathOwnerId());
             dirSelf.SetPathType(NKikimrSchemeOp::EPathTypeDir);
             dirSelf.SetCreateFinished(true);
             dirSelf.SetCreateTxId(1);
@@ -84,7 +84,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
                 TDescription& objDesc = objDescTwoPart.Record;
 
                 objDesc.SetStatus(NKikimrScheme::StatusSuccess);
-                objDesc.SetPathOwner(owner);
+                objDesc.SetPathOwnerId(owner);
                 objDesc.SetPathId(nextPathId++);
                 objDesc.SetPath(objPath);
 
@@ -94,7 +94,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
                 dirChildren.Add()->CopyFrom(objSelf);
 
                 objSelf.SetPathId(objDesc.GetPathId());
-                objSelf.SetSchemeshardId(objDesc.GetPathOwner());
+                objSelf.SetSchemeshardId(objDesc.GetPathOwnerId());
                 objSelf.SetCreateFinished(true);
                 objSelf.SetCreateTxId(1);
                 objSelf.SetCreateStep(1);
@@ -194,7 +194,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
 
         Descriptions = GenerateDescriptions(Owner, Config, NextPathId);
         Populator = Register(CreateSchemeBoardPopulator(
-            Owner, Max<ui64>(), ssId, Descriptions, NextPathId
+            Owner, Max<ui64>(), ssId, std::vector<std::pair<TPathId, TTwoPartDescription>>(Descriptions.begin(), Descriptions.end()), NextPathId
         ));
 
         TPathId pathId(Owner, NextPathId - 1);
@@ -236,7 +236,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
         Send(Subscriber, new TEvents::TEvPoisonPill());
         Subscriber = TActorId();
 
-        const TInstant ts = TInstant::FromValue(GetPathVersion(msg->DescribeSchemeResult));
+        const TInstant ts = TInstant::FromValue(NSchemeBoard::GetPathVersion(msg->DescribeSchemeResult));
         *SyncDuration = (TlsActivationContext->Now() - ts).MilliSeconds();
 
         Test();
@@ -352,7 +352,7 @@ class TLoadConsumer: public TActorBootstrapped<TLoadConsumer> {
     void Handle(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev) {
         const auto* msg = ev->Get();
 
-        const TInstant ts = TInstant::FromValue(GetPathVersion(msg->DescribeSchemeResult));
+        const TInstant ts = TInstant::FromValue(NSchemeBoard::GetPathVersion(msg->DescribeSchemeResult));
         if (IsDir(msg->DescribeSchemeResult)) {
             LatencyDir->Collect((TlsActivationContext->Now() - ts).MilliSeconds());
         } else {

@@ -7,7 +7,6 @@
 
 
 add_subdirectory(common)
-add_subdirectory(compression)
 add_subdirectory(dictionary)
 add_subdirectory(hash)
 add_subdirectory(reader)
@@ -41,8 +40,14 @@ target_link_libraries(core-formats-arrow PUBLIC
   ydb-library-binary_json
   ydb-library-dynumber
   ydb-library-services
+  core-arrow_kernels-request
 )
 target_sources(core-formats-arrow PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/converter.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/input_stream.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/merging_sorted_input_stream.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/one_batch_input_stream.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/sort_cursor.h
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/arrow_batch_builder.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/arrow_filter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/arrow_helpers.cpp

@@ -7,6 +7,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 
+#include <ydb/core/control/immediate_control_board_wrapper.h>
 #include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NKqp {
@@ -19,9 +20,12 @@ struct TKqpWorkerSettings {
     NKikimrConfig::TTableServiceConfig TableService;
     NKikimrConfig::TQueryServiceConfig QueryService;
 
+    TControlWrapper MkqlInitialMemoryLimit;
+    TControlWrapper MkqlMaxMemoryLimit;
+
     TKqpDbCountersPtr DbCounters;
 
-    TKqpWorkerSettings(const TString& cluster, const TString& database,
+    explicit TKqpWorkerSettings(const TString& cluster, const TString& database,
                        const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
                        const  NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
                        TKqpDbCountersPtr dbCounters)
@@ -29,7 +33,15 @@ struct TKqpWorkerSettings {
         , Database(database)
         , TableService(tableServiceConfig)
         , QueryService(queryServiceConfig)
-        , DbCounters(dbCounters) {}
+        , MkqlInitialMemoryLimit(2097152, 1, Max<i64>())
+        , MkqlMaxMemoryLimit(1073741824, 1, Max<i64>())
+        , DbCounters(dbCounters)
+    {
+        AppData()->Icb->RegisterSharedControl(
+            MkqlInitialMemoryLimit, "KqpSession.MkqlInitialMemoryLimit");
+        AppData()->Icb->RegisterSharedControl(
+            MkqlMaxMemoryLimit, "KqpSession.MkqlMaxMemoryLimit");
+    }
 };
 
 IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,

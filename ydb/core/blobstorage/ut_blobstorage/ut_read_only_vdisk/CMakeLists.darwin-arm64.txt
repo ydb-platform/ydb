@@ -22,8 +22,6 @@ target_link_options(ut_blobstorage-ut_read_only_vdisk PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(ut_blobstorage-ut_read_only_vdisk PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/read_only_vdisk.cpp
@@ -53,6 +51,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

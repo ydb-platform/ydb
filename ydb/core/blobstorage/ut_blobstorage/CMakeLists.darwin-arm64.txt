@@ -7,6 +7,7 @@
 
 
 add_subdirectory(lib)
+add_subdirectory(ut_balancing)
 add_subdirectory(ut_blob_depot)
 add_subdirectory(ut_blob_depot_fat)
 add_subdirectory(ut_donor)
@@ -33,8 +34,6 @@ target_link_options(ydb-core-blobstorage-ut_blobstorage PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(ydb-core-blobstorage-ut_blobstorage PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/assimilation.cpp
@@ -49,6 +48,7 @@ target_sources(ydb-core-blobstorage-ut_blobstorage PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/incorrect_queries.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/index_restore_get.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/main.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/mirror3dc.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/mirror3of4.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/monitoring.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/recovery.cpp
@@ -87,6 +87,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

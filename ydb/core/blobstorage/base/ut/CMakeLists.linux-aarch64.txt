@@ -26,9 +26,6 @@ target_link_options(ydb-core-blobstorage-base-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-blobstorage-base-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/batched_vec_ut.cpp
@@ -47,6 +44,7 @@ set_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_property(
   TEST

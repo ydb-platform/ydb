@@ -62,8 +62,6 @@ target_link_options(yson2_udf.dyn PRIVATE
   -undefined
   dynamic_lookup
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(yson2_udf.dyn PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/yson2/yson2_udf.cpp

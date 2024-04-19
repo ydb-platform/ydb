@@ -30,6 +30,9 @@ target_link_libraries(api-service-protos PUBLIC
 target_proto_messages(api-service-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/api/service/protos/connector.proto
 )
+target_sources(api-service-protos PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h
+)
 target_proto_addincls(api-service-protos
   ./
   ${CMAKE_SOURCE_DIR}/

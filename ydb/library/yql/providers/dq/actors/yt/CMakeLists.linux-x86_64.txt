@@ -29,6 +29,12 @@ target_link_libraries(dq-actors-yt PUBLIC
   yt-yt-client
 )
 target_sources(dq-actors-yt PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/nodeid_assigner.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/resource_manager.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/nodeid_cleaner.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/worker_registrator.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/lock.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/yt_wrapper.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/nodeid_assigner.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/resource_manager.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/nodeid_cleaner.cpp

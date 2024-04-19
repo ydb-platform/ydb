@@ -40,7 +40,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   core-grpc_services-cancelation
   core-grpc_services-auth_processor
   ydb-core-health_check
-  ydb-core-io_formats
+  core-io_formats-ydb_dump
   core-kesus-tablet
   core-kqp-common
   ydb-core-protos
@@ -70,6 +70,8 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   services-ext_index-common
 )
 target_sources(ydb-core-grpc_services PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/db_metadata_cache.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/query/service_query.h
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/audit_log.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/audit_dml_operations.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/grpc_endpoint_publish_actor.cpp

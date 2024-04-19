@@ -20,6 +20,11 @@ target_link_libraries(core-sys_view-storage PUBLIC
   core-sys_view-common
 )
 target_sources(core-sys_view-storage PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/groups.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/pdisks.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/storage_pools.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/storage_stats.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/vslots.h
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/groups.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/pdisks.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/storage/storage_pools.cpp

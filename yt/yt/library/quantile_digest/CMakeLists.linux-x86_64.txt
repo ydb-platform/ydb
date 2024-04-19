@@ -36,6 +36,7 @@ target_proto_messages(yt-library-quantile_digest PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/library/quantile_digest/proto/quantile_digest.proto
 )
 target_sources(yt-library-quantile_digest PRIVATE
+  ${CMAKE_BINARY_DIR}/yt/yt/library/quantile_digest/proto/quantile_digest.pb.h
   ${CMAKE_SOURCE_DIR}/yt/yt/library/quantile_digest/config.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/library/quantile_digest/quantile_digest.cpp
 )

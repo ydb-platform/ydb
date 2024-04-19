@@ -281,8 +281,42 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
 
         const TVector<TString> tables = {R"(
             Name: "Table"
-            Columns { Name: "key" Type: "Utf8" }
-            Columns { Name: "value" Type: "Utf8" }
+            Columns {
+                Name: "key"
+                Type: "Utf8"
+                DefaultFromLiteral {
+                    type {
+                        optional_type {
+                            item {
+                                type_id: UTF8
+                            }
+                        }
+                    }
+                    value {
+                        items {
+                            text_value: "b"
+                        }
+                    }
+                }
+            }
+            Columns {
+                Name: "value"
+                Type: "Utf8"
+                DefaultFromLiteral {
+                    type {
+                        optional_type {
+                            item {
+                                type_id: UTF8
+                            }
+                        }
+                    }
+                    value {
+                        items {
+                            text_value: "a"
+                        }
+                    }
+                }
+            }
             KeyColumnNames: ["key"]
             PartitionConfig {
               ColumnFamilies {
@@ -330,7 +364,20 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
       }
     }
   }
-  not_null: false
+  from_literal {
+    type {
+      optional_type {
+        item {
+          type_id: UTF8
+        }
+      }
+    }
+    value {
+      items {
+        text_value: "b"
+      }
+    }
+  }
 }
 columns {
   name: "value"
@@ -341,7 +388,20 @@ columns {
       }
     }
   }
-  not_null: false
+  from_literal {
+    type {
+      optional_type {
+        item {
+          type_id: UTF8
+        }
+      }
+    }
+    value {
+      items {
+        text_value: "a"
+      }
+    }
+  }
 }
 primary_key: "key"
 storage_settings {

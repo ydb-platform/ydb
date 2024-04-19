@@ -39,6 +39,10 @@ target_link_libraries(yc_private-kms-asymmetricencryption PUBLIC
 target_proto_messages(yc_private-kms-asymmetricencryption PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/kms/asymmetricencryption/asymmetric_encryption_key.proto
 )
+target_sources(yc_private-kms-asymmetricencryption PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/kms/asymmetricencryption/asymmetric_encryption_key.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/public/api/client/yc_private/kms/asymmetricencryption/asymmetric_encryption_key.grpc.pb.h
+)
 target_proto_addincls(yc_private-kms-asymmetricencryption
   ./
   ${CMAKE_SOURCE_DIR}/

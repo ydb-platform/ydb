@@ -15,6 +15,7 @@ add_subdirectory(failure_injector)
 add_subdirectory(fetch)
 add_subdirectory(log)
 add_subdirectory(plan)
+add_subdirectory(signals)
 add_subdirectory(simd)
 add_subdirectory(sys)
 add_subdirectory(test_http_server)
@@ -35,6 +36,24 @@ target_link_libraries(library-yql-utils PUBLIC
   contrib-libs-miniselect
 )
 target_sources(library-yql-utils PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/bind_in_range.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/cast.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/debug_info.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/future_action.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/hash.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/md5_stream.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/method_index.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/multi_resource_lock.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/parse_double.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/proc_alive.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/rand_guid.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/resetable_setting.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/retry.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/rope_over_buffer.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/sort.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/swap_bytes.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/yql_panic.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/yql_paths.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/bind_in_range.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/debug_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/future_action.cpp

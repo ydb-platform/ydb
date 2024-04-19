@@ -26,6 +26,7 @@ target_link_options(restricted-aws-aws-c-cal INTERFACE
   Security
 )
 target_sources(restricted-aws-aws-c-cal PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/darwin/common_cryptor_spi.h
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/cal.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/der.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/ecc.c

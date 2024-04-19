@@ -14,6 +14,7 @@ target_link_libraries(ydb-core-blobstorage-ut_group PUBLIC
   yutil
   library-cpp-cpuid_check
   cpp-testing-unittest_main
+  version_definition
   actors-interconnect-mock
   cpp-testing-unittest
   core-blobstorage-crypto
@@ -31,9 +32,6 @@ target_link_options(ydb-core-blobstorage-ut_group PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-blobstorage-ut_group PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_group/main.cpp
@@ -63,6 +61,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

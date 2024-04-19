@@ -207,7 +207,7 @@ protected:
         TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleUpdate);
-            sFunc(TEvents::TEvPoison, ScheduleStop);
+            SFunc(TEvents::TEvPoison, TThis::Die);
         }
     }
 
@@ -237,7 +237,7 @@ protected:
             HFunc(NKikimr::TEvPQ::TEvCheckPartitionStatusResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, HandleOwnership);
             HFunc(TEvTabletPipe::TEvClientDestroyed, HandleOwnership);
-            sFunc(TEvents::TEvPoison, ScheduleStop);
+            SFunc(TEvents::TEvPoison, TThis::Die);
         }
     }
 

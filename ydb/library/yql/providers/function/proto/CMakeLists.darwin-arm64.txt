@@ -28,6 +28,9 @@ target_link_libraries(providers-function-proto PUBLIC
 target_proto_messages(providers-function-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/function/proto/dq_function.proto
 )
+target_sources(providers-function-proto PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/function/proto/dq_function.pb.h
+)
 target_proto_addincls(providers-function-proto
   ./
   ${CMAKE_SOURCE_DIR}/

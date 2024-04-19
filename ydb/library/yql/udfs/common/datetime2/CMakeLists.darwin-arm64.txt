@@ -68,8 +68,6 @@ target_link_options(datetime2_udf.dyn PRIVATE
   -undefined
   dynamic_lookup
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(datetime2_udf.dyn PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/datetime2/datetime_udf.cpp

@@ -22,9 +22,6 @@ target_link_options(secondary_index_builtin PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(secondary_index_builtin PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/main.cpp

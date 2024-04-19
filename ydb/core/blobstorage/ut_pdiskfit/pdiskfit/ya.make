@@ -6,6 +6,7 @@ IF (OS_LINUX)
     )
 
     PEERDIR(
+        ydb/apps/version
         library/cpp/getopt
         library/cpp/string_utils/parse_size
         ydb/core/blobstorage

@@ -271,6 +271,8 @@ private:
 
     TActorId PartitionWriterCache;
     TActorId PartitionChooser;
+
+    bool SessionClosed = false;
 };
 
 }

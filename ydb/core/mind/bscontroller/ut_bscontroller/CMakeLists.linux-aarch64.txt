@@ -31,9 +31,6 @@ target_link_options(ydb-core-mind-bscontroller-ut_bscontroller PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-mind-bscontroller-ut_bscontroller PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_bscontroller/main.cpp
@@ -63,6 +60,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

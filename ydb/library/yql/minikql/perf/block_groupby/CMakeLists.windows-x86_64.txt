@@ -17,7 +17,7 @@ target_link_libraries(block_groupby PUBLIC
   library-cpp-cpuid_check
   libs-apache-arrow
   yql-minikql-arrow
-  minikql-comp_nodes-llvm
+  minikql-comp_nodes-llvm14
   yql-public-udf
   udf-service-exception_policy
   yql-sql-pg_dummy

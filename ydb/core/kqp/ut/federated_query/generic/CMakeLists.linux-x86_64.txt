@@ -35,9 +35,6 @@ target_link_options(ydb-core-kqp-ut-federated_query-generic PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-kqp-ut-federated_query-generic PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/generic/ch_recipe_ut_helpers.cpp
@@ -51,7 +48,7 @@ set_property(
   ydb-core-kqp-ut-federated_query-generic
   PROPERTY
   SPLIT_FACTOR
-  10
+  1
 )
 add_yunittest(
   NAME
@@ -70,7 +67,8 @@ set_yunittest_property(
   ydb-core-kqp-ut-federated_query-generic
   PROPERTY
   LABELS
-  SMALL
+  MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

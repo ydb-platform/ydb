@@ -32,14 +32,13 @@ target_link_libraries(yql-providers-generic-provider-ut-pushdown PUBLIC
   providers-result-provider
   udf-service-stub
   library-yql-sql
+  minikql-invoke_builtins-llvm14
   yql-sql-pg_dummy
 )
 target_link_options(yql-providers-generic-provider-ut-pushdown PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(yql-providers-generic-provider-ut-pushdown PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/ut/pushdown/pushdown_ut.cpp
@@ -69,6 +68,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

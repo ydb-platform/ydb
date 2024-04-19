@@ -6,7 +6,9 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(olap)
 add_subdirectory(ut_auditsettings)
+add_subdirectory(ut_background_cleaning)
 add_subdirectory(ut_backup)
 add_subdirectory(ut_base)
 add_subdirectory(ut_base_reboots)
@@ -97,7 +99,6 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   core-engine-minikql
   ydb-core-external_sources
   core-filestore-core
-  formats-arrow-compression
   core-kesus-tablet
   ydb-core-metering
   ydb-core-persqueue
@@ -112,6 +113,7 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   ydb-core-tablet_flat
   ydb-core-tx
   core-tx-datashard
+  tx-schemeshard-olap
   core-tx-scheme_board
   core-tx-tx_allocator_client
   ydb-core-util
@@ -125,7 +127,27 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   ydb-services-bg_tasks
 )
 target_sources(core-tx-schemeshard PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_side_effects.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_common.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_common_subdomain.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_part.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_domain_links.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_effective_acl.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_info_types.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_path_element.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_path.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_schema.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_svp_migration.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_tx_infly.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_types.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_user_attr_limits.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_utils.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/operation_queue_timer.h
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__background_cleaning.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__borrowed_compaction.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__compaction.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__clean_pathes.cpp
@@ -149,13 +171,13 @@ target_sources(core-tx-schemeshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_memory_changes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_db_changes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_bsv.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_external_data_source.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_external_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_extsubdomain.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_fs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_index.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_kesus.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_login.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_olap_store.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_olap_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_pq.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_solomon.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_subdomain.cpp
@@ -164,6 +186,8 @@ target_sources(core-tx-schemeshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_assign_bsv.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_cancel_tx.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_common_external_data_source.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_common_external_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_consistent_copy_tables.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_copy_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_backup.cpp
@@ -176,8 +200,6 @@ target_sources(core-tx-schemeshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_indexed_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_kesus.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_lock.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_olap_store.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_olap_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_pq.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_replication.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_restore.cpp
@@ -195,8 +217,6 @@ target_sources(core-tx-schemeshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_indexed_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_kesus.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_lock.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_olap_store.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_olap_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_pq.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_replication.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_sequence.cpp
@@ -244,7 +264,6 @@ target_sources(core-tx-schemeshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_effective_acl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_identificators.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_info_types.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_olap_types.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_path_describer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_path_element.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_path.cpp

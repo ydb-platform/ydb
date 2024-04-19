@@ -7,6 +7,7 @@ import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/public/api/protos/ydb_cms.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 package NKikimrScheme;
 option java_package = "ru.yandex.kikimr.proto";
@@ -53,7 +54,7 @@ message TEvModifySchemeTransaction {
     optional uint64 TabletId = 3;
     optional string Owner = 5;
     optional bool FailOnExist = 6; // depricated, TModifyScheme.FailOnExist is recomended
-    optional string UserToken = 7; // serialized NACLib::TUserToken
+    optional string UserToken = 7 [(Ydb.sensitive) = true]; // serialized NACLib::TUserToken
     optional string PeerName = 8;
 }
 
@@ -106,12 +107,13 @@ message TEvDescribeSchemeResult {
     optional string Reason = 2;
     optional string Path = 3;
     optional NKikimrSchemeOp.TPathDescription PathDescription = 4;
-    optional fixed64 PathOwner = 5;
+    optional fixed64 DEPRECATED_PathOwner = 5;  // replaced by PathOwnerId
     optional fixed64 PathId = 6;
 
     optional string LastExistedPrefixPath = 7;
     optional fixed64 LastExistedPrefixPathId = 8;
     optional NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9;
+
     optional fixed64 PathOwnerId = 10;
 }
 
@@ -263,6 +265,7 @@ message TMigrateColumn {
     optional uint32 DefaultKind = 8;
     optional bytes DefaultValue = 9;
     optional bool NotNull = 10;
+    optional bool IsBuildInProgress = 12;
 }
 
 message TMigratePartition {

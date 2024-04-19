@@ -725,7 +725,7 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     if (const auto& serverlessComputeResourcesMode = subDomainInfo->GetServerlessComputeResourcesMode()) {
         entry->SetServerlessComputeResourcesMode(*serverlessComputeResourcesMode);
     }
-    
+
     if (TTabletId sharedHive = subDomainInfo->GetSharedHive()) {
         entry->SetSharedHive(sharedHive.GetValue());
     }
@@ -944,11 +944,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
                 pathStr = path.PathString();
             }
 
-            Result.Reset(new TEvSchemeShard::TEvDescribeSchemeResultBuilder(
-                pathStr,
-                Self->TabletID(),
-                pathId
-                ));
+            Result.Reset(new TEvSchemeShard::TEvDescribeSchemeResultBuilder(pathStr, pathId));
             Result->Record.SetStatus(checks.GetStatus());
             Result->Record.SetReason(checks.GetError());
 
@@ -963,7 +959,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         }
     }
 
-    Result = MakeHolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder>(pathStr, Self->TabletID(), pathId);
+    Result = MakeHolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder>(pathStr, pathId);
 
     auto descr = Result->Record.MutablePathDescription()->MutableSelf();
     FillPathDescr(descr, path);
@@ -1118,6 +1114,8 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
                 colDescr->SetFamilyName(it->second);
             }
         }
+
+        colDescr->SetIsBuildInProgress(cinfo.IsBuildInProgress);
 
         switch (cinfo.DefaultKind) {
             case ETableColumnDefaultKind::None:

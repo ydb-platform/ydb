@@ -27,8 +27,6 @@ target_link_options(ydb-core-kafka_proxy-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(ydb-core-kafka_proxy-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/ut/ut_kafka_functions.cpp
@@ -60,7 +58,8 @@ set_yunittest_property(
   ydb-core-kafka_proxy-ut
   PROPERTY
   LABELS
-  SMALL
+  medium
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

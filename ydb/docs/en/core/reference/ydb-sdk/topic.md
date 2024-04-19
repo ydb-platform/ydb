@@ -1263,15 +1263,15 @@ If commit fails with error, application should log it and continue, it makes no 
 
 ### Reading with consumer offset storage on the client side {#client-commit}
 
-Instead of committing messages client application may track reading progress on its own. In this case client can provide a handler, which will be called back on each partition read start. This handler may set starting reading position for this partition.
+Instead of committing messages, the client application may track reading progress on its own. In this case, it can provide a handler, which will be called back on each partition read start. This handler may set a starting reading position for this partition.
 
 {% list tabs %}
 
 - C++
 
-  Starting position of specific partition read can be set during `TStartPartitionSessionEvent` handling.
-  For this purpose `TStartPartitionSessionEvent::Confirm` has a `readOffset` parameter.
-  Additionally there is a `commitOffset` parameter, which will tell server to consider all messages with lesser offsets [committed](#commit).
+  The starting position of a specific partition read can be set during `TStartPartitionSessionEvent` handling.
+  For this purpose, `TStartPartitionSessionEvent::Confirm` has a `readOffset` parameter.
+  Additionally, there is a `commitOffset` parameter that tells the server to consider all messages with lesser offsets [committed](#commit).
 
   Setting handler example:
   ```cpp
@@ -1282,9 +1282,9 @@ Instead of committing messages client application may track reading progress on 
       }
   );
   ```
-  In the code above `GetOffsetToReadFrom` is a part of the example, not SDK. Use your own way to provide correct starting offset for a partition with given partition id.
+  In the code above,`GetOffsetToReadFrom` is part of the example, not SDK. Use your own method to provide the correct starting offset for a partition with a given partition id.
 
-  Also `TReadSessionSettings` have a `ReadFromTimestamp` setting for reading only messages newer than given timestamp. This setting is intended to be used to skip some amount of messages, not for precise reading start positioning. Several first received messages may still have timestamps less than specified.
+  Also, `TReadSessionSettings` has a `ReadFromTimestamp` setting for reading only messages newer than the given timestamp. This setting is intended to skip some messages, not for precise reading start positioning. Several first-received messages may still have timestamps less than the specified one.
 
 - Go
 

@@ -42,7 +42,6 @@ RECURSE(
     node_whiteboard
     persqueue
     pgproxy
-    protos
     public_http
     quoter
     raw_socket

@@ -19,7 +19,7 @@ namespace NKikimr::NSsa {
 
 // Bump this version every time incompatible runtime functions are introduced.
 #ifndef SSA_RUNTIME_VERSION
-#define SSA_RUNTIME_VERSION 4U
+#define SSA_RUNTIME_VERSION 5U
 #endif
 
 // History:

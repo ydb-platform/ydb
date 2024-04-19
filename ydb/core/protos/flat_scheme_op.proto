@@ -621,7 +621,6 @@ message TColumnStorageConfig {
 
 // This is used internally by schemeshard
 message TColumnStoreSharding {
-    repeated TShardIdx MetaShards = 1;
     repeated TShardIdx ColumnShards = 2;
 }
 

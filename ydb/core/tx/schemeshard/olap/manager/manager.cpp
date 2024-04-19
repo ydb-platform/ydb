@@ -1,5 +1,4 @@
-#include "schemeshard_tables_storage.h"
-#include "schemeshard_impl.h"
+#include "manager.h"
 
 namespace NKikimr::NSchemeShard {
 
@@ -111,25 +110,6 @@ void TTablesStorage::TTableExtractedGuard::UseAlterDataVerified() {
     Y_ABORT_UNLESS(alterInfo);
     alterInfo->AlterBody.Clear();
     Object = alterInfo;
-}
-
-std::vector<ui64> TColumnTablesLayout::ShardIdxToTabletId(const std::vector<TShardIdx>& shards, const TSchemeShard& ss) {
-    std::vector<ui64> result;
-    for (const auto& shardIdx : shards) {
-        auto* shardInfo = ss.ShardInfos.FindPtr(shardIdx);
-        Y_ABORT_UNLESS(shardInfo, "ColumnShard not found");
-        result.emplace_back(shardInfo->TabletID.GetValue());
-    }
-    return result;
-}
-
-TColumnTablesLayout TColumnTablesLayout::BuildTrivial(const std::vector<ui64>& tabletIds) {
-    TTableIdsGroup emptyGroup;
-    TShardIdsGroup shardIdsGroup;
-    for (const auto& tabletId : tabletIds) {
-        shardIdsGroup.AddId(tabletId);
-    }
-    return TColumnTablesLayout({ TTablesGroup(std::move(emptyGroup), std::move(shardIdsGroup)) });
 }
 
 bool TTablesStorage::TTableCreateOperator::InitShardingTablets(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, TOlapStoreInfo::ILayoutPolicy::TPtr layoutPolicy, bool& isNewGroup) const {

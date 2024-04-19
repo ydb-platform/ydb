@@ -74,6 +74,11 @@
         "size": 134,
         "uri": "https://{canondata_backend}/1937367/0c34a75b8b4a5365c02304ca6cc4b2edceabb822/resource.tar.gz#test.test_expr-literal_strings-default.txt_/results.txt"
     },
+    "test.test[expr-minmax_for_complex_types-default.txt]": {
+        "checksum": "75eac89ef8ad90f44ef237f9ee70f31d",
+        "size": 232,
+        "uri": "https://{canondata_backend}/1889210/e82fcafca2c88e8b7bf00a30b73f2619a330c7ea/resource.tar.gz#test.test_expr-minmax_for_complex_types-default.txt_/results.txt"
+    },
     "test.test[expr-opt_list_map-default.txt]": {
         "checksum": "6080042f77b81a97a54564fd851ec481",
         "size": 718,

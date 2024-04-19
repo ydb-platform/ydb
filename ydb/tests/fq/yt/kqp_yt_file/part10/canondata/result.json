@@ -159,6 +159,11 @@
         "size": 246,
         "uri": "https://{canondata_backend}/1777230/054cf45d3459ba38b9ed1e35437488db29538beb/resource.tar.gz#test.test_join-left_trivial-_/results.txt"
     },
+    "test.test[join-mapjoin_sharded-default.txt]": {
+        "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+        "size": 0,
+        "uri": "https://{canondata_backend}/1937492/d9d70dd9c16ef94f763ae7be8c2d3049b6abafb9/resource.tar.gz#test.test_join-mapjoin_sharded-default.txt_/results.txt"
+    },
     "test.test[join-mapjoin_unused_keys-]": {
         "checksum": "2667f38030cda204c8748b8c5fcebdc2",
         "size": 176,

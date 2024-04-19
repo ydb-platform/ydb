@@ -11,28 +11,25 @@
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
 
-namespace NKikimr {
-namespace NGRpcService {
+namespace NKikimr::NGRpcService {
 
 using namespace NActors;
 using namespace NKikimrIssues;
 using namespace Ydb;
 
-using TEvFetchBackupCollectionsRequest = TGrpcRequestOperationCall<
-    Ydb::Backup::FetchBackupCollectionsRequest,
-    Ydb::Backup::FetchBackupCollectionsResponse>;
-
-class TFetchBackupCollectionsRPC
+template <class TIn, class TOut>
+class TBackupCollectionsRPC
     : public TRpcOperationRequestActor<
-        TFetchBackupCollectionsRPC,
-        TEvFetchBackupCollectionsRequest,
+        TBackupCollectionsRPC<TIn, TOut>,
+        TGrpcRequestOperationCall<TIn, TOut>,
         true
     >
 {
 public:
+    using TSelf = TBackupCollectionsRPC<TIn, TOut>;
     using TRpcOperationRequestActor<
-        TFetchBackupCollectionsRPC,
-        TEvFetchBackupCollectionsRequest,
+        TBackupCollectionsRPC<TIn, TOut>,
+        TGrpcRequestOperationCall<TIn, TOut>,
         true
     >::TRpcOperationRequestActor;
 
@@ -43,7 +40,7 @@ public:
     IEventBase* MakeRequest() override {
         // TODO copy / transfer event from public api to internal
 
-        auto ev = MakeHolder<NSchemeShard::TEvBackup::TEvFetchBackupCollectionsRequest>();
+        auto ev = MakeHolder<typename NSchemeShard::TEvBackup::TEvApiMapping<TIn>::TEv>();
         ev->Record.SetTxId(this->TxId);
         ev->Record.SetDatabaseName(this->DatabaseName);
         if (this->UserToken) {
@@ -62,7 +59,7 @@ public:
         // TODO some validation
 
         this->AllocateTxId();
-        this->Become(&TFetchBackupCollectionsRPC::StateServe);
+        this->Become(&TSelf::StateServe);
     }
 
     template <class T>
@@ -72,36 +69,28 @@ public:
 
     STATEFN(StateServe) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NSchemeShard::TEvBackup::TEvFetchBackupCollectionsResponse, Handle);
+            hFunc(NSchemeShard::TEvBackup::TEvApiMapping<TOut>::TEv, Handle);
         default:
             return this->StateBase(ev);
         }
     }
 };
 
-void DoFetchBackupCollectionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(new TFetchBackupCollectionsRPC(p.release()));
-}
+#ifdef DEFINE_REQUEST_HANDLER
+#error DEFINE_REQUEST_HANDLER macro redefinition
+#else
+#define DEFINE_REQUEST_HANDLER(NAME) void Do ## NAME ## Request(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) { \
+    f.RegisterActor(new TBackupCollectionsRPC<Ydb::Backup:: NAME ## Request, Ydb::Backup:: NAME ## Response>(p.release())); \
+} Y_SEMICOLON_GUARD
+#endif
 
-void DoListBackupCollectionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(new TFetchBackupCollectionsRPC(p.release()));
-}
+DEFINE_REQUEST_HANDLER(FetchBackupCollections);
+DEFINE_REQUEST_HANDLER(ListBackupCollections);
+DEFINE_REQUEST_HANDLER(CreateBackupCollection);
+DEFINE_REQUEST_HANDLER(ReadBackupCollection);
+DEFINE_REQUEST_HANDLER(UpdateBackupCollection);
+DEFINE_REQUEST_HANDLER(DeleteBackupCollection);
 
-void DoCreateBackupCollectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(new TFetchBackupCollectionsRPC(p.release()));
-}
+#undef DEFINE_REQUEST_HANDLER
 
-void DoReadBackupCollectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(new TFetchBackupCollectionsRPC(p.release()));
-}
-
-void DoUpdateBackupCollectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(new TFetchBackupCollectionsRPC(p.release()));
-}
-
-void DoDeleteBackupCollectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(new TFetchBackupCollectionsRPC(p.release()));
-}
-
-}
-}
+} // namespace NKikimr::NGrpcService

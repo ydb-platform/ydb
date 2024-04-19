@@ -8,16 +8,17 @@ import "google/protobuf/timestamp.proto";
 
 import "ydb/public/api/protos/ydb_operation.proto";
 
+// TODO: move to separate proto shared between different services
 message S3Settings {}
 
 message PathList {
-        repeated string path = 1;
+    repeated string path = 1;
 }
 
 message S3Storage {
-        S3Settings s3_settings = 1;
-        string prefix = 2;
-        // and some additional storage settings, maybe different storage classes
+    S3Settings s3_settings = 1;
+    string prefix = 2;
+    // and some additional storage settings, maybe different storage classes
 }
 
 message LocalStorage {}
@@ -26,17 +27,8 @@ message BackupStorage {
     oneof storage {
         LocalStorage local = 1;
         S3Storage s3 = 2;
-        // + file_storage
+        // TODO: add file_storage
     }
-}
-
-message FetchBackupCollectionsRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    BackupStorage backup_storage = 2;
-}
-
-message ListBackupCollectionsRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
 }
 
 message ChangeStreamChunk {
@@ -91,9 +83,9 @@ message Restore {
 message BackupCollection {
     enum AccessFlags {
         Unspecified = 0x00;
-        READ        = 0x01;
-        WRITE       = 0x02;
-        READ_WRITE  = 0x03;
+        Read        = 0x01;
+        Write       = 0x02;
+        ReadWrite   = 0x03;
     }
 
     /*required*/ string uuid = 1;
@@ -106,9 +98,18 @@ message BackupCollection {
     repeated ChangeStreamChunk change_stream_chunks = 8;
 }
 
+message FetchBackupCollectionsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    BackupStorage backup_storage = 2;
+}
+
 message FetchBackupCollectionsResponse {
     Ydb.Operations.Operation operation = 1;
     repeated BackupCollection backup_collection = 2;
+}
+
+message ListBackupCollectionsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
 }
 
 message ListBackupCollectionsResponse {

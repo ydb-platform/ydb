@@ -4,7 +4,22 @@
 
 Для работы с внешней базой данных ClickHouse необходимо выполнить следующие шаги:
 1. Создать [секрет](../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
-1. Создать [внешний источник данных](../datamodel/external_data_source.md), ведущий на кластер ClickHouse. Для корректной работы с внешними источниками необходимо иметь сетевые доступы со всех хостов {{ydb-full-name}} в целевую систему.
+    ```sql
+    CREATE OBJECT clickhouse_datasource_user_password (TYPE SECRET) WITH (value = "password");
+    ```
+1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий целевую базу данных внутри кластера ClickHouse.  Для соединения с ClickHouse можно использовать либо [нативный TCP-протокол](https://clickhouse.com/docs/ru/interfaces/tcp) (`PROTOCOL="NATIVE"`), либо [протокол HTTP](https://clickhouse.com/docs/ru/interfaces/http) (`PROTOCOL="HTTP"`). При этом необходимо обеспечить сетевой доступ по указанному протоколу со всех хостов {{ydb-full-name}} в целевую систему.
+    ```sql
+    CREATE EXTERNAL DATA SOURCE clickhouse_datasource WITH (
+        SOURCE_TYPE="ClickHouse", 
+        LOCATION="clickhouse_cluster:9440", 
+        DATABASE_NAME="db",
+        AUTH_METHOD="BASIC",
+        LOGIN="user",
+        PASSWORD_SECRET_NAME="clickhouse_datasource_user_password",
+        PROTOCOL="NATIVE",
+        USE_TLS="TRUE"
+    );
+    ```
 1. [Выполнить запрос](#query) к базе данных.
 
 
@@ -12,27 +27,19 @@
 Для работы с ClickHouse используется следующая форма SQL-запроса:
 
 ```sql
-SELECT * FROM test_datasource.`<db>.<table>`
+SELECT * FROM clickhouse_datasource.table_name
 ```
 
 где:
-- `test_datasource` - название созданного подключения к БД.
-- `<db>` - имя базы данных ClickHouse в кластере.
-- `<table>` - имя таблицы в базе данных.
+- `clickhouse_datasource` - идентификатор внешнего источника данных.
+- `table_name` - имя таблицы внутри внешнего источника данных.
 
 ## Ограничения
 
 При работе с кластерами ClickHouse существует ряд ограничений.
 
-{% note warning %}
-
-В настоящий момент независимо от указанных фильтров для чтения таблиц ClickHouse, указанных в SQL-запросе, все данные из таблицы считываются в {{ydb-full-name}} и уже там происходит применение фильтров.
-
-{% endnote %}
-
 Ограничения:
 1. Поддерживаются только запросы чтения данных - `SELECT`, остальные виды запросов не поддерживаются.
-1. Максимальное поддерживаемое количество строк в таблице - 1000000. При превышении этого значения запрос завершается с ошибкой.
 1. {% include [!](_includes/datetime_limits.md) %}
 
 ## Поддерживаемые типы данных
@@ -53,7 +60,9 @@ SELECT * FROM test_datasource.`<db>.<table>`
 |`Float32`|`Float`||
 |`Float64`|`Double`||
 |`Date`|`Date`||
+|`Date32`|`Date`|Допустимый диапазон дат с 1970-01-01 00:00 и до 2105-12-31 23:59|
 |`DateTime`|`DateTime`|Допустимый диапазон дат с 1970-01-01 00:00 и до 2105-12-31 23:59|
+|`DateTime64`|`Timestamp`|Допустимый диапазон дат с 1970-01-01 00:00 и до 2105-12-31 23:59|
 |`String`|`String`||
 |`FixedString`|`String`|Нулевые байты `FixedString` переносятся в `String` без изменений|
 

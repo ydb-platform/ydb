@@ -1,6 +1,6 @@
 # Перемещение State Storage
 
-Если нужно вывести из эксплуатации хост кластера {{ ydb-short-name }}, на котором располагается часть [State Storage](../deploy/configuration/config.md#domains-state), необходимо переместить  ее на другой хост.
+Если нужно вывести из эксплуатации хост кластера {{ ydb-short-name }}, на котором располагается часть [State Storage](../../deploy/configuration/config.md#domains-state), необходимо переместить  ее на другой хост.
 
 {% include [warning-configuration-error](../_includes/warning-configuration-error.md) %}
 
@@ -19,9 +19,9 @@ domains_config:
 ...
 ```
 
-На хосте с `node_id:1` сконфигурирован и запущен [статический узел](../deploy/configuration/config.md#hosts) кластера, который обслуживает часть State Storage. Предположим, нам нужно вывести из эксплуатации этот хост.
+На хосте с `node_id:1` сконфигурирован и запущен [статический узел](../../deploy/configuration/config.md#hosts) кластера, который обслуживает часть State Storage. Предположим, нам нужно вывести из эксплуатации этот хост.
 
-Для замены `node_id:1` мы [добавили](../maintenance/manual/cluster_expansion.md#add-host) в кластер новый хост с `node_id:10` и [развернули](../maintenance/manual/cluster_expansion.md#add-static-node) на нем статический узел.
+Для замены `node_id:1` мы [добавили](../../maintenance/manual/cluster_expansion.md#add-host) в кластер новый хост с `node_id:10` и [развернули](../../maintenance/manual/cluster_expansion.md#add-static-node) на нем статический узел.
 
 Чтобы переместить State Storage с хоста `node_id:1` на `node_id:10`:
 
@@ -42,5 +42,5 @@ domains_config:
     ```
 
 1. Обновите конфигурационные файлы `config.yaml` для всех узлов кластера, в том числе и динамических.
-1. С помощью процедуры [rolling-restart](../maintenance/manual/node_restarting.md) перезапустите все узлы кластера, включая динамические, кроме статических узлов на хостах с `node_id:1` и `node_id:10`.
+1. С помощью процедуры [rolling-restart](../../maintenance/manual/node_restarting.md) перезапустите все узлы кластера, включая динамические, кроме статических узлов на хостах с `node_id:1` и `node_id:10`.
 1. Запустите статические узлы кластера на хостах `node_id:1` и `node_id:10`.

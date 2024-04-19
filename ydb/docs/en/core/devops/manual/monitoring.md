@@ -1,6 +1,6 @@
 # Setting up monitoring for a local {{ ydb-short-name }} cluster
 
-This page provides instructions on how to set up monitoring for a local YDB cluster that is deployed using [Quick start](../quickstart.md).
+This page provides instructions on how to set up monitoring for a local YDB cluster that is deployed using [Quick start](../../quickstart.md).
 
 {{ ydb-short-name }} has multiple system health sensors. Instant sensor values are available in the web interface:
 
@@ -30,9 +30,9 @@ http://localhost:31002/counters/counters=<servicename>/prometheus
 
 * `<servicename>`: Sensor subgroup name.
 
-To visualize data, use any system that supports Prometheus, such as [Zabbix]{% if lang == "ru" %}(https://www.zabbix.com/ru/){% endif %}{% if lang == "en" %}(https://www.zabbix.com/){% endif %}, [Amazon CloudWatch]{% if lang == "ru" %}(https://aws.amazon.com/ru/cloudwatch/){% endif %}{% if lang == "en" %}(https://aws.amazon.com/cloudwatch/){% endif %}, or [Grafana](https://grafana.com/):
+To visualize data, use any system that supports Prometheus, such as [Zabbix](https://www.zabbix.com/), [Amazon CloudWatch](https://aws.amazon.com/cloudwatch/), or [Grafana](https://grafana.com/):
 
-![grafana-actors](../_assets/grafana-actors.png)
+![grafana-actors](../../_assets/grafana-actors.png)
 
 ## Setting up monitoring with Prometheus and Grafana {#prometheus-grafana}
 
@@ -45,4 +45,4 @@ To set up monitoring for a local single-node {{ ydb-short-name }} cluster using 
 
    To upload dashboards, use the Grafana UI [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) tool or run a [script](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Please note that the script uses [basic authentication](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) in Grafana. For other cases, modify the script.
 
-   Review the dashboard [metric reference](grafana-dashboards.md).
+   Review the dashboard [metric reference](../../reference/observability/metrics/grafana-dashboards.md).

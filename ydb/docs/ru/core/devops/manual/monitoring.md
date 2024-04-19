@@ -1,6 +1,6 @@
 # Настройка мониторинга локального кластера {{ ydb-short-name }}
 
-На этой странице рассказано, как настроить мониторинг локального однонодового кластера YDB, запущенного с помощью инструкции по [Быстрому началу работы](../quickstart.md).
+На этой странице рассказано, как настроить мониторинг локального однонодового кластера YDB, запущенного с помощью инструкции по [Быстрому началу работы](../../quickstart.md).
 
 {{ ydb-short-name }} предоставляет множество сенсоров состояния системы. Мгновенные значения сенсоров можно посмотреть в веб-интерфейсе:
 
@@ -30,9 +30,9 @@ http://localhost:31002/counters/counters=<servicename>/prometheus
 
 * `<servicename>` — имя подгруппы сенсоров.
 
-Визуализировать данные можно с помощью любой системы, которая поддерживает формат Prometheus, например [Zabbix]{% if lang == "ru" %}(https://www.zabbix.com/ru/){% endif %}{% if lang == "en" %}(https://www.zabbix.com/){% endif %}, [Amazon CloudWatch]{% if lang == "ru" %}(https://aws.amazon.com/ru/cloudwatch/){% endif %}{% if lang == "en" %}(https://aws.amazon.com/cloudwatch/){% endif %} или [Grafana](https://grafana.com/):
+Визуализировать данные можно с помощью любой системы, которая поддерживает формат Prometheus, например [Zabbix](https://www.zabbix.com/ru/), [Amazon CloudWatch](https://aws.amazon.com/ru/cloudwatch/) или [Grafana](https://grafana.com/):
 
-![grafana-actors](../_assets/grafana-actors.png)
+![grafana-actors](../../_assets/grafana-actors.png)
 
 ## Настройка мониторинга с помощью Prometheus и Grafana {#prometheus-grafana}
 
@@ -45,4 +45,4 @@ http://localhost:31002/counters/counters=<servicename>/prometheus
 
     Вы можете загрузить дашборды с помощью инструмента [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) Grafana UI или выполнить [скрипт](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Обратите внимание, что скрипт использует [базовую аутентификацию](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) в Grafana. Для других случаев модифицируйте скрипт.
 
-    Ознакомьтесь со [справочником метрик](grafana-dashboards.md) дашбордов.
+    Ознакомьтесь со [справочником по дашбордам Grafana](../../reference/observability/metrics/grafana-dashboards.md).

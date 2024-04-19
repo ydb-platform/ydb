@@ -53,6 +53,20 @@ common:
     to: /devops/index.md
   - from: /cluster/logs.md
     to: /devops/manual/logging.md
+  - from: /administration/grafana-dashboards.md
+    to: /reference/observability/metrics/grafana-dashboards.md
+  - from: /administration/production-storage-config.md
+    to: /deploy/configuration/config.md
+  - from: /administration/decommissioning.md
+    to: /deploy/manual/decommissioning.md
+  - from: /administration/monitoring.md
+    to: /deploy/manual/monitoring.md
+  - from: /administration/state-storage-move.md
+    to: /deploy/manual/state-storage-move.md
+  - from: /administration/static-group-move.md
+    to: /deploy/manual/static-group-move.md
+  - from: /administration/upgrade.md
+    to: /deploy/manual/upgrade.md
 
 # DBA-related redirects
   - from: /db/index.md

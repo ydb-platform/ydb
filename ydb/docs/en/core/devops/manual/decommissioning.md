@@ -20,18 +20,18 @@ To cancel decommissioning, just change the disk status to `DECOMMIT_NONE`. In th
 
 By managing the `DECOMMIT_PENDING` and `DECOMMIT_IMMINENT` states, you can perform cluster decommissioning in parts.
 
-> For example, you need to move equipment from data center-1 (DC-1) to data center-2 (DC-2):
->
-> 1. The DC-2 hosts buffer equipment to transfer the first chunk of data to.
-> 1. Switch the status of all DC-1 disks to `DECOMMIT_PENDING` so that no data can be moved inside the DC-1.
-> 1. Switch the status of all DC-1 disks to `DECOMMIT_IMMINENT` on the equipment that is equivalent to the buffer one.
->
->    Wait until all the disks in the `DECOMMIT_IMMINENT` status are released.
-> 1. Move the released equipment from the DC-1 to the DC-2 and switch the status of its disks to `DECOMMIT_NONE`.
->
-> Repeat the above steps for the next set of equipment in the DC-1 until all the equipment is moved.
+For example, you need to move equipment from data center-1 (DC-1) to data center-2 (DC-2):
 
-To set the desired state of disk decommissioning, use the [{{ ydb-short-name }} DSTool](../reference/ydb-dstool/index.md) utility. The command below sets the `DECOMMIT_IMMINENT` status for the disk with the ID `1000` on the node with the ID `1`:
+1. The DC-2 hosts buffer equipment to transfer the first chunk of data to.
+1. Switch the status of all DC-1 disks to `DECOMMIT_PENDING` so that no data can be moved inside the DC-1.
+1. Switch the status of all DC-1 disks to `DECOMMIT_IMMINENT` on the equipment that is equivalent to the buffer one.
+
+   Wait until all the disks in the `DECOMMIT_IMMINENT` status are released.
+1. Move the released equipment from the DC-1 to the DC-2 and switch the status of its disks to `DECOMMIT_NONE`.
+
+Repeat the above steps for the next set of equipment in the DC-1 until all the equipment is moved.
+
+To set the desired state of disk decommissioning, use the [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md) utility. The command below sets the `DECOMMIT_IMMINENT` status for the disk with the ID `1000` on the node with the ID `1`:
 
 ```bash
 ydb-dstool -e  <bs_endpoint> pdisk set --decommit-status DECOMMIT_IMMINENT --pdisk-ids "[1:1000]"

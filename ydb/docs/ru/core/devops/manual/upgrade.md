@@ -9,10 +9,10 @@
 1. Обновление и рестарт storage узлов;
 1. Обновление и рестар динамических узлов.
 
-Процесс остановки и запуска описан на странице [Безопасные рестарт и выключение узлов](../maintenance/manual/node_restarting.md).
-Узлы {{ ydb-short-name }} следует обновлять последовательно по одному, после каждого шага контролировать состояние кластера через [{{ ydb-short-name }} Monitoring](../reference/embedded-ui/ydb-monitoring.md) - на вкладке `Storage` не должно быть пулов в состоянии `Degraded` (как на примере ниже). В противном случае обновление необходимо остановить.
+Процесс остановки и запуска описан на странице [Безопасные рестарт и выключение узлов](../../maintenance/manual/node_restarting.md).
+Узлы {{ ydb-short-name }} следует обновлять последовательно по одному, после каждого шага контролировать состояние кластера через [{{ ydb-short-name }} Monitoring](../../reference/embedded-ui/ydb-monitoring.md) - на вкладке `Storage` не должно быть пулов в состоянии `Degraded` (как на примере ниже). В противном случае обновление необходимо остановить.
 
-![Monitoring_storage_state](../reference/embedded-ui/_assets/monitoring_storage_state.png)
+![Monitoring_storage_state](../../reference/embedded-ui/_assets/monitoring_storage_state.png)
 
 ## Совместимость версий {#version-compatability}
 
@@ -29,7 +29,7 @@
 
 {% endnote %}
 
-Список доступных версий можно получить на [странице загрузки](https://ydb.tech/ru/docs/downloads/). Релизная политика YDB описана более детально в статье [Управление релизами](../contributor/manage-releases.md) в разделе документации для разработчиков YDB.
+Список доступных версий можно получить на [странице загрузки](../../downloads/index.md). Релизная политика YDB описана более детально в статье [Управление релизами](../../contributor/manage-releases.md) в разделе документации для разработчиков YDB.
 
 ### Примеры совместимости версий
 

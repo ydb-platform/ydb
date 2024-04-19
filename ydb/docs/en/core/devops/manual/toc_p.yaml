@@ -2,17 +2,17 @@ items:
 - name: Overview
   href: index.md
 - name: Deployment
-  include: { mode: link, path: ../../deploy/toc_p.yaml }
+  include:
+    mode: link
+    path: ../../deploy/toc_p.yaml
 - name: Managing a cluster's disk subsystem
-  include: { mode: link, path: ../../maintenance/manual/toc_p.yaml }
+  include:
+    mode: link
+    path: ../../maintenance/manual/toc_p.yaml
 - name: Monitoring
-  items:
-    - name: Setting up monitoring for a local YDB cluster
-      href: ../../administration/monitoring.md
-    - name: Grafana dashboards
-      href: ../../administration/grafana-dashboards.md
+  href: monitoring.md
 - name: Updating YDB
-  href: ../../administration/upgrade.md
+  href: upgrade.md
 - name: Changing an actor system's configuration
   href: ../../maintenance/manual/change_actorsystem_configs.md
 - name: Updating configurations via CMS

@@ -14,7 +14,7 @@ public:
         if (ColumnName.has_value()) {
             *this << "Csv parsing error on line " << Line << " in column \"" << ColumnName << "\": ";
         } else {
-            *this << "Csv parsing error on line " << Line << "\": ";
+            *this << "Csv parsing error on line " << Line << ": ";
         }
     }
 
@@ -353,11 +353,19 @@ TValue TCsvParser::FieldToValue(TTypeParser& parser, TStringBuf token) const {
     return converter.Convert(token);
 }
 
+TStringBuf TCsvParser::Consume(NCsvFormat::CsvSplitter& splitter) const {
+    try {
+        return splitter.Consume();
+    } catch (std::exception& e) {
+        throw TCsvParseException() << e.what();
+    }
+}
+
 void TCsvParser::GetParams(TString&& data, TParamsBuilder& builder) const {
     NCsvFormat::CsvSplitter splitter(data, Delimeter);
     auto headerIt = Header.begin();
     do {
-        TStringBuf token = splitter.Consume();
+        TStringBuf token = Consume(splitter);
         if (headerIt == Header.end()) {
             throw TCsvParseException() << "Header contains less fields than data. Header: \"" << HeaderRow << "\", data: \"" << data << "\"";
         }
@@ -392,7 +400,7 @@ void TCsvParser::GetValue(TString&& data, TValueBuilder& builder, const TType& t
     auto headerIt = Header.cbegin();
     std::map<TString, TStringBuf> fields;
     do {
-        TStringBuf token = splitter.Consume();
+        TStringBuf token = Consume(splitter);;
         if (headerIt == Header.cend()) {
             throw TCsvParseException() << "Header contains less fields than data. Header: \"" << HeaderRow << "\", data: \"" << data << "\"";
         }

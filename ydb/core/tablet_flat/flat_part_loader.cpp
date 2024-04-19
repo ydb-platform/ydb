@@ -109,7 +109,7 @@ void TLoader::StageParseMeta() noexcept
 
             switch (type) {
             case EPage::Scheme: SchemeId = pageId; break;
-            case EPage::Index: FlatGroupIndexes = {pageId}; break;
+            case EPage::FlatIndex: FlatGroupIndexes = {pageId}; break;
             /* All special pages have to be placed after the index
                 page, hack is required for legacy page collections without
                 topology data in metablob.

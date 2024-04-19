@@ -93,9 +93,6 @@ private:
         switch (tableInfo->Sharding.Method_case()) {
             case NKikimrSchemeOp::TColumnTableSharding::kRandomSharding: {
                 // Random sharding implies non-unique primary key
-                if (ShardsCount > 1) {
-                    tableInfo->Sharding.SetUniquePrimaryKey(false);
-                }
                 break;
             }
             case NKikimrSchemeOp::TColumnTableSharding::kHashSharding: {
@@ -118,8 +115,6 @@ private:
                         return false;
                     }
                 }
-                sharding.SetUniqueShardKey(true);
-                tableInfo->Sharding.SetUniquePrimaryKey(true);
                 break;
             }
             default: {

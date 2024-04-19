@@ -201,14 +201,24 @@ namespace NKikimr::NStorage {
             const auto& settings = bsConfig.GetAutoconfigSettings();
 
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
+            NBsController::TGroupMapper::TForbiddenPDisks forbid;
             for (const auto& vdisk : ss.GetVDisks()) {
-                if (VDiskIDFromVDiskID(vdisk.GetVDiskID()) == vdiskId) {
+                const TVDiskID currentVDiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
+                if (!currentVDiskId.SameExceptGeneration(vdiskId)) {
+                    continue;
+                }
+                if (currentVDiskId == vdiskId) {
                     NBsController::TPDiskId pdiskId;
                     if (cmd.HasPDiskId()) {
                         const auto& target = cmd.GetPDiskId();
                         pdiskId = {target.GetNodeId(), target.GetPDiskId()};
                     }
                     replacedDisks.emplace(vdiskId, pdiskId);
+                } else {
+                    Y_DEBUG_ABORT_UNLESS(vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY ||
+                        vdisk.HasDonorMode());
+                    const auto& loc = vdisk.GetVDiskLocation();
+                    forbid.emplace(loc.GetNodeID(), loc.GetPDiskID());
                 }
             }
 
@@ -217,8 +227,8 @@ namespace NKikimr::NStorage {
                     try {
                         Self->AllocateStaticGroup(&config, vdiskId.GroupID, vdiskId.GroupGeneration + 1,
                             TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies()),
-                            settings.GetGeometry(), settings.GetPDiskFilter(), replacedDisks, {}, 0, &ev->Get()->BaseConfig,
-                            cmd.GetConvertToDonor());
+                            settings.GetGeometry(), settings.GetPDiskFilter(), replacedDisks, forbid, 0,
+                            &ev->Get()->BaseConfig, cmd.GetConvertToDonor());
                     } catch (const TExConfigError& ex) {
                         STLOG(PRI_NOTICE, BS_NODE, NW49, "ReassignGroupDisk failed to allocate group", (Config, config),
                             (BaseConfig, ev->Get()->BaseConfig),

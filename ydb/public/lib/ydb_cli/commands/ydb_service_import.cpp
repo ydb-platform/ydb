@@ -286,9 +286,7 @@ int TCommandImportFromCsv::Run(TConfig& config) {
     settings.Header(Header);
     settings.NewlineDelimited(NewlineDelimited);
     settings.HeaderRow(HeaderRow);
-    if (config.ParseResult->Has("null-value")) {
-        settings.NullValue(NullValue);
-    }
+    settings.NullValue(NullValue);
 
     if (Delimiter.size() != 1) {
         throw TMisuseException()

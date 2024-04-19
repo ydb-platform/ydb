@@ -113,11 +113,15 @@ public:
                 break;
             }
 
+            case ui32(NKikimr::NSharedCache::EEv::EvUpdated):
+                // ignore shared cache Dropped events
+                break;
+
             case TEvents::TSystem::Poison:
                 throw TExPoison();
 
             default:
-                Y_ABORT("unexpected event Type# 0x%08" PRIx32, ev->GetTypeRewrite());
+                Y_DEBUG_ABORT("unexpected event Type# 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }
 

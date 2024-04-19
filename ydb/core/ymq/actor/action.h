@@ -649,6 +649,8 @@ private:
             }
         }
 
+        Y_ABORT_UNLESS(SchemeCache_);
+
         bool isACLProtectedAccount = Cfg().GetForceAccessControl();
         if (!IsCloud() && (SecurityToken_ || (Cfg().GetForceAccessControl() && (isACLProtectedAccount = IsACLProtectedAccount(UserName_))))) {
             this->Become(&TActionActor::WaitAuthCheckMessages);
@@ -665,8 +667,6 @@ private:
                 SendReplyAndDie();
                 return;
             }
-
-            Y_ABORT_UNLESS(SchemeCache_);
 
             RequestSchemeCache(GetActionACLSourcePath()); // this also checks that requested queue (if any) does exist
             RequestTicketParser();

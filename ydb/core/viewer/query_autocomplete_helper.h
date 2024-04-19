@@ -61,14 +61,14 @@ public:
         }
     }
 
-    TVector<Type> Search(const TString& prefix, ui32 limit = 10) {
+    TVector<Type> Search(const TString& searchWord, ui32 limit = 10) {
         auto cmp = [](const WordHit& left, const WordHit& right) {
             return left.Distance < right.Distance;
         };
         std::priority_queue<WordHit, TVector<WordHit>, decltype(cmp)> queue(cmp);
 
         for (const auto& [word, data]: Dictionary) {
-            auto wordHit = WordHit(LevenshteinDistance(prefix, word), data);
+            auto wordHit = WordHit(LevenshteinDistance(searchWord, word), data);
             if (queue.size() < limit) {
                 queue.emplace(wordHit);
             } else if (wordHit.Distance < queue.top().Distance) {

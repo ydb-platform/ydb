@@ -249,6 +249,7 @@ private:
             "Skip", 
             "Take", 
             "Sort", 
+            "TopSort", 
             "AssumeSorted", 
             "SkipNullMembers"})) {
             lineage = *CollectLineage(node.Head());
@@ -267,16 +268,19 @@ private:
             HandleEquiJoin(lineage, node);
         } else if (node.IsCallable("LMap")) {
             HandleLMap(lineage, node);
-        } else if (node.IsCallable("PartitionsByKeys")) {
+        } else if (node.IsCallable({"PartitionsByKeys", "PartitionByKey"})) {
             HandlePartitionByKeys(lineage, node);
+        } else if (node.IsCallable({"AsList","List","ListIf"})) {
+            HandleListLiteral(lineage, node);
         } else {
-            Warning(node, TStringBuilder() << node.Content() << " is not supported");
+            Warning(node);
         }
 
         return &lineage;
     }
 
-    void Warning(const TExprNode& node, const TString& message) {
+    void Warning(const TExprNode& node) {
+        auto message = TStringBuilder() << node.Type() << " : " << node.Content() << " is not supported";
         auto issue = TIssue(ExprCtx_.GetPosition(node.Pos()), message);
         SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_LINEAGE_INTERNAL_ERROR, issue);
         ExprCtx_.AddWarning(issue);
@@ -293,9 +297,9 @@ private:
         }
     }
 
-    TMaybe<TFieldsLineage> ScanExprLineage(const TExprNode& node, const TExprNode& arg, const TLineage& src,
+    TMaybe<TFieldsLineage> ScanExprLineage(const TExprNode& node, const TExprNode* arg, const TLineage* src,
         TNodeMap<TMaybe<TFieldsLineage>>& visited) {
-        if (&node == &arg) {
+        if (&node == arg) {
             return Nothing();
         }
 
@@ -305,8 +309,8 @@ private:
         }
 
         if (node.IsCallable("Member")) {
-            if (&node.Head() == &arg) {
-                return it->second = *(*src.Fields).FindPtr(node.Tail().Content());
+            if (&node.Head() == arg && src) {
+                return it->second = *(*src->Fields).FindPtr(node.Tail().Content());
             }
 
             if (node.Head().IsCallable("Head")) {
@@ -352,11 +356,16 @@ private:
                 continue;
             }
 
-            if (!node.Child(index)->GetTypeAnn()->IsComputable()) {
+            auto child = node.Child(index);
+            if (node.IsCallable("AsStruct")) {
+                child = &child->Tail();
+            }
+
+            if (!child->GetTypeAnn()->IsComputable()) {
                 continue;
             }
 
-            auto inner = ScanExprLineage(*node.Child(index), arg, src, visited);
+            auto inner = ScanExprLineage(*child, arg, src, visited);
             if (!inner) {
                 return Nothing();
             }
@@ -386,7 +395,7 @@ private:
         TFieldLineageSet& dst, const TString& newTransforms = "") {
 
         TNodeMap<TMaybe<TFieldsLineage>> visited;
-        auto res = ScanExprLineage(expr, arg, src, visited);
+        auto res = ScanExprLineage(expr, &arg, &src, visited);
         if (!res) {
             for (const auto& f : *src.Fields) {
                 for (const auto& i: f.second.Items) {
@@ -518,13 +527,14 @@ private:
         const auto& arg = lambda.Head().Head();
         const auto& body = lambda.Tail();
         const TExprNode* value;
-        if (body.IsCallable("OptionalIf")) {
+        if (body.IsCallable({"OptionalIf", "FlatListIf"})) {
             value = &body.Tail();
         } else if (body.IsCallable("Just")) {
             value = &body.Head();
         } else if (body.IsCallable({"FlatMap", "OrderedFlatMap"})) {
             value = &body.Head();
         } else {
+            Warning(body);
             return;
         }
 
@@ -575,6 +585,7 @@ private:
                     bool produceStruct = payload->Child(1)->Head().Content() == "some";
                     MergeLineageFromUsedFields(extractHandler->Tail(), extractHandler->Head().Head(), innerLineage, source, produceStruct);
                 } else {
+                    Warning(*payload->Child(1));
                     lineage.Fields.Clear();
                     return;
                 }
@@ -798,6 +809,46 @@ private:
                         for (const auto& x : i.second) {
                             (*res.StructItems)[i.first].insert(x);
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    void HandleListLiteral(TLineage& lineage, const TExprNode& node) {
+        auto itemType = node.GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
+            return;
+        }
+
+        auto structType = itemType->Cast<TStructExprType>();
+        lineage.Fields.ConstructInPlace();
+        ui32 startIndex = 0;
+        if (node.IsCallable({"List", "ListIf"})) {
+            startIndex = 1;
+        }
+
+        for (ui32 i = startIndex; i < node.ChildrenSize(); ++i) {
+            auto child = node.Child(i);
+            if (child->IsCallable("AsStruct")) {
+                for (const auto& f : child->Children()) {
+                    TNodeMap<TMaybe<TFieldsLineage>> visited;
+                    auto res = ScanExprLineage(f->Tail(), nullptr, nullptr, visited);
+                    if (res) {
+                        auto name = f->Head().Content();
+                        (*lineage.Fields)[name].MergeFrom(*res);
+                    }
+                }
+            } else {
+                TNodeMap<TMaybe<TFieldsLineage>> visited;
+                auto res = ScanExprLineage(*child, nullptr, nullptr, visited);
+                if (res) {
+                    for (const auto& i : structType->GetItems()) {
+                        if (i->GetName().StartsWith("_yql_sys_")) {
+                            continue;
+                        }
+
+                        (*lineage.Fields)[i->GetName()].MergeFrom(*res);
                     }
                 }
             }

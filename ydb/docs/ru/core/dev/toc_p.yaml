@@ -1,6 +1,16 @@
 items:
-- name: Overview
+- name: Обзор
   href: index.md
+- name: Начало работы
+  href: getting-started.md
+- name: Примеры приложений
+  include:
+    mode: link
+    path: example-app/toc_p.yaml
+- name: Туториал по YQL
+  include:
+    mode: link
+    path: yql-tutorial/toc_p.yaml
 - name: Пакетная загрузка
   href: batch-upload.md
 - name: Постраничный вывод

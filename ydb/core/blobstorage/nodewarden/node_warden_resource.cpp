@@ -119,9 +119,7 @@ void TNodeWarden::ApplyStorageConfig(const NKikimrBlobStorage::TNodeWardenServic
         return ApplyStaticServiceSet(current);
     }
 
-    NKikimrBlobStorage::TNodeWardenServiceSet ss(*proposed);
-    // stop running obsolete VSlots to prevent them from answering
-    ApplyStaticServiceSet(ss);
+    ApplyStaticServiceSet(current);
 }
 
 void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConfig* /*proposed*/) {
@@ -139,7 +137,7 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
     FETCH_CONFIG(board, "ssb", StateStorageBoard)
     FETCH_CONFIG(schemeBoard, "sbr", SchemeBoard)
 
-    STLOG(PRI_DEBUG, BS_NODE, NW41, "ApplyStateStorageConfig",
+    STLOG(PRI_DEBUG, BS_NODE, NW52, "ApplyStateStorageConfig",
         (StateStorageConfig, StorageConfig.GetStateStorageConfig()),
         (NewStateStorageInfo, *stateStorageInfo),
         (CurrentStateStorageInfo, StateStorageInfo.Get()),
@@ -310,4 +308,22 @@ void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {
 
     // forward to just created service
     TActivationContext::Send(ev->Forward(keeperId));
+}
+
+void TNodeWarden::Handle(TEvNodeWardenQueryBaseConfig::TPtr ev) {
+    auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+    request->Record.MutableRequest()->AddCommand()->MutableQueryBaseConfig();
+    const ui64 cookie = NextConfigCookie++;
+    SendToController(std::move(request), cookie);
+
+    ConfigInFlight.emplace(cookie, [this, sender = ev->Sender, cookie = ev->Cookie](TEvBlobStorage::TEvControllerConfigResponse *ev) {
+        auto response = std::make_unique<TEvNodeWardenBaseConfig>();
+        if (ev) {
+            auto *record = ev->Record.MutableResponse();
+            if (record->GetSuccess() && record->StatusSize() == 1) {
+                response->BaseConfig = std::move(*record->MutableStatus(0)->MutableBaseConfig());
+            }
+        }
+        Send(sender, response.release(), 0, cookie);
+    });
 }

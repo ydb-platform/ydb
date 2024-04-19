@@ -1385,6 +1385,39 @@
             "uri": "https://{canondata_backend}/1871102/ae8b5d002551349280cb6bef50e922859b127b33/resource.tar.gz#test.test_limit-limit_skip_take-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[lineage-list_literal3-default.txt-Debug]": [
+        {
+            "checksum": "865e07122c0458b067ccbe651c77b588",
+            "size": 4129,
+            "uri": "https://{canondata_backend}/1130705/85c8665d91f0155a4ee02c4fb1744edb35184fe1/resource.tar.gz#test.test_lineage-list_literal3-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[lineage-list_literal3-default.txt-Lineage]": [
+        {
+            "checksum": "8b3b7ee46f2ca502787d24c9f5a22f6f",
+            "size": 1295,
+            "uri": "https://{canondata_backend}/1130705/85c8665d91f0155a4ee02c4fb1744edb35184fe1/resource.tar.gz#test.test_lineage-list_literal3-default.txt-Lineage_/results.txt"
+        }
+    ],
+    "test.test[lineage-list_literal3-default.txt-Plan]": [
+        {
+            "checksum": "f7dab291ac4301eb960026dba2d6086e",
+            "size": 10246,
+            "uri": "https://{canondata_backend}/1130705/85c8665d91f0155a4ee02c4fb1744edb35184fe1/resource.tar.gz#test.test_lineage-list_literal3-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[lineage-list_literal3-default.txt-Results]": [
+        {
+            "checksum": "110f479c92fbd5ead46466e177f57781",
+            "size": 46,
+            "uri": "https://{canondata_backend}/1130705/85c8665d91f0155a4ee02c4fb1744edb35184fe1/resource.tar.gz#test.test_lineage-list_literal3-default.txt-Results_/Output.txt"
+        },
+        {
+            "checksum": "aa9b2083e6a57435ef0983500a93ba38",
+            "size": 486,
+            "uri": "https://{canondata_backend}/1130705/85c8665d91f0155a4ee02c4fb1744edb35184fe1/resource.tar.gz#test.test_lineage-list_literal3-default.txt-Results_/Output.yqlrun.txt.attr"
+        }
+    ],
     "test.test[lineage-select_all-default.txt-Debug]": [
         {
             "checksum": "a9699e58a7528c39aec215dc164d4a47",
@@ -1416,6 +1449,39 @@
             "checksum": "99a23a80241cdd0057583910f9155f61",
             "size": 600,
             "uri": "https://{canondata_backend}/1899731/fba000ee13d15ca06c769e91a11df3e541feafd4/resource.tar.gz#test.test_lineage-select_all-default.txt-Results_/Output.yqlrun.txt.attr"
+        }
+    ],
+    "test.test[lineage-topsort-default.txt-Debug]": [
+        {
+            "checksum": "33db9ae4e5175d8a7cd21f6a4a5338d4",
+            "size": 3610,
+            "uri": "https://{canondata_backend}/1942173/16a6cdf0aea72ee3153163f98e7fe95d7adc75d1/resource.tar.gz#test.test_lineage-topsort-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[lineage-topsort-default.txt-Lineage]": [
+        {
+            "checksum": "32315a7b9568b4c2293678c2a6313e69",
+            "size": 936,
+            "uri": "https://{canondata_backend}/1942173/16a6cdf0aea72ee3153163f98e7fe95d7adc75d1/resource.tar.gz#test.test_lineage-topsort-default.txt-Lineage_/results.txt"
+        }
+    ],
+    "test.test[lineage-topsort-default.txt-Plan]": [
+        {
+            "checksum": "e9133b4d90450db3c79fcddf324513bb",
+            "size": 6798,
+            "uri": "https://{canondata_backend}/1942173/16a6cdf0aea72ee3153163f98e7fe95d7adc75d1/resource.tar.gz#test.test_lineage-topsort-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[lineage-topsort-default.txt-Results]": [
+        {
+            "checksum": "2be0db951e2ae908c8e71f2951e76bf2",
+            "size": 27,
+            "uri": "https://{canondata_backend}/1942173/16a6cdf0aea72ee3153163f98e7fe95d7adc75d1/resource.tar.gz#test.test_lineage-topsort-default.txt-Results_/Output.txt"
+        },
+        {
+            "checksum": "7a5f062202f47876caa00b67be297bb0",
+            "size": 377,
+            "uri": "https://{canondata_backend}/1942173/16a6cdf0aea72ee3153163f98e7fe95d7adc75d1/resource.tar.gz#test.test_lineage-topsort-default.txt-Results_/Output.yqlrun.txt.attr"
         }
     ],
     "test.test[match_recognize-simple_paritioning-default.txt-Debug]": [

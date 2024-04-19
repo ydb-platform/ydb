@@ -1,6 +1,5 @@
 #pragma once
 
-#include "flat_page_index.h"
 #include "flat_part_iface.h"
 #include "flat_fwd_iface.h"
 #include "flat_fwd_misc.h"
@@ -125,7 +124,7 @@ namespace NFwd {
         {
             if (pageId == IndexPage.PageId) {
                 if (IndexPage.Fetch == EFetch::None) {
-                    Stat.Fetch += head->AddToQueue(pageId, EPage::Index);
+                    Stat.Fetch += head->AddToQueue(pageId, EPage::FlatIndex);
                     IndexPage.Fetch = EFetch::Wait;
                 }
                 return {IndexPage.Touch(pageId, Stat), false, true};
@@ -169,7 +168,7 @@ namespace NFwd {
                 Stat.Saved += one.Data.size();
 
                 if (one.PageId == IndexPage.PageId) {
-                    Y_DEBUG_ABORT_UNLESS(Part->GetPageType(one.PageId, {}) == EPage::Index);
+                    Y_DEBUG_ABORT_UNLESS(Part->GetPageType(one.PageId, {}) == EPage::FlatIndex);
                     Index.emplace(one.Data);
                     Iter = Index->LookupRow(BeginRowId);
                     IndexPage.Settle(one);
@@ -260,8 +259,8 @@ namespace NFwd {
         TRowId BeginRowId, EndRowId;
         
         TPage IndexPage;
-        std::optional<NPage::TIndex> Index;
-        NPage::TIndex::TIter Iter;
+        std::optional<NPage::TFlatIndex> Index;
+        NPage::TFlatIndex::TIter Iter;
 
         TLoadedPagesCircularBuffer<TPart::Trace> Trace;
 

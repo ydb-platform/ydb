@@ -2,7 +2,6 @@
 #include "flat_part_iface.h"
 #include "flat_part_index_iter_iface.h"
 #include "flat_page_data.h"
-#include "flat_page_index.h"
 #include "flat_page_frames.h"
 #include "flat_page_blobs.h"
 #include "flat_page_bloom.h"
@@ -111,7 +110,7 @@ namespace {
 
         if (!indexPage) {
             Out
-                << " + Index{unload}"
+                << " + FlatIndex{unload}"
                 << Endl
                 << " |  Page     Row    Bytes  (";
             return;
@@ -121,7 +120,7 @@ namespace {
         auto label = index.Label();
 
         Out
-            << " + Index{" << indexPageId << "}" 
+            << " + FlatIndex{" << indexPageId << "}" 
             << " Label{" << (ui16)label.Type << " rev " << label.Format << ", " << label.Size << "b}"
             << " " << index->Count + (index.GetLastKeyRecord() ? 1 : 0) << " rec" << Endl
             << " |  Page     Row    Bytes  (";

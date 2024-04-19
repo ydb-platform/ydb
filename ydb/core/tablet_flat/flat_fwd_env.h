@@ -243,7 +243,7 @@ namespace NFwd {
 
     private:
         static bool IsIndexPage(EPage type) noexcept {
-            return type == EPage::Index || type == EPage::BTreeIndex;
+            return type == EPage::FlatIndex || type == EPage::BTreeIndex;
         }
 
         TResult Handle(TPageLoadingQueue &q, TPageId ref) noexcept

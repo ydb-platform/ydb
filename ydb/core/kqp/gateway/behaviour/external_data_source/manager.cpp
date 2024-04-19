@@ -190,7 +190,7 @@ NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalD
 
     auto validationFuture = ValidateCreateExternalDatasource(schemeTx.GetCreateExternalDataSource(), context);
 
-    return validationFuture.Apply([context, schemeTx](const NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus>& f) mutable {
+    return validationFuture.Apply([context, schemeTx](const NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus>& f) {
         if (const auto& value = f.GetValue(); value.IsFail()) {
             return NThreading::MakeFuture(value);
         }
@@ -282,7 +282,7 @@ NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusio
                 TStringBuilder() << "Execution of prepare operation for EXTERNAL_DATA_SOURCE object: unsupported operation: " << int(schemeOperation.GetOperationCase())));
     }
 
-    return validationFuture.Apply([context, schemeTx](const NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus>& f) mutable {
+    return validationFuture.Apply([context, schemeTx](const NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus>& f) {
         if (const auto& value = f.GetValue(); value.IsFail()) {
             return NThreading::MakeFuture(value);
         }

@@ -788,7 +788,6 @@ public:
                 += "INNER JOIN `" + table + "`" + " AS " + aliasTable + " ON "
                 +  aliasTable + ".id" + ToString(i) + "=" + prevAliasTable + ".id" 
                 +  ToString(i-1) + " ";
-
         }
 
         auto result = Session_.ExecuteDataQuery(joinRequest, TTxControl::BeginTx().CommitTx()).ExtractValueSync();

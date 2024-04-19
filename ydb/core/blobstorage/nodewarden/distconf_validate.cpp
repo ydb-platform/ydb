@@ -204,7 +204,7 @@ namespace NKikimr::NStorage {
 
         // scan vslots
         THashSet<std::tuple<ui32, ui32, ui32>> vslots; // nodeId:pdiskId:vslotId
-        THashMap<TVDiskID, std::tuple<ui32, ui32, ui32, ui64>> vdisks; // vdiskId -> nodeId:pdiskId:vslotId:guid
+        THashMap<TVDiskID, std::tuple<ui32, ui32, ui32, ui64, bool>> vdisks; // vdiskId -> nodeId:pdiskId:vslotId:guid:donor
         for (const auto& vslot : config.GetVDisks()) {
             if (!vslot.HasVDiskID()) {
                 return "VDiskID field missing";
@@ -238,8 +238,32 @@ namespace NKikimr::NStorage {
                 continue;
             }
 
-            if (const auto [_, inserted] = vdisks.try_emplace(vdiskId, nodeId, pdiskId, vslotId, pdiskGuid); !inserted) {
+            if (const auto [_, inserted] = vdisks.try_emplace(vdiskId, nodeId, pdiskId, vslotId, pdiskGuid, vslot.HasDonorMode()); !inserted) {
                 return "duplicate VDiskID";
+            }
+        }
+
+        // scan donors
+        for (const auto& vslot : config.GetVDisks()) {
+            for (const auto& donor : vslot.GetDonors()) {
+                if (!donor.HasVDiskId() || !donor.HasVDiskLocation()) {
+                    return "incorrect Donor record";
+                }
+                const TVDiskID vdiskId = VDiskIDFromVDiskID(donor.GetVDiskId());
+                const auto it = vdisks.find(vdiskId);
+                if (it == vdisks.end()) {
+                    return "incorrect Donor reference";
+                }
+                const auto& [nodeId, pdiskId, vslotId, pdiskGuid, isDonor] = it->second;
+                if (!isDonor) {
+                    return "incorrect Donor reference";
+                }
+                const auto& loc = donor.GetVDiskLocation();
+                if (nodeId != loc.GetNodeID() || pdiskId != loc.GetPDiskID() || vslotId != loc.GetVDiskSlotID() ||
+                        pdiskGuid != loc.GetPDiskGuid()) {
+                    return "incorrect Donor reference";
+                }
+                vdisks.erase(it);
             }
         }
 
@@ -304,7 +328,7 @@ namespace NKikimr::NStorage {
                                 << " PDiskId# " << pdiskId
                                 << " VSlotId# " << vslotId
                                 << " PDiskGuid# " << pdiskGuid;
-                        } else if (it->second != std::make_tuple(nodeId, pdiskId, vslotId, pdiskGuid)) {
+                        } else if (it->second != std::make_tuple(nodeId, pdiskId, vslotId, pdiskGuid, false)) {
                             return "VDiskLocation mismatch";
                         } else {
                             vdisks.erase(it);

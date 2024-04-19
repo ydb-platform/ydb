@@ -620,7 +620,7 @@
         {
             "Name": "TKqpOlapFilterTernaryOp",
             "Base": "TExprBase",
-            "Match": {"Type": "Tuple", "Name": "KqpOlapFilterBinaryOp"},
+            "Match": {"Type": "Tuple", "Name": "KqpOlapFilterTernaryOp"},
             "Children": [
                 {"Index": 0, "Name": "Operator", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "First", "Type": "TExprBase"},

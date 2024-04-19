@@ -37,6 +37,10 @@ DEFINE_TRIVIAL_PROTO_CONVERSIONS(bool)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#define YT_PROTO_OPTIONAL_CONVERT(...) __VA_OPT__(::NYT::FromProto<__VA_ARGS__>)
+
+////////////////////////////////////////////////////////////////////////////////
+
 // These conversions work in case if the patched protobuf that uses
 // TString is used.
 inline void ToProto(TString* serialized, TString original)

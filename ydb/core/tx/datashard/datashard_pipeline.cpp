@@ -1459,6 +1459,11 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
     };
 
+    if (rec.HasMvccSnapshot() && !rec.GetMvccSnapshot().GetRepeatableRead()) {
+        badRequest("MvccSnapshot with RepeatableRead=false is not implemented");
+        return tx;
+    }
+
     if (tx->IsSchemeTx()) {
         Y_ABORT_UNLESS(!tx->HasVolatilePrepareFlag(), "Volatile scheme transactions not supported");
 
@@ -1686,6 +1691,11 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         writeOp->SetError(status, TStringBuilder() << error << " at tablet# " << Self->TabletID());
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
     };
+
+    if (rec.HasMvccSnapshot() && !rec.GetMvccSnapshot().GetRepeatableRead()) {
+        badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "MvccSnapshot with RepeatableRead=false is not implemented");
+        return writeOp;
+    }
 
     if (!writeTx->Ready()) {
         badRequest(NEvWrite::TConvertor::ConvertErrCode(writeOp->GetWriteTx()->GetErrCode()), TStringBuilder() << "Cannot parse tx " << writeOp->GetTxId() << ". " << writeOp->GetWriteTx()->GetErrCode() << ": " << writeOp->GetWriteTx()->GetErrStr());

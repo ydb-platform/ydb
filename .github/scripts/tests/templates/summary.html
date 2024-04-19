@@ -30,7 +30,6 @@
         }
         button.copy {
             float: right;
-            cursor: pointer;
         }
         table > tbody > tr > td:nth-child(2),
         table > tbody > tr > td:nth-child(3),
@@ -83,7 +82,7 @@
 <body>
 {% for status in status_order %}
 <h1 id="{{ status.name}}">{{ status.name }} ({{ tests[status] | length }})</h1>
-<table style="width:100%;" border="1" class="result-table">
+<table style="width:100%;" border="1">
     <thead>
     <tr>
         <th>test name</th>

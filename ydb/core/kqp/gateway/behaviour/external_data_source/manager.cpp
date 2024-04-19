@@ -185,22 +185,25 @@ NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalD
                                                                                                                            TInternalModificationContext& context) const {
     using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
-    auto ev = MakeHolder<TRequest>();
-    ev->Record.SetDatabaseName(context.GetExternalData().GetDatabase());
-    if (context.GetExternalData().GetUserToken()) {
-        ev->Record.SetUserToken(context.GetExternalData().GetUserToken()->GetSerializedToken());
-    }
-
-    auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
+    NKikimrSchemeOp::TModifyScheme schemeTx;
     FillCreateExternalDataSourceCommand(schemeTx, settings, context);
 
     auto validationFuture = ValidateCreateExternalDatasource(schemeTx.GetCreateExternalDataSource(), context);
 
-    return validationFuture.Apply([ev = ev.Release(), context, schemeTx](const NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus>& f) {
+    return validationFuture.Apply([context, schemeTx](const NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus>& f) {
         if (const auto& value = f.GetValue(); value.IsFail()) {
             return NThreading::MakeFuture(value);
         }
-        return SendSchemeRequest(ev, context.GetExternalData().GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
+
+        auto ev = MakeHolder<TRequest>();
+        ev->Record.SetDatabaseName(context.GetExternalData().GetDatabase());
+        if (context.GetExternalData().GetUserToken()) {
+            ev->Record.SetUserToken(context.GetExternalData().GetUserToken()->GetSerializedToken());
+        }
+
+        *ev->Record.MutableTransaction()->MutableModifyScheme() = schemeTx;
+
+        return SendSchemeRequest(ev.Release(), context.GetExternalData().GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
     });
 }
 
@@ -259,14 +262,8 @@ NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusio
         const ui32 /*nodeId*/, const NMetadata::IClassBehaviour::TPtr& /*manager*/, const IOperationsManager::TExternalModificationContext& context) const {
     using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
-    auto ev = MakeHolder<TRequest>();
-    ev->Record.SetDatabaseName(context.GetDatabase());
-    if (context.GetUserToken()) {
-        ev->Record.SetUserToken(context.GetUserToken()->GetSerializedToken());
-    }
-
     auto validationFuture = NThreading::MakeFuture(TExternalDataSourceManager::TYqlConclusionStatus::Success());
-    auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
+    NKikimrSchemeOp::TModifyScheme schemeTx;
     switch (schemeOperation.GetOperationCase()) {
         case NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource: {
             const auto& createExternalDataSource = schemeOperation.GetCreateExternalDataSource();
@@ -285,11 +282,20 @@ NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusio
                 TStringBuilder() << "Execution of prepare operation for EXTERNAL_DATA_SOURCE object: unsupported operation: " << int(schemeOperation.GetOperationCase())));
     }
 
-    return validationFuture.Apply([ev = ev.Release(), context, schemeTx](const NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus>& f) {
+    return validationFuture.Apply([context, schemeTx](const NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus>& f) {
         if (const auto& value = f.GetValue(); value.IsFail()) {
             return NThreading::MakeFuture(value);
         }
-        return SendSchemeRequest(ev, context.GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
+
+        auto ev = MakeHolder<TRequest>();
+        ev->Record.SetDatabaseName(context.GetDatabase());
+        if (context.GetUserToken()) {
+            ev->Record.SetUserToken(context.GetUserToken()->GetSerializedToken());
+        }
+
+        *ev->Record.MutableTransaction()->MutableModifyScheme() = schemeTx;
+
+        return SendSchemeRequest(ev.Release(), context.GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
     });
 }
 

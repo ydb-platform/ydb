@@ -6,7 +6,7 @@ This document describes how to deploy a multi-tenant {{ ydb-short-name }} cluste
 
 ### Prerequisites {#requirements}
 
-Review the [system requirements](../../cluster/system-requirements.md) and the [cluster topology](../../cluster/topology.md).
+Review the [system requirements](../../devops/system-requirements.md) and the [cluster topology](../../concepts/topology.md).
 
 Make sure you have SSH access to all servers. This is required to install artifacts and run the {{ ydb-short-name }} executable.
 
@@ -17,7 +17,7 @@ The network configuration must allow TCP connections on the following ports (the
 * 19001, 19002: Interconnect for intra-cluster node interaction
 * 8765, 8766: HTTP interface of {{ ydb-short-name }} Embedded UI.
 
-Distinct ports are necessary for GRPC, Interconnect and HTTP interface of each dynamic node when hosting multiple dynamic nodes on a single server.
+Distinct ports are necessary for gRPC, Interconnect and HTTP interface of each dynamic node when hosting multiple dynamic nodes on a single server.
 
 Make sure that the system clocks running on all the cluster's servers are synced by `ntpd` or `chrony`. We recommend using the same time source for all servers in the cluster to maintain consistent leap seconds processing.
 
@@ -34,7 +34,7 @@ Run each static node (data node) on a separate server. Both static and dynamic n
 
 {% endnote %}
 
-For more information about hardware requirements, see [{#T}](../../cluster/system-requirements.md).
+For more information about hardware requirements, see [{#T}](../../devops/system-requirements.md).
 
 ### Preparing TLS keys and certificates {#tls-certificates}
 

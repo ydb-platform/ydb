@@ -4,7 +4,7 @@ To ensure the required fault tolerance of {{ ydb-short-name }}, configure the [c
 
 ## Fault tolerance modes {#fault-tolerance}
 
-We recommend using the following [fault tolerance modes](../cluster/topology.md) for {{ ydb-short-name }} production installations:
+We recommend using the following [fault tolerance modes](../concepts/topology.md) for {{ ydb-short-name }} production installations:
 
 * `block-4-2`: For a cluster hosted in a single availability zone.
 * `mirror-3-dc`: For a cluster hosted in three availability zones.
@@ -40,7 +40,7 @@ This causes some issues when a cluster's hardware is distributed across the mini
 
 If the number of fail domains in a cluster exceeds the minimum amount required for creating storage groups at least by one (that is, 9 domains for `block-4-2` and 4 domains in each fail realm for `mirror-3-dc)`, in case some hardware fails, the load can be redistributed across all the hardware that is still running.
 
-The system can work with fail domains of any size. However, if there are few domains and a different number of disks in different domains, the amount of storage groups that you can create will be limited. In this case, some hardware in fail domains that are too large may be underutilized. If the hardware is used in full, significant distortions in domain sizes may make reconfiguration impossible.
+The system can work with fail domains of any size. However, if there are few domains and a different number of disks in different domains, the number of storage groups that you can create will be limited. In this case, some hardware in fail domains that are too large may be underutilized. If the hardware is used in full, significant distortions in domain sizes may make reconfiguration impossible.
 
 > For example, there are 15 racks in a cluster with `block-4-2` fault tolerance mode. The first of the 15 racks hosts 20 servers and the other 14 racks host 10 servers each. To fully utilize all the 20 servers from the first rack, {{ ydb-short-name }} will create groups so that 1 disk from this largest fail domain is used in each group. As a result, if any other fail domain's hardware is down, the load can't be distributed to the hardware in the first rack.
 

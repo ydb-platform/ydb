@@ -19,6 +19,24 @@ common:
     to: /quickstart.md
   - from: /getting_started/self_hosted/ydb_minikube.md
     to: /quickstart.md
+  - from: /getting_started/index.md
+    to: /quickstart.md
+  - from: /getting_started/quickstart/index.md
+    to: /quickstart.md
+  - from: /cluster/topology.md
+    to: /concepts/topology.md
+  - from: /getting_started/yql.md
+    to: /yql/reference/index.md
+  - from: /concepts/datatypes.md
+    to: /yql/reference/types/index.md
+
+# DevOps-related redirects
+  - from: /getting_started/kubernetes.md
+    to: /devops/kubernetes/initial-deployment.md
+  - from: /getting_started/ansible.md
+    to: /devops/ansible/initial-deployment.md
+  - from: /troubleshooting/system_views_cluster.md
+    to: /devops/manual/system-views.md
   - from: /ops/devslice-user-guide-k8s-baremetal-host.md
     to: /ops/devslice-setup-kikimr-slice.md
   - from: /deploy/orchestrated/concepts.md
@@ -29,18 +47,8 @@ common:
     to: /devops/kubernetes/initial-deployment.md
   - from: /deploy/orchestrated/operate.md
     to: /devops/kubernetes/initial-deployment.md
-  - from: /getting_started/index.md
-    to: /quickstart.md
-  - from: /getting_started/kubernetes.md
-    to: /devops/kubernetes/initial-deployment.md
-  - from: /getting_started/ansible.md
-    to: /devops/ansible/initial-deployment.md
-  - from: /getting_started/yql.md
-    to: /yql/reference/index.md
-  - from: /troubleshooting/system_views_cluster.md
-    to: /devops/manual/system-views.md
-  - from: /concepts/datatypes.md
-    to: /yql/reference/types/index.md
+  - from: /cluster/system-requirements.md
+    to: /devops/system-requirements.md
 
 # DBA-related redirects
   - from: /db/index.md

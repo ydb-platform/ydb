@@ -1,4 +1,4 @@
-# Cluster configuration
+# {{ ydb-short-name }} cluster configuration
 
 The cluster configuration is specified in the YAML file passed in the `--yaml-config` parameter when the cluster nodes are run.
 
@@ -147,7 +147,7 @@ This section defines one or more types of storage pools available in the cluster
 - Data encryption (on/off)
 - Fault tolerance mode
 
-The following [fault tolerance modes](../../cluster/topology.md) are available:
+The following [fault tolerance modes](../../concepts/topology.md) are available:
 
 | Mode | Description |
 --- | ---

@@ -2,9 +2,9 @@ items:
 - name: Обзор
   href: index.md
 - name: Системные требования и рекомендации
-  href: ../cluster/system-requirements.md
+  href: ../devops/system-requirements.md
 - name: Логирование
   href: ../cluster/logs.md
 - name: Топология
-  href: ../cluster/topology.md
+  href: ../concepts/topology.md
 - include: { mode: link, path: toc_i.yaml }

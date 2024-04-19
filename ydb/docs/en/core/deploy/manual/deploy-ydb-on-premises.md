@@ -455,7 +455,7 @@ To check access to the {{ ydb-short-name }} built-in web interface, open in the 
 
 In the web browser, set as trusted the certificate authority that issued certificates for the {{ ydb-short-name }} cluster. Otherwise, you will see a warning about an untrusted certificate.
 
-If authentication is enabled in the cluster, the web browser should prompt you for a login and password. Enter your credentials, and you'll see the built-in interface welcome page. The user interface and its features are described in [{#T}](../../maintenance/embedded_monitoring/index.md).
+If authentication is enabled in the cluster, the web browser should prompt you for a login and password. Enter your credentials, and you'll see the built-in interface welcome page. The user interface and its features are described in [{#T}](../../reference/embedded-ui/index.md).
 
 {% note info %}
 

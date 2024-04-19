@@ -2,7 +2,7 @@
 Each YDB component writes messages to logs at different levels. They can be used to detect severe issues or identify the root causes of issues.
 
 ## Logging setup {#log_setup}
-You can configure logging for the various components of the YDB [monitoring system](../maintenance/embedded_monitoring/logs.md#change_log_level).
+You can configure logging for the various components of the YDB [monitoring system](../reference/embedded-ui/logs.md#change_log_level).
 
 There are currently two options for running YDB logging.
 

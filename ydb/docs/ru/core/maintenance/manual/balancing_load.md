@@ -7,7 +7,7 @@
 
 ## Распределить нагрузку равномерно по группам {#reassign-groups}
 
-На странице [Hive web-viewer](../embedded_monitoring/hive.md#reassign_groups), в нижней части экрана есть кнопка "Reassign Groups".
+На странице [Hive web-viewer](../../reference/embedded-ui/hive.md#reassign_groups), в нижней части экрана есть кнопка "Reassign Groups".
 
 ## Распределить VDisk'и равномерно по устройствам {#cluster-balance}
 

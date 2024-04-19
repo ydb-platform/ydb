@@ -180,6 +180,22 @@ common:
   - from: /administration/ydb-dstool-setup.md
     to: /reference/ydb-dstool/install.md
 
+# Redirects for Embedded UI
+  - from: /maintenance/embedded_monitoring/ydb_monitoring.md
+    to: /reference/embedded-ui/ydb-monitoring.md
+  - from: /maintenance/embedded_monitoring/overview.md
+    to: /reference/embedded-ui/overview.md
+  - from: /maintenance/embedded_monitoring/hive.md
+    to: /reference/embedded-ui/hive.md
+  - from: /maintenance/embedded_monitoring/logs.md
+    to: /reference/embedded-ui/logs.md
+  - from: /maintenance/embedded_monitoring/interconnect_overview.md
+    to: /reference/embedded-ui/interconnect-overview.md
+  - from: /maintenance/embedded_monitoring/charts.md
+    to: /reference/embedded-ui/charts.md
+  - from: /maintenance/embedded_monitoring/index.md
+    to: /reference/embedded-ui/index.md
+
 # Redirects from export_import to export-import   
   - from: /reference/ydb-cli/export_import/s3_conn.md
     to: /reference/ydb-cli/export-import/auth-s3.md

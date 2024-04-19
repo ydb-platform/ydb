@@ -7,7 +7,7 @@
 
 ## Distribute the load evenly across groups {#reassign-groups}
 
-At the bottom of the [Hive web-viewer](../embedded_monitoring/hive.md#reassign_groups) page, there is a button named "Reassign Groups".
+At the bottom of the [Hive web-viewer](../../reference/embedded-ui/hive.md#reassign_groups) page, there is a button named "Reassign Groups".
 
 ## Distribute VDisks evenly across block store volumes {#cluster-balance}
 

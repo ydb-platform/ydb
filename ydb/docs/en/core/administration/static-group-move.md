@@ -65,5 +65,5 @@ To move a part of the static group from the `node_id:1` host to the `node_id:10`
 
 1. Update the `config.yaml` configuration files for all the cluster nodes, including dynamic nodes.
 1. Use the [rolling-restart](../maintenance/manual/node_restarting.md) procedure to restart all the static cluster nodes.
-1. Go to the Embedded UI monitoring page and make sure that the VDisk of the static group is visible on the target physical disk and its replication is in progress. For details, see [{#T}](../maintenance/embedded_monitoring/ydb_monitoring.md#static-group).
+1. Go to the Embedded UI monitoring page and make sure that the VDisk of the static group is visible on the target physical disk and its replication is in progress. For details, see [{#T}](../reference/embedded-ui/ydb-monitoring.md#static-group).
 1. Use the [rolling-restart](../maintenance/manual/node_restarting.md) procedure to restart all the dynamic cluster nodes.

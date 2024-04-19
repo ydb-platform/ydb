@@ -6,11 +6,11 @@ items:
   href: viewer.md
   when: false
 - name: YDB Monitoring
-  href: ydb_monitoring.md
+  href: ydb-monitoring.md
 - name: Hive web-viewer
   href: hive.md
 - name: Обзор соединений
-  href: interconnect_overview.md
+  href: interconnect-overview.md
 - name: Логи
   href: logs.md
 - name: Графики

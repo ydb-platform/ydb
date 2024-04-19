@@ -80,7 +80,7 @@ void MakeJoinHypergraphRec(
     subtreeNodes[joinTree] = subtreeNodes[joinNode->LeftArg] | subtreeNodes[joinNode->RightArg];
 
     TNodeSet conditionUsedRels{};
-    conditionUsedRels = graph.GetNodesByRelNamesInSubtree(joinTree, GetConditionUsedRelationNames(joinNode));
+    conditionUsedRels = graph.GetNodesByRelNames(GetConditionUsedRelationNames(joinNode));
 
     graph.AddEdge(MakeHyperedge<TNodeSet>(joinNode, conditionUsedRels, subtreeNodes));
 }
@@ -92,6 +92,10 @@ TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
     TJoinHypergraph<TNodeSet> graph{};
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet> subtreeNodes{};
     MakeJoinHypergraphRec(graph, joinTree, subtreeNodes);
+
+    TTransitiveClosureConstructor transitveClosure(graph);
+    transitveClosure.Construct();
+
     return graph;
 }
 

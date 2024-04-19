@@ -32,9 +32,6 @@
             float: right;
             cursor: pointer;
         }
-        button.copy:after {
-            content: "Copy"
-        }
         table > tbody > tr > td:nth-child(2),
         table > tbody > tr > td:nth-child(3),
         table > tbody > tr > td:nth-child(4) {
@@ -102,7 +99,7 @@
     <tr>
         <td>
             <span>{{ t.full_name }}</span>
-            {% if status.is_error %}<button class="copy" title="Copy to clipboard"></button>{% endif %}
+            {% if status.is_error %}<button class="copy" title="Copy test filter to clipboard">Copy test filter</button>{% endif %}
         </td>
         <td><span title="{{ t.elapsed }}s">{{ t.elapsed_display }}</span></td>
         <td>

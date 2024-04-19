@@ -181,7 +181,7 @@ public:
 
     bool ForceAcquireSnapshot() const {
         const bool forceSnapshot = (
-            ReadOnlyTx &&
+            HasTableSourceRead() &&
             !ImmediateTx &&
             !HasPersistentChannels &&
             !HasOlapTable &&
@@ -1460,6 +1460,17 @@ private:
         return true;
     }
 
+    bool HasTableSourceRead() const {
+        for (const auto& tx : Request.Transactions) {
+            for (const auto& stage : tx.Body->GetStages()) {
+                if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     void BuildDatashardTasks(TStageInfo& stageInfo) {
         THashMap<ui64, ui64> shardTasks; // shardId -> taskId
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
@@ -1985,7 +1996,7 @@ private:
         YQL_ENSURE(evWriteTxs.empty() || datashardTxs.empty());
 
         // Single-shard datashard transactions are always immediate
-        ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) <= 1
+        ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) == 1
                     && !UnknownAffectedShardCount
                     && evWriteTxs.empty()
                     && !HasOlapTable;

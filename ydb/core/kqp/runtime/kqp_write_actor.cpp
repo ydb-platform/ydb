@@ -199,7 +199,7 @@ namespace {
         i64 Memory = 0;
     };
 
-    constexpr i64 kInFlightMemoryLimitPerActor = 100_MB;
+    constexpr i64 kInFlightMemoryLimitPerActor = 1000_MB;
 }
 
 
@@ -329,7 +329,7 @@ private:
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
 
-        if (Finished) {
+        if (Finished || SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
             TResumeNotificationManager resumeNotificator(*this);
             for (auto& [shardId, batches] : Serializer->FlushBatchesForce()) {
                 for (auto& batch : batches) {
@@ -337,7 +337,9 @@ private:
                 }
             }
             resumeNotificator.CheckMemory();
+        }
 
+        if (Finished) {
             for (auto& [shardId, shardInfo] : ShardsInfo.GetShards()) {
                 shardInfo.Close();
             }
@@ -598,7 +600,6 @@ private:
         }
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
-            std::get<ui64>(TxId),
             NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         YQL_ENSURE(!inFlightBatch.Data.empty());
 

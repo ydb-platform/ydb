@@ -603,14 +603,14 @@ namespace {
             if (params) {
                 return client.StreamExecuteQuery(
                     query,
-                    NQuery::TTxControl::BeginTx().CommitTx(),
+                    NQuery::TTxControl::NoTx(),
                     *params,
                     settings
                 );
             } else {
                 return client.StreamExecuteQuery(
                     query,
-                    NQuery::TTxControl::BeginTx().CommitTx(),
+                    NQuery::TTxControl::NoTx(),
                     settings
                 );
             }
@@ -907,7 +907,7 @@ int TCommandExplain::Run(TConfig& config) {
 
         auto result = client.StreamExecuteQuery(
             Query,
-            NQuery::TTxControl::BeginTx().CommitTx(),
+            NQuery::TTxControl::NoTx(),
             settings).GetValueSync();
         ThrowOnError(result);
 

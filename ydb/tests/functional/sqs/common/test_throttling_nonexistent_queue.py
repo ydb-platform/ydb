@@ -4,11 +4,10 @@ from hamcrest import assert_that, raises
 
 from ydb.tests.library.sqs.test_base import KikimrSqsTestBase
 
-
 throttling_exception_pattern = ".*</Message><Code>ThrottlingException</Code>.*"
 
-class TestSqsThrottlingOnNonexistentQueue(KikimrSqsTestBase):
 
+class TestSqsThrottlingOnNonexistentQueue(KikimrSqsTestBase):
 
     def test_throttling_on_nonexistent_queue(self):
         queue_url = self._create_queue_and_assert(self.queue_name, False, True)

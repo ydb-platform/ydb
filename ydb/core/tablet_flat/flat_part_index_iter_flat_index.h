@@ -1,7 +1,7 @@
 #pragma once
 
 #include "flat_part_iface.h"
-#include "flat_page_index.h"
+#include "flat_page_flat_index.h"
 #include "flat_part_index_iter_iface.h"
 #include "flat_table_part.h"
 #include "flat_stat_part_group_iter_iface.h"
@@ -13,9 +13,9 @@ namespace NKikimr::NTable {
 class TPartGroupFlatIndexIter : public IPartGroupIndexIter, public IStatsPartGroupIter {
 public:
     using TCells = NPage::TCells;
-    using TRecord = NPage::TIndex::TRecord;
-    using TIndex = NPage::TIndex;
-    using TIter = NPage::TIndex::TIter;
+    using TRecord = NPage::TFlatIndex::TRecord;
+    using TIndex = NPage::TFlatIndex;
+    using TIter = NPage::TFlatIndex::TIter;
     using TGroupId = NPage::TGroupId;
 
     TPartGroupFlatIndexIter(const TPart* part, IPages* env, TGroupId groupId)

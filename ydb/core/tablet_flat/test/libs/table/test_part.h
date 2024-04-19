@@ -4,7 +4,7 @@
 #include <ydb/core/tablet_flat/flat_fwd_blobs.h>
 #include <ydb/core/tablet_flat/flat_fwd_cache.h>
 #include <ydb/core/tablet_flat/flat_part_iface.h>
-#include <ydb/core/tablet_flat/flat_part_index_iter.h>
+#include <ydb/core/tablet_flat/flat_part_index_iter_flat_index.h>
 #include <ydb/core/tablet_flat/flat_part_laid.h>
 #include <ydb/core/tablet_flat/flat_row_scheme.h>
 #include <ydb/core/tablet_flat/flat_table_misc.h>

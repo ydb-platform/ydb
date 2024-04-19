@@ -163,7 +163,7 @@ void TPartScheme::InitGroup(TGroupInfo& group)
         }
 
         group.ColsKeyIdx = group.ColsKeyData;
-        group.IdxRecFixedSize = InitInfo(group.ColsKeyIdx, TPgSizeOf<TIndex::TItem>::Value);
+        group.IdxRecFixedSize = InitInfo(group.ColsKeyIdx, TPgSizeOf<TFlatIndex::TItem>::Value);
     } else {
         group.IdxRecFixedSize = 0;
     }

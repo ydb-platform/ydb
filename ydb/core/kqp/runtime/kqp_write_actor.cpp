@@ -199,7 +199,7 @@ namespace {
         i64 Memory = 0;
     };
 
-    constexpr i64 kInFlightMemoryLimitPerActor = 1000_MB;
+    constexpr i64 kInFlightMemoryLimitPerActor = 100_MB;
 }
 
 

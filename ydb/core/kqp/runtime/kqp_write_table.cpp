@@ -14,7 +14,7 @@ namespace NKqp {
 
 namespace {
 
-constexpr ui64 MaxBatchBytes = 8_MB;
+constexpr ui64 MaxBatchBytes = 1_MB;
 
 TVector<TSysTables::TTableColumnInfo> BuildColumns(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
     TVector<TSysTables::TTableColumnInfo> result;

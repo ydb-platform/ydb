@@ -8022,7 +8022,7 @@ TExprNode::TPtr DropAssume(const TExprNode::TPtr& node, TExprContext&) {
 }
 
 TExprNode::TPtr OptimizeCoalesce(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (const auto& input = node->Head(); input.IsCallable("If")) {
+    if (const auto& input = node->Head(); input.IsCallable("If") && (input.Child(1U)->IsComplete() || input.Child(2U)->IsComplete())) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Dive " << node->Content() << " into " << input.Content();
         return ctx.ChangeChildren(input, {
             input.HeadPtr(),
@@ -8032,6 +8032,9 @@ TExprNode::TPtr OptimizeCoalesce(const TExprNode::TPtr& node, TExprContext& ctx)
     } else if (input.IsCallable("Nothing")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << input.Content();
         return node->TailPtr();
+    } else if (input.IsCallable("Just")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << input.Content();
+        return node->HeadPtr();
     }
     return node;
 }

@@ -22,6 +22,9 @@ on:
       put_build_results_to_cache:
         type: boolean
         default: true
+      commit_sha:
+        type: string
+        default: ""
 
 jobs:
   main:

@@ -568,6 +568,42 @@
             "uri": "https://{canondata_backend}/212715/592e73ba25cf99c8f78b39095eff4363259e1e9d/resource.tar.gz#test.test_Builtins-OrOverOptional-Results_/Output.txt"
         }
     ],
+    "test.test[Builtins-StaticFold-Debug]": [
+        {
+            "checksum": "e3cd59bddf1e5ca453aef1f03d261d81",
+            "size": 1722,
+            "uri": "https://{canondata_backend}/1925842/ffaa35da378e795047f81353f47c059270081fe0/resource.tar.gz#test.test_Builtins-StaticFold-Debug_/opt.yql"
+        },
+        {
+            "checksum": "a9926e97480197d845932e16de75e6af",
+            "size": 612,
+            "uri": "https://{canondata_backend}/1925842/ffaa35da378e795047f81353f47c059270081fe0/resource.tar.gz#test.test_Builtins-StaticFold-Debug_/Output.yqlrun.txt.attr"
+        },
+        {
+            "checksum": "e74e3b118273ca0280b13f17d989108f",
+            "size": 322,
+            "uri": "https://{canondata_backend}/1925842/ffaa35da378e795047f81353f47c059270081fe0/resource.tar.gz#test.test_Builtins-StaticFold-Debug_/bb686f68-2245bd5f-2318fa4e-1.tmp"
+        },
+        {
+            "checksum": "a9926e97480197d845932e16de75e6af",
+            "size": 612,
+            "uri": "https://{canondata_backend}/1925842/ffaa35da378e795047f81353f47c059270081fe0/resource.tar.gz#test.test_Builtins-StaticFold-Debug_/bb686f68-2245bd5f-2318fa4e-1.tmp.attr"
+        }
+    ],
+    "test.test[Builtins-StaticFold-Plan]": [
+        {
+            "checksum": "e13b3ad7116fdb49e4bb8ca9a45194bc",
+            "size": 5602,
+            "uri": "https://{canondata_backend}/1925842/ffaa35da378e795047f81353f47c059270081fe0/resource.tar.gz#test.test_Builtins-StaticFold-Plan_/plan.txt"
+        }
+    ],
+    "test.test[Builtins-StaticFold-Results]": [
+        {
+            "checksum": "e74e3b118273ca0280b13f17d989108f",
+            "size": 322,
+            "uri": "https://{canondata_backend}/1925842/ffaa35da378e795047f81353f47c059270081fe0/resource.tar.gz#test.test_Builtins-StaticFold-Results_/Output.txt"
+        }
+    ],
     "test.test[Builtins-Take-Debug]": [
         {
             "checksum": "d7d67a212675d2e7f5fe3910b6968c66",

@@ -309,6 +309,7 @@ class MDBExtension(ExtensionPoint):
         kikimr.compute_plane.fq_config['common']['mdb_gateway'] = self.endpoint     # v2
         kikimr.compute_plane.fq_config['gateways']['generic']['mdb_gateway'] = self.endpoint   # v1
 
+
 class YdbMvpExtension(ExtensionPoint):
 
     def __init__(self, endpoint: str, use_ssl=False):
@@ -325,6 +326,7 @@ class YdbMvpExtension(ExtensionPoint):
 
     def apply_to_kikimr(self, request, kikimr):
         kikimr.compute_plane.qs_config['generic']['ydb_mvp_endpoint'] = self.endpoint
+
 
 class TokenAccessorExtension(ExtensionPoint):
 

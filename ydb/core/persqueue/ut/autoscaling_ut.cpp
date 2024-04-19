@@ -280,12 +280,12 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         ui64 txId = 1023;
         SplitPartition(setup, ++txId, 0, "a");
 
-        TTestReadSession readSession1("Session-0", client, Max<size_t>(), false);
+        TTestReadSession readSession1("Session-0", client, Max<size_t>(), false, {0, 1, 2});
         readSession1.Offsets[0] = 1;
         readSession1.WaitAndAssertPartitions({0, 1, 2}, "Must read all exists partitions because read the partition 0 from offset 1");
         readSession1.Offsets[0] = 0;
 
-        TTestReadSession readSession2("Session-1", client, Max<size_t>(), false, 0);
+        TTestReadSession readSession2("Session-1", client, Max<size_t>(), false, {0});
         readSession2.Offsets[0] = 0;
 
         readSession2.WaitAndAssertPartitions({0}, "Must read partition 0 because it defined in the readSession");
@@ -293,9 +293,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         readSession1.WaitAndAssertPartitions({}, "Must release all partitions becase readSession2 read not from EndOffset");
         readSession1.Run();
-
-        readSession2.WaitAndAssertPartitions({}, "Partition must be released because reding finished");
-        readSession2.Run();
 
         readSession1.WaitAndAssertPartitions({0}, "Partition 0 must rebalance to other sessions (Session-0)");
 

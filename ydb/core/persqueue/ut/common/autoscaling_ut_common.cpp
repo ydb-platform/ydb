@@ -119,7 +119,7 @@ std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& cl
 }
 
 
-TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount, bool autoCommit, std::optional<ui32> partition)
+TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount, bool autoCommit, std::set<ui32> partitions)
     : Name(name)
     , AutoCommit(autoCommit)
     , Semaphore(name.c_str(), SemCount)  {
@@ -129,8 +129,8 @@ TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, si
     auto readSettings = TReadSessionSettings()
         .ConsumerName(TEST_CONSUMER)
         .AppendTopics(TEST_TOPIC);
-    if (partition) {
-        readSettings.Topics_[0].AppendPartitionIds(partition.value());
+    for (auto partitionId : partitions) {
+        readSettings.Topics_[0].AppendPartitionIds(partitionId);
     }
 
     readSettings.EventHandlers_.SimpleDataHandlers(

@@ -109,6 +109,8 @@ struct TPartitionFamily {
 
     void ClassifyPartitions();
 
+    bool PossibleForBalance(TSession* session);
+
     TString DebugStr() const;
 
 private:
@@ -120,7 +122,7 @@ private:
     ui32 TabletGeneration() const;
 
     const TPartitionInfo* GetPartitionInfo(ui32 partitionId) const;
-    TPartition* GetPartitionStatus(ui32 partitionId);
+    TPartition* GetPartition(ui32 partitionId);
     bool IsReadable(ui32 partitionId) const;
     ui32 NextStep();
 
@@ -166,6 +168,9 @@ struct TConsumer {
 
     // Families is not reading now.
     std::unordered_map<size_t, TPartitionFamily*> UnreadableFamilies;
+    // Families that require balancing. Only families are included here if there are reading
+    // sessions that want to read the partitions of this family.
+    std::unordered_map<size_t, TPartitionFamily*> FamiliesRequireBalancing;
 
     std::unordered_map<ui32, TPartition> Partitions;
 
@@ -178,7 +183,7 @@ struct TConsumer {
     const TString& TopicPath() const;
     ui32 TabletGeneration() const;
     const TPartitionInfo* GetPartitionInfo(ui32 partitionId) const;
-    TPartition* GetPartitionStatus(ui32 partitionId);
+    TPartition* GetPartition(ui32 partitionId);
     ui32 NextStep();
 
     void RegisterPartition(ui32 partitionId, const TActorContext& ctx);

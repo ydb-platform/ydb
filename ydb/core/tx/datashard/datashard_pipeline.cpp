@@ -1425,8 +1425,9 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
                       rec.GetFlags(), 0,
                       receivedAt,
                       tieBreakerIndex);
-    if (rec.HasMvccSnapshot() && rec.GetMvccSnapshot().GetRepeatableRead()) {
-        info.SetMvccSnapshot(TRowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId()));
+    if (rec.HasMvccSnapshot()) {
+        info.SetMvccSnapshot(TRowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId()),
+            rec.GetMvccSnapshot().GetRepeatableRead());
     }
     TActiveTransaction::TPtr tx = MakeIntrusive<TActiveTransaction>(info);
     tx->SetTarget(ev->Sender);
@@ -1679,8 +1680,9 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
 {
     const auto& rec = ev->Get()->Record;
     TBasicOpInfo info(rec.GetTxId(), EOperationKind::WriteTx, NEvWrite::TConvertor::GetProposeFlags(rec.GetTxMode()), 0, receivedAt, tieBreakerIndex);
-    if (rec.HasMvccSnapshot() && rec.GetMvccSnapshot().GetRepeatableRead()) {
-        info.SetMvccSnapshot(TRowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId()));
+    if (rec.HasMvccSnapshot()) {
+        info.SetMvccSnapshot(TRowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId()),
+            rec.GetMvccSnapshot().GetRepeatableRead());
     }
     auto writeOp = MakeIntrusive<TWriteOperation>(info, std::move(ev), Self);
     writeOp->OperationSpan = std::move(operationSpan);

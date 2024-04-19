@@ -54,7 +54,7 @@ TDataShard::TPromotePostExecuteEdges TFinishProposeWriteUnit::PromoteImmediatePo
             return DataShard.PromoteImmediatePostExecuteEdges(op->GetMvccSnapshot(), TDataShard::EPromotePostExecuteEdges::ReadOnly, txc);
         }
     } else if (op->MvccReadWriteVersion) {
-        if (op->IsReadOnly()) {
+        if (op->IsReadOnly() || op->LockTxId()) {
             return DataShard.PromoteImmediatePostExecuteEdges(*op->MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadOnly, txc);
         } else {
             return DataShard.PromoteImmediatePostExecuteEdges(*op->MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);

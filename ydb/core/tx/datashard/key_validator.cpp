@@ -87,7 +87,7 @@ bool TKeyValidator::IsValidKey(TKeyDesc& key, const TValidateOptions& opt) const
     if (key.RowOperation != TKeyDesc::ERowOperation::Read) {
         // Prevent updates/erases with LockTxId set, unless it's allowed for immediate mvcc txs
         if (opt.IsLockTxId) {
-            if (!(Self.GetEnableLockedWrites() && opt.IsImmediateTx && opt.IsRepeatableSnapshot && opt.IsLockNodeId)) {
+            if (!(Self.GetEnableLockedWrites() && opt.IsImmediateTx && opt.IsLockNodeId)) {
                 key.Status = TKeyDesc::EStatus::OperationNotSupported;
                 return false;
             }

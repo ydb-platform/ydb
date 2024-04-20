@@ -13,7 +13,14 @@ namespace NKikimr::NSchemeShard {
 template <class TSetElement>
 class TLayoutIdSet {
 private:
+    ui64 Hash = 0;
     std::set<TSetElement> Elements;
+    void ResetHash() {
+        Hash = 0;
+        for (auto&& i : Elements) {
+            Hash = CombineHashes(Hash, i);
+        }
+    }
 public:
     TLayoutIdSet() = default;
     TLayoutIdSet(const TSetElement elem) {
@@ -58,11 +65,15 @@ public:
     }
 
     bool AddId(const TSetElement& id) {
-        return Elements.emplace(id).second;
+        bool result = Elements.emplace(id).second;
+        ResetHash();
+        return result;
     }
 
     bool RemoveId(const TSetElement& id) {
-        return Elements.erase(id);
+        auto result = Elements.erase(id);
+        ResetHash();
+        return result;
     }
 
     bool operator<(const TLayoutIdSet& item) const {
@@ -72,39 +83,13 @@ public:
         if (Elements.size() > item.Elements.size()) {
             return false;
         }
-        auto itSelf = Elements.begin();
-        auto itItem = item.Elements.begin();
-        while (itSelf != Elements.end() && itItem != item.Elements.end()) {
-            if (*itSelf < *itItem) {
-                return true;
-            } else if (*itSelf > *itItem) {
-                return false;
-            }
-            ++itSelf;
-            ++itItem;
-        }
-        if (itSelf != Elements.end() && itItem == item.Elements.end()) {
-            return false;
-        }
-        if (itSelf == Elements.end() && itItem != item.Elements.end()) {
-            return true;
-        }
-        return false;
+        return Hash < item.Hash;
     }
     bool operator==(const TLayoutIdSet& item) const {
         if (Elements.size() != item.Elements.size()) {
             return false;
         }
-        auto itSelf = Elements.begin();
-        auto itItem = item.Elements.begin();
-        while (itSelf != Elements.end() && itItem != item.Elements.end()) {
-            if (*itSelf != *itItem) {
-                return false;
-            }
-            ++itSelf;
-            ++itItem;
-        }
-        return true;
+        return Hash == item.Hash;
     }
 };
 

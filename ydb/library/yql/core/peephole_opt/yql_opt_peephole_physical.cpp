@@ -5497,6 +5497,102 @@ TExprNode::TPtr SplitByPairs(TPositionHandle pos, const TStringBuf& funcName, co
     return ctx.NewCallable(pos, funcName, { left, right });
 }
 
+std::function<bool(const TExprNode::TPtr&)> MakeBlockRewriteStopPredicate(TCoLambda lambda) {
+    return [lambda](const TExprNode::TPtr& node) {
+        return node->IsArguments() || (node->IsLambda() && node != lambda.Ptr());
+    };
+}
+
+TNodeSet CollectLazyNonStrictNodes(TCoLambda lambda) {
+    TNodeSet nonStrictNodes;
+    VisitExpr(lambda.Ptr(), [&](const TExprNode::TPtr& node) {
+        if (node->IsArguments() || node->IsArgument()) {
+            return false;
+        }
+
+        auto type = node->GetTypeAnn();
+        YQL_ENSURE(type);
+
+        // avoid visiting any possible scalar context
+        return type->IsComposable();
+    }, [&](const TExprNode::TPtr& node) {
+        YQL_ENSURE(!nonStrictNodes.contains(node.Get()));
+        if (node->IsCallable("AssumeStrict")) {
+            return true;
+        }
+        if (node->IsCallable("AssumeNonStrict")) {
+            nonStrictNodes.insert(node.Get());
+            return true;
+        }
+        if (AnyOf(node->ChildrenList(), [&](const auto& child) { return nonStrictNodes.contains(child.Get()); }))
+        {
+            nonStrictNodes.insert(node.Get());
+            return true;
+        }
+
+        if (auto maybeStrict = IsStrictNoRecurse(*node); maybeStrict.Defined() && !*maybeStrict) {
+            nonStrictNodes.insert(node.Get());
+            return true;
+        }
+
+        return true;
+    });
+
+    auto needStop = MakeBlockRewriteStopPredicate(lambda);
+
+    TNodeSet lazyNodes;
+    VisitExpr(lambda.Ptr(), [&](const TExprNode::TPtr& node) {
+        if (needStop(node)) {
+            return false;
+        }
+
+        if (node->IsCallable({"And", "Or", "If", "Coalesce"})) {
+            YQL_ENSURE(node->ChildrenSize() >= 1);
+            const auto& children = node->ChildrenList();
+            for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
+                VisitExpr(node->ChildPtr(i), [&](const auto& node) {
+                    if (needStop(node)) {
+                        return false;
+                    }
+                    lazyNodes.insert(node.Get());
+                    return true;
+                });
+            }
+            return false;
+        }
+
+        return true;
+    });
+
+    VisitExpr(lambda.Ptr(), [&](const TExprNode::TPtr& node) {
+        if (needStop(node)) {
+            return false;
+        }
+
+        if (node->IsCallable({"And", "Or", "If", "Coalesce"})) {
+            VisitExpr(node->HeadPtr(), [&](const auto& node) {
+                if (needStop(node)) {
+                    return false;
+                }
+                lazyNodes.erase(node.Get());
+                return true;
+            });
+            return false;
+        }
+
+        lazyNodes.erase(node.Get());
+        return true;
+    });
+
+    TNodeSet lazyNonStrict;
+    for (auto& node : lazyNodes) {
+        if (nonStrictNodes.contains(node)) {
+            lazyNonStrict.insert(node);
+        }
+    }
+    return lazyNonStrict;
+}
+
 bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputColumns, const TExprNode::TPtr& lambda,
     ui32& newNodes, TNodeMap<size_t>& rewritePositions,
     TExprNode::TPtr& blockLambda, TExprNode::TPtr& restLambda,
@@ -5534,17 +5630,12 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         rewrites[lambda->Head().Child(i)] = blockArgs[i];
     }
 
+    const TNodeSet lazyNonStrict = CollectLazyNonStrictNodes(TCoLambda(lambda));
+    auto needStop = MakeBlockRewriteStopPredicate(TCoLambda(lambda));
+
     newNodes = 0;
     VisitExpr(lambda, [&](const TExprNode::TPtr& node) {
-        if (node->IsArguments()) {
-            return false;
-        }
-
-        if (node->IsLambda() && node != lambda) {
-            return false;
-        }
-
-        return true;
+        return !needStop(node);
     }, [&](const TExprNode::TPtr& node) {
         if (rewrites.contains(node.Get())) {
             return true;
@@ -5563,6 +5654,10 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         }
 
         if (node->IsList() && (!node->GetTypeAnn()->IsComputable() || node->IsLiteralList())) {
+            return true;
+        }
+
+        if (lazyNonStrict.contains(node.Get())) {
             return true;
         }
 

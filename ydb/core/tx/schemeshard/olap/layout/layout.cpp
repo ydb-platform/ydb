@@ -15,12 +15,11 @@ std::vector<ui64> TColumnTablesLayout::ShardIdxToTabletId(const std::vector<TSha
 }
 
 TColumnTablesLayout TColumnTablesLayout::BuildTrivial(const std::vector<ui64>& tabletIds) {
-    TTableIdsGroup emptyGroup;
     TShardIdsGroup shardIdsGroup;
     for (const auto& tabletId : tabletIds) {
         shardIdsGroup.AddId(tabletId);
     }
-    return TColumnTablesLayout({ TTablesGroup(std::move(emptyGroup), std::move(shardIdsGroup)) });
+    return TColumnTablesLayout({ TTablesGroup(&Default<TTableIdsGroup>(), std::move(shardIdsGroup)) });
 }
 
 TColumnTablesLayout::TColumnTablesLayout(std::vector<TTablesGroup>&& groups)

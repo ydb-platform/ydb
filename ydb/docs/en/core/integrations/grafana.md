@@ -4,7 +4,7 @@ The [{{ ydb-short-name }} data source plugin](https://grafana.com/grafana/plugin
 
 ## Installation
 
-Prerequisites: the plugin requires Grafana `v9.2` and higher.
+Prerequisites: the plugin requires Grafana `v9.2` or higher.
 
 Follow the Grafana's [plugin installation docs](https://grafana.com/docs/grafana/latest/plugins/installation/) to install a plugin named `ydb-grafana-datasource-plugin`.
 
@@ -16,7 +16,7 @@ Set up an {{ ydb-short-name }} user account with **read-only** permissions [(mor
 
 {% note warning %}
 
-Please note that Grafana does not validate that queries are safe. Queries can contain any SQL statements including data modification instructions.
+Please note that Grafana does not validate that queries are safe. Queries can contain any SQL statements, including data modification instructions.
 
 {% endnote %}
 
@@ -30,11 +30,11 @@ Once the plugin is installed on your Grafana instance, follow [these instruction
 
 ### Configuration with provisioning system
 
-Alternatively, it is possible to configure data sources using configuration files with Grafana’s provisioning system. To read about how it works, including all the settings that you can set for this data source, refer to [Provisioning Grafana data sources](https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources) documentation.
+Alternatively, Grafana's provisioning system allows you to configure data sources using configuration files. To read about how it works, including all the settings you can set for this data source, refer to the [Provisioning Grafana data sources](https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources) documentation.
 
 ### Authentication
 
-The Grafana plugin supports next [authentication methods](../reference/ydb-sdk/auth.md): Anonymous, Access Token, Metadata, Service Account Key and Static Credentials.
+The Grafana plugin supports the following [authentication methods](../reference/ydb-sdk/auth.md): Anonymous, Access Token, Metadata, Service Account Key and Static Credentials.
 
 Below is an example config for authenticating a {{ ydb-short-name }} data source using username and password:
 
@@ -65,23 +65,22 @@ Here are fields that are supported in connection configuration:
 | serviceAccAuthAccessKey | Service account access key  | `string` (secured) |
 | accessToken | OAuth access token  | `string` (secured) |
 | password | User password  | `string` (secured) |
-| certificate | If self-signed certificates are used on your {{ ydb-short-name }} cluster, specify the [Certificate Authority](https://en.wikipedia.org/wiki/Certificate_authority) certificate, through which they were released  | `string` (secured) |
+| certificate | If self-signed certificates are used on your {{ ydb-short-name }} cluster nodes, specify the [Certificate Authority](https://en.wikipedia.org/wiki/Certificate_authority) certificate used to issue them  | `string` (secured) |
 
 ## Building queries
 
 {{ ydb-short-name }} is queried with a SQL dialect named [YQL](../yql/reference/index.md).
-Queries can contain macros which simplify syntax and allow for dynamic parts. There are two kinds of macros - [Grafana-level](#macros) and {{ ydb-short-name }}-level. The plugin will parse query text and, before sending it to {{ ydb-short-name }}, substitute variables and Grafana-level macros with particular values. After that {{ ydb-short-name }}-level macroses will be treated by {{ ydb-short-name }} server-side. 
-The query editor allows to get data in different representations: time series, table or logs.
+The query editor allows to get data in different representations: time series, table, or logs.
 
 ### Time series
 
-Time series visualization options are selectable if the query returns at least one field with `Date`, `Datetime`, or `Timestamp` type (for now, working with time is supported only in UTC timezone) and at least one field with `Int64`, `Int32`, `Int16`, `Int8`, `Uint64`, `Uint32`, `Uint16`, `Uint8`, `Double` or `Float` type. Then you can select time series visualization options. Any other column is treated as a value column.
+Time series visualization options are selectable if the query returns at least one field with `Date`, `Datetime`, or `Timestamp` type (for now, working with time is supported only in UTC timezone) and at least one field with `Int64`, `Int32`, `Int16`, `Int8`, `Uint64`, `Uint32`, `Uint16`, `Uint8`, `Double` or `Float` type. Then, you can select time series visualization options. Any other column is treated as a value column.
 
 ![Time-series](../_assets/grafana/time-series.png)
 
 #### Multi-line time series
 
-To create multi-line time series, the query must return at least 3 fields in the following order:
+To create a multi-line time series, the query must return at least 3 fields in the following order:
 
 - field 1: `Date`, `Datetime` or `Timestamp`
 - field 2: value to group by
@@ -108,15 +107,16 @@ Table visualizations will always be available for any valid {{ ydb-short-name }}
 
 ### Visualizing logs with the Logs Panel
 
-To use the Logs panel your query must return a `Date`, `Datetime` or `Timestamp` and `String` values. You can select logs visualizations using the visualization options.
+To use the Logs panel, your query must return a `Date`, `Datetime`, or `Timestamp` value and a `String` value. You can select logs visualizations using the visualization options.
 
-By default, only the first text field will be represented as log line. This can be customized using the query builder.
+Only the first text field will be represented as a log line by default. This behavior can be customized using the query builder.
 
 ![Logs](../_assets/grafana/logs.png)
 
 ### Macros
 
-To simplify syntax and to allow for dynamic parts, like date range filters, the query can contain macros.
+The query can contain macros, which simplify syntax and allow for dynamic parts, like date range filters.
+There are two kinds of macros - [Grafana-level](#macros) and {{ ydb-short-name }}-level. The plugin will parse query text and, before sending it to {{ ydb-short-name }}, substitute variables and Grafana-level macros with particular values. After that {{ ydb-short-name }}-level macroses will be treated by {{ ydb-short-name }} server-side. 
 
 Here is an example of a query with a macro that will use Grafana's time filter:
 

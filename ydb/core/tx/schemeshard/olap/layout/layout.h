@@ -4,13 +4,14 @@
 
 #include <ydb/library/accessor/accessor.h>
 
+#include <util/digest/numeric.h>
 #include <util/system/types.h>
 
 #include <set>
 
 namespace NKikimr::NSchemeShard {
 
-template <class TSetElement>
+template <class TSetElement, class THashCalcer>
 class TLayoutIdSet {
 private:
     ui64 Hash = 0;
@@ -18,7 +19,7 @@ private:
     void ResetHash() {
         Hash = 0;
         for (auto&& i : Elements) {
-            Hash = CombineHashes(Hash, i);
+            Hash = CombineHashes(Hash, THashCalcer::GetHash(i));
         }
     }
 public:
@@ -96,9 +97,26 @@ public:
 class TSchemeShard;
 
 class TColumnTablesLayout {
+private:
+    class TSelfHash {
+    public:
+        template <class T>
+        static ui64 GetHash(const T data) {
+            return data;
+        }
+    };
+
+    class TPathIdHashCalcer {
+    public:
+        template <class T>
+        static ui64 GetHash(const T& data) {
+            return data.Hash();
+        }
+    };
+
 public:
-    using TShardIdsGroup = TLayoutIdSet<ui64>;
-    using TTableIdsGroup = TLayoutIdSet<TPathId>;
+    using TShardIdsGroup = TLayoutIdSet<ui64, TSelfHash>;
+    using TTableIdsGroup = TLayoutIdSet<TPathId, TPathIdHashCalcer>;
 
     class TTablesGroup {
     private:

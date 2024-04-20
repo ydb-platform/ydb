@@ -7,7 +7,7 @@ void TTablesStorage::OnAddObject(const TPathId& pathId, TColumnTableInfo::TPtr o
     if (!!tieringId) {
         PathsByTieringId[tieringId].emplace(pathId);
     }
-    for (auto&& s : object->ColumnShards) {
+    for (auto&& s : object->GetColumnShards()) {
         TablesByShard[s].AddId(pathId);
     }
 }
@@ -24,7 +24,7 @@ void TTablesStorage::OnRemoveObject(const TPathId& pathId, TColumnTableInfo::TPt
             PathsByTieringId.erase(it);
         }
     }
-    for (auto&& s : object->ColumnShards) {
+    for (auto&& s : object->GetColumnShards()) {
         TablesByShard[s].RemoveId(pathId);
     }
 }

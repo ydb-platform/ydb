@@ -6,10 +6,26 @@
 namespace NKikimr::NSchemeShard {
 
 struct TColumnTableInfo {
+private:
+    YDB_READONLY_DEF(std::vector<ui64>, ColumnShards);
+public:
     using TPtr = std::shared_ptr<TColumnTableInfo>;
 
     ui64 AlterVersion = 0;
     TPtr AlterData;
+
+    void SetColumnShards(std::vector<ui64>&& columnShards) {
+        AFL_VERIFY(ColumnShards.empty());
+        ColumnShards = std::move(columnShards);
+
+        Sharding.SetVersion(1);
+
+        Sharding.MutableColumnShards()->Clear();
+        Sharding.MutableColumnShards()->Reserve(ColumnShards.size());
+        for (ui64 columnShard : ColumnShards) {
+            Sharding.AddColumnShards(columnShard);
+        }
+    }
 
     NKikimrSchemeOp::TColumnTableDescription Description;
     NKikimrSchemeOp::TColumnTableSharding Sharding;
@@ -18,7 +34,6 @@ struct TColumnTableInfo {
 
     TMaybe<TPathId> OlapStorePathId; // PathId of the table store
 
-    std::vector<ui64> ColumnShards; // Current list of column shards
     std::vector<TShardIdx> OwnedColumnShards;
     TAggregatedStats Stats;
 

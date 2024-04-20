@@ -270,7 +270,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        Y_ABORT_UNLESS(tableInfo->ColumnShards.empty() || tableInfo->OwnedColumnShards.empty());
+        Y_ABORT_UNLESS(tableInfo->GetColumnShards().empty() || tableInfo->OwnedColumnShards.empty());
 
         TString columnShardTxBody;
         auto seqNo = context.SS->StartRound(*txState);
@@ -280,7 +280,7 @@ public:
         {
             NKikimrTxColumnShard::TCreateTable* create{};
             if (tableInfo->IsStandalone()) {
-                Y_ABORT_UNLESS(tableInfo->ColumnShards.empty());
+                Y_ABORT_UNLESS(tableInfo->GetColumnShards().empty());
                 Y_ABORT_UNLESS(tableInfo->Description.HasSchema());
 
                 auto* init = tx.MutableInitShard();
@@ -392,7 +392,7 @@ public:
 
         auto table = context.SS->ColumnTables.TakeAlterVerified(pathId);
         if (table->IsStandalone()) {
-            table->ColumnShards = TColumnTablesLayout::ShardIdxToTabletId(table->OwnedColumnShards, *context.SS);
+            table->SetColumnShards(TColumnTablesLayout::ShardIdxToTabletId(table->OwnedColumnShards, *context.SS));
         }
 
         context.SS->PersistColumnTableAlterRemove(db, pathId);
@@ -703,12 +703,12 @@ public:
                 auto layoutPolicy = storeInfo->GetTablesLayoutPolicy();
                 auto currentLayout = context.SS->ColumnTables.GetTablesLayout(TColumnTablesLayout::ShardIdxToTabletId(storeInfo->GetColumnShards(), *context.SS));
                 auto layoutConclusion = layoutPolicy->Layout(currentLayout, shardsCount);
+                needUpdateObject = layoutConclusion->GetIsNewGroup();
+                tableInfo->SetColumnShards(std::move(layoutConclusion->MutableTabletIds()));
                 if (layoutConclusion.IsFail()) {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed, layoutConclusion.GetErrorMessage());
                     return result;
                 }
-                needUpdateObject = layoutConclusion->GetIsNewGroup();
-                tableInfo->ColumnShards = std::move(layoutConclusion->MutableTabletIds());
             }
         } else {
             TOlapTableConstructor tableConstructor;
@@ -742,9 +742,9 @@ public:
             auto olapStorePath = parentPath.FindOlapStore();
 
             txState.State = TTxState::ConfigureParts;
-            txState.Shards.reserve(tableInfo->ColumnShards.size());
+            txState.Shards.reserve(tableInfo->GetColumnShards().size());
 
-            for (ui64 columnShardId : tableInfo->ColumnShards) {
+            for (ui64 columnShardId : tableInfo->GetColumnShards()) {
                 auto tabletId = TTabletId(columnShardId);
                 auto shardIdx = context.SS->TabletIdToShardIdx.at(tabletId);
                 TShardInfo& shardInfo = context.SS->ShardInfos.at(shardIdx);

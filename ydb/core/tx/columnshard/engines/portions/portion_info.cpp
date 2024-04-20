@@ -87,9 +87,9 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
     }
     sb << "chunks:(" << Records.size() << ");";
     if (IS_TRACE_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
-        std::vector<TBlobRangeLink16> blobRanges;
+        std::vector<TBlobRange> blobRanges;
         for (auto&& i : Records) {
-            blobRanges.emplace_back(i.BlobRange);
+            blobRanges.emplace_back(RestoreBlobRange(i.BlobRange));
         }
         sb << "blobs:" << JoinSeq(",", blobRanges) << ";ranges_count:" << blobRanges.size() << ";";
         sb << "blob_ids:" << JoinSeq(",", BlobIds) << ";blobs_count:" << BlobIds.size() << ";";

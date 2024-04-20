@@ -8032,6 +8032,10 @@ TExprNode::TPtr OptimizeCoalesce(const TExprNode::TPtr& node, TExprContext& ctx)
     } else if (input.IsCallable("Nothing")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << input.Content();
         return node->TailPtr();
+    } else if (input.IsCallable("Just")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << input.Content();
+        return IsSameAnnotation(*node->GetTypeAnn(), *input.GetTypeAnn()) ?
+            node->HeadPtr() : node->Head().HeadPtr();
     }
     return node;
 }

@@ -18,8 +18,8 @@ struct TColumnTableInfo {
 
     TMaybe<TPathId> OlapStorePathId; // PathId of the table store
 
-    TVector<ui64> ColumnShards; // Current list of column shards
-    TVector<TShardIdx> OwnedColumnShards;
+    std::vector<ui64> ColumnShards; // Current list of column shards
+    std::vector<TShardIdx> OwnedColumnShards;
     TAggregatedStats Stats;
 
     TColumnTableInfo() = default;

@@ -112,21 +112,6 @@ void TTablesStorage::TTableExtractedGuard::UseAlterDataVerified() {
     Object = alterInfo;
 }
 
-bool TTablesStorage::TTableCreateOperator::InitShardingTablets(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, TOlapStoreInfo::ILayoutPolicy::TPtr layoutPolicy, bool& isNewGroup) const {
-    if (!layoutPolicy->Layout(currentLayout, shardsCount, Object->ColumnShards, isNewGroup)) {
-        ALS_ERROR(NKikimrServices::FLAT_TX_SCHEMESHARD) << "cannot layout new table with " << shardsCount << " shards";
-        return false;
-    }
-    Object->Sharding.SetVersion(1);
-
-    Object->Sharding.MutableColumnShards()->Clear();
-    Object->Sharding.MutableColumnShards()->Reserve(Object->ColumnShards.size());
-    for (ui64 columnShard : Object->ColumnShards) {
-        Object->Sharding.AddColumnShards(columnShard);
-    }
-    return true;
-}
-
 std::unordered_set<TPathId> TTablesStorage::GetAllPathIds() const {
     std::unordered_set<TPathId> result;
     for (const auto& [pathId, _] : Tables) {

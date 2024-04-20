@@ -392,11 +392,7 @@ public:
 
         auto table = context.SS->ColumnTables.TakeAlterVerified(pathId);
         if (table->IsStandalone()) {
-            Y_ABORT_UNLESS(table->ColumnShards.empty());
-            auto currentLayout = TColumnTablesLayout::BuildTrivial(TColumnTablesLayout::ShardIdxToTabletId(table->OwnedColumnShards, *context.SS));
-            auto layoutPolicy = std::make_shared<TOlapStoreInfo::TMinimalTablesCountLayout>();
-            bool isNewGroup;
-            Y_ABORT_UNLESS(table.InitShardingTablets(currentLayout, table->OwnedColumnShards.size(), layoutPolicy, isNewGroup));
+            table->ColumnShards = TColumnTablesLayout::ShardIdxToTabletId(table->OwnedColumnShards, *context.SS);
         }
 
         context.SS->PersistColumnTableAlterRemove(db, pathId);
@@ -584,7 +580,7 @@ public:
         const auto acceptExisted = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
 
-        // Copy CreateColumnTable for changes. Update defaut sharding if not set.
+        // Copy CreateColumnTable for changes. Update default sharding if not set.
         auto createDescription = Transaction.GetCreateColumnTable();
         if (!createDescription.HasColumnShardCount()) {
             createDescription.SetColumnShardCount(TTableConstructorBase::DEFAULT_SHARDS_COUNT);
@@ -705,14 +701,14 @@ public:
             tableInfo = tableConstructor.BuildTableInfo(errors);
             if (tableInfo) {
                 auto layoutPolicy = storeInfo->GetTablesLayoutPolicy();
-                auto currentLayout = context.SS->ColumnTables.GetTablesLayout(
-                    TColumnTablesLayout::ShardIdxToTabletId(storeInfo->GetColumnShards(), *context.SS));
-                TTablesStorage::TTableCreateOperator createOperator(tableInfo);
-                if (!createOperator.InitShardingTablets(currentLayout, shardsCount, layoutPolicy, needUpdateObject)) {
-                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                        "cannot layout table by shards");
+                auto currentLayout = context.SS->ColumnTables.GetTablesLayout(TColumnTablesLayout::ShardIdxToTabletId(storeInfo->GetColumnShards(), *context.SS));
+                auto layoutConclusion = layoutPolicy->Layout(currentLayout, shardsCount);
+                if (layoutConclusion.IsFail()) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, layoutConclusion.GetErrorMessage());
                     return result;
                 }
+                needUpdateObject = layoutConclusion->GetIsNewGroup();
+                tableInfo->ColumnShards = std::move(layoutConclusion->MutableTabletIds());
             }
         } else {
             TOlapTableConstructor tableConstructor;

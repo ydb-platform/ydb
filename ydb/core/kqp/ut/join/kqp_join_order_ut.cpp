@@ -801,7 +801,7 @@ private:
     TKikimrRunner Kikimr_;
     NYdb::NTable::TTableClient TableClient_;
     TSession Session_;
-    size_t ChainSize_;
+    size_t ChainSize_; 
 };
 
 Y_UNIT_TEST_SUITE(KqpJoinOrder) {

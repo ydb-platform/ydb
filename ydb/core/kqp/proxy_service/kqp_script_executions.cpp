@@ -1,12 +1,14 @@
 #include "kqp_script_executions.h"
 #include "kqp_script_executions_impl.h"
 
+#include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/rows_proto_splitter.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/proto/result_set_meta.pb.h>
 #include <ydb/core/kqp/run_script_actor/kqp_run_script_actor.h>
+#include <ydb/core/tx/datashard/const.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/library/table_creator/table_creator.h>
@@ -134,7 +136,8 @@ private:
                     Col("end_ts", NScheme::NTypeIds::Timestamp),
                     Col("query_text", NScheme::NTypeIds::Text),
                     Col("syntax", NScheme::NTypeIds::Int32),
-                    Col("ast", NScheme::NTypeIds::Text),
+                    Col("ast_compressed", NScheme::NTypeIds::String),
+                    Col("ast_compression_method", NScheme::NTypeIds::Text),
                     Col("issues", NScheme::NTypeIds::JsonDocument),
                     Col("plan", NScheme::NTypeIds::JsonDocument),
                     Col("meta", NScheme::NTypeIds::JsonDocument),
@@ -1135,7 +1138,8 @@ public:
                 plan,
                 issues,
                 stats,
-                ast
+                ast_compressed,
+                ast_compression_method
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
                   (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
@@ -1220,8 +1224,12 @@ public:
             Metadata.mutable_exec_stats()->set_query_plan(*plan);
         }
 
-        const TMaybe<TString> ast = result.ColumnParser("ast").GetOptionalUtf8();
+        TMaybe<TString> ast = result.ColumnParser("ast_compressed").GetOptionalString();
         if (ast) {
+            if (const TMaybe<TString> astCompressionMethod = result.ColumnParser("ast_compression_method").GetOptionalUtf8()) {
+                NFq::TCompressor compressor(*astCompressionMethod);
+                ast = compressor.Decompress(*ast);
+            }
             Metadata.mutable_exec_stats()->set_query_ast(*ast);
         }
 
@@ -2457,7 +2465,8 @@ public:
             DECLARE $issues AS JsonDocument;
             DECLARE $plan AS JsonDocument;
             DECLARE $stats AS JsonDocument;
-            DECLARE $ast AS Text;
+            DECLARE $ast_compressed AS String;
+            DECLARE $ast_compression_method AS Optional<Text>;
             DECLARE $operation_ttl AS Interval;
             DECLARE $customer_supplied_id AS Text;
             DECLARE $user_token AS Text;
@@ -2474,7 +2483,8 @@ public:
                 plan = $plan,
                 end_ts = CurrentUtcTimestamp(),
                 stats = $stats,
-                ast = $ast,
+                ast_compressed = $ast_compressed,
+                ast_compression_method = $ast_compression_method,
                 expire_at = IF($operation_ttl > CAST(0 AS Interval), CurrentUtcTimestamp() + $operation_ttl, NULL),
                 customer_supplied_id = IF($applicate_script_external_effect_required, $customer_supplied_id, NULL),
                 user_token = IF($applicate_script_external_effect_required, $user_token, NULL),
@@ -2493,6 +2503,13 @@ public:
             NGRpcService::FillQueryStats(queryStats, *Request.QueryStats);
             NProtobufJson::Proto2Json(queryStats, statsJson, NProtobufJson::TProto2JsonConfig());
             serializedStats = NJson::WriteJson(statsJson);
+        }
+
+        auto astCompressionMethod = Request.QueryAstCompressionMethod ? TMaybe<TString>(*Request.QueryAstCompressionMethod) : Nothing();
+        if (Request.QueryAst && Request.QueryAst->size() > NDataShard::NLimits::MaxWriteValueSize) {
+            astCompressionMethod = Nothing();
+            Request.QueryAst = std::nullopt;
+            Request.Issues.AddIssue(TStringBuilder() << "Query ast size is " << Request.QueryAst->size() << " bytes, that is larger than allowed limit " << NDataShard::NLimits::MaxWriteValueSize << " bytes, ast was dropped");
         }
 
         NYdb::TParamsBuilder params;
@@ -2521,8 +2538,11 @@ public:
             .AddParam("$stats")
                 .JsonDocument(serializedStats)
                 .Build()
-            .AddParam("$ast")
-                .Utf8(Request.QueryAst.value_or(""))
+            .AddParam("$ast_compressed")
+                .String(Request.QueryAst.value_or(""))
+                .Build()
+            .AddParam("$ast_compression_method")
+                .OptionalUtf8(astCompressionMethod)
                 .Build()
             .AddParam("$operation_ttl")
                 .Interval(static_cast<i64>(OperationTtl.MicroSeconds()))

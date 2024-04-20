@@ -1,5 +1,6 @@
 #include "kqp_finalize_script_actor.h"
 
+#include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/events/events.h>
 
 #include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
@@ -20,6 +21,7 @@ public:
     TScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
         const NKikimrConfig::TFinalizeScriptServiceConfig& finalizeScriptServiceConfig,
         const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
+        const NFq::NConfig::TCommonConfig& federatedQueryConfig,
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
         : ReplyActor_(request->Sender)
         , ExecutionId_(request->Get()->Description.ExecutionId)
@@ -29,9 +31,20 @@ public:
         , FinalizationTimeout_(TDuration::Seconds(finalizeScriptServiceConfig.GetScriptFinalizationTimeoutSeconds()))
         , MaximalSecretsSnapshotWaitTime_(2 * TDuration::Seconds(metadataProviderConfig.GetRefreshPeriodSeconds()))
         , FederatedQuerySetup_(federatedQuerySetup)
+        , Compressor(federatedQueryConfig.GetQueryArtifactsCompressionMethod(), federatedQueryConfig.GetQueryArtifactsCompressionMinSize())
     {}
 
     void Bootstrap() {
+        if (Compressor.IsEnabled()) {
+            auto& description = Request_->Get()->Description;
+
+            if (const auto& ast = description.QueryAst) {
+                const auto& [astCompressionMethod, astCompressed] = Compressor.Compress(*ast);
+                description.QueryAstCompressionMethod = astCompressionMethod;
+                description.QueryAst = astCompressed;
+            }
+        }
+
         Register(CreateSaveScriptFinalStatusActor(SelfId(), std::move(Request_)));
         Become(&TScriptFinalizerActor::FetchState);
     }
@@ -94,7 +107,7 @@ private:
         }
 
         for (const auto& sink : Sinks_) {
-            auto sinkName = sink.GetSinkName();
+            const auto& sinkName = sink.GetSinkName();
 
             if (sinkName) {
                 const auto& structuredToken = NYql::CreateStructuredTokenParser(sink.GetAuthInfo()).ToBuilder().ReplaceReferences(secretsMap).ToJson();
@@ -196,15 +209,16 @@ private:
     }
 
 private:
-    TActorId ReplyActor_;
-    TString ExecutionId_;
-    TString Database_;
-    EFinalizationStatus FinalizationStatus_;
+    const TActorId ReplyActor_;
+    const TString ExecutionId_;
+    const TString Database_;
+    const EFinalizationStatus FinalizationStatus_;
     TEvScriptFinalizeRequest::TPtr Request_;
 
-    TDuration FinalizationTimeout_;
-    TDuration MaximalSecretsSnapshotWaitTime_;
+    const TDuration FinalizationTimeout_;
+    const TDuration MaximalSecretsSnapshotWaitTime_;
     const std::optional<TKqpFederatedQuerySetup>& FederatedQuerySetup_;
+    const NFq::TCompressor Compressor;
 
     TString CustomerSuppliedId_;
     std::vector<NKqpProto::TKqpExternalSink> Sinks_;
@@ -219,8 +233,9 @@ private:
 IActor* CreateScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
     const NKikimrConfig::TFinalizeScriptServiceConfig& finalizeScriptServiceConfig,
     const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
+    const NFq::NConfig::TCommonConfig& federatedQueryConfig,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup) {
-    return new TScriptFinalizerActor(std::move(request), finalizeScriptServiceConfig, metadataProviderConfig, federatedQuerySetup);
+    return new TScriptFinalizerActor(std::move(request), finalizeScriptServiceConfig, metadataProviderConfig, federatedQueryConfig, federatedQuerySetup);
 }
 
 }  // namespace NKikimr::NKqp

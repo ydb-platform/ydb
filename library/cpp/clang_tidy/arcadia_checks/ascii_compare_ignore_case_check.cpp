@@ -2,7 +2,7 @@
 
 #include <contrib/libs/clang16/include/clang/AST/ASTContext.h>
 #include <contrib/libs/clang16/include/clang/ASTMatchers/ASTMatchFinder.h>
-#include <contrib/libs/clang16/include/clang/Tooling/FixIt.h>
+#include <contrib/libs/clang16/include/clang/Basic/Diagnostic.h>
 
 
 using namespace clang::ast_matchers;
@@ -17,10 +17,10 @@ namespace clang::tidy::arcadia {
 
     void AsciiCompareIgnoreCaseCheck::registerMatchers(MatchFinder* finder) {
         const auto compareMatcher = callExpr(
-            callee(functionDecl(hasName("AsciiCompareIgnoreCase"))),
-            argumentCountIs(2),
-            hasArgument(0, expr()),
-            hasArgument(1, expr())
+            callee(functionDecl(
+                hasName("AsciiCompareIgnoreCase"),
+                parameterCountIs(2)
+            ))
         );
 
         // Case 1: AsciiCompareIgnoreCase(...) is casted (maybe implicitly) to boolean.

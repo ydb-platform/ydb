@@ -45,4 +45,11 @@ const TColumnTablesLayout::TTableIdsGroup& TColumnTablesLayout::TTablesGroup::Ge
     return *TableIds;
 }
 
+TColumnTablesLayout::TTablesGroup::TTablesGroup(const TTableIdsGroup* tableIds, TShardIdsGroup&& shardIds)
+    : TableIds(tableIds)
+    , ShardIds(std::move(shardIds))
+{
+    AFL_VERIFY(TableIds);
+}
+
 }

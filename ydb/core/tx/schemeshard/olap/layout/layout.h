@@ -121,11 +121,7 @@ public:
         YDB_READONLY_DEF(TShardIdsGroup, ShardIds);
     public:
         TTablesGroup() = default;
-        TTablesGroup(const TTableIdsGroup& tableIds, TShardIdsGroup&& shardIds)
-            : TableIds(&tableIds)
-            , ShardIds(std::move(shardIds)) {
-
-        }
+        TTablesGroup(const TTableIdsGroup* tableIds, TShardIdsGroup&& shardIds);
 
         const TTableIdsGroup& GetTableIds() const;
 

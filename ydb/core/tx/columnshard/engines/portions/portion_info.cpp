@@ -110,6 +110,7 @@ std::vector<const NKikimr::NOlap::TColumnRecord*> TPortionInfo::GetColumnChunksP
 }
 
 void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
+    db.ErasePortion(*this);
     for (auto& record : Records) {
         db.EraseColumn(*this, record);
     }

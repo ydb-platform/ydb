@@ -15,6 +15,11 @@ class TLayoutIdSet {
 private:
     std::set<TSetElement> Elements;
 public:
+    TLayoutIdSet() = default;
+    TLayoutIdSet(const TSetElement elem) {
+        Elements.emplace(elem);
+    }
+
     typename std::set<TSetElement>::const_iterator begin() const {
         return Elements.begin();
     }
@@ -25,18 +30,6 @@ public:
 
     size_t Size() const {
         return Elements.size();
-    }
-
-    explicit operator ui64() const {
-        return Hash();
-    }
-
-    ui64 Hash() const {
-        ui64 result = 0;
-        for (auto&& i : Elements) {
-            result = CombineHashes(result, std::hash<TSetElement>()(i));
-        }
-        return result;
     }
 
     std::vector<TSetElement> GetIdsVector() const {
@@ -124,27 +117,29 @@ public:
 
     class TTablesGroup {
     private:
-        YDB_READONLY_DEF(TTableIdsGroup, TableIds);
+        const TTableIdsGroup* TableIds = nullptr;
         YDB_READONLY_DEF(TShardIdsGroup, ShardIds);
     public:
+        TTablesGroup() = default;
         TTablesGroup(const TTableIdsGroup& tableIds, TShardIdsGroup&& shardIds)
-            : TableIds(tableIds)
+            : TableIds(&tableIds)
             , ShardIds(std::move(shardIds)) {
 
         }
 
+        const TTableIdsGroup& GetTableIds() const;
+
+        bool TryMerge(const TTablesGroup& item);
+
         bool operator<(const TTablesGroup& item) const {
-            return TableIds < item.TableIds;
+            return GetTableIds() < item.GetTableIds();
         }
     };
 
 private:
     YDB_READONLY_DEF(std::vector<TTablesGroup>, Groups);
 public:
-    TColumnTablesLayout(std::vector<TTablesGroup>&& groups)
-        : Groups(std::move(groups)) {
-        std::sort(Groups.begin(), Groups.end());
-    }
+    TColumnTablesLayout(std::vector<TTablesGroup>&& groups);
 
     static std::vector<ui64> ShardIdxToTabletId(const std::vector<TShardIdx>& shards, const TSchemeShard& ss);
 

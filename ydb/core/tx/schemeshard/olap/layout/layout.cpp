@@ -1,5 +1,6 @@
 #include "layout.h"
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -20,6 +21,28 @@ TColumnTablesLayout TColumnTablesLayout::BuildTrivial(const std::vector<ui64>& t
         shardIdsGroup.AddId(tabletId);
     }
     return TColumnTablesLayout({ TTablesGroup(std::move(emptyGroup), std::move(shardIdsGroup)) });
+}
+
+TColumnTablesLayout::TColumnTablesLayout(std::vector<TTablesGroup>&& groups)
+    : Groups(std::move(groups))
+{
+    AFL_VERIFY(std::is_sorted(Groups.begin(), Groups.end()));
+}
+
+bool TColumnTablesLayout::TTablesGroup::TryMerge(const TTablesGroup& item) {
+    if (GetTableIds() == item.GetTableIds()) {
+        for (auto&& i : item.ShardIds) {
+            AFL_VERIFY(ShardIds.AddId(i));
+        }
+        return true;
+    } else {
+        return false;
+    }
+}
+
+const TColumnTablesLayout::TTableIdsGroup& TColumnTablesLayout::TTablesGroup::GetTableIds() const {
+    AFL_VERIFY(TableIds);
+    return *TableIds;
 }
 
 }

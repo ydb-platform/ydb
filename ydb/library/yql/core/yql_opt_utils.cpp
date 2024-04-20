@@ -1853,7 +1853,7 @@ bool IsStrict(const TExprNode::TPtr& root) {
         }
 
         auto maybeStrict = IsStrictNoRecurse(*node);
-        if (maybeStrict.Defined() && !maybeStrict) {
+        if (maybeStrict.Defined() && !*maybeStrict) {
             isStrict = false;
         }
 

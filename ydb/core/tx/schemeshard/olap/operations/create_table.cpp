@@ -58,7 +58,7 @@ public:
     }
 
     TColumnTableInfo::TPtr BuildTableInfo(IErrorCollector& errors) const {
-        TColumnTableInfo::TPtr tableInfo = new TColumnTableInfo;
+        TColumnTableInfo::TPtr tableInfo = std::make_shared<TColumnTableInfo>();
         tableInfo->AlterVersion = 1;
 
         BuildDescription(tableInfo->Description);

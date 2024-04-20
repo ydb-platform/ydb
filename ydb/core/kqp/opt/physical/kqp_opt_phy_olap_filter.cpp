@@ -5,6 +5,7 @@
 #include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <ydb/library/yql/providers/common/pushdown/collection.h>
 #include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
 
@@ -45,6 +46,7 @@ struct TPushdownSettings : public NPushdown::TSettings {
             | EFlag::UuidType
             | EFlag::DecimalType
             | EFlag::DyNumberType);
+        Enable(EFlag::JustPassthroughOperators, NSsa::RuntimeVersion >= 5U);
     }
 };
 
@@ -120,6 +122,26 @@ std::optional<std::pair<TExprBase, TExprBase>> ExtractBinaryFunctionParameters(c
     return std::make_pair(left.front(), right.front());
 }
 
+std::optional<std::array<TExprBase, 3U>> ExtractTernaryFunctionParameters(const TExprBase& op, TExprContext& ctx, TPositionHandle pos)
+{
+    const auto first = ConvertComparisonNode(TExprBase(op.Ref().ChildPtr(0U)), ctx, pos);
+    if (first.size() != 1U) {
+        return std::nullopt;
+    }
+
+    const auto second = ConvertComparisonNode(TExprBase(op.Ref().ChildPtr(1U)), ctx, pos);
+    if (second.size() != 1U) {
+        return std::nullopt;
+    }
+
+    const auto third = ConvertComparisonNode(TExprBase(op.Ref().ChildPtr(2U)), ctx, pos);
+    if (third.size() != 1U) {
+        return std::nullopt;
+    }
+
+    return std::array<TExprBase, 3U>{first.front(), second.front(), third.front()};
+}
+
 std::vector<std::pair<TExprBase, TExprBase>> ExtractComparisonParameters(const TCoCompare& predicate, TExprContext& ctx, TPositionHandle pos)
 {
     std::vector<std::pair<TExprBase, TExprBase>> out;
@@ -151,6 +173,19 @@ TMaybeNode<TExprBase> YqlCoalescePushdown(const TCoCoalesce& coalesce, TExprCont
                 .Left(params->first)
                 .Right(params->second)
                 .Done();
+    }
+
+    return NullNode;
+}
+
+TMaybeNode<TExprBase> YqlIfPushdown(const TCoIf& ifOp, TExprContext& ctx) {
+    if (const auto params = ExtractTernaryFunctionParameters(ifOp, ctx, ifOp.Pos())) {
+        return Build<TKqpOlapFilterTernaryOp>(ctx, ifOp.Pos())
+            .Operator().Value("if", TNodeFlags::Default).Build()
+            .First(std::get<0U>(*params))
+            .Second(std::get<1U>(*params))
+            .Third(std::get<2U>(*params))
+            .Done();
     }
 
     return NullNode;
@@ -199,6 +234,19 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, TExprConte
                     .Build();
             }
             return builder.Done();
+        }
+
+        if (const auto maybeJust = node.Maybe<TCoJust>()) {
+            if (const auto params = ConvertComparisonNode(maybeJust.Cast().Input(), ctx, pos); 1U == params.size()) {
+                return Build<TKqpOlapFilterUnaryOp>(ctx, node.Pos())
+                    .Operator().Value("just", TNodeFlags::Default).Build()
+                    .Arg(params.front())
+                    .Done();
+            }
+        }
+
+        if (const auto maybeIf = node.Maybe<TCoIf>()) {
+            return YqlIfPushdown(maybeIf.Cast(), ctx);
         }
 
         if constexpr (NKikimr::NSsa::RuntimeVersion >= 4U) {
@@ -546,6 +594,10 @@ TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, TExprContext& ctx
         return TFilterOpsLevels(pred);
     }
 
+    if (const auto maybeIf = predicate.Maybe<TCoIf>()) {
+        return YqlIfPushdown(maybeIf.Cast(), ctx);
+    }
+
     if (const auto maybeNot = predicate.Maybe<TCoNot>()) {
         const auto notNode = maybeNot.Cast();
         if constexpr (NSsa::RuntimeVersion >= 4U) {
@@ -706,8 +758,12 @@ bool IsGoodNodeForPushdown(const TExprBase& node) {
     } else if (const auto maybeCoalesce = node.Maybe<TCoCoalesce>()) {
         const auto coalesce = maybeCoalesce.Cast();
         return IsGoodNodeForPushdown(coalesce.Predicate()) && IsGoodNodeForPushdown(coalesce.Value());
+    } else if (const auto maybeIf = node.Maybe<TCoIf>()) {
+        const auto ifOp = maybeIf.Cast();
+        return IsGoodNodeForPushdown(ifOp.Predicate()) && IsGoodNodeForPushdown(ifOp.ThenValue()) && IsGoodNodeForPushdown(ifOp.ElseValue());
+    } else if (const auto maybeJust = node.Maybe<TCoJust>()) {
+        return IsGoodNodeForPushdown(maybeJust.Cast().Input());
     }
-
     return true;
 }
 
@@ -746,18 +802,37 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     }
 
     const auto& lambda = flatmap.Lambda();
-    auto lambdaArg = lambda.Args().Arg(0).Raw();
 
     YQL_CLOG(TRACE, ProviderKqp) << "Initial OLAP lambda: " << KqpExprToPrettyString(lambda, ctx);
 
-    auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
+    const auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
     if (!maybeOptionalIf.IsValid()) {
         return node;
     }
 
-    const auto optionalIf = maybeOptionalIf.Cast();
-    NPushdown::TPredicateNode predicateTree(optionalIf.Predicate());
-    CollectPredicates(optionalIf.Predicate(), predicateTree, lambdaArg, read.Process().Body(), TPushdownSettings());
+    const auto& optionaIf = maybeOptionalIf.Cast();
+    auto predicate = optionaIf.Predicate();
+    auto value = optionaIf.Value();
+
+    if constexpr (NSsa::RuntimeVersion >= 5U) { // TODO: Rework for pushdown any UDFs, not only Json: Re2 as example.
+        if (!FindNode(optionaIf.Ptr(), [](const TExprNode::TPtr& node) { return node->IsCallable({"JsonExists","JsonValue"}); })) {
+            TExprNode::TPtr afterPeephole;
+            bool hasNonDeterministicFunctions;
+            if (const auto status = PeepHoleOptimizeNode(optionaIf.Ptr(), afterPeephole, ctx, typesCtx, nullptr, hasNonDeterministicFunctions);
+                status != IGraphTransformer::TStatus::Ok) {
+                YQL_CLOG(ERROR, ProviderKqp) << "Peephole OLAP failed." << Endl << ctx.IssueManager.GetIssues().ToString();
+                return node;
+            }
+
+            const TCoIf simplified(std::move(afterPeephole));
+            predicate = simplified.Predicate();
+            value = simplified.ThenValue().Cast<TCoJust>().Input();
+        }
+    }
+
+    NPushdown::TPredicateNode predicateTree(predicate);
+    auto lambdaArg = lambda.Args().Arg(0).Raw();
+    CollectPredicates(predicate, predicateTree, lambdaArg, read.Process().Body(), TPushdownSettings());
     YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
     UpdatePushableFlagWithOlapSpecific(predicateTree);
 
@@ -833,7 +908,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
                     .With(lambda.Args().Arg(0), "new_arg")
                     .Build()
                 .Value<TExprApplier>()
-                    .Apply(optionalIf.Value())
+                    .Apply(value)
                     .With(lambda.Args().Arg(0), "new_arg")
                     .Build()
                 .Build()

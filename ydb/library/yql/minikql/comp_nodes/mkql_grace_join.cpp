@@ -856,9 +856,6 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                 }
                 LeftPacker->Pack();
                 LeftPacker->TablePtr->AddTuple(LeftPacker->TupleIntVals.data(), LeftPacker->TupleStrings.data(), LeftPacker->TupleStrSizes.data(), LeftPacker->IColumnsHolder.data());
-                if (LeftPacker->TablePtr->HasRunningAsyncIoOperation()) {
-                    return EFetchResult::Yield;
-                }
             }
 
             if (resultRight == EFetchResult::One) {
@@ -870,27 +867,19 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     RightPacker->Pack();
                     RightPacker->TablePtr->AddTuple(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
                 }
-
-                if (RightPacker->TablePtr->HasRunningAsyncIoOperation()) {
-                    return EFetchResult::Yield;
-                }
             }
 
             if (resultLeft == EFetchResult::Finish ) {
                 *HaveMoreLeftRows = false;
                 LeftPacker->TablePtr->Finalize();
-                if (LeftPacker->TablePtr->HasRunningAsyncIoOperation()) {
-                    return EFetchResult::Yield;
-                }
+                continue;
             }
 
 
             if (resultRight == EFetchResult::Finish ) {
                 *HaveMoreRightRows = false;
                 RightPacker->TablePtr->Finalize();
-                if (RightPacker->TablePtr->HasRunningAsyncIoOperation()) {
-                    return EFetchResult::Yield;
-                }
+                continue;
             }
 
             if ((resultLeft == EFetchResult::Yield && (!*HaveMoreRightRows || resultRight == EFetchResult::Yield)) ||
@@ -900,18 +889,14 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
             }
         }
 
-        //LeftPacker->TablePtr->SpillNextBucket();
-        //RightPacker->TablePtr->SpillNextBucket();
-        //if (RightPacker->TablePtr->HasRunningAsyncIoOperation() || RightPacker->TablePtr->HasRunningAsyncIoOperation()) return EFetchResult::Yield;
-
 
         if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {
             if (!RightPacker->TablePtr->IsNextBucketInMemory()) {
-                RightPacker->TablePtr->ProcessLoadingNextSpilledBucket(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
+                RightPacker->TablePtr->ProcessLoadingNextSpilledBucket();
                 if (RightPacker->TablePtr->HasRunningAsyncIoOperation()) return EFetchResult::Yield;
             }
             if (!LeftPacker->TablePtr->IsNextBucketInMemory()) {
-                LeftPacker->TablePtr->ProcessLoadingNextSpilledBucket(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
+                LeftPacker->TablePtr->ProcessLoadingNextSpilledBucket();
                 if (LeftPacker->TablePtr->HasRunningAsyncIoOperation()) return EFetchResult::Yield;
             }
             JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
@@ -921,11 +906,11 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
 
         if (!*HaveMoreLeftRows && !*PartialJoinCompleted && RightPacker->TuplesBatchPacked >= RightPacker->BatchSize ) {
              if (!RightPacker->TablePtr->IsNextBucketInMemory()) {
-                RightPacker->TablePtr->ProcessLoadingNextSpilledBucket(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
+                RightPacker->TablePtr->ProcessLoadingNextSpilledBucket();
                 if (RightPacker->TablePtr->HasRunningAsyncIoOperation()) return EFetchResult::Yield;
             }
             if (!LeftPacker->TablePtr->IsNextBucketInMemory()) {
-                LeftPacker->TablePtr->ProcessLoadingNextSpilledBucket(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
+                LeftPacker->TablePtr->ProcessLoadingNextSpilledBucket();
                 if (LeftPacker->TablePtr->HasRunningAsyncIoOperation()) return EFetchResult::Yield;
             }
             JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
@@ -936,11 +921,11 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
 
         if (!*HaveMoreRightRows && !*HaveMoreLeftRows && !*PartialJoinCompleted) {
             if (!RightPacker->TablePtr->IsNextBucketInMemory()) {
-                RightPacker->TablePtr->ProcessLoadingNextSpilledBucket(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
+                RightPacker->TablePtr->ProcessLoadingNextSpilledBucket();
                 if (RightPacker->TablePtr->HasRunningAsyncIoOperation()) return EFetchResult::Yield;
             }
             if (!LeftPacker->TablePtr->IsNextBucketInMemory()) {
-                LeftPacker->TablePtr->ProcessLoadingNextSpilledBucket(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
+                LeftPacker->TablePtr->ProcessLoadingNextSpilledBucket();
                 if (LeftPacker->TablePtr->HasRunningAsyncIoOperation()) return EFetchResult::Yield;
             }
             // TODO: set only once

@@ -172,6 +172,8 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     }*/
 
     FillBucketWithDataFromTTuple(TableBuckets[bucket], TempTuple, intColumns, stringColumns, stringsSizes, iColumns, hash);
+
+    TableSpilledBuckets[bucket].ProcessBucketSpilling(TableBuckets[bucket]);
 }
 
 
@@ -1221,11 +1223,15 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
 
 bool TTable::HasRunningAsyncIoOperation() {
     for (size_t i = 0; i < NumberOfBuckets; ++i) {
-        TableSpilledBuckets[i].DataUi64Adapter.Update();
+        TableSpilledBuckets[i].Update();
+        if (!TableSpilledBuckets[i].IsProcessingFinished()) {
+            TableSpilledBuckets[i].ProcessBucketSpilling(TableBuckets[i]);
+        }
     }
 
     for (size_t i = 0; i < NumberOfBuckets; ++i) {
-        if (!TableSpilledBuckets[i].DataUi64Adapter.IsAcceptingData() && !TableSpilledBuckets[i].DataUi64Adapter.IsAcceptingDataRequests() && !TableSpilledBuckets[i].DataUi64Adapter.IsDataReady()) {
+        // TODO: IsProcessingFinished maybe?
+        if (TableSpilledBuckets[i].HasRunningAsyncIoOperation()) {
             return true;
         }
     }
@@ -1240,25 +1246,16 @@ bool TTable::IsNextBucketInMemory() {
     return TableSpilledBuckets[NextBucketToJoin].BucketState == TTableSpilledBucket::EBucketState::InMemory;
 }
 
-void TTable::ProcessLoadingNextSpilledBucket(ui64 * intColumns, char ** stringColumns, ui32 * stringsSizes, NYql::NUdf::TUnboxedValue * iColumns) {
-    while (TableSpilledBuckets[NextBucketToJoin].SpilledTuplesCount) {
-        if (TableSpilledBuckets[NextBucketToJoin].DataUi64Adapter.IsAcceptingDataRequests()) {
-            TableSpilledBuckets[NextBucketToJoin].DataUi64Adapter.RequestNextVector();
-        }
-        if (!TableSpilledBuckets[NextBucketToJoin].DataUi64Adapter.IsDataReady()) return;
-
-        TempTuple = TableSpilledBuckets[NextBucketToJoin].DataUi64Adapter.ExtractVector();
-        auto hash = GetTemporaryTupleHash();
-        FillBucketWithDataFromTTuple(TableBuckets[NextBucketToJoin], TempTuple, intColumns, stringColumns, stringsSizes, iColumns, hash);
-        --TableSpilledBuckets[NextBucketToJoin].SpilledTuplesCount;
+void TTable::ProcessLoadingNextSpilledBucket() {
+    while (TableSpilledBuckets[NextBucketToJoin].BucketState != TTableSpilledBucket::EBucketState::InMemory) {
+        TableSpilledBuckets[NextBucketToJoin].ProcessBucketRestoration(TableBuckets[NextBucketToJoin]);
+        if (TableSpilledBuckets[NextBucketToJoin].HasRunningAsyncIoOperation()) return;
     }
-
-    TableSpilledBuckets[NextBucketToJoin].BucketState = TTableSpilledBucket::EBucketState::InMemory;
 }
 
 void TTable::Finalize() {
     for (size_t i = 0; i < NumberOfBuckets; ++i) {
-        TableSpilledBuckets[i].DataUi64Adapter.Finalize();
+        TableSpilledBuckets[i].Finalize();
     }
 }
 

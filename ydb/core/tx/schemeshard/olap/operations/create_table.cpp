@@ -270,7 +270,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        Y_ABORT_UNLESS(tableInfo->ColumnShards.empty() || tableInfo->OwnedColumnShards.empty());
+        Y_ABORT_UNLESS(tableInfo->GetColumnShards().empty() || tableInfo->OwnedColumnShards.empty());
 
         TString columnShardTxBody;
         auto seqNo = context.SS->StartRound(*txState);
@@ -280,7 +280,7 @@ public:
         {
             NKikimrTxColumnShard::TCreateTable* create{};
             if (tableInfo->IsStandalone()) {
-                Y_ABORT_UNLESS(tableInfo->ColumnShards.empty());
+                Y_ABORT_UNLESS(tableInfo->GetColumnShards().empty());
                 Y_ABORT_UNLESS(tableInfo->Description.HasSchema());
 
                 auto* init = tx.MutableInitShard();
@@ -392,11 +392,7 @@ public:
 
         auto table = context.SS->ColumnTables.TakeAlterVerified(pathId);
         if (table->IsStandalone()) {
-            Y_ABORT_UNLESS(table->ColumnShards.empty());
-            auto currentLayout = TColumnTablesLayout::BuildTrivial(TColumnTablesLayout::ShardIdxToTabletId(table->OwnedColumnShards, *context.SS));
-            auto layoutPolicy = std::make_shared<TOlapStoreInfo::TMinimalTablesCountLayout>();
-            bool isNewGroup;
-            Y_ABORT_UNLESS(table.InitShardingTablets(currentLayout, table->OwnedColumnShards.size(), layoutPolicy, isNewGroup));
+            table->SetColumnShards(TColumnTablesLayout::ShardIdxToTabletId(table->OwnedColumnShards, *context.SS));
         }
 
         context.SS->PersistColumnTableAlterRemove(db, pathId);
@@ -584,7 +580,7 @@ public:
         const auto acceptExisted = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
 
-        // Copy CreateColumnTable for changes. Update defaut sharding if not set.
+        // Copy CreateColumnTable for changes. Update default sharding if not set.
         auto createDescription = Transaction.GetCreateColumnTable();
         if (!createDescription.HasColumnShardCount()) {
             createDescription.SetColumnShardCount(TTableConstructorBase::DEFAULT_SHARDS_COUNT);
@@ -705,12 +701,12 @@ public:
             tableInfo = tableConstructor.BuildTableInfo(errors);
             if (tableInfo) {
                 auto layoutPolicy = storeInfo->GetTablesLayoutPolicy();
-                auto currentLayout = context.SS->ColumnTables.GetTablesLayout(
-                    TColumnTablesLayout::ShardIdxToTabletId(storeInfo->GetColumnShards(), *context.SS));
-                TTablesStorage::TTableCreateOperator createOperator(tableInfo);
-                if (!createOperator.InitShardingTablets(currentLayout, shardsCount, layoutPolicy, needUpdateObject)) {
-                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                        "cannot layout table by shards");
+                auto currentLayout = context.SS->ColumnTables.GetTablesLayout(TColumnTablesLayout::ShardIdxToTabletId(storeInfo->GetColumnShards(), *context.SS));
+                auto layoutConclusion = layoutPolicy->Layout(currentLayout, shardsCount);
+                needUpdateObject = layoutConclusion->GetIsNewGroup();
+                tableInfo->SetColumnShards(std::move(layoutConclusion->MutableTabletIds()));
+                if (layoutConclusion.IsFail()) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, layoutConclusion.GetErrorMessage());
                     return result;
                 }
             }
@@ -746,9 +742,9 @@ public:
             auto olapStorePath = parentPath.FindOlapStore();
 
             txState.State = TTxState::ConfigureParts;
-            txState.Shards.reserve(tableInfo->ColumnShards.size());
+            txState.Shards.reserve(tableInfo->GetColumnShards().size());
 
-            for (ui64 columnShardId : tableInfo->ColumnShards) {
+            for (ui64 columnShardId : tableInfo->GetColumnShards()) {
                 auto tabletId = TTabletId(columnShardId);
                 auto shardIdx = context.SS->TabletIdToShardIdx.at(tabletId);
                 TShardInfo& shardInfo = context.SS->ShardInfos.at(shardIdx);

@@ -6682,7 +6682,7 @@ bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 key
     return true;
 }
 
-void TSchemeShard::SetPartitioning(TPathId pathId, const TVector<TShardIdx>& partitioning) {
+void TSchemeShard::SetPartitioning(TPathId pathId, const std::vector<TShardIdx>& partitioning) {
     if (AppData()->FeatureFlags.GetEnableSystemViews()) {
         TVector<std::pair<ui64, ui64>> shardIndices;
         shardIndices.reserve(partitioning.size());

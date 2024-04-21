@@ -70,12 +70,13 @@ namespace NFwd {
 
     public:
         void Add(TPageId pageId, TGroupId groupId, ui32 level) {
-            Y_ABORT_UNLESS(Map.emplace(pageId, TPageLocation(groupId, level)).second);
+            Y_ABORT_UNLESS(Map.emplace(pageId, TPageLocation(groupId, level)).second, "All index pages should be unique");
         }
 
-        ui32 GetLevel(TPageId pageId, ui32 levelsCount) const {
+        ui32 GetLevel(TPageId pageId) const {
             auto ptr = Map.FindPtr(pageId);
-            return ptr ? ptr->Level : levelsCount - 1;
+            Y_ABORT_UNLESS(ptr, "Unknown page");
+            return ptr->Level;
         }
 
         TGroupId GetGroup(TPageId pageId) {
@@ -120,9 +121,11 @@ namespace NFwd {
             }
         }
 
-        TResult Handle(IPageLoadingQueue *head, TPageId pageId, ui64 lower) noexcept override
+        TResult Get(IPageLoadingQueue *head, TPageId pageId, EPage type, ui64 lower) noexcept override
         {
-            if (pageId == IndexPage.PageId) {
+            if (type == EPage::FlatIndex) {
+                Y_ABORT_UNLESS(pageId == IndexPage.PageId);
+
                 if (IndexPage.Fetch == EFetch::None) {
                     Stat.Fetch += head->AddToQueue(pageId, EPage::FlatIndex);
                     IndexPage.Fetch = EFetch::Wait;
@@ -130,7 +133,7 @@ namespace NFwd {
                 return {IndexPage.Touch(pageId, Stat), false, true};
             }
 
-            Y_DEBUG_ABORT_UNLESS(Part->GetPageType(pageId, GroupId) == EPage::DataPage);
+            Y_ABORT_UNLESS(type == EPage::DataPage);
 
             if (auto *page = Trace.Get(pageId)) {
                 return {page, false, true};
@@ -160,35 +163,26 @@ namespace NFwd {
             }
         }
 
-        void Apply(TArrayRef<NPageCollection::TLoadedPage> loaded) noexcept override
+        void Fill(NPageCollection::TLoadedPage& page, EPage type) noexcept override
         {
-            auto it = Pages.begin();
-
-            for (auto &one: loaded) {
-                Stat.Saved += one.Data.size();
-
-                if (one.PageId == IndexPage.PageId) {
-                    Y_DEBUG_ABORT_UNLESS(Part->GetPageType(one.PageId, {}) == EPage::FlatIndex);
-                    Index.emplace(one.Data);
-                    Iter = Index->LookupRow(BeginRowId);
-                    IndexPage.Settle(one);
-                    continue;
-                }
-
-                Y_DEBUG_ABORT_UNLESS(Part->GetPageType(one.PageId, GroupId) == EPage::DataPage);
-                if (it == Pages.end() || it->PageId > one.PageId) {
-                    it = std::lower_bound(Pages.begin(), it, one.PageId);
-                } else if (it->PageId < one.PageId) {
-                    it = std::lower_bound(++it, Pages.end(), one.PageId);
-                }
-                Y_ABORT_UNLESS(it != Pages.end() && it->PageId == one.PageId, "Got page that hasn't been requested for load");
-                
-                Y_ABORT_UNLESS(one.Data.size() <= OnFetch, "Forward cache ahead counters is out of sync");
-                OnFetch -= one.Data.size();
-                OnHold += it->Settle(one); // settle of a dropped page returns 0 and releases its data
-
-                ++it;
+            Stat.Saved += page.Data.size();
+            
+            if (type == EPage::FlatIndex) {
+                Y_ABORT_UNLESS(page.PageId == IndexPage.PageId);
+                Index.emplace(page.Data);
+                Iter = Index->LookupRow(BeginRowId);
+                IndexPage.Settle(page);
+                return;
             }
+
+            Y_ABORT_UNLESS(type == EPage::DataPage);
+
+            auto it = std::lower_bound(Pages.begin(), Pages.end(), page.PageId);
+            Y_ABORT_UNLESS(it != Pages.end() && it->PageId == page.PageId, "Got page that hasn't been requested for load");
+            
+            Y_ABORT_UNLESS(page.Data.size() <= OnFetch, "Forward cache ahead counters is out of sync");
+            OnFetch -= page.Data.size();
+            OnHold += it->Settle(page); // settle of a dropped page returns 0 and releases its data
 
             ShrinkPages();
         }
@@ -322,9 +316,9 @@ namespace NFwd {
             }
         }
 
-        TResult Handle(IPageLoadingQueue *head, TPageId pageId, ui64 lower) noexcept override
+        TResult Get(IPageLoadingQueue *head, TPageId pageId, EPage type, ui64 lower) noexcept override
         {
-            auto levelId = IndexPageLocator.GetLevel(pageId, Levels.size());
+            auto levelId = GetLevel(pageId, type);
             auto& level = Levels[levelId];
 
             if (auto *page = level.Trace.Get(pageId)) {
@@ -359,49 +353,41 @@ namespace NFwd {
             }
         }
 
-        void Apply(TArrayRef<NPageCollection::TLoadedPage> loaded) noexcept override
+        void Fill(NPageCollection::TLoadedPage& page, EPage type) noexcept override
         {
-            TVector<TDeque<TPageEx>::iterator> iters;
-            for (auto& level : Levels) {
-                iters.emplace_back(level.Pages.begin());
-            }
-
-            for (auto &one: loaded) {
-                Stat.Saved += one.Data.size();
+            Stat.Saved += page.Data.size();
               
-                auto levelId = IndexPageLocator.GetLevel(one.PageId, Levels.size());
-                auto& it = iters[levelId];
-                auto& level = Levels[levelId];
+            auto levelId = GetLevel(page.PageId, type);
+            auto& level = Levels[levelId];
 
-                if (it == level.Pages.end() || it->PageId > one.PageId) {
-                    it = std::lower_bound(level.Pages.begin(), it, one.PageId);
-                } else if (it->PageId < one.PageId) {
-                    it = std::lower_bound(++it, level.Pages.end(), one.PageId);
+            auto it = std::lower_bound(level.Pages.begin(), level.Pages.end(), page.PageId);
+            Y_ABORT_UNLESS(it != level.Pages.end() && it->PageId == page.PageId, "Got page that hasn't been requested for load");
+
+            if (levelId + 2 < Levels.size()) { // next level is index
+                NPage::TBtreeIndexNode node(page.Data);
+                for (auto pos : xrange(node.GetChildrenCount())) {
+                    IndexPageLocator.Add(node.GetShortChild(pos).PageId, GroupId, levelId + 1);
                 }
-                Y_ABORT_UNLESS(it != level.Pages.end() && it->PageId == one.PageId, "Got page that hasn't been requested for load");
-
-                if (levelId + 2 < Levels.size()) { // next level is index
-                    NPage::TBtreeIndexNode node(one.Data);
-                    for (auto pos : xrange(node.GetChildrenCount())) {
-                        IndexPageLocator.Add(node.GetShortChild(pos).PageId, GroupId, levelId + 1);
-                    }
-                }
-                
-                it->Settle(one); // settle of a dropped page releases its data
-
-                ++it;
             }
+            
+            it->Settle(page); // settle of a dropped page releases its data
 
-            for (auto levelId : xrange<ui32>(Levels.size() - 1)) {
-                QueueChildren(levelId);
-            }
-
-            for (auto& level : Levels) {
-                ShrinkPages(level);
-            }
+            QueueChildren(levelId);
+            ShrinkPages(level);
         }
 
     private:
+        ui32 GetLevel(TPageId pageId, EPage type) {
+            switch (type) {
+                case EPage::BTreeIndex:
+                    return IndexPageLocator.GetLevel(pageId);
+                case EPage::DataPage:
+                    return Levels.size() - 1;
+                default:
+                    Y_ABORT("Unknown page type");
+            }
+        }
+
         void DropPagesBefore(TLevel& level, TPageId pageId) noexcept
         {
             while (level.PagesBeginOffset < level.Pages.size()) {
@@ -428,7 +414,9 @@ namespace NFwd {
 
         void QueueChildren(ui32 levelId) noexcept
         {
-            Y_ABORT_UNLESS(levelId + 1 < Levels.size());
+            if (levelId + 1 == Levels.size()) {
+                return;
+            }
 
             auto& level = Levels[levelId];
 

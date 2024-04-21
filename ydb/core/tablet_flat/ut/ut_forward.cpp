@@ -54,7 +54,7 @@ namespace {
 
         TBlobsWrap& Get(ui32 page, bool has, bool grow, bool need)
         {
-            auto got = Cache->Handle(this, page, AheadLo);
+            auto got = Cache->Get(this, page, EPage::Opaque, AheadLo);
 
             if (has != bool(got.Page) || grow != got.Grow || need != got.Need){
                 Log()
@@ -113,7 +113,9 @@ namespace {
 
             Shuffle(load.begin(), load.end(), Rnd);
 
-            Cache->Apply(load);
+            for (auto &page : load) {
+                Cache->Fill(page, EPage::Opaque);
+            }
 
             UNIT_ASSERT(Cache->Stat.Saved == Cache->Stat.Fetch);
 
@@ -157,7 +159,7 @@ namespace {
 
         TCacheWrap& Get(TPageId pageId, bool has, bool grow, bool need, NFwd::TStat stat)
         {
-            auto got = Cache->Handle(this, pageId, AheadLo);
+            auto got = Cache->Get(this, pageId, Part->GetPageType(pageId, { }), AheadLo);
 
             if (has != bool(got.Page) || grow != got.Grow || need != got.Need){
                 Log()
@@ -193,7 +195,9 @@ namespace {
 
             Shuffle(load.begin(), load.end(), Rnd);
 
-            Cache->Apply(load);
+            for (auto &page : load) {
+                Cache->Fill(page, Part->GetPageType(page.PageId, {}));
+            }
 
             UNIT_ASSERT_VALUES_EQUAL_C(Cache->Stat, stat, CurrentStepStr());
 
@@ -232,7 +236,9 @@ namespace {
 
             Shuffle(load.begin(), load.end(), Rnd);
 
-            Cache->Apply(load);
+            for (auto &page : load) {
+                Cache->Fill(page, Part->GetPageType(page.PageId, {}));
+            }
 
             UNIT_ASSERT_VALUES_EQUAL_C(Cache->Stat, stat, CurrentStepStr());
 

@@ -40,9 +40,9 @@ namespace NTest {
                 pass ? TTestEnv::Locate(part, ref, lob) : TResult{need, nullptr };
         }
 
-        const TSharedData* TryGetPage(const TPart *part, TPageId ref, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
         {
-            return Pages ? TTestEnv::TryGetPage(part, ref, groupId) : nullptr;
+            return Pages ? TTestEnv::TryGetPage(part, pageId, groupId) : nullptr;
         }
 
         bool Pages = false;
@@ -101,12 +101,12 @@ namespace NTest {
             }
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageId ref, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override
         {
-            auto pass = ShouldPass((const void*)part, ref | (ui64(groupId.Raw()) << 32), 
-                part->GetPageType(ref, groupId) == EPage::FlatIndex || part->GetPageType(ref, groupId) == EPage::BTreeIndex);
+            auto pass = ShouldPass((const void*)part, pageId | (ui64(groupId.Raw()) << 32), 
+                part->GetPageType(pageId, groupId) == EPage::FlatIndex || part->GetPageType(pageId, groupId) == EPage::BTreeIndex);
 
-            return pass ? TTestEnv::TryGetPage(part, ref, groupId) : nullptr;
+            return pass ? TTestEnv::TryGetPage(part, pageId, groupId) : nullptr;
         }
 
         bool ShouldPass(const void *token, ui64 id, bool isIndex)
@@ -176,12 +176,12 @@ namespace NTest {
                 for (auto &seq: Fetch) {
                     NPageCollection::TLoadedPage page(seq, *Store->GetPage(Room, seq));
 
-                    PageLoadingLogic->Apply({ &page, 1 }); /* will move data */
+                    PageLoadingLogic->Fill(page, Store->GetPageType(Room, seq)); /* will move data */
                 }
 
                 Fetch.clear();
 
-                auto got = PageLoadingLogic->Handle(this, page, lower);
+                auto got = PageLoadingLogic->Get(this, page, Store->GetPageType(Room, page), lower);
 
                 Y_ABORT_UNLESS((Grow = got.Grow) || Fetch || got.Page);
 

@@ -5242,7 +5242,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // no read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
             queueScan->ReadAhead = {1, 1};
-            queueScan->ExpectedPageFaults = 1100;
+            queueScan->ExpectedPageFaults = 1172;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
@@ -5250,7 +5250,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // small read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
             queueScan->ReadAhead = {5*10*1024, 10*10*1024};
-            queueScan->ExpectedPageFaults = 174;
+            queueScan->ExpectedPageFaults = 332;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
@@ -5376,7 +5376,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // no read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount, TRowVersion(2, 0));
             queueScan->ReadAhead = {1, 1};
-            queueScan->ExpectedPageFaults = 2096;
+            queueScan->ExpectedPageFaults = 2344;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
@@ -5384,7 +5384,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // small read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount, TRowVersion(2, 0));
             queueScan->ReadAhead = {5*10*1024, 10*10*1024};
-            queueScan->ExpectedPageFaults = 302;
+            queueScan->ExpectedPageFaults = 337;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
@@ -5392,7 +5392,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // infinite read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount, TRowVersion(2, 0));
             queueScan->ReadAhead = {Max<ui64>(), Max<ui64>()};
-            queueScan->ExpectedPageFaults = 175;
+            queueScan->ExpectedPageFaults = 10;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
@@ -5508,7 +5508,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // no read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
             queueScan->ReadAhead = {1, 1};
-            queueScan->ExpectedPageFaults = 1048;
+            queueScan->ExpectedPageFaults = 1172;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
@@ -5516,7 +5516,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // small read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
             queueScan->ReadAhead = {5*10*1024, 10*10*1024};
-            queueScan->ExpectedPageFaults = 296;
+            queueScan->ExpectedPageFaults = 189;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }

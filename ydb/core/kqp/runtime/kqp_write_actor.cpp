@@ -505,11 +505,6 @@ private:
                 << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                 << " Sink=" << this->SelfId() << "."
                 << " Ignored this error.");
-            RuntimeError(
-                TStringBuilder() << "Got OVERLOADED for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`.",
-                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-                getIssues());
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED: {

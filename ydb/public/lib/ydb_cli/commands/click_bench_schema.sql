@@ -1,13 +1,13 @@
 --!syntax_v1
 CREATE TABLE `{table}`
 (
-    WatchID Uint64 {notnull},
+    WatchID Int64 {notnull},
     JavaEnable Int16 {notnull},
     Title Text {notnull},
     GoodEvent Int16 {notnull},
     EventTime Timestamp {notnull},
     EventDate Date {notnull},
-    CounterID Uint32 {notnull},
+    CounterID Int32 {notnull},
     ClientIP Int32 {notnull},
     RegionID Int32 {notnull},
     UserID Int64 {notnull},
@@ -107,13 +107,11 @@ CREATE TABLE `{table}`
     URLHash Int64 {notnull},
     CLID Int32 {notnull},
 
-    PRIMARY KEY (WatchID, UserID, CounterID, EventDate, EventTime)
+    PRIMARY KEY (EventTime, CounterID, EventDate, UserID, WatchID)
 )
 {partition}
 WITH (
     {store}
-    AUTO_PARTITIONING_BY_SIZE = DISABLED,
-    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 128,
-    AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 128,
-    UNIFORM_PARTITIONS = 128
+    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 128
 );

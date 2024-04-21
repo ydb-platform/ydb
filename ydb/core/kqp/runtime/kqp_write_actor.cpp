@@ -24,7 +24,7 @@
 
 namespace {
     struct TWriteActorBackoffSettings {
-        TDuration StartRetryDelay = TDuration::MilliSeconds(500);
+        TDuration StartRetryDelay = TDuration::MilliSeconds(250);
         TDuration MaxRetryDelay = TDuration::Seconds(10);
         double UnsertaintyRatio = 0.5;
         double Multiplier = 2.0;
@@ -325,7 +325,7 @@ private:
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
 
-        if (Finished /*|| GetFreeSpace() <= 0*/ || SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+        if (Finished || GetFreeSpace() <= 0 || SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
             TResumeNotificationManager resumeNotificator(*this);
             for (auto& [shardId, batches] : Serializer->FlushBatchesForce()) {
                 for (auto& batch : batches) {

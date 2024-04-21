@@ -424,8 +424,6 @@ int TClickBenchCommandInit::Run(TConfig& config) {
         notNull = "NOT NULL";
     } else if (StoreType != "row") {
         throw yexception() << "Incorrect storage type. Available options: \"row\", \"column\"." << Endl;
-    } else {
-        storageType = "AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 128, UNIFORM_PARTITIONS = 128,";
     }
 
     auto driver = CreateDriver(config);

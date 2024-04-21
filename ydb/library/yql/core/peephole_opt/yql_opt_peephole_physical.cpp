@@ -5497,10 +5497,57 @@ TExprNode::TPtr SplitByPairs(TPositionHandle pos, const TStringBuf& funcName, co
     return ctx.NewCallable(pos, funcName, { left, right });
 }
 
-std::function<bool(const TExprNode::TPtr&)> MakeBlockRewriteStopPredicate(TCoLambda lambda) {
+using TExprNodePtrPred = std::function<bool(const TExprNode::TPtr&)>;
+
+TExprNodePtrPred MakeBlockRewriteStopPredicate(TCoLambda lambda) {
     return [lambda](const TExprNode::TPtr& node) {
         return node->IsArguments() || (node->IsLambda() && node != lambda.Ptr());
     };
+}
+
+void DoMarkLazy(const TExprNode::TPtr& node, TNodeSet& lazyNodes, const TExprNodePtrPred& needStop, TNodeSet& visited, bool markAll) {
+    if (!visited.insert(node.Get()).second) {
+        return;
+    }
+
+    if (needStop(node)) {
+        return;
+    }
+
+    if (markAll) {
+        lazyNodes.insert(node.Get());
+    }
+
+    const bool isLazyNode = node->IsCallable({"And", "Or", "If", "Coalesce"});
+    for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
+        DoMarkLazy(node->ChildPtr(i), lazyNodes, needStop, visited, markAll || (isLazyNode && i > 0));
+    }
+}
+
+void MarkLazy(const TExprNode::TPtr& node, TNodeSet& lazyNodes, const TExprNodePtrPred& needStop) {
+    TNodeSet visited;
+    DoMarkLazy(node, lazyNodes, needStop, visited, false);
+}
+
+void DoMarkNonLazy(const TExprNode::TPtr& node, TNodeSet& lazyNodes, const TExprNodePtrPred& needStop, TNodeSet& visited) {
+    if (!visited.insert(node.Get()).second) {
+        return;
+    }
+
+    if (needStop(node)) {
+        return;
+    }
+
+    lazyNodes.erase(node.Get());
+    ui32 endIndex = node->IsCallable({"And", "Or", "If", "Coalesce"}) ? 1 : node->ChildrenSize();
+    for (ui32 i = 0; i < endIndex; ++i) {
+        DoMarkNonLazy(node->ChildPtr(i), lazyNodes, needStop, visited);
+    }
+}
+
+void MarkNonLazy(const TExprNode::TPtr& node, TNodeSet& lazyNodes, const TExprNodePtrPred& needStop) {
+    TNodeSet visited;
+    DoMarkNonLazy(node, lazyNodes, needStop, visited);
 }
 
 TNodeSet CollectLazyNonStrictNodes(TCoLambda lambda) {
@@ -5541,48 +5588,8 @@ TNodeSet CollectLazyNonStrictNodes(TCoLambda lambda) {
     auto needStop = MakeBlockRewriteStopPredicate(lambda);
 
     TNodeSet lazyNodes;
-    VisitExpr(lambda.Ptr(), [&](const TExprNode::TPtr& node) {
-        if (needStop(node)) {
-            return false;
-        }
-
-        if (node->IsCallable({"And", "Or", "If", "Coalesce"})) {
-            YQL_ENSURE(node->ChildrenSize() >= 1);
-            const auto& children = node->ChildrenList();
-            for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
-                VisitExpr(node->ChildPtr(i), [&](const auto& node) {
-                    if (needStop(node)) {
-                        return false;
-                    }
-                    lazyNodes.insert(node.Get());
-                    return true;
-                });
-            }
-            return false;
-        }
-
-        return true;
-    });
-
-    VisitExpr(lambda.Ptr(), [&](const TExprNode::TPtr& node) {
-        if (needStop(node)) {
-            return false;
-        }
-
-        if (node->IsCallable({"And", "Or", "If", "Coalesce"})) {
-            VisitExpr(node->HeadPtr(), [&](const auto& node) {
-                if (needStop(node)) {
-                    return false;
-                }
-                lazyNodes.erase(node.Get());
-                return true;
-            });
-            return false;
-        }
-
-        lazyNodes.erase(node.Get());
-        return true;
-    });
+    MarkLazy(lambda.Ptr(), lazyNodes, needStop);
+    MarkNonLazy(lambda.Ptr(), lazyNodes, needStop);
 
     TNodeSet lazyNonStrict;
     for (auto& node : lazyNodes) {

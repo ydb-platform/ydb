@@ -264,6 +264,7 @@ public:
         {
             NKikimrTxColumnShard::TCreateTable* create{};
             if (tableInfo->IsStandalone()) {
+                Y_ABORT_UNLESS(tableInfo->GetOwnedColumnShardsVerified().size());
                 Y_ABORT_UNLESS(tableInfo->GetColumnShards().empty());
                 Y_ABORT_UNLESS(tableInfo->Description.HasSchema());
 
@@ -275,7 +276,7 @@ public:
                 create = init->AddTables();
                 create->MutableSchema()->CopyFrom(tableInfo->Description.GetSchema());
             } else {
-                Y_ABORT_UNLESS(tableInfo->GetOwnedColumnShardsVerified().empty());
+                Y_ABORT_UNLESS(tableInfo->GetColumnShards().size());
                 Y_ABORT_UNLESS(!tableInfo->Description.HasSchema());
                 Y_ABORT_UNLESS(tableInfo->Description.HasSchemaPresetId());
 

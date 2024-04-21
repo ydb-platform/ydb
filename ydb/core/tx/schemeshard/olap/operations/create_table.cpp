@@ -54,6 +54,8 @@ public:
         TColumnTableInfo::TPtr tableInfo = std::make_shared<TColumnTableInfo>();
         if (!description.HasSharding()) {
             *tableInfo->Description.MutableSharding() = NKikimrSchemeOp::TColumnTableSharding();
+        } else {
+            *tableInfo->Description.MutableSharding() = description.GetSharding();
         }
         FillDefaultSharding(*tableInfo->Description.MutableSharding());
 

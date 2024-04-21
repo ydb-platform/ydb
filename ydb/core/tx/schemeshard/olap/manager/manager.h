@@ -48,7 +48,6 @@ public:
         using TBase = TTableReadGuard;
     public:
         using TBase::TBase;
-        bool InitShardingTablets(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, TOlapStoreInfo::ILayoutPolicy::TPtr layoutPolicy, bool& isNewGroup) const;
     };
 
     class TTableCreatedGuard: public TTableCreateOperator, TMoveOnly {

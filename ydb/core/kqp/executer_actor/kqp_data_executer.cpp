@@ -181,7 +181,7 @@ public:
 
     bool ForceAcquireSnapshot() const {
         const bool forceSnapshot = (
-            HasTableSourceRead() &&
+            HasTableSourceRead() && // ReadOnlyTx && //
             !ImmediateTx &&
             !HasPersistentChannels &&
             !HasOlapTable &&

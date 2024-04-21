@@ -4,6 +4,18 @@
 
 namespace NKikimr::NSharding {
 
+TConclusionStatus TShardingBase::ValidateBehaviour(const NSchemeShard::TOlapSchema& schema, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo) {
+    auto copy = shardingInfo;
+    if (copy.GetColumnShards().size() == 0) {
+        copy.AddColumnShards(1);
+    }
+    auto fakeResult = BuildFromProto(schema, shardingInfo);
+    if (fakeResult.IsFail()) {
+        return fakeResult;
+    }
+    return TConclusionStatus::Success();
+}
+
 TConclusion<std::unique_ptr<TShardingBase>> TShardingBase::BuildFromProto(const NSchemeShard::TOlapSchema& schema, const NKikimrSchemeOp::TColumnTableSharding& shardingProto) {
     if (!shardingProto.GetColumnShards().size()) {
         return TConclusionStatus::Fail("config is incorrect for construct shading behaviour");

@@ -63,6 +63,11 @@ public:
             return nullptr;
         }
         tableInfo->AlterVersion = 1;
+        auto shardingValidation = NSharding::TShardingBase::ValidateBehaviour(GetSchema(), tableInfo->Description.GetSharding());
+        if (shardingValidation.IsFail()) {
+            errors.AddError(shardingValidation.GetErrorMessage());
+        }
+
         auto statusBuild = BuildDescription(context, tableInfo);
         if (statusBuild.IsFail()) {
             errors.AddError(statusBuild.GetErrorMessage());

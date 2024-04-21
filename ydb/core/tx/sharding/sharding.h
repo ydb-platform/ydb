@@ -33,6 +33,7 @@ protected:
 public:
     using TColumn = TExternalTableColumn;
 public:
+    static TConclusionStatus ValidateBehaviour(const NSchemeShard::TOlapSchema& schema, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo);
     static TConclusion<std::unique_ptr<TShardingBase>> BuildFromProto(const NSchemeShard::TOlapSchema& schema, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo);
 
     TShardingBase(const std::vector<ui64>& shardIds)

@@ -265,9 +265,9 @@ namespace {
         TAutoPtr<NFwd::IPageLoadingLogic> Cache;
         const ui64 AheadLo;
         const ui64 AheadHi;
+        bool Grow = false;
 
     private:
-        bool Grow = false;
         TDeque<TPageId> Queue;
         TMersenne<ui64> Rnd;
     };
@@ -679,6 +679,27 @@ Y_UNIT_TEST_SUITE(NFwd_TFlatIndexCache) {
             {803, 803, 553, 0, 0});
     }
 
+    Y_UNIT_TEST(ForwardTwice)
+    {
+        const auto eggs = CookPart();
+
+        TCacheWrap wrap(eggs.Lone(), nullptr, 200, 350);
+    
+        // provide index page:
+        wrap.To(0).Get(20, false, false, true,
+            {453, 0, 453, 0, 0});
+        wrap.To(1).Fill({20},
+            {453, 453, 453, 0, 0});
+        
+        wrap.To(2).Get(5, false, true, true,
+            {503, 453, 503, 0, 0});
+        wrap.To(3).Fill({5, 6, 7, 8, 9, 10, 11},
+            {803, 803, 503, 0, 0});
+        wrap.Grow = true;
+        wrap.To(4).Fill({},
+            {803, 803, 503, 0, 0});
+    }
+
     Y_UNIT_TEST(Skip_Done)
     {
         const auto eggs = CookPart();
@@ -1056,6 +1077,31 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCache) {
         wrap.To(8).Get(23, true, false, true,
             {384, 384, 241, 0, 0});
         wrap.To(9).Get(23, true, false, true,
+            {384, 384, 241, 0, 0});
+    }
+
+    Y_UNIT_TEST(ForwardTwice)
+    {
+        const auto eggs = CookPart();
+
+        TCacheWrap wrap(eggs.Lone(), nullptr, 200, 350);
+    
+        // level 0:
+        wrap.To(0).Get(28, false, false, true,
+            {98, 0, 98, 0, 0});
+        wrap.To(2).Fill({28},
+            {98, 98, 98, 0, 0});
+        wrap.Grow = true;
+        wrap.To(2).Fill({},
+            {98, 98, 98, 0, 0});
+
+        // level 1:
+        wrap.To(5).Get(23, false, true, true,
+            {241, 98, 241, 0, 0});
+        wrap.To(7).Fill({23, 27},
+            {384, 384, 241, 0, 0});
+        wrap.Grow = true;
+        wrap.To(7).Fill({},
             {384, 384, 241, 0, 0});
     }
 

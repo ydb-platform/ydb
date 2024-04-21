@@ -156,8 +156,6 @@ namespace NFwd {
 
         void Forward(IPageLoadingQueue *head, ui64 upper) noexcept override
         {
-            Y_DEBUG_ABORT_UNLESS(Iter && Iter->GetRowId() < EndRowId);
-
             while (Iter && Iter->GetRowId() < EndRowId && OnHold + OnFetch < upper) {
                 RequestNextPage(head);
             }

@@ -213,21 +213,25 @@ namespace NFwd {
 
         TAutoPtr<TFetch> GrabFetches() noexcept
         {
-            while (auto *q = FetchingQueues ? FetchingQueues.PopFront() : nullptr) {
-                if (std::exchange(q->Grow, false)) {
-                    (*q)->Forward(q, Max(ui64(1), Conf.AheadHi));
+            while (FetchingQueues) {
+                auto queue = FetchingQueues.Front();
+
+                if (std::exchange(queue->Grow, false)) {
+                    (*queue)->Forward(queue, Max(ui64(1), Conf.AheadHi));
                 }
 
-                if (auto req = std::move(q->IndexFetch)) {
-                    Y_ABORT_UNLESS(req->Pages, "Shouldn't sent an empty requests");
-                    Pending += req->Pages.size();
-                    return req;
+                if (auto request = std::move(queue->IndexFetch)) {
+                    Y_ABORT_UNLESS(request->Pages, "Shouldn't sent an empty requests");
+                    Pending += request->Pages.size();
+                    return request;
                 }
-                if (auto req = std::move(q->GroupFetch)) {
-                    Y_ABORT_UNLESS(req->Pages, "Shouldn't sent an empty requests");
-                    Pending += req->Pages.size();
-                    return req;
+                if (auto request = std::move(queue->GroupFetch)) {
+                    Y_ABORT_UNLESS(request->Pages, "Shouldn't sent an empty requests");
+                    Pending += request->Pages.size();
+                    return request;
                 }
+
+                FetchingQueues.PopFront();
             }
 
             return nullptr;
@@ -272,15 +276,13 @@ namespace NFwd {
         {
             auto got = queue->Get(&queue, pageId, type, Conf.AheadLo);
 
-            if (queue.IndexFetch || queue.GroupFetch) {
+            // Note: different levels of B-Tree may have different grow mindset
+            queue.Grow |= got.Grow;
+
+            if (queue.Grow || queue.IndexFetch || queue.GroupFetch) {
                 FetchingQueues.PushBack(&queue);
             } else {
                 Y_ABORT_IF(got.Need && got.Page == nullptr, "Cache line head don't want to do fetch but should");
-            }
-
-            if (got.Grow) {
-                queue.Grow = true;
-                FetchingQueues.PushBack(&queue);
             }
 
             return { got.Need, got.Page };

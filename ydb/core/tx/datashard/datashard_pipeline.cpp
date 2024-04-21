@@ -1694,8 +1694,9 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
     };
 
-    if (rec.HasMvccSnapshot() && !rec.GetMvccSnapshot().GetRepeatableRead()) {
-        badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "MvccSnapshot with RepeatableRead=false is not implemented");
+    if (rec.HasMvccSnapshot() && !rec.GetLockTxId()) {
+        badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+            "MvccSnapshot without LockTxId is not implemented");
         return writeOp;
     }
 

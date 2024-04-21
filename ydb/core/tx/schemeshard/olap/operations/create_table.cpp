@@ -165,7 +165,6 @@ private:
         if (shardingObject.IsFail()) {
             return shardingObject;
         }
-        table->SetColumnShards((*shardingObject)->GetShardIds());
         return TConclusionStatus::Success();
     }
 
@@ -591,6 +590,12 @@ public:
                     "OLAP schema operations are not supported");
                 return result;
             }
+        }
+
+        if (createDescription.GetSharding().GetColumnShards().size()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Incoming tx message has initialized shard ids");
+            return result;
         }
 
         TOlapStoreInfo::TPtr storeInfo;

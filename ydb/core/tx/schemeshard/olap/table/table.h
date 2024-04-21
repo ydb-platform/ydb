@@ -6,24 +6,24 @@
 namespace NKikimr::NSchemeShard {
 
 struct TColumnTableInfo {
-private:
-    YDB_READONLY_DEF(std::vector<ui64>, ColumnShards);
 public:
     using TPtr = std::shared_ptr<TColumnTableInfo>;
 
     ui64 AlterVersion = 0;
     TPtr AlterData;
 
-    void SetColumnShards(const std::vector<ui64>& columnShards) {
-        AFL_VERIFY(ColumnShards.empty());
-        AFL_VERIFY(columnShards.size());
-        ColumnShards = columnShards;
+    const auto& GetColumnShards() const {
+        return Description.GetSharding().GetColumnShards();
+    }
 
+    void SetColumnShards(const std::vector<ui64>& columnShards) {
+        AFL_VERIFY(GetColumnShards().empty())("original", Description.DebugString());
+        AFL_VERIFY(columnShards.size());
         Description.MutableSharding()->SetVersion(1);
 
         Description.MutableSharding()->MutableColumnShards()->Clear();
-        Description.MutableSharding()->MutableColumnShards()->Reserve(ColumnShards.size());
-        for (ui64 columnShard : ColumnShards) {
+        Description.MutableSharding()->MutableColumnShards()->Reserve(columnShards.size());
+        for (ui64 columnShard : columnShards) {
             Description.MutableSharding()->AddColumnShards(columnShard);
         }
     }
@@ -59,7 +59,7 @@ public:
     }
 
     void UpdateShardStats(const TShardIdx shardIdx, const TPartitionStats& newStats) {
-        Stats.Aggregated.PartCount = ColumnShards.size();
+        Stats.Aggregated.PartCount = GetColumnShards().size();
         Stats.PartitionStats[shardIdx]; // insert if none
         Stats.UpdateShardStats(shardIdx, newStats);
     }

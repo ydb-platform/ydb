@@ -22,11 +22,6 @@ TColumnTableInfo::TColumnTableInfo(
         schema.ParseFromLocalDB(Description.GetSchema());
     }
 
-    ColumnShards.reserve(Description.GetSharding().GetColumnShards().size());
-    for (ui64 columnShard : Description.GetSharding().GetColumnShards()) {
-        ColumnShards.push_back(columnShard);
-    }
-
     if (StandaloneSharding) {
         OwnedColumnShards.reserve(StandaloneSharding->GetColumnShards().size());
         for (const auto& shardIdx : StandaloneSharding->GetColumnShards()) {

@@ -9,7 +9,7 @@ TConclusionStatus TShardingBase::ValidateBehaviour(const NSchemeShard::TOlapSche
     if (copy.GetColumnShards().size() == 0) {
         copy.AddColumnShards(1);
     }
-    auto fakeResult = BuildFromProto(schema, shardingInfo);
+    auto fakeResult = BuildFromProto(schema, copy);
     if (fakeResult.IsFail()) {
         return fakeResult;
     }
@@ -18,7 +18,7 @@ TConclusionStatus TShardingBase::ValidateBehaviour(const NSchemeShard::TOlapSche
 
 TConclusion<std::unique_ptr<TShardingBase>> TShardingBase::BuildFromProto(const NSchemeShard::TOlapSchema& schema, const NKikimrSchemeOp::TColumnTableSharding& shardingProto) {
     if (!shardingProto.GetColumnShards().size()) {
-        return TConclusionStatus::Fail("config is incorrect for construct shading behaviour");
+        return TConclusionStatus::Fail("config is incorrect for construct sharding behaviour");
     }
     std::vector<ui64> shardIds(shardingProto.GetColumnShards().begin(), shardingProto.GetColumnShards().end());
     if (shardingProto.HasRandomSharding()) {

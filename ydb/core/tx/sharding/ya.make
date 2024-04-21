@@ -5,6 +5,7 @@ PEERDIR(
     ydb/library/yql/utils
     ydb/library/yql/public/udf
     ydb/core/formats/arrow/hash
+    ydb/core/tx/schemeshard/olap/schema
     ydb/core/formats
     ydb/core/protos
 )

@@ -1460,11 +1460,6 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
     };
 
-    if (rec.HasMvccSnapshot() && !rec.GetMvccSnapshot().GetRepeatableRead()) {
-        badRequest("MvccSnapshot with RepeatableRead=false is not implemented");
-        return tx;
-    }
-
     if (tx->IsSchemeTx()) {
         Y_ABORT_UNLESS(!tx->HasVolatilePrepareFlag(), "Volatile scheme transactions not supported");
 

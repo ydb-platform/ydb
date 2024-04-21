@@ -34,7 +34,7 @@ public:
     using TPtr = std::shared_ptr<TValidatedWriteTx>;
 
     TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite& ev,
-            bool mvccSnapshotRepeatable);
+            bool mvccSnapshotRead);
     ~TValidatedWriteTx();
 
     EType GetType() const override { 
@@ -130,7 +130,7 @@ private:
     YDB_READONLY_DEF(std::optional<NKikimrDataEvents::TKqpLocks>, KqpLocks);
     YDB_READONLY_DEF(TInstant, ReceivedAt);
     YDB_READONLY_DEF(std::optional<ui64>, OverloadSubscribe);
-    YDB_READONLY_DEF(bool, MvccSnapshotRepeatable);
+    YDB_READONLY_DEF(bool, MvccSnapshotRead);
 
     YDB_READONLY_DEF(ui64, TxSize);
 

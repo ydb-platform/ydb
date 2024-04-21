@@ -260,8 +260,8 @@ public:
         UserDb.SetIsImmediateTx(true);
     }
 
-    void SetIsRepeatableSnapshot() {
-        UserDb.SetIsRepeatableSnapshot(true);
+    void SetUsesMvccSnapshot() {
+        UserDb.SetUsesMvccSnapshot(true);
     }
 
     std::optional<ui64> GetCurrentChangeGroup() const override {
@@ -312,7 +312,7 @@ public:
         TKeyValidator::TValidateOptions options(
             UserDb.GetLockTxId(),
             UserDb.GetLockNodeId(),
-            UserDb.GetIsRepeatableSnapshot(),
+            UserDb.GetUsesMvccSnapshot(),
             UserDb.GetIsImmediateTx(),
             UserDb.GetIsWriteTx(), 
             Scheme
@@ -623,11 +623,11 @@ void TEngineBay::SetIsImmediateTx() {
     host->SetIsImmediateTx();
 }
 
-void TEngineBay::SetIsRepeatableSnapshot() {
+void TEngineBay::SetUsesMvccSnapshot() {
     Y_ABORT_UNLESS(EngineHost);
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
-    host->SetIsRepeatableSnapshot();
+    host->SetUsesMvccSnapshot();
 }
 
 TVector<IDataShardChangeCollector::TChange> TEngineBay::GetCollectedChanges() const {

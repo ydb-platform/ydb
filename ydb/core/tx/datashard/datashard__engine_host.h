@@ -101,7 +101,7 @@ public:
     void SetReadVersion(TRowVersion readVersion);
     void SetVolatileTxId(ui64 txId);
     void SetIsImmediateTx();
-    void SetIsRepeatableSnapshot();
+    void SetUsesMvccSnapshot();
 
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const;
     void ResetCollectedChanges();

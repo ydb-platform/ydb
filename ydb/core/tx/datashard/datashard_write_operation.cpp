@@ -36,13 +36,13 @@ namespace NKikimr {
 namespace NDataShard {
 
 TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite& ev,
-        bool mvccSnapshotRepeatable)
+        bool mvccSnapshotRead)
     : KeyValidator(*self)
     , TabletId(self->TabletID())
     , IsImmediate(ev.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE)
     , GlobalTxId(globalTxId)
     , ReceivedAt(receivedAt)
-    , MvccSnapshotRepeatable(mvccSnapshotRepeatable)
+    , MvccSnapshotRead(mvccSnapshotRead)
     , TxSize(0)
     , ErrCode(NKikimrTxDataShard::TError::OK)
     , IsReleased(false)
@@ -218,7 +218,7 @@ bool TValidatedWriteTx::ReValidateKeys(const NTable::TScheme& scheme)
 {
     using EResult = NMiniKQL::IEngineFlat::EResult;
 
-    TKeyValidator::TValidateOptions options(LockTxId, LockNodeId, MvccSnapshotRepeatable, IsImmediate, true, scheme);
+    TKeyValidator::TValidateOptions options(LockTxId, LockNodeId, MvccSnapshotRead, IsImmediate, true, scheme);
     auto [result, error] = GetKeyValidator().ValidateKeys(options);
     if (result != EResult::Ok) {
         ErrStr = std::move(error);
@@ -407,7 +407,7 @@ TValidatedWriteTx::TPtr TWriteOperation::BuildWriteTx(TDataShard* self)
 {
     if (!WriteTx) {
         Y_ABORT_UNLESS(WriteRequest);
-        WriteTx = std::make_shared<TValidatedWriteTx>(self, GetGlobalTxId(), GetReceivedAt(), *WriteRequest, IsMvccSnapshotRepeatable());
+        WriteTx = std::make_shared<TValidatedWriteTx>(self, GetGlobalTxId(), GetReceivedAt(), *WriteRequest, IsMvccSnapshotRead());
     }
     return WriteTx;
 }
@@ -512,7 +512,7 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, NTable::TDat
 
     bool extractKeys = WriteTx->IsTxInfoLoaded();
 
-    WriteTx = std::make_shared<TValidatedWriteTx>(self, GetTxId(), GetReceivedAt(), *WriteRequest, IsMvccSnapshotRepeatable());
+    WriteTx = std::make_shared<TValidatedWriteTx>(self, GetTxId(), GetReceivedAt(), *WriteRequest, IsMvccSnapshotRead());
     if (WriteTx->Ready() && extractKeys) {
         WriteTx->ExtractKeys(db.GetScheme(), true);
     }

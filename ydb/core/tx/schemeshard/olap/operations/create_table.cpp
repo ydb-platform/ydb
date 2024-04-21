@@ -256,8 +256,6 @@ public:
 
         txState->ClearShardsInProgress();
 
-        Y_ABORT_UNLESS(tableInfo->GetColumnShards().empty() || tableInfo->GetOwnedColumnShardsVerified().empty());
-
         TString columnShardTxBody;
         auto seqNo = context.SS->StartRound(*txState);
         NKikimrTxColumnShard::TSchemaTxBody tx;

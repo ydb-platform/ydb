@@ -2922,6 +2922,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 R"([[4u]])");
         }
 
+        Cerr << "TEST 1 ----------------------------------" << Endl;
         {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/DataShard2` SELECT * FROM `/Root/DataShard`;

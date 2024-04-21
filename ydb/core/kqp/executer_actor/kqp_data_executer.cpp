@@ -181,7 +181,7 @@ public:
 
     bool ForceAcquireSnapshot() const {
         const bool forceSnapshot = (
-            HasTableSourceRead() && // ReadOnlyTx && //
+            ReadOnlyTx &&
             !ImmediateTx &&
             !HasPersistentChannels &&
             !HasOlapTable &&
@@ -1458,17 +1458,6 @@ private:
         }
 
         return true;
-    }
-
-    bool HasTableSourceRead() const {
-        for (const auto& tx : Request.Transactions) {
-            for (const auto& stage : tx.Body->GetStages()) {
-                if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     void BuildDatashardTasks(TStageInfo& stageInfo) {

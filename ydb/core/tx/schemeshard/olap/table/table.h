@@ -12,6 +12,11 @@ public:
     ui64 AlterVersion = 0;
     TPtr AlterData;
 
+    TPathId GetOlapStorePathIdVerified() const {
+        AFL_VERIFY(!IsStandalone());
+        return PathIdFromPathId(Description.GetColumnStorePathId());
+    }
+
     const auto& GetColumnShards() const {
         return Description.GetSharding().GetColumnShards();
     }
@@ -32,9 +37,6 @@ public:
     TMaybe<NKikimrSchemeOp::TColumnStoreSharding> StandaloneSharding;
     TMaybe<NKikimrSchemeOp::TAlterColumnTable> AlterBody;
 
-    TMaybe<TPathId> OlapStorePathId; // PathId of the table store
-
-    std::vector<TShardIdx> OwnedColumnShards;
     TAggregatedStats Stats;
 
     TColumnTableInfo() = default;
@@ -42,8 +44,20 @@ public:
         TMaybe<NKikimrSchemeOp::TColumnStoreSharding>&& standaloneSharding,
         TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody = Nothing());
 
+    const auto& GetOwnedColumnShardsVerified() const {
+        AFL_VERIFY(IsStandalone());
+        return StandaloneSharding->GetColumnShards();
+    }
+
+    std::vector<TShardIdx> BuildOwnedColumnShardsVerified() const {
+        std::vector<TShardIdx> result;
+        for (auto&& i : GetOwnedColumnShardsVerified()) {
+            result.emplace_back(TShardIdx::BuildFromProto(i).DetachResult());
+        }
+        return result;
+    }
+
     void SetOlapStorePathId(const TPathId& pathId) {
-        OlapStorePathId = pathId;
         Description.MutableColumnStorePathId()->SetOwnerId(pathId.OwnerId);
         Description.MutableColumnStorePathId()->SetLocalId(pathId.LocalPathId);
     }
@@ -51,7 +65,7 @@ public:
     static TColumnTableInfo::TPtr BuildTableWithAlter(const TColumnTableInfo& initialTable, const NKikimrSchemeOp::TAlterColumnTable& alterBody);
 
     bool IsStandalone() const {
-        return !OwnedColumnShards.empty();
+        return !!StandaloneSharding;
     }
 
     const TAggregatedStats& GetStats() const {

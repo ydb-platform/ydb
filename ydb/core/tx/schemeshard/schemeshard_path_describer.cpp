@@ -414,7 +414,7 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
     if (tableInfo->IsStandalone()) {
         FillAggregatedStats(*pathDescription, tableInfo->GetStats());
     } else {
-        const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(*tableInfo->OlapStorePathId);
+        const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(tableInfo->GetOlapStorePathIdVerified());
         Y_ABORT_UNLESS(storeInfo, "OlapStore not found");
 
         auto& preset = storeInfo->SchemaPresets.at(description->GetSchemaPresetId());

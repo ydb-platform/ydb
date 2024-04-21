@@ -4605,8 +4605,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     std::move(description), std::move(storeSharding)));
                 Self->IncrementPathDbRefCount(pathId);
 
-                if (tableInfo->OlapStorePathId) {
-                    auto itStore = Self->OlapStores.find(*tableInfo->OlapStorePathId);
+                if (!tableInfo->IsStandalone()) {
+                    auto itStore = Self->OlapStores.find(tableInfo->GetOlapStorePathIdVerified());
                     if (itStore != Self->OlapStores.end()) {
                         itStore->second->ColumnTables.insert(pathId);
                         if (pathsUnderOperation.contains(pathId)) {

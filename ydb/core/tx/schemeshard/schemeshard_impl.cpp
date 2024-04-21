@@ -3442,9 +3442,9 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId)
     }
 
     // Unlink table from olap store
-    if (tableInfo.OlapStorePathId && *tableInfo.OlapStorePathId) {
-        Y_ABORT_UNLESS(OlapStores.contains(*tableInfo.OlapStorePathId));
-        auto storeInfo = OlapStores.at(*tableInfo.OlapStorePathId);
+    if (!tableInfo.IsStandalone() && tableInfo.GetOlapStorePathIdVerified()) {
+        Y_ABORT_UNLESS(OlapStores.contains(tableInfo.GetOlapStorePathIdVerified()));
+        auto storeInfo = OlapStores.at(tableInfo.GetOlapStorePathIdVerified());
         storeInfo->ColumnTablesUnderOperation.erase(pathId);
         storeInfo->ColumnTables.erase(pathId);
     }
@@ -4056,9 +4056,9 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
 
                 if (tableInfo->Description.HasSchema()) {
                     result.SetColumnTableSchemaVersion(tableInfo->Description.GetSchema().GetVersion());
-                } else if (tableInfo->Description.HasSchemaPresetId() && tableInfo->OlapStorePathId) {
-                    Y_ABORT_UNLESS(OlapStores.contains(*tableInfo->OlapStorePathId));
-                    auto& storeInfo = OlapStores.at(*tableInfo->OlapStorePathId);
+                } else if (tableInfo->Description.HasSchemaPresetId() && tableInfo->GetOlapStorePathIdVerified()) {
+                    Y_ABORT_UNLESS(OlapStores.contains(tableInfo->GetOlapStorePathIdVerified()));
+                    auto& storeInfo = OlapStores.at(tableInfo->GetOlapStorePathIdVerified());
                     auto& preset = storeInfo->SchemaPresets.at(tableInfo->Description.GetSchemaPresetId());
                     result.SetColumnTableSchemaVersion(tableInfo->Description.GetSchemaPresetVersionAdj() + preset.GetVersion());
                 } else {
@@ -6702,7 +6702,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInf
 }
 
 void TSchemeShard::SetPartitioning(TPathId pathId, TColumnTableInfo::TPtr tableInfo) {
-    SetPartitioning(pathId, tableInfo->OwnedColumnShards);
+    SetPartitioning(pathId, tableInfo->BuildOwnedColumnShardsVerified());
 }
 
 void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning) {

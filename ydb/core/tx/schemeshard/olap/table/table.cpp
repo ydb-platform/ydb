@@ -10,26 +10,8 @@ TColumnTableInfo::TColumnTableInfo(
     : AlterVersion(alterVersion)
     , Description(std::move(description))
     , StandaloneSharding(std::move(standaloneSharding))
-    , AlterBody(std::move(alterBody)) {
-    if (Description.HasColumnStorePathId()) {
-        OlapStorePathId = TPathId(
-            TOwnerId(Description.GetColumnStorePathId().GetOwnerId()),
-            TLocalPathId(Description.GetColumnStorePathId().GetLocalId()));
-    }
-
-    if (Description.HasSchema()) {
-        TOlapSchema schema;
-        schema.ParseFromLocalDB(Description.GetSchema());
-    }
-
-    if (StandaloneSharding) {
-        OwnedColumnShards.reserve(StandaloneSharding->GetColumnShards().size());
-        for (const auto& shardIdx : StandaloneSharding->GetColumnShards()) {
-            OwnedColumnShards.push_back(TShardIdx(
-                TOwnerId(shardIdx.GetOwnerId()),
-                TLocalShardIdx(shardIdx.GetLocalId())));
-        }
-    }
+    , AlterBody(std::move(alterBody))
+{
 }
 
 TColumnTableInfo::TPtr TColumnTableInfo::BuildTableWithAlter(const TColumnTableInfo& initialTable, const NKikimrSchemeOp::TAlterColumnTable& alterBody) {

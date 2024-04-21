@@ -256,7 +256,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        Y_ABORT_UNLESS(tableInfo->GetColumnShards().empty() || tableInfo->OwnedColumnShards.empty());
+        Y_ABORT_UNLESS(tableInfo->GetColumnShards().empty() || tableInfo->GetOwnedColumnShardsVerified().empty());
 
         TString columnShardTxBody;
         auto seqNo = context.SS->StartRound(*txState);
@@ -277,7 +277,7 @@ public:
                 create = init->AddTables();
                 create->MutableSchema()->CopyFrom(tableInfo->Description.GetSchema());
             } else {
-                Y_ABORT_UNLESS(tableInfo->OwnedColumnShards.empty());
+                Y_ABORT_UNLESS(tableInfo->GetOwnedColumnShardsVerified().empty());
                 Y_ABORT_UNLESS(!tableInfo->Description.HasSchema());
                 Y_ABORT_UNLESS(tableInfo->Description.HasSchemaPresetId());
 
@@ -378,7 +378,7 @@ public:
 
         auto table = context.SS->ColumnTables.TakeAlterVerified(pathId);
         if (table->IsStandalone()) {
-            table->SetColumnShards(TColumnTablesLayout::ShardIdxToTabletId(table->OwnedColumnShards, *context.SS));
+            table->SetColumnShards(TColumnTablesLayout::ShardIdxToTabletId(table->BuildOwnedColumnShardsVerified(), *context.SS));
         }
 
         context.SS->PersistColumnTableAlterRemove(db, pathId);
@@ -757,9 +757,7 @@ public:
             storageConfig.SetDataChannelCount(1);
 
             TChannelsBindings channelsBindings;
-            if (!context.SS->GetOlapChannelsBindings(dstPath.GetPathIdForDomain(),
-                                                     storageConfig, channelsBindings, errStr))
-            {
+            if (!context.SS->GetOlapChannelsBindings(dstPath.GetPathIdForDomain(), storageConfig, channelsBindings, errStr)) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
@@ -771,19 +769,14 @@ public:
             columnShardInfo.BindedChannels = channelsBindings;
 
             tableInfo->StandaloneSharding = NKikimrSchemeOp::TColumnStoreSharding();
-            Y_ABORT_UNLESS(tableInfo->OwnedColumnShards.empty());
-            tableInfo->OwnedColumnShards.reserve(shardsCount);
+            Y_ABORT_UNLESS(tableInfo->GetOwnedColumnShardsVerified().empty());
 
             for (ui64 i = 0; i < shardsCount; ++i) {
                 TShardIdx idx = context.SS->RegisterShardInfo(columnShardInfo);
                 context.SS->TabletCounters->Simple()[COUNTER_COLUMN_SHARDS].Add(1);
                 txState.Shards.emplace_back(idx, ETabletType::ColumnShard, TTxState::CreateParts);
 
-                auto* shardInfoProto = tableInfo->StandaloneSharding->AddColumnShards();
-                shardInfoProto->SetOwnerId(idx.GetOwnerId());
-                shardInfoProto->SetLocalId(idx.GetLocalId().GetValue());
-
-                tableInfo->OwnedColumnShards.emplace_back(std::move(idx));
+                *tableInfo->StandaloneSharding->AddColumnShards() = idx.SerializeToProto();
             }
 
             context.SS->SetPartitioning(pathId, tableInfo);
@@ -834,7 +827,7 @@ public:
         dstPath.DomainInfo()->IncPathsInside();
         if (!storeInfo) {
             dstPath.DomainInfo()->AddInternalShards(txState);
-            dstPath.Base()->IncShardsInside(tableInfo->OwnedColumnShards.size());
+            dstPath.Base()->IncShardsInside(tableInfo->GetOwnedColumnShardsVerified().size());
         }
         parentPath.Base()->IncAliveChildren();
 

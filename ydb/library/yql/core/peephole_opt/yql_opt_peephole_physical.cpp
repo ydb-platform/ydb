@@ -5499,9 +5499,9 @@ TExprNode::TPtr SplitByPairs(TPositionHandle pos, const TStringBuf& funcName, co
 
 using TExprNodePtrPred = std::function<bool(const TExprNode::TPtr&)>;
 
-TExprNodePtrPred MakeBlockRewriteStopPredicate(TCoLambda lambda) {
+TExprNodePtrPred MakeBlockRewriteStopPredicate(const TExprNode::TPtr& lambda) {
     return [lambda](const TExprNode::TPtr& node) {
-        return node->IsArguments() || (node->IsLambda() && node != lambda.Ptr());
+        return node->IsArguments() || (node->IsLambda() && node != lambda);
     };
 }
 
@@ -5550,9 +5550,9 @@ void MarkNonLazy(const TExprNode::TPtr& node, TNodeSet& lazyNodes, const TExprNo
     DoMarkNonLazy(node, lazyNodes, needStop, visited);
 }
 
-TNodeSet CollectLazyNonStrictNodes(TCoLambda lambda) {
+TNodeSet CollectLazyNonStrictNodes(const TExprNode::TPtr& lambda) {
     TNodeSet nonStrictNodes;
-    VisitExpr(lambda.Ptr(), [&](const TExprNode::TPtr& node) {
+    VisitExpr(lambda, [&](const TExprNode::TPtr& node) {
         if (node->IsArguments() || node->IsArgument()) {
             return false;
         }
@@ -5588,8 +5588,8 @@ TNodeSet CollectLazyNonStrictNodes(TCoLambda lambda) {
     auto needStop = MakeBlockRewriteStopPredicate(lambda);
 
     TNodeSet lazyNodes;
-    MarkLazy(lambda.Ptr(), lazyNodes, needStop);
-    MarkNonLazy(lambda.Ptr(), lazyNodes, needStop);
+    MarkLazy(lambda, lazyNodes, needStop);
+    MarkNonLazy(lambda, lazyNodes, needStop);
 
     TNodeSet lazyNonStrict;
     for (auto& node : lazyNodes) {
@@ -5637,8 +5637,8 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         rewrites[lambda->Head().Child(i)] = blockArgs[i];
     }
 
-    const TNodeSet lazyNonStrict = CollectLazyNonStrictNodes(TCoLambda(lambda));
-    auto needStop = MakeBlockRewriteStopPredicate(TCoLambda(lambda));
+    const TNodeSet lazyNonStrict = CollectLazyNonStrictNodes(lambda);
+    auto needStop = MakeBlockRewriteStopPredicate(lambda);
 
     newNodes = 0;
     VisitExpr(lambda, [&](const TExprNode::TPtr& node) {

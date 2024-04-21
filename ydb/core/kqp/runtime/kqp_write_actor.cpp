@@ -457,11 +457,13 @@ private:
 
         switch (ev->Get()->GetStatus()) {
         case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED: {
-            RuntimeError(
-                TStringBuilder() << "Got UNSPECIFIED for table `"
+            CA_LOG_E("Got UNSPECIFIED for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
-                    << " Sink=" << this->SelfId() << ".",
+                    << " Sink=" << this->SelfId() << ".");
+            RuntimeError(
+                TStringBuilder() << "Got UNSPECIFIED for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`.",
                 NYql::NDqProto::StatusIds::UNSPECIFIED,
                 getIssues());
             return;
@@ -474,70 +476,86 @@ private:
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
-            // TODO: split info to log + user error
-            RuntimeError(
-                TStringBuilder() << "Got ABORTED for table `"
+            CA_LOG_E("Got ABORTED for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
-                    << " Sink=" << this->SelfId() << ".",
+                    << " Sink=" << this->SelfId() << ".");
+            RuntimeError(
+                TStringBuilder() << "Got ABORTED for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`.",
                 NYql::NDqProto::StatusIds::ABORTED,
                 getIssues());
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR: {
-            RuntimeError(
-                TStringBuilder() << "Got INTERNAL ERROR for table `"
+            CA_LOG_E("Got INTERNAL ERROR for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
-                    << " Sink=" << this->SelfId() << ".",
+                    << " Sink=" << this->SelfId() << ".");
+            RuntimeError(
+                TStringBuilder() << "Got INTERNAL ERROR for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`.",
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                 getIssues());
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
-            CA_LOG_W("Got OVERLOADED for table `"
+            CA_LOG_E("Got OVERLOADED for table `"
                 << SchemeEntry->TableId.PathId.ToString() << "`."
                 << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                 << " Sink=" << this->SelfId() << "."
                 << " Ignored this error.");
+            RuntimeError(
+                TStringBuilder() << "Got OVERLOADED for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`.",
+                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                getIssues());
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED: {
-            RuntimeError(
-                TStringBuilder() << "Got CANCELLED for table `"
+            CA_LOG_E("Got CANCELLED for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
-                    << " Sink=" << this->SelfId() << ".",
+                    << " Sink=" << this->SelfId() << ".");
+            RuntimeError(
+                TStringBuilder() << "Got CANCELLED for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`.",
                 NYql::NDqProto::StatusIds::CANCELLED,
                 getIssues());
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST: {
-            RuntimeError(
-                TStringBuilder() << "Got BAD REQUEST for table `"
+            CA_LOG_E("Got BAD REQUEST for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
-                    << " Sink=" << this->SelfId() << ".",
+                    << " Sink=" << this->SelfId() << ".");
+            RuntimeError(
+                TStringBuilder() << "Got BAD REQUEST for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`.",
                 NYql::NDqProto::StatusIds::BAD_REQUEST,
                 getIssues());
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED: {
-            RuntimeError(
-                TStringBuilder() << "Got SCHEME CHANGED for table `"
+            CA_LOG_E("Got SCHEME CHANGED for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
-                    << " Sink=" << this->SelfId() << ".",
+                    << " Sink=" << this->SelfId() << ".");
+            RuntimeError(
+                TStringBuilder() << "Got SCHEME CHANGED for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`.",
                 NYql::NDqProto::StatusIds::SCHEME_ERROR,
                 getIssues());
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
-            RuntimeError(
-                TStringBuilder() << "Got LOCKS BROKEN for table `"
+            CA_LOG_E("Got LOCKS BROKEN for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
-                    << " Sink=" << this->SelfId() << ".",
+                    << " Sink=" << this->SelfId() << ".");
+            RuntimeError(
+                TStringBuilder() << "Got LOCKS BROKEN for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`.",
                 NYql::NDqProto::StatusIds::ABORTED,
                 getIssues());
             return;
@@ -606,13 +624,15 @@ private:
         YQL_ENSURE(!shard.IsEmpty());
         auto& inFlightBatch = shard.CurrentBatch();
         if (inFlightBatch.SendAttempts >= BackoffSettings()->MaxWriteAttempts) {
+            CA_LOG_E("ShardId=" << shardId
+                    << " for table '" << Settings.GetTable().GetPath()
+                    << "': retry limit exceeded."
+                    << " Sink=" << this->SelfId() << ".");
             RuntimeError(
                 TStringBuilder()
                     << "ShardId=" << shardId
                     << " for table '" << Settings.GetTable().GetPath()
-                    << "': retry limit exceeded."
-                    << " Sink=" << this->SelfId() << "."
-                    << inFlightBatch.SendAttempts << " / " << BackoffSettings()->MaxWriteAttempts,
+                    << "': retry limit exceeded.",
                 NYql::NDqProto::StatusIds::UNAVAILABLE);
             return;
         }
@@ -664,7 +684,7 @@ private:
             return;
         }
 
-        CA_LOG_D("Retry ShardID=" << shardId << " with Cookie=" << ifCookieEqual.value_or(0));
+        CA_LOG_T("Retry ShardID=" << shardId << " with Cookie=" << ifCookieEqual.value_or(0));
         SendDataToShard(shardId);
     }
 

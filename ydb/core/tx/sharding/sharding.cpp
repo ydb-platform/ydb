@@ -4,23 +4,42 @@
 
 namespace NKikimr::NSharding {
 
-TConclusion<std::unique_ptr<TShardingBase>> TShardingBase::BuildShardingOperator(const NKikimrSchemeOp::TColumnTableSharding& sharding) {
-    if (sharding.HasRandomSharding()) {
-        return std::make_unique<TRandomSharding>(sharding.GetColumnShards().size());
+TConclusion<std::unique_ptr<TShardingBase>> TShardingBase::BuildFromProto(const NSchemeShard::TOlapSchema& schema, const NKikimrSchemeOp::TColumnTableSharding& shardingProto) {
+    if (!shardingProto.GetColumnShards().size()) {
+        return TConclusionStatus::Fail("config is incorrect for construct shading behaviour");
     }
-    if (sharding.HasHashSharding()) {
-        auto& hashSharding = sharding.GetHashSharding();
-        std::vector<TString> columnNames(hashSharding.GetColumns().begin(), hashSharding.GetColumns().end());
+    std::vector<ui64> shardIds(shardingProto.GetColumnShards().begin(), shardingProto.GetColumnShards().end());
+    if (shardingProto.HasRandomSharding()) {
+        return std::make_unique<TRandomSharding>(shardIds);
+    }
+    if (shardingProto.HasHashSharding()) {
+        auto& hashSharding = shardingProto.GetHashSharding();
+        std::vector<TString> columnNames;
+        if (hashSharding.GetColumns().empty()) {
+            for (auto&& i : schema.GetColumns().GetKeyColumnIds()) {
+                columnNames.emplace_back(schema.GetColumns().GetByIdVerified(i)->GetName());
+            }
+        } else {
+            for (auto&& i : hashSharding.GetColumns()) {
+                columnNames.emplace_back(i);
+                if (!schema.GetColumns().GetByName(i)) {
+                    return TConclusionStatus::Fail("incorrect sharding column name: " + i);
+                }
+                if (!schema.GetColumns().GetByName(i)->IsKeyColumn()) {
+                    return TConclusionStatus::Fail("sharding column name have to been primary key column: " + i);
+                }
+            }
+        }
         if (hashSharding.GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64) {
-            return std::make_unique<TConsistencySharding64>(sharding.GetColumnShards().size(), columnNames, 0);
+            return std::make_unique<TConsistencySharding64>(shardIds, columnNames, 0);
         } else if (hashSharding.GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N) {
-            return std::make_unique<THashSharding>(sharding.GetColumnShards().size(), columnNames, 0);
+            return std::make_unique<THashShardingModuloN>(shardIds, columnNames, 0);
         } else if (hashSharding.GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CLOUD_LOGS) {
             ui32 activeShards = TLogsSharding::DEFAULT_ACITVE_SHARDS;
             if (hashSharding.HasActiveShardsCount()) {
                 activeShards = hashSharding.GetActiveShardsCount();
             }
-            return std::make_unique<TLogsSharding>(sharding.GetColumnShards().size(), columnNames, activeShards);
+            return std::make_unique<TLogsSharding>(shardIds, columnNames, activeShards);
         }
     }
     return TConclusionStatus::Fail("not determined sharding type");
@@ -30,7 +49,7 @@ TString TShardingBase::DebugString() const {
     return "SHARDING";
 }
 
-std::vector<ui32> THashSharding::MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+std::vector<ui32> THashShardingModuloN::MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const {
     std::vector<ui64> hashes = MakeHashes(batch);
     std::vector<ui32> result;
     result.reserve(hashes.size());

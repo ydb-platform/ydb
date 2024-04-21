@@ -14,21 +14,21 @@ public:
     ui64 AlterVersion = 0;
     TPtr AlterData;
 
-    void SetColumnShards(std::vector<ui64>&& columnShards) {
+    void SetColumnShards(const std::vector<ui64>& columnShards) {
         AFL_VERIFY(ColumnShards.empty());
-        ColumnShards = std::move(columnShards);
+        AFL_VERIFY(columnShards.size());
+        ColumnShards = columnShards;
 
-        Sharding.SetVersion(1);
+        Description.MutableSharding()->SetVersion(1);
 
-        Sharding.MutableColumnShards()->Clear();
-        Sharding.MutableColumnShards()->Reserve(ColumnShards.size());
+        Description.MutableSharding()->MutableColumnShards()->Clear();
+        Description.MutableSharding()->MutableColumnShards()->Reserve(ColumnShards.size());
         for (ui64 columnShard : ColumnShards) {
-            Sharding.AddColumnShards(columnShard);
+            Description.MutableSharding()->AddColumnShards(columnShard);
         }
     }
 
     NKikimrSchemeOp::TColumnTableDescription Description;
-    NKikimrSchemeOp::TColumnTableSharding Sharding;
     TMaybe<NKikimrSchemeOp::TColumnStoreSharding> StandaloneSharding;
     TMaybe<NKikimrSchemeOp::TAlterColumnTable> AlterBody;
 
@@ -39,7 +39,6 @@ public:
 
     TColumnTableInfo() = default;
     TColumnTableInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnTableDescription&& description,
-        NKikimrSchemeOp::TColumnTableSharding&& sharding,
         TMaybe<NKikimrSchemeOp::TColumnStoreSharding>&& standaloneSharding,
         TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody = Nothing());
 

@@ -5,12 +5,10 @@ namespace NKikimr::NSchemeShard {
 TColumnTableInfo::TColumnTableInfo(
     ui64 alterVersion,
     NKikimrSchemeOp::TColumnTableDescription&& description,
-    NKikimrSchemeOp::TColumnTableSharding&& sharding,
     TMaybe<NKikimrSchemeOp::TColumnStoreSharding>&& standaloneSharding,
     TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody)
     : AlterVersion(alterVersion)
     , Description(std::move(description))
-    , Sharding(std::move(sharding))
     , StandaloneSharding(std::move(standaloneSharding))
     , AlterBody(std::move(alterBody)) {
     if (Description.HasColumnStorePathId()) {
@@ -24,8 +22,8 @@ TColumnTableInfo::TColumnTableInfo(
         schema.ParseFromLocalDB(Description.GetSchema());
     }
 
-    ColumnShards.reserve(Sharding.GetColumnShards().size());
-    for (ui64 columnShard : Sharding.GetColumnShards()) {
+    ColumnShards.reserve(Description.GetSharding().GetColumnShards().size());
+    for (ui64 columnShard : Description.GetSharding().GetColumnShards()) {
         ColumnShards.push_back(columnShard);
     }
 

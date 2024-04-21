@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/core/mind/hive/hive.h>
 
 #include <util/random/shuffle.h>
@@ -17,11 +18,10 @@ public:
     static constexpr ui32 DEFAULT_SHARDS_COUNT = 64;
 
 private:
-    ui32 ShardsCount = 0;
     TString Name;
     std::optional<NKikimrSchemeOp::TColumnDataLifeCycle> TtlSettings;
-    std::optional<NKikimrSchemeOp::TColumnTableSharding> Sharding;
-
+protected:
+    ui32 ShardsCount = 0;
 public:
     bool Deserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) {
         Name = description.GetName();
@@ -35,14 +35,7 @@ public:
             return false;
         }
 
-        ShardsCount = description.GetColumnShardCount();
-
-        if (description.HasSharding()) {
-            Sharding = description.GetSharding();
-        } else {
-            Sharding = NKikimrSchemeOp::TColumnTableSharding();
-        }
-        FillDefaultSharding(*Sharding);
+        ShardsCount = std::max<ui32>(description.GetColumnShardCount(), 1);
 
         if (!DoDeserialize(description, errors)) {
             return false;
@@ -57,73 +50,36 @@ public:
         return true;
     }
 
-    TColumnTableInfo::TPtr BuildTableInfo(IErrorCollector& errors) const {
+    TColumnTableInfo::TPtr BuildTableInfo(const NKikimrSchemeOp::TColumnTableDescription& description, const TOperationContext& context, IErrorCollector& errors) {
         TColumnTableInfo::TPtr tableInfo = std::make_shared<TColumnTableInfo>();
-        tableInfo->AlterVersion = 1;
+        if (!description.HasSharding()) {
+            *tableInfo->Description.MutableSharding() = NKikimrSchemeOp::TColumnTableSharding();
+        }
+        FillDefaultSharding(*tableInfo->Description.MutableSharding());
 
-        BuildDescription(tableInfo->Description);
+        if (!Deserialize(description, errors)) {
+            return nullptr;
+        }
+        tableInfo->AlterVersion = 1;
+        auto statusBuild = BuildDescription(context, tableInfo);
+        if (statusBuild.IsFail()) {
+            errors.AddError(statusBuild.GetErrorMessage());
+            return nullptr;
+        }
         tableInfo->Description.SetColumnShardCount(ShardsCount);
         tableInfo->Description.SetName(Name);
         if (TtlSettings) {
             tableInfo->Description.MutableTtlSettings()->CopyFrom(*TtlSettings);
             tableInfo->Description.MutableTtlSettings()->SetVersion(1);
         }
-        if (!SetSharding(GetSchema(), tableInfo, errors)) {
-            return nullptr;
-        }
+
         return tableInfo;
     }
 
 private:
-    virtual void BuildDescription(NKikimrSchemeOp::TColumnTableDescription& description) const = 0;
+    virtual TConclusionStatus BuildDescription(const TOperationContext& context, TColumnTableInfo::TPtr& table) const = 0;
     virtual bool DoDeserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) = 0;
     virtual const TOlapSchema& GetSchema() const = 0;
-
-    bool SetSharding(const TOlapSchema& schema, TColumnTableInfo::TPtr tableInfo, IErrorCollector& errors) const {
-        if (!ShardsCount) {
-            errors.AddError("Shards count is zero");
-            return false;
-        }
-        if (!Sharding) {
-            errors.AddError("Sharding is not set");
-            return false;
-        }
-        tableInfo->Sharding = *Sharding;
-
-        switch (tableInfo->Sharding.Method_case()) {
-            case NKikimrSchemeOp::TColumnTableSharding::kRandomSharding: {
-                // Random sharding implies non-unique primary key
-                break;
-            }
-            case NKikimrSchemeOp::TColumnTableSharding::kHashSharding: {
-                auto& sharding = *tableInfo->Sharding.MutableHashSharding();
-                if (sharding.ColumnsSize() == 0) {
-                    sharding.MutableColumns()->CopyFrom(tableInfo->Description.GetSchema().GetKeyColumnNames());
-                }
-                if (ShardsCount > 1 && sharding.ColumnsSize() == 0) {
-                    errors.AddError("Hash sharding requires a non-empty list of columns or primary key specified");
-                    return false;
-                }
-                for (const TString& columnName : sharding.GetColumns()) {
-                    auto* pColumn = schema.GetColumns().GetByName(columnName);
-                    if (!pColumn) {
-                        errors.AddError(Sprintf("Hash sharding is using an unknown column '%s'", columnName.c_str()));
-                        return false;
-                    }
-                    if (!pColumn->IsKeyColumn()) {
-                        errors.AddError(Sprintf("Hash sharding is using a non-key column '%s'", columnName.c_str()));
-                        return false;
-                    }
-                }
-                break;
-            }
-            default: {
-                errors.AddError("Unsupported sharding method");
-                return false;
-            }
-        }
-        return true;
-    }
 
     static void FillDefaultSharding(NKikimrSchemeOp::TColumnTableSharding& info) {
         if (info.HasRandomSharding()) {
@@ -138,11 +94,15 @@ class TOlapPresetConstructor : public TTableConstructorBase {
     ui32 PresetId = 0;
     TString PresetName = "default";
     const TOlapStoreInfo& StoreInfo;
-
+    mutable bool NeedUpdateObject = false;
 public:
     TOlapPresetConstructor(const TOlapStoreInfo& storeInfo)
         : StoreInfo(storeInfo)
     {}
+
+    bool GetNeedUpdateObject() const {
+        return NeedUpdateObject;
+    }
 
     bool DoDeserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) override {
         if (description.GetColumnShardCount() > StoreInfo.GetColumnShards().size()) {
@@ -179,9 +139,27 @@ public:
     }
 
 private:
-    void BuildDescription(NKikimrSchemeOp::TColumnTableDescription& description) const override {
+    TConclusionStatus BuildDescription(const TOperationContext& context, TColumnTableInfo::TPtr& table) const override {
+        auto& description = table->Description;
         description.SetSchemaPresetId(PresetId);
         description.SetSchemaPresetName(PresetName);
+
+        auto layoutPolicy = StoreInfo.GetTablesLayoutPolicy();
+        auto currentLayout = context.SS->ColumnTables.GetTablesLayout(TColumnTablesLayout::ShardIdxToTabletId(StoreInfo.GetColumnShards(), *context.SS));
+        auto layoutConclusion = layoutPolicy->Layout(currentLayout, ShardsCount);
+        if (layoutConclusion.IsFail()) {
+            return layoutConclusion;
+        }
+        NeedUpdateObject = layoutConclusion->GetIsNewGroup();
+        for (auto&& i : layoutConclusion->MutableTabletIds()) {
+            description.MutableSharding()->AddColumnShards(i);
+        }
+        auto shardingObject = NSharding::TShardingBase::BuildFromProto(GetSchema(), description.GetSharding());
+        if (shardingObject.IsFail()) {
+            return shardingObject;
+        }
+        table->SetColumnShards((*shardingObject)->GetShardIds());
+        return TConclusionStatus::Success();
     }
 
     const TOlapSchema& GetSchema() const override {
@@ -218,11 +196,13 @@ private:
     }
 
 private:
-    void BuildDescription(NKikimrSchemeOp::TColumnTableDescription& description) const override {
+    TConclusionStatus BuildDescription(const TOperationContext& /*context*/, TColumnTableInfo::TPtr& table) const override {
+        auto& description = table->Description;
         if (HasDataChannels) {
             description.MutableStorageConfig()->SetDataChannelCount(1);
         }
         TableSchema.Serialize(*description.MutableSchema());
+        return TConclusionStatus::Success();
     }
 
     const TOlapSchema& GetSchema() const override {
@@ -695,27 +675,11 @@ public:
         bool needUpdateObject = false;
         if (storeInfo) {
             TOlapPresetConstructor tableConstructor(*storeInfo);
-            if (!tableConstructor.Deserialize(createDescription, errors)) {
-                return result;
-            }
-            tableInfo = tableConstructor.BuildTableInfo(errors);
-            if (tableInfo) {
-                auto layoutPolicy = storeInfo->GetTablesLayoutPolicy();
-                auto currentLayout = context.SS->ColumnTables.GetTablesLayout(TColumnTablesLayout::ShardIdxToTabletId(storeInfo->GetColumnShards(), *context.SS));
-                auto layoutConclusion = layoutPolicy->Layout(currentLayout, shardsCount);
-                needUpdateObject = layoutConclusion->GetIsNewGroup();
-                tableInfo->SetColumnShards(std::move(layoutConclusion->MutableTabletIds()));
-                if (layoutConclusion.IsFail()) {
-                    result->SetError(NKikimrScheme::StatusPreconditionFailed, layoutConclusion.GetErrorMessage());
-                    return result;
-                }
-            }
+            tableInfo = tableConstructor.BuildTableInfo(createDescription, context, errors);
+            needUpdateObject = tableConstructor.GetNeedUpdateObject();
         } else {
             TOlapTableConstructor tableConstructor;
-            if (!tableConstructor.Deserialize(createDescription, errors)) {
-                return result;
-            }
-            tableInfo = tableConstructor.BuildTableInfo(errors);
+            tableInfo = tableConstructor.BuildTableInfo(createDescription, context, errors);
         }
 
         if (!tableInfo) {

@@ -890,7 +890,7 @@ Pear;15;33'''
         assert data.result.result_set.rows[0].items[2].bytes_value == b"", str(data.result.result_set)
 
     @yq_all
-    def test_parquet_converters_to_timestamp(self, kikimr, s3, client, unique_prefix):
+    def test_parquet_converters_to_timestamp(self, kikimr, s3, client):
         # timestamp[ms] -> Timestamp
         # 2024-04-02T12:01:00.000Z
         data = [['apple'], [1712059260000]]
@@ -907,7 +907,7 @@ Pear;15;33'''
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "hcpp"
+        storage_connection_name = "hcpp"
         client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -1392,7 +1392,7 @@ Pear;15;33'''
         assert len(data.result.result_set.rows) == 1, "invalid count rows"
 
     @yq_all
-    def test_parquet_converters_to_datetime(self, kikimr, s3, client, unique_prefix):
+    def test_parquet_converters_to_datetime(self, kikimr, s3, client):
         # timestamp[ms] -> Datetime
         # 2024-04-02T12:01:00.000Z
         data = [['apple'], [1712059260000]]
@@ -1409,7 +1409,7 @@ Pear;15;33'''
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "hcpp"
+        storage_connection_name = "hcpp"
         client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = f'''

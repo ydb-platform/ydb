@@ -174,7 +174,7 @@ void TPartitionFamily::Release(const TActorContext& ctx, EStatus targetStatus) {
 }
 
 bool TPartitionFamily::Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx) {
-    if (!Session || Session->PipeClient != sender) {
+    if (!Session || Session->Pipe != sender) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 GetPrefix() << "try unlock the partition " << partitionId << " from other sender");
         return false;
@@ -395,7 +395,7 @@ bool TPartitionFamily::PossibleForBalance(TSession* session) {
         return true;
     }
 
-    return session->PipeClient != partition->LastPipe;
+    return session->Pipe != partition->LastPipe;
 }
 
 
@@ -441,7 +441,7 @@ void TPartitionFamily::UpdateSpecialSessions() {
 
     for (auto& [_, session] : Consumer.Session) {
         if (session->WithGroups() && session->AllPartitionsReadable(Partitions)) {
-            auto [_, inserted] = SpecialSessions.try_emplace(session->PipeClient, session);
+            auto [_, inserted] = SpecialSessions.try_emplace(session->Pipe, session);
             if (inserted) {
                 hasChanges = true;
             }
@@ -476,7 +476,7 @@ std::unique_ptr<TEvPersQueue::TEvReleasePartition> TPartitionFamily::MakeEvRelea
     //    r.SetCount(1);
     //}
     r.SetGroup(partitionId + 1);
-    ActorIdToProto(Session->PipeClient, r.MutablePipeClient());
+    ActorIdToProto(Session->Pipe, r.MutablePipeClient());
 
     return res;
 }
@@ -492,7 +492,7 @@ std::unique_ptr<TEvPersQueue::TEvLockPartition> TPartitionFamily::MakeEvLockPart
     r.SetGeneration(TabletGeneration());
     r.SetStep(step);
     r.SetClientId(Session->ClientId);
-    ActorIdToProto(Session->PipeClient, res->Record.MutablePipeClient());
+    ActorIdToProto(Session->Pipe, res->Record.MutablePipeClient());
 
     auto* partitionInfo = GetPartitionInfo(partitionId);
     if (partitionInfo) {
@@ -653,12 +653,12 @@ void TConsumer::RegisterReadingSession(TSession* session, const TActorContext& c
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
             GetPrefix() << "register reading session " << session->DebugStr());
 
-    Session[session->PipeClient] = session;
+    Session[session->Pipe] = session;
 
     if (session->WithGroups()) {
         for (auto& [_, family] : Families) {
             if (session->AllPartitionsReadable(family->Partitions)) {
-                family->SpecialSessions[session->PipeClient] = session;
+                family->SpecialSessions[session->Pipe] = session;
                 FamiliesRequireBalancing[family->Id] = family.get();
             }
         }
@@ -680,7 +680,7 @@ std::vector<TPartitionFamily*> Snapshot(const std::unordered_map<size_t, const s
 void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext& ctx) {
     if (session->WithGroups()) {
         for (auto& [_, family] : Families) {
-            family->SpecialSessions.erase(session->PipeClient);
+            family->SpecialSessions.erase(session->Pipe);
         }
     }
 
@@ -693,7 +693,7 @@ void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext&
         }
     }
 
-    Session.erase(session->PipeClient);
+    Session.erase(session->Pipe);
 }
 
 bool TConsumer::Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx) {
@@ -881,7 +881,7 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
                     << ". Scheduled release of the partition for re-reading. Delay=" << delay << " seconds,"
                     << " firstMessage=" << r.GetStartedReadingFromEndOffset() << ", " << GetSdkDebugString0(r.GetScaleAwareSDK()));
 
-        status->LastPipe = family->Session->PipeClient;
+        status->LastPipe = family->Session->Pipe;
         ctx.Schedule(TDuration::Seconds(delay), new TEvPQ::TEvWakeupReleasePartition(ConsumerName, partitionId, status->Cookie));
     }
 }
@@ -965,7 +965,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
         if (family->Status != TPartitionFamily::EStatus::Active || family->SpecialSessions.empty()) {
             continue;
         }
-        if (!family->SpecialSessions.contains(family->Session->Sender)) {
+        if (!family->SpecialSessions.contains(family->Session->Pipe)) {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 GetPrefix() << "rebalance " << family->DebugStr() << " because exists the special session for it");
             family->Release(ctx);
@@ -975,7 +975,6 @@ void TConsumer::Balance(const TActorContext& ctx) {
     TOrderedSessions commonSessions = OrderSessions(Session, [](auto* session) {
         return !session->WithGroups();
     });
-    Cerr << ">>>>> Session.size()=" << Session.size() << " commonSessions.size()=" << commonSessions.size() << Endl;
 
     // Balance unredable families.
     if (!UnreadableFamilies.empty()) {
@@ -988,7 +987,6 @@ void TConsumer::Balance(const TActorContext& ctx) {
             auto sit = sessions.begin();
             for (;sit != sessions.end() && sessions.size() > 1 && !family->PossibleForBalance(*sit); ++sit) {
                 // Skip unpossible session. If there is only one session, then we always balance in it.
-                Cerr << ">>>>> 0000!!!" << Endl;
             }
 
             if (sit == sessions.end()) {
@@ -1057,7 +1055,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
                 continue;
             }
 
-            if (!family->SpecialSessions.contains(family->Session->PipeClient)) {
+            if (!family->SpecialSessions.contains(family->Session->Pipe)) {
                 family->Release(ctx);
                 continue;
             }
@@ -1119,7 +1117,7 @@ void TConsumer::Release(ui32 partitionId, const TActorContext& ctx) {
 //
 
 TSession::TSession(const TActorId& pipeClient)
-            : PipeClient(pipeClient)
+            : Pipe(pipeClient)
             , ServerActors(0)
             , ActivePartitionCount(0)
             , InactivePartitionCount(0)
@@ -1150,7 +1148,7 @@ bool TSession::AllPartitionsReadable(const std::vector<ui32>& partitions) const 
 }
 
 TString TSession::DebugStr() const {
-    return TStringBuilder() << "ReadingSession \"" << Session << "\" (Sender=" << Sender << ", Pipe=" << PipeClient
+    return TStringBuilder() << "ReadingSession \"" << Session << "\" (Sender=" << Sender << ", Pipe=" << Pipe
             << ", Partitions=[" << JoinRange(", ", Partitions.begin(), Partitions.end()) << "])";
 }
 
@@ -1337,7 +1335,7 @@ void TBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActo
     const auto& r = ev->Get()->Record;
     const TString& consumerName = r.GetClientId();
     auto partitionId = r.GetPartition();
-    TActorId sender = ActorIdFromProto(r.GetPipeClient());
+    TActorId sender = ActorIdFromProto(r.GetPipe());
 
     auto* partitionInfo = GetPartitionInfo(partitionId);
     if (!partitionInfo) {
@@ -1436,7 +1434,7 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
     const auto& r = ev->Get()->Record;
     auto& consumerName = r.GetClientId();
 
-    TActorId pipe = ActorIdFromProto(r.GetPipeClient());
+    TActorId pipe = ActorIdFromProto(r.GetPipe());
     LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
             GetPrefix() << "consumer \"" << consumerName << "\" register session for pipe " << pipe << " session " << r.GetSession());
 
@@ -1454,7 +1452,7 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
 
     if (!pipe) {
         LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "ignored the session registration with empty PipeClient.");
+            GetPrefix() << "ignored the session registration with empty Pipe.");
         return;
     }
 

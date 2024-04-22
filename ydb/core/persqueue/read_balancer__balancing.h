@@ -226,7 +226,7 @@ struct TSession {
     TString ClientId;
     TString Session;
     TActorId Sender;
-    TActorId PipeClient;
+    TActorId Pipe;
 
     TString ClientNode;
     ui32 ProxyNodeId;

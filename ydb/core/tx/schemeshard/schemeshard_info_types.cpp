@@ -1462,8 +1462,7 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
         newAggregatedStats.DataSize += newStats.DataSize;
         newAggregatedStats.IndexSize += newStats.IndexSize;
         for (const auto& [poolName, newStoragePoolStats] : newStats.StoragePoolsStats) {
-            auto& aggregatedStoragePoolStats = newAggregatedStats.StoragePoolsStats[poolName];
-            aggregatedStoragePoolStats += newStoragePoolStats;
+            newAggregatedStats.StoragePoolsStats[poolName] += newStoragePoolStats;
         }
         newAggregatedStats.InFlightTxCount += newStats.InFlightTxCount;
         cpuTotal += newStats.GetCurrentRawCpuUsage();

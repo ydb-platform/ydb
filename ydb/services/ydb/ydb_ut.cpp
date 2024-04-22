@@ -5574,7 +5574,7 @@ Y_UNIT_TEST(DisableWritesToDatabase) {
     auto sender = runtime.AllocateEdgeActor();
     InitRoot(server, sender);
 
-    runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
     NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
     NDataShard::gDbStatsDataSizeResolution = 1;
     NDataShard::gDbStatsRowCountResolution = 1;

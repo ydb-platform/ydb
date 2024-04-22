@@ -3364,7 +3364,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
 
     Y_UNIT_TEST_FLAG(DisableWritesToDatabase, IsExternalSubdomain) {
         TTestBasicRuntime runtime;
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
 
         TTestEnvOptions opts;
         opts.DisableStatsBatching(true);
@@ -3486,7 +3486,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
 
     Y_UNIT_TEST_FLAG(QuoteNonexistentPool, IsExternalSubdomain) {
         TTestBasicRuntime runtime;
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
 
         TTestEnvOptions opts;
         TTestEnv env(runtime, opts);
@@ -3535,7 +3535,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
     // To fix the test you need to update canonical quotas and / or batch sizes.
     Y_UNIT_TEST_FLAG(DifferentQuotasInteraction, IsExternalSubdomain) {
         TTestBasicRuntime runtime;
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
 
         TTestEnvOptions opts;
         opts.DisableStatsBatching(true);

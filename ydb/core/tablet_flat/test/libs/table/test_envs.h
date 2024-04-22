@@ -160,8 +160,8 @@ namespace NTest {
     };
 
     class TForwardEnv : public IPages {
-        struct TPageLoadingQueue : private NFwd::IPageLoadingQueue {
-            TPageLoadingQueue(TIntrusiveConstPtr<TStore> store, ui32 room, THolder<NFwd::IPageLoadingLogic> line)
+        struct TPartGroupLoadingQueue : private NFwd::IPageLoadingQueue {
+            TPartGroupLoadingQueue(TIntrusiveConstPtr<TStore> store, ui32 room, THolder<NFwd::IPageLoadingLogic> line)
                 : Room(room)
                 , Store(std::move(store))
                 , PageLoadingLogic(std::move(line))
@@ -257,44 +257,44 @@ namespace NTest {
         }
 
     private:
-        TPageLoadingQueue& Get(const TPart *part, ui32 room) noexcept
+        TPartGroupLoadingQueue& Get(const TPart *part, ui32 room) noexcept
         {
             auto* partStore = CheckedCast<const TPartStore*>(part);
 
-            auto& indexes = PartQueues[part];
-            if (indexes.empty()) {
-                indexes.reserve(partStore->Store->GetRoomCount() + part->HistoricGroupsCount);
+            auto& partGroupQueues = PartGroupQueues[part];
+            if (partGroupQueues.empty()) {
+                partGroupQueues.reserve(partStore->Store->GetRoomCount() + part->HistoricGroupsCount);
                 for (ui32 room : xrange(partStore->Store->GetRoomCount())) {
                     if (room < partStore->Store->GetGroupCount()) {
                         NPage::TGroupId groupId(room);
-                        indexes.push_back(Settle(partStore, room, NFwd::CreateCache(part, PartIndexPageLocator[part], groupId)));
+                        partGroupQueues.push_back(Settle(partStore, room, NFwd::CreateCache(part, PartIndexPageLocator[part], groupId)));
                     } else if (room == partStore->Store->GetOuterRoom()) {
-                        indexes.push_back(Settle(partStore, room, MakeOuter(partStore)));
+                        partGroupQueues.push_back(Settle(partStore, room, MakeOuter(partStore)));
                     } else if (room == partStore->Store->GetExternRoom()) {
-                        indexes.push_back(Settle(partStore, room, MakeExtern(partStore)));
+                        partGroupQueues.push_back(Settle(partStore, room, MakeExtern(partStore)));
                     } else {
                         Y_ABORT("Don't know how to work with room %" PRIu32, room);
                     }
                 }
                 for (ui32 group : xrange(part->HistoricGroupsCount)) {
                     NPage::TGroupId groupId(group, true);
-                    indexes.push_back(Settle(partStore, group, NFwd::CreateCache(part, PartIndexPageLocator[part], groupId)));
+                    partGroupQueues.push_back(Settle(partStore, group, NFwd::CreateCache(part, PartIndexPageLocator[part], groupId)));
                 }
             }
 
-            Y_ABORT_UNLESS(room < indexes.size());
+            Y_ABORT_UNLESS(room < partGroupQueues.size());
+            Y_ABORT_UNLESS(partGroupQueues[room]);
 
-            return Queues.at(indexes[room]);
+            return *partGroupQueues[room];
         }
 
-        ui32 Settle(const TPartStore *part, ui16 room, THolder<NFwd::IPageLoadingLogic> line)
+        TPartGroupLoadingQueue* Settle(const TPartStore *part, ui16 room, THolder<NFwd::IPageLoadingLogic> line)
         {
             if (line) {
-                Queues.emplace_back(part->Store, room, std::move(line));
-
-                return Queues.size() - 1;
+                GroupQueues.emplace_back(part->Store, room, std::move(line));
+                return &GroupQueues.back();
             } else {
-                return Max<ui32>(); /* Will fail on access in Head(...) */
+                return nullptr; /* Will fail on access in Head(...) */
             }
         }
 
@@ -324,10 +324,10 @@ namespace NTest {
         const ui64 AheadLo = 0;
         const ui64 AheadHi = 0;
         const ui32 Edge = Max<ui32>();
-        TDeque<TPageLoadingQueue> Queues;
-        TMap<const TPart*, TVector<ui32>> PartQueues;
+        TDeque<TPartGroupLoadingQueue> GroupQueues;
+        TMap<const TPart*, TVector<TPartGroupLoadingQueue*>> PartGroupQueues;
         THashMap<const TPart*, NFwd::TIndexPageLocator> PartIndexPageLocator;
-        TAutoPtr<NFwd::TMemTableHandler> MemTable;   /* Wrapper for memable blobs    */
+        TAutoPtr<NFwd::TMemTableHandler> MemTable;   /* Wrapper for memtable blobs    */
     };
 
 }

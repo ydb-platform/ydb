@@ -41,7 +41,7 @@ SELECT * FROM clickhouse_datasource.table_name
 
 1. Поддерживаются только запросы чтения данных - `SELECT`, остальные виды запросов не поддерживаются.
 1. {% include [!](_includes/datetime_limits.md) %}
-1. {% include [!](_includes/pushdown_limits.md) %}
+1. {% include [!](_includes/predicate_pushdown.md) %}
 
 ## Поддерживаемые типы данных
 

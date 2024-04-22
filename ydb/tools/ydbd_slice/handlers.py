@@ -512,12 +512,8 @@ RestartSec=1
 [Install]
 WantedBy=multi-user.target
 """.format(
-            user=user,
-            lib_dir=self.slice_lib_dir,
-            kikimr_path=self.slice_kikimr_path,
-            cfg_path=self.slice_cfg_path,
+            user=user
         )
-
 
         kikimr_run_compute_node_sh = """set -e
 

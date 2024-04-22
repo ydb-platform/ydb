@@ -30,7 +30,7 @@ struct TPartition {
     ui64 PartitionCookie;
 
     // Return true if the reading of the partition has been finished and children's partitions are readable.
-    bool IsFinished() const;
+    bool IsInactive() const;
     // Return true if children's partitions can't be balance separately.
     bool NeedReleaseChildren() const;
     bool BalanceToOtherPipe() const;
@@ -77,9 +77,9 @@ struct TPartitionFamily {
     // Partitions that are in the family
     std::unordered_set<ui32> LockedPartitions;
 
-    // The number of active partitions in the family
+    // The number of active partitions in the family.
     size_t ActivePartitionCount;
-    // The number of inactive partitions in the family
+    // The number of inactive partitions in the family.
     size_t InactivePartitionCount;
 
     // Reading sessions that have a list of partitions to read and these sessions can read this family
@@ -88,7 +88,10 @@ struct TPartitionFamily {
     TPartitionFamily(TConsumer& consumerInfo, size_t id, std::vector<ui32>&& partitions);
     ~TPartitionFamily() = default;
 
+    bool IsActive() const;
+
     bool IsLonely() const;
+    bool HasActivePartitions() const;
 
     // Releases all partitions of the family.
     void Release(const TActorContext& ctx, EStatus targetStatus = EStatus::Free);
@@ -97,6 +100,7 @@ struct TPartitionFamily {
     bool Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx);
     // Processes the signal that the reading session has ended.
     bool Reset(const TActorContext& ctx);
+    bool Reset(EStatus targetStatus, const TActorContext& ctx);
     // Starts reading the family in the specified reading session.
     void StartReading(TSession& session, const TActorContext& ctx);
     // Add partitions to the family.
@@ -138,18 +142,16 @@ private:
 };
 
 struct TPartitionFamilyComparator {
-    bool operator()(const TPartitionFamily* lhs, const TPartitionFamily* rhs) const {
-        if (lhs->ActivePartitionCount != rhs->ActivePartitionCount) {
-            return lhs->ActivePartitionCount < rhs->ActivePartitionCount;
-        }
-        if (lhs->InactivePartitionCount != rhs->InactivePartitionCount) {
-            return lhs->InactivePartitionCount < rhs->InactivePartitionCount;
-        }
-        return (lhs->Id < rhs->Id);
-    }
+    bool operator()(const TPartitionFamily* lhs, const TPartitionFamily* rhs) const;
 };
 
 using TOrderedPartitionFamilies = std::set<TPartitionFamily*, TPartitionFamilyComparator>;
+
+struct SessionComparator {
+    bool operator()(const TSession* lhs, const TSession* rhs) const;
+};
+
+using TOrderedSessions = std::set<TSession*, SessionComparator>;
 
 struct TConsumer {
     friend struct TPartitionFamily;
@@ -175,6 +177,7 @@ struct TConsumer {
     std::unordered_map<ui32, TPartition> Partitions;
 
     ui32 Step;
+    size_t ActiveFamilyCount;
 
     TConsumer(TBalancer& balancer, const TString& consumerName);
     ~TConsumer() = default;
@@ -208,7 +211,7 @@ struct TConsumer {
     void Release(ui32 partitionId, const TActorContext& ctx);
 
     bool IsReadable(ui32 partitionId);
-    bool IsFinished(ui32 partitionId);
+    bool IsInactive(ui32 partitionId);
 
     bool ScalingSupport() const;
 
@@ -234,8 +237,17 @@ struct TSession {
     // the number of pipes connected from SessionActor to ReadBalancer
     ui32 ServerActors;
 
+    // The number of active partitions
     size_t ActivePartitionCount;
+    // The number of inactive partitions
     size_t InactivePartitionCount;
+    // The number of releasing partitions (active and inactive)
+    size_t ReleasingPartitionCount;
+
+    // The number of active families (the status equal Active)
+    size_t ActiveFamilyCount;
+    // The number of releasing families (the status equal Releasing)
+    size_t ReleasingFamilyCount;
 
     // The partition families that are being read by this session.
     TOrderedPartitionFamilies Families;

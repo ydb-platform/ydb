@@ -3576,6 +3576,27 @@
             "uri": "https://{canondata_backend}/1917492/bf361ba6aca9974e26535026fb228b74d0ff24ef/resource.tar.gz#test_sql2yql.test_blocks-if_/sql.yql"
         }
     ],
+    "test_sql2yql.test[blocks-lazy_nonstrict_basic]": [
+        {
+            "checksum": "bb3c3b4a2e9d968a4e3d7d5c70d98e4d",
+            "size": 4234,
+            "uri": "https://{canondata_backend}/1936842/8d77b55c95ef4699963bd71d8cf4248f656f1473/resource.tar.gz#test_sql2yql.test_blocks-lazy_nonstrict_basic_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[blocks-lazy_nonstrict_nested]": [
+        {
+            "checksum": "2eafb1a166d573561db215f1b89564d1",
+            "size": 1708,
+            "uri": "https://{canondata_backend}/1889210/98f6fd4d010cb71a3a74f921494b3f4682dc5c71/resource.tar.gz#test_sql2yql.test_blocks-lazy_nonstrict_nested_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[blocks-lazy_nonstrict_with_scalar_ctx]": [
+        {
+            "checksum": "cf75bc6ce806c3a1e35ad6330fb52fc3",
+            "size": 4333,
+            "uri": "https://{canondata_backend}/1946324/c8f87009bde7cdc3b5b9a77da3e917fd59702752/resource.tar.gz#test_sql2yql.test_blocks-lazy_nonstrict_with_scalar_ctx_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[blocks-member]": [
         {
             "checksum": "801120991f062aeba5589bf360ea68b4",
@@ -21949,6 +21970,27 @@
             "checksum": "b649410c2a4dbec4627225e51894b5fe",
             "size": 532,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_blocks-if_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-lazy_nonstrict_basic]": [
+        {
+            "checksum": "285bfbbe81a6ea4974ba99c38efbb87f",
+            "size": 633,
+            "uri": "https://{canondata_backend}/1936842/8d77b55c95ef4699963bd71d8cf4248f656f1473/resource.tar.gz#test_sql_format.test_blocks-lazy_nonstrict_basic_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-lazy_nonstrict_nested]": [
+        {
+            "checksum": "9bff11601ddad74ad28455febf201137",
+            "size": 221,
+            "uri": "https://{canondata_backend}/1889210/98f6fd4d010cb71a3a74f921494b3f4682dc5c71/resource.tar.gz#test_sql_format.test_blocks-lazy_nonstrict_nested_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-lazy_nonstrict_with_scalar_ctx]": [
+        {
+            "checksum": "1a0fee4a6f1ae3427085fb1c41008fa4",
+            "size": 449,
+            "uri": "https://{canondata_backend}/1946324/c8f87009bde7cdc3b5b9a77da3e917fd59702752/resource.tar.gz#test_sql_format.test_blocks-lazy_nonstrict_with_scalar_ctx_/formatted.sql"
         }
     ],
     "test_sql_format.test[blocks-member]": [

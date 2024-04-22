@@ -21,8 +21,23 @@ services:
       CLICKHOUSE_PASSWORD: password
     volumes:
       - ./clickhouse:/docker-entrypoint-initdb.d
-  connector:
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.2.20@sha256:a1771f348dc8be6219865e332f788429907cdfec3677b3e98f0bc6f7dd542dc6
-    container_name: ${USER}_ydb_tests_fq_generic_connector
+  ydb:
+    image: ghcr.io/ydb-platform/local-ydb:latest@sha256:9045e00afec1923dc3277564c7b2f829087c2115f45f18e1d38b80bb89f98be6
+    container_name: tests-fq-generic-ydb
+    hostname: tests-fq-generic-ydb
+    environment:
+      YDB_DEFAULT_LOG_LEVEL: DEBUG
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+       - ./ydb/init_ydb:/init_ydb
+       - ./ydb/01_basic.sh:/01_basic.sh
+  fq-connector-go:
+    image: "ghcr.io/ydb-platform/fq-connector-go:v0.2.20@sha256:a1771f348dc8be6219865e332f788429907cdfec3677b3e98f0bc6f7dd542dc6"
+    container_name: tests-fq-generic-fq-connector-go
     ports:
-      - '50051'
+      - '2130'
+    command: >
+      sh -c "
+        echo \"$$(dig fq-tests-ydb-ydb +short) fq-tests-ydb-ydb\" >> /etc/hosts; cat /etc/hosts;
+        /opt/ydb/bin/fq-connector-go server -c /opt/ydb/cfg/fq-connector-go.yaml"

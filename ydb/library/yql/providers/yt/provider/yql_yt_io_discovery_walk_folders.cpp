@@ -101,7 +101,7 @@ BuildFolderListItemExpr(TExprContext &ctx, NYql::TPositionHandle pos,
 }
 
 TWalkFoldersImpl::TWalkFoldersImpl(const TString& sessionId, const TString& cluster, TYtSettings::TConstPtr config, 
-    TPosition pos, TYtKey::TWalkFoldersArgs&& args, const IYtGateway::TPtr gateway):
+    TPosition pos, const TYtKey::TWalkFoldersArgs& args, const IYtGateway::TPtr gateway):
     Pos_(pos), SessionId_(sessionId), Cluster_(cluster), Config_(config), Gateway_(gateway) {
     
     PreHandler_ = args.PreHandler->IsCallable("Void") ? Nothing() : MakeMaybe(args.PreHandler);

@@ -13,7 +13,7 @@ services:
        - ./init/01_basic.sh:/01_basic.sh
 
   fq-connector-go:
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.2.12@sha256:dd2483ba061e25e8ee645bcc64cae8b8a0a93dba6772eb4b8ab0a0aab4b8dd48
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.2.20@sha256:a1771f348dc8be6219865e332f788429907cdfec3677b3e98f0bc6f7dd542dc6
     container_name: fq-tests-ydb-fq-connector-go
     volumes:
       - ../../fq-connector-go/:/opt/ydb/cfg/

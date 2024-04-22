@@ -508,18 +508,6 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     Owner->ActivateExecutor(OwnerCtx());
 
-    for (auto channel : GcLogic->ListChannels()) {
-        for (const auto& historyEntry : loadedState->HistoryCutter->GetHistoryToCut(channel)) {
-            TAutoPtr<TEvTablet::TEvCutTabletHistory> ev(new TEvTablet::TEvCutTabletHistory);
-            auto &record = ev->Record;
-            record.SetTabletID(Owner->TabletID());
-            record.SetChannel(channel);
-            record.SetFromGeneration(historyEntry.FromGeneration);
-            record.SetGroupID(historyEntry.GroupID);
-            OwnerCtx().Send(Launcher, ev.Release());
-        }
-    }
-
     UpdateCounters(ctx);
 }
 
@@ -2969,6 +2957,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         break;
     case ECommit::Snap:
         LogicSnap->Confirm(msg->Step);
+        GcLogic->Confirm(ctx, Launcher);
 
         if (NeedFollowerSnapshot)
             MakeLogSnapshot();

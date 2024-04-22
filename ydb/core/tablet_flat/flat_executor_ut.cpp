@@ -6603,7 +6603,7 @@ Y_UNIT_TEST_SUITE(TCutTabletHistory) {
         TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
 
         env.SendSync(data.MakeScheme(std::move(policy)));
-        env.SendSync(data.MakeRows(250));
+        env.SendSync(data.MakeRows(3000));
 
         env.SendSync(new TEvents::TEvPoison, false, true);
 

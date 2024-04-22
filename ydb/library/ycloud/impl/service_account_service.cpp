@@ -1,6 +1,6 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/public/api/client/yc_private/iam/service_account_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/iam/v1/service_account_service.grpc.pb.h>
 #include "service_account_service.h"
 #include <ydb/library/grpc/actor_client/grpc_service_client.h>
 

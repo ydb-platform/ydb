@@ -1,15 +1,11 @@
 syntax = "proto3";
 
-package yandex.cloud.priv.accessservice.v2;
+package yandex.cloud.priv.servicecontrol.v1;
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/any.proto";
 import "google/protobuf/field_mask.proto";
-import "ydb/public/api/client/yc_private/accessservice/resource.proto";
-import "ydb/public/api/client/yc_private/accessservice/sensitive.proto";
-
-option go_package = "accessservice_v2";
-option java_outer_classname = "PAS";
+import "ydb/public/api/client/yc_private/servicecontrol/v1/resource.proto";
 
 service AccessService {
   // Verify the identity of a subject.
@@ -64,26 +60,21 @@ service AccessService {
 
 message AuthenticateRequest {
   oneof credentials {
-    // option (exactly_one) = true;
 
     // IAM-token obtained from the IAM Token Service.
     // The server response for an empty IAM token is UNAUTHENTICATED
-    string iam_token = 1 [(sensitive) = true, (sensitive_type) = SENSITIVE_IAM_TOKEN]; // [(length) = "<=1024"];
+    string iam_token = 1;
 
     // AWS-compatible signature.
     AccessKeySignature signature = 2;
 
     // API key.
     // The server response for an empty API key is UNAUTHENTICATED
-    string api_key = 3 [(sensitive) = true, (sensitive_type) = SENSITIVE_CRC];
+    string api_key = 3;
 
     // IAM-cookie.
     // The server response for an empty IAM cookie is UNAUTHENTICATED
-    string iam_cookie = 4 [(sensitive) = true, (sensitive_type) = SENSITIVE_IAM_COOKIE];
-
-    // RefreshToken.
-    // The server response for an empty RefreshToken is UNAUTHENTICATED
-    string refresh_token = 5 [(sensitive) = true, (sensitive_type) = SENSITIVE_REFRESH_TOKEN];
+    string iam_cookie = 4;
   }
 }
 
@@ -93,23 +84,22 @@ message AuthenticateResponse {
 
 message AuthorizeRequest {
   oneof identity {
-    // option (exactly_one) = true;
 
     Subject subject = 1;
 
     // IAM-token obtained from the IAM Token Service.
     // The server response for an empty IAM token is UNAUTHENTICATED
-    string iam_token = 2 [(sensitive) = true, (sensitive_type) = SENSITIVE_IAM_TOKEN]; // [(length) = "<=1024"];
+    string iam_token = 2;
 
     // AWS-compatible signature.
     AccessKeySignature signature = 3;
 
     // API key.
     // The server response for an empty API key is UNAUTHENTICATED
-    string api_key = 6 [(sensitive) = true, (sensitive_type) = SENSITIVE_CRC];
+    string api_key = 6;
   }
 
-  string permission = 4; // [(required) = true, (length) = "<=128"];
+  string permission = 4;
 
   // A resource to authorize access to. This may also include a service-specific hierarchy of the resource, usually
   // ends with resource-manager.folder.
@@ -120,7 +110,7 @@ message AuthorizeRequest {
   //     (compute.instance, b1gqqhvc4fg65mkrefs8), (resource-manager.folder, b1gn3enigctah04o0fkb)
   //     (resource-manager.cloud, aje56o8prppkrpaiuoc6)
   //     (my-service.instance, b1gqqepv0upu57issrog), (resource-manager.cloud, aje56o8prppkrpaiuoc6)
-  repeated Resource resource_path = 5; // [(size) = ">0"];
+  repeated Resource resource_path = 5;
 }
 
 message AuthorizeResponse {
@@ -132,19 +122,17 @@ message AuthorizeResponse {
 
 message BulkAuthorizeRequest {
   oneof identity {
-    // option (exactly_one) = true;
 
     Subject subject = 1;
 
-    string iam_token = 2 [(sensitive) = true, (sensitive_type) = SENSITIVE_IAM_TOKEN]; // [(length) = "<=1024"];
+    string iam_token = 2;
 
     AccessKeySignature signature = 3;
 
-    string api_key = 4 [(sensitive) = true, (sensitive_type) = SENSITIVE_CRC];
+    string api_key = 4;
   }
 
   oneof authorizations {
-    // option (exactly_one) = true;
 
     Actions actions = 5;
 
@@ -156,20 +144,20 @@ message BulkAuthorizeRequest {
   google.protobuf.FieldMask result_mask = 8;
 
   message Action {
-    repeated Resource resource_path = 1; // [(size) = "1-128"];
+    repeated Resource resource_path = 1;
 
-    string permission = 2; // [(required) = true, (length) = "<=128"];
+    string permission = 2;
   }
 
   message Actions {
-    repeated Action items = 1; // [(size) = "1-1000"];
+    repeated Action items = 1;
   }
 
   // Cross product of paths and permissions (represents N*M actions, N*M <= 1000).
   message ActionMatrix {
-    repeated ResourcePath resource_paths = 2; // [(size) = "1-1000"];
+    repeated ResourcePath resource_paths = 2;
 
-    repeated string permissions = 1; // [(size) = "1-1000", (length) = "<=128"];
+    repeated string permissions = 1;
   }
 
   enum ResultFilter {
@@ -206,13 +194,11 @@ message BulkAuthorizeResponse {
 }
 
 message AccessKeySignature {
-  string access_key_id = 1; // [(required) = true, (length) = "<=50"];
-  string string_to_sign = 2; // [(required) = true, (length) = "<=8192"];
-  string signature = 3 [(sensitive) = true, (sensitive_type) = SENSITIVE_CRC]; // [(required) = true, (length) = "<=128"];
+  string access_key_id = 1;
+  string string_to_sign = 2;
+  string signature = 3;
 
   oneof parameters {
-    // option (exactly_one) = true;
-
     Version2Parameters v2_parameters = 4;
     Version4Parameters v4_parameters = 5;
   }
@@ -228,29 +214,27 @@ message AccessKeySignature {
   }
 
   message Version4Parameters {
-    google.protobuf.Timestamp signed_at = 1; // [(required) = true];
-    string service = 2; // [(required) = true, (length) = "<=64"];
-    string region = 3; // [(required) = true, (length) = "<=32"];
+    google.protobuf.Timestamp signed_at = 1;
+    string service = 2;
+    string region = 3;
   }
 }
 
 message Subject {
   oneof type {
-    // option (exactly_one) = true;
-
     UserAccount user_account = 1;
     ServiceAccount service_account = 2;
     AnonymousAccount anonymous_account = 3;
   }
 
   message UserAccount {
-    string id = 1; // [(required) = true, (length) = "<=50"];
-    string federation_id = 2; // [(length) = "<=50"];
+    string id = 1;
+    string federation_id = 2;
   }
 
   message ServiceAccount {
-    string id = 1; // [(required) = true, (length) = "<=50"];
-    string folder_id = 2; // [(length) = "<=50"];
+    string id = 1;
+    string folder_id = 2;
   }
 
   // Use this if you want to check if an unauthenticated subject is allowed to access a resource.

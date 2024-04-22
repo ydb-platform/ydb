@@ -12,7 +12,7 @@ import "ydb/public/api/protos/ydb_operation.proto";
 message S3Settings {}
 
 message PathList {
-    repeated string path = 1;
+    repeated string paths = 1;
 }
 
 message S3Storage {
@@ -40,7 +40,7 @@ message ChangeStreamChunk {
         Deleting = 4;
     }
 
-    /*required*/ string uuid = 1;
+    string uuid = 1 [(required) = true];
     State state = 2;
     google.protobuf.Timestamp start_time = 3;
     google.protobuf.Timestamp end_time = 4;
@@ -55,7 +55,7 @@ message FullBackup {
         Deleting = 4;
     }
 
-    /*required*/ string uuid = 1;
+    string uuid = 1 [(required) = true];
     State state = 2;
     google.protobuf.Timestamp time = 3;
 }
@@ -75,7 +75,7 @@ message Restore {
         // Cancelled
     }
 
-    /*required*/ string uuid = 1;
+    string uuid = 1 [(required) = true];
 }
 
 // Look at this as a Binding in YQ
@@ -88,7 +88,7 @@ message BackupCollection {
         ReadWrite   = 0x03;
     }
 
-    /*required*/ string uuid = 1;
+    string uuid = 1 [(required) = true];
     string description = 2;
     uint32 access_flags = 3;
     optional BackupTarget backup_target = 4;
@@ -104,8 +104,12 @@ message FetchBackupCollectionsRequest {
 }
 
 message FetchBackupCollectionsResponse {
+    // Result of request will be stored inside operation with type FetchBackupCollectionsResult
     Ydb.Operations.Operation operation = 1;
-    repeated BackupCollection backup_collection = 2;
+}
+
+message FetchBackupCollectionsResult {
+    repeated BackupCollection backup_collection = 1;
 }
 
 message ListBackupCollectionsRequest {
@@ -113,8 +117,12 @@ message ListBackupCollectionsRequest {
 }
 
 message ListBackupCollectionsResponse {
+    // Result of request will be stored inside operation with type ListBackupCollectionsResult
     Ydb.Operations.Operation operation = 1;
-    repeated BackupCollection backup_collection = 2;
+}
+
+message ListBackupCollectionsResult {
+    repeated BackupCollection backup_collection = 1;
 }
 
 message CreateBackupCollectionRequest {
@@ -122,8 +130,12 @@ message CreateBackupCollectionRequest {
 }
 
 message CreateBackupCollectionResponse {
+    // Result of request will be stored inside operation with type CreateBackupCollectionResult
     Ydb.Operations.Operation operation = 1;
-    BackupCollection backup_collection = 2;
+}
+
+message CreateBackupCollectionResult {
+    BackupCollection backup_collection = 1;
 }
 
 message ReadBackupCollectionRequest {
@@ -131,8 +143,12 @@ message ReadBackupCollectionRequest {
 }
 
 message ReadBackupCollectionResponse {
+    // Result of request will be stored inside operation with type ReadBackupCollectionResult
     Ydb.Operations.Operation operation = 1;
-    BackupCollection backup_collection = 2;
+}
+
+message ReadBackupCollectionResult {
+    BackupCollection backup_collection = 1;
 }
 
 message UpdateBackupCollectionRequest {
@@ -140,8 +156,12 @@ message UpdateBackupCollectionRequest {
 }
 
 message UpdateBackupCollectionResponse {
+    // Result of request will be stored inside operation with type UpdateBackupCollectionResult
     Ydb.Operations.Operation operation = 1;
-    BackupCollection backup_collection = 2;
+}
+
+message UpdateBackupCollectionResult {
+    BackupCollection backup_collection = 1;
 }
 
 message DeleteBackupCollectionRequest {
@@ -149,6 +169,10 @@ message DeleteBackupCollectionRequest {
 }
 
 message DeleteBackupCollectionResponse {
+    // Result of request will be stored inside operation with type DeleteBackupCollectionResult
     Ydb.Operations.Operation operation = 1;
-    BackupCollection backup_collection = 2;
+}
+
+message DeleteBackupCollectionResult {
+    BackupCollection backup_collection = 1;
 }

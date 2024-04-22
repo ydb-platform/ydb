@@ -27,7 +27,6 @@ option java_package = "ru.yandex.kikimr.proto";
 
 message TMkDir {
     optional string Name = 1;
-    optional NActorsProto.TActorId OwnerActorId = 2;
 }
 
 enum EDropWaitPolicy {
@@ -1742,7 +1741,7 @@ message TModifyScheme {
 
     optional TViewDescription CreateView = 64;
 
-    reserved 65; // deprecated TempTableOwnerActorId
+    optional NActorsProto.TActorId TempDirOwnerActorId = 65;
 
     optional TCopySequence CopySequence = 66;
     optional TReplicationDescription AlterReplication = 67;
@@ -1885,7 +1884,6 @@ message TDirEntry {
     optional uint64 PathVersion = 13;
     optional EPathSubType PathSubType = 14;
     optional TPathVersion Version = 15;
-    optional NActorsProto.TActorId OwnerActorId = 16;
 
     optional uint64 BalancerTabletID = 999; //temporary optimization for old PQ read/write protocol. Must be removed later
 }

@@ -86,7 +86,7 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
     size_t DbRefCount = 0;
     size_t AllChildrenCount = 0;
 
-    TActorId OwnerActorId;
+    TActorId TempDirOwnerActorId;
 
 private:
     ui64 AliveChildrenCount = 0;

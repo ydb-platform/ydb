@@ -108,7 +108,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::DirAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::UserAttrsAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::ACLVersion>(0),
-            rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>()
+            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorId>()
         );
     }
 
@@ -134,7 +134,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         TPathElement::TPtr path = new TPathElement(pathId, parentPathId, domainId, name, owner);
 
-        TString ownerActorId;
+        TString tempDirOwnerActorId;
         std::tie(
             std::ignore, //pathId
             std::ignore, //parentPathId
@@ -150,14 +150,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             path->DirAlterVersion,
             path->UserAttrs->AlterVersion,
             path->ACLVersion,
-            ownerActorId) = rec;
+            tempDirOwnerActorId) = rec;
 
         path->PathState = TPathElement::EPathState::EPathStateNoChanges;
         if (path->StepDropped) {
             path->PathState = TPathElement::EPathState::EPathStateNotExist;
         }
 
-        path->OwnerActorId.Parse(ownerActorId.c_str(), ownerActorId.size());
+        path->TempDirOwnerActorId.Parse(tempDirOwnerActorId.c_str(), tempDirOwnerActorId.size());
 
         return path;
     }
@@ -1393,27 +1393,27 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 parent->DbRefCount++;
                 parent->AllChildrenCount++;
 
-                if (path->OwnerActorId) {
-                    const TActorId& ownerActorId = path->OwnerActorId;
+                if (path->TempDirOwnerActorId) {
+                    const TActorId& tempDirOwnerActorId = path->TempDirOwnerActorId;
 
                     auto& TempDirsByOwner = Self->TempDirsState.TempDirsByOwner;
                     auto& nodeStates = Self->TempDirsState.NodeStates;
 
-                    auto it = TempDirsByOwner.find(ownerActorId);
-                    const auto nodeId = ownerActorId.NodeId();
+                    auto it = TempDirsByOwner.find(tempDirOwnerActorId);
+                    const auto nodeId = tempDirOwnerActorId.NodeId();
 
                     auto itNodeStates = nodeStates.find(nodeId);
                     if (itNodeStates == nodeStates.end()) {
                         auto& nodeState = nodeStates[nodeId];
-                        nodeState.Owners.insert(ownerActorId);
+                        nodeState.Owners.insert(tempDirOwnerActorId);
                         nodeState.RetryState.CurrentDelay =
                             TDuration::MilliSeconds(Self->BackgroundCleaningRetrySettings.GetStartDelayMs());
                     } else {
-                        itNodeStates->second.Owners.insert(ownerActorId);
+                        itNodeStates->second.Owners.insert(tempDirOwnerActorId);
                     }
 
                     if (it == TempDirsByOwner.end()) {
-                        auto& currentTempTables = TempDirsByOwner[ownerActorId];
+                        auto& currentTempTables = TempDirsByOwner[tempDirOwnerActorId];
                         currentTempTables.insert(path->PathId);
                     } else {
                         it->second.insert(path->PathId);

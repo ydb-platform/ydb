@@ -115,7 +115,7 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        if (Transaction.GetMkDir().HasOwnerActorId() && !context.SS->EnableTempTables) {
+        if (Transaction.HasTempDirOwnerActorId() && !context.SS->EnableTempTables) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 TStringBuilder() << "It is not allowed to create temporary objects: " << name);
             return result;
@@ -222,8 +222,8 @@ public:
         newDir->UserAttrs->AlterData = userAttrs;
         newDir->DirAlterVersion = 1;
 
-        if (Transaction.GetMkDir().HasOwnerActorId()) {
-            newDir->OwnerActorId = ActorIdFromProto(Transaction.GetMkDir().GetOwnerActorId());
+        if (Transaction.HasTempDirOwnerActorId()) {
+            newDir->TempDirOwnerActorId = ActorIdFromProto(Transaction.GetTempDirOwnerActorId());
         }
 
         if (!acl.empty()) {
@@ -240,14 +240,14 @@ public:
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
-        if (Transaction.GetMkDir().HasOwnerActorId()) {
+        if (Transaction.HasTempDirOwnerActorId()) {
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Processing create temp directory with Name: " << name
                     << ", WorkingDir: " << parentPathStr
-                    << ", OwnerActorId: " << newDir->OwnerActorId
+                    << ", TempDirOwnerActorId: " << newDir->TempDirOwnerActorId
                     << ", PathId: " << newDir->PathId);
             context.OnComplete.UpdateTempDirsToMakeState(
-                newDir->OwnerActorId, newDir->PathId);
+                newDir->TempDirOwnerActorId, newDir->PathId);
         }
 
         dstPath.DomainInfo()->IncPathsInside();

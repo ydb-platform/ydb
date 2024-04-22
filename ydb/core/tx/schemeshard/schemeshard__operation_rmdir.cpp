@@ -67,12 +67,12 @@ public:
         txState.MinStep = TStepId(1);
 
         const TPathElement::TPtr pathElement = context.SS->PathsById.at(path.Base()->PathId);
-        if (pathElement->OwnerActorId) {
+        if (pathElement->TempDirOwnerActorId) {
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Processing remove temp directory with Name: " << name
                     << ", WorkingDir: " << parentPathStr
-                    << ", OwnerActorId: " << pathElement->OwnerActorId);
-            context.OnComplete.UpdateTempDirsToRemoveState(pathElement->OwnerActorId, path.Base()->PathId);
+                    << ", TempDirOwnerActorId: " << pathElement->TempDirOwnerActorId);
+            context.OnComplete.UpdateTempDirsToRemoveState(pathElement->TempDirOwnerActorId, path.Base()->PathId);
         }
 
         context.OnComplete.ActivateTx(OperationId);

@@ -46,7 +46,7 @@ class TKqpSchemeExecuter : public TActorBootstrapped<TKqpSchemeExecuter> {
             IKqpGateway::TGenericResult Result;
         };
 
-        struct TEvMakeDirResult : public TEventLocal<TEvMakeDirResult, EEv::EvMakeDirResult> {
+        struct TEvMakeTempDirResult : public TEventLocal<TEvMakeTempDirResult, EEv::EvMakeDirResult> {
             IKqpGateway::TGenericResult Result;
         };
     };
@@ -98,7 +98,7 @@ public:
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
         auto* makeDir = modifyScheme->MutableMkDir();
         makeDir->SetName(SessionId);
-        ActorIdToProto(KqpTempTablesAgentActor, makeDir->MutableOwnerActorId());
+        ActorIdToProto(KqpTempTablesAgentActor, modifyScheme->MutableTempDirOwnerActorId());
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
         IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
@@ -107,7 +107,7 @@ public:
         auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
         auto selfId = SelfId();
         promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
-            auto ev = MakeHolder<TEvPrivate::TEvMakeDirResult>();
+            auto ev = MakeHolder<TEvPrivate::TEvMakeTempDirResult>();
             ev->Result = future.GetValue();
             actorSystem->Send(selfId, ev.Release());
         });
@@ -399,7 +399,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvPrivate::TEvResult, HandleExecute);
-                hFunc(TEvPrivate::TEvMakeDirResult, Handle);
+                hFunc(TEvPrivate::TEvMakeTempDirResult, Handle);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
@@ -430,7 +430,7 @@ public:
         }
     }
 
-    void Handle(TEvPrivate::TEvMakeDirResult::TPtr& result) {
+    void Handle(TEvPrivate::TEvMakeTempDirResult::TPtr& result) {
         if (!result->Get()->Result.Success()) {   
             InternalError(TStringBuilder()
                 << "Error creating temporary directory for session " << SessionId

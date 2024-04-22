@@ -159,7 +159,7 @@ struct TTempDirsState {
 struct TTempDirInfo {
     TString WorkingDir;
     TString Name;
-    TActorId OwnerActorId;
+    TActorId TempDirOwnerActorId;
 };
 
 }

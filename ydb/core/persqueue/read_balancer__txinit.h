@@ -54,6 +54,9 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
 
                     Migrate(Self->TabletConfig);
                     Self->Consumers.clear();
+                    for (auto& consumer : Self->TabletConfig.GetConsumers()) {
+                        Self->Consumers[consumer.GetName()];
+                    }
                     Self->PartitionGraph = MakePartitionGraph(Self->TabletConfig);
                 }
                 Self->Inited = true;

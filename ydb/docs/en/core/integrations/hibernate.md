@@ -152,7 +152,7 @@ For example, for `@OneToMany` generates a SQL script:
 
 {% list tabs %}
 
-- `FetchType.LAZY`
+- FetchType.LAZY
 
   ```sql
   SELECT 
@@ -173,7 +173,7 @@ For example, for `@OneToMany` generates a SQL script:
       s1_0.GroupId=?
   ```
 
-- `FetchType.EAGER`
+- FetchType.EAGER
 
   ```sql
   SELECT

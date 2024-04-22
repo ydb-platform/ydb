@@ -153,7 +153,7 @@ Hibernate не предназначен для управления схемам
 
 {% list tabs %}
 
-- `FetchType.LAZY`
+- FetchType.LAZY
 
   ```sql
   SELECT 
@@ -174,7 +174,7 @@ Hibernate не предназначен для управления схемам
       s1_0.GroupId=?
   ```
 
-- `FetchType.EAGER`
+- FetchType.EAGER
 
   ```sql
   SELECT

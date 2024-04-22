@@ -848,7 +848,22 @@ const TPath::TChecker& TPath::TChecker::IsView(EStatus status) const {
     return Fail(status, TStringBuilder() << "path is not a view"
         << " (" << BasicPathInfo(Path.Base()) << ")"
     );
+}
 
+const TPath::TChecker& TPath::TChecker::NotRestricted(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    for (const auto& element : Path.Elements) {
+        if (element->IsRestricted()) {
+            return Fail(status, TStringBuilder() << "path is restricted"
+                << " (" << BasicPathInfo(Path.Base()) << ")"
+            );
+        }
+    }
+
+    return *this;
 }
 
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus status) const {

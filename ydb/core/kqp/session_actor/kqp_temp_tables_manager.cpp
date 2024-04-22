@@ -157,6 +157,7 @@ private:
             }
 
             auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+            modifyScheme->SetRestrictedOperation(true);
             modifyScheme->SetWorkingDir(NKikimr::JoinPath(TVector<TString>(std::begin(path), std::prev(std::end(path)))));
             modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
             auto* drop = modifyScheme->MutableDrop();
@@ -207,6 +208,7 @@ private:
         }
 
         auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        modifyScheme->SetRestrictedOperation(true);
         modifyScheme->SetWorkingDir(NKikimr::JoinPath(TVector<TString>(std::begin(dirToDrop), std::prev(std::end(dirToDrop)))));
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpRmDir);
         auto* drop = modifyScheme->MutableDrop();

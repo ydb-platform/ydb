@@ -89,6 +89,7 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
     TActorId TempDirOwnerActorId; // Only for EPathType::EPathTypeDir.
                                   // Not empty if dir must be deleted after loosing connection with TempDirOwnerActorId actor.
                                   // See schemeshard__background_cleaning.cpp.
+    bool Restricted = false;
 
 private:
     ui64 AliveChildrenCount = 0;
@@ -132,6 +133,7 @@ public:
     bool IsExternalTable() const;
     bool IsExternalDataSource() const;
     bool IsView() const;
+    bool IsRestricted() const;
     TVirtualTimestamp GetCreateTS() const;
     TVirtualTimestamp GetDropTS() const;
     void SetDropped(TStepId step, TTxId txId);

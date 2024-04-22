@@ -121,6 +121,12 @@ public:
             return result;
         }
 
+        if (Transaction.HasTempDirOwnerActorId() && !Transaction.GetRestrictedOperation()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                TStringBuilder() << "It is not allowed to create temporary objects in dirs without restricted flag: " << name);
+            return result;
+        }
+
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
@@ -132,6 +138,10 @@ public:
                 .NotUnderDeleting()
                 .IsCommonSensePath()
                 .IsLikeDirectory();
+            
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -221,6 +231,7 @@ public:
         newDir->PathType = TPathElement::EPathType::EPathTypeDir;
         newDir->UserAttrs->AlterData = userAttrs;
         newDir->DirAlterVersion = 1;
+        newDir->Restricted = Transaction.GetRestrictedOperation();
 
         if (Transaction.HasTempDirOwnerActorId()) {
             newDir->TempDirOwnerActorId = ActorIdFromProto(Transaction.GetTempDirOwnerActorId());

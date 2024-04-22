@@ -94,6 +94,7 @@ public:
         }
 
         auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        modifyScheme->SetRestrictedOperation(true);
         modifyScheme->SetWorkingDir(GetSessionDirsBasePath(Database));
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
         auto* makeDir = modifyScheme->MutableMkDir();
@@ -147,6 +148,7 @@ public:
                     }
                     tableDesc->SetName(GetCreateTempTablePath(Database, SessionId, JoinPath({tableDesc->GetPath(), tableDesc->GetName()})));
                     tableDesc->SetPath(Database);
+                    modifyScheme.SetRestrictedOperation(true);
                 }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;

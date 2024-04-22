@@ -34,10 +34,3 @@ services:
     image: postgres:15-bullseye@sha256:3411b9f2e5239cd7867f34fcf22fe964230f7d447a71d63c283e3593d3f84085
     ports:
       - 5432
-  fq-connector-go:
-    container_name: fq-tests-join-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.2.20@sha256:a1771f348dc8be6219865e332f788429907cdfec3677b3e98f0bc6f7dd542dc6
-    volumes:
-      - ../fq-connector-go/:/opt/ydb/cfg/
-    ports:
-      - 2130

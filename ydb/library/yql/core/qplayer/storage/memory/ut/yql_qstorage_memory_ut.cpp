@@ -30,8 +30,8 @@ Y_UNIT_TEST_SUITE(TQStorageMemoryTests) {
     Y_UNIT_TEST(One) {
         auto storage = MakeMemoryQStorage();
         auto writer = storage->MakeWriter("foo");
-        writer->Put({"comp", "label"}, "value").Wait();
-        writer->Commit().Wait();
+        writer->Put({"comp", "label"}, "value").GetValueSync();
+        writer->Commit().GetValueSync();
         auto reader = storage->MakeReader("foo");
         auto value = reader->Get({"comp", "label"}).GetValueSync();
         UNIT_ASSERT(value.Defined());
@@ -51,8 +51,8 @@ Y_UNIT_TEST_SUITE(TQStorageMemoryTests) {
     Y_UNIT_TEST(IterateWithoutValue) {
         auto storage = MakeMemoryQStorage();
         auto writer = storage->MakeWriter("foo");
-        writer->Put({"comp", "label"}, "value").Wait();
-        writer->Commit().Wait();
+        writer->Put({"comp", "label"}, "value").GetValueSync();
+        writer->Commit().GetValueSync();
         auto reader = storage->MakeReader("foo");
         auto settings = TQIteratorSettings{};
         settings.DoNotLoadValue = true;
@@ -71,10 +71,10 @@ Y_UNIT_TEST_SUITE(TQStorageMemoryTests) {
         auto storage = MakeMemoryQStorage();
         auto writer = storage->MakeWriter("foo");
         for (size_t i = 0; i < N; ++i) {
-            writer->Put({"comp", "label" + ToString(i)}, "value" + ToString(i)).Wait();
+            writer->Put({"comp", "label" + ToString(i)}, "value" + ToString(i)).GetValueSync();
         }
 
-        writer->Commit().Wait();
+        writer->Commit().GetValueSync();
         auto reader = storage->MakeReader("foo");
         for (size_t i = 0; i < N; ++i) {
             auto value = reader->Get({"comp", "label" + ToString(i)}).GetValueSync();
@@ -104,13 +104,13 @@ Y_UNIT_TEST_SUITE(TQStorageMemoryTests) {
         value = iterator1->Next().GetValueSync();
         UNIT_ASSERT(!value.Defined());
         auto writer = storage->MakeWriter("foo");
-        writer->Put({"comp", "label"}, "value").Wait();
+        writer->Put({"comp", "label"}, "value").GetValueSync();
         value = reader->Get({"comp", "label"}).GetValueSync();
         UNIT_ASSERT(!value.Defined());
         auto iterator2 = storage->MakeIterator("foo", {});
         value = iterator2->Next().GetValueSync();
         UNIT_ASSERT(!value.Defined());
-        writer->Commit().Wait();
+        writer->Commit().GetValueSync();
         value = reader->Get({"comp", "label"}).GetValueSync();
         UNIT_ASSERT(value.Defined());
         UNIT_ASSERT_VALUES_EQUAL(value->Key.Component, "comp");

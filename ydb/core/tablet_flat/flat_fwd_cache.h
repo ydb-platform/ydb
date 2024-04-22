@@ -303,7 +303,7 @@ namespace NFwd {
 
             auto& meta = Part->IndexPages.GetBTree(groupId);
             Levels.resize(meta.LevelCount + 1);
-            Levels[0].Queue.emplace_back(meta.PageId, meta.DataSize);
+            Levels[0].Queue.push_back({meta.PageId, meta.DataSize});
             IndexPageLocator.Add(meta.PageId, GroupId, 0);
         }
 
@@ -500,7 +500,7 @@ namespace NFwd {
             Stat.Fetch += size;
 
             Y_ABORT_UNLESS(!level.Pages || level.Pages.back().PageId < pageId);
-            level.Pages.emplace_back(TPage(pageId, size, 0, Max<TPageId>()), level.Queue.front().EndDataSize);
+            level.Pages.push_back({TPage(pageId, size, 0, Max<TPageId>()), level.Queue.front().EndDataSize});
             level.Pages.back().Fetch = EFetch::Wait;
 
             level.Queue.pop_front();

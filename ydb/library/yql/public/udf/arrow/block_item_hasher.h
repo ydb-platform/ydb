@@ -54,7 +54,7 @@ class TTzDateBlockItemHasher : public TBlockItemHasherBase<TTzDateBlockItemHashe
 public:
     ui64 DoHash(TBlockItem value) const {
         using TLayout = typename TDataType<T>::TLayout;
-        TUnboxedValuePod uv {value.As<TLayout>()};
+        TUnboxedValuePod uv {value.Get<TLayout>()};
         uv.SetTimezoneId(value.GetTimezoneId());
         return GetValueHash<TDataType<T>::Slot>(uv);
     }

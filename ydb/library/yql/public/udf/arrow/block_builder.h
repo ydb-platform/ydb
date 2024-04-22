@@ -1187,7 +1187,8 @@ public:
     }
 
     void AddToChildren(TInputBuffer& input) {
-        AddToChildren(input.PopNumber<TUnboxedValuePod>());
+        DateBuilder_.Add(input);
+        TimezoneBuilder_.Add(input);
     }
 
     void AddManyToChildren(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) {

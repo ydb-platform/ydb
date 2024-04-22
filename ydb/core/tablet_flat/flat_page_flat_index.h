@@ -9,7 +9,7 @@ namespace NKikimr {
 namespace NTable {
 namespace NPage {
 
-    struct TIndex {
+    struct TFlatIndex {
         /*
                 TRecord binary layout v2
             .---------.---------------.
@@ -61,10 +61,10 @@ namespace NPage {
 
         static constexpr ui16 Version = 3;
 
-        TIndex(TSharedData raw)
+        TFlatIndex(TSharedData raw)
             : Raw(std::move(raw))
         {
-            const auto data = NPage::TLabelWrapper().Read(Raw, EPage::Index);
+            const auto data = NPage::TLabelWrapper().Read(Raw, EPage::FlatIndex);
             Y_ABORT_UNLESS(data == ECodec::Plain && (data.Version == 2 || data.Version == 3));
 
             auto *recordsHeader = TDeref<const TRecordsHeader>::At(data.Page.data(), 0);

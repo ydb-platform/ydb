@@ -24,7 +24,8 @@ struct TSettings {
         ImplicitConversionToInt64 = 1 << 14, // Allow implicit conversions to 64-bits integers from other types of integers
         UnaryOperators = 1 << 15, // -, Abs, Size
         DoNotCheckCompareArgumentsTypes = 1 << 16,
-        TimestampCtor = 1 << 17
+        TimestampCtor = 1 << 17,
+        JustPassthroughOperators = 1 << 18 // if + coalesce + just
     };
 
     explicit TSettings(NLog::EComponent logComponent)

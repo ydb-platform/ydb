@@ -41,8 +41,7 @@ public:
         auto& filter = *req.mutable_filter();
         filter.set_name(BindingName_);
 
-        LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-            "YdbOverFq::DescribeTable actorId: " << SelfId().ToString() << ", listing bindings");
+        SRC_LOG_T("listing bindings");
 
         Become(&DescribeTableRPC::ListBindingsState);
         MakeLocalCall(std::move(req), ctx);
@@ -58,8 +57,7 @@ public:
 
         if (result.next_page_token().empty()) {
             TString errorMsg = TStringBuilder{} << "couldn't find binding with matching name for " << BindingName_;
-            LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                "YdbOverFq::DescribeTable actorId: " << SelfId().ToString() << " failed: " << errorMsg);
+            SRC_LOG_I("failed: " << errorMsg);
             Reply(
                 Ydb::StatusIds_StatusCode_NOT_FOUND, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             return;
@@ -76,8 +74,7 @@ public:
         FederatedQuery::DescribeBindingRequest req;
         req.set_binding_id(bindingId);
 
-        LOG_TRACE_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-            "YdbOverFq::DescribeTable actorId: " << SelfId().ToString() << ", describing binding " << bindingId);
+        SRC_LOG_T("describing binding: " << bindingId);
 
         Become(&DescribeTableRPC::DescribeBindingState);
         MakeLocalCall(std::move(req), ctx);
@@ -99,8 +96,7 @@ public:
         default:
             TString errorMsg = TStringBuilder{} << "binding " << result.binding().meta().id() << " got unexpected type: " <<
                 static_cast<int>(settings.binding_case());
-            LOG_INFO_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-                "YdbOverFq::DescribeTable actorId: " << SelfId().ToString() << " failed: " << errorMsg);
+            SRC_LOG_I("failed: " << errorMsg);
             Reply(
                 Ydb::StatusIds_StatusCode_INTERNAL_ERROR, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             return;

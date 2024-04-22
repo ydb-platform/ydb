@@ -110,7 +110,7 @@ public:
         IGraphTransformer& transformer,
         TExprContext& ctx,
         TKqlTransformContext& transformCtx)
-        : TKqpAsyncResultBase(queryRoot, ctx, transformer)
+        : TKqpAsyncResultBase(queryRoot, ctx, transformer, nullptr)
         , TransformCtx(transformCtx)
     {
     }

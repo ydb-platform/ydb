@@ -452,7 +452,7 @@ public:
             context.SS->PersistLastTxId(db, storePath.Base());
 
             // TODO: we need to know all shards where this table has ever been created
-            for (ui64 columnShardId : tableInfo->ColumnShards) {
+            for (ui64 columnShardId : tableInfo->GetColumnShards()) {
                 auto tabletId = TTabletId(columnShardId);
                 auto shardIdx = context.SS->TabletIdToShardIdx.at(tabletId);
 

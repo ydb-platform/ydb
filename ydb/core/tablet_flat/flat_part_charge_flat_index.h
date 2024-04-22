@@ -2,7 +2,7 @@
 
 #include "flat_table_part.h"
 #include "flat_part_iface.h"
-#include "flat_part_index_iter.h"
+#include "flat_part_index_iter_flat_index.h"
 #include "flat_part_charge_iface.h"
 
 #include <util/generic/bitmap.h>
@@ -10,13 +10,13 @@
 namespace NKikimr {
 namespace NTable {
 
-    class TCharge : public ICharge {
+    class TChargeFlatIndex : public ICharge {
     public:
-        using TIter = NPage::TIndex::TIter;
+        using TIter = NPage::TFlatIndex::TIter;
         using TDataPage = NPage::TDataPage;
         using TGroupId = NPage::TGroupId;
 
-        TCharge(IPages *env, const TPart &part, TTagsRef tags, bool includeHistory)
+        TChargeFlatIndex(IPages *env, const TPart &part, TTagsRef tags, bool includeHistory)
             : Env(env)
             , Part(&part)
             , Scheme(*Part->Scheme)

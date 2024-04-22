@@ -9,4 +9,5 @@ RECURSE_FOR_TESTS(
     restarts
     s3
     yds
+    yt
 )

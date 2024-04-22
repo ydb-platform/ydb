@@ -30220,9 +30220,9 @@
     ],
     "test_sql_format.test[produce-reduce_with_assume]": [
         {
-            "checksum": "4daf2f046eb660f2a56a1f84928ee6c4",
-            "size": 412,
-            "uri": "https://{canondata_backend}/1917492/ff234d5884581cc297a96d70a1828b0d89366fd5/resource.tar.gz#test_sql_format.test_produce-reduce_with_assume_/formatted.sql"
+            "checksum": "f66b71a12b26ca4bc97619a3b43cbd5e",
+            "size": 378,
+            "uri": "https://{canondata_backend}/1936273/d3ce9e6be300ac95ccb90e8a7420184de361fe19/resource.tar.gz#test_sql_format.test_produce-reduce_with_assume_/formatted.sql"
         }
     ],
     "test_sql_format.test[produce-reduce_with_assume_in_subquery]": [

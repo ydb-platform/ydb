@@ -16,6 +16,9 @@ bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TString>& joinKey
             return false;
         }
     }
+
+    YQL_CLOG(ERROR, ProviderYt) << "IsPKJoin true";
+
     return true;
 }
 

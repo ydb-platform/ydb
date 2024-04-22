@@ -14,13 +14,13 @@ Scheme of table `episodes`:
 
 ![episodes](../_assets/episodes_scheme.png)
 
-Let's build plan for this query, you can do this via UI or {{ ydb-short-name }} CLI:
+Let's build a plan for this query, you can do this via UI or {{ ydb-short-name }} CLI:
 
 {% list tabs %}
 
 - {{ ydb-short-name }} CLI
 
-  You can build query plan via {{ ydb-short-name }} [CLI](../reference/ydb-cli/_includes/index.md) using the following command:
+  You can build a query plan via {{ ydb-short-name }} [CLI](../reference/ydb-cli/_includes/index.md) using the following command:
   ```
   ydb -p <profile_name> table query explain \
     -q "SELECT season_id, episode_id 
@@ -42,7 +42,7 @@ Let's build plan for this query, you can do this via UI or {{ ydb-short-name }} 
 
 - Embedded UI
 
-  You can also build query plan via [Embedded UI](../maintenance/embedded_monitoring/ydb_monitoring.md). You need to navigate to database page, go to `Query` section and click on `Explain`:
+  You can also build a query plan via [Embedded UI](../reference/embedded-ui/ydb-monitoring.md). You need to navigate to the database page, go to `Query` section and click on `Explain`:
 
   ![explain_ui](../_assets/explain_ui.png)
 
@@ -52,7 +52,7 @@ Let's build plan for this query, you can do this via UI or {{ ydb-short-name }} 
 
 {% endlist %}
 
-Both plan representations contain result being returned to the client at the root, table operations at the leaves, and data transformations at the intermediate nodes. It is important to pay attention to the node that contains the table reading operation. In this case, it is a `TableFullScan` for table `episodes`. Full table scans consume time and resources proportional to size of table, so it is advisable to avoid them whenever possible in tables that tend to grow over time or are simply large.
+Both plan representations contain the result being returned to the client at the root, table operations at the leaves, and data transformations at the intermediate nodes. It is important to pay attention to the node that contains the table reading operation. In this case, it is a `TableFullScan` for the table `episodes`. Full table scans consume time and resources proportional to the size of the table, so it is advisable to avoid them whenever possible in tables that tend to grow over time or are simply large.
 
 One typical approach to avoid full scans is using a [secondary index](secondary-indexes.md). In this case, it makes sense to add a secondary index for the column `title` using the following query:
 
@@ -63,7 +63,7 @@ ALTER TABLE episodes
 
 Please note that in this example, [synchronous secondary index](../concepts/_includes/secondary_indexes.md#sync) is used. Building an index in {{ ydb-short-name }} is an asynchronous operation, so even if the index creation query is successful, it is advisable to wait for some time, because index may not be ready for use immediately. You can manage asynchronous operations through the [CLI](../reference/ydb-cli/commands/_includes/secondary_index.md#add).
 
-Let's build the query plan using secondary index `title_index`. It is important that secondary index should be explicitly specified in query using `VIEW` construct.
+Let's build the query plan using the secondary index `title_index`. It is important that secondary indexes should be explicitly specified in queries using `VIEW` construct.
 
 {% list tabs %}
 

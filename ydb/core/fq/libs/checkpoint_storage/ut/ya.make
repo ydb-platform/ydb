@@ -24,5 +24,5 @@ SRCS(
     ydb_state_storage_ut.cpp
     ydb_checkpoint_storage_ut.cpp
 )
-
+REQUIREMENTS(ram:32)
 END()

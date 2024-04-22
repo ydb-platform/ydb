@@ -44,7 +44,7 @@ message TMiniKqlProgramState {
 
 // Checkpoint for single compute actor.
 message TComputeActorState {
-    TMiniKqlProgramState MiniKqlProgram = 1;
+    // TMiniKqlProgramState MiniKqlProgram = 1;
     repeated TSourceState Sources = 2;
     repeated TSinkState Sinks = 3;
 }

@@ -25,7 +25,7 @@ const TCheckpointId CheckpointId2(12, 1);
 const TCheckpointId CheckpointId3(12, 4);
 const TCheckpointId CheckpointId4(13, 2);
 
-const size_t YdbRowSizeLimit = 500;
+const size_t YdbRowSizeLimit = 16*1000*1000;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -52,15 +52,15 @@ public:
         return storage;
     }
 
-    NYql::NDqProto::TComputeActorState MakeState(NYql::NUdf::TUnboxedValuePod&& value) {
+    TComputeActorState MakeState(NYql::NUdf::TUnboxedValuePod&& value) {
         TString result;
         NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, value.AsStringRef());
-        NYql::NDqProto::TComputeActorState state;
+        TComputeActorState state;
         state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
         return state;
     }
 
-    NYql::NDqProto::TComputeActorState MakeStateFromBlob(size_t blobSize) {
+    TEvDqCompute::TEvComputeActorState MakeStateFromBlob(size_t blobSize) {
         TString blob;
         blob.reserve(blobSize);
         for (size_t i = 0; i < blobSize; ++i) {
@@ -69,7 +69,7 @@ public:
         return MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(blob, 0));
     }
 
-    NYql::NDqProto::TComputeActorState MakeIncrementState(size_t miniKqlPStateSize) {
+    TEvDqCompute::TEvComputeActorState MakeIncrementState(size_t miniKqlPStateSize) {
         std::map<TString, TString> map;
         size_t itemCount = 4;
         for (size_t i = 0; i < itemCount; ++i) {
@@ -78,7 +78,7 @@ public:
         return MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeSnapshotState(map, 0));
     }
 
-    NYql::NDqProto::TComputeActorState MakeIncrementState(
+    TEvDqCompute::TEvComputeActorState MakeIncrementState(
         const std::map<TString, TString>& snapshot,
         const std::map<TString, TString>& increment,
         const std::set<TString>& deleted)
@@ -94,13 +94,13 @@ public:
         ui64 taskId,
         const TString& graphId,
         const TCheckpointId& checkpointId,
-        const NYql::NDqProto::TComputeActorState& state)
+        const TEvDqCompute::TEvComputeActorState& state)
     {
         auto issues = storage->SaveState(taskId, graphId, checkpointId, state).GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
     }
 
-    NYql::NDqProto::TComputeActorState GetState(
+    TEvDqCompute::TEvComputeActorState GetState(
         TStateStoragePtr storage,
         const ui64 taskId,
         const TString& graphId,
@@ -112,7 +112,7 @@ public:
         return states[0];
     }
 
-    void ShouldSaveGetStateImpl(const char* tablePrefix, const NYql::NDqProto::TComputeActorState& state) {
+    void ShouldSaveGetStateImpl(const char* tablePrefix, const TEvDqCompute::TEvComputeActorState& state) {
         auto storage = GetStateStorage(tablePrefix);
         auto issues = storage->SaveState(1, "graph1", CheckpointId1, state).GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
@@ -147,14 +147,14 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         auto state2 = NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(TString(20, 'b'), 0);
         NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, state1.AsStringRef());
         NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, state2.AsStringRef());
-        NYql::NDqProto::TComputeActorState state;
+        TEvDqCompute::TEvComputeActorState state;
         state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
         ShouldSaveGetStateImpl("TStateStorageTestShouldSaveGetState", state);
     }
 
     Y_UNIT_TEST_F(ShouldSaveGetOldBigState, TFixture)
     {
-        ShouldSaveGetStateImpl("TStateStorageTestShouldSaveGetState", MakeStateFromBlob(YdbRowSizeLimit * 4));
+        ShouldSaveGetStateImpl("TStateStorageTestShouldSaveGetState", MakeStateFromBlob(YdbRowSizeLimit * 150));
     }
 
     Y_UNIT_TEST_F(ShouldSaveGetIncrementSmallState, TFixture)

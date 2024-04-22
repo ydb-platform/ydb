@@ -39,7 +39,7 @@ enum class EStateType {
 class TIncrementLogic {
 public:
 
-    void Apply(NYql::NDqProto::TComputeActorState& update) {
+    void Apply(TComputeActorState& update) {
         Sources = update.GetSources();      // Always snapshot - copy it;
         Sinks = update.GetSinks();
         ui64 nodeNum = 0;
@@ -90,9 +90,9 @@ public:
         }
     }
 
-    NYql::NDqProto::TComputeActorState Build() {
+    TComputeActorState Build() {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
-        NYql::NDqProto::TComputeActorState state;
+        TComputeActorState state;
         *state.MutableSources() = Sources;
         *state.MutableSinks() = Sinks;
         TString result;                
@@ -115,7 +115,7 @@ public:
         return state;
     }
 
-    static EStateType GetStateType(const NYql::NDqProto::TComputeActorState& state) {
+    static EStateType GetStateType(const TComputeActorState& state) {
         if (!state.HasMiniKqlProgram()) {
             return EStateType::Snapshot;
         }
@@ -141,8 +141,8 @@ private:
         TString SimpleBlobNodeState;
     };
     std::map<ui64, NodeState> NodeStates;
-    google::protobuf::RepeatedPtrField< ::NYql::NDqProto::TSourceState> Sources;
-    google::protobuf::RepeatedPtrField<NYql::NDqProto::TSinkState> Sinks;
+    google::protobuf::RepeatedPtrField< ::NYql::NDq::TSourceState> Sources;
+    google::protobuf::RepeatedPtrField<NYql::NDq::TSinkState> Sinks;
     TMaybe<ui64> LastVersion;
 };
 
@@ -163,7 +163,7 @@ struct TContext : public TThrRefBase {
         std::list<TString> Rows;
         EStateType Type = EStateType::Snapshot;
         std::list<TStateInfo> ListOfStatesForReading;     // ordered by desc
-        std::list<NYql::NDqProto::TComputeActorState> States;
+        std::list<TComputeActorState> States;
     };
 
     const NActors::TActorSystem* ActorSystem;
@@ -299,7 +299,7 @@ public:
         ui64 taskId,
         const TString& graphId,
         const TCheckpointId& checkpointId,
-        const NYql::NDqProto::TComputeActorState& state) override;
+        const TComputeActorState& state) override;
 
     TFuture<TGetStateResult> GetState(
         const std::vector<ui64>& taskIds,
@@ -333,7 +333,7 @@ private:
         const TContextPtr& context);
 
     std::list<TString> SerializeState(
-        const NYql::NDqProto::TComputeActorState& state);
+        const TComputeActorState& state);
     
     EStateType DeserializeState(
         TContext::TaskInfo& taskInfo);
@@ -344,7 +344,7 @@ private:
     TFuture<TStatus> ReadRows(
         const TContextPtr& context);
 
-    std::vector<NYql::NDqProto::TComputeActorState> ApplyIncrements(
+    std::vector<TComputeActorState> ApplyIncrements(
         const TContextPtr& context,
         NYql::TIssues& issues);
 
@@ -418,13 +418,13 @@ EStateType TStateStorage::DeserializeState(TContext::TaskInfo& taskInfo) {
         it = taskInfo.Rows.erase(it);
     }
     taskInfo.States.push_front({});
-    NYql::NDqProto::TComputeActorState& state = taskInfo.States.front();
+    TComputeActorState& state = taskInfo.States.front();
     auto res = state.ParseFromString(blob);
     Y_ENSURE(res, "Parsing error");
     return TIncrementLogic::GetStateType(state);
 }
 
-std::list<TString> TStateStorage::SerializeState(const NYql::NDqProto::TComputeActorState& state) {
+std::list<TString> TStateStorage::SerializeState(const TComputeActorState& state) {
     std::list<TString> result;
     TString serializedState;
     if (!state.SerializeToString(&serializedState)) {
@@ -447,8 +447,11 @@ TFuture<TIssues> TStateStorage::SaveState(
     ui64 taskId,
     const TString& graphId,
     const TCheckpointId& checkpointId,
-    const NYql::NDqProto::TComputeActorState& state) {
+    const TComputeActorState& state) {
     
+    const size_t stateSize = state.ByteSizeLong();
+    std::cerr << "SaveState, size: " << stateSize << std::endl;
+
     std::list<TString> serializedState;
     EStateType type = EStateType::Snapshot;
 
@@ -456,11 +459,16 @@ TFuture<TIssues> TStateStorage::SaveState(
         type = TIncrementLogic::GetStateType(state);
         serializedState = SerializeState(state);
         if (serializedState.empty()) {
+            std::cerr << "SaveState, empty: " << std::endl;
             return MakeFuture(NYql::TIssues{NYql::TIssue{"Failed to serialize compute actor state"}});
         }
     } catch (...) {
+        //std::cerr << "exception " << std::endl;
+
+        LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*NActors::TActivationContext::ActorSystem(), "Exception " << stateSize);
         return MakeFuture(NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}});
     }
+ //   return MakeFuture(NYql::TIssues{NYql::TIssue{"XXXXXX"}});
 
     auto context = MakeIntrusive<TContext>(
         NActors::TActivationContext::ActorSystem(),
@@ -965,12 +973,12 @@ TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context) {
     return promise.GetFuture();
 }
 
-std::vector<NYql::NDqProto::TComputeActorState> TStateStorage::ApplyIncrements(
+std::vector<TComputeActorState> TStateStorage::ApplyIncrements(
     const TContextPtr& context,
     NYql::TIssues& issues) {
     LOG_STORAGE_DEBUG(context, "ApplyIncrements");
 
-    std::vector<NYql::NDqProto::TComputeActorState> states;
+    std::vector<TComputeActorState> states;
     try {
         for (auto& task : context->Tasks)
         {

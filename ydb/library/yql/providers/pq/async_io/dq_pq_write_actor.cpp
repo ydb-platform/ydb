@@ -4,7 +4,8 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
+//#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
@@ -232,7 +233,7 @@ public:
         }
     };
 
-    void LoadState(const NDqProto::TSinkState& state) override {
+    void LoadState(const TSinkState& state) override {
         Y_ABORT_UNLESS(NextSeqNo == 1);
         const auto& data = state.GetData().GetStateData();
         if (data.GetVersion() == StateVersion) { // Current version
@@ -352,7 +353,7 @@ private:
         return !events.empty();
     }
 
-    NDqProto::TSinkState BuildState(const NDqProto::TCheckpoint& checkpoint) {
+    TSinkState BuildState(const NDqProto::TCheckpoint& checkpoint) {
         NPq::NProto::TDqPqTopicSinkState stateProto;
         stateProto.SetSourceId(GetSourceId());
         stateProto.SetConfirmedSeqNo(ConfirmedSeqNo);
@@ -360,7 +361,7 @@ private:
         TString serializedState;
         YQL_ENSURE(stateProto.SerializeToString(&serializedState));
 
-        NDqProto::TSinkState sinkState;
+        TSinkState sinkState;
         auto* data = sinkState.MutableData()->MutableStateData();
         data->SetVersion(StateVersion);
         data->SetBlob(serializedState);

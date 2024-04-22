@@ -6,7 +6,8 @@
 #include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
+//#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
@@ -137,7 +138,7 @@ public:
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
 
 public:
-    void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TSourceState& state) override {
+    void SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) override {
         NPq::NProto::TDqPqTopicSourceState stateProto;
 
         NPq::NProto::TDqPqTopicSourceState::TTopicDescription* topic = stateProto.AddTopics();
@@ -169,7 +170,7 @@ public:
         CurrentDeferredCommit = NYdb::NTopic::TDeferredCommit();
     }
 
-    void LoadState(const NDqProto::TSourceState& state) override {
+    void LoadState(const TSourceState& state) override {
         TInstant minStartingMessageTs = state.DataSize() ? TInstant::Max() : StartingMessageTimestamp;
         ui64 ingressBytes = 0;
         for (const auto& stateData : state.GetData()) {

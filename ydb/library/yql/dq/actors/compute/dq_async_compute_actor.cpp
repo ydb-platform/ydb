@@ -548,7 +548,7 @@ private:
         }
     }
 
-    void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TComputeActorState& state) const override {
+    void SaveState(const NDqProto::TCheckpoint& checkpoint, TEvDqCompute::TEvComputeActorState& state) const override {
         CA_LOG_D("Save state");
         Y_ABORT_UNLESS(ProgramState);
         state.MutableMiniKqlProgram()->Swap(&*ProgramState);
@@ -557,7 +557,7 @@ private:
         // TODO:(whcrc) maybe save Sources before Program?
         for (auto& [inputIndex, source] : SourcesMap) {
             YQL_ENSURE(source.AsyncInput, "Source[" << inputIndex << "] is not created");
-            NDqProto::TSourceState& sourceState = *state.AddSources();
+            TSourceState& sourceState = *state.AddSources();
             source.AsyncInput->SaveState(checkpoint, sourceState);
             sourceState.SetInputIndex(inputIndex);
         }
@@ -976,7 +976,7 @@ private:
     bool ReadyToCheckpointFlag;
     TVector<std::pair<NActors::TActorId, ui64>> WaitingForStateResponse;
     bool SentStatsRequest;
-    mutable THolder<NDqProto::TMiniKqlProgramState> ProgramState;
+    mutable THolder<TMiniKqlProgramState> ProgramState;
     ui64 MkqlMemoryLimit = 0;
     TDqMemoryQuota::TProfileStats ProfileStats;
     bool CheckpointRequestedFromTaskRunner = false;

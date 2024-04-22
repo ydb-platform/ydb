@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
         const TString topicName = "Checkpoints";
         PQCreateStream(topicName);
 
-        NDqProto::TSinkState state1;
+        TSinkState state1;
         {
             TPqIoTestFixture setup;
             setup.InitAsyncOutput(topicName);
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
         const TString topicName = "CheckpointsWithEmptyBatch";
         PQCreateStream(topicName);
 
-        NDqProto::TSinkState state1;
+        TSinkState state1;
         {
             InitAsyncOutput(topicName);
 

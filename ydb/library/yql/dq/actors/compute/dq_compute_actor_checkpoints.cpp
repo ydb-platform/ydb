@@ -75,33 +75,33 @@ std::vector<ui64> TaskIdsFromLoadPlan(const NDqProto::NDqStateLoadPlan::TTaskPla
     return taskIds;
 }
 
-const NDqProto::TSourceState& FindSourceState(
+const TSourceState& FindSourceState(
     const NDqProto::NDqStateLoadPlan::TSourcePlan::TForeignTaskSource& foreignTaskSource,
-    const std::vector<NDqProto::TComputeActorState>& states,
+    const std::vector<TComputeActorState>& states,
     const std::vector<ui64>& taskIds)
 {
     // Find state index
     const auto stateIndexIt = std::lower_bound(taskIds.begin(), taskIds.end(), foreignTaskSource.GetTaskId());
     YQL_ENSURE(stateIndexIt != taskIds.end(), "Task id was not found in plan");
     const size_t stateIndex = std::distance(taskIds.begin(), stateIndexIt);
-    const NDqProto::TComputeActorState& state = states[stateIndex];
-    for (const NDqProto::TSourceState& sourceState : state.GetSources()) {
-        if (sourceState.GetInputIndex() == foreignTaskSource.GetInputIndex()) {
+    const TComputeActorState& state = states[stateIndex];
+    for (const TSourceState& sourceState : state.Sources) {
+        if (sourceState.InputIndex == foreignTaskSource.GetInputIndex()) {
             return sourceState;
         }
     }
     YQL_ENSURE(false, "Source input index " << foreignTaskSource.GetInputIndex() << " was not found in state");
     // Make compiler happy
-    return state.GetSources(0);
+    return state.Sources.front();
 }
 
-NDqProto::TComputeActorState CombineForeignState(
+TComputeActorState CombineForeignState(
     const NDqProto::NDqStateLoadPlan::TTaskPlan& plan,
-    const std::vector<NDqProto::TComputeActorState>& states,
+    const std::vector<TComputeActorState>& states,
     const std::vector<ui64>& taskIds)
 {
-    NDqProto::TComputeActorState state;
-    state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetVersion(TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion);
+    TComputeActorState state;
+    state.MiniKqlProgram.Data.Version = TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion;
     YQL_ENSURE(plan.GetProgram().GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY, "Unsupported program state type. Plan: " << plan);
     for (const auto& sinkPlan : plan.GetSinks()) {
         YQL_ENSURE(sinkPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY, "Unsupported sink state type. Plan: " << sinkPlan);
@@ -109,15 +109,16 @@ NDqProto::TComputeActorState CombineForeignState(
     for (const auto& sourcePlan : plan.GetSources()) {
         YQL_ENSURE(sourcePlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY || sourcePlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN, "Unsupported sink state type. Plan: " << sourcePlan);
         if (sourcePlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
-            auto& sourceState = *state.AddSources();
-            sourceState.SetInputIndex(sourcePlan.GetInputIndex());
+            state.Sources.push_back({});
+            auto& sourceState = state.Sources.back();
+            sourceState.InputIndex = sourcePlan.GetInputIndex();
             for (const auto& foreignTaskSource : sourcePlan.GetForeignTasksSources()) {
-                const NDqProto::TSourceState& srcSourceState = FindSourceState(foreignTaskSource, states, taskIds);
-                for (const NDqProto::TStateData& data : srcSourceState.GetData()) {
-                    sourceState.AddData()->CopyFrom(data);
+                const TSourceState& srcSourceState = FindSourceState(foreignTaskSource, states, taskIds);
+                for (const TStateData& data : srcSourceState.Data) {
+                    sourceState.Data.emplace_back(data);
                 }
             }
-            YQL_ENSURE(sourceState.DataSize(), "No data was loaded to source " << sourcePlan.GetInputIndex());
+            YQL_ENSURE(sourceState.Data.size(), "No data was loaded to source " << sourcePlan.GetInputIndex());
         }
     }
     return state;
@@ -340,7 +341,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
     if (StateLoadPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_OWN) {
         ComputeActor->LoadState(std::move(ev->Get()->States[0]));
     } else if (StateLoadPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
-        NDqProto::TComputeActorState state = CombineForeignState(StateLoadPlan, ev->Get()->States, taskIds);
+        TComputeActorState state = CombineForeignState(StateLoadPlan, ev->Get()->States, taskIds);
         ComputeActor->LoadState(std::move(state));
     } else {
         Y_ABORT("Unprocessed state type %s (%d)",
@@ -501,7 +502,7 @@ void TDqComputeActorCheckpoints::AbortCheckpoint() {
     SavingToDatabase = false;
 }
 
-void TDqComputeActorCheckpoints::OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) {
+void TDqComputeActorCheckpoints::OnSinkStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) {
     Y_ABORT_UNLESS(CheckpointCoordinator);
     Y_ABORT_UNLESS(checkpoint.GetGeneration() <= CheckpointCoordinator->Generation);
     if (checkpoint.GetGeneration() < CheckpointCoordinator->Generation) {
@@ -512,11 +513,12 @@ void TDqComputeActorCheckpoints::OnSinkStateSaved(NDqProto::TSinkState&& state, 
     Y_ABORT_UNLESS(PendingCheckpoint);
     Y_ABORT_UNLESS(PendingCheckpoint.Checkpoint->GetId() == checkpoint.GetId(),
         "Expected pending checkpoint id %lu, but got %lu", PendingCheckpoint.Checkpoint->GetId(), checkpoint.GetId());
-    for (const NDqProto::TSinkState& sinkState : PendingCheckpoint.ComputeActorState.GetSinks()) {
-        Y_ABORT_UNLESS(sinkState.GetOutputIndex() != outputIndex, "Double save sink[%lu] state", outputIndex);
+    for (const TSinkState& sinkState : PendingCheckpoint.ComputeActorState.Sinks) {
+        Y_ABORT_UNLESS(sinkState.OutputIndex != outputIndex, "Double save sink[%lu] state", outputIndex);
     }
 
-    NDqProto::TSinkState* sinkState = PendingCheckpoint.ComputeActorState.AddSinks();
+    PendingCheckpoint.ComputeActorState.Sinks.push_back({});
+    TSinkState* sinkState = PendingCheckpoint.ComputeActorState.Sinks.back();
     *sinkState = std::move(state);
     sinkState->SetOutputIndex(outputIndex); // Set index explicitly to avoid errors
     ++PendingCheckpoint.SavedSinkStatesCount;

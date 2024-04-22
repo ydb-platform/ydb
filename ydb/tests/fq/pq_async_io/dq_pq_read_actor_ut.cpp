@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
     }
 
     Y_UNIT_TEST(TestSaveLoadPqRead) {
-        NDqProto::TSourceState state;
+        TSourceState state;
         const TString topicName = "SaveLoadPqRead";
         PQCreateStream(topicName);
 
@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             Cerr << "State saved" << Endl;
         }
 
-        NDqProto::TSourceState state2;
+        TSourceState state2;
         {
             TPqIoTestFixture setup2;
             setup2.InitSource(topicName);
@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             PQWrite({"futherData"}, topicName);
         }
 
-        NDqProto::TSourceState state3;
+        TSourceState state3;
         {
             TPqIoTestFixture setup3;
             setup3.InitSource(topicName);
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
     }
 
     Y_UNIT_TEST(LoadCorruptedState) {
-        NDqProto::TSourceState state;
+        TSourceState state;
         const TString topicName = "Invalid"; // We wouldn't read from this topic.
         auto checkpoint = CreateCheckpoint();
 
@@ -232,7 +232,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         const TString topicName = "LoadFromSeveralStates";
         PQCreateStream(topicName);
 
-        NDqProto::TSourceState state2;
+        TSourceState state2;
         {
             TPqIoTestFixture setup;
             setup.InitSource(topicName);
@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             auto result1 = setup.SourceReadDataUntil<TString>(UVParser, 1);
             AssertDataWithWatermarks(result1, data, {});
 
-            NDqProto::TSourceState state1;
+            TSourceState state1;
             auto checkpoint1 = CreateCheckpoint();
             setup.SaveSourceState(checkpoint1, state1);
             Cerr << "State saved" << Endl;
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
     Y_UNIT_TEST(WatermarkCheckpointWithItemsInReadyBuffer) {
         const TString topicName = "WatermarkCheckpointWithItemsInReadyBuffer";
         PQCreateStream(topicName);
-        NDqProto::TSourceState state;
+        TSourceState state;
 
         {
             TPqIoTestFixture setup;

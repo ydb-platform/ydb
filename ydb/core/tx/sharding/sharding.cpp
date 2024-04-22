@@ -28,9 +28,7 @@ TConclusion<std::unique_ptr<TShardingBase>> TShardingBase::BuildFromProto(const 
         auto& hashSharding = shardingProto.GetHashSharding();
         std::vector<TString> columnNames;
         if (hashSharding.GetColumns().empty()) {
-            for (auto&& i : schema.GetColumns().GetKeyColumnIds()) {
-                columnNames.emplace_back(schema.GetColumns().GetByIdVerified(i)->GetName());
-            }
+            return TConclusionStatus::Fail("no columns for hash calculation");
         } else {
             for (auto&& i : hashSharding.GetColumns()) {
                 columnNames.emplace_back(i);

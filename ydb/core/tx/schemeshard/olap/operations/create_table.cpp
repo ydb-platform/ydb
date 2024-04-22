@@ -62,10 +62,19 @@ public:
         if (!Deserialize(description, errors)) {
             return nullptr;
         }
+        if (tableInfo->Description.GetSharding().HasHashSharding()) {
+            auto& hashSharding = *tableInfo->Description.MutableSharding()->MutableHashSharding();
+            if (!hashSharding.GetColumns().size()) {
+                for (auto&& i : GetSchema().GetColumns().GetKeyColumnIds()) {
+                    hashSharding.AddColumns(GetSchema().GetColumns().GetByIdVerified(i)->GetName());
+                }
+            }
+        }
         tableInfo->AlterVersion = 1;
         auto shardingValidation = NSharding::TShardingBase::ValidateBehaviour(GetSchema(), tableInfo->Description.GetSharding());
         if (shardingValidation.IsFail()) {
             errors.AddError(shardingValidation.GetErrorMessage());
+            return nullptr;
         }
 
         auto statusBuild = BuildDescription(context, tableInfo);

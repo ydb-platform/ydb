@@ -135,7 +135,7 @@ Use `helm` to deploy the {{ ydb-short-name }} {{ k8s }} operator to the cluster:
 
 ### Deploy storage nodes
 
-{{ ydb-short-name }} supports a number of [storage topologies](../../cluster/topology.md). {{ ydb-short-name }} {{ k8s }} operator comes with a few sample configuration files for the most common topologies. This guide uses them as-is, but feel free to adjust them as needed or implement a new configuration file from scratch.
+{{ ydb-short-name }} supports a number of [storage topologies](../../concepts/topology.md). {{ ydb-short-name }} {{ k8s }} operator comes with a few sample configuration files for the most common topologies. This guide uses them as-is, but feel free to adjust them as needed or implement a new configuration file from scratch.
 
 Apply the manifest for creating storage nodes:
 
@@ -171,7 +171,7 @@ The cluster configuration is static. The controller won't process any changes wh
 
 ### Create a database and dynamic nodes
 
-{{ ydb-short-name }} database is a logical entity that is served by a number of dynamic nodes. A sample manifest that comes with {{ ydb-short-name }} {{ k8s }} operator creates a database named `database-sample` with 3 dynamic nodes. As with storage nodes, feel free to adjust the configuration as needed.
+{{ ydb-short-name }} database is a logical entity that is served by a set of dynamic nodes. A sample manifest that comes with {{ ydb-short-name }} {{ k8s }} operator creates a database named `database-sample` with 3 dynamic nodes. As with storage nodes, feel free to adjust the configuration as needed.
 
 Apply the manifest for creating a database and dynamic nodes:
 

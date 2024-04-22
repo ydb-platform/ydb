@@ -16,16 +16,10 @@ class TLayoutIdSet {
 private:
     ui64 Hash = 0;
     std::set<TSetElement> Elements;
-    void ResetHash() {
-        Hash = 0;
-        for (auto&& i : Elements) {
-            Hash = CombineHashes(Hash, THashCalcer::GetHash(i));
-        }
-    }
 public:
     TLayoutIdSet() = default;
     TLayoutIdSet(const TSetElement elem) {
-        Elements.emplace(elem);
+        AddId(elem);
     }
 
     typename std::set<TSetElement>::const_iterator begin() const {
@@ -67,13 +61,17 @@ public:
 
     bool AddId(const TSetElement& id) {
         bool result = Elements.emplace(id).second;
-        ResetHash();
+        if (result) {
+            Hash ^= THashCalcer::GetHash(id);
+        }
         return result;
     }
 
     bool RemoveId(const TSetElement& id) {
         auto result = Elements.erase(id);
-        ResetHash();
+        if (result) {
+            Hash ^= THashCalcer::GetHash(id);
+        }
         return result;
     }
 
@@ -102,7 +100,7 @@ private:
     public:
         template <class T>
         static ui64 GetHash(const T data) {
-            return data;
+            return IntHash(data);
         }
     };
 

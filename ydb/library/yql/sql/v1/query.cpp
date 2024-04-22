@@ -2351,9 +2351,9 @@ protected:
             auto settings = Y();
             for (auto&& [k, v] : Settings) {
                 if (v) {
-                    settings = L(settings, Q(Y(Q(k), v)));
+                    settings = L(settings, Q(Y(BuildQuotedAtom(Pos, k), v)));
                 } else {
-                    settings = L(settings, Q(Y(Q(k))));
+                    settings = L(settings, Q(Y(BuildQuotedAtom(Pos, k))));
                 }
             }
             options = L(options, Q(Y(Q("settings"), Q(settings))));
@@ -2410,9 +2410,9 @@ protected:
             auto settings = Y();
             for (auto&& [k, v] : Settings) {
                 if (v) {
-                    settings = L(settings, Q(Y(Q(k), v)));
+                    settings = L(settings, Q(Y(BuildQuotedAtom(Pos, k), v)));
                 } else {
-                    settings = L(settings, Q(Y(Q(k))));
+                    settings = L(settings, Q(Y(BuildQuotedAtom(Pos, k))));
                 }
             }
             options = L(options, Q(Y(Q("settings"), Q(settings))));

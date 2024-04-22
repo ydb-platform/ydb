@@ -1090,7 +1090,7 @@ NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type) {
         return NYql::NCommon::PgValueFromNativeBinary(cell.AsBuf(), NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()));
     }
 
-    Y_DEBUG_ABORT_UNLESS(false, "Unsupported type: %" PRIu16, type.GetTypeId());
+    Y_DEBUG_ABORT("Unsupported type: %" PRIu16, type.GetTypeId());
     return MakeString(NUdf::TStringRef(cell.Data(), cell.Size()));
 }
 

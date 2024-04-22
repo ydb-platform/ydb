@@ -55,7 +55,7 @@ message SimulateResponse {
 
 
 message ListOperationsResponse {
-    repeated yandex.cloud.priv.operation.Operation operations = 1;
+    repeated .ydb.yc.priv.operation.Operation operations = 1;
     string next_page_token = 2;
 }
 

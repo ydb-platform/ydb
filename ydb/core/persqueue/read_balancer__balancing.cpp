@@ -1335,7 +1335,7 @@ void TBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActo
     const auto& r = ev->Get()->Record;
     const TString& consumerName = r.GetClientId();
     auto partitionId = r.GetPartition();
-    TActorId sender = ActorIdFromProto(r.GetPipe());
+    TActorId sender = ActorIdFromProto(r.GetPipeClient());
 
     auto* partitionInfo = GetPartitionInfo(partitionId);
     if (!partitionInfo) {
@@ -1434,7 +1434,7 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
     const auto& r = ev->Get()->Record;
     auto& consumerName = r.GetClientId();
 
-    TActorId pipe = ActorIdFromProto(r.GetPipe());
+    TActorId pipe = ActorIdFromProto(r.GetPipeClient());
     LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
             GetPrefix() << "consumer \"" << consumerName << "\" register session for pipe " << pipe << " session " << r.GetSession());
 

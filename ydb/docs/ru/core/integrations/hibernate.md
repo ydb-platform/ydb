@@ -17,7 +17,7 @@ Hibernate - это фреймворк объектно-реляционного 
 - Maven
 
     ```xml
-    <!-- Set an actual versions -->
+    <!-- Set actual versions -->
     <dependency>
         <groupId>tech.ydb.jdbc</groupId>
         <artifactId>ydb-jdbc-driver</artifactId>
@@ -35,7 +35,7 @@ Hibernate - это фреймворк объектно-реляционного 
 
     ```groovy
     dependencies {
-        // Set an actual versions
+        // Set actual versions
         implementation "tech.ydb.dialects:hibernate-ydb-dialect:$ydbDialectVersion"
         implementation "tech.ydb.jdbc:ydb-jdbc-driver:$ydbJdbcVersion"
     }
@@ -56,6 +56,9 @@ Hibernate - это фреймворк объектно-реляционного 
 Или в Java коде:
 
 ```java
+import org.hibernate.cfg.AvailableSettings;
+import org.hibernate.cfg.Configuration;
+
 public static Configuration basedConfiguration() {
     return new Configuration()
             .setProperty(AvailableSettings.DIALECT, YdbDialect.class.getName());
@@ -68,76 +71,61 @@ public static Configuration basedConfiguration() {
 
 Таблица сопоставления Java типов с [{{ ydb-short-name }} типами](../yql/reference/types/primitive.md):
 
-| Java type                                                           | {{ ydb-short-name }} type   |
-|---------------------------------------------------------------------|-----------------------------|
-| `bool`, `Boolean`                                                   | `Bool`                      |
-| `String`, enum with `@Enumerated(EnumType.STRING)`                  | `Text` (синоним `Utf8`)     |
-| `java.time.LocalDate`                                               | `Date`                      |
-| `java.math.BigDecimal`, `java.math.BigInteger`                      | `Decimal(22,9)`             |
-| `double`, `Double`                                                  | `Double`                    |
-| `float`, `Float`                                                    | `Float`                     |
-| `int`, `java.lang.Integer`                                          | `Int32`                     |
-| `long`, `java.lang.Long`                                            | `Int64`                     |
-| `short`, `java.lang.Short`                                          | `Int16`                     |
-| `byte`, `java.lang.Byte`, enum with `@Enumerated(EnumType.ORDINAL)` | `Int8`                      |
-| `[]byte`                                                            | `Bytes`  (синоним `String`) |
-| `java.time.LocalDateTime`                                           | `Datetime`                  |
-| `java.time.Instant`                                                 | `Timestamp`                 |
+| Java type                                                                   | {{ ydb-short-name }} type   |
+|-----------------------------------------------------------------------------|-----------------------------|
+| `bool`, `Boolean`                                                           | `Bool`                      |
+| `String`, enum с аннотацией `@Enumerated(EnumType.STRING)`                  | `Text` (синоним `Utf8`)     |
+| `java.time.LocalDate`                                                       | `Date`                      |
+| `java.math.BigDecimal`, `java.math.BigInteger`                              | `Decimal(22,9)`             |
+| `double`, `Double`                                                          | `Double`                    |
+| `float`, `Float`                                                            | `Float`                     |
+| `int`, `java.lang.Integer`                                                  | `Int32`                     |
+| `long`, `java.lang.Long`                                                    | `Int64`                     |
+| `short`, `java.lang.Short`                                                  | `Int16`                     |
+| `byte`, `java.lang.Byte`, enum с аннотацией `@Enumerated(EnumType.ORDINAL)` | `Int8`                      |
+| `[]byte`                                                                    | `Bytes`  (синоним `String`) |
+| `java.time.LocalDateTime` (timezone будет установлена в `UTC`)              | `Datetime`                  |
+| `java.time.Instant` (timezone будет установлена в `UTC`)                    | `Timestamp`                 |
 
-Поддержана генерация схемы базы данных по Hibernate сущностям.
+Диалект {{ ydb-short-name }} поддерживает генерацию схемы базы данных на основе объектов Hibernate.
 
-Например, для класса Group: 
+Например, для класса `Group`: 
 
-```java
-@Getter
-@Setter
+```kotlin
 @Entity
-@Table(name = "Groups", indexes = @Index(name = "group_name_index", columnList = "GroupName"))
-@NamedQuery(
-        name = "Group.findGroups",
-        query = "SELECT g FROM Group g " +
-                "JOIN Plan p ON g.id = p.planId.groupId " +
-                "JOIN Lecturer l ON p.planId.lecturerId = l.id " +
-                "WHERE p.planId.courseId = :CourseId and l.id = :LecturerId"
-)
-public class Group {
+@Table(name = "Groups", indexes = [Index(name = "group_name_index", columnList = "GroupName")])
+data class Group(
+  @Id
+  @Column(name = "GroupId")
+  val id: Int,
 
-    @Id
-    @Column(name = "GroupId")
-    private int id;
-  
-    @Column(name = "GroupName")
-    private String name;
-  
-    @OneToMany(mappedBy = "group")
-    private List<Student> students;
-  
-    @Override
-    public int hashCode() {
-      return id;
-    }
-}
+  @Column(name = "GroupName")
+  val name: String,
+
+  @OneToMany(mappedBy = "group")
+  val students: List<Student>
+)
 ```
 
 Будет сгенерирована следующая таблица `Groups` и вторичный индекс `group_name_index` к колонке `GroupName`:
 
 ```sql
-create table Groups (
-    GroupId Int32 not null,
+CREATE TABLE Groups (
+    GroupId Int32 NOT NULL,
     GroupName Text,
-    primary key (GroupId)
+    PRIMARY KEY (GroupId)
 );
 
-alter table Groups
-  add index group_name_index global 
-       on (GroupName);
+ALTER TABLE Groups
+  ADD INDEX group_name_index GLOBAL 
+       ON (GroupName);
 ```
 
 Если эволюционировать сущность Group путем добавления поля `deparment`:
 
-```java
+```kotlin
 @Column
-private String department;
+val department: String
 ```
 
 Hibernate при старте приложения обновит схему базы данных, если установлен режим `update`:
@@ -149,19 +137,13 @@ jakarta.persistence.schema-generation.database.action=update
 Результат изменения схемы:
 
 ```sql
-alter table Groups 
-   add column department Text
+ALTER TABLE Groups 
+   ADD COLUMN department Text
 ```
 
 {% note warning %}
 
-Hibernate не предназначен для управления схемами баз данных.
-
-{% endnote %}
-
-{% note info %}
-
-Вы можете использовать [Liquibase](./liquibase.md) для управления схемой базы данных.
+Hibernate не предназначен для управления схемами баз данных. Вы можете использовать [Liquibase](./liquibase.md) или Flyway для управления схемой базы данных.
 
 {% endnote %}
 
@@ -226,10 +208,17 @@ val employee = Employee(
     23
 )
 
+/* SQL will be executed: 
+INSERT INTO employee (age,department,email,full_name,hire_date,is_active,limit_date_password,salary,id) 
+VALUES (?,?,?,?,?,?,?,?,?) 
+*/
 employeeRepository.save(employee)
 
 assertEquals(employee, employeeRepository.findByIdOrNull(employee.id))
 
+/* SQL will be executed:
+DELETE FROM employee WHERE id=?
+ */
 employeeRepository.delete(employee)
 
 assertNull(employeeRepository.findByIdOrNull(employee.id))

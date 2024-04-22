@@ -15,7 +15,7 @@ Add the following dependency to your project:
 - Maven
 
     ```xml
-    <!-- Set an actual versions -->
+    <!-- Set actual versions -->
     <dependency>
         <groupId>tech.ydb.jdbc</groupId>
         <artifactId>ydb-jdbc-driver</artifactId>
@@ -33,7 +33,7 @@ Add the following dependency to your project:
 
     ```groovy
     dependencies {
-        // Set an actual versions
+        // Set actual versions
         implementation "tech.ydb.dialects:hibernate-ydb-dialect:$ydbDialectVersion"
         implementation "tech.ydb.jdbc:ydb-jdbc-driver:$ydbJdbcVersion"
     }
@@ -41,7 +41,7 @@ Add the following dependency to your project:
 
 {% endlist %}
 
-If you use Hibernate version 5, you need `<artifactId>hibernate-ydb-dialect-v5</artifactId>` for Maven or `implementation 'tech.ydb.dialects:hibernate-ydb-dialect-v5:$version` for Gradle.
+If you use Hibernate version 5, you need `<artifactId>hibernate-ydb-dialect-v5</artifactId>` for Maven or `implementation 'tech.ydb.dialects:hibernate-ydb-dialect-v5:$version` for Gradle instead of the similar package without the `-v5` suffix.
 
 ## Configuration {#configuration-dialect}
 
@@ -54,6 +54,9 @@ Configure Hibernate to use the custom {{ ydb-short-name }} dialect by updating y
 Or, if you are using programmatic configuration:
 
 ```java
+import org.hibernate.cfg.AvailableSettings;
+import org.hibernate.cfg.Configuration;
+
 public static Configuration basedConfiguration() {
     return new Configuration()
             .setProperty(AvailableSettings.DRIVER, YdbDriver.class.getName())
@@ -67,76 +70,61 @@ Use this custom dialect just like any other Hibernate dialect. Map your entity c
 
 Table of comparison of Java types descriptions with [{{ ydb-short-name }} types](../yql/reference/types/primitive.md):
 
-| Java type                                                           | {{ ydb-short-name }} type   |
-|---------------------------------------------------------------------|-----------------------------|
-| `bool`, `Boolean`                                                   | `Bool`                      |
-| `String`, enum with `@Enumerated(EnumType.STRING)`                  | `Text` (synonym `Utf8`)     |
-| `java.time.LocalDate`                                               | `Date`                      |
-| `java.math.BigDecimal`, `java.math.BigInteger`                      | `Decimal(22,9)`             |
-| `double`, `Double`                                                  | `Double`                    |
-| `float`, `Float`                                                    | `Float`                     |
-| `int`, `java.lang.Integer`                                          | `Int32`                     |
-| `long`, `java.lang.Long`                                            | `Int64`                     |
-| `short`, `java.lang.Short`                                          | `Int16`                     |
-| `byte`, `java.lang.Byte`, enum with `@Enumerated(EnumType.ORDINAL)` | `Int8`                      |
-| `[]byte`                                                            | `Bytes`  (synonym `String`) |
-| `java.time.LocalDateTime`                                           | `Datetime`                  |
-| `java.time.Instant`                                                 | `Timestamp`                 |
+| Java type                                                                      | {{ ydb-short-name }} type   |
+|--------------------------------------------------------------------------------|-----------------------------|
+| `bool`, `Boolean`                                                              | `Bool`                      |
+| `String`, enum with annotation `@Enumerated(EnumType.STRING)`                  | `Text` (synonym `Utf8`)     |
+| `java.time.LocalDate`                                                          | `Date`                      |
+| `java.math.BigDecimal`, `java.math.BigInteger`                                 | `Decimal(22,9)`             |
+| `double`, `Double`                                                             | `Double`                    |
+| `float`, `Float`                                                               | `Float`                     |
+| `int`, `java.lang.Integer`                                                     | `Int32`                     |
+| `long`, `java.lang.Long`                                                       | `Int64`                     |
+| `short`, `java.lang.Short`                                                     | `Int16`                     |
+| `byte`, `java.lang.Byte`, enum with annotation `@Enumerated(EnumType.ORDINAL)` | `Int8`                      |
+| `[]byte`                                                                       | `Bytes`  (synonym `String`) |
+| `java.time.LocalDateTime` (timezone will be set to `UTC`)                      | `Datetime`                  |
+| `java.time.Instant` (timezone will be set to `UTC`)                            | `Timestamp`                 |
 
-Database schema generation based on hibernate entities is supported.
+{{ ydb-short-name }} dialect supports database schema generation based on Hibernate entities.
 
-For example, for the Group class:
+For example, for the `Group` class:
 
-```java
-@Getter
-@Setter
+```kotlin
 @Entity
-@Table(name = "Groups", indexes = @Index(name = "group_name_index", columnList = "GroupName"))
-@NamedQuery(
-        name = "Group.findGroups",
-        query = "SELECT g FROM Group g " +
-                "JOIN Plan p ON g.id = p.planId.groupId " +
-                "JOIN Lecturer l ON p.planId.lecturerId = l.id " +
-                "WHERE p.planId.courseId = :CourseId and l.id = :LecturerId"
-)
-public class Group {
+@Table(name = "Groups", indexes = [Index(name = "group_name_index", columnList = "GroupName")])
+data class Group(
+  @Id
+  @Column(name = "GroupId")
+  val id: Int,
+  
+  @Column(name = "GroupName")
+  val name: String,
 
-    @Id
-    @Column(name = "GroupId")
-    private int id;
-  
-    @Column(name = "GroupName")
-    private String name;
-  
-    @OneToMany(mappedBy = "group")
-    private List<Student> students;
-  
-    @Override
-    public int hashCode() {
-      return id;
-    }
-}
+  @OneToMany(mappedBy = "group")
+  val students: List<Student>
+)
 ```
 
-The following `Groups` table will be created and a secondary index, `group_name_index`, will be added to the `GroupName` column:
+The following `Groups` table will be created, and the `GroupName` will be indexed by a global secondary index named `group_name_index`:
 
 ```sql
-create table Groups (
-    GroupId Int32 not null,
+CREATE TABLE Groups (
+    GroupId Int32 NOT NULL,
     GroupName Text,
-    primary key (GroupId)
+    PRIMARY KEY (GroupId)
 );
 
-alter table Groups
-  add index group_name_index global 
-       on (GroupName);
+ALTER TABLE Groups
+  ADD INDEX group_name_index GLOBAL 
+       ON (GroupName);
 ```
 
 If you evolve the Group entity by adding the `deparment` field:
 
-```java
+```kotlin
 @Column
-private String department;
+val department: String
 ```
 
 Hibernate, at the start of the application, update the database schema if the `update` mode is set:
@@ -145,22 +133,16 @@ Hibernate, at the start of the application, update the database schema if the `u
 jakarta.persistence.schema-generation.database.action=update
 ```
 
-The result of changing the scheme is:
+The result of changing the schema is:
 
 ```sql
-alter table Groups 
-   add column department Text
+ALTER TABLE Groups 
+   ADD COLUMN department Text
 ```
 
 {% note warning %}
 
-Hibernate is not designed to manage database schemas.
-
-{% endnote %}
-
-{% note info %}
-
-You can use [Liquibase](./liquibase.md) or Flyway to manage your database schema.
+Hibernate is not designed to manage database schemas. You can manage your database schema using [Liquibase](./liquibase.md) or Flyway.
 
 {% endnote %}
 
@@ -175,7 +157,7 @@ spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
 spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/database[?saFile=file:~/sa_key.json]
 ```
 
-Create simple entity and repository:
+Create a simple entity and repository:
 
 ```kotlin
 @Entity
@@ -211,7 +193,7 @@ interface EmployeeRepository : CrudRepository<Employee, Long>
 fun EmployeeRepository.findByIdOrNull(id: Long): Employee? = this.findById(id).orElse(null)
 ```
 
-Example using:
+Usage example:
 
 ```kotlin
 val employee = Employee(
@@ -225,10 +207,17 @@ val employee = Employee(
     23
 )
 
+/* SQL will be executed: 
+INSERT INTO employee (age,department,email,full_name,hire_date,is_active,limit_date_password,salary,id) 
+VALUES (?,?,?,?,?,?,?,?,?) 
+*/
 employeeRepository.save(employee)
 
 assertEquals(employee, employeeRepository.findByIdOrNull(employee.id))
 
+/* SQL will be executed:
+DELETE FROM employee WHERE id=?
+ */
 employeeRepository.delete(employee)
 
 assertNull(employeeRepository.findByIdOrNull(employee.id))

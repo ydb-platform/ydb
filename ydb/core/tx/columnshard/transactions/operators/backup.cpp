@@ -59,7 +59,7 @@ bool TBackupTransactionOperator::CompleteOnProgress(TColumnShard& owner, const T
     return true;
 }
 
-bool TBackupTransactionOperator::Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
+bool TBackupTransactionOperator::ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
     owner.GetExportsManager()->RemoveSession(ExportTask->GetIdentifier(), txc);
     return true;
 }

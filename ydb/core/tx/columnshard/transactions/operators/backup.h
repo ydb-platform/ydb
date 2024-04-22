@@ -26,7 +26,10 @@ namespace NKikimr::NColumnShard {
 
         virtual bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) override;
 
-        virtual bool Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
+        virtual bool ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
+        virtual bool CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
+            return true;
+        }
     };
 
 }

@@ -89,8 +89,10 @@ namespace NKikimr::NColumnShard {
             return true;
         }
 
-        virtual bool Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override {
-            Y_UNUSED(owner, txc);
+        virtual bool ExecuteOnAbort(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
+            return true;
+        }
+        virtual bool CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
             return true;
         }
 

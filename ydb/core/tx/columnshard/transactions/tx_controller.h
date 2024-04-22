@@ -97,8 +97,11 @@ public:
         virtual bool CompleteOnPropose(TColumnShard& owner, const TActorContext& ctx) const = 0;
 
         virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) = 0;
-        virtual bool Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;
         virtual bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) = 0;
+
+        virtual bool ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+        virtual bool CompleteOnAbort(TColumnShard& owner, const TActorContext& ctx) = 0;
+
         virtual void RegisterSubscriber(const TActorId&) {
             AFL_VERIFY(false)("message", "Not implemented");
         };
@@ -133,7 +136,8 @@ public:
     TTxInfo RegisterTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);
     TTxInfo RegisterTxWithDeadline(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);
 
-    bool CancelTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
+    bool ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
+    bool CompleteOnCancel(const ui64 txId, const TActorContext& ctx);
 
     std::optional<TTxInfo> StartPlannedTx();
     void FinishPlannedTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);

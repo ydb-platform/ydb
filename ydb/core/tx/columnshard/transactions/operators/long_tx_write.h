@@ -90,7 +90,7 @@ namespace NKikimr::NColumnShard {
             return true;
         }
 
-        bool Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override {
+        virtual bool ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override {
             NIceDb::TNiceDb db(txc.DB);
             for (TWriteId writeId : WriteIds) {
                 owner.RemoveLongTxWrite(db, writeId, GetTxId());
@@ -98,6 +98,9 @@ namespace NKikimr::NColumnShard {
             TBlobGroupSelector dsGroupSelector(owner.Info());
             NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
             owner.InsertTable->Abort(dbTable, WriteIds);
+            return true;
+        }
+        virtual bool CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
             return true;
         }
 

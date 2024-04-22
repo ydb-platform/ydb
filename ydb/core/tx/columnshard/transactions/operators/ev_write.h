@@ -39,9 +39,13 @@ namespace NKikimr::NColumnShard {
             return true;
         }
 
-        virtual bool Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override {
+        virtual bool ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override {
             return owner.OperationsManager->AbortTransaction(owner, GetTxId(), txc);
         }
+        virtual bool CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
+            return true;
+        }
+
     private:
         ui64 LockId = 0;
     };

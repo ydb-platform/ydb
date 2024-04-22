@@ -137,7 +137,8 @@ bool TTxController::AbortTx(const ui64 txId, NTabletFlatExecutor::TTransactionCo
 
     auto opIt = Operators.find(txId);
     Y_ABORT_UNLESS(opIt != Operators.end());
-    opIt->second->Abort(Owner, txc);
+    opIt->second->ExecuteOnAbort(Owner, txc);
+    opIt->second->CompleteOnAbort(Owner, NActors::TActivationContext::AsActorContext());
 
     if (it->second.MaxStep != Max<ui64>()) {
         DeadlineQueue.erase(TPlanQueueItem(it->second.MaxStep, txId));
@@ -149,7 +150,28 @@ bool TTxController::AbortTx(const ui64 txId, NTabletFlatExecutor::TTransactionCo
     return true;
 }
 
-bool TTxController::CancelTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
+bool TTxController::CompleteOnCancel(const ui64 txId, const TActorContext& ctx) {
+    auto it = BasicTxInfo.find(txId);
+    if (it == BasicTxInfo.end()) {
+        return true;
+    }
+    if (it->second.PlanStep != 0) {
+        return false;
+    }
+
+    auto opIt = Operators.find(txId);
+    Y_ABORT_UNLESS(opIt != Operators.end());
+    opIt->second->CompleteOnAbort(Owner, ctx);
+
+    if (it->second.MaxStep != Max<ui64>()) {
+        DeadlineQueue.erase(TPlanQueueItem(it->second.MaxStep, txId));
+    }
+    BasicTxInfo.erase(it);
+    Operators.erase(txId);
+    return true;
+}
+
+bool TTxController::ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     auto it = BasicTxInfo.find(txId);
     if (it == BasicTxInfo.end()) {
         return true;
@@ -161,13 +183,8 @@ bool TTxController::CancelTx(const ui64 txId, NTabletFlatExecutor::TTransactionC
 
     auto opIt = Operators.find(txId);
     Y_ABORT_UNLESS(opIt != Operators.end());
-    opIt->second->Abort(Owner, txc);
+    opIt->second->ExecuteOnAbort(Owner, txc);
 
-    if (it->second.MaxStep != Max<ui64>()) {
-        DeadlineQueue.erase(TPlanQueueItem(it->second.MaxStep, txId));
-    }
-    BasicTxInfo.erase(it);
-    Operators.erase(txId);
     NIceDb::TNiceDb db(txc.DB);
     Schema::EraseTxInfo(db, txId);
     return true;

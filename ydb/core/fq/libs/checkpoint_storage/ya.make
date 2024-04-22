@@ -32,7 +32,6 @@ END()
 
 RECURSE(
     events
-    proto
 )
 
 RECURSE_FOR_TESTS(

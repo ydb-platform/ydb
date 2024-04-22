@@ -11,7 +11,6 @@ RECURSE(
     http_gateway
     metrics
     mkql
-    proto
     proto/python
     provider
     pushdown

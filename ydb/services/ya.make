@@ -4,7 +4,6 @@ RECURSE(
     cms
     datastreams
     deprecated/persqueue_v0
-    deprecated/persqueue_v0/api
     discovery
     dynamic_config
     ext_index

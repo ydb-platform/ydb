@@ -147,6 +147,53 @@ Hibernate не предназначен для управления схемам
 
 {% endnote %}
 
+Диалект {{ ydb-short-name }} поддерживает `@OneToMany`, `@ManyToOne`, `@ManyToMany` связи.
+
+Например, сгенерированный SQL скрипт для `@OneToMany`:
+
+{% list tabs %}
+
+- `FetchType.LAZY`
+
+  ```sql
+  SELECT 
+      g1_0.GroupId,
+      g1_0.GroupName 
+  FROM 
+      Groups g1_0 
+  WHERE
+      g1_0.GroupName='M3439'
+  
+  SELECT 
+      s1_0.GroupId,
+      s1_0.StudentId,
+      s1_0.StudentName 
+  FROM 
+      Students s1_0 
+  WHERE 
+      s1_0.GroupId=?
+  ```
+
+- `FetchType.EAGER`
+
+  ```sql
+  SELECT
+      g1_0.GroupId,
+      g1_0.GroupName,
+      s1_0.GroupId,
+      s1_0.StudentId,
+      s1_0.StudentName 
+  FROM
+      Groups g1_0 
+  JOIN
+      Students s1_0 
+          on g1_0.GroupId=s1_0.GroupId 
+  WHERE
+      g1_0.GroupName='M3439'
+  ```
+
+{% endlist %}
+
 ### Пример с Spring Data JPA {#integration-with-spring-data-jpa-example}
 
 Настройте Spring Data JPA для использования диалекта {{ ydb-short-name }}, обновив свой `application.properties`:

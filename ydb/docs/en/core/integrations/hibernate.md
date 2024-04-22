@@ -146,6 +146,53 @@ Hibernate is not designed to manage database schemas. You can manage your databa
 
 {% endnote %}
 
+{{ ydb-short-name }} dialect supports `@OneToMany`, `@ManyToOne` and `@ManyToMany` relationships.
+
+For example, for `@OneToMany` generates a SQL script:
+
+{% list tabs %}
+
+- `FetchType.LAZY`
+
+  ```sql
+  SELECT 
+      g1_0.GroupId,
+      g1_0.GroupName 
+  FROM 
+      Groups g1_0 
+  WHERE
+      g1_0.GroupName='M3439'
+  
+  SELECT 
+      s1_0.GroupId,
+      s1_0.StudentId,
+      s1_0.StudentName 
+  FROM 
+      Students s1_0 
+  WHERE 
+      s1_0.GroupId=?
+  ```
+
+- `FetchType.EAGER`
+
+  ```sql
+  SELECT
+      g1_0.GroupId,
+      g1_0.GroupName,
+      s1_0.GroupId,
+      s1_0.StudentId,
+      s1_0.StudentName 
+  FROM
+      Groups g1_0 
+  JOIN
+      Students s1_0 
+          on g1_0.GroupId=s1_0.GroupId 
+  WHERE
+      g1_0.GroupName='M3439'
+  ```
+
+{% endlist %}
+
 ### Example with Spring Data JPA
 
 Configure [Spring Data JPA](https://spring.io/projects/spring-data-jpa/) with Hibernate to use custom {{ ydb-short-name }} dialect by updating your `application.properties`:

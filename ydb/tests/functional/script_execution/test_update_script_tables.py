@@ -19,7 +19,7 @@ def list_operations(driver):
                   "ListOperations")
 
 
-columns = ["syntax", "ast_compressed", "stats"]
+columns = ["syntax", "ast", "stats"]
 
 
 class TestUpdateScriptTablesYdb(object):

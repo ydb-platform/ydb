@@ -2,33 +2,30 @@
 
 namespace NKikimr::NSchemeShard {
 
-bool TOlapStoreInfo::ILayoutPolicy::Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const {
-    if (!DoLayout(currentLayout, shardsCount, result, isNewGroup)) {
-        return false;
+TConclusion<TOlapStoreInfo::TLayoutInfo> TOlapStoreInfo::ILayoutPolicy::Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const {
+    auto result = DoLayout(currentLayout, shardsCount);
+    if (result.IsFail()) {
+        return result;
     }
-    Y_ABORT_UNLESS(result.size() == shardsCount);
-    return true;
+    AFL_VERIFY(result->GetTabletIds().size() == shardsCount);
+    return result;
 }
 
-bool TOlapStoreInfo::TIdentityGroupsLayout::DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const {
-    isNewGroup = false;
+TConclusion<TOlapStoreInfo::TLayoutInfo> TOlapStoreInfo::TIdentityGroupsLayout::DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const {
     for (auto&& i : currentLayout.GetGroups()) {
         if (i.GetTableIds().Size() == 0 && i.GetShardIds().Size() >= shardsCount) {
-            result = i.GetShardIds().GetIdsVector(shardsCount);
-            isNewGroup = true;
-            return true;
+            return TOlapStoreInfo::TLayoutInfo(i.GetShardIds().GetIdsVector(shardsCount), true);
         }
         if (i.GetShardIds().Size() != shardsCount) {
             continue;
         }
-        result = i.GetShardIds().GetIdsVector();
-        return true;
+        return TOlapStoreInfo::TLayoutInfo(i.GetShardIds().GetIdsVector(), false);
     }
-    return false;
+    return TConclusionStatus::Fail("cannot find appropriate group for " + ::ToString(shardsCount) + " shards");
 }
 
-bool TOlapStoreInfo::TMinimalTablesCountLayout::DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const {
-    isNewGroup = true;
+TConclusion<TOlapStoreInfo::TLayoutInfo> TOlapStoreInfo::TMinimalTablesCountLayout::DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const {
+    bool isNewGroup = true;
     std::vector<ui64> resultLocal;
     for (auto&& i : currentLayout.GetGroups()) {
         if (i.GetTableIds().Size() > 0) {
@@ -37,12 +34,11 @@ bool TOlapStoreInfo::TMinimalTablesCountLayout::DoLayout(const TColumnTablesLayo
         for (auto&& s : i.GetShardIds()) {
             resultLocal.emplace_back(s);
             if (resultLocal.size() == shardsCount) {
-                std::swap(result, resultLocal);
-                return true;
+                return TOlapStoreInfo::TLayoutInfo(std::move(resultLocal), isNewGroup);
             }
         }
     }
-    return false;
+    return TConclusionStatus::Fail("cannot find appropriate group for " + ::ToString(shardsCount) + " shards");
 }
 
 TOlapStoreInfo::TOlapStoreInfo(

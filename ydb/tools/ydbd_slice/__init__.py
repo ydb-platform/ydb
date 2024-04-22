@@ -700,9 +700,9 @@ def add_create_systemd_unit(modes, walle_provider):
         dispatch_run(handlers.Slice.slice_create_systemd_unit, args, walle_provider)
 
     mode = modes.add_parser(
-        "create-systemd-unit",
+        "create-systemd-units",
         parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
-        description="Creates systemd unit. WARNING: this mode is not production ready"
+        description="Creates systemd units. WARNING: this mode is not production ready"
 
     )
     mode.set_defaults(handler=_run)

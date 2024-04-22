@@ -368,7 +368,10 @@ def start_kikimr(request, kikimr_extensions):
         kikimr.stop_mvp_mock_server()
 
 
-yq_v1 = pytest.mark.yq_version('v1')
-yq_v2 = pytest.mark.yq_version('v2')
-yq_all = pytest.mark.yq_version('v1', 'v2')
-yq_stats_full = pytest.mark.stats_mode('STATS_MODE_FULL')
+YQV1_VERSION_NAME = 'v1'
+YQV2_VERSION_NAME = 'v2'
+YQ_STATS_FULL = 'STATS_MODE_FULL'
+
+yq_v1 = pytest.mark.yq_version(YQV1_VERSION_NAME)
+yq_v2 = pytest.mark.yq_version(YQV2_VERSION_NAME)
+yq_all = pytest.mark.yq_version(YQV1_VERSION_NAME, YQV2_VERSION_NAME)

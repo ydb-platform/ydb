@@ -70,7 +70,7 @@ namespace NFwd {
 
     public:
         void Add(TPageId pageId, TGroupId groupId, ui32 level) {
-            Y_ABORT_UNLESS(Map.emplace(pageId, TIndexPageLocation(groupId, level)).second, "All index pages should be unique");
+            Y_ABORT_UNLESS(Map.emplace(pageId, TIndexPageLocation{groupId, level}).second, "All index pages should be unique");
         }
 
         ui32 GetLevel(TPageId pageId) const {

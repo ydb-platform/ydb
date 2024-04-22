@@ -244,6 +244,7 @@ public:
                             .WithTableStats(table.GetNeedsStats())
                             .WithPrivateTables(IsInternalCall)
                             .WithExternalDatasources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
+                            .WithAuthInfo(table.GetNeedAuthInfo())
             );
 
             futures.push_back(future.Apply([result, queryType]

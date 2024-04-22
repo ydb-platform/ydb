@@ -437,7 +437,7 @@ namespace NFwd {
                             continue;
                         }
                         Y_ABORT_UNLESS(!Levels[levelId + 1].Queue || Levels[levelId + 1].Queue.back().PageId < child.PageId);
-                        Levels[levelId + 1].Queue.emplace_back(child.PageId, child.DataSize);
+                        Levels[levelId + 1].Queue.push_back({child.PageId, child.DataSize});
                         if (child.RowCount >= EndRowId) {
                             break;
                         }

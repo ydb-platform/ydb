@@ -6268,11 +6268,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 } else {
                     result = ctx.Expr.Builder(input->Pos())
                         .Apply(reduceFunc)
-                            .With(0, result)
-                            .With(1).Callable("Member")
+                            .With(0).Callable("Member")
                                 .Add(0, collection)
                                 .Atom(1, member->GetName())
                             .Seal().Done()
+                            .With(1, result)
                         .Seal()
                     .Build();
                 }                        
@@ -6291,11 +6291,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 } else {
                     result = ctx.Expr.Builder(input->Pos())
                         .Apply(reduceFunc)
-                            .With(0, result)
-                            .With(1).Callable("Nth")
+                            .With(0).Callable("Nth")
                                 .Add(0, collection)
                                 .Atom(1, ToString(idx))
                             .Seal().Done()
+                            .With(1, result)
                         .Seal()
                     .Build();
                 }

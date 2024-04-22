@@ -5,7 +5,7 @@ $st_single = <|a: "zero"|>;
 $st_empty = <||>;
 $tup = AsTuple("first", "second");
 
-$concat = ($left, $right) -> { return $left || $right; };
+$concat = ($item, $state) -> { return $state || $item; };
 $start = ($value) -> { return "(" || $value || ")"; };
 
 SELECT

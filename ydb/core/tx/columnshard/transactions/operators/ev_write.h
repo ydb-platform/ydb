@@ -20,16 +20,20 @@ namespace NKikimr::NColumnShard {
             return !!LockId;
         }
 
-        TProposeResult Propose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, bool /*proposed*/) const override {
+        TProposeResult ExecuteOnPropose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const override {
             owner.OperationsManager->LinkTransaction(LockId, GetTxId(), txc);
             return TProposeResult();
         }
 
-        virtual bool Progress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
+        bool CompleteOnPropose(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) const override {
+            return true;
+        }
+
+        virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
             return owner.OperationsManager->CommitTransaction(owner, GetTxId(), txc, version);
         }
 
-        virtual bool Complete(TColumnShard& owner, const TActorContext& ctx) override {
+        virtual bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) override {
             auto result = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(owner.TabletID(), GetTxId());
             ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
             return true;

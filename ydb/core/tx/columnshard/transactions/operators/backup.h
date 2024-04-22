@@ -17,11 +17,14 @@ namespace NKikimr::NColumnShard {
 
         virtual bool Parse(const TString& data) override;
 
-        virtual TProposeResult Propose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, bool /*proposed*/) const override;
+        virtual TProposeResult ExecuteOnPropose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const override;
+        virtual bool CompleteOnPropose(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) const override {
+            return true;
+        }
 
-        virtual bool Progress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override;
+        virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override;
 
-        virtual bool Complete(TColumnShard& owner, const TActorContext& ctx) override;
+        virtual bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) override;
 
         virtual bool Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
     };

@@ -13,6 +13,7 @@ public:
 
 protected:
     void ProposeTransaction(const TTxController::TBasicTxInfo& txInfo, const TString& txBody, const TActorId source, const ui64 cookie, TTransactionContext& txc);
+    void CompleteTransaction(const TTxController::TBasicTxInfo& txInfo, const TActorContext& ctx);
 
     virtual void OnProposeResult(TTxController::TProposeResult& proposeResult, const TTxController::TTxInfo& txInfo) = 0;
     virtual void OnProposeError(TTxController::TProposeResult& proposeResult, const TTxController::TBasicTxInfo& txInfo) = 0;

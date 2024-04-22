@@ -132,8 +132,13 @@ void TTxProposeTransaction::OnProposeResult(TTxController::TProposeResult& propo
 }
 
 void TTxProposeTransaction::Complete(const TActorContext& ctx) {
+    auto& record = Proto(Ev->Get());
+    const auto txKind = record.GetTxKind();
+    const ui64 txId = record.GetTxId();
+
     Y_ABORT_UNLESS(Ev);
     Y_ABORT_UNLESS(Result);
+    CompleteTransaction(TTxController::TBasicTxInfo(txKind, txId), ctx);
     ctx.Send(Ev->Get()->GetSource(), Result.release());
     Self->TryRegisterMediatorTimeCast();
 }

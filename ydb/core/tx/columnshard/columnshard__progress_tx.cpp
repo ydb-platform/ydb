@@ -41,7 +41,7 @@ public:
             }
 
             TxOperator = Self->ProgressTxController->GetVerifiedTxOperator(txId);
-            AFL_VERIFY(TxOperator->Progress(*Self, NOlap::TSnapshot(step, txId), txc));
+            AFL_VERIFY(TxOperator->ExecuteOnProgress(*Self, NOlap::TSnapshot(step, txId), txc));
             Self->ProgressTxController->FinishPlannedTx(txId, txc);
             Self->RescheduleWaitingReads();
         }
@@ -56,7 +56,7 @@ public:
     void Complete(const TActorContext& ctx) override {
         NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "complete");
         if (TxOperator) {
-            TxOperator->Complete(*Self, ctx);
+            TxOperator->CompleteOnProgress(*Self, ctx);
         }
         if (PlannedQueueItem) {
             Self->GetProgressTxController().CompleteRunningTx(*PlannedQueueItem);

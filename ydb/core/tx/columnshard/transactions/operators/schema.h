@@ -22,7 +22,7 @@ namespace NKikimr::NColumnShard {
             return false;
         }
 
-        TProposeResult Propose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, bool /*proposed*/) const override {
+        TProposeResult ExecuteOnPropose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const override {
             switch (SchemaTxBody.TxBody_case()) {
                 case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
                     {
@@ -66,13 +66,17 @@ namespace NKikimr::NColumnShard {
             return TProposeResult();
         }
 
-        virtual bool Progress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
+        virtual bool CompleteOnPropose(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) const override {
+            return true;
+        }
+
+        virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
             owner.RunSchemaTx(SchemaTxBody, version, txc);
             owner.ProtectSchemaSeqNo(SchemaTxBody.GetSeqNo(), txc);
             return true;
         }
 
-        virtual bool Complete(TColumnShard& owner, const TActorContext& ctx) override {
+        virtual bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) override {
             for (TActorId subscriber : NotifySubscribers) {
                 auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
                 ctx.Send(subscriber, event.Release(), 0, 0);

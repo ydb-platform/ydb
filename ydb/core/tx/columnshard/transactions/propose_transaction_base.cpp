@@ -23,7 +23,7 @@ namespace NKikimr::NColumnShard {
             TTxController::TProposeResult proposeResult;
             OnProposeResult(proposeResult, *txInfoPtr);
         } else {
-            auto proposeResult = txOperator->Propose(*Self, txc, false);
+            auto proposeResult = txOperator->ExecuteOnPropose(*Self, txc);
             if (!!proposeResult) {
                 const auto fullTxInfo = txOperator->TxWithDeadline() ? Self->GetProgressTxController().RegisterTxWithDeadline(txInfo.TxId, txInfo.TxKind, txBody, source, cookie, txc)
                                                                 : Self->GetProgressTxController().RegisterTx(txInfo.TxId, txInfo.TxKind, txBody, source, cookie, txc);
@@ -34,4 +34,12 @@ namespace NKikimr::NColumnShard {
             }
         }
     }
+
+    void TProposeTransactionBase::CompleteTransaction(const TTxController::TBasicTxInfo& txInfo, const TActorContext& ctx) {
+        auto txOperator = Self->GetProgressTxController().GetTxOperator(txInfo.TxId);
+        AFL_VERIFY(!!txOperator)("error", "cannot found txOperator in propose transaction base")("tx_id", txInfo.TxId);
+
+        txOperator->CompleteOnPropose(*Self, ctx);
+    }
+
 }

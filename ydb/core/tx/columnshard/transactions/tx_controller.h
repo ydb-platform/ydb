@@ -93,11 +93,12 @@ public:
         }
 
         virtual bool Parse(const TString& data) = 0;
-        virtual TProposeResult Propose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, bool proposed) const = 0;
+        virtual TProposeResult ExecuteOnPropose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const = 0;
+        virtual bool CompleteOnPropose(TColumnShard& owner, const TActorContext& ctx) const = 0;
 
-        virtual bool Progress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+        virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) = 0;
         virtual bool Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;
-        virtual bool Complete(TColumnShard& owner, const TActorContext& ctx) = 0;
+        virtual bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) = 0;
         virtual void RegisterSubscriber(const TActorId&) {
             AFL_VERIFY(false)("message", "Not implemented");
         };

@@ -32,7 +32,7 @@ bool TBackupTransactionOperator::Parse(const TString& data) {
     return true;
 }
 
-TBackupTransactionOperator::TProposeResult TBackupTransactionOperator::Propose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& /*txc*/, bool /*proposed*/) const {
+TBackupTransactionOperator::TProposeResult TBackupTransactionOperator::ExecuteOnPropose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& /*txc*/) const {
     auto proposition = owner.GetExportsManager()->ProposeTask(ExportTask);
     if (!proposition) {
         return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
@@ -41,14 +41,14 @@ TBackupTransactionOperator::TProposeResult TBackupTransactionOperator::Propose(T
     return TProposeResult();
 }
 
-bool TBackupTransactionOperator::Progress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) {
+bool TBackupTransactionOperator::ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) {
     Y_UNUSED(version);
     AFL_VERIFY(ExportTask);
     owner.GetExportsManager()->ConfirmSessionOnExecute(ExportTask->GetIdentifier(), txc);
     return true;
 }
 
-bool TBackupTransactionOperator::Complete(TColumnShard& owner, const TActorContext& ctx) {
+bool TBackupTransactionOperator::CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) {
     AFL_VERIFY(ExportTask);
     owner.GetExportsManager()->ConfirmSessionOnComplete(ExportTask->GetIdentifier());
     auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(

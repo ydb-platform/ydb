@@ -97,6 +97,25 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleCreateReplication(TKiCreateReplication node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
+    TStatus HandleAlterReplication(TKiAlterReplication node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
+    TStatus HandleDropReplication(TKiDropReplication node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
+
     TStatus HandleModifyPermissions(TKiModifyPermissions node, TExprContext& ctx) override {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
             << "ModifyPermissions is not yet implemented for intent determination transformer"));
@@ -302,6 +321,8 @@ private:
                 return TStatus::Ok;
             case TKikimrKey::Type::PGObject:
                 return TStatus::Ok;
+            case TKikimrKey::Type::Replication:
+                return TStatus::Ok;
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid table key type."));
@@ -467,9 +488,17 @@ public:
             || node.IsCallable(TKiAlterTable::CallableName())) {
             return true;
         }
+
         if (node.IsCallable(TKiCreateTopic::CallableName())
             || node.IsCallable(TKiAlterTopic::CallableName())
             || node.IsCallable(TKiDropTopic::CallableName())
+        ) {
+            return true;
+        }
+
+        if (node.IsCallable(TKiCreateReplication::CallableName())
+            || node.IsCallable(TKiAlterReplication::CallableName())
+            || node.IsCallable(TKiDropReplication::CallableName())
         ) {
             return true;
         }
@@ -1170,6 +1199,48 @@ public:
                 } else {
                     YQL_ENSURE(false, "unknown PGObject mode \"" << TString(mode) << "\"");
                 }
+                break;
+            }
+
+            case TKikimrKey::Type::Replication: {
+                auto settings = NCommon::ParseWriteReplicationSettings(TExprList(node->Child(4)), ctx);
+                YQL_ENSURE(settings.Mode);
+                auto mode = settings.Mode.Cast();
+
+                if (mode == "create") {
+                    return Build<TKiCreateReplication>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Replication().Build(key.GetReplicationPath())
+                        .Targets(settings.Targets.Cast())
+                        .ReplicationSettings(settings.ReplicationSettings.Cast())
+                        .Settings(settings.Other)
+                        .Done()
+                        .Ptr();
+                } else if (mode == "alter") {
+                    return Build<TKiAlterReplication>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Replication().Build(key.GetReplicationPath())
+                        .ReplicationSettings(settings.ReplicationSettings.Cast())
+                        .Settings(settings.Other)
+                        .Done()
+                        .Ptr();
+                } else if (mode == "drop" || mode == "dropCascade") {
+                    return Build<TKiDropReplication>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Replication().Build(key.GetReplicationPath())
+                        .Cascade<TCoAtom>()
+                            .Value(mode == "dropCascade")
+                            .Build()
+                        .Done()
+                        .Ptr();
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Unknown operation type for replication"));
+                    return nullptr;
+                }
+                break;
             }
         }
 
@@ -1261,6 +1332,18 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
         return HandleDropTopic(node.Cast(), ctx);
     }
 
+    if (auto node = TMaybeNode<TKiCreateReplication>(input)) {
+        return HandleCreateReplication(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiAlterReplication>(input)) {
+        return HandleAlterReplication(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiDropReplication>(input)) {
+        return HandleDropReplication(node.Cast(), ctx);
+    }
+
     if (auto node = TMaybeNode<TKiUpsertObject>(input)) {
         return HandleUpsertObject(node.Cast(), ctx);
     }
@@ -1309,7 +1392,7 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
         return HandleDropGroup(node.Cast(), ctx);
     }
 
-    if(auto node = TMaybeNode<TPgDropObject>(input)) {
+    if (auto node = TMaybeNode<TPgDropObject>(input)) {
         return HandlePgDropObject(node.Cast(), ctx);
     }
 

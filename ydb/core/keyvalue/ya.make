@@ -56,10 +56,6 @@ PEERDIR(
 
 END()
 
-RECURSE(
-    protos
-)
-
 RECURSE_FOR_TESTS(
     ut
     ut_trace

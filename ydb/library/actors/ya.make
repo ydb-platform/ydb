@@ -8,7 +8,6 @@ RECURSE(
     memory_log
     helpers
     prof
-    protos
     util
     wilson
     testlib

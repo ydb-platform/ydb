@@ -45,20 +45,22 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
         }
     }
 
-    return SplitImpl(batch, sharding);
-}
-
-NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplitter::SplitImpl(const std::shared_ptr<arrow::RecordBatch>& batch, const NKikimrSchemeOp::TColumnTableSharding& descSharding) {
-    Y_ABORT_UNLESS(batch);
-
-    const std::vector<ui64> tabletIds(descSharding.GetColumnShards().begin(), descSharding.GetColumnShards().end());
-    auto shardingConclusion = NSharding::TShardingBase::BuildShardingOperator(descSharding);
+    NSchemeShard::TOlapSchema olapSchema;
+    olapSchema.ParseFromLocalDB(scheme);
+    auto shardingConclusion = NSharding::TShardingBase::BuildFromProto(olapSchema, sharding);
     if (shardingConclusion.IsFail()) {
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, shardingConclusion.GetErrorMessage());
     }
     AFL_VERIFY(!!shardingConclusion.GetResult());
-    auto sharding = shardingConclusion.DetachResult();
-    auto split = sharding->SplitByShards(batch, tabletIds, NColumnShard::TLimits::GetMaxBlobSize() * 0.875);
+    return SplitImpl(batch, shardingConclusion.DetachResult());
+}
+
+NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplitter::SplitImpl(const std::shared_ptr<arrow::RecordBatch>& batch,
+    const std::shared_ptr<NSharding::TShardingBase>& sharding)
+{
+    Y_ABORT_UNLESS(batch);
+
+    auto split = sharding->SplitByShards(batch, NColumnShard::TLimits::GetMaxBlobSize() * 0.875);
     if (split.IsFail()) {
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, split.GetErrorMessage());
     }

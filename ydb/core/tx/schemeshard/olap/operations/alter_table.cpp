@@ -538,8 +538,8 @@ public:
         }
 
         TOlapStoreInfo::TPtr storeInfo;
-        if (tableInfo->OlapStorePathId) {
-            auto& storePathId = *tableInfo->OlapStorePathId;
+        if (!tableInfo->IsStandalone()) {
+            const auto storePathId = tableInfo->GetOlapStorePathIdVerified();
             TPath storePath = TPath::Init(storePathId, context.SS);
             {
                 TPath::TChecker checks = storePath.Check();
@@ -593,7 +593,7 @@ public:
         context.SS->PersistLastTxId(db, path.Base());
 
         if (storeInfo) {
-            auto& storePathId = *tableInfo->OlapStorePathId;
+            const auto storePathId = tableInfo->GetOlapStorePathIdVerified();
             TPath storePath = TPath::Init(storePathId, context.SS);
 
             Y_ABORT_UNLESS(storeInfo->ColumnTables.contains(path->PathId));

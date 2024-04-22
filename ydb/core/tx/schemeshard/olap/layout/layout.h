@@ -119,7 +119,7 @@ public:
     class TTablesGroup {
     private:
         const TTableIdsGroup* TableIds = nullptr;
-        YDB_READONLY_DEF(TShardIdsGroup, ShardIds);
+        YDB_READONLY_DEF(std::set<ui64>, ShardIds);
     public:
         TTablesGroup() = default;
         TTablesGroup(const TTableIdsGroup* tableIds, TShardIdsGroup&& shardIds);

@@ -31,7 +31,7 @@ TColumnTablesLayout::TColumnTablesLayout(std::vector<TTablesGroup>&& groups)
 bool TColumnTablesLayout::TTablesGroup::TryMerge(const TTablesGroup& item) {
     if (GetTableIds() == item.GetTableIds()) {
         for (auto&& i : item.ShardIds) {
-            AFL_VERIFY(ShardIds.AddId(i));
+            AFL_VERIFY(ShardIds.emplace(i));
         }
         return true;
     } else {
@@ -44,7 +44,7 @@ const TColumnTablesLayout::TTableIdsGroup& TColumnTablesLayout::TTablesGroup::Ge
     return *TableIds;
 }
 
-TColumnTablesLayout::TTablesGroup::TTablesGroup(const TTableIdsGroup* tableIds, TShardIdsGroup&& shardIds)
+TColumnTablesLayout::TTablesGroup::TTablesGroup(const TTableIdsGroup* tableIds, std::set<ui64>&& shardIds)
     : TableIds(tableIds)
     , ShardIds(std::move(shardIds))
 {

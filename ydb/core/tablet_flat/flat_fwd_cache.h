@@ -360,7 +360,12 @@ namespace NFwd {
             auto levelId = GetLevel(page.PageId, type);
             auto& level = Levels[levelId];
 
-            auto it = std::lower_bound(level.Pages.begin(), level.Pages.end(), page.PageId);
+            auto it = level.Pages.begin() + level.PagesPendingOffset;
+            Y_ABORT_UNLESS(it != level.Pages.end(), "No pending pages");
+            Y_ABORT_UNLESS(it->PageId <= page.PageId, "Got page that hasn't been requested for load");
+            if (it->PageId < page.PageId) {
+                it = std::lower_bound(it, level.Pages.end(), page.PageId);
+            }
             Y_ABORT_UNLESS(it != level.Pages.end() && it->PageId == page.PageId, "Got page that hasn't been requested for load");
 
             if (levelId + 2 < Levels.size()) { // next level is index
@@ -372,7 +377,7 @@ namespace NFwd {
             
             it->Settle(page); // settle of a dropped page releases its data
 
-            QueueChildren(levelId);
+            AdvancePending(levelId);
             ShrinkPages(level);
         }
 
@@ -412,12 +417,8 @@ namespace NFwd {
             }
         }
 
-        void QueueChildren(ui32 levelId) noexcept
+        void AdvancePending(ui32 levelId) noexcept
         {
-            if (levelId + 1 == Levels.size()) {
-                return;
-            }
-
             auto& level = Levels[levelId];
 
             while (level.PagesPendingOffset < level.Pages.size()) {
@@ -428,7 +429,7 @@ namespace NFwd {
                     break;
                 }
 
-                if (page) {
+                if (levelId + 1 < Levels.size() && page) {
                     NPage::TBtreeIndexNode node(page.Data);
                     for (auto pos : xrange(node.GetChildrenCount())) {
                         auto& child = node.GetShortChild(pos);

@@ -18,16 +18,16 @@ service BackupService {
   rpc List (ListBackupsRequest) returns (ListBackupsResponse);
 
   // Restarts the specified backup.
-  rpc Restart (RestartBackupRequest) returns (operation.Operation);
+  rpc Restart (RestartBackupRequest) returns (ydb.yc.priv.operation.Operation);
 
   // Deletes the specified backup.
-  rpc Delete (DeleteBackupRequest) returns (operation.Operation);
+  rpc Delete (DeleteBackupRequest) returns (ydb.yc.priv.operation.Operation);
 
   rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse);
 
-  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (operation.Operation);
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (ydb.yc.priv.operation.Operation);
 
-  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (operation.Operation);
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (ydb.yc.priv.operation.Operation);
 
   rpc ListByStatus (ListBackupsByStatusRequest) returns (ListBackupsByStatusResponse);
 

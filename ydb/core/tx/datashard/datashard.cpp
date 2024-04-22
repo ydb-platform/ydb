@@ -966,6 +966,13 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
         }
     }
 
+    if (auto rIt = ChangeQueueReservations.find(record.ReservationCookie); rIt != ChangeQueueReservations.end()) {
+        --ChangeQueueReservedCapacity;
+        if (!--rIt->second) {
+            ChangeQueueReservations.erase(rIt);
+        }
+    }
+
     UpdateChangeExchangeLag(AppData()->TimeProvider->Now());
     ChangesQueue.erase(it);
 
@@ -975,7 +982,7 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
     CheckChangesQueueNoOverflow();
 }
 
-void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records) {
+void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie) {
     if (!records) {
         return;
     }
@@ -1000,7 +1007,7 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
         auto res = ChangesQueue.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(record.Order),
-            std::forward_as_tuple(record, now)
+            std::forward_as_tuple(record, now, cookie)
         );
         if (res.second) {
             ChangesList.PushBack(&res.first->second);
@@ -1021,6 +1028,38 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
 
     Y_ABORT_UNLESS(OutChangeSender);
     Send(OutChangeSender, new NChangeExchange::TEvChangeExchange::TEvEnqueueRecords(std::move(forward)));
+}
+
+ui32 TDataShard::GetFreeChangeQueueCapacity(ui64 cookie) {
+    const auto sizeLimit = AppData()->DataShardConfig.GetChangesQueueItemsLimit();
+    if (sizeLimit < ChangesQueue.size()) {
+        return 0;
+    }
+
+    const auto free = Min(sizeLimit - ChangesQueue.size(), Max(sizeLimit / 2, 1ul));
+
+    ui32 reserved = ChangeQueueReservedCapacity;
+    if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
+        reserved -= it->second;
+    }
+
+    if (free < reserved) {
+        return 0;
+    }
+
+    return free - reserved;
+}
+
+ui64 TDataShard::ReserveChangeQueueCapacity(ui32 capacity) {
+    const auto sizeLimit = AppData()->DataShardConfig.GetChangesQueueItemsLimit();
+    if (Max(sizeLimit / 2, 1ul) < ChangeQueueReservedCapacity) {
+        return 0;
+    }
+
+    const auto cookie = NextChangeQueueReservationCookie++;
+    ChangeQueueReservations.emplace(cookie, capacity);
+    ChangeQueueReservedCapacity += capacity;
+    return cookie;
 }
 
 void TDataShard::UpdateChangeExchangeLag(TInstant now) {
@@ -2672,10 +2711,7 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
         }
     }
 
-    size_t totalInFly =
-        ReadIteratorsInFly() + TxInFly() + ImmediateInFly() + MediatorStateWaitingMsgs.size()
-            + ProposeQueue.Size() + TxWaiting();
-    if (totalInFly > GetMaxTxInFly()) {
+    if (!Pipeline.CheckInflightLimit()) {
         reject = true;
         rejectReasons |= ERejectReasons::OverloadByTxInFly;
         rejectDescriptions.push_back("MaxTxInFly was exceeded");
@@ -2831,6 +2867,8 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
         if (Pipeline.AddWaitingTxOp(ev, ctx)) {
             UpdateProposeQueueSize();
             return;
+        } else {
+            Y_ABORT("Unexpected failure to add a waiting unrejected tx");
         }
     }
 
@@ -3451,6 +3489,20 @@ bool TDataShard::CheckTxNeedWait() const {
     return false;
 }
 
+bool TDataShard::CheckTxNeedWait(const TRowVersion& mvccSnapshot) const {
+    TRowVersion unreadableEdge = Pipeline.GetUnreadableEdge();
+    if (mvccSnapshot >= unreadableEdge) {
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+            "New transaction uses snapshot "
+            << mvccSnapshot
+            << " which is not before unreadable edge "
+            << unreadableEdge);
+        return true;
+    }
+
+    return false;
+}
+
 bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const {
     if (CheckTxNeedWait()) {
         return true;
@@ -3459,11 +3511,9 @@ bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr
     auto* msg = ev->Get();
     auto& rec = msg->Record;
     if (rec.HasMvccSnapshot()) {
-        TRowVersion rowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId());
-        TRowVersion unreadableEdge = Pipeline.GetUnreadableEdge();
-        if (rowVersion >= unreadableEdge) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "New transaction reads from " << rowVersion << " which is not before unreadable edge " << unreadableEdge);
-            LWTRACK(ProposeTransactionWaitSnapshot, msg->Orbit, rowVersion.Step, rowVersion.TxId);
+        TRowVersion mvccSnapshot(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId());
+        if (CheckTxNeedWait(mvccSnapshot)) {
+            LWTRACK(ProposeTransactionWaitSnapshot, msg->Orbit, mvccSnapshot.Step, mvccSnapshot.TxId);
             return true;
         }
     }
@@ -3471,19 +3521,49 @@ bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr
     return false;
 }
 
-bool TDataShard::CheckChangesQueueOverflow() const {
+bool TDataShard::CheckTxNeedWait(const NEvents::TDataEvents::TEvWrite::TPtr& ev) const {
+    if (CheckTxNeedWait()) {
+        return true;
+    }
+
+    auto* msg = ev->Get();
+    auto& rec = msg->Record;
+    if (rec.HasMvccSnapshot()) {
+        TRowVersion mvccSnapshot(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId());
+        if (CheckTxNeedWait(mvccSnapshot)) {
+            LWTRACK(ProposeTransactionWaitSnapshot, msg->GetOrbit(), mvccSnapshot.Step, mvccSnapshot.TxId);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool TDataShard::CheckChangesQueueOverflow(ui64 cookie) const {
     const auto* appData = AppData();
     const auto sizeLimit = appData->DataShardConfig.GetChangesQueueItemsLimit();
     const auto bytesLimit = appData->DataShardConfig.GetChangesQueueBytesLimit();
-    return ChangesQueue.size() >= sizeLimit || ChangesQueueBytes >= bytesLimit;
+
+    ui32 reserved = ChangeQueueReservedCapacity;
+    if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
+        reserved -= it->second;
+    }
+
+    return (ChangesQueue.size() + reserved) >= sizeLimit || ChangesQueueBytes >= bytesLimit;
 }
 
-void TDataShard::CheckChangesQueueNoOverflow() {
+void TDataShard::CheckChangesQueueNoOverflow(ui64 cookie) {
     if (OverloadSubscribersByReason[RejectReasonIndex(ERejectReason::ChangesQueueOverflow)]) {
         const auto* appData = AppData();
         const auto sizeLimit = appData->DataShardConfig.GetChangesQueueItemsLimit();
         const auto bytesLimit = appData->DataShardConfig.GetChangesQueueBytesLimit();
-        if (ChangesQueue.size() < sizeLimit && ChangesQueueBytes < bytesLimit) {
+
+        ui32 reserved = ChangeQueueReservedCapacity;
+        if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
+            reserved -= it->second;
+        }
+
+        if ((ChangesQueue.size() + reserved) < sizeLimit && ChangesQueueBytes < bytesLimit) {
             NotifyOverloadSubscribers(ERejectReason::ChangesQueueOverflow);
         }
     }

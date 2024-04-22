@@ -6,6 +6,13 @@ using namespace NYql;
 
 namespace {
 
+THashMap<TString,EJoinAlgoType> JoinAlgoMap = {
+    {"Undefined",EJoinAlgoType::Undefined},
+    {"LookupJoin",EJoinAlgoType::LookupJoin},
+    {"MapJoin",EJoinAlgoType::MapJoin},
+    {"GraceJoin",EJoinAlgoType::GraceJoin},
+    {"StreamLookupJoin",EJoinAlgoType::StreamLookupJoin}};
+
 bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TString>& joinKeys) {
     if (stats.KeyColumns.size()==0) {
         return false;
@@ -28,6 +35,15 @@ bool NDq::operator < (const NDq::TJoinColumn& c1, const NDq::TJoinColumn& c2) {
         return c1.AttributeName < c2.AttributeName;
     }
     return false;
+}
+
+TString NYql::ConvertToJoinAlgoString(EJoinAlgoType joinAlgo) {
+    for (const auto& [k,v] : JoinAlgoMap) {
+        if (v == joinAlgo) {
+            return k;
+        }
+    }
+    Y_ENSURE(false, "Unknown join algo");
 }
 
 /**

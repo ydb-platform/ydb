@@ -344,6 +344,7 @@ struct TYtPathInfo: public TThrRefBase {
     TYtColumnsInfo::TPtr Columns;
     TYtRangesInfo::TPtr Ranges;
     TYtTableStatInfo::TPtr Stat;
+    TMaybe<TString> AdditionalAttributes;
 private:
     const NCommon::TStructMemberMapper& GetColumnMapper();
 

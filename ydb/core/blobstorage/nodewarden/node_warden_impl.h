@@ -106,6 +106,9 @@ namespace NKikimr::NStorage {
         std::optional<TString> InstanceId; // instance ID of BS_CONTROLLER running this node
         TActorId PipeClientId;
 
+        ui64 NextConfigCookie = 1;
+        std::unordered_map<ui64, std::function<void(TEvBlobStorage::TEvControllerConfigResponse*)>> ConfigInFlight;
+
         TVector<NPDisk::TDriveData> WorkingLocalDrives;
 
         NPDisk::TOwnerRound LocalPDiskInitOwnerRound = 1;
@@ -467,10 +470,10 @@ namespace NKikimr::NStorage {
         void Handle(TEvRegisterPDiskLoadActor::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr ev);
 
-        void SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId);
+        void SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId, TDuration backoff = {});
 
         void SendVDiskReport(TVSlotId vslotId, const TVDiskID& vdiskId,
-            NKikimrBlobStorage::TEvControllerNodeReport::EVDiskPhase phase);
+            NKikimrBlobStorage::TEvControllerNodeReport::EVDiskPhase phase, TDuration backoff = {});
 
         void SendPDiskReport(ui32 pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::EPDiskPhase phase);
 
@@ -530,6 +533,15 @@ namespace NKikimr::NStorage {
         void ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConfig *proposed);
         void HandleGone(STATEFN_SIG);
         void ApplyStaticServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& ss);
+
+        void Handle(TEvNodeWardenQueryBaseConfig::TPtr ev);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        ui64 NextInvokeCookie = 1;
+        std::unordered_map<ui64, std::function<void(TEvNodeConfigInvokeOnRootResult&)>> InvokeCallbacks;
+
+        void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -613,6 +625,9 @@ namespace NKikimr::NStorage {
                 fFunc(TEvBlobStorage::EvNodeConfigScatter, ForwardToDistributedConfigKeeper);
                 fFunc(TEvBlobStorage::EvNodeConfigGather, ForwardToDistributedConfigKeeper);
                 fFunc(TEvBlobStorage::EvNodeConfigInvokeOnRoot, ForwardToDistributedConfigKeeper);
+
+                hFunc(TEvNodeWardenQueryBaseConfig, Handle);
+                hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
 
                 fFunc(TEvents::TSystem::Gone, HandleGone);
 

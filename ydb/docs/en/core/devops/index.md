@@ -4,4 +4,6 @@ This section of {{ ydb-short-name }} documentation covers everything you need to
 
 * **[Ansible](ansible/index.md)**: for deployments on bare metal and virtual machines.
 * **[Kubernetes](kubernetes/index.md)**: for containerized deployments.
-* **[Manual](../cluster/index.md)**: generic instructions.
+* **[Manual](manual/index.md)**: generic instructions.
+
+Regardless of the chosen infrastructure management method, it is recommended to familiarize yourself with [{{ ydb-short-name }} system requirements](system-requirements.md) first.

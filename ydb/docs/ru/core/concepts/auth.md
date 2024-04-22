@@ -54,7 +54,7 @@
 
 Для включения аутентификации по логину и паролю укажите значение `true` для ключа `enforce_user_token_requirement` в [конфигурационном файле](../deploy/configuration/config.md#auth) кластера.
 
-Об управлении ролями и пользователями читайте в [{#T}](../cluster/access.md).
+Об управлении ролями и пользователями читайте в [{#T}](../security/access-management.md).
 
 <!-- ### API получения токенов IAM {#token-refresh-api}
 

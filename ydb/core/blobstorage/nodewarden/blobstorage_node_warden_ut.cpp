@@ -917,7 +917,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         auto res = responseEvent->Record.MutableResponse();
         res->SetSuccess(false);
         res->SetErrorDescription("Fake error");
-        runtime.Send(new IEventHandle(nodeWarden, fakeBSC, responseEvent, 0, cookie), nodeId);
+        runtime.Send(new IEventHandle(nodeWarden, fakeBSC, responseEvent, 0, 1), nodeId);
 
         auto evPtr = runtime.WaitForEdgeActorEvent<TEvBlobStorage::TEvAskWardenRestartPDiskResult>(pdiskActorId);
         auto restartPDiskEv = evPtr->Get();

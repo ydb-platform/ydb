@@ -36,7 +36,7 @@ public:
         auto *partStore = CheckedCast<const TPartStore*>(part);
         auto *info = partStore->PageCollections.at(groupId.Index).Get();
         auto type = EPage(info->PageCollection->Page(pageId).Type);
-        Y_ABORT_UNLESS(type == EPage::Index || type == EPage::BTreeIndex);
+        Y_ABORT_UNLESS(type == EPage::FlatIndex || type == EPage::BTreeIndex);
 
         if (auto *partPages = Parts.FindPtr(part)) {
             if (auto *page = partPages->Pages.FindPtr(pageId)) {

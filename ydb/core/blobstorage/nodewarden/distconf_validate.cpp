@@ -30,21 +30,43 @@ namespace NKikimr::NStorage {
             }
         }
 
+        THashMap<ui32, ui32> currentGroupGens;
+        for (const auto& group : current.GetGroups()) {
+            currentGroupGens.emplace(group.GetGroupID(), group.GetGroupGeneration());
+        }
+
         // make a list of slots in current config
         THashMap<TVDiskID, std::tuple<ui32, ui32, ui32, ui64>> vdisks;
         for (const auto& vslot : current.GetVDisks()) {
+            TVDiskID vdiskId = VDiskIDFromVDiskID(vslot.GetVDiskID());
+            const auto it = currentGroupGens.find(vdiskId.GroupID);
+            if (it == currentGroupGens.end() || it->second != vdiskId.GroupGeneration) {
+                continue;
+            }
+            vdiskId.GroupGeneration = 0;
             const auto& l = vslot.GetVDiskLocation();
-            if (const auto [_, inserted] = vdisks.try_emplace(VDiskIDFromVDiskID(vslot.GetVDiskID()), l.GetNodeID(),
+            if (const auto [_, inserted] = vdisks.try_emplace(vdiskId, l.GetNodeID(),
                     l.GetPDiskID(), l.GetVDiskSlotID(), l.GetPDiskGuid()); !inserted) {
                 return "duplicate VDiskID in current config";
             }
         }
 
+        THashMap<ui32, ui32> proposedGroupGens;
+        for (const auto& group : proposed.GetGroups()) {
+            proposedGroupGens.emplace(group.GetGroupID(), group.GetGroupGeneration());
+        }
+
         // scan vslots in new config and check if they match
         THashSet<ui32> changedGroups;
         for (const auto& vslot : proposed.GetVDisks()) {
+            TVDiskID vdiskId = VDiskIDFromVDiskID(vslot.GetVDiskID());
+            const auto groupIt = proposedGroupGens.find(vdiskId.GroupID);
+            if (groupIt == proposedGroupGens.end() || groupIt->second != vdiskId.GroupGeneration) {
+                continue;
+            }
+            vdiskId.GroupGeneration = 0;
+
             const auto& l = vslot.GetVDiskLocation();
-            const TVDiskID vdiskId = VDiskIDFromVDiskID(vslot.GetVDiskID());
             const auto it = vdisks.find(vdiskId);
             if (it == vdisks.end()) { // this is new vslot from a new group
                 continue;
@@ -109,7 +131,8 @@ namespace NKikimr::NStorage {
     std::optional<TString> ValidateConfigUpdate(const NKikimrBlobStorage::TStorageConfig& current,
             const NKikimrBlobStorage::TStorageConfig& proposed) {
         if (current.GetGeneration() + 1 != proposed.GetGeneration()) {
-            return "invalid proposed config generation";
+            return TStringBuilder() << "invalid proposed config generation current# " << current.GetGeneration()
+                << " proposed# " << proposed.GetGeneration();
         }
 
         if (auto error = ValidateConfig(proposed)) {
@@ -181,7 +204,7 @@ namespace NKikimr::NStorage {
 
         // scan vslots
         THashSet<std::tuple<ui32, ui32, ui32>> vslots; // nodeId:pdiskId:vslotId
-        THashMap<TVDiskID, std::tuple<ui32, ui32, ui32, ui64>> vdisks; // vdiskId -> nodeId:pdiskId:vslotId:guid
+        THashMap<TVDiskID, std::tuple<ui32, ui32, ui32, ui64, bool>> vdisks; // vdiskId -> nodeId:pdiskId:vslotId:guid:donor
         for (const auto& vslot : config.GetVDisks()) {
             if (!vslot.HasVDiskID()) {
                 return "VDiskID field missing";
@@ -211,8 +234,36 @@ namespace NKikimr::NStorage {
                 return "duplicate NodeID:PDiskID:VDiskSlotID for vdisk";
             }
 
-            if (const auto [_, inserted] = vdisks.try_emplace(vdiskId, nodeId, pdiskId, vslotId, pdiskGuid); !inserted) {
+            if (vslot.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
+                continue;
+            }
+
+            if (const auto [_, inserted] = vdisks.try_emplace(vdiskId, nodeId, pdiskId, vslotId, pdiskGuid, vslot.HasDonorMode()); !inserted) {
                 return "duplicate VDiskID";
+            }
+        }
+
+        // scan donors
+        for (const auto& vslot : config.GetVDisks()) {
+            for (const auto& donor : vslot.GetDonors()) {
+                if (!donor.HasVDiskId() || !donor.HasVDiskLocation()) {
+                    return "incorrect Donor record";
+                }
+                const TVDiskID vdiskId = VDiskIDFromVDiskID(donor.GetVDiskId());
+                const auto it = vdisks.find(vdiskId);
+                if (it == vdisks.end()) {
+                    return "incorrect Donor reference";
+                }
+                const auto& [nodeId, pdiskId, vslotId, pdiskGuid, isDonor] = it->second;
+                if (!isDonor) {
+                    return "incorrect Donor reference";
+                }
+                const auto& loc = donor.GetVDiskLocation();
+                if (nodeId != loc.GetNodeID() || pdiskId != loc.GetPDiskID() || vslotId != loc.GetVDiskSlotID() ||
+                        pdiskGuid != loc.GetPDiskGuid()) {
+                    return "incorrect Donor reference";
+                }
+                vdisks.erase(it);
             }
         }
 
@@ -270,8 +321,14 @@ namespace NKikimr::NStorage {
                         const TVDiskID vdiskId(groupId, groupGen, failRealmIdx, failDomainIdx, vdiskIdx);
 
                         if (const auto it = vdisks.find(vdiskId); it == vdisks.end()) {
-                            return "vslot with specific VDiskID is not found";
-                        } else if (it->second != std::make_tuple(nodeId, pdiskId, vslotId, pdiskGuid)) {
+                            return TStringBuilder() << "vslot with specific VDiskID is not found"
+                                << " GroupId# " << groupId
+                                << " VDiskId# " << vdiskId
+                                << " NodeId# " << nodeId
+                                << " PDiskId# " << pdiskId
+                                << " VSlotId# " << vslotId
+                                << " PDiskGuid# " << pdiskGuid;
+                        } else if (it->second != std::make_tuple(nodeId, pdiskId, vslotId, pdiskGuid, false)) {
                             return "VDiskLocation mismatch";
                         } else {
                             vdisks.erase(it);

@@ -538,8 +538,8 @@ public:
         }
 
         TOlapStoreInfo::TPtr storeInfo;
-        if (tableInfo->OlapStorePathId) {
-            auto& storePathId = *tableInfo->OlapStorePathId;
+        if (!tableInfo->IsStandalone()) {
+            const auto storePathId = tableInfo->GetOlapStorePathIdVerified();
             TPath storePath = TPath::Init(storePathId, context.SS);
             {
                 TPath::TChecker checks = storePath.Check();
@@ -577,7 +577,7 @@ public:
         txState.State = TTxState::ConfigureParts;
 
         // TODO: we need to know all shards where this table is currently active
-        for (ui64 columnShardId : tableInfo->ColumnShards) {
+        for (ui64 columnShardId : tableInfo->GetColumnShards()) {
             auto tabletId = TTabletId(columnShardId);
             auto shardIdx = context.SS->TabletIdToShardIdx.at(tabletId);
 
@@ -593,7 +593,7 @@ public:
         context.SS->PersistLastTxId(db, path.Base());
 
         if (storeInfo) {
-            auto& storePathId = *tableInfo->OlapStorePathId;
+            const auto storePathId = tableInfo->GetOlapStorePathIdVerified();
             TPath storePath = TPath::Init(storePathId, context.SS);
 
             Y_ABORT_UNLESS(storeInfo->ColumnTables.contains(path->PathId));

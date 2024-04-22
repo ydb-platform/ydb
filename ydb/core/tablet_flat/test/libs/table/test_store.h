@@ -232,7 +232,7 @@ namespace NTest {
 
             if (group == 0) {
                 switch (type) {
-                    case EPage::Index:
+                    case EPage::FlatIndex:
                         Indexes.push_back(id);
                         break;
                     case EPage::Frames:

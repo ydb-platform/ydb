@@ -1403,6 +1403,7 @@ private:
                             res.Data[idx].Columns.ConstructInPlace(normalizedPath.Columns_->Parts_);
                         }
                         res.Data[idx].Ranges = normalizedPath.GetRanges();
+                        res.Data[idx].AdditionalAttributes = SerializeRichYPathAttrs(normalizedPath);
                     }));
 
                 }
@@ -1985,7 +1986,7 @@ private:
             }
             for (auto& name: names) {
                 auto fullName = prefix + name;
-                rangeRes.Tables.push_back(TCanonizedPath{fullName, Nothing(), {}});
+                rangeRes.Tables.push_back(TCanonizedPath{fullName, Nothing(), {}, Nothing()});
                 cached.push_back(NYT::TRichYPath(fullName));
             }
         }

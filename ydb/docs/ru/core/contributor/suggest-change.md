@@ -14,7 +14,7 @@
 * Если у вас еще нет созданных ключей (или yubikey), то просто создайте новые ключи. Полные инструкции находятся на [этой странице GitHub](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#generating-a-new-ssh-key).
 * Если у вас есть yubikey, вы можете использовать legacy ключ из yubikey:
   * Предположим, что у вас уже есть настроенный yubikey (или вы настроили yubikey локально)
-  * На вашем ноутбуке: `skotty ssh-keys`
+  * На вашем ноутбуке: `skotty ssh keys`
   * Загрузите ssh-ключ `legacy@yubikey` на github (через пользовательский интерфейс: https://github.com/settings/keys)
   * Проверьте подключение на ноутбуке: `ssh -T git@github.com`
 

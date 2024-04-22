@@ -1577,19 +1577,21 @@ void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartition
     Aggregated.IndexSize += (newStats.IndexSize - oldStats.IndexSize);
     for (const auto& [poolKind, newStoragePoolStats] : newStats.StoragePoolsStats) {
         auto* aggregatedStoragePoolStats = Aggregated.StoragePoolsStats.FindPtr(poolKind);
+        const auto* oldStoragePoolStats = oldStats.StoragePoolsStats.FindPtr(poolKind);
         if (aggregatedStoragePoolStats) {
-            const auto* oldStoragePoolStats = oldStats.StoragePoolsStats.FindPtr(poolKind);
-
             // Missing old stats for a particular storage pool are interpreted as if this data
             // has just been written to the datashard and we need to increment the aggregate by the entire new stats' sizes.
             aggregatedStoragePoolStats->DataSize += newStoragePoolStats.DataSize - (oldStoragePoolStats ? oldStoragePoolStats->DataSize : 0u);
             aggregatedStoragePoolStats->IndexSize += newStoragePoolStats.IndexSize - (oldStoragePoolStats ? oldStoragePoolStats->IndexSize : 0u);
         } else {
+            Y_ABORT_UNLESS(!oldStoragePoolStats, "Old stats are present, but they haven't been aggregated.");
             Aggregated.StoragePoolsStats.emplace(poolKind, newStoragePoolStats);
         }
     }
     for (const auto& [poolKind, oldStoragePoolStats] : oldStats.StoragePoolsStats) {
-        if (const auto* newStoragePoolStats = newStats.StoragePoolsStats.FindPtr(poolKind); !newStoragePoolStats) {
+        if (const auto* newStoragePoolStats = newStats.StoragePoolsStats.FindPtr(poolKind);
+            !newStoragePoolStats
+        ) {
             auto* aggregatedStoragePoolStats = Aggregated.StoragePoolsStats.FindPtr(poolKind);
             Y_ABORT_UNLESS(aggregatedStoragePoolStats, "Old stats are present, but they haven't been aggregated.");
 

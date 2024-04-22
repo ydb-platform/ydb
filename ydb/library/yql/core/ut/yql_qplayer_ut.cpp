@@ -1,5 +1,3 @@
-#include "yql_execution.h"
-
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>

@@ -2547,6 +2547,19 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "ReturningStar"},
             "Children": []
+        },
+        {
+            "Name": "TCoReplicationTarget",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "RemotePath", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "LocalPath", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TCoReplicationTargetList",
+            "ListBase": "TCoReplicationTarget"
         }
     ]
 }

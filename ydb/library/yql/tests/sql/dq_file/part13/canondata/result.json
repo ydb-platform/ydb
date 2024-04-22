@@ -836,6 +836,28 @@
         }
     ],
     "test.test[expr-list_takeskipwhileinclusive-default.txt-Results]": [],
+    "test.test[expr-static_fold-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1937150/0c11aba9b59c65417a9b8c9c045b2b1abdb4612e/resource.tar.gz#test.test_expr-static_fold-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[expr-static_fold-default.txt-Debug]": [
+        {
+            "checksum": "28c4f93c5515ff62348881ba3fb0069e",
+            "size": 787,
+            "uri": "https://{canondata_backend}/1937150/0c11aba9b59c65417a9b8c9c045b2b1abdb4612e/resource.tar.gz#test.test_expr-static_fold-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[expr-static_fold-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1937150/0c11aba9b59c65417a9b8c9c045b2b1abdb4612e/resource.tar.gz#test.test_expr-static_fold-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[expr-static_fold-default.txt-Results]": [],
     "test.test[expr-to_dict_from_nothing-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",

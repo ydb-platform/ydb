@@ -94,7 +94,7 @@ public:
         }
 
         auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme->SetWorkingDir(CanonizePath(JoinPath({Database, ".tmp", "sessions"})));
+        modifyScheme->SetWorkingDir(GetSessionDirsBasePath(Database));
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
         auto* makeDir = modifyScheme->MutableMkDir();
         makeDir->SetName(SessionId);
@@ -145,7 +145,7 @@ public:
                         default:
                             YQL_ENSURE(false, "Unexpected operation type");
                     }
-                    tableDesc->SetName(CanonizePath(JoinPath({".tmp", "sessions", SessionId, Database, tableDesc->GetPath(), tableDesc->GetName()})));
+                    tableDesc->SetName(GetCreateTempTablePath(Database, SessionId, JoinPath({tableDesc->GetPath(), tableDesc->GetName()})));
                     tableDesc->SetPath(Database);
                 }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);

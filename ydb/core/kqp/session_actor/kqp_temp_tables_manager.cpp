@@ -63,7 +63,8 @@ public:
             return;
         }
 
-        PathsToTraverse.push_back(NKikimr::SplitPath(NKikimr::JoinPath({Database, ".tmp", "sessions", TempTablesState.SessionId})));
+        PathsToTraverse.push_back(
+            NKikimr::SplitPath(GetSessionDirPath(Database, TempTablesState.SessionId)));
         TraverseNext();
         Become(&TKqpTempTablesManager::PathSearchState);
     }

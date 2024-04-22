@@ -27,4 +27,9 @@ struct TKqpTempTablesState {
     FindInfo(const std::string_view& path, bool withSessionId = false) const;
 };
 
+TString GetSessionDirsBasePath(const TString& database);
+TString GetSessionDirPath(const TString& database, const TString& sessionId);
+TString GetTempTablePath(const TString& database, const TString& sessionId, const TString tablePath);
+TString GetCreateTempTablePath(const TString& database, const TString& sessionId, const TString tablePath);
+
 } // namespace NKikimr::NKqp

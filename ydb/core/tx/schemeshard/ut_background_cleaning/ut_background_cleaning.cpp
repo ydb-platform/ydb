@@ -61,8 +61,7 @@ void AsyncMkDir(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const
 void AsyncMkTempDir(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx) {
     auto ev = MkDirRequest(txId, workingDir, scheme);
     auto* tx = ev->Record.MutableTransaction(0);
-    auto* desc = tx->MutableMkDir();
-    ActorIdToProto(ownerActorId, desc->MutableOwnerActorId());
+    ActorIdToProto(ownerActorId, tx->MutableTempDirOwnerActorId());
     AsyncSend(runtime, schemeShardId, ev, nodeIdx, ownerActorId);
 }
 

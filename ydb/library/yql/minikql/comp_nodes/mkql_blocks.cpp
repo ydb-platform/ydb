@@ -93,7 +93,7 @@ public:
                         break;
                 }
                 break;
-            } while (++s.Rows_ < MaxLength_);
+            } while (++s.Rows_ < MaxLength_ && s.BuilderAllocatedSize_ <= s.MaxBuilderAllocatedSize_);
 
             if (s.Rows_)
                 s.MakeBlocks(ctx.HolderFactory);
@@ -257,6 +257,8 @@ private:
     struct TState : public TBlockState {
         size_t Rows_ = 0;
         bool IsFinished_ = false;
+        size_t BuilderAllocatedSize_ = 0;
+        size_t MaxBuilderAllocatedSize_ = 0;
         std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
         TState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types, size_t maxLength, NUdf::TUnboxedValue**const fields)
             : TBlockState(memInfo, types.size() + 1U)

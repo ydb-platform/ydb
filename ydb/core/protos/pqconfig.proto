@@ -948,6 +948,7 @@ message TEvProposeTransaction {
         TDataTransaction Data = 3;
         TConfigTransaction Config = 4;
     }
+    optional NActorsProto.TActorId SupportivePartitionActor = 5;
 };
 
 message TEvProposeTransactionResult {

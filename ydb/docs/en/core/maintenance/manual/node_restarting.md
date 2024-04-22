@@ -34,7 +34,7 @@ After replication is complete, you can safely shut down the node.
 
 To make sure that disabling the dynamic node doesn't affect query handling, drain the tablets from this node first.
 
-Go to the [Hive web-viewer](../embedded_monitoring/hive.md) page.
+Go to the [Hive web-viewer](../../reference/embedded-ui/hive.md) page.
 Click "View Nodes" to see a list of all nodes.
 
 Before disabling the node, first disable the transfer of tablets through the Active button, then click Drain, and wait for all the tablets to be moved away.

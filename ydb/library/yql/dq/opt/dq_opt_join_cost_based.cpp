@@ -223,7 +223,7 @@ public:
         }
 
         if (64 < relsCount && relsCount <= 128) {
-            JoinSearchImpl<TNodeSet128>(joinTree);
+            return JoinSearchImpl<TNodeSet128>(joinTree);
         }
 
         ComputeStatistics(joinTree, this->Pctx);

@@ -19,23 +19,36 @@ private:
 public:
     using TPtr = std::shared_ptr<TOlapStoreInfo>;
 
+    class TLayoutInfo {
+    private:
+        YDB_ACCESSOR_DEF(std::vector<ui64>, TabletIds);
+        YDB_READONLY(bool, IsNewGroup, false);
+    public:
+        TLayoutInfo(std::vector<ui64>&& ids, const bool isNewGroup)
+            : TabletIds(std::move(ids))
+            , IsNewGroup(isNewGroup)
+        {
+
+        }
+    };
+
     class ILayoutPolicy {
     protected:
-        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const = 0;
+        virtual TConclusion<TLayoutInfo> DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const = 0;
     public:
         using TPtr = std::shared_ptr<ILayoutPolicy>;
         virtual ~ILayoutPolicy() = default;
-        bool Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const;
+        TConclusion<TLayoutInfo> Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const;
     };
 
     class TMinimalTablesCountLayout: public ILayoutPolicy {
     protected:
-        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const override;
+        virtual TConclusion<TLayoutInfo> DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const override;
     };
 
     class TIdentityGroupsLayout: public ILayoutPolicy {
     protected:
-        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const override;
+        virtual TConclusion<TLayoutInfo> DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const override;
     };
 
     TPtr AlterData;

@@ -11,6 +11,12 @@
 - [Node.js](../example-nodejs.md)
 - [Python](../python/index.md)
 
+{% node info %}
+
+Дополнительную информацию о том, как работают эти примеры приложений, можно найти в [справочной документации {{ ydb-short-name }} SDK](../../../reference/ydb-sdk/index.md).
+
+{% endnote %}
+
 Тестовое приложение выполняет следующие шаги:
 
 {% include [init.md](steps/01_init.md) %}

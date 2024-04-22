@@ -22,7 +22,7 @@
 Кроме того, рекомендуется настроить хотя бы один из доступных способов запуска произвольных запросов в целях отладки. Выберите часть из них по своим предпочтениям:
 
 * [YDB CLI](../reference/ydb-cli/install.md)
-* [Встроенный пользовательский интерфейс](../maintenance/embedded_monitoring/index.md)
+* [Встроенный пользовательский интерфейс](../reference/embedded-ui/index.md)
 * Любая среда разработки SQL, поддерживающая [JDBC](https://github.com/ydb-platform/ydb-jdbc-driver).
 * [psql](https://www.postgresql.org/docs/14/app-psql.html) или [pgAdmin](https://www.pgadmin.org/) для пути совместимости с PostgreSQL.
 

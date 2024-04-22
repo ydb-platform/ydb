@@ -20,7 +20,7 @@ BuildFolderItemStructType(TExprContext& ctx, NYql::TPositionHandle pos);
 class TWalkFoldersImpl {
 public:
     TWalkFoldersImpl(const TString& sessionId, const TString& cluster, TYtSettings::TConstPtr config, 
-                     TPosition pos, TYtKey::TWalkFoldersArgs&& args, const IYtGateway::TPtr gateway);
+                     TPosition pos, const TYtKey::TWalkFoldersArgs& args, const IYtGateway::TPtr gateway);
 
     IGraphTransformer::TStatus GetNextStateExpr(TExprContext& ctx, const TYtKey::TWalkFoldersImplArgs& args, TExprNode::TPtr& state);
 

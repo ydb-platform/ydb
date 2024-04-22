@@ -156,6 +156,12 @@ class TTable {
     // Adds keys to KeysHashTable, return true if added, false if equal key already added
     inline bool AddKeysToHashTable(KeysHashTable& t, ui64* keys);
 
+    ui64 JoinTwoBuckets(TTableBucket * bucket1, TTableBucket * bucket2, ui64 bucket,
+                            std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds, EMemorySubPool::Temporary>>& joinResults,
+                            std::vector<ui64, TMKQLAllocator<ui64, EMemorySubPool::Temporary>>& joinSlots,
+                            std::vector<ui64, TMKQLAllocator<ui64, EMemorySubPool::Temporary>>& spillSlots,
+                            std::vector<ui64, TMKQLAllocator<ui64, EMemorySubPool::Temporary>>& slotToIdx);
+
     ui64 TotalPacked = 0; // Total number of packed tuples
     ui64 TotalUnpacked = 0; // Total number of unpacked tuples
 
@@ -170,6 +176,8 @@ class TTable {
     bool Table2Initialized_ = false;    // True when iterator counters for second table already initialized
 
     ui64 TuplesFound_ = 0; // Total number of matching keys found during join
+
+    ui64 NextBucketToJoin = 0;
 
 public:
 
@@ -192,6 +200,10 @@ public:
 
     // Returns next jointed tuple data. Returs true if there are more tuples
     bool NextJoinedData(TupleData& td1, TupleData& td2);
+
+    bool IsEverythingJoined() {
+        return NextBucketToJoin > NumberOfBuckets;
+    }
 
     // Clears table content
     void Clear();

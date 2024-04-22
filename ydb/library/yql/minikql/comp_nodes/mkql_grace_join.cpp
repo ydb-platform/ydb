@@ -817,7 +817,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
 
                 }
 
-                if (!*HaveMoreRightRows && !*HaveMoreLeftRows) {
+                if (!*HaveMoreRightRows && !*HaveMoreLeftRows && JoinedTablePtr->IsEverythingJoined()) {
                     *JoinCompleted = true;
                     break;
                 }

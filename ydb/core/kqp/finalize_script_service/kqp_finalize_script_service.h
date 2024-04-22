@@ -1,7 +1,5 @@
 #pragma once
 
-#include <ydb/core/fq/libs/config/protos/common.pb.h>
-
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 
 

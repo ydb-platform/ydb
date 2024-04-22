@@ -96,6 +96,9 @@ public:
         : Writer_(writer)
     {}
 
+    TQContext(const TQContext&) = default;
+    TQContext& operator=(const TQContext&) = default;
+
     bool CanRead() const {
         return Reader_ != nullptr;
     }
@@ -113,8 +116,8 @@ public:
     }
 
 private:
-    const IQReaderPtr Reader_;
-    const IQWriterPtr Writer_;
+    IQReaderPtr Reader_;
+    IQWriterPtr Writer_;
 };
 
 }

@@ -90,7 +90,7 @@ WHERE views = 0;
 
 {% note info %}
 
-Currently, data deletion is possible using a synchronous secondary index only.
+Currently, deleting data is possible only using a synchronous secondary index. This is because data removal is possible only in [Serializable](../concepts/transactions.md#modes) transactions, but accessing asynchronous indices would break the guarantees of this transaction mode.
 
 {% endnote %}
 

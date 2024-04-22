@@ -200,10 +200,12 @@ bool TParallelFileInputState::NextValue() {
             MkqlReader_.Next();
             return true;
         }
-        if (MkqlReader_.GetRowIndexUnchecked()) {
-            StateByReader_[CurrentInput_].CurrentRow = *MkqlReader_.GetRowIndexUnchecked() - 1;
+        if (!Settings_->Requests.empty()) {
+            if (MkqlReader_.GetRowIndexUnchecked()) {
+                StateByReader_[CurrentInput_].CurrentRow = *MkqlReader_.GetRowIndexUnchecked() - 1;
+            }
+            StateByReader_[CurrentInput_].CurrentRange = MkqlReader_.GetRangeIndexUnchecked();
         }
-        StateByReader_[CurrentInput_].CurrentRange = MkqlReader_.GetRangeIndexUnchecked();
         bool needWait = false;
         {
             std::lock_guard lock(InnerState_->Lock);

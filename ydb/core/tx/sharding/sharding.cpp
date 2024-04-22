@@ -1,11 +1,13 @@
 #include "sharding.h"
-#include "unboxed_reader.h"
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NSharding {
 
-std::unique_ptr<TShardingBase> TShardingBase::BuildShardingOperator(const NKikimrSchemeOp::TColumnTableSharding& sharding) {
+TConclusion<std::unique_ptr<TShardingBase>> TShardingBase::BuildShardingOperator(const NKikimrSchemeOp::TColumnTableSharding& sharding) {
+    if (sharding.HasRandomSharding()) {
+        return std::make_unique<TRandomSharding>(sharding.GetColumnShards().size());
+    }
     if (sharding.HasHashSharding()) {
         auto& hashSharding = sharding.GetHashSharding();
         std::vector<TString> columnNames(hashSharding.GetColumns().begin(), hashSharding.GetColumns().end());
@@ -21,11 +23,11 @@ std::unique_ptr<TShardingBase> TShardingBase::BuildShardingOperator(const NKikim
             return std::make_unique<TLogsSharding>(sharding.GetColumnShards().size(), columnNames, activeShards);
         }
     }
-    return nullptr;
+    return TConclusionStatus::Fail("not determined sharding type");
 }
 
 TString TShardingBase::DebugString() const {
-    return "Columns: " + JoinSeq(", ", GetShardingColumns());
+    return "SHARDING";
 }
 
 std::vector<ui32> THashSharding::MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const {
@@ -62,13 +64,6 @@ std::vector<ui32> TLogsSharding::MakeSharding(const std::shared_ptr<arrow::Recor
     }
 
     return out;
-}
-
-ui64 THashShardingImpl::CalcHash(const NYql::NUdf::TUnboxedValue& value, const TUnboxedValueReader& readerInfo) const {
-    NArrow::NHash::NXX64::TStreamStringHashCalcer calcer(Seed);
-    calcer.Start();
-    readerInfo.BuildStringForHash(value, calcer);
-    return calcer.Finish();
 }
 
 }

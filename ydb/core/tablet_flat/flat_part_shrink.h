@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "flat_row_nulls.h"
 #include "flat_row_celled.h"
-#include "flat_part_iter_multi.h"
+#include "flat_part_iter.h"
 #include "flat_part_screen.h"
 #include "flat_part_laid.h"
 #include "flat_stat_part.h"

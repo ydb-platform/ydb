@@ -40,8 +40,8 @@ message TLayout {
     optional uint32 Small = 6;  // EPage::Frames index for packed blobs
     optional uint32 ByKey = 4;  // EPage::ByKey bloom filter page
     optional uint32 Scheme = 5; // EPage::Schem2 with data pages scheme
-    repeated uint32 GroupIndexes = 7; // EPage::Index for alt column groups
-    repeated uint32 HistoricIndexes = 8; // EPage::Index for historic data
+    repeated uint32 GroupIndexes = 7; // EPage::FlatIndex for alt column groups
+    repeated uint32 HistoricIndexes = 8; // EPage::FlatIndex for historic data
     optional uint32 GarbageStats = 9; // EPage::GarbageStats for historic data
     optional uint32 TxIdStats = 10; // EPage::TxIdStats for uncommitted deltas
     repeated TBTreeIndexMeta BTreeGroupIndexes = 11;

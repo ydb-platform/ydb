@@ -258,7 +258,7 @@ namespace NFwd {
 
     private:
         static bool IsIndexPage(EPage type) noexcept {
-            return type == EPage::Index || type == EPage::BTreeIndex;
+            return type == EPage::FlatIndex || type == EPage::BTreeIndex;
         }
 
         const TSharedData* TryGetIndexPage(TSlot slot, TPageId pageId, EPage type) noexcept

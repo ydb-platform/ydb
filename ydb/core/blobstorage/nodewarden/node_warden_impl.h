@@ -470,7 +470,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvRegisterPDiskLoadActor::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr ev);
 
-        void SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId);
+        void SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId, TDuration backoff = {});
 
         void SendVDiskReport(TVSlotId vslotId, const TVDiskID& vdiskId,
             NKikimrBlobStorage::TEvControllerNodeReport::EVDiskPhase phase, TDuration backoff = {});

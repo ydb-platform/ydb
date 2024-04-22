@@ -189,11 +189,28 @@ Y_UNIT_TEST_SUITE(TKernelRegistryTest) {
         }
     }
 
+    Y_UNIT_TEST(TestJust) {
+        TestOne([](auto& b,auto& ctx) {
+            const auto boolType = ctx.template MakeType<TDataExprType>(EDataSlot::Bool);
+            const auto inputType = ctx.template MakeType<TBlockExprType>(boolType);
+            const auto outputType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TOptionalExprType>(boolType));
+            return b.AddUnaryOp(TKernelRequestBuilder::EUnaryOp::Just, inputType, outputType);
+        });
+    }
+
     Y_UNIT_TEST(TestCoalesece) {
         TestOne([](auto& b,auto& ctx) {
             auto blockStringType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::String));
             auto blockOptStringType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TOptionalExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::String)));
             return b.AddBinaryOp(TKernelRequestBuilder::EBinaryOp::Coalesce, blockOptStringType, blockStringType, blockStringType);
+        });
+    }
+
+    Y_UNIT_TEST(TestIf) {
+        TestOne([](auto& b,auto& ctx) {
+            auto blockStringType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::String));
+            auto blockBoolType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Bool));
+            return b.AddIf(blockBoolType, blockStringType, blockStringType);
         });
     }
 

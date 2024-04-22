@@ -194,6 +194,46 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
+    Y_UNIT_TEST(WriteImmediateSeveralOperations) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+
+        const ui64 shard = shards[0];
+        const ui32 rowCount = 3;
+
+        Cout << "========= Send immediate write with several operations =========\n";
+        {
+            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            const std::vector<ui32> columnIds = {1,2};
+
+            for (ui32 row = 0; row < rowCount; ++row) {
+                TVector<TCell> cells;
+
+                for (ui32 col = 0; col < columnIds.size(); ++col) {
+                    ui32 value32 = row * columnIds.size() + col;
+                    cells.emplace_back(TCell((const char*)&value32, sizeof(ui32)));
+                }
+
+                TSerializedCellMatrix matrix(cells, 1, columnIds.size());
+                ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(matrix.ReleaseBuffer());
+                evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+            }
+            
+            const auto writeResult = Write(runtime, sender, shard, std::move(evWrite));
+
+            const auto& tableAccessStats = writeResult.GetTxStats().GetTableAccessStats(0);
+            UNIT_ASSERT_VALUES_EQUAL(tableAccessStats.GetUpdateRow().GetCount(), rowCount);
+        }
+
+        Cout << "========= Read table =========\n";
+        {
+            auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+            UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
+        }
+    }    
+
     Y_UNIT_TEST(DeleteImmediate) {
         auto [runtime, server, sender] = TestCreateServer();
 

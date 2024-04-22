@@ -35,8 +35,8 @@ class KqpRun(object):
         cmd = self.kqprun_binary + ' '
 
         cmd += '--emulate-yt ' \
-            '--clear-execution ' \
             '--exclude-linked-udfs ' \
+            '--clear-execution query ' \
             '--app-config=%(config_file)s ' \
             '--script-query=%(program_file)s ' \
             '--scheme-query=%(scheme_file)s ' \

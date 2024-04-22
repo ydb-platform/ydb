@@ -63,14 +63,14 @@ namespace NFwd {
     class TIndexPageLocator {
         using TGroupId = NPage::TGroupId;
 
-        struct TPageLocation {
+        struct TIndexPageLocation {
             TGroupId GroupId;
             ui32 Level;
         };
 
     public:
         void Add(TPageId pageId, TGroupId groupId, ui32 level) {
-            Y_ABORT_UNLESS(Map.emplace(pageId, TPageLocation(groupId, level)).second, "All index pages should be unique");
+            Y_ABORT_UNLESS(Map.emplace(pageId, TIndexPageLocation(groupId, level)).second, "All index pages should be unique");
         }
 
         ui32 GetLevel(TPageId pageId) const {
@@ -85,12 +85,12 @@ namespace NFwd {
             return ptr->GroupId;
         }
 
-        const TMap<TPageId, TPageLocation>& GetMap() {
+        const TMap<TPageId, TIndexPageLocation>& GetMap() {
             return Map;
         }
 
     private:
-        TMap<TPageId, TPageLocation> Map;
+        TMap<TPageId, TIndexPageLocation> Map;
     };
 
     class TFlatIndexCache : public IPageLoadingLogic {
@@ -126,6 +126,7 @@ namespace NFwd {
             if (type == EPage::FlatIndex) {
                 Y_ABORT_UNLESS(pageId == IndexPage.PageId);
 
+                // Note: doesn't affect read ahead limits, only stats
                 if (IndexPage.Fetch == EFetch::None) {
                     Stat.Fetch += head->AddToQueue(pageId, EPage::FlatIndex);
                     IndexPage.Fetch = EFetch::Wait;
@@ -166,6 +167,7 @@ namespace NFwd {
             Stat.Saved += page.Data.size();
             
             if (type == EPage::FlatIndex) {
+                // Note: doesn't affect read ahead limits, only stats
                 Y_ABORT_UNLESS(page.PageId == IndexPage.PageId);
                 Index.emplace(page.Data);
                 Iter = Index->LookupRow(BeginRowId);
@@ -288,8 +290,8 @@ namespace NFwd {
 
         TBTreeIndexCache(const TPart* part, TIndexPageLocator& indexPageLocator, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices = nullptr)
             : Part(part)
-            , IndexPageLocator(indexPageLocator)
             , GroupId(groupId)
+            , IndexPageLocator(indexPageLocator)
         {
             if (slices && !slices->empty()) {
                 BeginRowId = slices->front().BeginRowId();
@@ -399,7 +401,7 @@ namespace NFwd {
                     Y_ABORT("Dropping page that has not been touched");
                 } else if (page.Usage == EUsage::Keep && page) {
                     level.Trace.Emplace(page);
-                    // Note: keep page in IndexPageLocator for simplicity
+                    // Note: keep dropped pages in IndexPageLocator for simplicity
                 } else {
                     page.Release();
                     *(page.Ready() ? &Stat.After : &Stat.Before) += page.Size;
@@ -422,6 +424,7 @@ namespace NFwd {
                 auto &page = level.Pages.at(level.PagesPendingOffset);
 
                 if (!page.Ready()) {
+                    // queue should be sorted, at first wait pending pages
                     break;
                 }
 
@@ -463,11 +466,11 @@ namespace NFwd {
                     (level.Pages.empty() 
                         ? 0 
                         // Note: for simplicity consider pages as sequential
-                        : level.Pages.rbegin()->EndDataSize - level.Pages.begin()->EndDataSize + level.Pages.begin()->Size);
+                        : level.Pages.back().EndDataSize - level.Pages.begin()->EndDataSize + level.Pages.front().Size);
             } else {
                 return level.Pages.empty() 
                     ? 0 
-                    : level.Pages.rbegin()->EndDataSize - level.Pages.begin()->EndDataSize;
+                    : level.Pages.back().EndDataSize - level.Pages.front().EndDataSize;
             }
         }
 
@@ -504,9 +507,10 @@ namespace NFwd {
 
     private:
         const TPart* Part;
-        TIndexPageLocator& IndexPageLocator;
         const TGroupId GroupId;
         TRowId BeginRowId, EndRowId;
+
+        TIndexPageLocator& IndexPageLocator;
         
         TVector<TLevel> Levels;
     };

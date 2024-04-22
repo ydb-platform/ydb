@@ -389,6 +389,10 @@ public:
                 );
             }
 
+            if (userDb.GetPerformedUserReads()) {
+                op->SetPerformedUserReads(true);
+            }
+
             if (op->HasVolatilePrepareFlag()) {
                 // Notify other shards about our expectations as soon as possible, even before we commit
                 for (ui64 target : op->AwaitingDecisions()) {

@@ -524,11 +524,6 @@ enum ETransactionKind {
     // kinds. See NKikimr::NDataShard::EOperationKind.
 }
 
-message TMvccSnapshot {
-    optional uint64 Step = 10;
-    optional uint64 TxId = 11;
-}
-
 message TEvProposeTransaction {
     optional ETransactionKind TxKind = 1;
     optional NActorsProto.TActorId SourceDeprecated = 2 [deprecated = true]; // for compatibility with old tx engine
@@ -539,7 +534,8 @@ message TEvProposeTransaction {
     optional uint64 SchemeShardId = 7;
     optional NKikimrSubDomains.TProcessingParams ProcessingParams = 8;
     optional uint64 SubDomainPathId = 9; // LocalPathId (SchemeShardId is the OwnerId)
-    optional TMvccSnapshot MvccSnapshot = 10;
+    optional NKikimrDataEvents.TMvccSnapshot MvccSnapshot = 10;
+    optional bool MvccSnapshotRepeatable = 11 [default = true];
 }
 
 message TEvCancelTransactionProposal {

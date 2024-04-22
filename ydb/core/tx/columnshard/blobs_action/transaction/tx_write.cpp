@@ -129,8 +129,8 @@ void TTxWrite::Complete(const TActorContext& ctx) {
     for (ui32 i = 0; i < buffer.GetAggregations().size(); ++i) {
         const auto& writeMeta = buffer.GetAggregations()[i]->GetWriteData()->GetWriteMeta();
         auto operation = Self->OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
-        CompleteTransaction(TTxController::TBasicTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, operation->GetLockId()), ctx);
         if (operation) {
+            CompleteTransaction(TTxController::TBasicTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, operation->GetLockId()), ctx);
             ctx.Send(writeMeta.GetSource(), Results[i].release(), 0, operation->GetCookie());
         } else {
             ctx.Send(writeMeta.GetSource(), Results[i].release());

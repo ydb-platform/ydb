@@ -210,24 +210,26 @@ namespace NTest {
         {
             Y_ABORT_UNLESS(!Finished, "This store is already finished");
 
-            auto& pages = PageCollections[GetOuterRoom()];
+            auto room = GetOuterRoom();
+            TPageId pageId = PageCollections[room].size();
 
-            pages.emplace_back(std::move(page));
+            PageCollections[room].emplace_back(std::move(page));
+            PageTypes[room].push_back(EPage::Opaque);
 
-            return pages.size() - 1;
+            return pageId;
         }
 
         TPageId Write(TSharedData page, EPage type, ui32 group) noexcept
         {
             Y_ABORT_UNLESS(group < PageCollections.size() - 1, "Invalid column group");
             Y_ABORT_UNLESS(!Finished, "This store is already finished");
-            NPageCollection::Checksum(page); /* will catch uninitialised values */
+            NPageCollection::Checksum(page); /* will catch uninitialized values */
 
             if (type == EPage::DataPage) {
                 DataBytes[group] += page.size();
             }
             TPageId pageId = PageCollections[group].size();
-            PageCollections[group].push_back(std::move(page));
+            PageCollections[group].emplace_back(std::move(page));
             PageTypes[group].push_back(type);
 
             if (group == 0) {

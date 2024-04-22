@@ -252,12 +252,8 @@ namespace NTest {
 
             Y_ABORT_UNLESS(groupId.Index < partStore->Store->GetGroupCount());
 
-            if (part->GetPageType(pageId, groupId) == EPage::FlatIndex || part->GetPageType(pageId, groupId) == EPage::BTreeIndex) {
-                return partStore->Store->GetPage(groupId.Index, pageId);
-            } else {
-                ui32 room = (groupId.Historic ? partStore->Store->GetRoomCount() : 0) + groupId.Index;
-                return Get(part, room).DoLoad(pageId, AheadLo, AheadHi).Page;
-            }
+            ui32 room = (groupId.Historic ? partStore->Store->GetRoomCount() : 0) + groupId.Index;
+            return Get(part, room).DoLoad(pageId, AheadLo, AheadHi).Page;
         }
 
     private:

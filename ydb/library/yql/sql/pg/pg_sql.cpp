@@ -4773,7 +4773,7 @@ public:
         TVector<TAstNode*> children;
         children.reserve(2 + ListLength(lst));
 
-        children.push_back(A("PgMixedIn"));
+        children.push_back(A("PgIn"));
         children.push_back(lhs);
         for (int item = 0; item < ListLength(lst); ++item) {
             auto cell = ParseExpr(ListNodeNth(lst, item), settings);

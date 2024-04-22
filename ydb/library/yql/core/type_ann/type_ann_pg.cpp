@@ -5430,7 +5430,7 @@ IGraphTransformer::TStatus PgLikeWrapper(const TExprNode::TPtr& input, TExprNode
     return IGraphTransformer::TStatus::Ok;
 }
 
-TExprNodePtr BuildPgIn(TExprNodeList&& args, ui32 targetTypeId, bool castRequired, TContext& ctx) {
+TExprNodePtr BuildPgInStrict(TExprNodeList&& args, ui32 targetTypeId, bool castRequired, TContext& ctx) {
     auto lhs = args[0];
     if (castRequired) {
         const auto lhsType = lhs->GetTypeAnn()->Cast<TPgExprType>();
@@ -5457,14 +5457,14 @@ TExprNodePtr BuildPgIn(TExprNodeList&& args, ui32 targetTypeId, bool castRequire
         .Build();
 
     return ctx.Expr.Builder(lhs->Pos())
-        .Callable("PgIn")
+        .Callable("PgInStrict")
             .Add(0, lhs)
             .Add(1, rhs)
         .Seal()
         .Build();
 }
 
-IGraphTransformer::TStatus PgMixedInWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "IN expects at least one element"));
         return IGraphTransformer::TStatus::Error;
@@ -5496,7 +5496,7 @@ IGraphTransformer::TStatus PgMixedInWrapper(const TExprNode::TPtr& input, TExprN
         }
         if (hasConvertions) {
             output = ctx.Expr.Builder(input->Pos())
-                .Callable("PgMixedIn")
+                .Callable("PgIn")
                     .Add(std::move(convertedChildren))
                 .Seal()
                 .Build();
@@ -5542,7 +5542,7 @@ IGraphTransformer::TStatus PgMixedInWrapper(const TExprNode::TPtr& input, TExprN
 
         for (auto& elemsOfType: elemsByType) {
             auto& conversion = elemsOfType.second;
-            orClausesOfIn.push_back(BuildPgIn(std::move(conversion.items), conversion.targetType, conversion.conversionRequired, ctx));
+            orClausesOfIn.push_back(BuildPgInStrict(std::move(conversion.items), conversion.targetType, conversion.conversionRequired, ctx));
         }
         output = ctx.Expr.Builder(input->Pos())
             .Callable("Fold")
@@ -5561,12 +5561,12 @@ IGraphTransformer::TStatus PgMixedInWrapper(const TExprNode::TPtr& input, TExprN
             .Seal()
             .Build();
     } else {
-        output = BuildPgIn(std::move(input->ChildrenList()), commonType->TypeId, castRequired, ctx);
+        output = BuildPgInStrict(std::move(input->ChildrenList()), commonType->TypeId, castRequired, ctx);
     }
     return IGraphTransformer::TStatus::Repeat;
 }
 
-IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+IGraphTransformer::TStatus PgInStrictWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }

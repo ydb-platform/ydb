@@ -4093,7 +4093,7 @@ TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOp
         .Build();
 }
 
-TExprNode::TPtr ExpandPgIn(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+TExprNode::TPtr ExpandPgInStrict(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     Y_UNUSED(optCtx);
     return ctx.Builder(node->Pos())
         .Callable("ToPg")

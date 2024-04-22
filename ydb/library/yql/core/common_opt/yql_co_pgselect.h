@@ -17,7 +17,7 @@ TExprNode::TPtr NormalizeColumnOrder(const TExprNode::TPtr& node, const TColumnO
 
 TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx);
 
-TExprNode::TPtr ExpandPgIn(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx);
+TExprNode::TPtr ExpandPgInStrict(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx);
 
 TExprNode::TPtr ExpandPgBetween(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx);
 

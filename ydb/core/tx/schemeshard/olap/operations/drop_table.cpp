@@ -412,7 +412,7 @@ public:
         auto tableInfo = context.SS->ColumnTables.GetVerified(path.Base()->PathId);
         if (tableInfo->IsStandalone()) {
             NIceDb::TNiceDb db(context.GetDB());
-            for (auto shardIdx : tableInfo->OwnedColumnShards) {
+            for (auto shardIdx : tableInfo->BuildOwnedColumnShardsVerified()) {
                 Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
                 txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::DropParts);
 
@@ -420,7 +420,7 @@ public:
                 context.SS->PersistShardTx(db, shardIdx, opTxId);
             }
         } else {
-            auto& storePathId = *tableInfo->OlapStorePathId;
+            auto storePathId = tableInfo->GetOlapStorePathIdVerified();
             TPath storePath = TPath::Init(storePathId, context.SS);
             {
                 TPath::TChecker checks = storePath.Check();

@@ -17,32 +17,32 @@ service DatabaseService {
   rpc List (ListDatabasesRequest) returns (ListDatabasesResponse);
 
   // Creates a new database.
-  rpc Create (CreateDatabaseRequest) returns (ydb.yc.priv.operation.Operation);
+  rpc Create (CreateDatabaseRequest) returns (.ydb.yc.priv.operation.Operation);
 
   // Modifies the specified database.
-  rpc Update (UpdateDatabaseRequest) returns (ydb.yc.priv.operation.Operation);
+  rpc Update (UpdateDatabaseRequest) returns (.ydb.yc.priv.operation.Operation);
 
   // Starts the specified database.
-  rpc Start (StartDatabaseRequest) returns (ydb.yc.priv.operation.Operation);
+  rpc Start (StartDatabaseRequest) returns (.ydb.yc.priv.operation.Operation);
 
   // Stops the specified database.
-  rpc Stop (StopDatabaseRequest) returns (ydb.yc.priv.operation.Operation);
+  rpc Stop (StopDatabaseRequest) returns (.ydb.yc.priv.operation.Operation);
 
   // Deletes the specified database.
-  rpc Delete (DeleteDatabaseRequest) returns (ydb.yc.priv.operation.Operation);
+  rpc Delete (DeleteDatabaseRequest) returns (.ydb.yc.priv.operation.Operation);
 
   // Restores the specified backup
-  rpc Restore (RestoreBackupRequest) returns (ydb.yc.priv.operation.Operation);
+  rpc Restore (RestoreBackupRequest) returns (.ydb.yc.priv.operation.Operation);
 
-  rpc Backup(BackupDatabaseRequest) returns (ydb.yc.priv.operation.Operation);
+  rpc Backup(BackupDatabaseRequest) returns (.ydb.yc.priv.operation.Operation);
 
-  rpc Move(MoveDatabaseRequest) returns (ydb.yc.priv.operation.Operation);
+  rpc Move(MoveDatabaseRequest) returns (.ydb.yc.priv.operation.Operation);
 
   rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse);
 
-  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (ydb.yc.priv.operation.Operation);
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (.ydb.yc.priv.operation.Operation);
 
-  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (ydb.yc.priv.operation.Operation);
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (.ydb.yc.priv.operation.Operation);
 
   // private methods
   rpc GetByPath(GetDatabaseByPathRequest) returns (Database);
@@ -51,7 +51,7 @@ service DatabaseService {
 
   rpc ListAll(ListAllDatabasesRequest) returns (ListAllDatabasesResponse);
 
-  rpc UpdateInstances(UpdateInstancesRequest) returns (ydb.yc.priv.operation.Operation);
+  rpc UpdateInstances(UpdateInstancesRequest) returns (.ydb.yc.priv.operation.Operation);
 }
 
 enum DatabaseView {

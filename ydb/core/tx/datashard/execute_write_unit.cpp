@@ -341,6 +341,8 @@ public:
                 return EExecutionStatus::Executed;
             }
 
+            const bool isArbiter = op->HasVolatilePrepareFlag() && KqpLocksIsArbiter(tabletId, kqpLocks);
+
             KqpCommitLocks(tabletId, kqpLocks, sysLocks, writeVersion, userDb);
 
             TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
@@ -385,6 +387,7 @@ public:
                     participants,
                     userDb.GetChangeGroup(),
                     userDb.GetVolatileCommitOrdered(),
+                    isArbiter,
                     txc
                 );
             }

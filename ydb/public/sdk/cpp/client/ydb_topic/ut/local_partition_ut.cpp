@@ -610,6 +610,49 @@ namespace NYdb::NTopic::NTests {
             UNIT_ASSERT(expected.Matches(events));
         }
 
+        Y_UNIT_TEST(DirectWriteWithoutDescribeResourcesPermission) {
+            // It should be possible to use DirectWrite option with UpdateRow permission only.
+            // In this test we don't grant DescribeSchema permission and check that direct write still works.
+
+            auto setup = CreateSetup(TEST_CASE_NAME);
+
+            auto authToken = GetTestParam("token", "x-user-x@builtin");
+
+            {
+                // Add UpdateRow permission.
+                NACLib::TDiffACL acl;
+                acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, authToken);
+                // The old behavior required DescribeSchema permission. Now it should work without this line:
+                // acl.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, authToken);
+                auto parent = GetTestParam("parent", "/Root");
+                auto topic = GetTestParam("topic", TEST_TOPIC);
+                setup->GetServer().AnnoyingClient->ModifyACL(parent, topic, acl.SerializeAsString());
+            }
+
+            TMockDiscoveryService discovery;
+            discovery.SetGoodEndpoints(*setup);
+            auto* tracingBackend = new TTracingBackend();
+            auto driverConfig = CreateConfig(*setup, discovery.GetDiscoveryAddr())
+                .SetLog(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}))
+                .SetAuthToken(authToken);
+            TDriver driver(driverConfig);
+
+            auto clientSettings = TTopicClientSettings()
+                .Database("/Root");
+
+            TTopicClient client(driver, clientSettings);
+
+            auto sessionSettings = TWriteSessionSettings()
+                .Path(TEST_TOPIC)
+                .ProducerId(TEST_MESSAGE_GROUP_ID)
+                .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+                .DirectWriteToPartition(true);
+
+            auto writeSession = client.CreateSimpleBlockingWriteSession(sessionSettings);
+            UNIT_ASSERT(writeSession->Write("message"));
+            writeSession->Close();
+        }
+
         Y_UNIT_TEST(WithoutPartitionWithSplit) {
             auto setup = CreateSetupForSplitMerge(TEST_CASE_NAME);
             setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);

@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(TQStorageMemoryTests) {
         auto storage = MakeMemoryQStorage();
         auto writer = storage->MakeWriter("foo");
         writer->Put({"comp", "label"}, "value").Wait();
-        writer->Commit();
+        writer->Commit().Wait();
         auto reader = storage->MakeReader("foo");
         auto settings = TQIteratorSettings{};
         settings.DoNotLoadValue = true;

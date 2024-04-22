@@ -4,7 +4,7 @@
 
 namespace NKikimr::NColumnShard {
 
-bool TBackupTransactionOperator::Parse(const TString& data) {
+bool TBackupTransactionOperator::Parse(TColumnShard& /*owner*/, const TString& data) {
     NKikimrTxColumnShard::TBackupTxBody txBody;
     if (!txBody.ParseFromString(data)) {
         return false;

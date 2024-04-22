@@ -92,7 +92,7 @@ public:
             return true;
         }
 
-        virtual bool Parse(const TString& data) = 0;
+        virtual bool Parse(TColumnShard& owner, const TString& data) = 0;
         virtual TProposeResult ExecuteOnPropose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const = 0;
         virtual bool CompleteOnPropose(TColumnShard& owner, const TActorContext& ctx) const = 0;
 
@@ -131,7 +131,7 @@ public:
     ui64 GetMemoryUsage() const;
     bool HaveOutdatedTxs() const;
 
-    bool Load(NTabletFlatExecutor::TTransactionContext& txc);
+    bool Load(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc);
 
     TTxInfo RegisterTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);
     TTxInfo RegisterTxWithDeadline(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);

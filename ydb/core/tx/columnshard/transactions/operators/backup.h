@@ -15,7 +15,7 @@ namespace NKikimr::NColumnShard {
     public:
         using TBase::TBase;
 
-        virtual bool Parse(const TString& data) override;
+        virtual bool Parse(TColumnShard& owner, const TString& data) override;
 
         virtual TProposeResult ExecuteOnPropose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const override;
         virtual bool CompleteOnPropose(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) const override {

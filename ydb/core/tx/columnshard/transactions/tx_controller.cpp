@@ -37,7 +37,7 @@ TTxController::TPlanQueueItem TTxController::GetFrontTx() const {
     return TPlanQueueItem(Owner.LastPlannedStep, 0);
 }
 
-bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
+bool TTxController::Load(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
     auto rowset = db.Table<Schema::TxInfo>().GreaterOrEqual(0).Select();
@@ -67,7 +67,7 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         const TString txBody = rowset.GetValue<Schema::TxInfo::TxBody>();
         ITransactionOperatior::TPtr txOperator(ITransactionOperatior::TFactory::Construct(txInfo.TxKind, txInfo));
         Y_ABORT_UNLESS(!!txOperator);
-        Y_ABORT_UNLESS(txOperator->Parse(txBody));
+        Y_ABORT_UNLESS(txOperator->Parse(owner, txBody));
         Operators[txId] = txOperator;
 
         if (!rowset.Next()) {
@@ -101,7 +101,7 @@ TTxController::TTxInfo TTxController::RegisterTx(const ui64 txId, const NKikimrT
 
     ITransactionOperatior::TPtr txOperator(ITransactionOperatior::TFactory::Construct(txInfo.TxKind, txInfo));
     Y_ABORT_UNLESS(!!txOperator);
-    Y_ABORT_UNLESS(txOperator->Parse(txBody));
+    Y_ABORT_UNLESS(txOperator->Parse(Owner, txBody));
     Operators[txId] = txOperator;
 
     Schema::SaveTxInfo(db, txInfo.TxId, txInfo.TxKind, txBody, Max<ui64>(), txInfo.Source, txInfo.Cookie);
@@ -120,7 +120,7 @@ TTxController::TTxInfo TTxController::RegisterTxWithDeadline(const ui64 txId, co
 
     ITransactionOperatior::TPtr txOperator(ITransactionOperatior::TFactory::Construct(txInfo.TxKind, txInfo));
     Y_ABORT_UNLESS(!!txOperator);
-    Y_ABORT_UNLESS(txOperator->Parse(txBody));
+    Y_ABORT_UNLESS(txOperator->Parse(Owner, txBody));
     Operators[txId] = txOperator;
 
     Schema::SaveTxInfo(db, txInfo.TxId, txInfo.TxKind, txBody, txInfo.MaxStep, txInfo.Source, txInfo.Cookie);

@@ -11,7 +11,7 @@ namespace NKikimr::NColumnShard {
     public:
         using TBase::TBase;
 
-        bool Parse(const TString& data) override {
+        bool Parse(TColumnShard& /*owner*/, const TString& data) override {
             NKikimrTxColumnShard::TCommitTxBody commitTxBody;
             if (!commitTxBody.ParseFromString(data)) {
                 return false;

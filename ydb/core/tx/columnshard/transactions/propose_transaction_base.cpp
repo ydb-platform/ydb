@@ -7,7 +7,7 @@ namespace NKikimr::NColumnShard {
 
     void TProposeTransactionBase::ProposeTransaction(const TTxController::TBasicTxInfo& txInfo, const TString& txBody, const TActorId source, const ui64 cookie, TTransactionContext& txc) {
         auto txOperator = TTxController::ITransactionOperatior::TFactory::MakeHolder(txInfo.TxKind, TTxController::TTxInfo(txInfo.TxKind, txInfo.TxId));
-        if (!txOperator || !txOperator->Parse(txBody)) {
+        if (!txOperator || !txOperator->Parse(*Self, txBody)) {
             TTxController::TProposeResult proposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Error processing commit TxId# " << txInfo.TxId
                                                     << (txOperator ? ". Parsing error " : ". Unknown operator for txKind"));
             OnProposeError(proposeResult, txInfo);

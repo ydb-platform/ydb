@@ -368,11 +368,6 @@ IOutputStream& operator <<(IOutputStream& out, const NKikimr::NOlap::TBlobRange&
     return out << blobRange.ToString();
 }
 
-inline
-IOutputStream& operator <<(IOutputStream& out, const NKikimr::NOlap::TBlobRangeLink16& blobRange) {
-    return out << blobRange.ToString();
-}
-
 template<>
 struct ::THash<NKikimr::NOlap::TUnifiedBlobId> {
     inline ui64 operator()(const NKikimr::NOlap::TUnifiedBlobId& a) const {

@@ -1,6 +1,8 @@
 items:
 - name: Обзор
   href: index.md
+- name: Системные требования
+  href: system-requirements.md
 - name: Ansible
   include:
     mode: link

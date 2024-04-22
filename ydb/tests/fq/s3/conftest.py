@@ -108,6 +108,8 @@ def kikimr(yq_version: str, kikimr_yqv1, kikimr_yqv2):
 
     if kikimr is not None:
         kikimr.control_plane.drop_metering()
+        kikimr.control_plane.ensure_is_alive()
+        kikimr.compute_plane.ensure_is_alive()
 
     return kikimr
 
@@ -118,7 +120,10 @@ def client(kikimr, request=None):
                                   if request is not None
                                   else "my_folder",
                                   streaming_over_kikimr=kikimr)
-    return client
+    yield client
+
+    kikimr.control_plane.ensure_is_alive()
+    kikimr.compute_plane.ensure_is_alive()
 
 
 @pytest.fixture

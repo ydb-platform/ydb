@@ -322,8 +322,8 @@ namespace NKikimr::NStorage {
             const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TPDiskFilter>& pdiskFilters,
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid,
-            i64 requiredSpace,
-            NKikimrBlobStorage::TBaseConfig *baseConfig);
+            i64 requiredSpace, NKikimrBlobStorage::TBaseConfig *baseConfig,
+            bool convertToDonor);
 
         void GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
             const NKikimrBlobStorage::TStorageConfig& baseConfig);
@@ -572,6 +572,9 @@ namespace NKikimr::NStorage {
                 return makeError("incorrect TVDisk record");
             }
             if (vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
+                continue;
+            }
+            if (vdisk.HasDonorMode()) {
                 continue;
             }
             const auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());

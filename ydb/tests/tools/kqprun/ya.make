@@ -7,7 +7,9 @@ SRCS(
 PEERDIR(
     library/cpp/getopt
 
+    ydb/library/yql/parser/pg_wrapper
     ydb/library/yql/providers/yt/gateway/file
+    ydb/library/yql/sql/pg
 
     ydb/tests/tools/kqprun/src
 )

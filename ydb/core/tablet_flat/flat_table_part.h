@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "flat_part_scheme.h"
 #include "flat_page_btree_index.h"
-#include "flat_page_index.h"
+#include "flat_page_flat_index.h"
 #include "flat_page_data.h"
 #include "flat_page_blobs.h"
 #include "flat_page_frames.h"

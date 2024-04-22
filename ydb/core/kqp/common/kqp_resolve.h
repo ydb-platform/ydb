@@ -171,16 +171,6 @@ public:
             ColumnTableInfo = columnTableInfo;
         }
 
-        static std::unique_ptr<NSharding::TShardingBase> BuildSharding(const TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo>& columnTableInfo) {
-            if (columnTableInfo) {
-                auto result = NSharding::TShardingBase::BuildShardingOperator(columnTableInfo->Description.GetSharding());
-                YQL_ENSURE(result);
-                return result;
-            } else {
-                return nullptr;
-            }
-        }
-
         void SetPath(const TStringBuf& path) {
             TableConstInfo->Path = path;
         }

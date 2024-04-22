@@ -193,7 +193,6 @@ SRCS(
     schemeshard_svp_migration.h
     schemeshard_svp_migration.cpp
     schemeshard_tx_infly.h
-    schemeshard_tables_storage.cpp
     schemeshard_types.cpp
     schemeshard_types.h
     schemeshard_user_attr_limits.h

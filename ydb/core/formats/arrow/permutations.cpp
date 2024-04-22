@@ -201,8 +201,7 @@ bool BuildHashUI64Impl(std::shared_ptr<TDataContainer>& batch, const std::vector
             return true;
         }
     }
-    std::shared_ptr<arrow::Array> hashColumn = NArrow::NHash::TXX64(fieldNames, NArrow::NHash::TXX64::ENoColumnPolicy::Verify, 34323543)
-        .ExecuteToArray(batch, hashFieldName);
+    std::shared_ptr<arrow::Array> hashColumn = NArrow::NHash::TXX64(fieldNames, NArrow::NHash::TXX64::ENoColumnPolicy::Verify, 34323543).ExecuteToArray(batch);
     batch = NAdapter::TDataBuilderPolicy<TDataContainer>::AddColumn(batch, std::make_shared<arrow::Field>(hashFieldName, hashColumn->type()), hashColumn);
     return true;
 }

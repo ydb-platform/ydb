@@ -21,7 +21,7 @@ Thus, {{ ydb-short-name }} server major version is a combination of the first tw
 
 ### Compatibility {#server-compatibility}
 
-{{ ydb-short-name }} maintains compatibility between major versions to ensure a cluster can operate while its nodes run two adjacent major versions of the YDB server executable. You may refer the [Updating {{ ydb-short-name }}](../administration/upgrade.md) article to learn more about the cluster upgrade procedure.
+{{ ydb-short-name }} maintains compatibility between major versions to ensure a cluster can operate while its nodes run two adjacent major versions of the YDB server executable. You may refer the [Updating {{ ydb-short-name }}](../devops/manual/upgrade.md) article to learn more about the cluster upgrade procedure.
 
 Given the above compatibility target, major releases go in pairs: odd numbered releases add new functionality switched off by feature flags, and even numbered releases enable that functionality by default.
 

@@ -19,7 +19,7 @@ bool TPartition::NeedReleaseChildren() const {
 }
 
 bool TPartition::BalanceToOtherPipe() const {
-    return LastPipe && !Commited && ReadingFinished && !ScaleAwareSDK;
+    return !Commited && ReadingFinished && !ScaleAwareSDK;
 }
 
 bool TPartition::StartReading() {
@@ -58,9 +58,6 @@ bool TPartition::SetFinishedState(bool scaleAwareSDK, bool startedReadingFromEnd
     } else {
         ++Iteration;
     }
-    if (scaleAwareSDK || currentStatus) {
-        LastPipe = TActorId();
-    }
     return currentStatus && !previousStatus;
 }
 
@@ -71,7 +68,6 @@ bool TPartition::Reset() {
     ReadingFinished = false;
     Commited = false;
     ++Cookie;
-    LastPipe = TActorId();
 
     return result;
 };
@@ -286,6 +282,8 @@ void TPartitionFamily::StartReading(TSession& session, const TActorContext& ctx)
     ++Session->ActiveFamilyCount;
     ++Consumer.ActiveFamilyCount;
 
+    LastPipe = Session->Pipe;
+
     for (auto partitionId : Partitions) {
         LockPartition(partitionId, ctx);
     }
@@ -373,7 +371,7 @@ void TPartitionFamily::InactivatePartition(ui32 partitionId) {
 
 TString TPartitionFamily::DebugStr() const {
     return TStringBuilder() << "family=" << Id << " (Status=" << Status
-            << ", Partitions=[" << JoinRange(", ", Partitions.begin(), Partitions.end()) << "])";
+            << ", Partitions=[" << JoinRange(", ", Partitions.begin(), Partitions.end()) << "], SpecialSessions=" << SpecialSessions.size() << ")";
 }
 
 TPartition* TPartitionFamily::GetPartition(ui32 partitionId) {
@@ -395,7 +393,7 @@ bool TPartitionFamily::PossibleForBalance(TSession* session) {
         return true;
     }
 
-    return session->Pipe != partition->LastPipe;
+    return session->Pipe != LastPipe;
 }
 
 
@@ -881,7 +879,6 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
                     << ". Scheduled release of the partition for re-reading. Delay=" << delay << " seconds,"
                     << " firstMessage=" << r.GetStartedReadingFromEndOffset() << ", " << GetSdkDebugString0(r.GetScaleAwareSDK()));
 
-        status->LastPipe = family->Session->Pipe;
         ctx.Schedule(TDuration::Seconds(delay), new TEvPQ::TEvWakeupReleasePartition(ConsumerName, partitionId, status->Cookie));
     }
 }
@@ -987,6 +984,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
             auto sit = sessions.begin();
             for (;sit != sessions.end() && sessions.size() > 1 && !family->PossibleForBalance(*sit); ++sit) {
                 // Skip unpossible session. If there is only one session, then we always balance in it.
+                Cerr << ">>>> Skip session " << (*sit)-> DebugStr() << Endl;
             }
 
             if (sit == sessions.end()) {
@@ -1149,7 +1147,8 @@ bool TSession::AllPartitionsReadable(const std::vector<ui32>& partitions) const 
 
 TString TSession::DebugStr() const {
     return TStringBuilder() << "ReadingSession \"" << Session << "\" (Sender=" << Sender << ", Pipe=" << Pipe
-            << ", Partitions=[" << JoinRange(", ", Partitions.begin(), Partitions.end()) << "])";
+            << ", Partitions=[" << JoinRange(", ", Partitions.begin(), Partitions.end())
+            << "], ActiveFamilyCount=" << ActiveFamilyCount << ")";
 }
 
 

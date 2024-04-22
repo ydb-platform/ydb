@@ -23,9 +23,7 @@ struct TPartition {
     size_t Iteration = 0;
     ui64 Cookie = 0;
 
-    TActorId LastPipe;
-
-        // Generation of PQ-tablet and cookie for synchronization of commit information.
+    // Generation of PQ-tablet and cookie for synchronization of commit information.
     ui32 PartitionGeneration;
     ui64 PartitionCookie;
 
@@ -84,6 +82,8 @@ struct TPartitionFamily {
 
     // Reading sessions that have a list of partitions to read and these sessions can read this family
     std::unordered_map<TActorId, TSession*> SpecialSessions;
+
+    TActorId LastPipe;
 
     TPartitionFamily(TConsumer& consumerInfo, size_t id, std::vector<ui32>&& partitions);
     ~TPartitionFamily() = default;
@@ -153,6 +153,8 @@ struct SessionComparator {
 
 using TOrderedSessions = std::set<TSession*, SessionComparator>;
 
+// It contains all the logic of balancing the reading sessions of a single consumer: the distribution of partitions
+// across reading sessions, the uniformity of the load.
 struct TConsumer {
     friend struct TPartitionFamily;
 

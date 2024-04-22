@@ -29,9 +29,6 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
 
     if (Ev) {
         auto* request = Ev->Get();
-        const auto& record = request->Record;
-        Y_UNUSED(record);
-
         LWTRACK(WriteExecute, request->GetOrbit());
     }
 

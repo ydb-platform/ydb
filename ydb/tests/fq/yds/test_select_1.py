@@ -28,7 +28,7 @@ class TestSelect1(object):
         assert result_set.columns[0].type.type_id == ydb.Type.INT32
         assert len(result_set.rows) == 1
         assert result_set.rows[0].items[0].int32_value == 1
-        assert sum(kikimr.control_plane.get_metering()) == 10
+        assert sum(kikimr.control_plane.get_metering(1)) == 10
 
     @yq_all
     def test_select_z_x_y(self, client):

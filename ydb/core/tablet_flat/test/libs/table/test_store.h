@@ -270,11 +270,13 @@ namespace NTest {
         {
             Y_ABORT_UNLESS(!Finished, "This store is already finished");
 
-            auto& pages = PageCollections[GetExternRoom()];
+            auto room = GetExternRoom();
+            TPageId pageId = PageCollections[room].size();
 
-            pages.emplace_back(std::move(data));
+            PageCollections[room].emplace_back(std::move(data));
+            PageTypes[room].push_back(EPage::Opaque);
 
-            return GlobForBlob(pages.size() - 1);
+            return GlobForBlob(pageId);
         }
 
         void Finish() noexcept

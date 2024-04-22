@@ -71,7 +71,7 @@ UPDATE table1 ON SELECT * FROM $to_update
 
 {% note info %}
 
-Currently, data updating is possible using a synchronous secondary index only.
+Currently, data updating is possible only using a synchronous secondary index. This is because data modification is possible only in [Serializable](../concepts/transactions.md#modes) transactions, but accessing asynchronous indices would break the guarantees of this transaction mode.
 
 {% endnote %}
 

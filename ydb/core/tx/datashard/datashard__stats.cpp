@@ -74,7 +74,7 @@ public:
         auto partStore = CheckedCast<const TPartStore*>(part);
         auto info = partStore->PageCollections.at(groupId.Index).Get();
         auto type = EPage(info->PageCollection->Page(pageId).Type);
-        Y_ABORT_UNLESS(type == EPage::Index || type == EPage::BTreeIndex);
+        Y_ABORT_UNLESS(type == EPage::FlatIndex || type == EPage::BTreeIndex);
 
         auto& partPages = Pages[part];
         auto page = partPages.FindPtr(pageId);

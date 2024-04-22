@@ -110,7 +110,7 @@ void TReadTableCommand::DoExecute(ICommandContextPtr context)
         BuildYsonMapFragmentFluently(consumer)
             .Item("approximate_row_count").Value(reader->GetTotalRowCount())
             .Item("omitted_inaccessible_columns").Value(reader->GetOmittedInaccessibleColumns())
-            .DoIf(reader->GetTotalRowCount() > 0, [&](auto fluent) {
+            .DoIf(reader->GetTotalRowCount() > 0, [&] (auto fluent) {
                 fluent
                     .Item("start_row_index").Value(reader->GetStartRowIndex());
             });
@@ -130,7 +130,7 @@ void TReadTableCommand::DoExecute(ICommandContextPtr context)
         ControlAttributes,
         0);
 
-    auto finally = Finally([&] () {
+    auto finally = Finally([&] {
         auto dataStatistics = reader->GetDataStatistics();
         YT_LOG_DEBUG("Command statistics (RowCount: %v, WrittenSize: %v, "
             "ReadUncompressedDataSize: %v, ReadCompressedDataSize: %v, "

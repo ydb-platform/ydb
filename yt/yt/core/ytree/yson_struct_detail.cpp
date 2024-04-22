@@ -71,7 +71,7 @@ IYsonStructParameterPtr TYsonStructMeta::GetParameter(const TString& keyOrAlias)
 void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const TString& key, const NYTree::INodePtr& node) const
 {
     const auto& parameter = GetParameter(key);
-    auto validate = [&] () {
+    auto validate = [&] {
         parameter->PostprocessParameter(target, "/" + key);
         try {
             for (const auto& postprocessor : Postprocessors_) {

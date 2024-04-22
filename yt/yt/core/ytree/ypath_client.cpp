@@ -593,7 +593,7 @@ void SetNodeByYPath(
 
     TString currentToken;
     TString currentLiteralValue;
-    auto nextSegment = [&] () {
+    auto nextSegment = [&] {
         tokenizer.Skip(NYPath::ETokenType::Ampersand);
         tokenizer.Expect(NYPath::ETokenType::Slash);
         tokenizer.Advance();
@@ -694,7 +694,7 @@ void ForceYPath(
 
     TString currentToken;
     TString currentLiteralValue;
-    auto nextSegment = [&] () {
+    auto nextSegment = [&] {
         tokenizer.Skip(NYPath::ETokenType::Ampersand);
         tokenizer.Expect(NYPath::ETokenType::Slash);
         tokenizer.Advance();

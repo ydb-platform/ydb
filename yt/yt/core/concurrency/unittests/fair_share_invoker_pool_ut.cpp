@@ -251,7 +251,7 @@ protected:
 
         auto invokerPool = CreateInvokerPool(Queues_[0]->GetInvoker(), switchToCount + 1);
 
-        auto callback = BIND([this, invokerPool, switchToCount] () {
+        auto callback = BIND([this, invokerPool, switchToCount] {
             for (int i = 1; i <= switchToCount; ++i) {
                 ExpectInvokerIndex(i - 1);
                 Spin(Quantum * i);

@@ -33,7 +33,7 @@ struct TTestDataStorage
 {
     TTestDataStorage()
     {
-        LookupResult1 = [&]() {
+        LookupResult1 = [&] {
             auto rowBuffer = NYT::New<NTableClient::TRowBuffer>();
             std::vector<NTableClient::TUnversionedRow> rows;
             for (ui64 key : {10, 11}) {
@@ -47,7 +47,7 @@ struct TTestDataStorage
             };
         } ();
 
-        LookupResult2 = [&]() {
+        LookupResult2 = [&] {
             auto rowBuffer = NYT::New<NTableClient::TRowBuffer>();
             std::vector<NTableClient::TUnversionedRow> rows;
             for (ui64 key : {12, 13}) {
@@ -64,7 +64,7 @@ struct TTestDataStorage
         NameTable = NYT::New<NTableClient::TNameTable>();
 
         i32 keyField = NameTable->GetIdOrRegisterName(KeyColumn);
-        auto keys = [&]() {
+        auto keys = [&] {
             auto rowBuffer = NYT::New<NTableClient::TRowBuffer>();
             std::vector<NTableClient::TUnversionedRow> keysVector;
             for (ui64 key : {10, 11}) {

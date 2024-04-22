@@ -559,7 +559,7 @@ TClient::TClient(const std::vector<IClientPtr>& underlyingClients, TFederationCo
         int priority = GetDataCenterByClient(client) == localDatacenter ? 1 : 0;
         UnderlyingClients_.push_back(New<TClientDescription>(client, priority));
     }
-    std::stable_sort(UnderlyingClients_.begin(), UnderlyingClients_.end(), [](const auto& lhs, const auto& rhs) {
+    std::stable_sort(UnderlyingClients_.begin(), UnderlyingClients_.end(), [] (const auto& lhs, const auto& rhs) {
         return lhs->Priority > rhs->Priority;
     });
 

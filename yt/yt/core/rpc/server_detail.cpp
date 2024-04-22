@@ -973,7 +973,7 @@ TFuture<void> TServerBase::Stop(bool graceful)
     YT_LOG_INFO("Stopping RPC server (Graceful: %v)",
         graceful);
 
-    return DoStop(graceful).Apply(BIND([this, this_ = MakeStrong(this)] () {
+    return DoStop(graceful).Apply(BIND([this, this_ = MakeStrong(this)] {
         YT_LOG_INFO("RPC server stopped");
     }));
 }

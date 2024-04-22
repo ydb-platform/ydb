@@ -96,9 +96,7 @@ struct TTableSpilledBucket {
     }
 
     void Finalize() {
-        StateUi64Adapter.Finalize();
-        StateUi32Adapter.Finalize();
-        StateCharAdapter.Finalize();
+        IsFinalizing = true;
     }
 
     bool IsProcessingFinished() const {
@@ -110,10 +108,11 @@ struct TTableSpilledBucket {
     }
 
     void ProcessBucketSpilling(TTableBucket& bucket) {
-        if  (NextVectorToProcess == ENextVectorToProcess::None) {
+        if (NextVectorToProcess == ENextVectorToProcess::None) {
             NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
+            BucketState = EBucketState::Spilled;
         }
-        BucketState = EBucketState::Spilled;
+        
         while (NextVectorToProcess != ENextVectorToProcess::None) {
             if (HasRunningAsyncIoOperation()) return;
 
@@ -142,6 +141,12 @@ struct TTableSpilledBucket {
                     StateUi32Adapter.AddData(std::move(bucket.InterfaceOffsets));
                     NextVectorToProcess = ENextVectorToProcess::None;
                     SpilledBucketsCount++;
+
+                    if (IsFinalizing) {
+                        StateUi64Adapter.Finalize();
+                        StateUi32Adapter.Finalize();
+                        StateCharAdapter.Finalize();
+                    }
                     break;
                 default:
                     return;
@@ -241,6 +246,8 @@ struct TTableSpilledBucket {
     ENextVectorToProcess NextVectorToProcess = ENextVectorToProcess::None;
 
     ui64 SpilledBucketsCount = 0;
+
+    bool IsFinalizing = false;
 };
 
 
@@ -380,6 +387,33 @@ public:
 
     bool IsEverythingJoined() {
         return NextBucketToJoin > NumberOfBuckets;
+    }
+
+    bool UpdateAndCheckIfBusy() {
+        for (ui64 i = 0; i < NumberOfBuckets; ++i) {
+            TableSpilledBuckets[i].Update();
+        }
+
+        for (ui64 i = 0; i < NumberOfBuckets; ++i) {
+            if (!TableSpilledBuckets[i].IsProcessingFinished() && !TableSpilledBuckets[i].HasRunningAsyncIoOperation()) {
+                TableSpilledBuckets[i].ProcessBucketSpilling(TableBuckets[i]);
+            }
+        }
+
+        for (ui64 i = 0; i < NumberOfBuckets; ++i) {
+            if (TableSpilledBuckets[i].HasRunningAsyncIoOperation()) return true;
+        }
+
+        return false;
+    }
+
+    void FinalizeSpilling() {
+        for (ui64 i = 0; i < NumberOfBuckets; ++i) {
+            assert(TableSpilledBuckets[i].IsProcessingFinished());
+            assert(!TableSpilledBuckets[i].HasRunningAsyncIoOperation());
+            TableSpilledBuckets[i].ProcessBucketSpilling(TableBuckets[i]);
+            TableSpilledBuckets[i].Finalize();
+        }
     }
 
     // Clears table content

@@ -150,7 +150,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
 
     }
 
-
+    TableSpilledBuckets[bucket].ProcessBucketSpilling(TableBuckets[bucket]);
 }
 
 void TTable::ResetIterator() {
@@ -1193,7 +1193,7 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
     // TODO change to bool IsSpilling enabled
     if (spillerFactory) {
         for (size_t i = 0; i < NumberOfBuckets; ++i) {
-            TableSpilledBuckets.emplace_back(SpillerFactory->CreateSpiller(), 10_MB);
+            TableSpilledBuckets.emplace_back(SpillerFactory->CreateSpiller(), 10_KB);
         }
     }
 

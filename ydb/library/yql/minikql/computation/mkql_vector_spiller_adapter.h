@@ -58,7 +58,7 @@ public:
         MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
         MKQL_ENSURE(State == EState::AcceptingData, "Internal logic error");
 
-        CurrentVector = vec;
+        CurrentVector = std::move(vec);
         StoredChunksElementsCount.push(vec.size());
         NextVectorPositionToSave = 0;
 

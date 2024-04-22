@@ -765,6 +765,9 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 
 EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
 
+            if (LeftPacker->TablePtr->UpdateAndCheckIfBusy()) return EFetchResult::Yield;
+            if (RightPacker->TablePtr->UpdateAndCheckIfBusy()) return EFetchResult::Yield;
+
             // Collecting data for join and perform join (batch or full)
             while (!*JoinCompleted ) {
 
@@ -860,12 +863,19 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                 }
 
                 if (resultLeft == EFetchResult::Finish ) {
+                    // RightPacker->TablePtr->FinalizeSpilling();
                     *HaveMoreLeftRows = false;
                 }
 
 
                 if (resultRight == EFetchResult::Finish ) {
+                    // RightPacker->TablePtr->FinalizeSpilling();
                     *HaveMoreRightRows = false;
+                }
+
+                if (resultRight == EFetchResult::Finish || resultLeft == EFetchResult::Finish) {
+                    if (LeftPacker->TablePtr->UpdateAndCheckIfBusy()) return EFetchResult::Yield;
+                    if (RightPacker->TablePtr->UpdateAndCheckIfBusy()) return EFetchResult::Yield;
                 }
 
                 if ((resultLeft == EFetchResult::Yield && (!*HaveMoreRightRows || resultRight == EFetchResult::Yield)) ||

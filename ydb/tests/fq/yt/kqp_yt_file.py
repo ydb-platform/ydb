@@ -212,8 +212,8 @@ def run_test(suite, case, cfg):
     if do_custom_query_check(result, sql_query):
         return None
 
-    if os.path.exists(result.results_file) and full_test_name not in EXCLUDED_CANONIZATION:
-        return yatest.common.canonical_file(result.results_file)
+    #if os.path.exists(result.results_file) and full_test_name not in EXCLUDED_CANONIZATION:
+    #    return yatest.common.canonical_file(result.results_file)
 
 
 def run_file_kqp_no_cache(suite, case, cfg):

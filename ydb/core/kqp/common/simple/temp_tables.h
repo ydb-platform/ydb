@@ -32,4 +32,7 @@ TString GetSessionDirPath(const TString& database, const TString& sessionId);
 TString GetTempTablePath(const TString& database, const TString& sessionId, const TString tablePath);
 TString GetCreateTempTablePath(const TString& database, const TString& sessionId, const TString tablePath);
 
+bool IsSessionsDirPath(const TStringBuf database, const TStringBuf path);
+bool IsSessionsDirPath(const TStringBuf database, const TString& workingDir, const TString& name);
+
 } // namespace NKikimr::NKqp

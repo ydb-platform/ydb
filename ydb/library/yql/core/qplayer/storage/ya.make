@@ -1,4 +1,5 @@
 RECURSE(
     interface
+    memory
 )
 

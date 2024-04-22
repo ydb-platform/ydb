@@ -146,4 +146,4 @@ StorageLoad: {
     }
 }
 ```
-Calculated percentiles will only represent the requests of the main load cycle and won't include write requests sent during the initial data allocation. The [graphs in Monitoring](../administration/grafana-dashboards.md) should be of interest, for example, they allow to trace the request latency degradation caused by the increasing load.
+Calculated percentiles will only represent the requests of the main load cycle and won't include write requests sent during the initial data allocation. The [graphs in Monitoring](../reference/observability/metrics/grafana-dashboards.md) should be of interest, for example, they allow to trace the request latency degradation caused by the increasing load.

@@ -19,6 +19,24 @@ common:
     to: /quickstart.md
   - from: /getting_started/self_hosted/ydb_minikube.md
     to: /quickstart.md
+  - from: /getting_started/index.md
+    to: /quickstart.md
+  - from: /getting_started/quickstart/index.md
+    to: /quickstart.md
+  - from: /cluster/topology.md
+    to: /concepts/topology.md
+  - from: /getting_started/yql.md
+    to: /yql/reference/index.md
+  - from: /concepts/datatypes.md
+    to: /yql/reference/types/index.md
+
+# DevOps-related redirects
+  - from: /getting_started/kubernetes.md
+    to: /devops/kubernetes/initial-deployment.md
+  - from: /getting_started/ansible.md
+    to: /devops/ansible/initial-deployment.md
+  - from: /troubleshooting/system_views_cluster.md
+    to: /devops/manual/system-views.md
   - from: /ops/devslice-user-guide-k8s-baremetal-host.md
     to: /ops/devslice-setup-kikimr-slice.md
   - from: /deploy/orchestrated/concepts.md
@@ -29,18 +47,26 @@ common:
     to: /devops/kubernetes/initial-deployment.md
   - from: /deploy/orchestrated/operate.md
     to: /devops/kubernetes/initial-deployment.md
-  - from: /getting_started/index.md
-    to: /quickstart.md
-  - from: /getting_started/kubernetes.md
-    to: /devops/kubernetes/initial-deployment.md
-  - from: /getting_started/ansible.md
-    to: /devops/ansible/initial-deployment.md
-  - from: /getting_started/yql.md
-    to: /yql/reference/index.md
-  - from: /troubleshooting/system_views_cluster.md
-    to: /devops/manual/system-views.md
-  - from: /concepts/datatypes.md
-    to: /yql/reference/types/index.md
+  - from: /cluster/system-requirements.md
+    to: /devops/system-requirements.md
+  - from: /cluster/index.md
+    to: /devops/index.md
+  - from: /cluster/logs.md
+    to: /devops/manual/logging.md
+  - from: /administration/grafana-dashboards.md
+    to: /reference/observability/metrics/grafana-dashboards.md
+  - from: /administration/production-storage-config.md
+    to: /deploy/configuration/config.md
+  - from: /administration/decommissioning.md
+    to: /deploy/manual/decommissioning.md
+  - from: /administration/monitoring.md
+    to: /deploy/manual/monitoring.md
+  - from: /administration/state-storage-move.md
+    to: /deploy/manual/state-storage-move.md
+  - from: /administration/static-group-move.md
+    to: /deploy/manual/static-group-move.md
+  - from: /administration/upgrade.md
+    to: /deploy/manual/upgrade.md
 
 # DBA-related redirects
   - from: /db/index.md
@@ -128,6 +154,14 @@ common:
   - from: /reference/ydb-sdk/example/python/index.md
     to: /dev/example-app/python/index.md
 
+# Security-related redirects
+  - from: /cluster/access.md
+    to: /security/acess-management.md
+  - from: /cluster/audit-log.md
+    to: /security/audit-log.md
+  - from: /cluster/short-access-control-notation.md
+    to: /security/short-access-control-notation.md
+
 # Contributors-related redirects
   - from: /development/build-ya.md
     to: /contributor/build-ya.md
@@ -171,6 +205,22 @@ common:
     to: /reference/ydb-dstool/index.md
   - from: /administration/ydb-dstool-setup.md
     to: /reference/ydb-dstool/install.md
+
+# Redirects for Embedded UI
+  - from: /maintenance/embedded_monitoring/ydb_monitoring.md
+    to: /reference/embedded-ui/ydb-monitoring.md
+  - from: /maintenance/embedded_monitoring/overview.md
+    to: /reference/embedded-ui/overview.md
+  - from: /maintenance/embedded_monitoring/hive.md
+    to: /reference/embedded-ui/hive.md
+  - from: /maintenance/embedded_monitoring/logs.md
+    to: /reference/embedded-ui/logs.md
+  - from: /maintenance/embedded_monitoring/interconnect_overview.md
+    to: /reference/embedded-ui/interconnect-overview.md
+  - from: /maintenance/embedded_monitoring/charts.md
+    to: /reference/embedded-ui/charts.md
+  - from: /maintenance/embedded_monitoring/index.md
+    to: /reference/embedded-ui/index.md
 
 # Redirects from export_import to export-import   
   - from: /reference/ydb-cli/export_import/s3_conn.md

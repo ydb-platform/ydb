@@ -88,9 +88,9 @@ TColumnTablesLayout TTablesStorage::GetTablesLayout(const std::vector<ui64>& tab
     for (auto&& i : tabletIds) {
         auto it = TablesByShard.find(i);
         if (it == TablesByShard.end()) {
-            groups.emplace_back(&Default<TColumnTablesLayout::TTableIdsGroup>(), TColumnTablesLayout::TShardIdsGroup(i));
+            groups.emplace_back(&Default<TColumnTablesLayout::TTableIdsGroup>(), std::set<ui64>({i}));
         } else {
-            groups.emplace_back(&it->second, TColumnTablesLayout::TShardIdsGroup(i));
+            groups.emplace_back(&it->second, std::set<ui64>({i}));
         }
     }
     std::sort(groups.begin(), groups.end());

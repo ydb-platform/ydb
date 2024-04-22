@@ -15,11 +15,8 @@ std::vector<ui64> TColumnTablesLayout::ShardIdxToTabletId(const std::vector<TSha
 }
 
 TColumnTablesLayout TColumnTablesLayout::BuildTrivial(const std::vector<ui64>& tabletIds) {
-    TShardIdsGroup shardIdsGroup;
-    for (const auto& tabletId : tabletIds) {
-        shardIdsGroup.AddId(tabletId);
-    }
-    return TColumnTablesLayout({ TTablesGroup(&Default<TTableIdsGroup>(), std::move(shardIdsGroup)) });
+    std::set<ui64> ids(tabletIds.begin(), tabletIds.end());
+    return TColumnTablesLayout({ TTablesGroup(&Default<TTableIdsGroup>(), std::move(ids)) });
 }
 
 TColumnTablesLayout::TColumnTablesLayout(std::vector<TTablesGroup>&& groups)
@@ -31,7 +28,7 @@ TColumnTablesLayout::TColumnTablesLayout(std::vector<TTablesGroup>&& groups)
 bool TColumnTablesLayout::TTablesGroup::TryMerge(const TTablesGroup& item) {
     if (GetTableIds() == item.GetTableIds()) {
         for (auto&& i : item.ShardIds) {
-            AFL_VERIFY(ShardIds.emplace(i));
+            AFL_VERIFY(ShardIds.emplace(i).second);
         }
         return true;
     } else {

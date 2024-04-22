@@ -96,14 +96,6 @@ class TSchemeShard;
 
 class TColumnTablesLayout {
 private:
-    class TSelfHash {
-    public:
-        template <class T>
-        static ui64 GetHash(const T data) {
-            return IntHash(data);
-        }
-    };
-
     class TPathIdHashCalcer {
     public:
         template <class T>
@@ -113,7 +105,6 @@ private:
     };
 
 public:
-    using TShardIdsGroup = TLayoutIdSet<ui64, TSelfHash>;
     using TTableIdsGroup = TLayoutIdSet<TPathId, TPathIdHashCalcer>;
 
     class TTablesGroup {
@@ -122,7 +113,7 @@ public:
         YDB_READONLY_DEF(std::set<ui64>, ShardIds);
     public:
         TTablesGroup() = default;
-        TTablesGroup(const TTableIdsGroup* tableIds, TShardIdsGroup&& shardIds);
+        TTablesGroup(const TTableIdsGroup* tableIds, std::set<ui64>&& shardIds);
 
         const TTableIdsGroup& GetTableIds() const;
 

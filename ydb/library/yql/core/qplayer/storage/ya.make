@@ -1,0 +1,5 @@
+RECURSE(
+    interface
+    memory
+)
+

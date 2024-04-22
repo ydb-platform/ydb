@@ -71,6 +71,178 @@ struct TTableBucket {
 
  };
 
+struct TTableSpilledBucket {
+    TTableSpilledBucket(ISpiller::TPtr spiller, size_t sizeLimit)
+        : StateUi64Adapter(spiller, sizeLimit)
+        , StateUi32Adapter(spiller, sizeLimit)
+        , StateCharAdapter(spiller, sizeLimit) {
+    }
+
+    TVectorSpillerAdapter<ui64, TMKQLAllocator<ui64>> StateUi64Adapter;
+    TVectorSpillerAdapter<ui32, TMKQLAllocator<ui32>> StateUi32Adapter;
+    TVectorSpillerAdapter<char, TMKQLAllocator<char>> StateCharAdapter;
+
+
+    bool HasRunningAsyncIoOperation() {
+        return StateUi64Adapter.HasRunningAsyncIoOperatrion()
+            || StateUi32Adapter.HasRunningAsyncIoOperatrion()
+            || StateCharAdapter.HasRunningAsyncIoOperatrion();
+    }
+
+    void Update() {
+        StateUi64Adapter.Update();
+        StateUi32Adapter.Update();
+        StateCharAdapter.Update();
+    }
+
+    void Finalize() {
+        StateUi64Adapter.Finalize();
+        StateUi32Adapter.Finalize();
+        StateCharAdapter.Finalize();
+    }
+
+    bool IsProcessingFinished() const {
+        return NextVectorToProcess == ENextVectorToProcess::None;
+    }
+
+    bool HasMoreSpilledBuckets() const { 
+        return SpilledBucketsCount > 0;
+    }
+
+    void ProcessBucketSpilling(TTableBucket& bucket) {
+        if  (NextVectorToProcess == ENextVectorToProcess::None) {
+            NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
+        }
+        BucketState = EBucketState::Spilled;
+        while (NextVectorToProcess != ENextVectorToProcess::None) {
+            if (HasRunningAsyncIoOperation()) return;
+
+            switch (NextVectorToProcess) {
+                case ENextVectorToProcess::KeyAndVals:
+                    StateUi64Adapter.AddData(std::move(bucket.KeyIntVals));
+                    NextVectorToProcess = ENextVectorToProcess::DataIntVals;
+                    break;
+                case ENextVectorToProcess::DataIntVals:
+                    StateUi64Adapter.AddData(std::move(bucket.DataIntVals));
+                    NextVectorToProcess = ENextVectorToProcess::StringsValues;
+                    break;
+                case ENextVectorToProcess::StringsValues:
+                    StateCharAdapter.AddData(std::move(bucket.StringsValues));
+                    NextVectorToProcess = ENextVectorToProcess::StringsOffsets;
+                    break;
+                case ENextVectorToProcess::StringsOffsets:
+                    StateUi32Adapter.AddData(std::move(bucket.StringsOffsets));
+                    NextVectorToProcess = ENextVectorToProcess::InterfaceValues;
+                    break;
+                case ENextVectorToProcess::InterfaceValues:
+                    StateCharAdapter.AddData(std::move(bucket.InterfaceValues));
+                    NextVectorToProcess = ENextVectorToProcess::InterfaceOffsets;
+                    break;
+                case ENextVectorToProcess::InterfaceOffsets:
+                    StateUi32Adapter.AddData(std::move(bucket.InterfaceOffsets));
+                    NextVectorToProcess = ENextVectorToProcess::None;
+                    SpilledBucketsCount++;
+                    break;
+                default:
+                    return;
+            }
+        }
+    }
+
+    template <class T>
+    void AppendVector(std::vector<T, TMKQLAllocator<T>>& first, std::vector<T, TMKQLAllocator<T>>&& second) {
+        if (first.empty()) {
+            first = std::move(second);
+            return;
+        }
+        first.insert(first.end(), second.begin(), second.end());
+    }
+
+    void ProcessBucketRestoration(TTableBucket& bucket) {
+        if (NextVectorToProcess == ENextVectorToProcess::None) {
+            NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
+        }
+        while (NextVectorToProcess != ENextVectorToProcess::None) {
+            if (HasRunningAsyncIoOperation()) return;
+
+            switch (NextVectorToProcess) {
+                case ENextVectorToProcess::KeyAndVals:
+                    if (!StateUi64Adapter.IsDataReady()) {
+                        StateUi64Adapter.RequestNextVector();
+                    }
+                    AppendVector(bucket.KeyIntVals, StateUi64Adapter.ExtractVector());
+                    NextVectorToProcess = ENextVectorToProcess::DataIntVals;
+                    break;
+                case ENextVectorToProcess::DataIntVals:
+                    if (!StateUi64Adapter.IsDataReady()) {
+                        StateUi64Adapter.RequestNextVector();
+                    }
+                    AppendVector(bucket.DataIntVals, StateUi64Adapter.ExtractVector());
+                    NextVectorToProcess = ENextVectorToProcess::StringsValues;
+                    break;
+                case ENextVectorToProcess::StringsValues:
+                    if (!StateCharAdapter.IsDataReady()) {
+                        StateCharAdapter.RequestNextVector();
+                    }
+                    AppendVector(bucket.StringsValues, StateCharAdapter.ExtractVector());
+                    NextVectorToProcess = ENextVectorToProcess::StringsOffsets;
+                    break;
+                case ENextVectorToProcess::StringsOffsets:
+                    if (!StateUi32Adapter.IsDataReady()) {
+                        StateUi32Adapter.RequestNextVector();
+                    }
+                    AppendVector(bucket.StringsOffsets, StateUi32Adapter.ExtractVector());
+                    NextVectorToProcess = ENextVectorToProcess::InterfaceValues;
+                    break;
+                case ENextVectorToProcess::InterfaceValues:
+                    if (!StateCharAdapter.IsDataReady()) {
+                        StateCharAdapter.RequestNextVector();
+                    }
+                    AppendVector(bucket.InterfaceValues, StateCharAdapter.ExtractVector());
+                    NextVectorToProcess = ENextVectorToProcess::InterfaceOffsets;
+                    break;
+                case ENextVectorToProcess::InterfaceOffsets:
+                    if (!StateUi32Adapter.IsDataReady()) {
+                        StateUi32Adapter.RequestNextVector();
+                    }
+                    AppendVector(bucket.InterfaceOffsets, StateUi32Adapter.ExtractVector());
+                    NextVectorToProcess = ENextVectorToProcess::None;
+                    SpilledBucketsCount--;
+                    if (SpilledBucketsCount == 0) {
+                        BucketState = EBucketState::InMemory;
+                    }
+                    break;
+                default:
+                    return;
+
+            }
+        }
+    }
+
+    enum class EBucketState {
+        InMemory,
+        Spilling,
+        Restoring,
+        Spilled
+    };
+
+    enum class ENextVectorToProcess {
+        KeyAndVals,
+        DataIntVals,
+        StringsValues,
+        StringsOffsets,
+        InterfaceValues,
+        InterfaceOffsets,
+
+        None
+    };
+
+    EBucketState BucketState = EBucketState::InMemory;
+    ENextVectorToProcess NextVectorToProcess = ENextVectorToProcess::None;
+
+    ui64 SpilledBucketsCount = 0;
+};
+
 
 struct TupleData {
     ui64 * IntColumns = nullptr; // Array of packed int  data of the table. Caller should allocate array of NumberOfIntColumns size
@@ -119,6 +291,8 @@ class TTable {
     
     // Table data is partitioned in buckets based on key value
     std::vector<TTableBucket> TableBuckets;
+
+    std::vector<TTableSpilledBucket> TableSpilledBuckets;
 
     // Temporary vector for tuples manipulation;
     std::vector<ui64> TempTuple;
@@ -178,179 +352,9 @@ class TTable {
 
     ui64 TuplesFound_ = 0; // Total number of matching keys found during join
 
+    std::shared_ptr<ISpillerFactory> SpillerFactory;
+
     ui64 NextBucketToJoin = 0;
-
-    struct TTableSpilledBucket {
-        TTableSpilledBucket(ISpiller::TPtr spiller, size_t sizeLimit)
-            : StateUi64Adapter(spiller, sizeLimit)
-            , StateUi32Adapter(spiller, sizeLimit)
-            , StateCharAdapter(spiller, sizeLimit) {
-        }
-
-        TVectorSpillerAdapter<ui64, TMKQLAllocator<ui64>> StateUi64Adapter;
-        TVectorSpillerAdapter<ui32, TMKQLAllocator<ui32>> StateUi32Adapter;
-        TVectorSpillerAdapter<char, TMKQLAllocator<char>> StateCharAdapter;
-
-
-        bool HasRunningAsyncIoOperation() {
-            return StateUi64Adapter.HasRunningAsyncIoOperatrion()
-                || StateUi32Adapter.HasRunningAsyncIoOperatrion()
-                || StateCharAdapter.HasRunningAsyncIoOperatrion();
-        }
-
-        void Update() {
-            StateUi64Adapter.Update();
-            StateUi32Adapter.Update();
-            StateCharAdapter.Update();
-        }
-
-        void Finalize() {
-            StateUi64Adapter.Finalize();
-            StateUi32Adapter.Finalize();
-            StateCharAdapter.Finalize();
-        }
-
-        bool IsProcessingFinished() const {
-            return NextVectorToProcess == ENextVectorToProcess::None;
-        }
-
-        bool HasMoreSpilledBuckets() const { 
-            return SpilledBucketsCount > 0;
-        }
-
-        void ProcessBucketSpilling(TTableBucket& bucket) {
-            if  (NextVectorToProcess == ENextVectorToProcess::None) {
-                NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
-            }
-            BucketState = EBucketState::Spilled;
-            while (NextVectorToProcess != ENextVectorToProcess::None) {
-                if (HasRunningAsyncIoOperation()) return;
-
-                switch (NextVectorToProcess) {
-                    case ENextVectorToProcess::KeyAndVals:
-                        StateUi64Adapter.AddData(std::move(bucket.KeyIntVals));
-                        NextVectorToProcess = ENextVectorToProcess::DataIntVals;
-                        break;
-                    case ENextVectorToProcess::DataIntVals:
-                        StateUi64Adapter.AddData(std::move(bucket.DataIntVals));
-                        NextVectorToProcess = ENextVectorToProcess::StringsValues;
-                        break;
-                    case ENextVectorToProcess::StringsValues:
-                        StateCharAdapter.AddData(std::move(bucket.StringsValues));
-                        NextVectorToProcess = ENextVectorToProcess::StringsOffsets;
-                        break;
-                    case ENextVectorToProcess::StringsOffsets:
-                        StateUi32Adapter.AddData(std::move(bucket.StringsOffsets));
-                        NextVectorToProcess = ENextVectorToProcess::InterfaceValues;
-                        break;
-                    case ENextVectorToProcess::InterfaceValues:
-                        StateCharAdapter.AddData(std::move(bucket.InterfaceValues));
-                        NextVectorToProcess = ENextVectorToProcess::InterfaceOffsets;
-                        break;
-                    case ENextVectorToProcess::InterfaceOffsets:
-                        StateUi32Adapter.AddData(std::move(bucket.InterfaceOffsets));
-                        NextVectorToProcess = ENextVectorToProcess::None;
-                        SpilledBucketsCount++;
-                        break;
-                    default:
-                        return;
-                }
-            }
-        }
-
-        template <class T>
-        void AppendVector(std::vector<T, TMKQLAllocator<T>>& first, std::vector<T, TMKQLAllocator<T>>&& second) {
-            if (first.empty()) {
-                first = std::move(second);
-                return;
-            }
-            first.insert(first.end(), second.begin(), second.end());
-        }
-
-        void ProcessBucketRestoration(TTableBucket& bucket) {
-            if (NextVectorToProcess == ENextVectorToProcess::None) {
-                NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
-            }
-            while (NextVectorToProcess != ENextVectorToProcess::None) {
-                if (HasRunningAsyncIoOperation()) return;
-
-                switch (NextVectorToProcess) {
-                    case ENextVectorToProcess::KeyAndVals:
-                        if (!StateUi64Adapter.IsDataReady()) {
-                            StateUi64Adapter.RequestNextVector();
-                        }
-                        AppendVector(bucket.KeyIntVals, StateUi64Adapter.ExtractVector());
-                        NextVectorToProcess = ENextVectorToProcess::DataIntVals;
-                        break;
-                    case ENextVectorToProcess::DataIntVals:
-                        if (!StateUi64Adapter.IsDataReady()) {
-                            StateUi64Adapter.RequestNextVector();
-                        }
-                        AppendVector(bucket.DataIntVals, StateUi64Adapter.ExtractVector());
-                        NextVectorToProcess = ENextVectorToProcess::StringsValues;
-                        break;
-                    case ENextVectorToProcess::StringsValues:
-                        if (!StateCharAdapter.IsDataReady()) {
-                            StateCharAdapter.RequestNextVector();
-                        }
-                        AppendVector(bucket.StringsValues, StateCharAdapter.ExtractVector());
-                        NextVectorToProcess = ENextVectorToProcess::StringsOffsets;
-                        break;
-                    case ENextVectorToProcess::StringsOffsets:
-                        if (!StateUi32Adapter.IsDataReady()) {
-                            StateUi32Adapter.RequestNextVector();
-                        }
-                        AppendVector(bucket.StringsOffsets, StateUi32Adapter.ExtractVector());
-                        NextVectorToProcess = ENextVectorToProcess::InterfaceValues;
-                        break;
-                    case ENextVectorToProcess::InterfaceValues:
-                        if (!StateCharAdapter.IsDataReady()) {
-                            StateCharAdapter.RequestNextVector();
-                        }
-                        AppendVector(bucket.InterfaceValues, StateCharAdapter.ExtractVector());
-                        NextVectorToProcess = ENextVectorToProcess::InterfaceOffsets;
-                        break;
-                    case ENextVectorToProcess::InterfaceOffsets:
-                        if (!StateUi32Adapter.IsDataReady()) {
-                            StateUi32Adapter.RequestNextVector();
-                        }
-                        AppendVector(bucket.InterfaceOffsets, StateUi32Adapter.ExtractVector());
-                        NextVectorToProcess = ENextVectorToProcess::None;
-                        SpilledBucketsCount--;
-                        if (SpilledBucketsCount == 0) {
-                            BucketState = EBucketState::InMemory;
-                        }
-                        break;
-                    default:
-                        return;
-
-                }
-            }
-        }
-
-        enum class EBucketState {
-            InMemory,
-            Spilling,
-            Restoring,
-            Spilled
-        };
-
-        enum class ENextVectorToProcess {
-            KeyAndVals,
-            DataIntVals,
-            StringsValues,
-            StringsOffsets,
-            InterfaceValues,
-            InterfaceOffsets,
-
-            None
-        };
-
-        EBucketState BucketState = EBucketState::InMemory;
-        ENextVectorToProcess NextVectorToProcess = ENextVectorToProcess::None;
-
-        ui64 SpilledBucketsCount = 0;
-    };
 
 public:
 
@@ -385,7 +389,8 @@ public:
     TTable(ui64 numberOfKeyIntColumns = 0, ui64 numberOfKeyStringColumns = 0,
             ui64 numberOfDataIntColumns = 0, ui64 numberOfDataStringColumns = 0,
             ui64 numberOfKeyIColumns = 0, ui64 numberOfDataIColumns = 0, 
-            ui64 nullsBitmapSize = 1, TColTypeInterface * colInterfaces = nullptr, bool isAny = false);
+            ui64 nullsBitmapSize = 1, TColTypeInterface * colInterfaces = nullptr, bool isAny = false,
+            std::shared_ptr<ISpillerFactory> spillerFactory = nullptr);
     
     ~TTable();
 

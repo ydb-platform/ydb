@@ -11,6 +11,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 #include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
+#include <ydb/library/yql/minikql/computation/mkql_spiller.h>
 
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -82,7 +83,8 @@ struct TGraceJoinPacker {
     bool IsAny; // Flag to support any join attribute
     inline void Pack() ; // Packs new tuple from TupleHolder and TuplePtrs to TupleIntVals, TupleStrSizes, TupleStrings
     inline void UnPack(); // Unpacks packed values from TupleIntVals, TupleStrSizes, TupleStrings into TupleHolder and TuplePtrs
-    TGraceJoinPacker(const std::vector<TType*>& columnTypes, const std::vector<ui32>& keyColumns, const THolderFactory& holderFactory, bool isAny);
+    std::shared_ptr<ISpillerFactory> SpillerFactory;
+    TGraceJoinPacker(const std::vector<TType*>& columnTypes, const std::vector<ui32>& keyColumns, const THolderFactory& holderFactory, bool isAny, std::shared_ptr<ISpillerFactory> SpillerFactory);
 };
 
 
@@ -441,10 +443,11 @@ void TGraceJoinPacker::UnPack()  {
 }
 
 
-TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, const std::vector<ui32>& keyColumns, const THolderFactory& holderFactory, bool isAny) :
+TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, const std::vector<ui32>& keyColumns, const THolderFactory& holderFactory, bool isAny, std::shared_ptr<ISpillerFactory> spillerFactory) :
                                     ColumnTypes(columnTypes)
                                     , HolderFactory(holderFactory)
-                                    , IsAny(isAny) {
+                                    , IsAny(isAny)
+                                    , SpillerFactory(spillerFactory) {
 
     ui64 nColumns = ColumnTypes.size();
     ui64 nKeyColumns = keyColumns.size();
@@ -562,7 +565,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
 
     TablePtr = std::make_unique<GraceJoin::TTable>(
         PackedKeyIntColumnsNum, KeyStrColumnsNum, PackedDataIntColumnsNum,
-        DataStrColumnsNum, KeyIColumnsNum, DataIColumnsNum, NullsBitmapSize, cti_p, IsAny );
+        DataStrColumnsNum, KeyIColumnsNum, DataIColumnsNum, NullsBitmapSize, cti_p, IsAny, SpillerFactory);
 
 }
 
@@ -576,7 +579,7 @@ public:
         EJoinKind joinKind,  EAnyJoinSettings anyJoinSettings, const std::vector<ui32>& leftKeyColumns, const std::vector<ui32>& rightKeyColumns,
         const std::vector<ui32>& leftRenames, const std::vector<ui32>& rightRenames,
         const std::vector<TType*>& leftColumnsTypes, const std::vector<TType*>& rightColumnsTypes, const THolderFactory & holderFactory,
-        const bool isSelfJoin)
+        const bool isSelfJoin, std::shared_ptr<ISpillerFactory> spillerFactory)
     :  TBase(memInfo)
     ,   FlowLeft(flowLeft)
     ,   FlowRight(flowRight)
@@ -584,8 +587,9 @@ public:
     ,   LeftKeyColumns(leftKeyColumns)
     ,   RightKeyColumns(rightKeyColumns)
     ,   LeftRenames(leftRenames)
-    ,   RightRenames(rightRenames)    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both)))
-    ,   RightPacker(std::make_unique<TGraceJoinPacker>(rightColumnsTypes, rightKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Right || anyJoinSettings == EAnyJoinSettings::Both)))
+    ,   RightRenames(rightRenames)
+    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both), spillerFactory))
+    ,   RightPacker(std::make_unique<TGraceJoinPacker>(rightColumnsTypes, rightKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Right || anyJoinSettings == EAnyJoinSettings::Both), spillerFactory))
     ,   JoinedTablePtr(std::make_unique<GraceJoin::TTable>())
     ,   JoinCompleted(std::make_unique<bool>(false))
     ,   PartialJoinCompleted(std::make_unique<bool>(false))
@@ -742,7 +746,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
             state = ctx.HolderFactory.Create<TGraceJoinState>(
                 FlowLeft, FlowRight, JoinKind, AnyJoinSettings_, LeftKeyColumns, RightKeyColumns,
                 LeftRenames, RightRenames, LeftColumnsTypes, RightColumnsTypes,
-                ctx.HolderFactory, IsSelfJoin_);
+                ctx.HolderFactory, IsSelfJoin_, ctx.SpillerFactory);
         }
 
         IComputationWideFlowNode *const  FlowLeft;

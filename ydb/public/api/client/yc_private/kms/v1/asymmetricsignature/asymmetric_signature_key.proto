@@ -4,7 +4,7 @@ package yandex.cloud.priv.kms.v1.asymmetricsignature;
 
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/kms/asymmetricsignature;kms";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/kms/v1/asymmetricsignature;kms";
 option java_outer_classname = "PASK";
 
 enum AsymmetricSignatureAlgorithm {

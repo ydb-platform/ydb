@@ -1,6 +1,6 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/public/api/client/yc_private/iam/iam_token_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/iam/v1/iam_token_service.grpc.pb.h>
 #include "iam_token_service.h"
 #include <ydb/library/grpc/actor_client/grpc_service_client.h>
 #include <ydb/library/grpc/actor_client/grpc_service_cache.h>

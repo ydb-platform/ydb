@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/api/client/yc_private/iam/service_account_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/iam/v1/service_account_service.grpc.pb.h>
 
 class TServiceAccountServiceMock : public yandex::cloud::priv::iam::v1::ServiceAccountService::Service {
 public:

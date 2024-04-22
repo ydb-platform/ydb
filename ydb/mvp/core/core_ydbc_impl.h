@@ -10,7 +10,7 @@
 #include <ydb/public/api/client/yc_private/ydb/v1/storage_type_service.grpc.pb.h>
 #include <ydb/public/api/client/yc_private/ydb/v1/resource_preset_service.grpc.pb.h>
 #include <ydb/public/api/client/yc_private/ydb/v1/quota_service.grpc.pb.h>
-#include <ydb/public/api/client/yc_private/resourcemanager/cloud.pb.h>
+#include <ydb/public/api/client/yc_private/resourcemanager/v1/cloud.pb.h>
 #include <ydb/public/api/client/yc_private/ydb/v1/console_service.grpc.pb.h>
 
 namespace NMVP {

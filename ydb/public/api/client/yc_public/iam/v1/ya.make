@@ -4,8 +4,7 @@ EXCLUDE_TAGS(GO_PROTO)
 
 GRPC()
 SRCS(
-    options.proto
-    common.proto
+    iam_token_service.proto
 )
 
 USE_COMMON_GOOGLE_APIS(

@@ -1224,7 +1224,7 @@ private:
         LOG_T("TS3ReadActor", "Handle undelivered FileQueue ");
         if (!FileQueueEvents.HandleUndelivered(ev)) {
             TIssues issues{TIssue{TStringBuilder() << "FileQueue was lost"}};
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR));
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::UNAVAILABLE));
         }
     }
 
@@ -3399,12 +3399,12 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         fileQueueActor = ActorIdFromProto(protoId);
     }
     
-    ui64 fileQueueBatchSizeLimit;
+    ui64 fileQueueBatchSizeLimit = 0;
     if (auto it = settings.find("fileQueueBatchSizeLimit"); it != settings.cend()) {
         fileQueueBatchSizeLimit = FromString<ui64>(it->second);
     }
 
-    ui64 fileQueueBatchObjectCountLimit;
+    ui64 fileQueueBatchObjectCountLimit = 0;
     if (auto it = settings.find("fileQueueBatchObjectCountLimit"); it != settings.cend()) {
         fileQueueBatchObjectCountLimit = FromString<ui64>(it->second);
     }

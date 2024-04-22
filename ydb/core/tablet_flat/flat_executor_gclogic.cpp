@@ -6,7 +6,8 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 
 TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies)
-    : TabletStorageInfo(std::move(info))
+    : HistoryCutter(info)
+    , TabletStorageInfo(std::move(info))
     , Cookies(cookies)
     , Generation(Cookies->Gen)
     , Slicer(1, Cookies.Get(), NBlockIO::BlockSize)
@@ -101,6 +102,10 @@ void TExecutorGCLogic::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap, ui32 s
             x->SetChannel(chIt.first);
             x->SetSetToGeneration(chIt.second.CommitedGcBarrier.Generation);
             x->SetSetToStep(chIt.second.CommitedGcBarrier.Step);
+
+            if (!chIt.second.CutHistory) {
+                ChannelsToCutHistory.push_back(chIt.first);
+            }
         }
     }
 }
@@ -158,6 +163,22 @@ ui32 TExecutorGCLogic::GetActiveGcBarrier() {
 void TExecutorGCLogic::FollowersSyncComplete(bool isBoot) {
     Y_UNUSED(isBoot);
     AllowGarbageCollection = true;
+}
+
+void TExecutorGCLogic::Confirm(const TActorContext &ctx, TActorId launcher) {
+    for (auto channel : ChannelsToCutHistory) {
+        for (const auto& historyEntry : HistoryCutter.GetHistoryToCut(channel)) {
+            TAutoPtr<TEvTablet::TEvCutTabletHistory> ev(new TEvTablet::TEvCutTabletHistory);
+            auto &record = ev->Record;
+            record.SetTabletID(TabletStorageInfo->TabletID);
+            record.SetChannel(channel);
+            record.SetFromGeneration(historyEntry.FromGeneration);
+            record.SetGroupID(historyEntry.GroupID);
+            ctx.Send(launcher, ev.Release());
+        }
+        ChannelInfo[channel].CutHistory = true;
+    }
+    ChannelsToCutHistory.clear();
 }
 
 void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) {

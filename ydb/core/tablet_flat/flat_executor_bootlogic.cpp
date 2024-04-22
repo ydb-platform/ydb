@@ -34,7 +34,6 @@ TExecutorBootLogic::TExecutorBootLogic(IOps *ops, const TActorId &self, TTabletS
     : Ops(ops)
     , SelfId(self)
     , Info(info)
-    , HistoryCutter(Info)
     , GroupResolveCachedChannel(Max<ui32>())
     , GroupResolveCachedGeneration(Max<ui32>())
     , GroupResolveCachedGroup(Max<ui32>())
@@ -111,6 +110,12 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveBoot(
 
     if (msg->DependencyGraph) {
         StartLeaseWaiter(BootTimestamp, *msg->DependencyGraph);
+
+        for (const auto &entry : msg->DependencyGraph->Entries) {
+            for (const auto &blobId : entry.References) {
+                SeenBlob(blobId);
+            }
+        }
     }
 
     Steps->Spawn<NBoot::TStages>(std::move(msg->DependencyGraph), nullptr);
@@ -173,7 +178,7 @@ void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
     for (const auto &blobId : entry->Blobs()) {
         EntriesToLoad[blobId] = entry;
         LoadBlobQueue.Enqueue(blobId, group, this);
-        HistoryCutter.SeenBlob(blobId);
+        SeenBlob(blobId);
     }
 }
 
@@ -181,6 +186,8 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPage
     auto success = Loads.insert(std::make_pair(req->PageCollection.Get(), step)).second;
 
     Y_ABORT_UNLESS(success, "IPageCollection queued twice for loading");
+
+    SeenBlob(req->PageCollection->Label());
 
     Ops->Send(
         MakeSharedPageCacheId(),
@@ -263,6 +270,12 @@ void TExecutorBootLogic::OnBlobLoaded(const TLogoBlobID& id, TString body, uintp
     Steps->Execute();
 }
 
+void TExecutorBootLogic::SeenBlob(const TLogoBlobID& id) {
+    if (Result().GcLogic) {
+        Result().GcLogic->HistoryCutter.SeenBlob(id);
+    }
+}
+
 TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandle &ev)
 {
     if (auto *msg = ev.CastAsLocal<TEvBlobStorage::TEvGetResult>()) {
@@ -305,7 +318,23 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
 
 TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() noexcept {
     Y_ABORT_UNLESS(Result_->Database, "Looks like booting hasn't been done");
-    Result_->HistoryCutter = new NBoot::THistoryCutter(std::move(HistoryCutter));
+    for (const auto& [tableId, table] : Result_->Database->GetScheme().Tables) {
+        for (const auto& part : Result_->Database->GetTableParts(tableId)) {
+            if (!part || !part->Blobs) {
+                continue;
+            }
+            for (const auto& glob : **(part->Blobs)) {
+                SeenBlob(glob.Logo);
+            }
+        }
+        if (table.ColdBorrow) {
+            for (const auto& [_, room] : table.Rooms) {
+                Result().GcLogic->HistoryCutter.BecomeUncertain(room.Main);
+                Result().GcLogic->HistoryCutter.BecomeUncertain(room.Blobs);
+                Result().GcLogic->HistoryCutter.BecomeUncertain(room.Outer);
+            }
+        }
+    }
     return Result_;
 }
 

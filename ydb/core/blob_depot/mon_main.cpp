@@ -445,6 +445,35 @@ namespace NKikimr::NBlobDepot {
                     })
                 }
             }
+
+            if (Configured && Config.GetIsDecommittingGroup()) {
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        s << "Decommission";
+                    }
+                    DIV_CLASS("panel-body") {
+                        KEYVALUE_TABLE({
+                            KEYVALUE_P("Now", TInstant::Now());
+                            KEYVALUE_P("Decommit state", DecommitState);
+                            KEYVALUE_P("Assimilator state", GroupAssimilatorId ? "running" : "stopped");
+                            KEYVALUE_P("Assimilator position", TStringBuilder() << "<pre>" << AssimilatorPosition << "<pre/>");
+                            KEYVALUE_P("Last assimilated blob id", Data->LastAssimilatedBlobId ?
+                                Data->LastAssimilatedBlobId->ToString() : "<null>");
+                            KEYVALUE_P("Last read blob id", AssimilatorLastReadBlobId);
+                            KEYVALUE_P("Latest successful get", AssimilatorLatestOkGet);
+                            KEYVALUE_P("Latest erroneous get", AssimilatorLatestErrorGet);
+                            KEYVALUE_P("Latest successful put", AssimilatorLatestOkPut);
+                            KEYVALUE_P("Latest erroneous put", AssimilatorLatestErrorPut);
+                            KEYVALUE_P("Blobs read with OK", AssimilatorBlobsReadOk);
+                            KEYVALUE_P("Blobs read with NODATA", AssimilatorBlobsReadNoData);
+                            KEYVALUE_P("Blobs read with error", AssimilatorBlobsReadError);
+                            KEYVALUE_P("Blobs put with OK", AssimilatorBlobsPutOk);
+                            KEYVALUE_P("Blobs put with error", AssimilatorBlobsPutError);
+                        })
+                    }
+                }
+            }
+
             DIV_CLASS("panel panel-info") {
                 DIV_CLASS("panel-heading") {
                     s << "Data";

@@ -4,9 +4,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <contrib/libs/xxhash/xxhash.h>
-#include <chrono>
 #include <string_view>
-#include <format>
 
 
 namespace NKikimr {
@@ -534,6 +532,7 @@ ui64 TTable::JoinTwoBuckets(TTableBucket * bucket1, TTableBucket * bucket2, ui64
 // Joins two tables and returns join result in joined table. Tuples of joined table could be received by
 // joined table iterator
 void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLeftTuples, bool hasMoreRightTuples ) {
+    assert(false);
     if ( hasMoreLeftTuples )
         LeftTableBatch_ = true;
 

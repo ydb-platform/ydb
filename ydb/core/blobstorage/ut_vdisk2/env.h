@@ -21,6 +21,45 @@ namespace NKikimr {
         TIntrusivePtr<TPDiskMockState> PDiskMockState;
         std::unordered_map<NKikimrBlobStorage::EVDiskQueueId, TActorId> QueueIds;
 
+        class TFakeConfigDispatcher : public TActor<TFakeConfigDispatcher> {
+            std::unordered_set<TActorId> Subscribers;
+            TActorId EdgeId;
+        public:
+            TFakeConfigDispatcher()
+                : TActor<TFakeConfigDispatcher>(&TFakeConfigDispatcher::StateWork)
+            {
+            }
+
+            STFUNC(StateWork) {
+                switch (ev->GetTypeRewrite()) {
+                    hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
+                    hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle)
+                    hFunc(NConsole::TEvConsole::TEvConfigNotificationResponse, Handle)
+                }
+            }
+
+            void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr& ev) {
+                auto& items = ev->Get()->ConfigItemKinds;
+                if (items.at(0) != NKikimrConsole::TConfigItem::BlobStorageConfigItem) {
+                    return;
+                }
+                Subscribers.emplace(ev->Sender);
+            }
+
+            void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+                EdgeId = ev->Sender;
+                for (auto& id : Subscribers) {
+                    auto update = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+                    update->Record.CopyFrom(ev->Get()->Record);
+                    Send(id, update.Release());
+                }
+            }
+
+            void Handle(NConsole::TEvConsole::TEvConfigNotificationResponse::TPtr& ev) {
+                Forward(ev, EdgeId);
+            }
+        };
+
     public:
         TTestEnv(TIntrusivePtr<TPDiskMockState> state = nullptr)
             : Runtime(std::make_unique<TTestActorSystem>(1))
@@ -31,6 +70,7 @@ namespace NKikimr {
             SetupLogging();
             Runtime->Start();
             CreatePDisk();
+            CreateConfigDispatcher();
             CreateVDisk();
             CreateQueues();
         }
@@ -76,6 +116,23 @@ namespace NKikimr {
                 collect ? collect->first : 0, collect ? collect->second : 0, hard, keep ? &keep : nullptr,
                 doNotKeep ? &doNotKeep : nullptr, VDiskId, TInstant::Max()),
                 NKikimrBlobStorage::EVDiskQueueId::PutTabletLog);
+        }
+
+        void ChangeMinHugeBlobSize(ui32 minHugeBlobSize) {
+            const TActorId& edge = Runtime->AllocateEdgeActor(NodeId);
+            auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            auto perfConfig = NKikimrConfig::TBlobStorageConfig_TVDiskPerformanceConfig();
+            perfConfig.SetPDiskType(PDiskTypeToPDiskType(VDiskConfig->BaseInfo.DeviceType));
+            perfConfig.SetMinHugeBlobSizeInBytes(minHugeBlobSize);
+            
+            auto* vdiskTypes = request->Record.MutableConfig()->MutableBlobStorageConfig()->MutableVDiskPerformanceSettings()->MutableVDiskTypes();
+            vdiskTypes->Add(std::move(perfConfig));
+            
+            Runtime->Send(new IEventHandle(NConsole::MakeConfigsDispatcherID(NodeId), edge, request.Release()), NodeId);
+            auto ev = Runtime->WaitForEdgeActorEvent({edge});
+            Runtime->DestroyActor(edge);
+            auto *msg = ev->CastAsLocal<NConsole::TEvConsole::TEvConfigNotificationResponse>();
+            UNIT_ASSERT(msg);
         }
 
     private:
@@ -124,6 +181,10 @@ namespace NKikimr {
                     E::GetDiscover, E::GetLowRead}) {
                 QueueIds.emplace(queueId, CreateQueue(queueId));
             }
+        }
+
+        void CreateConfigDispatcher() {
+            Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(NodeId), Runtime->Register(new TFakeConfigDispatcher(), NodeId));
         }
 
         static NKikimrBlobStorage::EVDiskQueueId GetQueueId(NKikimrBlobStorage::EPutHandleClass prio) {

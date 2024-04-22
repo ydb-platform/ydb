@@ -44,6 +44,8 @@
 #include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
 #include <ydb/core/blobstorage/vdisk/defrag/defrag_actor.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_internal_interface.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -171,6 +173,41 @@ namespace NKikimr {
             if (OverloadHandler) {
                 OverloadHandler->Feedback(*ev->Get(), ctx);
             }
+        }
+
+        void Handle(const NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx) {
+            auto& record = ev->Get()->Record;
+            if (!record.HasConfig() ) {
+                return;
+            }
+            if (const auto& config = record.GetConfig(); config.HasBlobStorageConfig() && config.GetBlobStorageConfig().HasVDiskPerformanceSettings()) {
+                for (auto &type : config.GetBlobStorageConfig().GetVDiskPerformanceSettings().GetVDiskTypes()) {
+                    if (!type.HasPDiskType() && Config->BaseInfo.DeviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
+                        continue;
+                    }
+                    if (!type.HasMinHugeBlobSizeInBytes()) {
+                        continue;
+                    }
+                    if (!ApplyHugeBlobSize(type.GetMinHugeBlobSizeInBytes())) {
+                        continue;
+                    }
+                    if (Config->RunRepl) {
+                        ctx.Send(Db->ReplID, new TEvMinHugeBlobSize(MinREALHugeBlobInBytes));
+                    }
+                    ctx.Send(*SkeletonFrontIDPtr, new TEvMinHugeBlobSize(MinREALHugeBlobInBytes));
+                }
+            }
+            ctx.Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+        }
+
+        bool ApplyHugeBlobSize(ui32 minHugeBlobInBytes) {
+            ui32 alignedSize = HugeBlobCtx->HugeSlotsMap->AlignByBlockSize(minHugeBlobInBytes) + 1;
+            if (MinREALHugeBlobInBytes == alignedSize) {
+                return false;
+            }
+            MinREALHugeBlobInBytes = alignedSize;
+            IFaceMonGroup->MinHugeBlobInBytes(MinREALHugeBlobInBytes);
+            return true;
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -511,7 +548,7 @@ namespace NKikimr {
                 TVPutInfo &info = putsInfo.back();
 
                 try {
-                    info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, blobId.FullID());
+                    info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, blobId.FullID(), MinREALHugeBlobInBytes);
                     if (info.IsHugeBlob) {
                         LOG_CRIT_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << "TEvVMultiPut: TEvVMultiPut has huge blob# "
                             << blobId << " Marker# BSVS08");
@@ -654,7 +691,7 @@ namespace NKikimr {
             const ui64 bufSize = info.Buffer.GetSize();
 
             try {
-                info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID());
+                info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID(), MinREALHugeBlobInBytes);
             } catch (yexception ex) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << ex.what()  << " Marker# BSVS41");
                 info.HullStatus = {NKikimrProto::ERROR, 0, false};
@@ -1630,8 +1667,8 @@ namespace NKikimr {
 
             TRope buf = std::move(msg->Data);
             const ui64 bufSize = buf.GetSize();
-            Y_ABORT_UNLESS(bufSize <= Config->MaxLogoBlobDataSize && HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID()),
-                    "TEvRecoveredHugeBlob: blob is too small/huge bufSize# %zu", bufSize);
+            Y_ABORT_UNLESS(bufSize <= Config->MaxLogoBlobDataSize,
+                    "TEvRecoveredHugeBlob: blob is huge bufSize# %zu", bufSize);
             UpdatePDiskWriteBytes(bufSize);
 
             auto oosStatus = VCtx->GetOutOfSpaceState().GetGlobalStatusFlags();
@@ -1716,9 +1753,14 @@ namespace NKikimr {
             auto msg = std::make_unique<TEvFrontRecoveryStatus>(TEvFrontRecoveryStatus::SyncGuidRecoveryDone,
                                                           NKikimrProto::OK,
                                                           (PDiskCtx ? PDiskCtx->Dsk : nullptr),
-                                                          HugeBlobCtx,
+                                                          MinREALHugeBlobInBytes,
                                                           Db->GetVDiskIncarnationGuid());
             ctx.Send(*SkeletonFrontIDPtr, msg.release());
+            ctx.Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
+                NKikimrConsole::TConfigItem::BlobStorageConfigItem,
+                SelfId()
+            ));
+
             Hull->PermitGarbageCollection(ctx);
             // propagate status to Node Warden unless replication is on -- in that case it sets the status itself
             if (!runRepl) {
@@ -1738,7 +1780,7 @@ namespace NKikimr {
             auto msg = std::make_unique<TEvFrontRecoveryStatus>(phase,
                                                           NKikimrProto::ERROR,
                                                           (PDiskCtx ? PDiskCtx->Dsk : nullptr),
-                                                          HugeBlobCtx,
+                                                          MinREALHugeBlobInBytes,
                                                           Db->GetVDiskIncarnationGuid());
             ctx.Send(*SkeletonFrontIDPtr, msg.release());
             // push the status
@@ -1785,7 +1827,7 @@ namespace NKikimr {
 
             // check status
             if (ev->Get()->Status == NKikimrProto::OK) {
-                IFaceMonGroup->MinHugeBlobInBytes(HugeBlobCtx->MinREALHugeBlobInBytes);
+                ApplyHugeBlobSize(Config->MinHugeBlobInBytes);
                 // handle special case when donor disk starts and finds out that it has been wiped out
                 if (ev->Get()->LsnMngr->GetOriginallyRecoveredLsn() == 0 && Config->BaseInfo.DonorMode) {
                     // send drop donor cmd to NodeWarden
@@ -1802,7 +1844,7 @@ namespace NKikimr {
                 auto msg = std::make_unique<TEvFrontRecoveryStatus>(TEvFrontRecoveryStatus::LocalRecoveryDone,
                                                               NKikimrProto::OK,
                                                               PDiskCtx->Dsk,
-                                                              HugeBlobCtx,
+                                                              MinREALHugeBlobInBytes,
                                                               Db->GetVDiskIncarnationGuid());
                 ctx.Send(*SkeletonFrontIDPtr, msg.release());
 
@@ -1965,7 +2007,7 @@ namespace NKikimr {
                 DbBirthLsn = ev->Get()->DbBirthLsn;
                 SkeletonIsUpAndRunning(ctx, Config->RunRepl);
                 if (Config->RunRepl) {
-                    auto replCtx = std::make_shared<TReplCtx>(VCtx, HullCtx, PDiskCtx, HugeBlobCtx, Hull->GetHullDs(),
+                    auto replCtx = std::make_shared<TReplCtx>(VCtx, HullCtx, PDiskCtx, HugeBlobCtx, MinREALHugeBlobInBytes, Hull->GetHullDs(),
                         GInfo, SelfId(), Config, PDiskWriteBytes, Config->ReplPausedAtStart);
                     Db->ReplID.Set(ctx.Register(CreateReplActor(replCtx)));
                     ActiveActors.Insert(Db->ReplID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
@@ -2595,6 +2637,8 @@ namespace NKikimr {
         )
 
         STRICT_STFUNC(StateNormal,
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvBlobStorage::TEvVMovedPatch, Handle)
             HFunc(TEvBlobStorage::TEvVPatchStart, Handle)
             HFunc(TEvBlobStorage::TEvVPatchDiff, HandleVPatchDiffResending)
@@ -2741,6 +2785,7 @@ namespace NKikimr {
         THullCtxPtr HullCtx;
         THugeBlobCtxPtr HugeBlobCtx;
         std::shared_ptr<THullLogCtx> HullLogCtx;
+        ui32 MinREALHugeBlobInBytes;
         std::shared_ptr<THull> Hull; // run it after local recovery
         std::shared_ptr<TOutOfSpaceLogic> OutOfSpaceLogic;
         std::shared_ptr<TQueryCtx> QueryCtx;

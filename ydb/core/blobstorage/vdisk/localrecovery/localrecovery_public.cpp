@@ -448,8 +448,6 @@ namespace NKikimr {
                             lsn, entryPoint, logFunc);
             }
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(
-                    Config->MinHugeBlobInBytes,
-                    LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                     LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(),
                     Config->AddHeader);
             HugeKeeperInitialized = true;

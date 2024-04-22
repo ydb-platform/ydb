@@ -33,9 +33,9 @@ static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartiti
     stats->SetPartCount(tableStats.PartCount);
 
     auto* storagePoolsStats = stats->MutableStoragePools()->MutablePoolsUsage();
-    for (const auto& [poolKind, stats] : tableStats.StoragePoolsStats) {
+    for (const auto& [poolName, stats] : tableStats.StoragePoolsStats) {
         auto* storagePoolStats = storagePoolsStats->Add();
-        storagePoolStats->SetPoolKind(poolKind);
+        storagePoolStats->SetPoolName(poolName);
         storagePoolStats->SetDataSize(stats.DataSize);
         storagePoolStats->SetIndexSize(stats.IndexSize);
     }
@@ -716,9 +716,9 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     diskSpaceUsage->MutableTopics()->SetDataSize(subDomainInfo->GetDiskSpaceUsage().Topics.DataSize);
     diskSpaceUsage->MutableTopics()->SetUsedReserveSize(subDomainInfo->GetDiskSpaceUsage().Topics.UsedReserveSize);
     auto* storagePoolsUsage = diskSpaceUsage->MutableStoragePoolsUsage();
-    for (const auto& [poolKind, usage] : subDomainInfo->GetDiskSpaceUsage().StoragePoolsUsage) {
+    for (const auto& [poolName, usage] : subDomainInfo->GetDiskSpaceUsage().StoragePoolsUsage) {
         auto* storagePoolUsage = storagePoolsUsage->Add();
-        storagePoolUsage->SetPoolKind(poolKind);
+        storagePoolUsage->SetPoolName(poolName);
         storagePoolUsage->SetDataSize(usage.DataSize);
         storagePoolUsage->SetIndexSize(usage.IndexSize);
         storagePoolUsage->SetTotalSize(usage.DataSize + usage.IndexSize);

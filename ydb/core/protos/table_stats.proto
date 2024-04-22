@@ -18,7 +18,7 @@ message TChannelStats {
 
 message TStoragePoolsStats {
     message TPoolUsage {
-        optional string PoolKind = 1;
+        optional string PoolName = 1;
         optional uint64 DataSize = 2;
         optional uint64 IndexSize = 3;
     }

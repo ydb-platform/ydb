@@ -263,7 +263,7 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
         if (const auto& effectivePools = requestedPools.empty()
                 ? actualPools
                 : requestedPools;
-            !CheckStorageQuotasKinds(input.GetDatabaseQuotas(), effectivePools, pathId.ToString(), error)
+            !CheckStoragePoolsInQuotas(input.GetDatabaseQuotas(), effectivePools, pathId.ToString(), error)
         ) {
             return paramError(error);
         }

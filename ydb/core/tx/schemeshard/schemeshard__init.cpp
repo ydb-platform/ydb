@@ -2272,7 +2272,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     );
                     for (const auto& poolUsage : protobufRepresentation.GetPoolsUsage()) {
                         stats.StoragePoolsStats.emplace(
-                            poolUsage.GetPoolKind(),
+                            poolUsage.GetPoolName(),
                             TPartitionStats::TStoragePoolStats{poolUsage.GetDataSize(),
                                                                poolUsage.GetIndexSize()
                             }

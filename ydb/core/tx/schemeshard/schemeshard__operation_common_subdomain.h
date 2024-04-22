@@ -6,31 +6,32 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-inline bool CheckStorageQuotasKinds(const Ydb::Cms::DatabaseQuotas& quotas,
-                                    const TVector<TStoragePool>& pools,
-                                    const TString& path,
-                                    TString& error
+inline bool CheckStoragePoolsInQuotas(const Ydb::Cms::DatabaseQuotas& quotas,
+                                      const TVector<TStoragePool>& pools,
+                                      const TString& path,
+                                      TString& error
 ) {
-    TVector<TString> quotedKinds;
+    TVector<TString> quotedPools;
     for (const auto& storageQuota : quotas.storage_quotas()) {
-        quotedKinds.emplace_back(storageQuota.unit_kind());
+        quotedPools.emplace_back(storageQuota.storage_unit());
     }
-    Sort(quotedKinds);
-    const auto uniqueEnd = Unique(quotedKinds.begin(), quotedKinds.end());
-    if (uniqueEnd != quotedKinds.end()) {
+    Sort(quotedPools);
+    if (const auto equalNames = AdjacentFind(quotedPools);
+        equalNames != quotedPools.end()
+    ) {
         error = TStringBuilder()
-            << "Malformed subdomain request: storage quotas' unit kinds must be unique, but "
-            << *uniqueEnd << " appears twice in the storage quotas definition of the " << path << " subdomain.";
+            << "Malformed subdomain request: storage pools in DatabaseQuotas must be unique, but "
+            << *equalNames << " appears twice in the quotas definition of the " << path << " subdomain.";
         return false;
     }
 
-    for (const auto& quotedKind : quotedKinds) {
-        if (!AnyOf(pools, [&quotedKind](const TStoragePool& pool) {
-            return pool.GetKind() == quotedKind;
+    for (const auto& quotedPool : quotedPools) {
+        if (!FindIfPtr(pools, [&quotedPool](const TStoragePool& pool) {
+            return pool.GetName() == quotedPool;
         })) {
             error = TStringBuilder()
-                << "Malformed subdomain request: cannot set a " << quotedKind << " storage quota, "
-                << "because no storage pool in the subdomain " << path << " has the specified kind.";
+                << "Malformed subdomain request: cannot set the quota for the " << quotedPool
+                << " storage pool, because it does not exist in the " << path << " subdomain.";
             return false;
         }
     }

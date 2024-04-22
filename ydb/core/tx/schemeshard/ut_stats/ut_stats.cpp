@@ -615,13 +615,11 @@ Y_UNIT_TEST_SUITE(TStoragePoolsStatsPersistence) {
 
         ui64 txId = 100;
 
-        TVector<TString> poolsKinds;
+        TStoragePools pools;
         {
             auto databaseDescription = DescribePath(runtime, "/MyRoot").GetPathDescription().GetDomainDescription();
             UNIT_ASSERT_GE_C(databaseDescription.StoragePoolsSize(), 2u, databaseDescription.DebugString());
-            for (const auto& pool : databaseDescription.GetStoragePools()) {
-                poolsKinds.emplace_back(pool.GetKind());
-            }
+            pools = TStoragePools(databaseDescription.GetStoragePools().begin(), databaseDescription.GetStoragePools().end());
         }
 
         TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -645,7 +643,11 @@ Y_UNIT_TEST_SUITE(TStoragePoolsStatsPersistence) {
                             }
                         }
                     }
-                )", poolsKinds[0].c_str(), poolsKinds[0].c_str(), poolsKinds[0].c_str(), poolsKinds[1].c_str()
+                )",
+                pools[0].GetKind().c_str(),
+                pools[0].GetKind().c_str(),
+                pools[0].GetKind().c_str(),
+                pools[1].GetKind().c_str()
             )
         );
         env.TestWaitNotification(runtime, txId);
@@ -665,8 +667,11 @@ Y_UNIT_TEST_SUITE(TStoragePoolsStatsPersistence) {
         // we wait for at least 1 part count, because it means that the table has been compacted
         WaitTableStats(runtime, datashard, 1, rowsCount).GetTableStats();
 
-        auto checkUsage = [&poolsKinds](ui64 totalUsage, const auto& poolUsage) {
-            if (IsIn(poolsKinds, poolUsage.GetPoolKind())) {
+        auto checkUsage = [&pools](ui64 totalUsage, const auto& poolUsage) {
+            if (AnyOf(pools, [&poolUsage](const TStoragePool& pool) {
+                    return pool.GetName() == poolUsage.GetPoolName();
+                }
+            )) {
                 UNIT_ASSERT_GT_C(totalUsage, 0, poolUsage.DebugString());
             } else {
                 UNIT_ASSERT_VALUES_EQUAL_C(totalUsage, 0, poolUsage.DebugString());

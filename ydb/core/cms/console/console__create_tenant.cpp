@@ -283,7 +283,7 @@ public:
                 if (unitHardQuota && unitSoftQuota && unitHardQuota < unitSoftQuota) {
                     return Error(Ydb::StatusIds::BAD_REQUEST,
                         TStringBuilder() << "Data size soft quota (" << unitSoftQuota << ")"
-                                         << " for a " << storageQuota.unit_kind() << " storage unit "
+                                         << " for a " << storageQuota.storage_unit() << " storage unit "
                                          << " of the database " << path
                                          << " must be smaller than the corresponding hard quota (" << unitHardQuota << ")",
                         ctx

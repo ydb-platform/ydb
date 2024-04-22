@@ -2452,9 +2452,9 @@ void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId
 
     if (!stats.StoragePoolsStats.empty()) {
         NKikimrTableStats::TStoragePoolsStats protobufRepresentation;
-        for (const auto& [poolKind, storagePoolStats] : stats.StoragePoolsStats) {
+        for (const auto& [poolName, storagePoolStats] : stats.StoragePoolsStats) {
             auto* poolUsage = protobufRepresentation.MutablePoolsUsage()->Add();
-            poolUsage->SetPoolKind(poolKind);
+            poolUsage->SetPoolName(poolName);
             poolUsage->SetDataSize(storagePoolStats.DataSize);
             poolUsage->SetIndexSize(storagePoolStats.IndexSize);
         }

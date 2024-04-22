@@ -5586,12 +5586,13 @@ Y_UNIT_TEST(DisableWritesToDatabase) {
 
     auto subdomainSettings = GetSubDomainDefaultSetting(tenant, storagePools);
     auto* parsedQuotas = subdomainSettings.MutableDatabaseQuotas();
-    constexpr const char* quotas = R"(
-        storage_quotas {
-            unit_kind: "hdd"
-            data_size_hard_quota: 1
-        }
-    )";
+    TString quotas = Sprintf(R"(
+            storage_quotas {
+                storage_unit: "%s"
+                data_size_hard_quota: 1
+            }
+        )", storagePools[1].GetName().c_str()
+    );
     UNIT_ASSERT_C(NProtoBuf::TextFormat::ParseFromString(quotas, parsedQuotas), quotas);
     AlterSubdomain(server, sender, "/Root", subdomainSettings);
 

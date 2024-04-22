@@ -108,12 +108,12 @@ TMap<TString, EDiskUsageStatus> CheckStoragePoolsQuotas(const THashMap<TString, 
                                                         const THashMap<TString, TQuotasPair>& storagePoolsQuotas
 ) {
     TMap<TString, EDiskUsageStatus> exceeders;
-    for (const auto& [poolKind, totalSize] : storagePoolsUsage) {
-        if (const auto* quota = storagePoolsQuotas.FindPtr(poolKind)) {
+    for (const auto& [poolName, totalSize] : storagePoolsUsage) {
+        if (const auto* quota = storagePoolsQuotas.FindPtr(poolName)) {
             if (quota->HardQuota && totalSize > quota->HardQuota) {
-                exceeders.emplace(poolKind, EDiskUsageStatus::AboveHardQuota);
+                exceeders.emplace(poolName, EDiskUsageStatus::AboveHardQuota);
             } else if (quota->SoftQuota && totalSize >= quota->SoftQuota) {
-                exceeders.emplace(poolKind, EDiskUsageStatus::InBetween);
+                exceeders.emplace(poolName, EDiskUsageStatus::InBetween);
             }
         }
     }
@@ -144,7 +144,7 @@ NLs::TCheckFunc LsCheckDiskQuotaExceeded(
             const auto& receivedUsage = desc.GetDiskSpaceUsage();
             THashMap<TString, ui64> parsedUsage;
             for (const auto& poolUsage : receivedUsage.GetStoragePoolsUsage()) {
-                parsedUsage.emplace(poolUsage.GetPoolKind(),
+                parsedUsage.emplace(poolUsage.GetPoolName(),
                                     poolUsage.GetDataSize() + poolUsage.GetIndexSize()
                 );
             }
@@ -154,7 +154,7 @@ NLs::TCheckFunc LsCheckDiskQuotaExceeded(
             const auto& receivedQuotas = desc.GetDatabaseQuotas();
             THashMap<TString, TQuotasPair> parsedQuotas;
             for (const auto& poolQuotas : receivedQuotas.storage_quotas()) {
-                parsedQuotas.emplace(poolQuotas.unit_kind(),
+                parsedQuotas.emplace(poolQuotas.storage_unit(),
                                      TQuotasPair{poolQuotas.data_size_hard_quota(),
                                                  poolQuotas.data_size_soft_quota()
                                      }
@@ -3394,7 +3394,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
             }
             DatabaseQuotas {
                 storage_quotas {
-                    unit_kind: "quoted_storage_pool_kind"
+                    storage_unit: "quoted_storage_pool"
                     data_size_hard_quota: 1
                 }
             }
@@ -3500,7 +3500,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
             TimeCastBucketsPerMediator: 2
             DatabaseQuotas {
                 storage_quotas {
-                    unit_kind: "nonexistent_storage_kind"
+                    storage_unit: "nonexistent_storage_pool"
                     data_size_hard_quota: 1
                 }
             }
@@ -3556,12 +3556,12 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
                     data_size_hard_quota: %d
                     data_size_soft_quota: %d
                     storage_quotas {
-                        unit_kind: "fast_kind"
+                        storage_unit: "fast"
                         data_size_hard_quota: %d
                         data_size_soft_quota: %d
                     }
                     storage_quotas {
-                        unit_kind: "large_kind"
+                        storage_unit: "large"
                         data_size_hard_quota: %d
                         data_size_soft_quota: %d
                     }
@@ -3679,15 +3679,15 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
         updateAndCheck(batchSizes[0], longText, false, {{EntireDatabaseTag, EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
         updateAndCheck(0, "", true, {}, DEBUG_HINT);
 
-        // 2) break only the large_kind hard quota, don't break other hard quotas,
+        // 2) break only the large pool hard quota, don't break other hard quotas,
         updateAndCheck(batchSizes[1], longText, true,
-            {{"large_kind", EDiskUsageStatus::AboveHardQuota}, {EntireDatabaseTag, EDiskUsageStatus::InBetween}}, DEBUG_HINT
+            {{"large", EDiskUsageStatus::AboveHardQuota}, {EntireDatabaseTag, EDiskUsageStatus::InBetween}}, DEBUG_HINT
         );
-        updateAndCheck(batchSizes[1], middleLengthText, true, {{"large_kind", EDiskUsageStatus::InBetween}}, DEBUG_HINT);
+        updateAndCheck(batchSizes[1], middleLengthText, true, {{"large", EDiskUsageStatus::InBetween}}, DEBUG_HINT);
         updateAndCheck(batchSizes[1], "extra_short_text", true, {}, DEBUG_HINT);
 
-        // 3) break only the fast_kind hard quota, don't break others.
-        updateAndCheck(batchSizes[2], "shortest", true, {{"fast_kind", EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
+        // 3) break only the fast pool hard quota, don't break others.
+        updateAndCheck(batchSizes[2], "shortest", true, {{"fast", EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
 
         // step 4: drop the table
         TestDropTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/SomeDatabase", "SomeTable");

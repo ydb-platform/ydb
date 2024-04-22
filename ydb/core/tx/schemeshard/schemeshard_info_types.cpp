@@ -20,9 +20,10 @@
 
 namespace {
 
-using TDiskSpaceQuotas = NKikimr::NSchemeShard::TSubDomainInfo::TDiskSpaceQuotas;
+using namespace NKikimr::NSchemeShard;
+using TDiskSpaceQuotas = TSubDomainInfo::TDiskSpaceQuotas;
 using TQuotasPair = TDiskSpaceQuotas::TQuotasPair;
-using TStoragePoolUsage = NKikimr::NSchemeShard::TSubDomainInfo::TDiskSpaceUsage::TStoragePoolUsage;
+using TStoragePoolUsage = TSubDomainInfo::TDiskSpaceUsage::TStoragePoolUsage;
 
 enum class EDiskUsageStatus {
     AboveHardQuota,
@@ -34,8 +35,8 @@ EDiskUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsa
                                          const THashMap<TString, TQuotasPair>& storagePoolsQuotas
 ) {
     bool softQuotaExceeded = false;
-    for (const auto& [poolKind, usage] : storagePoolsUsage) {
-        if (const auto* quota = storagePoolsQuotas.FindPtr(poolKind)) {
+    for (const auto& [poolName, usage] : storagePoolsUsage) {
+        if (const auto* quota = storagePoolsQuotas.FindPtr(poolName)) {
             const auto totalSize = usage.DataSize + usage.IndexSize;
             if (quota->HardQuota && totalSize > quota->HardQuota) {
                 return EDiskUsageStatus::AboveHardQuota;
@@ -104,7 +105,7 @@ TDiskSpaceQuotas TSubDomainInfo::GetDiskSpaceQuotas() const {
             unitHardQuota = unitSoftQuota;
         }
 
-        storagePoolsQuotas.emplace(storageQuota.unit_kind(), TQuotasPair{
+        storagePoolsQuotas.emplace(storageQuota.storage_unit(), TQuotasPair{
                 .HardQuota = unitHardQuota,
                 .SoftQuota = unitSoftQuota
             }
@@ -169,17 +170,20 @@ void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartiti
     i64 newTotalBytes = DiskSpaceUsage.Tables.TotalSize;
     counters->ChangeDiskSpaceTablesTotalBytes(newTotalBytes - oldTotalBytes);
 
-    for (const auto& [poolKind, newStoragePoolStats] : newAggr.StoragePoolsStats) {
-        const auto* oldStats = oldAggr.StoragePoolsStats.FindPtr(poolKind);
-        auto& storagePoolUsage = DiskSpaceUsage.StoragePoolsUsage[poolKind];
-        storagePoolUsage.DataSize += newStoragePoolStats.DataSize - (oldStats ? oldStats->DataSize : 0u);
-        storagePoolUsage.IndexSize += newStoragePoolStats.IndexSize - (oldStats ? oldStats->IndexSize : 0u);
+    for (const auto& [poolName, newStoragePoolStats] : newAggr.StoragePoolsStats) {
+        const auto* oldStats = oldAggr.StoragePoolsStats.FindPtr(poolName);
+        auto& storagePoolUsage = DiskSpaceUsage.StoragePoolsUsage[poolName];
+        const TStoragePoolUsage usageIncrement = {
+            newStoragePoolStats.DataSize - (oldStats ? oldStats->DataSize : 0u),
+            newStoragePoolStats.IndexSize - (oldStats ? oldStats->IndexSize : 0u)
+        };
+        storagePoolUsage += usageIncrement;
     }
-    for (const auto& [poolKind, oldStoragePoolStats] : oldAggr.StoragePoolsStats) {
-        if (const auto* newStats = newAggr.StoragePoolsStats.FindPtr(poolKind); !newStats) {
-            auto& storagePoolUsage = DiskSpaceUsage.StoragePoolsUsage[poolKind];
-            storagePoolUsage.DataSize -= oldStoragePoolStats.DataSize;
-            storagePoolUsage.IndexSize -= oldStoragePoolStats.IndexSize;
+    for (const auto& [poolName, oldStoragePoolStats] : oldAggr.StoragePoolsStats) {
+        if (const auto* newStats = newAggr.StoragePoolsStats.FindPtr(poolName); !newStats) {
+            auto& storagePoolUsage = DiskSpaceUsage.StoragePoolsUsage[poolName];
+            const TStoragePoolUsage usageIncrement = {-oldStoragePoolStats.DataSize, -oldStoragePoolStats.IndexSize};
+            storagePoolUsage += usageIncrement;
         }
     }
 }
@@ -1457,10 +1461,9 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
         newAggregatedStats.RowCount += newStats.RowCount;
         newAggregatedStats.DataSize += newStats.DataSize;
         newAggregatedStats.IndexSize += newStats.IndexSize;
-        for (const auto& [poolKind, newStoragePoolStats] : newStats.StoragePoolsStats) {
-            auto& aggregatedStoragePoolStats = newAggregatedStats.StoragePoolsStats[poolKind];
-            aggregatedStoragePoolStats.DataSize += newStoragePoolStats.DataSize;
-            aggregatedStoragePoolStats.IndexSize += newStoragePoolStats.IndexSize;
+        for (const auto& [poolName, newStoragePoolStats] : newStats.StoragePoolsStats) {
+            auto& aggregatedStoragePoolStats = newAggregatedStats.StoragePoolsStats[poolName];
+            aggregatedStoragePoolStats += newStoragePoolStats;
         }
         newAggregatedStats.InFlightTxCount += newStats.InFlightTxCount;
         cpuTotal += newStats.GetCurrentRawCpuUsage();
@@ -1542,28 +1545,25 @@ void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartition
     Aggregated.RowCount += (newStats.RowCount - oldStats.RowCount);
     Aggregated.DataSize += (newStats.DataSize - oldStats.DataSize);
     Aggregated.IndexSize += (newStats.IndexSize - oldStats.IndexSize);
-    for (const auto& [poolKind, newStoragePoolStats] : newStats.StoragePoolsStats) {
-        auto* aggregatedStoragePoolStats = Aggregated.StoragePoolsStats.FindPtr(poolKind);
-        if (aggregatedStoragePoolStats) {
-            const auto* oldStoragePoolStats = oldStats.StoragePoolsStats.FindPtr(poolKind);
+    using TStoragePoolStats = TPartitionStats::TStoragePoolStats;
+    for (const auto& [poolName, newStoragePoolStats] : newStats.StoragePoolsStats) {
+        auto& aggregatedStoragePoolStats = Aggregated.StoragePoolsStats[poolName];
+        const auto* oldStoragePoolStats = oldStats.StoragePoolsStats.FindPtr(poolName);
 
-            // Missing old stats for a particular storage pool are interpreted as if this data
-            // has just been written to the datashard and we need to increment the aggregate by the entire new stats' sizes.
-            aggregatedStoragePoolStats->DataSize += newStoragePoolStats.DataSize - (oldStoragePoolStats ? oldStoragePoolStats->DataSize : 0u);
-            aggregatedStoragePoolStats->IndexSize += newStoragePoolStats.IndexSize - (oldStoragePoolStats ? oldStoragePoolStats->IndexSize : 0u);
-        } else {
-            Aggregated.StoragePoolsStats.emplace(poolKind, newStoragePoolStats);
-        }
+        // Missing old stats for a particular storage pool are interpreted as if this data
+        // has just been written to the datashard and we need to increment the aggregate by the entire new stats' sizes.
+        aggregatedStoragePoolStats += newStoragePoolStats - (oldStoragePoolStats ? *oldStoragePoolStats : TStoragePoolStats());
     }
-    for (const auto& [poolKind, oldStoragePoolStats] : oldStats.StoragePoolsStats) {
-        if (const auto* newStoragePoolStats = newStats.StoragePoolsStats.FindPtr(poolKind); !newStoragePoolStats) {
-            auto* aggregatedStoragePoolStats = Aggregated.StoragePoolsStats.FindPtr(poolKind);
+    for (const auto& [poolName, oldStoragePoolStats] : oldStats.StoragePoolsStats) {
+        if (const auto* newStoragePoolStats = newStats.StoragePoolsStats.FindPtr(poolName);
+            !newStoragePoolStats
+        ) {
+            auto* aggregatedStoragePoolStats = Aggregated.StoragePoolsStats.FindPtr(poolName);
             Y_ABORT_UNLESS(aggregatedStoragePoolStats, "Old stats are present, but they haven't been aggregated.");
 
             // Missing new stats for a particular storage pool are interpreted as if this data
             // has been removed from the datashard and we need to subtract the old stats' sizes from the aggregate.
-            aggregatedStoragePoolStats->DataSize -= oldStoragePoolStats.DataSize;
-            aggregatedStoragePoolStats->IndexSize -= oldStoragePoolStats.IndexSize;
+            *aggregatedStoragePoolStats -= oldStoragePoolStats;
         }
     }
     Aggregated.LastAccessTime = Max(Aggregated.LastAccessTime, newStats.LastAccessTime);

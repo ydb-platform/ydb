@@ -229,6 +229,23 @@ struct TPartitionStats {
     struct TStoragePoolStats {
         ui64 DataSize = 0;
         ui64 IndexSize = 0;
+
+        TStoragePoolStats& operator+=(const TStoragePoolStats& other) {
+            DataSize += other.DataSize;
+            IndexSize += other.IndexSize;
+            return *this;
+        }
+
+        TStoragePoolStats& operator-=(const TStoragePoolStats& other) {
+            DataSize -= other.DataSize;
+            IndexSize -= other.IndexSize;
+            return *this;
+        }
+
+        friend TStoragePoolStats operator-(TStoragePoolStats lhs, const TStoragePoolStats& rhs) {
+            lhs -= rhs;
+            return lhs;
+        }
     };
     THashMap<TString, TStoragePoolStats> StoragePoolsStats;
 
@@ -1314,6 +1331,12 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         struct TStoragePoolUsage {
             ui64 DataSize = 0;
             ui64 IndexSize = 0;
+        
+            TStoragePoolUsage& operator+=(const TStoragePoolUsage& other) {
+                DataSize += other.DataSize;
+                IndexSize += other.IndexSize;
+                return *this;
+            }
         };
         THashMap<TString, TStoragePoolUsage> StoragePoolsUsage;
     };

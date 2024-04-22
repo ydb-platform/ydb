@@ -91,17 +91,18 @@ TTenantTestConfig DefaultConsoleTestConfig()
 }
 
 TString DefaultDatabaseQuotas() {
-    return R"(
-        data_size_hard_quota: 3000
-        storage_quotas {
-            unit_kind: "hdd"
-            data_size_hard_quota: 2000
-        }
-        storage_quotas {
-            unit_kind: "hdd-1"
-            data_size_hard_quota: 1000
-        }
-    )";
+    return Sprintf(R"(
+            data_size_hard_quota: 3000
+            storage_quotas {
+                storage_unit: "%s:hdd"
+                data_size_hard_quota: 2000
+            }
+            storage_quotas {
+                storage_unit: "%s:hdd-1"
+                data_size_hard_quota: 1000
+            }
+        )", TENANT1_1_NAME.c_str(), TENANT1_1_NAME.c_str()
+    );
 }
 
 void CheckAlterTenantSlots(TTenantTestRuntime &runtime, const TString &path,
@@ -2083,13 +2084,14 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST,
             TCreateTenantRequest(TENANT1_1_NAME, TCreateTenantRequest::EType::Common)
                 .WithPools({{"hdd", 1}})
-                .WithDatabaseQuotas(R"(
-                        storage_quotas {
-                            unit_kind: "hdd"
-                            data_size_hard_quota: 1
-                            data_size_soft_quota: 1000
-                        }
-                    )"
+                .WithDatabaseQuotas(Sprintf(R"(
+                            storage_quotas {
+                                storage_unit: "%s:hdd"
+                                data_size_hard_quota: 1
+                                data_size_soft_quota: 1000
+                            }
+                        )", TENANT1_1_NAME.c_str()
+                    )
                 )
         );
     }

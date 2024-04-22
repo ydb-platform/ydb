@@ -136,6 +136,7 @@ private:
                     Col("end_ts", NScheme::NTypeIds::Timestamp),
                     Col("query_text", NScheme::NTypeIds::Text),
                     Col("syntax", NScheme::NTypeIds::Int32),
+                    Col("ast", NScheme::NTypeIds::Text),
                     Col("ast_compressed", NScheme::NTypeIds::String),
                     Col("ast_compression_method", NScheme::NTypeIds::Text),
                     Col("issues", NScheme::NTypeIds::JsonDocument),
@@ -1138,6 +1139,7 @@ public:
                 plan,
                 issues,
                 stats,
+                ast,
                 ast_compressed,
                 ast_compression_method
             FROM `.metadata/script_executions`
@@ -1224,12 +1226,18 @@ public:
             Metadata.mutable_exec_stats()->set_query_plan(*plan);
         }
 
-        TMaybe<TString> ast = result.ColumnParser("ast_compressed").GetOptionalString();
-        if (ast) {
-            if (const TMaybe<TString> astCompressionMethod = result.ColumnParser("ast_compression_method").GetOptionalUtf8()) {
-                NFq::TCompressor compressor(*astCompressionMethod);
-                ast = compressor.Decompress(*ast);
+        TMaybe<TString> ast;
+        const TMaybe<TString> astCompressionMethod = result.ColumnParser("ast_compression_method").GetOptionalUtf8();
+        if (astCompressionMethod) {
+            const TMaybe<TString> astCompressed = result.ColumnParser("ast_compressed").GetOptionalString();
+            if (astCompressed) {
+                const NFq::TCompressor compressor(*astCompressionMethod);
+                ast = compressor.Decompress(*astCompressed);
             }
+        } else {
+            ast = result.ColumnParser("ast").GetOptionalUtf8();
+        }
+        if (ast) {
             Metadata.mutable_exec_stats()->set_query_ast(*ast);
         }
 
@@ -2465,7 +2473,8 @@ public:
             DECLARE $issues AS JsonDocument;
             DECLARE $plan AS JsonDocument;
             DECLARE $stats AS JsonDocument;
-            DECLARE $ast_compressed AS String;
+            DECLARE $ast AS Optional<Text>;
+            DECLARE $ast_compressed AS Optional<String>;
             DECLARE $ast_compression_method AS Optional<Text>;
             DECLARE $operation_ttl AS Interval;
             DECLARE $customer_supplied_id AS Text;
@@ -2483,6 +2492,7 @@ public:
                 plan = $plan,
                 end_ts = CurrentUtcTimestamp(),
                 stats = $stats,
+                ast = $ast,
                 ast_compressed = $ast_compressed,
                 ast_compression_method = $ast_compression_method,
                 expire_at = IF($operation_ttl > CAST(0 AS Interval), CurrentUtcTimestamp() + $operation_ttl, NULL),
@@ -2505,11 +2515,19 @@ public:
             serializedStats = NJson::WriteJson(statsJson);
         }
 
-        auto astCompressionMethod = Request.QueryAstCompressionMethod ? TMaybe<TString>(*Request.QueryAstCompressionMethod) : Nothing();
         if (Request.QueryAst && Request.QueryAst->size() > NDataShard::NLimits::MaxWriteValueSize) {
-            astCompressionMethod = Nothing();
             Request.QueryAst = std::nullopt;
             Request.Issues.AddIssue(TStringBuilder() << "Query ast size is " << Request.QueryAst->size() << " bytes, that is larger than allowed limit " << NDataShard::NLimits::MaxWriteValueSize << " bytes, ast was dropped");
+        }
+
+        TMaybe<TString> ast;
+        TMaybe<TString> astCompressed;
+        TMaybe<TString> astCompressionMethod;
+        if (Request.QueryAst && Request.QueryAstCompressionMethod) {
+            astCompressed = *Request.QueryAst;
+            astCompressionMethod = *Request.QueryAstCompressionMethod;
+        } else {
+            ast = Request.QueryAst.value_or("");
         }
 
         NYdb::TParamsBuilder params;
@@ -2538,8 +2556,11 @@ public:
             .AddParam("$stats")
                 .JsonDocument(serializedStats)
                 .Build()
+            .AddParam("$ast")
+                .OptionalUtf8(ast)
+                .Build()
             .AddParam("$ast_compressed")
-                .String(Request.QueryAst.value_or(""))
+                .OptionalString(astCompressed)
                 .Build()
             .AddParam("$ast_compression_method")
                 .OptionalUtf8(astCompressionMethod)

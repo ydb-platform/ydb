@@ -7,8 +7,8 @@
 
 namespace NKikimr::NKqp {
 
-IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TFinalizeScriptServiceConfig& finalizeScriptServiceConfig,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig, const NFq::NConfig::TCommonConfig& federatedQueryConfig,
+IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory);
 
 }  // namespace NKikimr::NKqp

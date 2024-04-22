@@ -12,12 +12,11 @@ namespace {
 
 class TKqpFinalizeScriptService : public TActorBootstrapped<TKqpFinalizeScriptService> {
 public:
-    TKqpFinalizeScriptService(const NKikimrConfig::TFinalizeScriptServiceConfig& finalizeScriptServiceConfig,
-        const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig, const NFq::NConfig::TCommonConfig& federatedQueryConfig,
+    TKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+        const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
         IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory)
-        : FinalizeScriptServiceConfig_(finalizeScriptServiceConfig)
+        : QueryServiceConfig_(queryServiceConfig)
         , MetadataProviderConfig_(metadataProviderConfig)
-        , FederatedQueryConfig_(federatedQueryConfig)
         , FederatedQuerySetupFactory_(federatedQuerySetupFactory)
     {}
 
@@ -61,7 +60,7 @@ public:
 
 private:
     void TryStartFinalizeRequest() {
-        if (FinalizationRequestsInFlight_ >= FinalizeScriptServiceConfig_.GetMaxInFlightFinalizationsCount() || WaitingFinalizationExecutions_.empty()) {
+        if (FinalizationRequestsInFlight_ >= QueryServiceConfig_.GetFinalizeScriptServiceConfig().GetMaxInFlightFinalizationsCount() || WaitingFinalizationExecutions_.empty()) {
             return;
         }
 
@@ -80,9 +79,8 @@ private:
 
         Register(CreateScriptFinalizerActor(
             std::move(request),
-            FinalizeScriptServiceConfig_,
+            QueryServiceConfig_,
             MetadataProviderConfig_,
-            FederatedQueryConfig_,
             FederatedQuerySetup_
         ));
     }
@@ -124,9 +122,8 @@ private:
     }
 
 private:
-    const NKikimrConfig::TFinalizeScriptServiceConfig FinalizeScriptServiceConfig_;
+    const NKikimrConfig::TQueryServiceConfig QueryServiceConfig_;
     const NKikimrConfig::TMetadataProviderConfig MetadataProviderConfig_;
-    const NFq::NConfig::TCommonConfig FederatedQueryConfig_;
 
     IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory_;
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup_;
@@ -138,10 +135,10 @@ private:
 
 }  // anonymous namespace
 
-IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TFinalizeScriptServiceConfig& finalizeScriptServiceConfig,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig, const NFq::NConfig::TCommonConfig& federatedQueryConfig,
+IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory) {
-    return new TKqpFinalizeScriptService(finalizeScriptServiceConfig, metadataProviderConfig, federatedQueryConfig, std::move(federatedQuerySetupFactory));
+    return new TKqpFinalizeScriptService(queryServiceConfig, metadataProviderConfig, std::move(federatedQuerySetupFactory));
 }
 
 }  // namespace NKikimr::NKqp

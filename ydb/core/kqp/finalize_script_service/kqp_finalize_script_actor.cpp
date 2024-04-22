@@ -19,19 +19,18 @@ namespace {
 class TScriptFinalizerActor : public TActorBootstrapped<TScriptFinalizerActor> {
 public:
     TScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
-        const NKikimrConfig::TFinalizeScriptServiceConfig& finalizeScriptServiceConfig,
+        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
         const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
-        const NFq::NConfig::TCommonConfig& federatedQueryConfig,
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
         : ReplyActor_(request->Sender)
         , ExecutionId_(request->Get()->Description.ExecutionId)
         , Database_(request->Get()->Description.Database)
         , FinalizationStatus_(request->Get()->Description.FinalizationStatus)
         , Request_(std::move(request))
-        , FinalizationTimeout_(TDuration::Seconds(finalizeScriptServiceConfig.GetScriptFinalizationTimeoutSeconds()))
+        , FinalizationTimeout_(TDuration::Seconds(queryServiceConfig.GetFinalizeScriptServiceConfig().GetScriptFinalizationTimeoutSeconds()))
         , MaximalSecretsSnapshotWaitTime_(2 * TDuration::Seconds(metadataProviderConfig.GetRefreshPeriodSeconds()))
         , FederatedQuerySetup_(federatedQuerySetup)
-        , Compressor(federatedQueryConfig.GetQueryArtifactsCompressionMethod(), federatedQueryConfig.GetQueryArtifactsCompressionMinSize())
+        , Compressor(queryServiceConfig.GetQueryArtifactsCompressionMethod(), queryServiceConfig.GetQueryArtifactsCompressionMinSize())
     {}
 
     void Bootstrap() {
@@ -231,11 +230,10 @@ private:
 }  // anonymous namespace
 
 IActor* CreateScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
-    const NKikimrConfig::TFinalizeScriptServiceConfig& finalizeScriptServiceConfig,
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
-    const NFq::NConfig::TCommonConfig& federatedQueryConfig,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup) {
-    return new TScriptFinalizerActor(std::move(request), finalizeScriptServiceConfig, metadataProviderConfig, federatedQueryConfig, federatedQuerySetup);
+    return new TScriptFinalizerActor(std::move(request), queryServiceConfig, metadataProviderConfig, federatedQuerySetup);
 }
 
 }  // namespace NKikimr::NKqp

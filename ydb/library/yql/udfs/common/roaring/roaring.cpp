@@ -163,10 +163,11 @@ namespace {
 
         class TList: public TBoxedValue {
         public:
-            TList(TRoaringWrapper* RoaringWrapper)
-                : RoaringWrapper_(RoaringWrapper)
+            TList(TUnboxedValue UnboxedValue)
+                : UnboxedValue_(UnboxedValue)
             {
-                Length_ = roaring_bitmap_get_cardinality(RoaringWrapper_->Roaring);
+                auto wrapper = static_cast<TRoaringWrapper*>(UnboxedValue_.AsBoxed().Get());
+                Length_ = roaring_bitmap_get_cardinality(wrapper->Roaring);
             }
 
             bool HasFastListLength() const override {
@@ -182,20 +183,19 @@ namespace {
             };
 
             TUnboxedValue GetListIterator() const override {
-                return TUnboxedValuePod(new TIterator(RoaringWrapper_->Roaring));
+                auto wrapper = static_cast<TRoaringWrapper*>(UnboxedValue_.AsBoxed().Get());
+                return TUnboxedValuePod(new TIterator(wrapper->Roaring));
             };
 
         private:
-            TRoaringWrapper* RoaringWrapper_;
+            TUnboxedValue UnboxedValue_;
             ui64 Length_;
         };
 
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-            auto bitmapWrapper = static_cast<TRoaringWrapper*>(args[0].AsBoxed().Get());
-
-            return TUnboxedValuePod(new TList(bitmapWrapper));
+            return TUnboxedValuePod(new TList(args[0]));
         }
     };
 
@@ -272,7 +272,7 @@ namespace {
 
             sink.Add(TRoaringCardinality::Name());
 
-            sink.Add(TRoaringUint32List::Name())->SetTypeAwareness();
+            sink.Add(TRoaringUint32List::Name());
 
             sink.Add(TRoaringOrWithBinary::Name());
             sink.Add(TRoaringOr::Name());
@@ -294,7 +294,7 @@ namespace {
                 auto typesOnly = (flags & TFlags::TypesOnly);
 
                 if (TRoaringDeserialize::Name() == name) {
-                    builder.Returns<TOptional<TResource<RoaringResourceName>>>().Args()->Add<TAutoMap<char*>>();
+                    builder.Returns<TResource<RoaringResourceName>>().Args()->Add<TAutoMap<char*>>();
 
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringDeserialize());
@@ -316,7 +316,7 @@ namespace {
                         builder.Implementation(new TRoaringCardinality());
                     }
                 } else if (TRoaringUint32List::Name() == name) {
-                    builder.Returns<TOptional<TListType<ui32>>>()
+                    builder.Returns<TListType<ui32>>()
                         .Args()
                         ->Add<TAutoMap<TResource<RoaringResourceName>>>();
 
@@ -324,7 +324,7 @@ namespace {
                         builder.Implementation(new TRoaringUint32List());
                     }
                 } else if (TRoaringOrWithBinary::Name() == name) {
-                    builder.Returns<TOptional<TResource<RoaringResourceName>>>()
+                    builder.Returns<TResource<RoaringResourceName>>()
                         .Args()
                         ->Add<TAutoMap<TResource<RoaringResourceName>>>()
                         .Add<TAutoMap<char*>>();
@@ -333,7 +333,7 @@ namespace {
                         builder.Implementation(new TRoaringOrWithBinary());
                     }
                 } else if (TRoaringOr::Name() == name) {
-                    builder.Returns<TOptional<TResource<RoaringResourceName>>>()
+                    builder.Returns<TResource<RoaringResourceName>>()
                         .Args()
                         ->Add<TAutoMap<TResource<RoaringResourceName>>>()
                         .Add<TAutoMap<TResource<RoaringResourceName>>>();
@@ -342,7 +342,7 @@ namespace {
                         builder.Implementation(new TRoaringOr());
                     }
                 } else if (TRoaringAndWithBinary::Name() == name) {
-                    builder.Returns<TOptional<TResource<RoaringResourceName>>>()
+                    builder.Returns<TResource<RoaringResourceName>>()
                         .Args()
                         ->Add<TAutoMap<TResource<RoaringResourceName>>>()
                         .Add<TAutoMap<char*>>();
@@ -351,7 +351,7 @@ namespace {
                         builder.Implementation(new TRoaringAndWithBinary());
                     }
                 } else if (TRoaringAnd::Name() == name) {
-                    builder.Returns<TOptional<TResource<RoaringResourceName>>>()
+                    builder.Returns<TResource<RoaringResourceName>>()
                         .Args()
                         ->Add<TAutoMap<TResource<RoaringResourceName>>>()
                         .Add<TAutoMap<TResource<RoaringResourceName>>>();

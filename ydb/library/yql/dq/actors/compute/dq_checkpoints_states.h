@@ -78,4 +78,4 @@ struct TComputeActorState {
     Y_SAVELOAD_DEFINE(MiniKqlProgram, Sources, Sinks);
 };
 
-} // namespace NDq::NYql
+} // namespace NYql::NDq 

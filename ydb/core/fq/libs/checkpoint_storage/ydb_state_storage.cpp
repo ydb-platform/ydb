@@ -459,16 +459,12 @@ TFuture<TIssues> TStateStorage::SaveState(
         type = TIncrementLogic::GetStateType(state);
         serializedState = SerializeState(state);
         if (serializedState.empty()) {
-            std::cerr << "SaveState, empty: " << std::endl;
             return MakeFuture(NYql::TIssues{NYql::TIssue{"Failed to serialize compute actor state"}});
         }
     } catch (...) {
-        //std::cerr << "exception " << std::endl;
-
         LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*NActors::TActivationContext::ActorSystem(), "Exception " << stateSize);
         return MakeFuture(NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}});
     }
- //   return MakeFuture(NYql::TIssues{NYql::TIssue{"XXXXXX"}});
 
     auto context = MakeIntrusive<TContext>(
         NActors::TActivationContext::ActorSystem(),

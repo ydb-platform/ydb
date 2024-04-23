@@ -235,7 +235,8 @@ public:
         newDir->PathType = TPathElement::EPathType::EPathTypeDir;
         newDir->UserAttrs->AlterData = userAttrs;
         newDir->DirAlterVersion = 1;
-        newDir->Restricted = Transaction.GetRestrictedOperation();
+        newDir->Restricted = Transaction.GetRestrictedOperation()
+            || parentPath.Base()->IsRestricted();
 
         if (Transaction.HasTempDirOwnerActorId()) {
             newDir->TempDirOwnerActorId = ActorIdFromProto(Transaction.GetTempDirOwnerActorId());

@@ -1149,13 +1149,14 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
 
+            const TVector<TString> sessionIdSplitted = StringSplitter(id).SplitByString("&id=");
             const auto queryCreateRestricted = Q_(fmt::format(R"(
                 --!syntax_v1
                 CREATE TABLE `/Root/.tmp/sessions/{}/Test` (
                     Key Uint64 NOT NULL,
                     Value String,
                     PRIMARY KEY (Key)
-                );)", id));
+                );)", sessionIdSplitted.back()));
 
             auto resultCreateRestricted = session.ExecuteQuery(queryCreateRestricted, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT(!resultCreateRestricted.IsSuccess());

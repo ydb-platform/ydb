@@ -23,6 +23,10 @@
 
 
 namespace {
+    constexpr i64 kInFlightMemoryLimitPerActor = 64_MB;
+    constexpr i64 kMemoryLimitPerMessage = 48_MB;
+    constexpr i64 kMaxBatchesPerMessage = 8;
+
     struct TWriteActorBackoffSettings {
         TDuration StartRetryDelay = TDuration::MilliSeconds(250);
         TDuration MaxRetryDelay = TDuration::Seconds(10);
@@ -59,8 +63,6 @@ namespace {
         public:
             struct TInFlightBatch {
                 TString Data;
-                ui64 Cookie = 0;
-                ui32 SendAttempts = 0;
             };
 
             size_t Size() const {
@@ -83,27 +85,36 @@ namespace {
                 Closed = true;
             }
 
-            TInFlightBatch& CurrentBatch() {
-                YQL_ENSURE(!IsEmpty());
-                return Batches.front();
+            void MakeNextBatches(ui64 maxDataSize, ui64 maxCount = kMaxBatchesPerMessage) {
+                YQL_ENSURE(BatchesInFlight == 0);
+                ui64 dataSize = 0;
+                while (BatchesInFlight < maxCount
+                        && BatchesInFlight < Batches.size()
+                        && dataSize + GetBatch(BatchesInFlight).Data.size() <= maxDataSize) {
+                    dataSize += GetBatch(BatchesInFlight).Data.size();
+                    ++BatchesInFlight;
+                }
+                YQL_ENSURE(BatchesInFlight == Batches.size() || GetBatch(BatchesInFlight).Data.size() <= maxDataSize); 
             }
 
-            const TInFlightBatch& CurrentBatch() const {
-                YQL_ENSURE(!IsEmpty());
-                return Batches.front();
+            const TInFlightBatch& GetBatch(size_t index) const {
+                return Batches.at(index);
             }
 
-            const TInFlightBatch& LastBatch() const {
-                YQL_ENSURE(!IsEmpty());
-                return Batches.back();
-            }
+            std::optional<ui64> PopBatches(const ui64 cookie) {
+                if (BatchesInFlight != 0 && Cookie == cookie) {
+                    ui64 dataSize = 0;
+                    for (size_t index = 0; index < BatchesInFlight; ++index) {
+                        dataSize += Batches.front().Data.size();
+                        Batches.pop_front();
+                    }
 
-            std::optional<TInFlightBatch> PopBatch(const ui64 Cookie) {
-                if (!IsEmpty() && Cookie == CurrentBatch().Cookie) {
-                    auto batch = std::move(Batches.front());
-                    Batches.pop_front();
-                    Memory -= batch.Data.size();
-                    return std::move(batch);
+                    ++Cookie;
+                    SendAttempts = 0;
+                    BatchesInFlight = 0;
+
+                    Memory -= dataSize;
+                    return dataSize;
                 }
                 return std::nullopt;
             }
@@ -111,9 +122,7 @@ namespace {
             void PushBatch(TString&& data) {
                 YQL_ENSURE(!IsClosed());
                 Batches.push_back(TInFlightBatch{
-                    .Data = std::move(data),
-                    .Cookie = ++NextCookie,
-                    .SendAttempts = 0,
+                    .Data = std::move(data)
                 });
                 Memory += Batches.back().Data.size();
             }
@@ -136,12 +145,31 @@ namespace {
                 return Lock;
             }
 
+            ui64 GetCookie() const {
+                return Cookie;
+            }
+
+            size_t GetBatchesInFlight() const {
+                return BatchesInFlight;
+            }
+
+            ui32 GetSendAttempts() const {
+                return SendAttempts;
+            }
+
+            void IncSendAttempts() {
+                ++SendAttempts;
+            }
+
         private:
             std::deque<TInFlightBatch> Batches;
-            ui64 NextCookie = 0;
             bool Closed = false;
             std::optional<NKikimrDataEvents::TLock> Lock;
             i64& Memory;
+
+            ui64 Cookie = 1;
+            ui32 SendAttempts = 0;
+            size_t BatchesInFlight = 0;
         };
 
         TShardInfo& GetShard(const ui64 shard) {
@@ -157,7 +185,7 @@ namespace {
         TVector<ui64> GetPendingShards() {
             TVector<ui64> result;
             for (const auto& [id, shard] : ShardsInfo) {
-                if (!shard.IsEmpty() && shard.CurrentBatch().SendAttempts == 0) {
+                if (!shard.IsEmpty() && shard.GetSendAttempts() == 0) {
                     result.push_back(id);
                 }
             }
@@ -198,8 +226,6 @@ namespace {
         THashMap<ui64, TShardInfo> ShardsInfo;
         i64 Memory = 0;
     };
-
-    constexpr i64 kInFlightMemoryLimitPerActor = 64_MB;
 }
 
 
@@ -261,6 +287,8 @@ public:
             Settings.GetTable().GetOwnerId(),
             Settings.GetTable().GetTableId(),
             Settings.GetTable().GetVersion())
+        , ImmediateTx(
+            Settings.GetImmediateTx())
     {
         YQL_ENSURE(std::holds_alternative<ui64>(TxId));
         EgressStats.Level = args.StatsLevel;
@@ -398,6 +426,7 @@ private:
         }
 
         if (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+            YQL_ENSURE(!ImmediateTx);
             Prepare();
         } else {
             ResolveShards();
@@ -576,8 +605,8 @@ private:
     void PopShardBatch(ui64 shardId, ui64 cookie) {
         TResumeNotificationManager resumeNotificator(*this);
         auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (const auto batch = shardInfo.PopBatch(cookie); batch) {
-            EgressStats.Bytes += batch->Data.size();
+        if (const auto removedDataSize = shardInfo.PopBatches(cookie); removedDataSize) {
+            EgressStats.Bytes += *removedDataSize;
             EgressStats.Chunks++;
             EgressStats.Splits++;
             EgressStats.Resume();
@@ -586,29 +615,37 @@ private:
     }
 
     void ProcessBatches() {
-        MakeNewBatches();
-        SendBatchesToShards();
-        if (Finished && Serializer->IsFinished() && ShardsInfo.IsFinished()) {
-            CA_LOG_D("Write actor finished");
-            Callbacks->OnAsyncOutputFinished(GetOutputIndex());
+        if (!ImmediateTx || Finished || GetFreeSpace() <= 0) {
+            MakeNewBatches();
+            SendBatchesToShards();
+            if (Finished && Serializer->IsFinished() && ShardsInfo.IsFinished()) {
+                CA_LOG_D("Write actor finished");
+                Callbacks->OnAsyncOutputFinished(GetOutputIndex());
+            }
         }
     }
 
     void MakeNewBatches() {
         for (const size_t shardId : Serializer->GetShardIds()) {
             auto& shard = ShardsInfo.GetShard(shardId);
-            if (shard.IsEmpty()) {
+            while (true) {
                 auto batch = Serializer->FlushBatch(shardId);
-                if (!batch.empty()) {
-                    shard.PushBatch(std::move(batch));
+                if (batch.empty()) {
+                    break;
                 }
+                shard.PushBatch(std::move(batch));
+            }
+            if (shard.GetBatchesInFlight() == 0) {
+                shard.MakeNextBatches(kMemoryLimitPerMessage, kMaxBatchesPerMessage);
             }
         }
     }
 
     void SendBatchesToShards() {
+        YQL_ENSURE(!ImmediateTx || ShardsInfo.GetShards().size());
+
         for (const size_t shardId : ShardsInfo.GetPendingShards()) {
-            auto& shard = ShardsInfo.GetShard(shardId);
+            const auto& shard = ShardsInfo.GetShard(shardId);
             YQL_ENSURE(!shard.IsEmpty());
             SendDataToShard(shardId);
         }
@@ -617,8 +654,7 @@ private:
     void SendDataToShard(const ui64 shardId) {
         auto& shard = ShardsInfo.GetShard(shardId);
         YQL_ENSURE(!shard.IsEmpty());
-        auto& inFlightBatch = shard.CurrentBatch();
-        if (inFlightBatch.SendAttempts >= BackoffSettings()->MaxWriteAttempts) {
+        if (shard.GetSendAttempts() >= BackoffSettings()->MaxWriteAttempts) {
             CA_LOG_E("ShardId=" << shardId
                     << " for table '" << Settings.GetTable().GetPath()
                     << "': retry limit exceeded."
@@ -634,38 +670,56 @@ private:
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
             NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-        YQL_ENSURE(!inFlightBatch.Data.empty());
+        
+        if (ImmediateTx && Finished && shard.Size() == shard.GetBatchesInFlight()) {
+            // Last immediate write (only for datashard)
+            if (shard.GetLock()) {
+                // multi immediate evwrite
+                // TODO: rollback on error!!!
+                auto* locks = evWrite->Record.MutableLocks();
+                locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+                locks->AddSendingShards(shardId);
+                locks->AddReceivingShards(shardId);
+                *locks->AddLocks() = *shard.GetLock();
+            }
+        } else {
+            evWrite->SetLockId(Settings.GetLockTxId(), Settings.GetLockNodeId());
+        }
 
-        const ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
-                .AddDataToPayload(TString(inFlightBatch.Data));
-        evWrite->SetLockId(Settings.GetLockTxId(), Settings.GetLockNodeId());
-
-        evWrite->AddOperation(
-            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE,
-            {
-                Settings.GetTable().GetOwnerId(),
-                Settings.GetTable().GetTableId(),
-                Settings.GetTable().GetVersion()
-            },
-            Serializer->GetWriteColumnIds(),
-            payloadIndex,
-            Serializer->GetDataFormat());
+        ui64 totalDataSize = 0;
+        for (size_t index = 0; index < shard.GetBatchesInFlight(); ++index) {
+            const auto& inFlightBatch = shard.GetBatch(index);
+            YQL_ENSURE(!inFlightBatch.Data.empty());
+            totalDataSize += inFlightBatch.Data.size();
+            const ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
+                    .AddDataToPayload(TString(inFlightBatch.Data));
+            evWrite->AddOperation(
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE,
+                {
+                    Settings.GetTable().GetOwnerId(),
+                    Settings.GetTable().GetTableId(),
+                    Settings.GetTable().GetVersion(),
+                },
+                Serializer->GetWriteColumnIds(),
+                payloadIndex,
+                Serializer->GetDataFormat());
+        }
 
         CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << std::get<ui64>(TxId)
             << ", LockTxId=" << Settings.GetLockTxId() << ", LockNodeId=" << Settings.GetLockNodeId()
-            << ", Size=" << inFlightBatch.Data.size() << ", Cookie=" << inFlightBatch.Cookie
+            << ", Size=" << totalDataSize << ", Cookie=" << shard.GetCookie()
             << "; ShardBatchesLeft=" << shard.Size() << ", ShardClosed=" << shard.IsClosed()
-            << "; Attempts=" << inFlightBatch.SendAttempts);
+            << "; Attempts=" << shard.GetSendAttempts());
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
             0,
-            inFlightBatch.Cookie);
-        ++inFlightBatch.SendAttempts;
+            shard.GetCookie());
+        shard.IncSendAttempts();
 
         TlsActivationContext->Schedule(
-            CalculateNextAttemptDelay(inFlightBatch.SendAttempts),
-            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvShardRequestTimeout(shardId), 0, inFlightBatch.Cookie));
+            CalculateNextAttemptDelay(shard.GetSendAttempts()),
+            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvShardRequestTimeout(shardId), 0, shard.GetCookie()));
     }
 
     void RetryShard(const ui64 shardId, const std::optional<ui64> ifCookieEqual) {
@@ -673,7 +727,7 @@ private:
             return;
         }
         const auto& shard = ShardsInfo.GetShard(shardId);
-        if (shard.IsEmpty() || (ifCookieEqual && shard.CurrentBatch().Cookie != ifCookieEqual)) {
+        if (shard.IsEmpty() || (ifCookieEqual && shard.GetCookie() != ifCookieEqual)) {
             return;
         }
 
@@ -756,6 +810,7 @@ private:
 
     const NYql::NDq::TTxId TxId;
     const TTableId TableId;
+    const bool ImmediateTx;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
     std::optional<NSchemeCache::TSchemeCacheRequest::TEntry> SchemeRequest;

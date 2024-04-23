@@ -573,7 +573,6 @@ exec $taskset $kikimr_binary_path $kikimr_arg $location --node-type slot
             (systemd_unit_compute_all, "/etc/systemd/system/kikimr-multi-all.service"),
             (systemd_unit_compute, "/etc/systemd/system/kikimr-multi@.service"),
             (kikimr_run_compute_node_sh, "/etc/systemd/system/kikimr-run.sh"),
-
         ]
 
         for content, location in mapping:

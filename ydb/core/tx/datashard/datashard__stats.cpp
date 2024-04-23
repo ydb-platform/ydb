@@ -68,7 +68,8 @@ public:
             Y_DEBUG_ABORT("unhandled exception");
         }
 
-        Die();
+        Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvNotifyActorDied);
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister);
     }
 
     TResult Locate(const TMemTable*, ui64, ui32) noexcept override {
@@ -123,7 +124,7 @@ private:
     void RunImpl() {
         ObtainResources();
 
-       auto ev = MakeHolder<TDataShard::TEvPrivate::TEvAsyncTableStats>();
+        auto ev = MakeHolder<TDataShard::TEvPrivate::TEvAsyncTableStats>();
         ev->TableId = TableId;
         ev->IndexSize = IndexSize;
         ev->StatsUpdateTime = StatsUpdateTime;
@@ -148,8 +149,6 @@ private:
                 }, &TTableStatsCoroBuilder::ProcessUnexpectedEvent);
 
                 ObtainResources();
-                CoroutineDeadline = GetCycleCountFast() + DurationToCycles(MaxCoroutineExecutionTime);
-
             }
         });
         
@@ -186,11 +185,6 @@ private:
                 Y_DEBUG_ABORT("unexpected event Type: %s", typeName.c_str());
             }
         }
-    }
-
-    void Die() {
-        Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvNotifyActorDied);
-        Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister);
     }
 
     void ObtainResources() {

@@ -14,7 +14,7 @@ class MvpMockHttpHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        endpoint = "{}/?database={}".format(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
+        endpoint = "{}/?database={}".format("tests-fq-generic-ydb:2136", "local")
         self.log_message("send response {}".format(endpoint))
         response = json.dumps({"endpoint" : endpoint}).encode("utf-8")
         self._set_headers(len(response))

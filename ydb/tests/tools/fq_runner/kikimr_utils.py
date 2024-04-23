@@ -272,6 +272,7 @@ class ConnectorExtension(ExtensionPoint):
         kikimr.control_plane.fq_config['common']['disable_ssl_for_generic_data_sources'] = True
         kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('POSTGRESQL_CLUSTER')
         kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('CLICKHOUSE_CLUSTER')
+        kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('YDB_DATABASE')
 
         generic = {
             'connector': {
@@ -284,6 +285,7 @@ class ConnectorExtension(ExtensionPoint):
         }
 
         kikimr.compute_plane.fq_config['gateways']['generic'] = generic  # v1
+        kikimr.control_plane.fq_config['gateways']['generic'] = generic  # v1
         kikimr.compute_plane.qs_config['generic'] = generic  # v2
 
 
@@ -306,8 +308,12 @@ class MDBExtension(ExtensionPoint):
         kikimr.compute_plane.qs_config['generic']['mdb_gateway'] = self.endpoint
 
         kikimr.compute_plane.fq_config['common']['mdb_transform_host'] = False
-        kikimr.compute_plane.fq_config['common']['mdb_gateway'] = self.endpoint     # v2
-        kikimr.compute_plane.fq_config['gateways']['generic']['mdb_gateway'] = self.endpoint   # v1
+        kikimr.compute_plane.fq_config['common']['mdb_gateway'] = self.endpoint
+        kikimr.compute_plane.fq_config['gateways']['generic']['mdb_gateway'] = self.endpoint
+
+        kikimr.control_plane.fq_config['common']['mdb_transform_host'] = False
+        kikimr.control_plane.fq_config['common']['mdb_gateway'] = self.endpoint
+        kikimr.control_plane.fq_config['gateways']['generic']['mdb_gateway'] = self.endpoint
 
 
 class YdbMvpExtension(ExtensionPoint):
@@ -354,6 +360,10 @@ class TokenAccessorExtension(ExtensionPoint):
         kikimr.control_plane.fq_config['token_accessor']['endpoint'] = self.endpoint
         kikimr.control_plane.fq_config['token_accessor']['use_ssl'] = self.use_ssl
         kikimr.control_plane.fq_config['token_accessor']['hmac_secret_file'] = self.hmac_secret_file
+
+        kikimr.compute_plane.fq_config['token_accessor']['enabled'] = True
+        kikimr.compute_plane.fq_config['token_accessor']['endpoint'] = self.endpoint
+        kikimr.compute_plane.fq_config['token_accessor']['use_ssl'] = self.use_ssl
 
 
 @contextmanager

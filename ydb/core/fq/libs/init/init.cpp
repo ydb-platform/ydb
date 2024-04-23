@@ -277,7 +277,7 @@ void Init(
 
     if (protoConfig.GetNodesManager().GetEnabled() || protoConfig.GetPendingFetcher().GetEnabled()) {
         auto internal = protoConfig.GetPrivateApi().GetLoopback()
-            ? NFq::CreateLoopbackServiceActor(clientCounters)
+            ? NFq::CreateLoopbackServiceActor(signer, clientCounters)
             : NFq::CreateInternalServiceActor(
                 yqSharedResources,
                 NKikimr::CreateYdbCredentialsProviderFactory,

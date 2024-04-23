@@ -24,9 +24,10 @@ namespace NFq {
 
 class TLoopbackService : public NActors::TActorBootstrapped<TLoopbackService> {
 public:
-    TLoopbackService(
-        const ::NMonitoring::TDynamicCounterPtr& counters)
+    TLoopbackService(const ::NFq::TSigner::TPtr& signer,
+                     const ::NMonitoring::TDynamicCounterPtr& counters)
         : ServiceCounters(counters->GetSubgroup("subsystem", "LoopbackService"))
+        , Signer(signer)
     {
     }
 
@@ -102,7 +103,24 @@ private:
         auto it = Senders.find(ev->Cookie);
         if (it != Senders.end()) {
             if (ev->Get()->Issues.Size() == 0) {
-                Send(it->second, new TEvInternalService::TEvGetTaskResponse(ev->Get()->Record), 0, OriginalCookies[ev->Cookie]);
+                auto& record = ev->Get()->Record;
+                try {
+                    for (auto& task : *record.mutable_tasks()) {
+                        THashMap<TString, TString> accountIdSignatures;
+                        for (auto& account : *task.mutable_service_accounts()) {
+                            const auto serviceAccountId = account.value();
+                            auto& signature = accountIdSignatures[serviceAccountId];
+                            if (!signature && Signer) {
+                                signature = Signer->SignAccountId(serviceAccountId);
+                            }
+                            account.set_signature(signature);
+                        }
+                    }
+                    Send(it->second, new TEvInternalService::TEvGetTaskResponse(ev->Get()->Record), 0, OriginalCookies[ev->Cookie]);
+                } catch (...) {
+                    const auto msg = TStringBuilder() << "Can't do GetTask: " << CurrentExceptionMessage();
+                    Send(it->second, new TEvInternalService::TEvGetTaskResponse(NYdb::EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{msg}}), 0, OriginalCookies[ev->Cookie]);
+                }
             } else {
                 auto issues = ev->Get()->Issues;
                 Send(it->second, new TEvInternalService::TEvGetTaskResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)), 0, OriginalCookies[ev->Cookie]);
@@ -203,6 +221,7 @@ private:
     }
 
     const ::NMonitoring::TDynamicCounterPtr ServiceCounters;
+    ::NFq::TSigner::TPtr Signer;
     ui64 Cookie = 0;
     THashMap<ui64, NActors::TActorId> Senders;
     THashMap<ui64, ui64> OriginalCookies;
@@ -210,9 +229,9 @@ private:
     NFq::TTenantInfo::TPtr TenantInfo;
 };
 
-NActors::IActor* CreateLoopbackServiceActor(
-    const ::NMonitoring::TDynamicCounterPtr& counters) {
-        return new TLoopbackService(counters);
+NActors::IActor* CreateLoopbackServiceActor(const ::NFq::TSigner::TPtr& signer,
+                                            const ::NMonitoring::TDynamicCounterPtr& counters) {
+        return new TLoopbackService(signer, counters);
 }
 
 } /* NFq */

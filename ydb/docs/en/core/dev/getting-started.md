@@ -2,7 +2,7 @@
 
 First of all, you'll need to obtain access to a {{ ydb-short-name }} cluster. Follow the [quickstart instructions](../quickstart.md) to get a basic local instance. Later on, you can work with your DevOps team to [build a production-ready cluster](../devops/index.md) or leverage one of the cloud service providers that offer a managed {{ ydb-short-name }} service.
 
-The second step is designing a data schema for an application you will build from scratch or adapt the schema of an existing application if you're migrating from another database management system. Work with your DBA on this, or refer to the documentation [for DBA](../dba/index.md) yourself if you don't have one on your team.
+The second step is designing a data schema for an application you will build from scratch or adapt the schema of an existing application if you're migrating from another database management system. Work with your DBA on this, or refer to the documentation [for DBA](../dev/index.md) yourself if you don't have one on your team.
 
 In parallel with designing the schema, you need to set up your development environment for interaction with {{ ydb-short-name }}. There are a few main aspects to it, explored below.
 

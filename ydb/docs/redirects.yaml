@@ -67,34 +67,32 @@ common:
     to: /deploy/manual/static-group-move.md
   - from: /administration/upgrade.md
     to: /deploy/manual/upgrade.md
-
-# DBA-related redirects
-  - from: /db/index.md
-    to: /dba/index.md
   - from: /maintenance/backup_and_recovery.md
-    to: /dba/backup-and-recovery.md
-  - from: /troubleshooting/system_views.md
-    to: /dba/system-views.md
-  - from: /troubleshooting/system_views_db.md
-    to: /dba/system-views.md
-  - from: /operations/manage-users-attr.md
-    to: /dba/custom-attributes.md
-  - from: /operations/query_plans_optimization.md
-    to: /dba/query-plans-optimization.md
-  - from: /best_practices/cdc.md
-    to: /dba/cdc.md
-  - from: /best_practices/pk-olap-scalability.md
-    to: /dba/primary-key/row-oriented.md
-  - from: /best_practices/pk-olap-scalability.md
-    to: /dba/primary-key/column-oriented.md
-  - from: /best_practices/schema_design.md
-    to: /dba/primary-key/index.md
-  - from: /best_practices/secondary_indexes.md
-    to: /dba/secondary-indexes.md
-  - from: /best_practices/table_sharding.md
-    to:  /dba/primary-key/index.md
+    to: /devops/manual/backup-and-recovery.md
 
 # Dev-related redirects
+  - from: /db/index.md
+    to: /dev/index.md
+  - from: /troubleshooting/system_views.md
+    to: /dev/system-views.md
+  - from: /troubleshooting/system_views_db.md
+    to: /dev/system-views.md
+  - from: /operations/manage-users-attr.md
+    to: /dev/custom-attributes.md
+  - from: /operations/query_plans_optimization.md
+    to: /dev/query-plans-optimization.md
+  - from: /best_practices/cdc.md
+    to: /dev/cdc.md
+  - from: /best_practices/pk-olap-scalability.md
+    to: /dev/primary-key/row-oriented.md
+  - from: /best_practices/pk-olap-scalability.md
+    to: /dev/primary-key/column-oriented.md
+  - from: /best_practices/schema_design.md
+    to: /dev/primary-key/index.md
+  - from: /best_practices/secondary_indexes.md
+    to: /dev/secondary-indexes.md
+  - from: /best_practices/table_sharding.md
+    to:  /dev/primary-key/index.md
   - from: /best_practices/batch_upload.md
     to: /dev/batch-upload.md
   - from: /best_practices/paging.md
@@ -246,4 +244,4 @@ ru:
   - from: /postgresql/index.md
     to: /postgresql/intro.md
   - from: /db/terraform.md
-    to: /dba/terraform.md
+    to: /dev/terraform.md

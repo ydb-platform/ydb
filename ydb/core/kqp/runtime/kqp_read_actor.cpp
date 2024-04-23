@@ -568,7 +568,11 @@ public:
 
         auto keyDesc = std::move(request->ResultSet[0].KeyDescription);
 
-        if (keyDesc->GetPartitions().size() == 1) {
+        if (keyDesc->GetPartitions().empty()) {
+            TString error = TStringBuilder() << "No partitions to read from '" << Settings->GetTable().GetTablePath() << "'";
+            CA_LOG_E(error);
+            return RuntimeError(error, NDqProto::StatusIds::SCHEME_ERROR);
+        } else if (keyDesc->GetPartitions().size() == 1) {
             auto& partition = keyDesc->GetPartitions()[0];
             if (partition.ShardId == state->TabletId) {
                 // we re-resolved the same shard
@@ -587,12 +591,6 @@ public:
             }
         } else if (!Snapshot.IsValid() && !Settings->GetAllowInconsistentReads()) {
             return RuntimeError("Inconsistent reads after shards split", NDqProto::StatusIds::UNAVAILABLE);
-        }
-
-        if (keyDesc->GetPartitions().empty()) {
-            TString error = TStringBuilder() << "No partitions to read from '" << Settings->GetTable().GetTablePath() << "'";
-            CA_LOG_E(error);
-            return RuntimeError(error, NDqProto::StatusIds::SCHEME_ERROR);
         }
 
         const auto& tr = *AppData()->TypeRegistry;

@@ -12,7 +12,7 @@ PEERDIR(
     ydb/core/fq/libs/config/protos
     ydb/library/folder_service
     ydb/library/ycloud/api
-    ydb/public/api/client/yc_public/events
+    ydb/public/api/client/yc_public/events/yq
 )
 
 END()

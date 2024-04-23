@@ -1,6 +1,6 @@
 #include "yq_cloud_audit_service.h"
 
-#include <ydb/public/api/client/yc_public/events/yq.pb.h>
+#include <ydb/public/api/client/yc_public/events/yq/yq.pb.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/audit/events/events.h>

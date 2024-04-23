@@ -449,6 +449,8 @@ inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planSt
     PlanCommit(runtime, sender, planStep, ids);
 }
 
+void Wakeup(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId);
+
 struct TTestBlobOptions {
     THashSet<TString> NullColumns;
     THashSet<TString> SameValueColumns;

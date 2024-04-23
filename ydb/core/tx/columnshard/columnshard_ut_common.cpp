@@ -1,7 +1,7 @@
 #include "columnshard_ut_common.h"
 
 #include "common/tests/shard_reader.h"
-#include "engines/reader/sys_view/chunks/chunks.h"
+#include "engines/reader/sys_view/portions/portions.h"
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
@@ -170,11 +170,11 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
     record.SetTxId(snap.GetPlanStep());
     record.SetScanId(scanId);
     // record.SetLocalPathId(0);
-    record.SetTablePath(NOlap::TIndexInfo::STORE_INDEX_STATS_TABLE);
+    record.SetTablePath(NOlap::TIndexInfo::STORE_INDEX_PORTION_STATS_TABLE);
 
     // Schema: pathId, kind, rows, bytes, rawBytes. PK: {pathId, kind}
     //record.SetSchemaVersion(0);
-    auto ydbSchema = NOlap::NReader::NSysView::NChunks::TStatsIterator::StatsSchema;
+    auto ydbSchema = NOlap::NReader::NSysView::NPortions::TStatsIterator::StatsSchema;
     for (const auto& col : ydbSchema.Columns) {
         record.AddColumnTags(col.second.Id);
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(col.second.PType, col.second.PTypeMod);
@@ -222,6 +222,11 @@ void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, cons
 
 void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, const TSet<ui64>& txIds) {
     PlanCommit(runtime, sender, TTestTxConfig::TxTablet0, planStep, txIds);
+}
+
+void Wakeup(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId) {
+    auto wakeup = std::make_unique<TEvPrivate::TEvPeriodicWakeup>(true);
+    ForwardToTablet(runtime, shardId, sender, wakeup.release());
 }
 
 void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 planStep, const TSet<ui64>& txIds) {

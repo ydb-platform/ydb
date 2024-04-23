@@ -29,6 +29,9 @@ protected:
     virtual TDuration GetLagForCompactionBeforeTierings(const TDuration /*def*/) const override {
         return TDuration::Zero();
     }
+    virtual TDuration GetCompactionActualizationLag(const TDuration /*def*/) const override {
+        return TDuration::Zero();
+    }
     virtual TDuration GetTTLDefaultWaitingDuration(const TDuration /*defaultValue*/) const override {
         return TDuration::Seconds(1);
     }

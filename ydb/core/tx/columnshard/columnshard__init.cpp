@@ -114,7 +114,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         ACFL_INFO("step", "TTxController::Load_Start");
         TMemoryProfileGuard g("TTxInit/TTxController");
         auto localTxController = std::make_unique<TTxController>(*Self);
-         if (!localTxController->Load(*Self, txc)) {
+         if (!localTxController->Load(txc)) {
             ACFL_ERROR("step", "TTxController::Load_Fails");
             return false;
         }

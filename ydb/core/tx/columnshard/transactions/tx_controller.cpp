@@ -37,7 +37,7 @@ TTxController::TPlanQueueItem TTxController::GetFrontTx() const {
     return TPlanQueueItem(Owner.LastPlannedStep, 0);
 }
 
-bool TTxController::Load(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
+bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
     auto rowset = db.Table<Schema::TxInfo>().GreaterOrEqual(0).Select();
@@ -65,9 +65,9 @@ bool TTxController::Load(TColumnShard& owner, NTabletFlatExecutor::TTransactionC
         }
 
         const TString txBody = rowset.GetValue<Schema::TxInfo::TxBody>();
-        ITransactionOperation::TPtr txOperator(ITransactionOperation::TFactory::Construct(txInfo.TxKind, txInfo));
+        ITransactionOperator::TPtr txOperator(ITransactionOperator::TFactory::Construct(txInfo.TxKind, txInfo));
         Y_ABORT_UNLESS(!!txOperator);
-        Y_ABORT_UNLESS(txOperator->Parse(owner, txBody));
+        Y_ABORT_UNLESS(txOperator->Parse(Owner, txBody));
         Operators[txId] = txOperator;
 
         if (!rowset.Next()) {
@@ -77,7 +77,7 @@ bool TTxController::Load(TColumnShard& owner, NTabletFlatExecutor::TTransactionC
     return true;
 }
 
-TTxController::ITransactionOperation::TPtr TTxController::GetTxOperator(const ui64 txId) {
+TTxController::ITransactionOperator::TPtr TTxController::GetTxOperator(const ui64 txId) {
     auto it = Operators.find(txId);
     if(it == Operators.end()) {
         return nullptr;
@@ -85,7 +85,7 @@ TTxController::ITransactionOperation::TPtr TTxController::GetTxOperator(const ui
     return it->second;
 }
 
-TTxController::ITransactionOperation::TPtr TTxController::GetVerifiedTxOperator(const ui64 txId) {
+TTxController::ITransactionOperator::TPtr TTxController::GetVerifiedTxOperator(const ui64 txId) {
     auto it = Operators.find(txId);
     AFL_VERIFY(it != Operators.end())("tx_id", txId);
     return it->second;
@@ -99,7 +99,7 @@ TTxController::TTxInfo TTxController::RegisterTx(const ui64 txId, const NKikimrT
     txInfo.Source = source;
     txInfo.Cookie = cookie;
 
-    ITransactionOperation::TPtr txOperator(ITransactionOperation::TFactory::Construct(txInfo.TxKind, txInfo));
+    ITransactionOperator::TPtr txOperator(ITransactionOperator::TFactory::Construct(txInfo.TxKind, txInfo));
     Y_ABORT_UNLESS(!!txOperator);
     Y_ABORT_UNLESS(txOperator->Parse(Owner, txBody));
     Operators[txId] = txOperator;
@@ -118,7 +118,7 @@ TTxController::TTxInfo TTxController::RegisterTxWithDeadline(const ui64 txId, co
     txInfo.MinStep = GetAllowedStep();
     txInfo.MaxStep = txInfo.MinStep + MaxCommitTxDelay.MilliSeconds();
 
-    ITransactionOperation::TPtr txOperator(ITransactionOperation::TFactory::Construct(txInfo.TxKind, txInfo));
+    ITransactionOperator::TPtr txOperator(ITransactionOperator::TFactory::Construct(txInfo.TxKind, txInfo));
     Y_ABORT_UNLESS(!!txOperator);
     Y_ABORT_UNLESS(txOperator->Parse(Owner, txBody));
     Operators[txId] = txOperator;

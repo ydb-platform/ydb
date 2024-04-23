@@ -71,14 +71,14 @@ public:
         }
     };
 
-    class ITransactionOperation {
+    class ITransactionOperator {
     protected:
         TTxInfo TxInfo;
     public:
-        using TPtr = std::shared_ptr<ITransactionOperation>;
-        using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperation, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
+        using TPtr = std::shared_ptr<ITransactionOperator>;
+        using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperator, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
 
-        ITransactionOperation(const TTxInfo& txInfo)
+        ITransactionOperator(const TTxInfo& txInfo)
             : TxInfo(txInfo)
         {}
 
@@ -86,7 +86,7 @@ public:
             return TxInfo.TxId;
         }
 
-        virtual ~ITransactionOperation() {}
+        virtual ~ITransactionOperator() {}
 
         virtual bool TxWithDeadline() const {
             return true;
@@ -116,7 +116,7 @@ private:
     std::set<TPlanQueueItem> PlanQueue;
     std::set<TPlanQueueItem> RunningQueue;
 
-    THashMap<ui64, ITransactionOperation::TPtr> Operators;
+    THashMap<ui64, ITransactionOperator::TPtr> Operators;
 
 private:
     ui64 GetAllowedStep() const;
@@ -125,13 +125,13 @@ private:
 public:
     TTxController(TColumnShard& owner);
 
-    ITransactionOperation::TPtr GetTxOperator(const ui64 txId);
-    ITransactionOperation::TPtr GetVerifiedTxOperator(const ui64 txId);
+    ITransactionOperator::TPtr GetTxOperator(const ui64 txId);
+    ITransactionOperator::TPtr GetVerifiedTxOperator(const ui64 txId);
 
     ui64 GetMemoryUsage() const;
     bool HaveOutdatedTxs() const;
 
-    bool Load(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc);
+    bool Load(NTabletFlatExecutor::TTransactionContext& txc);
 
     TTxInfo RegisterTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);
     TTxInfo RegisterTxWithDeadline(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);

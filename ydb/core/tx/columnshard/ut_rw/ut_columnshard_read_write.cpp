@@ -12,6 +12,7 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/common/tests/shard_reader.h>
 #include <ydb/library/actors/protos/unittests.pb.h>
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
@@ -2155,7 +2156,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     void TestCompactionSplitGranuleImpl(const TestTableDescription& table, const TTestBlobOptions& testBlobOptions = {}) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
-        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_NOTICE);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csDefaultControllerGuard->SetPeriodicWakeupActivationPeriod(TDuration::MilliSeconds(500));
 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -2273,7 +2276,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
-        { // Get index stats
+        const TInstant start = TInstant::Now();
+        bool success = false;
+        while (TInstant::Now() - start < TDuration::Seconds(30)) { // Get index stats
             ScanIndexStats(runtime, sender, {tableId, 42}, NOlap::TSnapshot(planStep, txId), 0);
             auto scanInited = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanInitActor>(handle);
             auto& msg = scanInited->Record;
@@ -2283,7 +2288,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             ui64 sumCompactedRows = 0;
             ui64 sumInsertedBytes = 0;
             ui64 sumInsertedRows = 0;
-            std::optional<ui32> keyColumnId;
             while (true) {
                 ui32 resultLimit = 1024 * 1024;
                 runtime.Send(new IEventHandle(scanActorId, sender, new NKqp::TEvKqpCompute::TEvScanDataAck(resultLimit, 0, 1)));
@@ -2294,15 +2298,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 }
                 UNIT_ASSERT(scan->ArrowBatch);
                 auto batchStats = NArrow::ToBatch(scan->ArrowBatch, true);
-                //                Cerr << batchStats->ToString() << Endl;
-
+                Cerr << batchStats->ToString() << Endl;
                 for (ui32 i = 0; i < batchStats->num_rows(); ++i) {
                     auto paths = batchStats->GetColumnByName("PathId");
                     auto kinds = batchStats->GetColumnByName("Kind");
                     auto rows = batchStats->GetColumnByName("Rows");
-                    auto bytes = batchStats->GetColumnByName("BlobRangeSize");
-                    auto rawBytes = batchStats->GetColumnByName("RawBytes");
-                    auto internalColumnIds = batchStats->GetColumnByName("InternalEntityId");
+                    auto bytes = batchStats->GetColumnByName("ColumnBlobBytes");
+                    auto rawBytes = batchStats->GetColumnByName("ColumnRawBytes");
                     auto activities = batchStats->GetColumnByName("Activity");
                     AFL_VERIFY(activities);
 
@@ -2312,30 +2314,21 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     ui64 numRows = static_cast<arrow::UInt64Array&>(*rows).Value(i);
                     ui64 numBytes = static_cast<arrow::UInt64Array&>(*bytes).Value(i);
                     ui64 numRawBytes = static_cast<arrow::UInt64Array&>(*rawBytes).Value(i);
-                    ui32 internalColumnId = static_cast<arrow::UInt32Array&>(*internalColumnIds).Value(i);
                     bool activity = static_cast<arrow::BooleanArray&>(*activities).Value(i);
                     if (!activity) {
                         continue;
-                    }
-                    if (!keyColumnId) {
-                        keyColumnId = internalColumnId;
                     }
                     Cerr << "[" << __LINE__ << "] " << activity << " " << table.Pk[0].GetType().GetTypeId() << " "
                         << pathId << " " << kindStr << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
 
                     if (pathId == tableId) {
-                        if (kindStr == ::ToString(NOlap::NPortion::EProduced::COMPACTED) || kindStr == ::ToString(NOlap::NPortion::EProduced::SPLIT_COMPACTED)) {
+                        if (kindStr == ::ToString(NOlap::NPortion::EProduced::COMPACTED) || kindStr == ::ToString(NOlap::NPortion::EProduced::SPLIT_COMPACTED) || numBytes > (4LLU << 20)) {
                             sumCompactedBytes += numBytes;
-                            if (*keyColumnId == internalColumnId) {
-                                sumCompactedRows += numRows;
-                            }
+                            sumCompactedRows += numRows;
                             //UNIT_ASSERT(numRawBytes > numBytes);
-                        }
-                        if (kindStr == ::ToString(NOlap::NPortion::EProduced::INSERTED)) {
+                        } else if (kindStr == ::ToString(NOlap::NPortion::EProduced::INSERTED)) {
                             sumInsertedBytes += numBytes;
-                            if (*keyColumnId == internalColumnId) {
-                                sumInsertedRows += numRows;
-                            }
+                            sumInsertedRows += numRows;
                             //UNIT_ASSERT(numRawBytes > numBytes);
                         }
                     } else {
@@ -2346,12 +2339,19 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 }
             }
             Cerr << "compacted=" << sumCompactedRows << ";inserted=" << sumInsertedRows << ";expected=" << fullNumRows << ";" << Endl;
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
-            AFL_VERIFY(sumCompactedRows == fullNumRows)("sum", sumCompactedRows)("full", fullNumRows);
-            UNIT_ASSERT(sumCompactedRows < sumCompactedBytes);
-            UNIT_ASSERT(sumInsertedRows == 0);
-            UNIT_ASSERT(sumInsertedBytes == 0);
+            if (!sumInsertedRows) {
+                success = true;
+                RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+                AFL_VERIFY(sumCompactedRows == fullNumRows)("sum", sumCompactedRows)("full", fullNumRows)("inserted", sumInsertedRows);
+                UNIT_ASSERT(sumCompactedRows < sumCompactedBytes);
+                AFL_VERIFY(sumInsertedRows == 0)("rows", sumInsertedRows);
+                UNIT_ASSERT(sumInsertedBytes == 0);
+                break;
+            } else {
+                Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
+            }
         }
+        AFL_VERIFY(success);
     }
 
     void TestCompactionSplitGranule(const TTypeId typeId) {

@@ -63,11 +63,10 @@ public:
         if (!!Self->ProgressTxController->GetPlannedTx()) {
             Self->EnqueueProgressTx(ctx);
         }
-        Self->SetupIndexation();
     }
 
 private:
-    TTxController::ITransactionOperation::TPtr TxOperator;
+    TTxController::ITransactionOperator::TPtr TxOperator;
     const ui32 TabletTxNo;
     std::optional<NOlap::TSnapshot> LastCompletedTx;
     std::optional<TTxController::TPlanQueueItem> PlannedQueueItem;

@@ -6,10 +6,10 @@
 
 namespace NKikimr::NColumnShard {
 
-    class TBackupTransactionOperator : public TTxController::ITransactionOperatior {
+    class TBackupTransactionOperator : public TTxController::ITransactionOperation {
     private:
         std::shared_ptr<NOlap::NExport::TExportTask> ExportTask;
-        using TBase = TTxController::ITransactionOperatior;
+        using TBase = TTxController::ITransactionOperation;
         using TProposeResult = TTxController::TProposeResult;
         static inline auto Registrator = TFactory::TRegistrator<TBackupTransactionOperator>(NKikimrTxColumnShard::TX_KIND_BACKUP);
     public:

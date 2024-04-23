@@ -4,8 +4,8 @@
 
 namespace NKikimr::NColumnShard {
 
-    class TSchemaTransactionOperator : public TTxController::ITransactionOperatior {
-        using TBase = TTxController::ITransactionOperatior;
+    class TSchemaTransactionOperator : public TTxController::ITransactionOperation {
+        using TBase = TTxController::ITransactionOperation;
         using TProposeResult = TTxController::TProposeResult;
         static inline auto Registrator = TFactory::TRegistrator<TSchemaTransactionOperator>(NKikimrTxColumnShard::TX_KIND_SCHEMA);
     public:

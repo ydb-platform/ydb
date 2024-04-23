@@ -4,8 +4,8 @@
 
 namespace NKikimr::NColumnShard {
 
-    class TEvWriteTransactionOperator : public TTxController::ITransactionOperatior {
-        using TBase = TTxController::ITransactionOperatior;
+    class TEvWriteTransactionOperator : public TTxController::ITransactionOperation {
+        using TBase = TTxController::ITransactionOperation;
         using TProposeResult = TTxController::TProposeResult;
         static inline auto Registrator = TFactory::TRegistrator<TEvWriteTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE);
     public:

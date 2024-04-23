@@ -65,7 +65,7 @@ bool TTxController::Load(TColumnShard& owner, NTabletFlatExecutor::TTransactionC
         }
 
         const TString txBody = rowset.GetValue<Schema::TxInfo::TxBody>();
-        ITransactionOperatior::TPtr txOperator(ITransactionOperatior::TFactory::Construct(txInfo.TxKind, txInfo));
+        ITransactionOperation::TPtr txOperator(ITransactionOperation::TFactory::Construct(txInfo.TxKind, txInfo));
         Y_ABORT_UNLESS(!!txOperator);
         Y_ABORT_UNLESS(txOperator->Parse(owner, txBody));
         Operators[txId] = txOperator;
@@ -77,7 +77,7 @@ bool TTxController::Load(TColumnShard& owner, NTabletFlatExecutor::TTransactionC
     return true;
 }
 
-TTxController::ITransactionOperatior::TPtr TTxController::GetTxOperator(const ui64 txId) {
+TTxController::ITransactionOperation::TPtr TTxController::GetTxOperator(const ui64 txId) {
     auto it = Operators.find(txId);
     if(it == Operators.end()) {
         return nullptr;
@@ -85,7 +85,7 @@ TTxController::ITransactionOperatior::TPtr TTxController::GetTxOperator(const ui
     return it->second;
 }
 
-TTxController::ITransactionOperatior::TPtr TTxController::GetVerifiedTxOperator(const ui64 txId) {
+TTxController::ITransactionOperation::TPtr TTxController::GetVerifiedTxOperator(const ui64 txId) {
     auto it = Operators.find(txId);
     AFL_VERIFY(it != Operators.end())("tx_id", txId);
     return it->second;
@@ -99,7 +99,7 @@ TTxController::TTxInfo TTxController::RegisterTx(const ui64 txId, const NKikimrT
     txInfo.Source = source;
     txInfo.Cookie = cookie;
 
-    ITransactionOperatior::TPtr txOperator(ITransactionOperatior::TFactory::Construct(txInfo.TxKind, txInfo));
+    ITransactionOperation::TPtr txOperator(ITransactionOperation::TFactory::Construct(txInfo.TxKind, txInfo));
     Y_ABORT_UNLESS(!!txOperator);
     Y_ABORT_UNLESS(txOperator->Parse(Owner, txBody));
     Operators[txId] = txOperator;
@@ -118,7 +118,7 @@ TTxController::TTxInfo TTxController::RegisterTxWithDeadline(const ui64 txId, co
     txInfo.MinStep = GetAllowedStep();
     txInfo.MaxStep = txInfo.MinStep + MaxCommitTxDelay.MilliSeconds();
 
-    ITransactionOperatior::TPtr txOperator(ITransactionOperatior::TFactory::Construct(txInfo.TxKind, txInfo));
+    ITransactionOperation::TPtr txOperator(ITransactionOperation::TFactory::Construct(txInfo.TxKind, txInfo));
     Y_ABORT_UNLESS(!!txOperator);
     Y_ABORT_UNLESS(txOperator->Parse(Owner, txBody));
     Operators[txId] = txOperator;
@@ -205,13 +205,12 @@ std::optional<TTxController::TTxInfo> TTxController::StartPlannedTx() {
 
 void TTxController::FinishPlannedTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
-
-    BasicTxInfo.erase(txId);
-    Operators.erase(txId);
     Schema::EraseTxInfo(db, txId);
 }
 
 void TTxController::CompleteRunningTx(const TPlanQueueItem& txItem) {
+    AFL_VERIFY(BasicTxInfo.erase(txItem.TxId));
+    AFL_VERIFY(Operators.erase(txItem.TxId));
     AFL_VERIFY(RunningQueue.erase(txItem))("info", txItem.DebugString());
 }
 

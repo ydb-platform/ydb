@@ -43,12 +43,6 @@ public:
             TxOperator = Self->ProgressTxController->GetVerifiedTxOperator(txId);
             AFL_VERIFY(TxOperator->ExecuteOnProgress(*Self, NOlap::TSnapshot(step, txId), txc));
             Self->ProgressTxController->FinishPlannedTx(txId, txc);
-            Self->RescheduleWaitingReads();
-        }
-
-        Self->ProgressTxInFlight = false;
-        if (!!Self->ProgressTxController->GetPlannedTx()) {
-            Self->EnqueueProgressTx(ctx);
         }
         return true;
     }
@@ -57,6 +51,7 @@ public:
         NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "complete");
         if (TxOperator) {
             TxOperator->CompleteOnProgress(*Self, ctx);
+            Self->RescheduleWaitingReads();
         }
         if (PlannedQueueItem) {
             Self->GetProgressTxController().CompleteRunningTx(*PlannedQueueItem);
@@ -64,11 +59,15 @@ public:
         if (LastCompletedTx) {
             Self->LastCompletedTx = std::max(*LastCompletedTx, Self->LastCompletedTx);
         }
+        Self->ProgressTxInFlight = false;
+        if (!!Self->ProgressTxController->GetPlannedTx()) {
+            Self->EnqueueProgressTx(ctx);
+        }
         Self->SetupIndexation();
     }
 
 private:
-    TTxController::ITransactionOperatior::TPtr TxOperator;
+    TTxController::ITransactionOperation::TPtr TxOperator;
     const ui32 TabletTxNo;
     std::optional<NOlap::TSnapshot> LastCompletedTx;
     std::optional<TTxController::TPlanQueueItem> PlannedQueueItem;

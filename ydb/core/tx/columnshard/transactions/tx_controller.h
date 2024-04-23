@@ -71,14 +71,14 @@ public:
         }
     };
 
-    class ITransactionOperatior {
+    class ITransactionOperation {
     protected:
         TTxInfo TxInfo;
     public:
-        using TPtr = std::shared_ptr<ITransactionOperatior>;
-        using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperatior, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
+        using TPtr = std::shared_ptr<ITransactionOperation>;
+        using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperation, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
 
-        ITransactionOperatior(const TTxInfo& txInfo)
+        ITransactionOperation(const TTxInfo& txInfo)
             : TxInfo(txInfo)
         {}
 
@@ -86,7 +86,7 @@ public:
             return TxInfo.TxId;
         }
 
-        virtual ~ITransactionOperatior() {}
+        virtual ~ITransactionOperation() {}
 
         virtual bool TxWithDeadline() const {
             return true;
@@ -116,7 +116,7 @@ private:
     std::set<TPlanQueueItem> PlanQueue;
     std::set<TPlanQueueItem> RunningQueue;
 
-    THashMap<ui64, ITransactionOperatior::TPtr> Operators;
+    THashMap<ui64, ITransactionOperation::TPtr> Operators;
 
 private:
     ui64 GetAllowedStep() const;
@@ -125,8 +125,8 @@ private:
 public:
     TTxController(TColumnShard& owner);
 
-    ITransactionOperatior::TPtr GetTxOperator(const ui64 txId);
-    ITransactionOperatior::TPtr GetVerifiedTxOperator(const ui64 txId);
+    ITransactionOperation::TPtr GetTxOperator(const ui64 txId);
+    ITransactionOperation::TPtr GetVerifiedTxOperator(const ui64 txId);
 
     ui64 GetMemoryUsage() const;
     bool HaveOutdatedTxs() const;

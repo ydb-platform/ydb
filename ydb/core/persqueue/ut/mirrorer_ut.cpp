@@ -210,8 +210,6 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         };
 
         for (ui32 partition = 0; partition < partitionsCount; ++partition) {
-            Cerr << "Create reader for partition " << partition << "\n";
-
             auto srcReader = createReader(srcTopic, partition);
             auto dstReader = createReader(dstTopic, partition);
 

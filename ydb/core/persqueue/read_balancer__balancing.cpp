@@ -983,7 +983,6 @@ void TConsumer::Balance(const TActorContext& ctx) {
             auto sit = sessions.begin();
             for (;sit != sessions.end() && sessions.size() > 1 && !family->PossibleForBalance(*sit); ++sit) {
                 // Skip unpossible session. If there is only one session, then we always balance in it.
-                Cerr << ">>>> Skip session " << (*sit)-> DebugStr() << Endl;
             }
 
             if (sit == sessions.end()) {

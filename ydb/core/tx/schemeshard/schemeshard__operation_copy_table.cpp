@@ -431,6 +431,10 @@ public:
                     .NotResolved();
             }
 
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
+            }
+
             if (checks) {
                 if (!parent.Base()->IsTableIndex() && !isBackup) {
                     checks.DepthLimit();
@@ -721,6 +725,10 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             .IsTable()
             .NotUnderOperation()
             .IsCommonSensePath(); //forbid copy impl index tables directly
+
+        if (!tx.GetRestrictedOperation()) {
+            checks.NotRestricted();
+        }
 
         if (!checks) {
             return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};

@@ -135,6 +135,10 @@ public:
                 .IsCommonSensePath()
                 .IsLikeDirectory();
 
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
+            }
+
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
@@ -154,6 +158,10 @@ public:
             } else {
                 checks
                     .NotEmpty();
+            }
+
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
             }
 
             if (checks) {

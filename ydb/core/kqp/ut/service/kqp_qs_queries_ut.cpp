@@ -1149,6 +1149,18 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
 
+            const auto queryCreateRestricted = Q_(fmt::format(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/.tmp/sessions/{}/Test` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );)", id));
+
+            auto resultCreateRestricted = session.ExecuteQuery(queryCreateRestricted, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!resultCreateRestricted.IsSuccess());
+            UNIT_ASSERT_C(resultCreateRestricted.GetIssues().ToString().Contains("error: path is restricted"), resultCreateRestricted.GetIssues().ToString());
+
             bool allDoneOk = true;
             NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
 

@@ -584,6 +584,10 @@ public:
                 .NotUnderTheSameOperation(OperationId.GetTxId())
                 .NotUnderOperation();
 
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
+            }
+
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
@@ -599,6 +603,10 @@ public:
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved();
+
+                if (!Transaction.GetRestrictedOperation()) {
+                    checks.NotRestricted();
+                }
 
                 if (dstParent.IsUnderDeleting()) {
                     checks
@@ -653,6 +661,10 @@ public:
                 checks
                     .NotEmpty()
                     .NotResolved();
+            }
+
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
             }
 
             if (checks) {

@@ -367,6 +367,10 @@ public:
                 .NotDeleted()
                 .IsTableIndex();
 
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
+            }
+
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
@@ -388,6 +392,10 @@ public:
                 .NotAsyncReplicaTable()
                 .IsUnderTheSameOperation(OperationId.GetTxId());
 
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
+            }
+
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
@@ -403,6 +411,10 @@ public:
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved();
+
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
+            }
 
             if (dstParentPath.IsUnderOperation()) {
                 checks
@@ -450,6 +462,10 @@ public:
                 checks
                     .NotEmpty()
                     .NotResolved();
+            }
+
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
             }
 
             if (checks) {

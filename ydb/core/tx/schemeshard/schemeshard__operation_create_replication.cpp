@@ -260,6 +260,10 @@ public:
                 .IsCommonSensePath()
                 .IsLikeDirectory();
 
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
+            }
+
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
@@ -271,6 +275,10 @@ public:
             const auto checks = path.Check();
             checks
                 .IsAtLocalSchemeShard();
+
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
+            }
 
             if (path.IsResolved()) {
                 checks

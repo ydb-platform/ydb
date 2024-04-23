@@ -314,6 +314,10 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting();
 
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
+            }
+
             if (checks) {
                 if (parentPath.Base()->IsCdcStream()) {
                     checks
@@ -347,6 +351,10 @@ public:
                 checks
                     .NotEmpty()
                     .NotResolved();
+            }
+
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
             }
 
             if (checks) {

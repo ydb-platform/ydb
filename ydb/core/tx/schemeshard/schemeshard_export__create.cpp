@@ -208,7 +208,8 @@ private:
                     .IsResolved()
                     .NotDeleted()
                     .NotUnderDeleting()
-                    .IsTable();
+                    .IsTable()
+                    .NotRestricted();
 
                 if (!checks) {
                     explain = checks.GetError();

@@ -180,6 +180,10 @@ public:
                     .NotResolved();
             }
 
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
+            }
+
             if (checks) {
                 checks
                     .IsValidLeafName()
@@ -594,6 +598,10 @@ public:
                 .NotAsyncReplicaTable()
                 .NotUnderDeleting();
 
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
+            }
+
             if (checks) {
                 if (!isIndexTable) {
                     checks.IsCommonSensePath();
@@ -802,6 +810,10 @@ ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& str
             .NotResolved();
     }
 
+    if (!tx.GetRestrictedOperation()) {
+        checks.NotRestricted();
+    }
+
     if (checks) {
         checks
             .IsValidLeafName()
@@ -829,6 +841,9 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
         .IsCommonSensePath()
         .NotUnderDeleting()
         .NotUnderOperation();
+    if (!tx.GetRestrictedOperation()) {
+        checks.NotRestricted();
+    }
 
     if (!checks) {
         return CreateReject(opId, checks.GetStatus(), checks.GetError());

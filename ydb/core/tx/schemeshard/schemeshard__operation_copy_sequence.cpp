@@ -623,6 +623,10 @@ public:
                     .NotResolved();
             }
 
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
+            }
+
             if (checks) {
                 checks.IsValidLeafName();
 

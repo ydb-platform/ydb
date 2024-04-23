@@ -96,7 +96,8 @@ class TCreateExternalDataSource : public TSubOperation {
     static bool IsDestinationPathValid(const THolder<TProposeResponse>& result,
                                 const TPath& dstPath,
                                 const TString& acl,
-                                bool acceptExisted) {
+                                bool acceptExisted,
+                                const TTxTransaction& tx) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard();
         if (dstPath.IsResolved()) {
@@ -108,6 +109,10 @@ class TCreateExternalDataSource : public TSubOperation {
             checks
                 .NotEmpty()
                 .NotResolved();
+        }
+
+        if (!tx.GetRestrictedOperation()) {
+            checks.NotRestricted();
         }
 
         if (checks) {
@@ -245,7 +250,7 @@ public:
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
         TPath dstPath     = parentPath.Child(name);
 
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, acceptExisted));
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, acceptExisted, Transaction));
         RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
         RETURN_RESULT_UNLESS(IsDescriptionValid(result,
                                                 externalDataSourceDescription,

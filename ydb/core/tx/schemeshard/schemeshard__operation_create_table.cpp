@@ -443,6 +443,10 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting();
+            
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
+            }
 
             if (checks) {
                 if (parentPath.Base()->IsTableIndex()) {
@@ -477,6 +481,10 @@ public:
                 checks
                     .NotEmpty()
                     .NotResolved();
+            }
+
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
             }
 
             if (checks) {

@@ -118,6 +118,10 @@ public:
                 .IsCommonSensePath()
                 .IsLikeDirectory();
 
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
+            }
+
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;

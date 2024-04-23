@@ -195,7 +195,8 @@ private:
                 TPath::TChecker checks = path.Check();
                 checks
                     .IsAtLocalSchemeShard()
-                    .HasResolvedPrefix();
+                    .HasResolvedPrefix()
+                    .NotRestricted();
 
                 if (path.IsResolved()) {
                     checks

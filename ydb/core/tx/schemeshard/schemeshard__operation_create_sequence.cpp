@@ -373,6 +373,10 @@ public:
                 .NotUnderDeleting()
                 .IsCommonSensePath();
 
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
+            }
+
             if (checks) {
                 if (parentPath->IsTable()) {
                     // allow immediately inside a normal table
@@ -418,6 +422,10 @@ public:
                 checks
                     .NotEmpty()
                     .NotResolved();
+            }
+
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
             }
 
             if (checks) {

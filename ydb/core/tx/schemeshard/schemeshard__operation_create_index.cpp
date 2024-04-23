@@ -141,6 +141,10 @@ public:
                 .IsTable()
                 .NotAsyncReplicaTable();
 
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
+            }
+
             if (tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {
                 checks
                     .IsUnderCreating(NKikimrScheme::StatusNameConflict)
@@ -167,6 +171,10 @@ public:
                 checks
                     .NotEmpty()
                     .NotResolved();
+            }
+
+            if (!Transaction.GetRestrictedOperation()) {
+                checks.NotRestricted();
             }
 
             if (checks) {

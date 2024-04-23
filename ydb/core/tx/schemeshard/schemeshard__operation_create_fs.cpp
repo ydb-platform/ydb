@@ -307,6 +307,10 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
             .IsCommonSensePath()
             .IsLikeDirectory();
 
+        if (!Transaction.GetRestrictedOperation()) {
+            checks.NotRestricted();
+        }
+
         if (!checks) {
             result->SetError(checks.GetStatus(), checks.GetError());
             return result;
@@ -328,6 +332,10 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
             checks
                 .NotEmpty()
                 .NotResolved();
+        }
+
+        if (!Transaction.GetRestrictedOperation()) {
+            checks.NotRestricted();
         }
 
         if (checks) {

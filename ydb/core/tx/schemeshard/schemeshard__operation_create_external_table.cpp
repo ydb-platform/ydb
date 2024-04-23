@@ -127,7 +127,8 @@ private:
     static bool IsDestinationPathValid(const THolder<TProposeResponse>& result,
                                        const TPath& dstPath,
                                        const TString& acl,
-                                       bool acceptExisted) {
+                                       bool acceptExisted,
+                                       const TTxTransaction& tx) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard();
         if (dstPath.IsResolved()) {
@@ -139,6 +140,10 @@ private:
             checks
                 .NotEmpty()
                 .NotResolved();
+        }
+
+        if (!tx.GetRestrictedOperation()) {
+            checks.NotRestricted();
         }
 
         if (checks) {
@@ -161,7 +166,7 @@ private:
         return static_cast<bool>(checks);
     }
 
-    static bool IsDataSourcePathValid(const THolder<TProposeResponse>& result, const TPath& dataSourcePath) {
+    static bool IsDataSourcePathValid(const THolder<TProposeResponse>& result, const TPath& dataSourcePath, const TTxTransaction& tx) {
         const auto checks = dataSourcePath.Check();
         checks
             .NotUnderDomainUpgrade()
@@ -172,6 +177,10 @@ private:
             .IsCommonSensePath()
             .IsExternalDataSource()
             .NotUnderOperation();
+
+        if (!tx.GetRestrictedOperation()) {
+            checks.NotRestricted();
+        }
 
         if (!checks) {
             result->SetError(checks.GetStatus(), checks.GetError());
@@ -314,11 +323,11 @@ public:
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
         TPath dstPath     = parentPath.Child(name);
         RETURN_RESULT_UNLESS(IsDestinationPathValid(
-            result, dstPath, acl, acceptExisted));
+            result, dstPath, acl, acceptExisted, Transaction));
 
         const auto dataSourcePath =
             TPath::Resolve(externalTableDescription.GetDataSourcePath(), context.SS);
-        RETURN_RESULT_UNLESS(IsDataSourcePathValid(result, dataSourcePath));
+        RETURN_RESULT_UNLESS(IsDataSourcePathValid(result, dataSourcePath, Transaction));
 
         const auto externalDataSource =
             context.SS->ExternalDataSources.Value(dataSourcePath->PathId, nullptr);

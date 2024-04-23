@@ -77,6 +77,10 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         .PathShardsLimit(baseShards)
         .PathsLimit(pathToCreate)
         .ShardsLimit(shardsToCreate);
+    
+    if (!tx.GetRestrictedOperation()) {
+        checks.NotRestricted();
+    }
 
     if (!checks) {
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, checks.GetError())};

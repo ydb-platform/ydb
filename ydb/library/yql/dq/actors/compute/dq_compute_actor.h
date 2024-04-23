@@ -17,7 +17,6 @@
 namespace NYql {
 namespace NDq {
 
-
 struct TEvDqCompute {
     struct TEvState : public NActors::TEventPB<TEvState, NDqProto::TEvComputeActorState, TDqComputeEvents::EvState> {};
     struct TEvStateRequest : public NActors::TEventPB<TEvStateRequest, NDqProto::TEvComputeStateRequest, TDqComputeEvents::EvStateRequest> {};
@@ -108,7 +107,6 @@ struct TEvDqCompute {
         const ui64 TaskId;
         const NDqProto::TCheckpoint Checkpoint;
         TComputeActorState State;
-        //NDqProto::TComputeActorState State;
     };
 
     struct TEvSaveTaskStateResult : public NActors::TEventPB<TEvSaveTaskStateResult,

@@ -238,7 +238,7 @@ public:
         if (data.Version == StateVersion) { // Current version
             NPq::NProto::TDqPqTopicSinkState stateProto;
             YQL_ENSURE(stateProto.ParseFromString(data.Blob), "Serialized state is corrupted");
-            //SINK_LOG_D("Load state: " << stateProto);
+            SINK_LOG_D("Load state: " << stateProto);
             SourceId = stateProto.GetSourceId();
             ConfirmedSeqNo = stateProto.GetConfirmedSeqNo();
             NextSeqNo = ConfirmedSeqNo + 1;

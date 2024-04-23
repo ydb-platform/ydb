@@ -118,7 +118,7 @@ TComputeActorState CombineForeignState(
                     sourceState.Data.emplace_back(data);
                 }
             }
-            YQL_ENSURE(sourceState.Data.size(), "No data was loaded to source " << sourcePlan.GetInputIndex());
+            YQL_ENSURE(sourceState.DataSize(), "No data was loaded to source " << sourcePlan.GetInputIndex());
         }
     }
     return state;
@@ -519,8 +519,6 @@ void TDqComputeActorCheckpoints::OnSinkStateSaved(TSinkState&& state, ui64 outpu
 
     state.OutputIndex = outputIndex; // Set index explicitly to avoid errors
     PendingCheckpoint.ComputeActorState.Sinks.emplace_back(std::move(state));
-    //TSinkState& sinkState = PendingCheckpoint.ComputeActorState.Sinks.back();
-   // sinkState = std::move(state);
     ++PendingCheckpoint.SavedSinkStatesCount;
     LOG_T("Sink[" << outputIndex << "] state saved");
 

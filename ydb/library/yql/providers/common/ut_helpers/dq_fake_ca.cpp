@@ -115,14 +115,14 @@ void TFakeCASetup::AsyncOutputWrite(const TWriteValueProducer valueProducer, TMa
     });
 }
 
-void TFakeCASetup::SaveSourceState(NDqProto::TCheckpoint checkpoint, NDq::TSourceState& state) {
+void TFakeCASetup::SaveSourceState(NDqProto::TCheckpoint checkpoint, TSourceState& state) {
     Execute([&state, &checkpoint](TFakeActor& actor) {
         Y_ASSERT(actor.DqAsyncInput);
         actor.DqAsyncInput->SaveState(checkpoint, state);
     });
 }
 
-void TFakeCASetup::LoadSource(const NDq::TSourceState& state) {
+void TFakeCASetup::LoadSource(const TSourceState& state) {
     Execute([&state](TFakeActor& actor) {
         Y_ASSERT(actor.DqAsyncInput);
         actor.DqAsyncInput->LoadState(state);

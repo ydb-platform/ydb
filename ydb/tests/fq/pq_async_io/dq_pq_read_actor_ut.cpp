@@ -260,7 +260,6 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
 
             // Add state1 to state2
             state2.Data.push_back(state1.Data.front());
-            //*state2.AddData() = state1.Data.front();
         }
 
         TPqIoTestFixture setup2;

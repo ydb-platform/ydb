@@ -448,9 +448,6 @@ TFuture<TIssues> TStateStorage::SaveState(
     const TString& graphId,
     const TCheckpointId& checkpointId,
     const NYql::NDq::TComputeActorState& state) {
-    
-    const size_t stateSize = state.ByteSizeLong();
-    std::cerr << "SaveState, size: " << stateSize << std::endl;
 
     std::list<TString> serializedState;
     EStateType type = EStateType::Snapshot;
@@ -462,7 +459,6 @@ TFuture<TIssues> TStateStorage::SaveState(
             return MakeFuture(NYql::TIssues{NYql::TIssue{"Failed to serialize compute actor state"}});
         }
     } catch (...) {
-        LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*NActors::TActivationContext::ActorSystem(), "Exception " << stateSize);
         return MakeFuture(NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}});
     }
 

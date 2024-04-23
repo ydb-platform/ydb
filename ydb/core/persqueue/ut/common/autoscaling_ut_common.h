@@ -72,6 +72,8 @@ struct TTestReadSession {
 
     void Close();
 
+    std::set<size_t> GetPartitions();
+
 private:
     void Acquire();
     void Release();

@@ -267,6 +267,12 @@ void TTestReadSession::Close() {
     Session.reset();
 }
 
+std::set<size_t> TTestReadSession::GetPartitions() {
+    with_lock (Lock) {
+        return Partitions;
+    }
+}
+
 void TTestReadSession::Modify(std::function<void (std::set<size_t>&)> modifier) {
     bool found = false;
 

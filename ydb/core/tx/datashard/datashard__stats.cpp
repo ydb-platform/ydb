@@ -16,15 +16,27 @@ using namespace NTable;
 
 class TTableStatsCoroBuilder : public TActorCoroImpl, IPages {
 private:
+    using ECode = TDataShard::TEvPrivate::TEvTableStatsError::ECode;
+
     static constexpr TDuration MaxCoroutineExecutionTime = TDuration::MilliSeconds(5);
 
     enum {
         EvResume = EventSpaceBegin(TEvents::ES_PRIVATE)
     };
 
-    struct TExResourceAllocationFailed{};
-    struct TExFetchPageFailed{};
-    struct TExPoison{};
+    struct TExTableStatsError {
+        TExTableStatsError(ECode code, const TString& msg)
+            : Code(code)
+            , Message(msg)
+        {}
+
+        TExTableStatsError(ECode code)
+            : TExTableStatsError(code, "")
+        {}
+
+        ECode Code;
+        TString Message;
+    };
 
 public:
     TTableStatsCoroBuilder(TActorId replyTo, ui64 tabletId, ui64 tableId, TActorId executorId, ui64 indexSize,
@@ -48,13 +60,12 @@ public:
     void Run() override {
         try {
             RunImpl();
-        } catch (const TDtorException&) {
-        } catch (const TExResourceAllocationFailed&) {
-        } catch (const TExFetchPageFailed&) {
-        } catch (const TExPoison&) {
-            // just stop execution, do nothing
+        } catch (const TExTableStatsError& ex) {
+            Send(ReplyTo, new TDataShard::TEvPrivate::TEvTableStatsError(TableId, ex.Code, ex.Message));
         } catch (...) {
-            Y_ABORT("unhandled exception");
+            Send(ReplyTo, new TDataShard::TEvPrivate::TEvTableStatsError(TableId, ECode::UNKNOWN));
+
+            Y_DEBUG_ABORT("unhandled exception");
         }
 
         Die();
@@ -93,7 +104,7 @@ public:
         if (msg->Status != NKikimrProto::OK) {
             LOG_ERROR_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "Stats build failed at datashard "
                 << TabletId << ", for tableId " << TableId << " requested pages but got " << msg->Status);
-            throw TExFetchPageFailed();
+            throw TExTableStatsError(ECode::FETCH_PAGE_FAILED, NKikimrProto::EReplyStatus_Name(msg->Status));
         }
 
         ObtainResources();
@@ -154,7 +165,7 @@ private:
             case TEvResourceBroker::EvTaskOperationError: {
                 const auto* msg = ev->CastAsLocal<TEvResourceBroker::TEvTaskOperationError>();
                 LOG_ERROR_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "TEvResourceAllocated: " << msg->Status.Message);
-                throw TExResourceAllocationFailed();
+                throw TExTableStatsError(ECode::RESOURCE_ALLOCATION_FAILED, msg->Status.Message);
             }
 
             case ui32(NTabletFlatExecutor::NBlockIO::EEv::Stat): {
@@ -168,7 +179,7 @@ private:
                 break;
 
             case TEvents::TSystem::Poison:
-                throw TExPoison();
+                throw TExTableStatsError(ECode::ACTOR_DIED);
 
             default: {
                 const auto typeName = ev->GetTypeName();
@@ -391,6 +402,19 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
     }
 }
 
+void TDataShard::Handle(TEvPrivate::TEvTableStatsError::TPtr& ev, const TActorContext& ctx) {
+    Actors.erase(ev->Sender);
+
+    auto msg = ev->Get();
+
+    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Stats rebuilt error '" << msg->Message 
+        << "', code: " << ui32(msg->Code) << ", datashard " << TabletID() << ", tableId " << msg->TableId);
+
+    auto it = TableInfos.find(msg->TableId);
+    if (it != TableInfos.end()) {
+        it->second->StatsUpdateInProgress = false;
+    }
+}
 
 class TDataShard::TTxInitiateStatsUpdate : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:

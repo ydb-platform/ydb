@@ -388,51 +388,6 @@ IGraphTransformer::TStatus BlockJustWrapper(const TExprNode::TPtr& input, TExprN
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus BlockAsStructWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-    Y_UNUSED(output);
-    if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    TVector<const TItemExprType*> members;
-    bool onlyScalars = true;
-    for (auto& child : input->Children()) {
-        auto nameNode = child->Child(0);
-        if (!EnsureAtom(*nameNode, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-        auto valueNode = child->Child(1);
-        if (!EnsureBlockOrScalarType(*valueNode, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        bool isScalar;
-        const TTypeAnnotationNode* blockItemType = GetBlockItemType(*valueNode->GetTypeAnn(), isScalar);
-
-        onlyScalars = onlyScalars && isScalar;
-        members.push_back(ctx.Expr.MakeType<TItemExprType>(nameNode->Content(), blockItemType));
-    }
-
-    auto structType = ctx.Expr.MakeType<TStructExprType>(members);
-    if (!structType->Validate(input->Pos(), ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    auto less = [](const TExprNode::TPtr& left, const TExprNode::TPtr& right) {
-        return left->Head().Content() < right->Head().Content();
-    };
-
-    if (!IsSorted(input->Children().begin(), input->Children().end(), less)) {
-        auto list = input->ChildrenList();
-        Sort(list.begin(), list.end(), less);
-        output = ctx.Expr.ChangeChildren(*input, std::move(list));
-        return IGraphTransformer::TStatus::Repeat;
-    }
-
-    input->SetTypeAnn(MakeBlockOrScalarType(structType, onlyScalars, ctx.Expr));
-    return IGraphTransformer::TStatus::Ok;
-}
-
 IGraphTransformer::TStatus BlockAsTupleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {

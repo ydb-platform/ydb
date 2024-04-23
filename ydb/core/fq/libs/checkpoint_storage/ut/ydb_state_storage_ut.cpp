@@ -56,7 +56,7 @@ public:
         TString result;
         NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, value.AsStringRef());
         NYql::NDq::TComputeActorState state;
-        state.MiniKqlProgram.Data.Blob = result;
+        state.MiniKqlProgram.Data.ConstructInPlace().Blob = result;
         return state;
     }
 
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, state1.AsStringRef());
         NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, state2.AsStringRef());
         NYql::NDq::TComputeActorState state;
-        state.MiniKqlProgram.Data.Blob = result;
+        state.MiniKqlProgram.ConstructInPlace().Data.Blob = result;
         ShouldSaveGetStateImpl("TStateStorageTestShouldSaveGetState", state);
     }
 

@@ -101,7 +101,7 @@ TComputeActorState CombineForeignState(
     const std::vector<ui64>& taskIds)
 {
     TComputeActorState state;
-    state.MiniKqlProgram.Data.Version = TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion;
+    state.MiniKqlProgram.ConstructInPlace().Data.Version = TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion;
     YQL_ENSURE(plan.GetProgram().GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY, "Unsupported program state type. Plan: " << plan);
     for (const auto& sinkPlan : plan.GetSinks()) {
         YQL_ENSURE(sinkPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY, "Unsupported sink state type. Plan: " << sinkPlan);
@@ -517,10 +517,10 @@ void TDqComputeActorCheckpoints::OnSinkStateSaved(TSinkState&& state, ui64 outpu
         Y_ABORT_UNLESS(sinkState.OutputIndex != outputIndex, "Double save sink[%lu] state", outputIndex);
     }
 
-    PendingCheckpoint.ComputeActorState.Sinks.push_back({});
-    TSinkState& sinkState = PendingCheckpoint.ComputeActorState.Sinks.back();
-    sinkState = std::move(state);
-    sinkState.OutputIndex = outputIndex; // Set index explicitly to avoid errors
+    state.OutputIndex = outputIndex; // Set index explicitly to avoid errors
+    PendingCheckpoint.ComputeActorState.Sinks.emplace_back(std::move(state));
+    //TSinkState& sinkState = PendingCheckpoint.ComputeActorState.Sinks.back();
+   // sinkState = std::move(state);
     ++PendingCheckpoint.SavedSinkStatesCount;
     LOG_T("Sink[" << outputIndex << "] state saved");
 

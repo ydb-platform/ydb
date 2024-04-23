@@ -697,7 +697,7 @@ protected:
     void LoadState(TComputeActorState&& state) override final {
         CA_LOG_D("Load state");
         TMaybe<TString> error = Nothing();
-        const TMiniKqlProgramState& mkqlProgramState = state.MiniKqlProgram;
+        const TMiniKqlProgramState& mkqlProgramState = *state.MiniKqlProgram;
         auto guard = BindAllocator();
         try {
             const ui64 version = mkqlProgramState.Data.Version;
@@ -721,7 +721,7 @@ protected:
             error = e.what();
             CA_LOG_E("Exception: " << error);
         }
-        TString& blob = state.MiniKqlProgram.Data.Blob;
+        TString& blob = state.MiniKqlProgram->Data.Blob;
         if (blob && !error.Defined()) {
             CA_LOG_D("State size: " << blob.size());
             DoLoadRunnerState(std::move(blob));

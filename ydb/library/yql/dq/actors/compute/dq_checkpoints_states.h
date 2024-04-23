@@ -6,6 +6,12 @@
 namespace NYql::NDq {
 
 struct TStateData {
+    TStateData() {}
+
+    TStateData(const TString& blob, ui64 version)
+    : Blob(blob)
+    , Version(version) {}
+
     TString Blob;
     ui64 Version{0};
 
@@ -46,7 +52,7 @@ struct TSinkState {
 
 // Checkpoint for single compute actor.
 struct TComputeActorState {
-    TMiniKqlProgramState MiniKqlProgram;
+    TMaybe<TMiniKqlProgramState> MiniKqlProgram;
     std::list<TSourceState> Sources;
     std::list<TSinkState> Sinks;
 

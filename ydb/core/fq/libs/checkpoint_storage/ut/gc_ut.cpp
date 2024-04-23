@@ -52,7 +52,7 @@ NYql::NDq::TComputeActorState MakeStateFromBlob(size_t blobSize, bool isIncremen
     TString result;
     NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, savedBuf);
     NYql::NDq::TComputeActorState state;
-    state.MiniKqlProgram.Data.Blob = result;
+    state.MiniKqlProgram.ConstructInPlace().Data.Blob = result;
     return state;
 }
 

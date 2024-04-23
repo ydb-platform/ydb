@@ -162,7 +162,7 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 
     void SaveState(const NDqProto::TCheckpoint& checkpoint, TComputeActorState& state) const override final{
         CA_LOG_D("Save state");
-        TMiniKqlProgramState& mkqlProgramState = state.MiniKqlProgram;
+        TMiniKqlProgramState& mkqlProgramState = state.MiniKqlProgram.ConstructInPlace();
         mkqlProgramState.RuntimeVersion = NDqProto::RUNTIME_VERSION_YQL_1_0;
         TStateData& data = mkqlProgramState.Data;
         data.Version = TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion;

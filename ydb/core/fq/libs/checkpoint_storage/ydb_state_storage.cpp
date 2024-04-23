@@ -44,9 +44,9 @@ public:
         Sinks = update.Sinks;
         ui64 nodeNum = 0;
 
-        if (true) {//update.HasMiniKqlProgram()) {
-            const TString& blob = update.MiniKqlProgram.Data.Blob;
-            ui64 version = update.MiniKqlProgram.Data.Version;
+        if (update.MiniKqlProgram) {
+            const TString& blob = update.MiniKqlProgram->Data.Blob;
+            ui64 version = update.MiniKqlProgram->Data.Version;
             if (LastVersion) {
                 Y_ENSURE(*LastVersion == version, "Version is different: " << *LastVersion << ", " << version);
             }
@@ -108,7 +108,7 @@ public:
                 result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
             }
         }
-        auto& stateData = state.MiniKqlProgram.Data;
+        auto& stateData = state.MiniKqlProgram.ConstructInPlace().Data;
         stateData.Blob = result;
         Y_ENSURE(LastVersion, "LastVersion is empty");
         stateData.Version = *LastVersion;
@@ -116,10 +116,10 @@ public:
     }
 
     static EStateType GetStateType(const NYql::NDq::TComputeActorState& state) {
-        if (false) {// !state.MiniKqlProgram) {
+        if (!state.MiniKqlProgram) {
             return EStateType::Snapshot;
         }
-        const TString& blob = state.MiniKqlProgram.Data.Blob;
+        const TString& blob = state.MiniKqlProgram->Data.Blob;
         TStringBuf buf(blob);
         while (!buf.empty()) {
             auto nodeStateSize = NKikimr::NMiniKQL::ReadUi32(buf);

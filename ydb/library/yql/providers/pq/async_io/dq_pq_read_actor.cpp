@@ -161,10 +161,7 @@ public:
         TString stateBlob;
         YQL_ENSURE(stateProto.SerializeToString(&stateBlob));
 
-        state.Data.push_back({});
-        auto& data = state.Data.back();
-        data.Version = StateVersion;
-        data.Blob = stateBlob;
+        state.Data.emplace_back(stateBlob, StateVersion);
 
         DeferredCommits.emplace(checkpoint.GetId(), std::move(CurrentDeferredCommit));
         CurrentDeferredCommit = NYdb::NTopic::TDeferredCommit();

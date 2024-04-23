@@ -6141,19 +6141,43 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         TExprNode::TListType children;
 
+        bool isUnion = input->Content() == "StructUnion";
+        bool isIntersection = input->Content() == "StructIntersection";
+        bool isDifference = input->Content() == "StructDifference";
+        bool isSymmDifference = input->Content() == "StructSymmetricDifference";
+
         for (const auto* leftItem : leftType->GetItems()) {
             const auto& name = leftItem->GetName();
-            if (rightType->FindItem(name)) {
-                children.push_back(mergeMembers(name, true, true));
-            } else {
-                children.push_back(mergeMembers(name, true, false));
+            if (isUnion) {
+                if (rightType->FindItem(name)) {
+                    children.push_back(mergeMembers(name, true, true));
+                } else {
+                    children.push_back(mergeMembers(name, true, false));
+                }
+            }
+            if (isIntersection) {
+                if (rightType->FindItem(name)) {
+                    children.push_back(mergeMembers(name, true, true));
+                }
+            }
+            if (isDifference || isSymmDifference) {
+                if (!rightType->FindItem(name)) {
+                    children.push_back(mergeMembers(name, true, false));
+                }
             }
         }
 
         for (const auto* rightItem : rightType->GetItems()) {
             const auto& name = rightItem->GetName();
-            if (!leftType->FindItem(name)) {
-                children.push_back(mergeMembers(name, false, true));
+            if (isUnion) {
+                if (!leftType->FindItem(name)) {
+                    children.push_back(mergeMembers(name, false, true));
+                }
+            }
+            if (isSymmDifference) {
+                if (!leftType->FindItem(name)) {
+                    children.push_back(mergeMembers(name, false, true));
+                }
             }
         }
 
@@ -12204,6 +12228,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgGroupingSet"] = &PgGroupingSetWrapper;
         Functions["PgToRecord"] = &PgToRecordWrapper;
         Functions["StructUnion"] = &StructMergeWrapper;
+        Functions["StructIntersection"] = &StructMergeWrapper;
+        Functions["StructDifference"] = &StructMergeWrapper;
+        Functions["StructSymmetricDifference"] = &StructMergeWrapper;
 
         Functions["AutoDemux"] = &AutoDemuxWrapper;
         Functions["AggrCountInit"] = &AggrCountInitWrapper;

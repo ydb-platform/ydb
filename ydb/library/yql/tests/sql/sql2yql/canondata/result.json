@@ -11551,9 +11551,9 @@
     ],
     "test_sql2yql.test[pg-in_mixed]": [
         {
-            "checksum": "62a2a1938abfb9ca2f62b28edc14e10b",
-            "size": 4419,
-            "uri": "https://{canondata_backend}/1925842/882e3fc0d746b6da63019211e947180d941fae9a/resource.tar.gz#test_sql2yql.test_pg-in_mixed_/sql.yql"
+            "checksum": "39007e177872f82bc8e05e22c876e4b7",
+            "size": 3783,
+            "uri": "https://{canondata_backend}/1817427/85bf70014c7a011526eae3f61b08c51a652f6056/resource.tar.gz#test_sql2yql.test_pg-in_mixed_/sql.yql"
         }
     ],
     "test_sql2yql.test[pg-in_sorted]": [

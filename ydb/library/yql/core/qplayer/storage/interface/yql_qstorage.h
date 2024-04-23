@@ -50,6 +50,7 @@ public:
     virtual ~IQWriter() = default;
 
     virtual NThreading::TFuture<void> Put(const TQItemKey& key, const TString& value) = 0;
+    // Commmit should be called at most once, no more Put are allowed after it
     virtual NThreading::TFuture<void> Commit() = 0;
 };
 

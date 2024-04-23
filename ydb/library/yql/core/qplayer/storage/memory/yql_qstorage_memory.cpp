@@ -52,6 +52,7 @@ public:
 
     NThreading::TFuture<void> Put(const TQItemKey& key, const TString& value) final {
         with_lock(Operation_->Mutex) {
+            Y_ENSURE(!Operation_->Committed);
             (*Operation_->WriteMap)[key] = value;
             return NThreading::MakeFuture();
         }

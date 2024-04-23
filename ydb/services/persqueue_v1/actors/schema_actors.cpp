@@ -1311,6 +1311,8 @@ TDescribePartitionActor::TDescribePartitionActor(NKikimr::NGRpcService::IRequest
 
 void TDescribePartitionActor::Bootstrap(const NActors::TActorContext& ctx)
 {
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "TDescribePartitionActor" << ctx.SelfID.ToString() << ": Bootstrap");
+    CheckAccessWithUpdateRowPermission = true;
     TBase::Bootstrap(ctx);
     SendDescribeProposeRequest(ctx);
     Become(&TDescribePartitionActor::StateWork);
@@ -1318,11 +1320,41 @@ void TDescribePartitionActor::Bootstrap(const NActors::TActorContext& ctx)
 
 void TDescribePartitionActor::StateWork(TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
+        case TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType:
+            if (MaybeRequestWithDescribeSchema(ev)) {
+                break;
+            }
+            [[fallthrough]];
         default:
             if (!TDescribeTopicActorImpl::StateWork(ev, ActorContext())) {
                 TBase::StateWork(ev);
             };
     }
+}
+
+// Return true if the second request to SchemeCache has been sent,
+// i.e. we had already sent the first request checking the UpdateRow permission,
+// but the result was negative, so we try again, this time using the DescribeSchema permission.
+bool TDescribePartitionActor::MaybeRequestWithDescribeSchema(TAutoPtr<IEventHandle>& ev) {
+    if (!std::exchange(CheckAccessWithUpdateRowPermission, false)) {
+        // We've got a response to our second request.
+        return false;
+    }
+
+    auto evNav = *reinterpret_cast<typename TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+    auto const& entries = evNav->Get()->Request.Get()->ResultSet;
+    Y_ABORT_UNLESS(entries.size() == 1);
+
+    if (entries.front().Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+        // We do have access to the requested entity.
+        // Transfer ownership to the ev pointer, and let the base classes' StateWork methods handle the response.
+        ev = *reinterpret_cast<TAutoPtr<IEventHandle>*>(&evNav);
+        return false;
+    }
+
+    // We do not have the UpdateRow permission. Check if we're allowed to DescribeSchema.
+    SendDescribeProposeRequest(ActorContext());
+    return true;
 }
 
 void TDescribePartitionActor::HandleCacheNavigateResponse(

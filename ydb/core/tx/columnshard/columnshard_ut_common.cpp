@@ -248,6 +248,7 @@ void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64
         UNIT_ASSERT(txIds.contains(res.GetTxId()));
         UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
     }
+    Wakeup(runtime, sender, shardId);
 }
 
 TCell MakeTestCell(const TTypeInfo& typeInfo, ui32 value, std::vector<TString>& mem) {

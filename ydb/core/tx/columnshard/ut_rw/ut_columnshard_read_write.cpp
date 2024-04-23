@@ -2158,7 +2158,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TTester::Setup(runtime);
         runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_NOTICE);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        csDefaultControllerGuard->SetPeriodicWakeupActivationPeriod(TDuration::MilliSeconds(500));
+        csDefaultControllerGuard->SetSmallSizeDetector(1LLU << 20);
 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -2278,7 +2278,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
         const TInstant start = TInstant::Now();
         bool success = false;
-        while (TInstant::Now() - start < TDuration::Seconds(30)) { // Get index stats
+        while (!success && TInstant::Now() - start < TDuration::Seconds(30)) { // Get index stats
             ScanIndexStats(runtime, sender, {tableId, 42}, NOlap::TSnapshot(planStep, txId), 0);
             auto scanInited = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanInitActor>(handle);
             auto& msg = scanInited->Record;
@@ -2298,7 +2298,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 }
                 UNIT_ASSERT(scan->ArrowBatch);
                 auto batchStats = NArrow::ToBatch(scan->ArrowBatch, true);
-                Cerr << batchStats->ToString() << Endl;
                 for (ui32 i = 0; i < batchStats->num_rows(); ++i) {
                     auto paths = batchStats->GetColumnByName("PathId");
                     auto kinds = batchStats->GetColumnByName("Kind");
@@ -2339,14 +2338,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 }
             }
             Cerr << "compacted=" << sumCompactedRows << ";inserted=" << sumInsertedRows << ";expected=" << fullNumRows << ";" << Endl;
-            if (!sumInsertedRows) {
+            if (!sumInsertedRows && sumCompactedRows == fullNumRows) {
                 success = true;
                 RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
-                AFL_VERIFY(sumCompactedRows == fullNumRows)("sum", sumCompactedRows)("full", fullNumRows)("inserted", sumInsertedRows);
                 UNIT_ASSERT(sumCompactedRows < sumCompactedBytes);
-                AFL_VERIFY(sumInsertedRows == 0)("rows", sumInsertedRows);
                 UNIT_ASSERT(sumInsertedBytes == 0);
-                break;
             } else {
                 Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
             }

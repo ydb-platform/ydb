@@ -10,8 +10,11 @@
                             [
                                 "OrCardinality";
                                 [
-                                    "DataType";
-                                    "Uint32"
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Uint32"
+                                    ]
                                 ]
                             ]
                         ]
@@ -19,7 +22,9 @@
                 ];
                 "Data" = [
                     [
-                        "3"
+                        [
+                            "3"
+                        ]
                     ]
                 ]
             }

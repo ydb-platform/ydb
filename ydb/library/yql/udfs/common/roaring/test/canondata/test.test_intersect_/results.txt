@@ -70,5 +70,37 @@
                 ]
             }
         ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "AndWithBinaryListEmpty";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "ListType";
+                                        [
+                                            "DataType";
+                                            "Uint32"
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        #
+                    ]
+                ]
+            }
+        ]
     }
 ]

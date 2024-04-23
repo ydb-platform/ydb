@@ -54,10 +54,6 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-
-            if (!args[0] || !args[1]) {
-                return TUnboxedValuePod();
-            }
             try {
                 auto binaryString = args[1].AsStringRef();
                 auto bitmap = DeserializePortable(binaryString);
@@ -85,10 +81,6 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-
-            if (!args[0] || !args[1]) {
-                return TUnboxedValuePod();
-            }
             try {
                 auto binaryString = args[1].AsStringRef();
                 auto bitmap = DeserializePortable(binaryString);
@@ -116,10 +108,6 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-
-            if (!args[0] || !args[1]) {
-                return TUnboxedValuePod();
-            }
             try {
                 roaring_bitmap_and_inplace(GetBitmapFromArg(args[0]), GetBitmapFromArg(args[1]));
                 return args[0];
@@ -142,10 +130,6 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-
-            if (!args[0] || !args[1]) {
-                return TUnboxedValuePod();
-            }
             try {
                 roaring_bitmap_or_inplace(GetBitmapFromArg(args[0]), GetBitmapFromArg(args[1]));
                 return args[0];
@@ -222,10 +206,6 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-            if (!args[0]) {
-                return TUnboxedValuePod();
-            }
-
             try {
                 auto bitmap = GetBitmapFromArg(args[0]);
 
@@ -249,11 +229,6 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-
-            if (!args[0]) {
-                return TUnboxedValuePod();
-            }
-
             try {
                 return TUnboxedValuePod(new TRoaringWrapper(args[0].AsStringRef()));
             } catch (const std::exception& e) {
@@ -274,10 +249,6 @@ namespace {
     private:
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
-            if (!args[0]) {
-                return TUnboxedValuePod();
-            }
-
             try {
                 auto bitmap = GetBitmapFromArg(args[0]);
                 roaring_bitmap_run_optimize(bitmap);
@@ -307,10 +278,6 @@ namespace {
     private:
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
-            if (!args[0]) {
-                return TUnboxedValuePod();
-            }
-
             Y_UNUSED(valueBuilder);
             try {
                 auto bitmap = GetBitmapFromArg(args[0]);
@@ -354,14 +321,9 @@ namespace {
                 Y_UNUSED(userType);
 
                 auto typesOnly = (flags & TFlags::TypesOnly);
-                auto roaringType = builder.Resource(RoaringResourceName);
-                auto optionalRoaringType = builder.Optional()->Item(roaringType).Build();
-
-                auto optionalStringType =
-                    builder.Optional()->Item(builder.SimpleType<char*>()).Build();
 
                 if (TRoaringDeserialize::Name() == name) {
-                    builder.Returns(optionalRoaringType).Args()->Add(optionalStringType);
+                    builder.Returns<TAutoMap<TResource<RoaringResourceName>>>().Args()->Add<TAutoMap<char*>>();
 
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringDeserialize());
@@ -369,7 +331,7 @@ namespace {
                 } else if (TRoaringSerialize::Name() == name) {
                     builder.Returns(builder.SimpleType<char*>())
                         .Args()
-                        ->Add(optionalRoaringType);
+                        ->Add<TAutoMap<TResource<RoaringResourceName>>>();
 
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringSerialize());
@@ -377,7 +339,7 @@ namespace {
                 } else if (TRoaringCardinality::Name() == name) {
                     builder.Returns(builder.SimpleType<ui32>())
                         .Args()
-                        ->Add(optionalRoaringType);
+                        ->Add<TAutoMap<TResource<RoaringResourceName>>>();
 
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringCardinality());
@@ -387,43 +349,43 @@ namespace {
                         builder.List()->Item(builder.SimpleType<ui32>()).Build();
                     builder.Returns(builder.Optional()->Item(ui32ListType).Build())
                         .Args()
-                        ->Add(optionalRoaringType);
+                        ->Add<TAutoMap<TResource<RoaringResourceName>>>();
 
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringUint32List());
                     }
                 } else if (TRoaringOrWithBinary::Name() == name) {
-                    builder.Returns(optionalRoaringType)
+                    builder.Returns<TAutoMap<TResource<RoaringResourceName>>>()
                         .Args()
-                        ->Add(optionalRoaringType)
-                        .Add(optionalStringType);
+                        ->Add<TAutoMap<TResource<RoaringResourceName>>>()
+                        .Add<TAutoMap<char*>>();
 
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringOrWithBinary());
                     }
                 } else if (TRoaringOr::Name() == name) {
-                    builder.Returns(optionalRoaringType)
+                    builder.Returns<TAutoMap<TResource<RoaringResourceName>>>()
                         .Args()
-                        ->Add(optionalRoaringType)
-                        .Add(optionalRoaringType);
+                        ->Add<TAutoMap<TResource<RoaringResourceName>>>()
+                        .Add<TAutoMap<TResource<RoaringResourceName>>>();
 
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringOr());
                     }
                 } else if (TRoaringAndWithBinary::Name() == name) {
-                    builder.Returns(optionalRoaringType)
+                    builder.Returns<TAutoMap<TResource<RoaringResourceName>>>()
                         .Args()
-                        ->Add(optionalRoaringType)
-                        .Add(optionalStringType);
+                        ->Add<TAutoMap<TResource<RoaringResourceName>>>()
+                        .Add<TAutoMap<char*>>();
 
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringAndWithBinary());
                     }
                 } else if (TRoaringAnd::Name() == name) {
-                    builder.Returns(optionalRoaringType)
+                    builder.Returns<TAutoMap<TResource<RoaringResourceName>>>()
                         .Args()
-                        ->Add(optionalRoaringType)
-                        .Add(optionalRoaringType);
+                        ->Add<TAutoMap<TResource<RoaringResourceName>>>()
+                        .Add<TAutoMap<TResource<RoaringResourceName>>>();
 
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringAnd());
@@ -439,7 +401,7 @@ namespace {
         }
 
     private:
-        inline static const std::string RoaringResourceName = "roaring_bitmap";
+        inline static const char RoaringResourceName[] = "roaring_bitmap";
 
         static void* RoaringMallocUdf(size_t size) {
             auto allocationSize = size + 2 * sizeof(void*);

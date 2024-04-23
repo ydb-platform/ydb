@@ -290,10 +290,6 @@ void CollectChildrenPredicates(const TExprNode& opNode, TPredicateNode& predicat
     }
 }
 
-void CollectExpressionPredicate(TPredicateNode& predicateTree, const TCoMember& member, const TExprNode* lambdaArg) {
-    predicateTree.CanBePushed = IsMemberColumn(member, lambdaArg);
-}
-
 }
 
 void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
@@ -311,8 +307,6 @@ void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree
         predicateTree.CanBePushed = ExistsCanBePushed(maybeExists.Cast(), lambdaArg);
     } else if (const auto maybeJsonExists = predicate.Maybe<TCoJsonExists>()) {
         predicateTree.CanBePushed = JsonExistsCanBePushed(maybeJsonExists.Cast(), lambdaArg);
-    } else if (const auto maybeMember = predicate.Maybe<TCoMember>()) {
-        return CollectExpressionPredicate(predicateTree, maybeMember.Cast(), lambdaArg);
     } else if (predicate.Maybe<TCoNot>()) {
         predicateTree.Op = TPredicateNode::EBoolOp::Not;
         return CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody);

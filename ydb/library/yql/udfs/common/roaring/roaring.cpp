@@ -26,19 +26,19 @@ namespace {
 
     struct TRoaringWrapper: public TBoxedValue {
         TRoaringWrapper(TStringRef binaryString)
-            : Roaring_(DeserializePortable(binaryString))
+            : Roaring(DeserializePortable(binaryString))
         {
         }
 
         ~TRoaringWrapper() {
-            roaring_bitmap_free(Roaring_);
+            roaring_bitmap_free(Roaring);
         }
 
-        roaring_bitmap_t* Roaring_;
+        roaring_bitmap_t* Roaring;
     };
 
     inline roaring_bitmap_t* GetBitmapFromArg(TUnboxedValuePod arg) {
-        return static_cast<TRoaringWrapper*>(arg.AsBoxed().Get())->Roaring_;
+        return static_cast<TRoaringWrapper*>(arg.AsBoxed().Get())->Roaring;
     }
 
     class TRoaringOrWithBinary: public TBoxedValue {
@@ -157,58 +157,83 @@ namespace {
 
     class TRoaringUint32List: public TBoxedValue {
     public:
-        TRoaringUint32List(ui32 indexLimit, ui32 indexOffset)
-            : IndexLimit_(indexLimit)
-            , IndexOffset_(indexOffset)
-        {
-        }
-
         static TStringRef Name() {
             return TStringRef::Of("Uint32List");
         }
 
     private:
+        class TIterator: public TManagedBoxedValue {
+        public:
+            TIterator(roaring_bitmap_t* Roaring) {
+                Iter_ = roaring_iterator_create(Roaring);
+            }
+            // Any iterator.
+            bool Skip() override {
+                if (!Iter_->has_value) {
+                    return false;
+                }
+                roaring_uint32_iterator_advance(Iter_);
+                return true;
+            };
+
+            // List iterator.
+            bool Next(TUnboxedValue& value) override {
+                if (!Iter_->has_value) {
+                    return false;
+                }
+                value = TUnboxedValuePod(Iter_->current_value);
+                roaring_uint32_iterator_advance(Iter_);
+                return true;
+            };
+
+        private:
+            roaring_uint32_iterator_t* Iter_;
+        };
+
+        class TList: public TBoxedValue {
+        public:
+            TList(roaring_bitmap_t* Roaring)
+                : Roaring_(Roaring)
+            {
+                Length_ = roaring_bitmap_get_cardinality(Roaring_);
+            }
+
+            bool HasFastListLength() const override {
+                return true;
+            };
+
+            ui64 GetListLength() const override {
+                return Length_;
+            };
+
+            ui64 GetEstimatedListLength() const override {
+                return GetListLength();
+            };
+
+            TUnboxedValue GetListIterator() const override {
+                return TUnboxedValuePod(new TIterator(Roaring_));
+            };
+
+        private:
+            roaring_bitmap_t* Roaring_;
+            ui64 Length_;
+        };
+
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
+            Y_UNUSED(valueBuilder);
             if (!args[0]) {
                 return TUnboxedValuePod();
             }
 
             try {
                 auto bitmap = GetBitmapFromArg(args[0]);
-                auto cardinality = roaring_bitmap_get_cardinality(bitmap);
-                auto resultList = TVector<TUnboxedValue>();
 
-                auto limit = cardinality;
-                auto offset = 0;
-
-                if (args[1]) {
-                    limit = args[1].GetElement(IndexLimit_).Get<ui32>();
-                    offset = args[1].GetElement(IndexOffset_).Get<ui32>();
-                }
-                resultList.reserve(limit);
-
-                auto i = roaring_iterator_create(bitmap);
-                while (i->has_value && limit > 0) {
-                    if (offset > 0) {
-                        offset--;
-                    } else {
-                        resultList.push_back(TUnboxedValuePod(i->current_value));
-                        limit--;
-                    }
-                    roaring_uint32_iterator_advance(i);
-                }
-                roaring_uint32_iterator_free(i);
-                if (resultList.size() == 0) {
-                    return valueBuilder->NewEmptyList();
-                }
-                return valueBuilder->NewList(resultList.data(), resultList.size());
+                return TUnboxedValuePod(new TList(bitmap));
             } catch (const std::exception& e) {
                 UdfTerminate(CurrentExceptionMessage().c_str());
             }
         }
-
-        ui32 IndexLimit_, IndexOffset_;
     };
 
     class TRoaringDeserialize: public TBoxedValue {
@@ -360,23 +385,12 @@ namespace {
                 } else if (TRoaringUint32List::Name() == name) {
                     auto ui32ListType =
                         builder.List()->Item(builder.SimpleType<ui32>()).Build();
-
-                    ui32 indexLimit = 0, indexOffset = 0;
-                    auto structType = builder.Struct()
-                                          ->AddField<ui32>("listLimit", &indexLimit)
-                                          .AddField<ui32>("listOffset", &indexOffset)
-                                          .Build();
-
                     builder.Returns(builder.Optional()->Item(ui32ListType).Build())
                         .Args()
-                        ->Add(optionalRoaringType)
-                        .Add(builder.Optional()->Item(structType).Build())
-                        .Done()
-                        .OptionalArgs(1);
+                        ->Add(optionalRoaringType);
 
                     if (!typesOnly) {
-                        builder.Implementation(
-                            new TRoaringUint32List(indexLimit, indexOffset));
+                        builder.Implementation(new TRoaringUint32List());
                     }
                 } else if (TRoaringOrWithBinary::Name() == name) {
                     builder.Returns(optionalRoaringType)

@@ -549,7 +549,8 @@ class StreamingOverKikimrConfig:
                  node_count=1,  # Union[int, dict[str, TenantConfig]]
                  tenant_mapping=None,  # dict[str, str]
                  cloud_mapping=None,  # dict
-                 dc_mapping=None  # dict
+                 dc_mapping=None,  # dict
+                 mvp_external_ydb_endpoint=None # str
                  ):
         if tenant_mapping is None:
             tenant_mapping = {}
@@ -562,6 +563,7 @@ class StreamingOverKikimrConfig:
         self.tenant_mapping = tenant_mapping
         self.cloud_mapping = cloud_mapping
         self.dc_mapping = dc_mapping
+        self.mvp_external_ydb_endpoint = mvp_external_ydb_endpoint
 
 
 class StreamingOverKikimr(object):
@@ -572,7 +574,7 @@ class StreamingOverKikimr(object):
             configuration = StreamingOverKikimrConfig()
         self.uuid = str(uuid.uuid4())
         self.mvp_mock_port = PortManager().get_port()
-        self.mvp_mock_server = Process(target=MvpMockServer(self.mvp_mock_port).serve_forever)
+        self.mvp_mock_server = Process(target=MvpMockServer(self.mvp_mock_port,  configuration.mvp_external_ydb_endpoint).serve_forever)
         self.tenants = {}
         _tenant_mapping = configuration.tenant_mapping.copy()
         if isinstance(configuration.node_count, dict):

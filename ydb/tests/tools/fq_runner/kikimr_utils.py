@@ -318,20 +318,18 @@ class MDBExtension(ExtensionPoint):
 
 class YdbMvpExtension(ExtensionPoint):
 
-    def __init__(self, endpoint: str, use_ssl=False):
-        MDBExtension.__init__.__annotations__ = {
-            'endpoint': str,
-            'use_ssl': bool
-        }
+    def __init__(self, mvp_external_ydb_endpoint):
+        self.mvp_external_ydb_endpoint = mvp_external_ydb_endpoint
         super().__init__()
-        self.endpoint = endpoint
-        self.use_ssl = use_ssl
 
     def is_applicable(self, request):
         return True
 
+    def apply_to_kikimr_conf(self, request, configuration):
+        configuration.mvp_external_ydb_endpoint = self.mvp_external_ydb_endpoint
+
     def apply_to_kikimr(self, request, kikimr):
-        kikimr.compute_plane.qs_config['generic']['ydb_mvp_endpoint'] = self.endpoint
+        kikimr.compute_plane.qs_config['generic']['ydb_mvp_endpoint'] = kikimr.control_plane.fq_config['common']['ydb_mvp_cloud_endpoint']
 
 
 class TokenAccessorExtension(ExtensionPoint):

@@ -456,19 +456,24 @@ namespace NKikimr::NBlobDepot {
                             KEYVALUE_P("Now", TInstant::Now());
                             KEYVALUE_P("Decommit state", DecommitState);
                             KEYVALUE_P("Assimilator state", GroupAssimilatorId ? "running" : "stopped");
-                            KEYVALUE_P("Assimilator position", TStringBuilder() << "<pre>" << AssimilatorPosition << "<pre/>");
+                            KEYVALUE_P("Assimilator position", TStringBuilder() << "<pre>" << Assimilator.Position << "<pre/>");
                             KEYVALUE_P("Last assimilated blob id", Data->LastAssimilatedBlobId ?
                                 Data->LastAssimilatedBlobId->ToString() : "<null>");
-                            KEYVALUE_P("Last read blob id", AssimilatorLastReadBlobId);
-                            KEYVALUE_P("Latest successful get", AssimilatorLatestOkGet);
-                            KEYVALUE_P("Latest erroneous get", AssimilatorLatestErrorGet);
-                            KEYVALUE_P("Latest successful put", AssimilatorLatestOkPut);
-                            KEYVALUE_P("Latest erroneous put", AssimilatorLatestErrorPut);
-                            KEYVALUE_P("Blobs read with OK", AssimilatorBlobsReadOk);
-                            KEYVALUE_P("Blobs read with NODATA", AssimilatorBlobsReadNoData);
-                            KEYVALUE_P("Blobs read with error", AssimilatorBlobsReadError);
-                            KEYVALUE_P("Blobs put with OK", AssimilatorBlobsPutOk);
-                            KEYVALUE_P("Blobs put with error", AssimilatorBlobsPutError);
+                            KEYVALUE_P("Copy iteration", Assimilator.CopyIteration);
+                            KEYVALUE_P("Bytes to copy", Assimilator.BytesToCopy);
+                            KEYVALUE_P("Bytes already copied", Assimilator.BytesCopied);
+                            KEYVALUE_P("Copy speed, bytes per second", Assimilator.CopySpeed);
+                            KEYVALUE_P("Copy time remaining", Assimilator.CopyTimeRemaining);
+                            KEYVALUE_P("Last read blob id", Assimilator.LastReadBlobId);
+                            KEYVALUE_P("Latest successful get", Assimilator.LatestOkGet);
+                            KEYVALUE_P("Latest erroneous get", Assimilator.LatestErrorGet);
+                            KEYVALUE_P("Latest successful put", Assimilator.LatestOkPut);
+                            KEYVALUE_P("Latest erroneous put", Assimilator.LatestErrorPut);
+                            KEYVALUE_P("Blobs read with OK", Assimilator.BlobsReadOk);
+                            KEYVALUE_P("Blobs read with NODATA", Assimilator.BlobsReadNoData);
+                            KEYVALUE_P("Blobs read with error", Assimilator.BlobsReadError);
+                            KEYVALUE_P("Blobs put with OK", Assimilator.BlobsPutOk);
+                            KEYVALUE_P("Blobs put with error", Assimilator.BlobsPutError);
                         })
                     }
                 }

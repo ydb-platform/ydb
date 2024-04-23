@@ -232,10 +232,9 @@ namespace {
             roaring_bitmap_run_optimize(bitmap);
 
             auto sizeInBytes = roaring_bitmap_portable_size_in_bytes(bitmap);
-            auto buf = (char*)UdfAllocateWithSize(sizeInBytes);
-            roaring_bitmap_portable_serialize(bitmap, buf);
-            auto string = valueBuilder->NewString(TStringRef(buf, sizeInBytes));
-            UdfFreeWithSize((void*)buf, sizeInBytes);
+
+            auto string = valueBuilder->NewStringNotFilled(sizeInBytes);
+            roaring_bitmap_portable_serialize(bitmap, string.AsStringRef().Data());
 
             return string;
         }
@@ -262,6 +261,13 @@ namespace {
 
     class TRoaringModule: public IUdfModule {
     public:
+        TRoaringModule() {
+            auto memoryHook = roaring_memory_t{
+                RoaringMallocUdf, RoaringReallocUdf, RoaringCallocUdf,
+                RoaringFreeUdf, RoaringAlignedMallocUdf, RoaringFreeUdf};
+            roaring_init_memory_hook(memoryHook);
+        }
+
         TStringRef Name() const {
             return TStringRef::Of("Roaring");
         }

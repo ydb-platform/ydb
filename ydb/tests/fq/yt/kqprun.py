@@ -9,8 +9,8 @@ class KqpRun(object):
     def __init__(self, udfs_dir=None):
         self.kqprun_binary = yql_utils.yql_binary_path('ydb/tests/tools/kqprun/kqprun')
 
-        self.config_file = yql_utils.yql_source_path(os.path.join('ydb/library/yql/cfg/tests', 'kqprun_config.conf'))
-        self.scheme_file = yql_utils.yql_source_path(os.path.join('ydb/library/yql/cfg/tests', 'kqprun_scheme.sql'))
+        self.config_file = yql_utils.yql_source_path(os.path.join('ydb/tests/fq/yt/cfg', 'kqprun_config.conf'))
+        self.scheme_file = yql_utils.yql_source_path(os.path.join('ydb/tests/fq/yt/cfg', 'kqprun_scheme.sql'))
 
         self.res_dir = yql_utils.get_yql_dir(prefix='kqprun_')
 

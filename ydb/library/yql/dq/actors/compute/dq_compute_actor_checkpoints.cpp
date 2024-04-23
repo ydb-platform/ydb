@@ -518,9 +518,9 @@ void TDqComputeActorCheckpoints::OnSinkStateSaved(TSinkState&& state, ui64 outpu
     }
 
     PendingCheckpoint.ComputeActorState.Sinks.push_back({});
-    TSinkState* sinkState = PendingCheckpoint.ComputeActorState.Sinks.back();
-    *sinkState = std::move(state);
-    sinkState->SetOutputIndex(outputIndex); // Set index explicitly to avoid errors
+    TSinkState& sinkState = PendingCheckpoint.ComputeActorState.Sinks.back();
+    sinkState = std::move(state);
+    sinkState.OutputIndex = outputIndex; // Set index explicitly to avoid errors
     ++PendingCheckpoint.SavedSinkStatesCount;
     LOG_T("Sink[" << outputIndex << "] state saved");
 
@@ -531,7 +531,7 @@ void TDqComputeActorCheckpoints::TryToSavePendingCheckpoint() {
     Y_ABORT_UNLESS(PendingCheckpoint);
     if (PendingCheckpoint.IsReady()) {
         auto saveTaskStateRequest = MakeHolder<TEvDqCompute::TEvSaveTaskState>(GraphId, Task.GetId(), *PendingCheckpoint.Checkpoint);
-        saveTaskStateRequest->State.Swap(&PendingCheckpoint.ComputeActorState);
+        saveTaskStateRequest->State = std::move(PendingCheckpoint.ComputeActorState);
         Send(CheckpointStorage, std::move(saveTaskStateRequest));
 
         LOG_PCP_D("Task checkpoint is done. Send to storage");

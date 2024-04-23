@@ -235,18 +235,18 @@ public:
 
     void LoadState(const TSinkState& state) override {
         Y_ABORT_UNLESS(NextSeqNo == 1);
-        const auto& data = state.GetData().GetStateData();
-        if (data.GetVersion() == StateVersion) { // Current version
+        const auto& data = state.Data;
+        if (data.Version == StateVersion) { // Current version
             NPq::NProto::TDqPqTopicSinkState stateProto;
-            YQL_ENSURE(stateProto.ParseFromString(data.GetBlob()), "Serialized state is corrupted");
-            SINK_LOG_D("Load state: " << stateProto);
+            YQL_ENSURE(stateProto.ParseFromString(data.Blob), "Serialized state is corrupted");
+            //SINK_LOG_D("Load state: " << stateProto);
             SourceId = stateProto.GetSourceId();
             ConfirmedSeqNo = stateProto.GetConfirmedSeqNo();
             NextSeqNo = ConfirmedSeqNo + 1;
             EgressStats.Bytes = stateProto.GetEgressBytes();
             return;
         }
-        ythrow yexception() << "Invalid state version " << data.GetVersion();
+        ythrow yexception() << "Invalid state version " << data.Version;
     }
 
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
@@ -353,7 +353,7 @@ private:
         return !events.empty();
     }
 
-    TSinkState BuildState(const NDqProto::TCheckpoint& checkpoint) {
+    TSinkState BuildState(const NDqProto::TCheckpoint& /*checkpoint*/) {
         NPq::NProto::TDqPqTopicSinkState stateProto;
         stateProto.SetSourceId(GetSourceId());
         stateProto.SetConfirmedSeqNo(ConfirmedSeqNo);
@@ -362,10 +362,10 @@ private:
         YQL_ENSURE(stateProto.SerializeToString(&serializedState));
 
         TSinkState sinkState;
-        auto* data = sinkState.MutableData()->MutableStateData();
-        data->SetVersion(StateVersion);
-        data->SetBlob(serializedState);
-        SINK_LOG_T("Save checkpoint " << checkpoint << " state: " << stateProto << ". Sink state: " << sinkState);
+        auto& data = sinkState.Data;
+        data.Version = StateVersion;
+        data.Blob = serializedState;
+        //SINK_LOG_T("Save checkpoint " << checkpoint << " state: " << stateProto << ". Sink state: " << sinkState);
         return sinkState;
     }
 

@@ -162,9 +162,10 @@ public:
         TString stateBlob;
         YQL_ENSURE(stateProto.SerializeToString(&stateBlob));
 
-        auto* data = state.AddData()->MutableStateData();
-        data->SetVersion(StateVersion);
-        data->SetBlob(stateBlob);
+        state.Data.push_back({});
+        auto& data = state.Data.back();
+        data.Version = StateVersion;
+        data.Blob = stateBlob;
 
         DeferredCommits.emplace(checkpoint.GetId(), std::move(CurrentDeferredCommit));
         CurrentDeferredCommit = NYdb::NTopic::TDeferredCommit();
@@ -173,11 +174,10 @@ public:
     void LoadState(const TSourceState& state) override {
         TInstant minStartingMessageTs = state.DataSize() ? TInstant::Max() : StartingMessageTimestamp;
         ui64 ingressBytes = 0;
-        for (const auto& stateData : state.GetData()) {
-            const auto& data = stateData.GetStateData();
-            if (data.GetVersion() == StateVersion) { // Current version
+        for (const auto& data : state.Data) {
+            if (data.Version == StateVersion) { // Current version
                 NPq::NProto::TDqPqTopicSourceState stateProto;
-                YQL_ENSURE(stateProto.ParseFromString(data.GetBlob()), "Serialized state is corrupted");
+                YQL_ENSURE(stateProto.ParseFromString(data.Blob), "Serialized state is corrupted");
                 YQL_ENSURE(stateProto.TopicsSize() == 1, "One topic per source is expected");
                 PartitionToOffset.reserve(PartitionToOffset.size() + stateProto.PartitionsSize());
                 for (const NPq::NProto::TDqPqTopicSourceState::TPartitionReadState& partitionProto : stateProto.GetPartitions()) {
@@ -191,7 +191,7 @@ public:
                 minStartingMessageTs = Min(minStartingMessageTs, TInstant::MilliSeconds(stateProto.GetStartingMessageTimestampMs()));
                 ingressBytes += stateProto.GetIngressBytes();
             } else {
-                ythrow yexception() << "Invalid state version " << data.GetVersion();
+                ythrow yexception() << "Invalid state version " << data.Version;
             }
         }
         for (const auto& [key, value] : PartitionToOffset) {

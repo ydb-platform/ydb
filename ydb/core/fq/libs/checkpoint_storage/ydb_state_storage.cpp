@@ -39,14 +39,14 @@ enum class EStateType {
 class TIncrementLogic {
 public:
 
-    void Apply(TComputeActorState& update) {
-        Sources = update.GetSources();      // Always snapshot - copy it;
-        Sinks = update.GetSinks();
+    void Apply(NYql::NDq::TComputeActorState& update) {
+        Sources = update.Sources;      // Always snapshot - copy it;
+        Sinks = update.Sinks;
         ui64 nodeNum = 0;
 
-        if (update.HasMiniKqlProgram()) {
-            const TString& blob = update.MutableMiniKqlProgram()->MutableData()->MutableStateData()->GetBlob();
-            ui64 version = update.MutableMiniKqlProgram()->MutableData()->MutableStateData()->GetVersion();
+        if (true) {//update.HasMiniKqlProgram()) {
+            const TString& blob = update.MiniKqlProgram.Data.Blob;
+            ui64 version = update.MiniKqlProgram.Data.Version;
             if (LastVersion) {
                 Y_ENSURE(*LastVersion == version, "Version is different: " << *LastVersion << ", " << version);
             }
@@ -90,11 +90,11 @@ public:
         }
     }
 
-    TComputeActorState Build() {
+    NYql::NDq::TComputeActorState Build() {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
-        TComputeActorState state;
-        *state.MutableSources() = Sources;
-        *state.MutableSinks() = Sinks;
+        NYql::NDq::TComputeActorState state;
+        state.Sources = Sources;
+        state.Sinks = Sinks;
         TString result;                
         for (const auto& [nodeNum, nodeState] : NodeStates) {
             
@@ -108,18 +108,18 @@ public:
                 result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
             }
         }
-        const auto& stateData = state.MutableMiniKqlProgram()->MutableData()->MutableStateData();
-        stateData->SetBlob(result);
+        auto& stateData = state.MiniKqlProgram.Data;
+        stateData.Blob = result;
         Y_ENSURE(LastVersion, "LastVersion is empty");
-        stateData->SetVersion(*LastVersion);
+        stateData.Version = *LastVersion;
         return state;
     }
 
-    static EStateType GetStateType(const TComputeActorState& state) {
-        if (!state.HasMiniKqlProgram()) {
+    static EStateType GetStateType(const NYql::NDq::TComputeActorState& state) {
+        if (false) {// !state.MiniKqlProgram) {
             return EStateType::Snapshot;
         }
-        const TString& blob = state.GetMiniKqlProgram().GetData().GetStateData().GetBlob();
+        const TString& blob = state.MiniKqlProgram.Data.Blob;
         TStringBuf buf(blob);
         while (!buf.empty()) {
             auto nodeStateSize = NKikimr::NMiniKQL::ReadUi32(buf);
@@ -141,8 +141,8 @@ private:
         TString SimpleBlobNodeState;
     };
     std::map<ui64, NodeState> NodeStates;
-    google::protobuf::RepeatedPtrField< ::NYql::NDq::TSourceState> Sources;
-    google::protobuf::RepeatedPtrField<NYql::NDq::TSinkState> Sinks;
+    std::list<NYql::NDq::TSourceState> Sources;
+    std::list<NYql::NDq::TSinkState> Sinks;
     TMaybe<ui64> LastVersion;
 };
 
@@ -163,7 +163,7 @@ struct TContext : public TThrRefBase {
         std::list<TString> Rows;
         EStateType Type = EStateType::Snapshot;
         std::list<TStateInfo> ListOfStatesForReading;     // ordered by desc
-        std::list<TComputeActorState> States;
+        std::list<NYql::NDq::TComputeActorState> States;
     };
 
     const NActors::TActorSystem* ActorSystem;
@@ -299,7 +299,7 @@ public:
         ui64 taskId,
         const TString& graphId,
         const TCheckpointId& checkpointId,
-        const TComputeActorState& state) override;
+        const NYql::NDq::TComputeActorState& state) override;
 
     TFuture<TGetStateResult> GetState(
         const std::vector<ui64>& taskIds,
@@ -333,7 +333,7 @@ private:
         const TContextPtr& context);
 
     std::list<TString> SerializeState(
-        const TComputeActorState& state);
+        const NYql::NDq::TComputeActorState& state);
     
     EStateType DeserializeState(
         TContext::TaskInfo& taskInfo);
@@ -344,7 +344,7 @@ private:
     TFuture<TStatus> ReadRows(
         const TContextPtr& context);
 
-    std::vector<TComputeActorState> ApplyIncrements(
+    std::vector<NYql::NDq::TComputeActorState> ApplyIncrements(
         const TContextPtr& context,
         NYql::TIssues& issues);
 
@@ -418,13 +418,13 @@ EStateType TStateStorage::DeserializeState(TContext::TaskInfo& taskInfo) {
         it = taskInfo.Rows.erase(it);
     }
     taskInfo.States.push_front({});
-    TComputeActorState& state = taskInfo.States.front();
+    NYql::NDq::TComputeActorState& state = taskInfo.States.front();
     auto res = state.ParseFromString(blob);
     Y_ENSURE(res, "Parsing error");
     return TIncrementLogic::GetStateType(state);
 }
 
-std::list<TString> TStateStorage::SerializeState(const TComputeActorState& state) {
+std::list<TString> TStateStorage::SerializeState(const NYql::NDq::TComputeActorState& state) {
     std::list<TString> result;
     TString serializedState;
     if (!state.SerializeToString(&serializedState)) {
@@ -447,7 +447,7 @@ TFuture<TIssues> TStateStorage::SaveState(
     ui64 taskId,
     const TString& graphId,
     const TCheckpointId& checkpointId,
-    const TComputeActorState& state) {
+    const NYql::NDq::TComputeActorState& state) {
     
     const size_t stateSize = state.ByteSizeLong();
     std::cerr << "SaveState, size: " << stateSize << std::endl;
@@ -973,12 +973,12 @@ TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context) {
     return promise.GetFuture();
 }
 
-std::vector<TComputeActorState> TStateStorage::ApplyIncrements(
+std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
     const TContextPtr& context,
     NYql::TIssues& issues) {
     LOG_STORAGE_DEBUG(context, "ApplyIncrements");
 
-    std::vector<TComputeActorState> states;
+    std::vector<NYql::NDq::TComputeActorState> states;
     try {
         for (auto& task : context->Tasks)
         {

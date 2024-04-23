@@ -548,18 +548,19 @@ private:
         }
     }
 
-    void SaveState(const NDqProto::TCheckpoint& checkpoint, TEvDqCompute::TEvComputeActorState& state) const override {
+    void SaveState(const NDqProto::TCheckpoint& checkpoint, TComputeActorState& state) const override {
         CA_LOG_D("Save state");
         Y_ABORT_UNLESS(ProgramState);
-        state.MutableMiniKqlProgram()->Swap(&*ProgramState);
+        state.MiniKqlProgram = std::move(*ProgramState);
         ProgramState.Destroy();
 
         // TODO:(whcrc) maybe save Sources before Program?
         for (auto& [inputIndex, source] : SourcesMap) {
             YQL_ENSURE(source.AsyncInput, "Source[" << inputIndex << "] is not created");
-            TSourceState& sourceState = *state.AddSources();
+            state.Sources.push_back({});
+            TSourceState& sourceState = state.Sources.back();
             source.AsyncInput->SaveState(checkpoint, sourceState);
-            sourceState.SetInputIndex(inputIndex);
+            sourceState.InputIndex = inputIndex;
         }
     }
 

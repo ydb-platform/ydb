@@ -422,7 +422,7 @@ mon={mon}""".format(
 
         self.slice_start()
 
-    def slice_create_systemd_unit(self, user="yc-user"):
+    def slice_create_systemd_units(self, user="yc-user"):
         # TODO: configs need proper review
         systemd_unit_storage = """[Unit]
 Description=YDB storage node

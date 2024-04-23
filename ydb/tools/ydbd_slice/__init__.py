@@ -697,7 +697,7 @@ def add_format_mode(modes, walle_provider):
 
 def add_create_systemd_unit(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.Slice.slice_create_systemd_unit, args, walle_provider)
+        dispatch_run(handlers.Slice.slice_create_systemd_units, args, walle_provider)
 
     mode = modes.add_parser(
         "create-systemd-units",

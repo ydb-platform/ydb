@@ -54,17 +54,13 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-            try {
-                auto binaryString = args[1].AsStringRef();
-                auto bitmap = DeserializePortable(binaryString);
+            auto binaryString = args[1].AsStringRef();
+            auto bitmap = DeserializePortable(binaryString);
 
-                roaring_bitmap_or_inplace(GetBitmapFromArg(args[0]), bitmap);
-                roaring_bitmap_free(bitmap);
+            roaring_bitmap_or_inplace(GetBitmapFromArg(args[0]), bitmap);
+            roaring_bitmap_free(bitmap);
 
-                return args[0];
-            } catch (const std::exception& e) {
-                UdfTerminate(CurrentExceptionMessage().c_str());
-            }
+            return args[0];
         }
     };
 
@@ -81,17 +77,13 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-            try {
-                auto binaryString = args[1].AsStringRef();
-                auto bitmap = DeserializePortable(binaryString);
+            auto binaryString = args[1].AsStringRef();
+            auto bitmap = DeserializePortable(binaryString);
 
-                roaring_bitmap_and_inplace(GetBitmapFromArg(args[0]), bitmap);
-                roaring_bitmap_free(bitmap);
+            roaring_bitmap_and_inplace(GetBitmapFromArg(args[0]), bitmap);
+            roaring_bitmap_free(bitmap);
 
-                return args[0];
-            } catch (const std::exception& e) {
-                UdfTerminate(CurrentExceptionMessage().c_str());
-            }
+            return args[0];
         }
     };
 
@@ -108,12 +100,8 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-            try {
-                roaring_bitmap_and_inplace(GetBitmapFromArg(args[0]), GetBitmapFromArg(args[1]));
-                return args[0];
-            } catch (const std::exception& e) {
-                UdfTerminate(CurrentExceptionMessage().c_str());
-            }
+            roaring_bitmap_and_inplace(GetBitmapFromArg(args[0]), GetBitmapFromArg(args[1]));
+            return args[0];
         }
     };
 
@@ -130,12 +118,8 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-            try {
-                roaring_bitmap_or_inplace(GetBitmapFromArg(args[0]), GetBitmapFromArg(args[1]));
-                return args[0];
-            } catch (const std::exception& e) {
-                UdfTerminate(CurrentExceptionMessage().c_str());
-            }
+            roaring_bitmap_or_inplace(GetBitmapFromArg(args[0]), GetBitmapFromArg(args[1]));
+            return args[0];
         }
     };
 
@@ -206,13 +190,9 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-            try {
-                auto bitmap = GetBitmapFromArg(args[0]);
+            auto bitmap = GetBitmapFromArg(args[0]);
 
-                return TUnboxedValuePod(new TList(bitmap));
-            } catch (const std::exception& e) {
-                UdfTerminate(CurrentExceptionMessage().c_str());
-            }
+            return TUnboxedValuePod(new TList(bitmap));
         }
     };
 
@@ -229,11 +209,7 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-            try {
-                return TUnboxedValuePod(new TRoaringWrapper(args[0].AsStringRef()));
-            } catch (const std::exception& e) {
-                UdfTerminate(CurrentExceptionMessage().c_str());
-            }
+            return TUnboxedValuePod(new TRoaringWrapper(args[0].AsStringRef()));
         }
     };
 
@@ -249,20 +225,16 @@ namespace {
     private:
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
-            try {
-                auto bitmap = GetBitmapFromArg(args[0]);
-                roaring_bitmap_run_optimize(bitmap);
+            auto bitmap = GetBitmapFromArg(args[0]);
+            roaring_bitmap_run_optimize(bitmap);
 
-                auto sizeInBytes = roaring_bitmap_portable_size_in_bytes(bitmap);
-                auto buf = (char*)UdfAllocateWithSize(sizeInBytes);
-                roaring_bitmap_portable_serialize(bitmap, buf);
-                auto string = valueBuilder->NewString(TStringRef(buf, sizeInBytes));
-                UdfFreeWithSize((void*)buf, sizeInBytes);
+            auto sizeInBytes = roaring_bitmap_portable_size_in_bytes(bitmap);
+            auto buf = (char*)UdfAllocateWithSize(sizeInBytes);
+            roaring_bitmap_portable_serialize(bitmap, buf);
+            auto string = valueBuilder->NewString(TStringRef(buf, sizeInBytes));
+            UdfFreeWithSize((void*)buf, sizeInBytes);
 
-                return string;
-            } catch (const std::exception& e) {
-                UdfTerminate(CurrentExceptionMessage().c_str());
-            }
+            return string;
         }
     };
 
@@ -279,13 +251,9 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-            try {
-                auto bitmap = GetBitmapFromArg(args[0]);
-                auto cardinality = (ui32)roaring_bitmap_get_cardinality(bitmap);
-                return TUnboxedValuePod(cardinality);
-            } catch (const std::exception& e) {
-                UdfTerminate(CurrentExceptionMessage().c_str());
-            }
+            auto bitmap = GetBitmapFromArg(args[0]);
+            auto cardinality = (ui32)roaring_bitmap_get_cardinality(bitmap);
+            return TUnboxedValuePod(cardinality);
         }
     };
 

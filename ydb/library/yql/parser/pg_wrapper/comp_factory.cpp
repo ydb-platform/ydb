@@ -754,7 +754,8 @@ public:
                     rows.emplace_back(row);
                 }
             } else if (Table_ == "pg_roles") {
-                for (ui32 index = 1; index <= 1; ++index) {
+                ui32 tableSize = PGGetGUCSetting("ydb_user") ? 2 : 1;
+                for (ui32 index = 1; index <= tableSize; ++index) {
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgRolesFillers_.size(), items);
                     for (ui32 i = 0; i < PgRolesFillers_.size(); ++i) {

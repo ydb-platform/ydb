@@ -928,8 +928,11 @@ private:
         }
         }
 
-        auto issue = YqlIssue({}, issueCode);
-        ReplyErrorAndDie(statusCode, issue);
+        if (result.ErrorsSize()) {
+            ReplyErrorAndDie(statusCode, YqlIssue({}, issueCode, result.GetErrors(0).GetReason()));
+        } else {
+            ReplyErrorAndDie(statusCode, YqlIssue({}, issueCode));
+        }
     }
 
     void CheckPrepareCompleted() {

@@ -56,7 +56,7 @@ public:
         TString result;
         NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, value.AsStringRef());
         NYql::NDq::TComputeActorState state;
-        state.MiniKqlProgram.Data.ConstructInPlace().Blob = result;
+        state.MiniKqlProgram.ConstructInPlace().Data.Blob = result;
         return state;
     }
 
@@ -120,17 +120,32 @@ public:
         auto [states, getIssues] = storage->GetState({1}, "graph1", CheckpointId1).GetValueSync();
         UNIT_ASSERT_C(getIssues.Empty(), getIssues.ToString());
         UNIT_ASSERT(!states.empty());
-        UNIT_ASSERT(Equals(state, states[0]));
+        CheckEquals(state, states[0]);
     }
 
-    bool Equals(const NYql::NDq::TComputeActorState& state1, const NYql::NDq::TComputeActorState& state2) {
-        return state1.MiniKqlProgram.Data.Blob == state2.MiniKqlProgram.Data.Blob 
-            && state1.MiniKqlProgram.Data.Version == state2.MiniKqlProgram.Data.Version
-            && state1.MiniKqlProgram.RuntimeVersion == state2.MiniKqlProgram.RuntimeVersion
-            && state1.Sources.size() == state2.Sources.size()
-            && state1.Sinks.size() == state2.Sinks.size();
-            
-        return true;
+    void CheckEquals(const NYql::NDq::TComputeActorState& state1, const NYql::NDq::TComputeActorState& state2) {
+        UNIT_ASSERT_VALUES_EQUAL(state1.MiniKqlProgram.Empty(), state2.MiniKqlProgram.Empty());
+        if (state1.MiniKqlProgram) {
+            UNIT_ASSERT_VALUES_EQUAL(state1.MiniKqlProgram->Data.Blob, state2.MiniKqlProgram->Data.Blob);
+            UNIT_ASSERT_VALUES_EQUAL(state1.MiniKqlProgram->Data.Version, state2.MiniKqlProgram->Data.Version);
+            UNIT_ASSERT_VALUES_EQUAL(state1.MiniKqlProgram->RuntimeVersion, state2.MiniKqlProgram->RuntimeVersion);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(state1.Sources.size(), state2.Sources.size());
+        UNIT_ASSERT(std::equal(std::begin(state1.Sources), std::end(state1.Sources), std::begin(state2.Sources), std::end(state2.Sources),
+            [](const NYql::NDq::TSourceState& state1, const NYql::NDq::TSourceState& state2) {
+                UNIT_ASSERT_VALUES_EQUAL(state1.InputIndex, state2.InputIndex);
+                UNIT_ASSERT_VALUES_EQUAL(state1.Data.size(), state2.Data.size());
+                return true;
+            }));
+        
+        UNIT_ASSERT_VALUES_EQUAL(state1.Sinks.size(), state2.Sinks.size());
+        UNIT_ASSERT(std::equal(std::begin(state1.Sinks), std::end(state1.Sinks), std::begin(state2.Sinks), std::end(state2.Sinks),
+            [](const NYql::NDq::TSinkState& state1, const NYql::NDq::TSinkState& state2) {
+                UNIT_ASSERT_VALUES_EQUAL(state1.OutputIndex, state2.OutputIndex);
+                UNIT_ASSERT_VALUES_EQUAL(state1.Data.Blob, state2.Data.Blob);
+                UNIT_ASSERT_VALUES_EQUAL(state1.Data.Version, state2.Data.Version);
+                return true;
+            }));
     }
 
 private:
@@ -345,19 +360,19 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         UNIT_ASSERT_C(getIssues.Empty(), getIssues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(states.size(), 4);
 
-        UNIT_ASSERT(Equals(state1, states[0]));
-        UNIT_ASSERT(Equals(state2, states[1]));
-        UNIT_ASSERT(Equals(state3, states[2]));
-        UNIT_ASSERT(Equals(state4, states[3]));
+        CheckEquals(state1, states[0]);
+        CheckEquals(state2, states[1]);
+        CheckEquals(state3, states[2]);
+        CheckEquals(state4, states[3]);
 
         // in different order
         auto [states2, getIssues2] = storage->GetState({42, 1, 13, 7}, "graph1", CheckpointId1).GetValueSync();
         UNIT_ASSERT(getIssues2.Empty());
         UNIT_ASSERT_VALUES_EQUAL(states2.size(), 4);
-        UNIT_ASSERT(Equals(state2, states2[0]));
-        UNIT_ASSERT(Equals(state1, states2[1]));
-        UNIT_ASSERT(Equals(state4, states2[2]));
-        UNIT_ASSERT(Equals(state3, states2[3]));
+        CheckEquals(state2, states2[0]);
+        CheckEquals(state1, states2[1]);
+        CheckEquals(state4, states2[2]);
+        CheckEquals(state3, states2[3]);
     }
 
     Y_UNIT_TEST_F(ShouldLoadLastSnapshot, TFixture)
@@ -371,7 +386,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         SaveState(storage, 1, "graph1", CheckpointId2, state2);
 
         auto state = GetState(storage, 1, "graph1", CheckpointId2);
-        UNIT_ASSERT(Equals(state, state2));
+        CheckEquals(state, state2);
     }
 
     Y_UNIT_TEST_F(ShouldNotGetNonExistendSnaphotState, TFixture)
@@ -403,7 +418,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         auto expected = MakeIncrementState({{"key1", "value1-new"}, {"key3", "value3"}, {"key4", value4}}, {}, {});
 
         auto actual = GetState(storage, 1, "graph1", CheckpointId3);
-        UNIT_ASSERT(Equals(expected, actual));
+        CheckEquals(expected, actual);
     }
 
 };

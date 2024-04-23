@@ -38,7 +38,7 @@ struct TSourceState {
     std::list<TStateData> Data;
     ui64 InputIndex{0};
 
-    size_t DataSize() const {return 1;}
+    size_t DataSize() const { return Data.size(); }
 
     Y_SAVELOAD_DEFINE(Data, InputIndex);
 };

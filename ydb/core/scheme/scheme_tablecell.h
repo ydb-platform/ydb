@@ -263,7 +263,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
     }
 
     default:
-        Y_DEBUG_ABORT_UNLESS(false, "Unknown type");
+        Y_DEBUG_ABORT("Unknown type");
     };
 
     return 0;
@@ -362,7 +362,7 @@ inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
         return NPg::PgNativeBinaryHash(cell.Data(), cell.Size(), typeDesc);
     }
 
-    Y_DEBUG_ABORT_UNLESS(false, "Type not supported for user columns: %d", typeId);
+    Y_DEBUG_ABORT("Type not supported for user columns: %d", typeId);
     return 0;
 }
 

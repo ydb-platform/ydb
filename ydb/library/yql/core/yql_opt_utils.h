@@ -142,6 +142,8 @@ TExprNode::TPtr FindNonYieldTransparentNode(const TExprNode::TPtr& root, const T
 bool IsYieldTransparent(const TExprNode::TPtr& root, const TTypeAnnotationContext& typeCtx);
 
 bool IsStrict(const TExprNode::TPtr& node);
+TMaybe<bool> IsStrictNoRecurse(const TExprNode& node);
+
 bool HasDependsOn(const TExprNode::TPtr& node, const TExprNode::TPtr& arg);
 
 TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstraintNode* sorted, const TTypeAnnotationNode* rowType, TExprContext& ctx);

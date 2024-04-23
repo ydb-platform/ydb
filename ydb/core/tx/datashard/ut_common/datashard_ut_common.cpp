@@ -1848,6 +1848,20 @@ void ExecSQL(Tests::TServer::TPtr server,
     );
 }
 
+TRowVersion AcquireReadSnapshot(TTestActorRuntime& runtime, const TString& databaseName, ui32 nodeIndex) {
+    TActorId sender = runtime.AllocateEdgeActor(nodeIndex);
+    runtime.Send(
+        NLongTxService::MakeLongTxServiceID(sender.NodeId()),
+        sender,
+        new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(databaseName),
+        nodeIndex,
+        true);
+    auto ev = runtime.GrabEdgeEventRethrow<NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
+    const auto& record = ev->Get()->Record;
+    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), Ydb::StatusIds::SUCCESS);
+    return TRowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
+}
+
 std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, ui64 seed) {
     std::vector<ui32> columnIds;
     for (ui32 col = 0; col < columns.size(); ++col) {
@@ -2012,6 +2026,10 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
             evWrite->Record.SetLockNodeId(tx.GetLockNodeId());
         if (tx.GetKqpTransaction().HasLocks())
             evWrite->Record.MutableLocks()->CopyFrom(tx.GetKqpTransaction().GetLocks());
+
+        if (record.HasMvccSnapshot()) {
+            *evWrite->Record.MutableMvccSnapshot() = record.GetMvccSnapshot();
+        }
 
         // Replace event
         auto handle = new IEventHandle(event->Recipient, event->Sender, evWrite.release(), 0, event->Cookie);

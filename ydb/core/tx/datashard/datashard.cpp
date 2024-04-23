@@ -2711,10 +2711,7 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
         }
     }
 
-    size_t totalInFly =
-        ReadIteratorsInFly() + TxInFly() + ImmediateInFly() + MediatorStateWaitingMsgs.size()
-            + ProposeQueue.Size() + TxWaiting();
-    if (totalInFly > GetMaxTxInFly()) {
+    if (!Pipeline.CheckInflightLimit()) {
         reject = true;
         rejectReasons |= ERejectReasons::OverloadByTxInFly;
         rejectDescriptions.push_back("MaxTxInFly was exceeded");
@@ -2870,6 +2867,8 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
         if (Pipeline.AddWaitingTxOp(ev, ctx)) {
             UpdateProposeQueueSize();
             return;
+        } else {
+            Y_ABORT("Unexpected failure to add a waiting unrejected tx");
         }
     }
 
@@ -3490,6 +3489,20 @@ bool TDataShard::CheckTxNeedWait() const {
     return false;
 }
 
+bool TDataShard::CheckTxNeedWait(const TRowVersion& mvccSnapshot) const {
+    TRowVersion unreadableEdge = Pipeline.GetUnreadableEdge();
+    if (mvccSnapshot >= unreadableEdge) {
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+            "New transaction uses snapshot "
+            << mvccSnapshot
+            << " which is not before unreadable edge "
+            << unreadableEdge);
+        return true;
+    }
+
+    return false;
+}
+
 bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const {
     if (CheckTxNeedWait()) {
         return true;
@@ -3498,11 +3511,27 @@ bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr
     auto* msg = ev->Get();
     auto& rec = msg->Record;
     if (rec.HasMvccSnapshot()) {
-        TRowVersion rowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId());
-        TRowVersion unreadableEdge = Pipeline.GetUnreadableEdge();
-        if (rowVersion >= unreadableEdge) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "New transaction reads from " << rowVersion << " which is not before unreadable edge " << unreadableEdge);
-            LWTRACK(ProposeTransactionWaitSnapshot, msg->Orbit, rowVersion.Step, rowVersion.TxId);
+        TRowVersion mvccSnapshot(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId());
+        if (CheckTxNeedWait(mvccSnapshot)) {
+            LWTRACK(ProposeTransactionWaitSnapshot, msg->Orbit, mvccSnapshot.Step, mvccSnapshot.TxId);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool TDataShard::CheckTxNeedWait(const NEvents::TDataEvents::TEvWrite::TPtr& ev) const {
+    if (CheckTxNeedWait()) {
+        return true;
+    }
+
+    auto* msg = ev->Get();
+    auto& rec = msg->Record;
+    if (rec.HasMvccSnapshot()) {
+        TRowVersion mvccSnapshot(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId());
+        if (CheckTxNeedWait(mvccSnapshot)) {
+            LWTRACK(ProposeTransactionWaitSnapshot, msg->GetOrbit(), mvccSnapshot.Step, mvccSnapshot.TxId);
             return true;
         }
     }

@@ -17,6 +17,8 @@ items:
   items:
   - name: Overview
     href: cluster/index.md
+  - name: Topology
+    href: topology.md
   - name: General YDB schema
     href: cluster/common_scheme_ydb.md
   - name: Disk subsystem of a cluster

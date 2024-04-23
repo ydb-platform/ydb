@@ -47,6 +47,9 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateTopic::CallableName());
         DataSinkNames.insert(TKiAlterTopic::CallableName());
         DataSinkNames.insert(TKiDropTopic::CallableName());
+        DataSinkNames.insert(TKiCreateReplication::CallableName());
+        DataSinkNames.insert(TKiAlterReplication::CallableName());
+        DataSinkNames.insert(TKiDropReplication::CallableName());
         DataSinkNames.insert(TKiCreateUser::CallableName());
         DataSinkNames.insert(TKiModifyPermissions::CallableName());
         DataSinkNames.insert(TKiAlterUser::CallableName());
@@ -103,6 +106,9 @@ struct TKikimrData {
             TYdbOperation::CreateTopic |
             TYdbOperation::AlterTopic |
             TYdbOperation::DropTopic |
+            TYdbOperation::CreateReplication |
+            TYdbOperation::AlterReplication |
+            TYdbOperation::DropReplication |
             TYdbOperation::CreateUser |
             TYdbOperation::AlterUser |
             TYdbOperation::DropUser |
@@ -404,6 +410,14 @@ bool TKikimrKey::Extract(const TExprNode& key) {
         const TExprNode* nameNode = key.Child(0)->Child(1);
         if (!nameNode->IsCallable("String")) {
             Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "Expected String as topic key."));
+            return false;
+        }
+        Target = nameNode->Child(0)->Content();
+    } else if (tagName == "replication") {
+        KeyType = Type::Replication;
+        const TExprNode* nameNode = key.Child(0)->Child(1);
+        if (!nameNode->IsCallable("String")) {
+            Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "Expected String as replication key."));
             return false;
         }
         Target = nameNode->Child(0)->Content();

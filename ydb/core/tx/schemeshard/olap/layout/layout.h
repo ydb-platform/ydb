@@ -4,17 +4,24 @@
 
 #include <ydb/library/accessor/accessor.h>
 
+#include <util/digest/numeric.h>
 #include <util/system/types.h>
 
 #include <set>
 
 namespace NKikimr::NSchemeShard {
 
-template <class TSetElement>
+template <class TSetElement, class THashCalcer>
 class TLayoutIdSet {
 private:
+    ui64 Hash = 0;
     std::set<TSetElement> Elements;
 public:
+    TLayoutIdSet() = default;
+    TLayoutIdSet(const TSetElement elem) {
+        AddId(elem);
+    }
+
     typename std::set<TSetElement>::const_iterator begin() const {
         return Elements.begin();
     }
@@ -25,18 +32,6 @@ public:
 
     size_t Size() const {
         return Elements.size();
-    }
-
-    explicit operator ui64() const {
-        return Hash();
-    }
-
-    ui64 Hash() const {
-        ui64 result = 0;
-        for (auto&& i : Elements) {
-            result = CombineHashes(result, std::hash<TSetElement>()(i));
-        }
-        return result;
     }
 
     std::vector<TSetElement> GetIdsVector() const {
@@ -65,11 +60,19 @@ public:
     }
 
     bool AddId(const TSetElement& id) {
-        return Elements.emplace(id).second;
+        bool result = Elements.emplace(id).second;
+        if (result) {
+            Hash ^= THashCalcer::GetHash(id);
+        }
+        return result;
     }
 
     bool RemoveId(const TSetElement& id) {
-        return Elements.erase(id);
+        auto result = Elements.erase(id);
+        if (result) {
+            Hash ^= THashCalcer::GetHash(id);
+        }
+        return result;
     }
 
     bool operator<(const TLayoutIdSet& item) const {
@@ -79,72 +82,52 @@ public:
         if (Elements.size() > item.Elements.size()) {
             return false;
         }
-        auto itSelf = Elements.begin();
-        auto itItem = item.Elements.begin();
-        while (itSelf != Elements.end() && itItem != item.Elements.end()) {
-            if (*itSelf < *itItem) {
-                return true;
-            } else if (*itSelf > *itItem) {
-                return false;
-            }
-            ++itSelf;
-            ++itItem;
-        }
-        if (itSelf != Elements.end() && itItem == item.Elements.end()) {
-            return false;
-        }
-        if (itSelf == Elements.end() && itItem != item.Elements.end()) {
-            return true;
-        }
-        return false;
+        return Hash < item.Hash;
     }
     bool operator==(const TLayoutIdSet& item) const {
         if (Elements.size() != item.Elements.size()) {
             return false;
         }
-        auto itSelf = Elements.begin();
-        auto itItem = item.Elements.begin();
-        while (itSelf != Elements.end() && itItem != item.Elements.end()) {
-            if (*itSelf != *itItem) {
-                return false;
-            }
-            ++itSelf;
-            ++itItem;
-        }
-        return true;
+        return Hash == item.Hash;
     }
 };
 
 class TSchemeShard;
 
 class TColumnTablesLayout {
+private:
+    class TPathIdHashCalcer {
+    public:
+        template <class T>
+        static ui64 GetHash(const T& data) {
+            return data.Hash();
+        }
+    };
+
 public:
-    using TShardIdsGroup = TLayoutIdSet<ui64>;
-    using TTableIdsGroup = TLayoutIdSet<TPathId>;
+    using TTableIdsGroup = TLayoutIdSet<TPathId, TPathIdHashCalcer>;
 
     class TTablesGroup {
     private:
-        YDB_READONLY_DEF(TTableIdsGroup, TableIds);
-        YDB_READONLY_DEF(TShardIdsGroup, ShardIds);
+        const TTableIdsGroup* TableIds = nullptr;
+        YDB_READONLY_DEF(std::set<ui64>, ShardIds);
     public:
-        TTablesGroup(const TTableIdsGroup& tableIds, TShardIdsGroup&& shardIds)
-            : TableIds(tableIds)
-            , ShardIds(std::move(shardIds)) {
+        TTablesGroup() = default;
+        TTablesGroup(const TTableIdsGroup* tableIds, std::set<ui64>&& shardIds);
 
-        }
+        const TTableIdsGroup& GetTableIds() const;
+
+        bool TryMerge(const TTablesGroup& item);
 
         bool operator<(const TTablesGroup& item) const {
-            return TableIds < item.TableIds;
+            return GetTableIds() < item.GetTableIds();
         }
     };
 
 private:
     YDB_READONLY_DEF(std::vector<TTablesGroup>, Groups);
 public:
-    TColumnTablesLayout(std::vector<TTablesGroup>&& groups)
-        : Groups(std::move(groups)) {
-        std::sort(Groups.begin(), Groups.end());
-    }
+    TColumnTablesLayout(std::vector<TTablesGroup>&& groups);
 
     static std::vector<ui64> ShardIdxToTabletId(const std::vector<TShardIdx>& shards, const TSchemeShard& ss);
 

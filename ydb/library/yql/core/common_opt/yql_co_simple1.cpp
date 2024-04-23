@@ -4782,6 +4782,20 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["Top"] = std::bind(&OptimizeReorder<true, false>, _1, _2);
     map["TopSort"] = std::bind(&OptimizeReorder<true, true>, _1, _2);
 
+    map["AssumeStrict"] = map["AssumeNonStrict"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        if (node->Head().IsCallable({"AssumeStrict", "AssumeNonStrict"})) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
+        }
+        const auto maybeStrict = IsStrictNoRecurse(node->Head());
+        if (maybeStrict.Defined() && *maybeStrict == node->IsCallable("AssumeStrict")) {
+            YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " over "
+                << (*maybeStrict ? "strict " : "non strict ") << node->Head().Content();
+            return node->HeadPtr();
+        }
+        return node;
+    };
+
     map["Minus"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         if (node->Head().IsCallable("Minus")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();

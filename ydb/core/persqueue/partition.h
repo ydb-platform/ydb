@@ -261,8 +261,8 @@ private:
     void ProcessDistrTx(const TActorContext& ctx);
 
     void AddImmediateTx(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> event);
-    void ProcessImmediateTxs(const TActorContext& ctx);
     void ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
+                            bool predicate,
                             const TActorContext& ctx);
 
     void AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act);
@@ -366,6 +366,8 @@ private:
 
     void Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr& ev, const TActorContext& ctx);
     void StartProcessChangeOwnerRequests(const TActorContext& ctx);
+
+    void CommitWriteOperations(const TActorContext& ctx);
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -612,6 +614,7 @@ private:
     template <class T> T& GetUserActionAndTransactionEventsFront();
     template <class T> T& GetCurrentEvent();
     TTransaction& GetCurrentTransaction();
+    TEvPersQueue::TEvProposeTransaction* TryGetCurrentImmediateTransaction();
 
     template <class T> void EnsureUserActionAndTransactionEventsFrontIs() const;
 

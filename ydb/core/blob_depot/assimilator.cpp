@@ -89,6 +89,7 @@ namespace NKikimr::NBlobDepot {
             if (stateBits & TStateBits::Blobs) {
                 Load(&stream, SkipBlobsUpTo.emplace());
             }
+            UpdateAssimilatorPosition();
         }
 
         Become(&TThis::StateFunc);
@@ -120,7 +121,7 @@ namespace NKikimr::NBlobDepot {
             cFunc(TEvents::TSystem::Poison, PassAway);
 
             default:
-                Y_DEBUG_ABORT_UNLESS(false, "unexpected event Type# %08" PRIx32, type);
+                Y_DEBUG_ABORT("unexpected event Type# %08" PRIx32, type);
                 STLOG(PRI_CRIT, BLOB_DEPOT, BDT00, "unexpected event", (Id, Self->GetLogId()), (Type, type));
                 break;
         }
@@ -255,6 +256,7 @@ namespace NKikimr::NBlobDepot {
 
             void Complete(const TActorContext&) override {
                 Self->Self->Data->CommitTrash(this);
+                Self->UpdateAssimilatorPosition();
 
                 if (MoreData) {
                     Self->Self->Execute(std::make_unique<TTxPutAssimilatedData>(*this));
@@ -363,6 +365,7 @@ namespace NKikimr::NBlobDepot {
 
     void TAssimilator::Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
         auto& msg = *ev->Get();
+        (msg.Status == NKikimrProto::OK ? Self->AssimilatorLatestOkGet : Self->AssimilatorLatestOkPut) = TInstant::Now();
         const auto it = GetIdToUnprocessedPuts.find(ev->Cookie);
         Y_ABORT_UNLESS(it != GetIdToUnprocessedPuts.end());
         ui32 getBytes = 0;
@@ -386,11 +389,17 @@ namespace NKikimr::NBlobDepot {
                     ++it->second;
                 }
                 getBytes += resp.Id.BlobSize();
+                ++Self->AssimilatorBlobsReadOk;
             } else if (resp.Status == NKikimrProto::NODATA) {
                 Self->Data->ExecuteTxCommitAssimilatedBlob(NKikimrProto::NODATA, TBlobSeqId(), TData::TKey(resp.Id),
                     TEvPrivate::EvTxComplete, SelfId(), it->first);
                 ++it->second;
+                ++Self->AssimilatorBlobsReadNoData;
+            } else {
+                ++Self->AssimilatorBlobsReadError;
+                continue;
             }
+            Self->AssimilatorLastReadBlobId = resp.Id;
         }
         if (getBytes) {
             Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_DECOMMIT_GET_BYTES] += getBytes;
@@ -416,8 +425,12 @@ namespace NKikimr::NBlobDepot {
 
     void TAssimilator::Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
         auto& msg = *ev->Get();
+        (msg.Status == NKikimrProto::OK ? Self->AssimilatorLatestOkPut : Self->AssimilatorLatestErrorPut) = TInstant::Now();
         if (msg.Status == NKikimrProto::OK) {
             Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_DECOMMIT_PUT_OK_BYTES] += msg.Id.BlobSize();
+            ++Self->AssimilatorBlobsPutOk;
+        } else {
+            ++Self->AssimilatorBlobsPutError;
         }
         const auto it = PutIdToKey.find(ev->Cookie);
         Y_ABORT_UNLESS(it != PutIdToKey.end());
@@ -538,6 +551,15 @@ namespace NKikimr::NBlobDepot {
         }
 
         return stream.Str();
+    }
+
+    void TAssimilator::UpdateAssimilatorPosition() const {
+        Self->AssimilatorPosition = TStringBuilder()
+            << "SkipBlocksUpTo# " << (SkipBlocksUpTo ? ToString(*SkipBlocksUpTo) : "<none>") << Endl
+            << "SkipBarriersUpTo# " << (SkipBarriersUpTo
+                ? TString(TStringBuilder() << std::get<0>(*SkipBarriersUpTo) << ':' << (int)std::get<1>(*SkipBarriersUpTo))
+                : "<none>") << Endl
+            << "SkipBlobsUpTo# " << (SkipBlobsUpTo ? SkipBlobsUpTo->ToString() : "<none>");
     }
 
     void TBlobDepot::TData::ExecuteTxCommitAssimilatedBlob(NKikimrProto::EReplyStatus status, TBlobSeqId blobSeqId,

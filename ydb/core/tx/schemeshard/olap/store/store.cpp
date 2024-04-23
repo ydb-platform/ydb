@@ -13,13 +13,13 @@ TConclusion<TOlapStoreInfo::TLayoutInfo> TOlapStoreInfo::ILayoutPolicy::Layout(c
 
 TConclusion<TOlapStoreInfo::TLayoutInfo> TOlapStoreInfo::TIdentityGroupsLayout::DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const {
     for (auto&& i : currentLayout.GetGroups()) {
-        if (i.GetTableIds().Size() == 0 && i.GetShardIds().Size() >= shardsCount) {
-            return TOlapStoreInfo::TLayoutInfo(i.GetShardIds().GetIdsVector(shardsCount), true);
+        if (i.GetTableIds().Size() == 0 && i.GetShardIds().size() >= shardsCount) {
+            return TOlapStoreInfo::TLayoutInfo(std::vector<ui64>(i.GetShardIds().begin(), std::next(i.GetShardIds().begin(), shardsCount)), true);
         }
-        if (i.GetShardIds().Size() != shardsCount) {
+        if (i.GetShardIds().size() != shardsCount) {
             continue;
         }
-        return TOlapStoreInfo::TLayoutInfo(i.GetShardIds().GetIdsVector(), false);
+        return TOlapStoreInfo::TLayoutInfo(std::vector<ui64>(i.GetShardIds().begin(), i.GetShardIds().end()), false);
     }
     return TConclusionStatus::Fail("cannot find appropriate group for " + ::ToString(shardsCount) + " shards");
 }

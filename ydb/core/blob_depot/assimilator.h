@@ -73,6 +73,7 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerGroupDecommittedResponse::TPtr ev);
         TString SerializeAssimilatorState() const;
+        void UpdateAssimilatorPosition() const;
     };
 
 } // NKikimrBlobDepot::NBlobDepot

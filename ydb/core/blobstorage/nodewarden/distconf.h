@@ -515,7 +515,7 @@ namespace NKikimr::NStorage {
             const TNodeWardenConfig& nwConfig, bool allowUnformatted) {
         auto makeError = [&](TString error) -> bool {
             STLOG(PRI_CRIT, BS_NODE, NWDC41, "configuration incorrect", (Error, error));
-            Y_DEBUG_ABORT_UNLESS(false, "%s", error.c_str());
+            Y_DEBUG_ABORT("%s", error.c_str());
             return false;
         };
         if (!config.HasBlobStorageConfig()) { // no storage config at all -- however, this is quite strange

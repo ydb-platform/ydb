@@ -149,6 +149,7 @@ void TKqpDatashardComputeContext::TouchTableRange(const TTableId& tableId, const
     if (UserDb.GetLockTxId()) {
         Shard->SysLocksTable().SetLock(tableId, range);
     }
+    UserDb.SetPerformedUserReads(true);
     Shard->SetTableAccessTime(tableId, UserDb.GetNow());
 }
 
@@ -156,6 +157,7 @@ void TKqpDatashardComputeContext::TouchTablePoint(const TTableId& tableId, const
     if (UserDb.GetLockTxId()) {
         Shard->SysLocksTable().SetLock(tableId, key);
     }
+    UserDb.SetPerformedUserReads(true);
     Shard->SetTableAccessTime(tableId, UserDb.GetNow());
 }
 

@@ -686,6 +686,64 @@ struct TDropExternalTableSettings {
     TString ExternalTable;
 };
 
+struct TReplicationSettings {
+    struct TStateDone {
+        enum class EFailoverMode: ui32 {
+            Consistent = 1,
+            Force = 2,
+        };
+
+        EFailoverMode FailoverMode;
+    };
+
+    struct TStaticCredentials {
+        TString UserName;
+        TString Password;
+    };
+
+    TMaybe<TString> ConnectionString;
+    TMaybe<TString> Endpoint;
+    TMaybe<TString> Database;
+    TMaybe<TString> OAuthToken;
+    TMaybe<TStaticCredentials> StaticCredentials;
+    TMaybe<TStateDone> StateDone;
+
+    TStaticCredentials& EnsureStaticCredentials() {
+        if (!StaticCredentials) {
+            StaticCredentials = TStaticCredentials();
+        }
+
+        return *StaticCredentials;
+    }
+
+    using EFailoverMode = TStateDone::EFailoverMode;
+    TStateDone& EnsureStateDone(EFailoverMode mode = EFailoverMode::Consistent) {
+        if (!StateDone) {
+            StateDone = TStateDone{
+                .FailoverMode = mode,
+            };
+        }
+
+        return *StateDone;
+    }
+};
+
+struct TCreateReplicationSettings {
+    TString Name;
+    TVector<std::pair<TString, TString>> Targets;
+    TReplicationSettings Settings;
+};
+
+struct TAlterReplicationSettings {
+    TString Name;
+    TReplicationSettings Settings;
+};
+
+struct TDropReplicationSettings {
+    TString Name;
+    bool Cascade = false;
+};
+
 struct TKikimrListPathItem {
     TKikimrListPathItem(TString name, bool isDirectory) {
         Name = name;
@@ -837,6 +895,12 @@ public:
     virtual NThreading::TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> CreateReplication(const TString& cluster, const TCreateReplicationSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> AlterReplication(const TString& cluster, const TAlterReplicationSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> DropReplication(const TString& cluster, const TDropReplicationSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> ModifyPermissions(const TString& cluster, const TModifyPermissionsSettings& settings) = 0;
 

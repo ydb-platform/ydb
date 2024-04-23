@@ -7,6 +7,10 @@ items:
   include:
     mode: link
     path: ../postgresql/toc_p.yaml
+- name: Встроенный UI
+  include:
+    mode: link
+    path: embedded-ui/toc_p.yaml
 - name: Интеграции
   include: 
     mode: link

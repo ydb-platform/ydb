@@ -23,17 +23,18 @@ public:
         TDbWrapper db(txc.DB, nullptr);
 
         for (auto&& portionInfo : Portions) {
-            auto schema = Schemas->at(portionInfo->GetPortionId());
-            portionInfo->SaveToDatabase(db, schema->GetIndexInfo().GetPKFirstColumnId(), true);
+            auto schema = Schemas->FindPtr(portionInfo->GetPortionId());
+            AFL_VERIFY(!!schema)("portion_id", portionInfo->GetPortionId());
+            portionInfo->SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), true);
         }
         return true;
     }
 };
 
-class TPortionsNormalizerTask1 : public INormalizerTask {
+class TPortionsNormalizer::TTask : public INormalizerTask {
     INormalizerChanges::TPtr Changes;
 public:
-    TPortionsNormalizerTask1(const INormalizerChanges::TPtr& changes)
+    TTask(const INormalizerChanges::TPtr& changes)
         : Changes(changes)
     {}
 
@@ -47,7 +48,7 @@ bool TPortionsNormalizer::CheckPortion(const TPortionInfo& portionInfo) const {
 }
 
 INormalizerTask::TPtr TPortionsNormalizer::BuildTask(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
-    return std::make_shared<TPortionsNormalizerTask1>(std::make_shared<TNormalizerResult>(std::move(portions), schemas));
+    return std::make_shared<TPortionsNormalizer::TTask>(std::make_shared<TNormalizerResult>(std::move(portions), schemas));
 }
 
  TConclusion<bool> TPortionsNormalizer::DoInit(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {

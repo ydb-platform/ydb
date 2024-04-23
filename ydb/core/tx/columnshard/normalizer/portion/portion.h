@@ -14,6 +14,7 @@ namespace NKikimr::NOlap {
 class TPortionsNormalizer : public TPortionsNormalizerBase {
 public:
     class TNormalizerResult;
+    class TTask;
 
 public:
     TPortionsNormalizer(TTabletStorageInfo* info)

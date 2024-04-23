@@ -140,6 +140,7 @@ PEERDIR(
     ydb/public/lib/base
     ydb/public/lib/deprecated/client
     ydb/services/auth
+    ydb/services/backup
     ydb/services/cms
     ydb/services/dynamic_config
     ydb/services/datastreams

@@ -15,6 +15,7 @@ SRCS(
     resolve_local_db_table.cpp
     rpc_alter_coordination_node.cpp
     rpc_alter_table.cpp
+    rpc_backup.cpp
     rpc_begin_transaction.cpp
     rpc_calls.cpp
     rpc_cancel_operation.cpp

@@ -16,8 +16,8 @@ struct TFileSpillingServiceConfig {
     ui64 MaxFileSize = 0;
     ui64 MaxFilePartSize = 0;
 
-    ui32 IoThreadPoolWorkersCount = 5;
-    ui32 IoThreadPoolQueueSize = 10000;
+    ui32 IoThreadPoolWorkersCount = 10;
+    ui32 IoThreadPoolQueueSize = 100000;
     bool CleanupOnShutdown = false;
 };
 

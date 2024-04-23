@@ -72,10 +72,10 @@ struct TTableBucket {
  };
 
 struct TTableSpilledBucket {
-    TTableSpilledBucket(ISpiller::TPtr spiller, size_t sizeLimit)
-        : StateUi64Adapter(spiller, sizeLimit)
-        , StateUi32Adapter(spiller, sizeLimit)
-        , StateCharAdapter(spiller, sizeLimit) {
+    TTableSpilledBucket(std::shared_ptr<ISpillerFactory> spillerFactory, size_t sizeLimit)
+        : StateUi64Adapter(spillerFactory->CreateSpiller(), sizeLimit)
+        , StateUi32Adapter(spillerFactory->CreateSpiller(), sizeLimit)
+        , StateCharAdapter(spillerFactory->CreateSpiller(), sizeLimit) {
     }
 
     TVectorSpillerAdapter<ui64, TMKQLAllocator<ui64>> StateUi64Adapter;
@@ -108,36 +108,43 @@ struct TTableSpilledBucket {
     }
 
     void ProcessBucketSpilling(TTableBucket& bucket) {
+        Update();
         if (NextVectorToProcess == ENextVectorToProcess::None) {
             NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
             BucketState = EBucketState::Spilled;
         }
         
         while (NextVectorToProcess != ENextVectorToProcess::None) {
-            if (HasRunningAsyncIoOperation()) return;
+            // if (HasRunningAsyncIoOperation()) return;
 
             switch (NextVectorToProcess) {
                 case ENextVectorToProcess::KeyAndVals:
+                    if (!StateUi64Adapter.IsAcceptingData()) return;
                     StateUi64Adapter.AddData(std::move(bucket.KeyIntVals));
                     NextVectorToProcess = ENextVectorToProcess::DataIntVals;
                     break;
                 case ENextVectorToProcess::DataIntVals:
+                    if (!StateUi64Adapter.IsAcceptingData()) return;
                     StateUi64Adapter.AddData(std::move(bucket.DataIntVals));
                     NextVectorToProcess = ENextVectorToProcess::StringsValues;
                     break;
                 case ENextVectorToProcess::StringsValues:
+                    if (!StateCharAdapter.IsAcceptingData()) return;
                     StateCharAdapter.AddData(std::move(bucket.StringsValues));
                     NextVectorToProcess = ENextVectorToProcess::StringsOffsets;
                     break;
                 case ENextVectorToProcess::StringsOffsets:
+                    if (!StateUi32Adapter.IsAcceptingData()) return;
                     StateUi32Adapter.AddData(std::move(bucket.StringsOffsets));
                     NextVectorToProcess = ENextVectorToProcess::InterfaceValues;
                     break;
                 case ENextVectorToProcess::InterfaceValues:
+                    if (!StateCharAdapter.IsAcceptingData()) return;
                     StateCharAdapter.AddData(std::move(bucket.InterfaceValues));
                     NextVectorToProcess = ENextVectorToProcess::InterfaceOffsets;
                     break;
                 case ENextVectorToProcess::InterfaceOffsets:
+                    if (!StateUi32Adapter.IsAcceptingData()) return;
                     StateUi32Adapter.AddData(std::move(bucket.InterfaceOffsets));
                     NextVectorToProcess = ENextVectorToProcess::None;
                     SpilledBucketsCount++;

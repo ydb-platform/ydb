@@ -691,7 +691,6 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
             family->AttachedPartitions.clear();
 
             family->ClassifyPartitions();
-            family->UpdateSpecialSessions();
 
             if (familiesIntersect) {
                 for (auto* f : newFamilies) {
@@ -703,8 +702,11 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
         }
     } else {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "can't break up " << family->DebugStr() << " because partition is not root of family.");
+                GetPrefix() << "can't break up " << family->DebugStr() << " because partition is not root of family " << family->DebugStr());
     }
+
+    family->WantedPartitions.clear();
+    family->UpdateSpecialSessions();
 
     if (destroy) {
         if (family->Status == TPartitionFamily::EStatus::Active) {

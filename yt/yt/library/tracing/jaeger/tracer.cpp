@@ -440,7 +440,7 @@ void TJaegerTracer::DequeueAll(const TJaegerTracerConfigPtr& config)
     }
 
     THashMap<TString, NProto::Batch> batches;
-    auto flushBatch = [&](TString endpoint) {
+    auto flushBatch = [&] (TString endpoint) {
         auto itBatch = batches.find(endpoint);
         if (itBatch == batches.end()) {
             return;

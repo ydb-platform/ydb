@@ -209,7 +209,7 @@ TEST(THedgingClientTest, GetclientResult2WhenFirstClientIsSleeping)
     auto mockClient2 = New<TStrictMockClient>();
 
     EXPECT_CALL(*mockClient1, ListNode(path, _))
-        .WillOnce(Return(NConcurrency::TDelayedExecutor::MakeDelayed(TDuration::Seconds(2)).Apply(BIND([=] () { return clientResult1; }))));
+        .WillOnce(Return(NConcurrency::TDelayedExecutor::MakeDelayed(TDuration::Seconds(2)).Apply(BIND([=] { return clientResult1; }))));
     EXPECT_CALL(*mockClient2, ListNode(path, _))
         .WillRepeatedly(Return(MakeFuture(clientResult2)));
 
@@ -235,7 +235,7 @@ TEST(THedgingClientTest, FirstClientIsBannedBecauseResponseWasCancelled)
     auto mockClient2 = New<TStrictMockClient>();
 
     EXPECT_CALL(*mockClient1, ListNode(path, _))
-        .WillOnce(Return(NConcurrency::TDelayedExecutor::MakeDelayed(SleepQuantum * 2).Apply(BIND([=] () { return clientResult1; }))))
+        .WillOnce(Return(NConcurrency::TDelayedExecutor::MakeDelayed(SleepQuantum * 2).Apply(BIND([=] { return clientResult1; }))))
         .WillRepeatedly(Return(MakeFuture(clientResult1)));
     EXPECT_CALL(*mockClient2, ListNode(path, _))
         .WillRepeatedly(Return(MakeFuture(clientResult2)));
@@ -276,10 +276,10 @@ TEST(THedgingClientTest, AmnestyBanPenaltyIfClientSucceeded)
         .WillRepeatedly(Return(MakeFuture(clientResult1)));
     EXPECT_CALL(*mockClient2, ListNode(path, _))
         .WillOnce(Return(MakeFuture(clientResult2)))
-        .WillOnce(Return(NConcurrency::TDelayedExecutor::MakeDelayed(TDuration::Seconds(100)).Apply(BIND([=] () { return clientResult2; }))))
+        .WillOnce(Return(NConcurrency::TDelayedExecutor::MakeDelayed(TDuration::Seconds(100)).Apply(BIND([=] { return clientResult2; }))))
         .WillRepeatedly(Return(MakeFuture(clientResult2)));
     EXPECT_CALL(*mockClient3, ListNode(path, _))
-        .WillRepeatedly(Return(NConcurrency::TDelayedExecutor::MakeDelayed(TDuration::Seconds(100)).Apply(BIND([=] () { return thirdClientResult; }))));
+        .WillRepeatedly(Return(NConcurrency::TDelayedExecutor::MakeDelayed(TDuration::Seconds(100)).Apply(BIND([=] { return thirdClientResult; }))));
 
     auto client = CreateTestHedgingClient(
         SleepQuantum * 2,
@@ -320,7 +320,7 @@ TEST(THedgingClientTest, MultiThread)
 
     EXPECT_CALL(*mockClient1, ListNode(path, _)).WillRepeatedly([=] (const NYPath::TYPath&, const NApi::TListNodeOptions& options) {
         if (options.Timeout) {
-            return NConcurrency::TDelayedExecutor::MakeDelayed(*options.Timeout).Apply(BIND([=] () {
+            return NConcurrency::TDelayedExecutor::MakeDelayed(*options.Timeout).Apply(BIND([=] {
                 return clientResult1;
             }));
         }
@@ -337,7 +337,7 @@ TEST(THedgingClientTest, MultiThread)
     auto threadPool = NConcurrency::CreateThreadPool(10, "test");
     std::vector<TFuture<void>> futures;
     for (int i = 0; i < 100; ++i) {
-        futures.push_back(BIND([=] () {
+        futures.push_back(BIND([=] {
             for (int j = 0; j < 100; ++j) {
                 NApi::TListNodeOptions options;
                 // on each 5th request for 1st and 2nd thread, the first client will timeout

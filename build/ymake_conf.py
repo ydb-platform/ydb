@@ -1732,9 +1732,9 @@ class LD(Linker):
 
         self.ld_sdk = select(default=None, selectors=[
             # -platform_version <platform> <min_version> <sdk_version>
-            (target.is_macos, '-Wl,-platform_version,macos,11.0,11.0'),
-            (not target.is_iossim and target.is_ios, '-Wl,-platform_version,ios,11.0,13.1'),
-            (target.is_iossim, '-Wl,-platform_version,ios-simulator,14.0,14.5'),
+            (target.is_macos, '-Wl,-platform_version,macos,{MACOS_VERSION_MIN},11.0'.format(MACOS_VERSION_MIN=MACOS_VERSION_MIN)),
+            (not target.is_iossim and target.is_ios, '-Wl,-platform_version,ios,{IOS_VERSION_MIN},13.1'.format(IOS_VERSION_MIN=IOS_VERSION_MIN)),
+            (target.is_iossim, '-Wl,-platform_version,ios-simulator,{IOS_VERSION_MIN},14.5'.format(IOS_VERSION_MIN=IOS_VERSION_MIN)),
         ])
 
         if self.build.profiler_type == Profiler.GProf:

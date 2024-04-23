@@ -117,7 +117,6 @@ SRCS(
     misc/coro_pipe.cpp
     misc/crash_handler.cpp
     misc/digest.cpp
-    misc/dnf.cpp
     misc/error.cpp
     misc/error_code.cpp
     misc/ema_counter.cpp

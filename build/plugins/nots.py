@@ -204,7 +204,7 @@ def on_peerdir_ts_resource(unit, *resources):
 
 @_with_report_configure_error
 def on_ts_configure(unit):
-    # type: (Unit, *str) -> None
+    # type: (Unit) -> None
     from lib.nots.package_manager.base import PackageJson
     from lib.nots.package_manager.base.utils import build_pj_path
     from lib.nots.typescript import TsConfig
@@ -575,20 +575,6 @@ def on_node_modules_configure(unit):
             __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
 
         if pj.get_use_prebuilder():
-            lf = pm.load_lockfile_from_dir(pm.sources_path)
-            is_valid, invalid_keys = lf.validate_has_addons_flags()
-
-            if not is_valid:
-                ymake.report_configure_error(
-                    "Project is configured to use @yatool/prebuilder. \n"
-                    + "Some packages in the pnpm-lock.yaml are misconfigured.\n"
-                    + "Run `ya tool nots update-lockfile` to fix lockfile.\n"
-                    + "All packages with `requiresBuild:true` have to be marked with `hasAddons:true/false`.\n"
-                    + "Misconfigured keys: \n"
-                    + "  - "
-                    + "\n  - ".join(invalid_keys)
-                )
-
             unit.on_peerdir_ts_resource("@yatool/prebuilder")
             unit.set(
                 [
@@ -596,6 +582,39 @@ def on_node_modules_configure(unit):
                     "--yatool-prebuilder-path $YATOOL_PREBUILDER_ROOT/node_modules/@yatool/prebuilder",
                 ]
             )
+
+            # YATOOL_PREBUILDER_0_7_0_RESOURCE_GLOBAL
+            prebuilder_major = unit.get("YATOOL_PREBUILDER-ROOT-VAR-NAME").split("_")[2]
+            logger.info(f"Detected prebuilder \033[0;32mv{prebuilder_major}.x.x\033[0;49m")
+
+            if prebuilder_major == "0":
+                # TODO: FBP-1408
+                lf = pm.load_lockfile_from_dir(pm.sources_path)
+                is_valid, invalid_keys = lf.validate_has_addons_flags()
+
+                if not is_valid:
+                    ymake.report_configure_error(
+                        "Project is configured to use @yatool/prebuilder. \n"
+                        + "Some packages in the pnpm-lock.yaml are misconfigured.\n"
+                        + "Run \033[0;32m`ya tool nots update-lockfile`\033[0;49m to fix lockfile.\n"
+                        + "All packages with `requiresBuild:true` have to be marked with `hasAddons:true/false`.\n"
+                        + "Misconfigured keys: \n"
+                        + "  - "
+                        + "\n  - ".join(invalid_keys)
+                    )
+            else:
+                lf = pm.load_lockfile_from_dir(pm.sources_path)
+                requires_build_packages = lf.get_requires_build_packages()
+                is_valid, validation_messages = pj.validate_prebuilds(requires_build_packages)
+
+                if not is_valid:
+                    ymake.report_configure_error(
+                        "Project is configured to use @yatool/prebuilder. \n"
+                        + "Some packages are misconfigured.\n"
+                        + "Run \033[0;32m`ya tool nots update-lockfile`\033[0;49m to fix pnpm-lock.yaml and package.json.\n"
+                        + "Validation details: \n"
+                        + "\n".join(validation_messages)
+                    )
 
 
 @_with_report_configure_error

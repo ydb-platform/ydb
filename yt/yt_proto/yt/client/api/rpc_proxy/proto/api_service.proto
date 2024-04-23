@@ -368,7 +368,7 @@ message TReqStartTransaction
 {
     message TReplicateToMasterCellTags
     {
-        repeated int32 cell_tags = 1;
+        repeated uint32 cell_tags = 1;
     }
 
     required ETransactionType type = 1;

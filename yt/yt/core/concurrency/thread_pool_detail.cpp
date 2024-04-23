@@ -73,7 +73,7 @@ TClosure TThreadPoolBase::MakeFinalizerCallback()
         std::swap(threads, Threads_);
     }
 
-    return BIND_NO_PROPAGATE([threads = std::move(threads)] () {
+    return BIND_NO_PROPAGATE([threads = std::move(threads)] {
         for (const auto& thread : threads) {
             thread->Stop();
         }

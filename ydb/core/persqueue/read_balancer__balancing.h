@@ -52,6 +52,8 @@ struct TPartition {
 
 // Multiple partitions balancing together always in one reading session
 struct TPartitionFamily {
+    friend struct TConsumer;
+
     enum class EStatus {
         Active,    // The family are reading
         Releasing, // The family is waiting for partition to be released
@@ -68,7 +70,9 @@ struct TPartitionFamily {
     // Partitions that are in the family
     std::vector<ui32> Partitions;
     // Partitions wich was added to the family.
-    std::set<ui32> AttachedPartitions;
+    std::unordered_set<ui32> AttachedPartitions;
+
+    std::unordered_set<ui32> WantedPartitions;
 
     // The reading session in which the family is currently being read.
     TSession* Session;
@@ -111,8 +115,6 @@ struct TPartitionFamily {
     // The partition became inactive
     void InactivatePartition(ui32 partitionId);
 
-    void ClassifyPartitions();
-
     bool PossibleForBalance(TSession* session);
 
     TString DebugStr() const;
@@ -131,6 +133,7 @@ private:
     ui32 NextStep();
 
 private:
+    void ClassifyPartitions();
     template<typename TPartitions>
     std::pair<size_t, size_t> ClassifyPartitions(const TPartitions& partitions);
     void UpdatePartitionMapping(const std::vector<ui32>& partitions);
@@ -188,6 +191,7 @@ struct TConsumer {
     ui32 TabletGeneration() const;
     const TPartitionInfo* GetPartitionInfo(ui32 partitionId) const;
     TPartition* GetPartition(ui32 partitionId);
+    const TPartitionGraph& GetPartitionGraph() const;
     ui32 NextStep();
 
     void RegisterPartition(ui32 partitionId, const TActorContext& ctx);
@@ -196,6 +200,8 @@ struct TConsumer {
 
     TPartitionFamily* CreateFamily(std::vector<ui32>&& partitions, const TActorContext& ctx);
     TPartitionFamily* CreateFamily(std::vector<ui32>&& partitions, TPartitionFamily::EStatus status, const TActorContext& ctx);
+    bool BreakUpFamily(ui32 partitionId, bool destroy, const TActorContext& ctx);
+    bool BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool destroy, const TActorContext& ctx);
     TPartitionFamily* FindFamily(ui32 partitionId);
 
     void RegisterReadingSession(TSession* session, const TActorContext& ctx);
@@ -257,7 +263,9 @@ struct TSession {
 
     // true if client connected to read from concret partitions
     bool WithGroups() const;
-    bool AllPartitionsReadable(const std::vector<ui32>& partitions) const;
+
+    template<typename TCollection>
+    bool AllPartitionsReadable(const TCollection& partitions) const;
 
     TString DebugStr() const;
 };

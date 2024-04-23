@@ -614,19 +614,25 @@ namespace NYdb::NTopic::NTests {
             // It should be possible to use DirectWrite option with UpdateRow permission only.
             // In this test we don't grant DescribeSchema permission and check that direct write still works.
 
-            auto setup = CreateSetup(TEST_CASE_NAME);
-
+            auto existingTopic = GetTestParam("existing", "yes") == "yes";
+            auto allowUpdateRow = GetTestParam("update", "allow") == "allow";
+            auto allowDescribe = GetTestParam("describe") == "allow";
             auto authToken = GetTestParam("token", "x-user-x@builtin");
+
+            auto setup = CreateSetup(TEST_CASE_NAME);
+            setup->GetServer().EnableLogs({NKikimrServices::TX_PROXY_SCHEME_CACHE}, NActors::NLog::PRI_TRACE);
 
             {
                 // Add UpdateRow permission.
                 NACLib::TDiffACL acl;
-                acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, authToken);
-                // The old behavior required DescribeSchema permission. Now it should work without this line:
-                // acl.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, authToken);
-                auto parent = GetTestParam("parent", "/Root");
-                auto topic = GetTestParam("topic", TEST_TOPIC);
-                setup->GetServer().AnnoyingClient->ModifyACL(parent, topic, acl.SerializeAsString());
+                if (allowUpdateRow) {
+                    acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, authToken);
+                }
+                // DescribePartitionRequest should work without DescribeSchema permission.
+                if (allowDescribe) {
+                    acl.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, authToken);
+                }
+                setup->GetServer().AnnoyingClient->ModifyACL("/Root", TEST_TOPIC, acl.SerializeAsString());
             }
 
             TMockDiscoveryService discovery;
@@ -643,7 +649,7 @@ namespace NYdb::NTopic::NTests {
             TTopicClient client(driver, clientSettings);
 
             auto sessionSettings = TWriteSessionSettings()
-                .Path(TEST_TOPIC)
+                .Path(existingTopic ? TEST_TOPIC : "non-existent")
                 .ProducerId(TEST_MESSAGE_GROUP_ID)
                 .MessageGroupId(TEST_MESSAGE_GROUP_ID)
                 .DirectWriteToPartition(true);

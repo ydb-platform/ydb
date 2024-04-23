@@ -134,6 +134,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             navigateRequest->DatabaseName = CanonizePath(Database);
 
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+            if (CheckAccessWithUpdateRowPermission) {
+                entry.Access = NACLib::EAccessRights::UpdateRow;
+            }
             entry.Path = NKikimr::SplitPath(GetTopicPath());
             entry.SyncVersion = true;
             entry.ShowPrivatePath = showPrivate;
@@ -199,6 +202,8 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return static_cast<TDerived*>(this)->HandleCacheNavigateResponse(ev);
             }
             break;
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+                [[fallthrough]];
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown: {
                 AddIssue(
                     FillIssue(
@@ -245,7 +250,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-       
+
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
@@ -256,6 +261,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
     protected:
         bool IsDead = false;
+        bool CheckAccessWithUpdateRowPermission = false;
         const TString TopicPath;
         const TString Database;
     };

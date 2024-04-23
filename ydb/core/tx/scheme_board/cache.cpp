@@ -190,8 +190,8 @@ namespace {
             return entry.KeyDescription->SecurityObject;
         }
 
-        static ui32 GetAccess(const TNavigate::TEntry&) {
-            return NACLib::EAccessRights::DescribeSchema;
+        static ui32 GetAccess(const TNavigate::TEntry& entry) {
+            return entry.Access;
         }
 
         static ui32 GetAccess(const TResolve::TEntry& entry) {
@@ -296,17 +296,16 @@ namespace {
                         continue;
                     }
 
-                    const ui32 access = GetAccess(entry);
-                    if (!securityObject->CheckAccess(access, *Context->Request->UserToken)) {
+                    if (!securityObject->CheckAccess(entry.Access, *Context->Request->UserToken)) {
                         SBC_LOG_W("Access denied"
                             << ": self# " << this->SelfId()
                             << ", for# " << Context->Request->UserToken->GetUserSID()
-                            << ", access# " << NACLib::AccessRightsToString(access));
+                            << ", access# " << NACLib::AccessRightsToString(entry.Access));
 
                         SetErrorAndClear(
                             Context.Get(),
                             entry,
-                            securityObject->CheckAccess(GetAccessForEnhancedError(), *Context->Request->UserToken));
+                            !securityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Context->Request->UserToken));
                     }
                 }
             }

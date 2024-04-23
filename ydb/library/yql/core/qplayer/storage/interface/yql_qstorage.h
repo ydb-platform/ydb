@@ -75,6 +75,7 @@ class IQStorage {
 public:
     virtual ~IQStorage() = default;
 
+    // it's an UB to open writer twice for the same operationId, implementations may check it
     virtual IQWriterPtr MakeWriter(const TString& operationId) const = 0;
     // readers & iterators may not see results of writer until commit
     virtual IQReaderPtr MakeReader(const TString& operationId) const = 0;

@@ -10,7 +10,9 @@ namespace {
 struct TOperationMap {
     TMutex Mutex;
     using TMap = THashMap<TQItemKey, TString>;
-    TMap ReadMap, WriteMap;
+    using TMapPtr = std::shared_ptr<TMap>;
+    TMapPtr ReadMap, WriteMap;
+    bool Committed = false;
 };
 
 using TOperationMapPtr = std::shared_ptr<TOperationMap>;
@@ -25,23 +27,21 @@ using TStatePtr = std::shared_ptr<TState>;
 
 class TReader : public IQReader {
 public:
-    TReader(const TOperationMapPtr& operation)
-        : Operation_(operation)
+    TReader(const TOperationMap::TMapPtr& map)
+        : Map_(map)
     {}
 
     NThreading::TFuture<TMaybe<TQItem>> Get(const TQItemKey& key) const final {
-        with_lock(Operation_->Mutex) {
-            auto it = Operation_->ReadMap.find(key);
-            if (it == Operation_->ReadMap.end()) {
-                return NThreading::MakeFuture(TMaybe<TQItem>());
-            }
-
-            return NThreading::MakeFuture(TMaybe<TQItem>(TQItem({key, it->second})));
+        auto it = Map_->find(key);
+        if (it == Map_->end()) {
+            return NThreading::MakeFuture(TMaybe<TQItem>());
         }
+
+        return NThreading::MakeFuture(TMaybe<TQItem>(TQItem({key, it->second})));
     }
 
 private:
-    const TOperationMapPtr Operation_;
+    const TOperationMap::TMapPtr Map_;
 };
 
 class TWriter : public IQWriter {
@@ -52,14 +52,16 @@ public:
 
     NThreading::TFuture<void> Put(const TQItemKey& key, const TString& value) final {
         with_lock(Operation_->Mutex) {
-            Operation_->WriteMap[key] = value;
+            (*Operation_->WriteMap)[key] = value;
             return NThreading::MakeFuture();
         }
     }
 
     NThreading::TFuture<void> Commit() final {
         with_lock(Operation_->Mutex) {
+            Y_ENSURE(!Operation_->Committed);
             Operation_->ReadMap = Operation_->WriteMap;
+            Operation_->Committed = true;
             return NThreading::MakeFuture();
         }
     }
@@ -70,14 +72,14 @@ private:
 
 class TIterator : public IQIterator {
 public:
-    TIterator(const TQIteratorSettings& settings, TOperationMap::TMap map)
+    TIterator(const TQIteratorSettings& settings, const TOperationMap::TMapPtr& map)
         : Settings_(settings)
-        , Map_(std::move(map))
-        , It_(Map_.begin())
+        , Map_(map)
+        , It_(Map_->begin())
     {}
 
     NThreading::TFuture<TMaybe<TQItem>> Next() final {
-        if (It_ == Map_.end()) {
+        if (It_ == Map_->end()) {
             return NThreading::MakeFuture(TMaybe<TQItem>());
         }
 
@@ -88,7 +90,7 @@ public:
 
 private:
     const TQIteratorSettings Settings_;
-    const TOperationMap::TMap Map_;
+    const TOperationMap::TMapPtr Map_;
     TOperationMap::TMap::const_iterator It_;
 };
 
@@ -98,25 +100,34 @@ public:
         : State_(std::make_shared<TState>())
     {
     }
+
     IQReaderPtr MakeReader(const TString& operationId) const final {
-        return std::make_shared<TReader>(GetOperation(operationId));
+        return std::make_shared<TReader>(GetOperation(operationId, false)->ReadMap);
     }
 
     IQWriterPtr MakeWriter(const TString& operationId) const final {
-        return std::make_shared<TWriter>(GetOperation(operationId));
+        return std::make_shared<TWriter>(GetOperation(operationId, true));
     }
 
     IQIteratorPtr MakeIterator(const TString& operationId, const TQIteratorSettings& settings) const final {
-        // clones the whole map for given operation id
-        return std::make_shared<TIterator>(settings, GetOperation(operationId)->ReadMap);
+        return std::make_shared<TIterator>(settings, GetOperation(operationId, false)->ReadMap);
     }
 
 private:
-    TOperationMapPtr GetOperation(const TString& operationId) const {
+    TOperationMapPtr GetOperation(const TString& operationId, bool forWrite) const {
         with_lock(State_->Mutex) {
             auto &op = State_->Operations[operationId];
             if (!op) {
                 op = std::make_shared<TOperationMap>();
+            }
+
+            if (forWrite) {
+                Y_ENSURE(!op->WriteMap);
+                op->WriteMap = std::make_shared<TOperationMap::TMap>();
+            } else {
+                if (!op->ReadMap) {
+                    op->ReadMap = std::make_shared<TOperationMap::TMap>();
+                }
             }
 
             return op;

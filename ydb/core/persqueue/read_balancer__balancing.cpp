@@ -131,7 +131,7 @@ TString TPartitionFamily::GetPrefix() const {
     if (Session) {
         sb << " session \"" << Session->Session << "\" sender " << Session->Sender;
     }
-    return TStringBuilder() ;
+    return sb;
 }
 
 
@@ -509,7 +509,6 @@ TConsumer::TConsumer(TBalancer& balancer, const TString& consumerName)
     : Balancer(balancer)
     , ConsumerName(consumerName)
     , NextFamilyId(0)
-    , Step(0)
     , ActiveFamilyCount(0)
 {
 }
@@ -539,7 +538,7 @@ TPartition* TConsumer::GetPartition(ui32 partitionId) {
 }
 
 ui32 TConsumer::NextStep() {
-    return ++Step;
+    return Balancer.NextStep();
 }
 
 void TConsumer::RegisterPartition(ui32 partitionId, const TActorContext& ctx) {
@@ -1157,7 +1156,8 @@ TString TSession::DebugStr() const {
 //
 
 TBalancer::TBalancer(TPersQueueReadBalancer& topicActor)
-    : TopicActor(topicActor) {
+    : TopicActor(topicActor)
+    , Step(0) {
 }
 
 const TString& TBalancer::Topic() const {
@@ -1547,7 +1547,9 @@ TString TBalancer::GetPrefix() const {
     return TStringBuilder() << "balancer: tablet " << TopicActor.TabletID() << " topic " << Topic() << " ";
 }
 
-
+ui32 TBalancer::NextStep() {
+    return ++Step;
+}
 
 
 bool TPartitionFamilyComparator::operator()(const TPartitionFamily* lhs, const TPartitionFamily* rhs) const {

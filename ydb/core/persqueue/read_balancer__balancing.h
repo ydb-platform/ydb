@@ -178,7 +178,6 @@ struct TConsumer {
 
     std::unordered_map<ui32, TPartition> Partitions;
 
-    ui32 Step;
     size_t ActiveFamilyCount;
 
     TConsumer(TBalancer& balancer, const TString& consumerName);
@@ -328,12 +327,15 @@ public:
 
 private:
     TString GetPrefix() const;
+    ui32 NextStep();
 
 private:
     TPersQueueReadBalancer& TopicActor;
 
     std::unordered_map<TActorId, std::unique_ptr<TSession>> Sessions;
     std::unordered_map<TString, std::unique_ptr<TConsumer>> Consumers;
+
+    ui32 Step;
 };
 
 }

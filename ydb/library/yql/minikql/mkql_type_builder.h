@@ -21,6 +21,7 @@ public:
 
 constexpr size_t MaxBlockSizeInBytes = 240_KB;
 static_assert(MaxBlockSizeInBytes < (size_t)std::numeric_limits<i32>::max());
+static_assert(MaxBlockSizeInBytes % 64 == 0, "arrow buffers are allocated with buffer size aligned to next 64 byte boundary");
 
 // maximum size of block item in bytes
 size_t CalcMaxBlockItemSize(const TType* type);

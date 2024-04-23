@@ -28,7 +28,7 @@ public:
     }
 
     bool HasRunningAsyncIoOperatrion() const {
-        return (State == EState::SpillingData && !WriteOperation.HasValue()) || State == EState::RestoringData;
+        return (State == EState::SpillingData && !WriteOperation.HasValue()) || (State == EState::RestoringData && !ReadOperation.HasValue());
     }
 
     ///Returns current stete of the adapter

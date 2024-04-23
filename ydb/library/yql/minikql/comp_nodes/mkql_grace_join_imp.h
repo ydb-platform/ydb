@@ -83,7 +83,7 @@ struct TTableSpilledBucket {
     TVectorSpillerAdapter<char, TMKQLAllocator<char>> StateCharAdapter;
 
 
-    bool HasRunningAsyncIoOperation() {
+    bool HasRunningAsyncIoOperation() const {
         return StateUi64Adapter.HasRunningAsyncIoOperatrion()
             || StateUi32Adapter.HasRunningAsyncIoOperatrion()
             || StateCharAdapter.HasRunningAsyncIoOperatrion();
@@ -100,7 +100,7 @@ struct TTableSpilledBucket {
     }
 
     bool IsProcessingFinished() const {
-        return NextVectorToProcess == ENextVectorToProcess::None;
+        return NextVectorToProcess == ENextVectorToProcess::None && !HasRunningAsyncIoOperation();
     }
 
     bool HasMoreSpilledBuckets() const { 

@@ -11,6 +11,7 @@ SRCS(
     yql_library_compiler_ut.cpp
     yql_opt_utils_ut.cpp
     yql_udf_index_ut.cpp
+    yql_qplayer_ut.cpp
 )
 
 PEERDIR(
@@ -19,6 +20,7 @@ PEERDIR(
     ydb/library/yql/core
     ydb/library/yql/core/facade
     ydb/library/yql/core/services
+    ydb/library/yql/core/qplayer/storage/memory
     ydb/library/yql/public/udf
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/core/type_ann

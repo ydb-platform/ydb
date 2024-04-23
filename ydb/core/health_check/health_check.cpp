@@ -446,6 +446,8 @@ public:
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
     THashMap<TNodeId, const TEvInterconnect::TNodeInfo*> MergedNodeInfo;
     THolder<TEvBlobStorage::TEvControllerConfigResponse> BaseConfig;
+    bool RequestedStorageConfig = false;
+    THashSet<TNodeId> UnknownStaticGroups;
 
     THashSet<TNodeId> NodeIds;
     THashSet<TNodeId> StorageNodeIds;
@@ -614,6 +616,10 @@ public:
         Schedule(Timeout, new TEvents::TEvWakeup(TimeoutFinal)); // timeout for the rest
     }
 
+    bool NeedWhiteboardInfoForGroup(TGroupId groupId) {
+        return BaseConfig && UnknownStaticGroups.count(groupId) != 0 || !BaseConfig && IsStaticGroup(groupId);
+    }
+
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         if (const NKikimrBlobStorage::TStorageConfig& config = *ev->Get()->Config; config.HasBlobStorageConfig()) {
             if (const auto& bsConfig = config.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
@@ -631,7 +637,6 @@ public:
                         pbPDisk.SetPath(pDisk.GetPath());
                         pbPDisk.SetGuid(pDisk.GetPDiskGuid());
                         pbPDisk.SetCategory(static_cast<ui64>(pDisk.GetPDiskCategory()));
-                        RequestStorageNode(pDisk.GetNodeID());
                     }
                 }
                 for (const NKikimrBlobStorage::TNodeWardenServiceSet_TVDisk& vDisk : staticConfig.vdisks()) {
@@ -645,6 +650,11 @@ public:
                         pbVDisk.MutableVDiskId()->CopyFrom(vDisk.vdiskid());
                         pbVDisk.SetNodeId(vDisk.GetVDiskLocation().GetNodeID());
                         pbVDisk.SetPDiskId(vDisk.GetVDiskLocation().GetPDiskID());
+                    }
+
+                    auto groupId = vDisk.GetVDiskID().GetGroupID();
+                    if (NeedWhiteboardInfoForGroup(groupId)) {
+                        RequestStorageNode(vDisk.GetVDiskLocation().GetNodeID());
                     }
                 }
                 for (const NKikimrBlobStorage::TGroupInfo& group : staticConfig.groups()) {
@@ -816,6 +826,14 @@ public:
         }
     }
 
+    void RequestStorageConfig() {
+        if (!RequestedStorageConfig) {
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false));
+            RequestedStorageConfig = true;
+            ++Requests;
+        }
+    }
+
     void Handle(TEvPrivate::TEvRetryNodeWhiteboard::TPtr& ev) {
         switch (ev->Get()->EventId) {
             case NNodeWhiteboard::TEvWhiteboard::EvSystemStateRequest:
@@ -933,8 +951,7 @@ public:
         switch (ev->Get()->Tag) {
             case TimeoutBSC:
                 if (!BaseConfig) {
-                    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false));
-                    ++Requests;
+                    RequestStorageConfig();
                 }
                 break;
             case TimeoutFinal:
@@ -971,20 +988,23 @@ public:
 
     bool NeedWhiteboardInfo(const NKikimrBlobStorage::TBaseConfig::TGroup& group) {
         return IsStaticGroup(group.groupid())
-                            && (group.operatingstatus() == NKikimrBlobStorage::TGroupStatus::UNKNOWN
-                                || group.operatingstatus() == NKikimrBlobStorage::TGroupStatus::DISINTEGRATED);
+                        && (group.operatingstatus() == NKikimrBlobStorage::TGroupStatus::UNKNOWN
+                        || group.operatingstatus() == NKikimrBlobStorage::TGroupStatus::DISINTEGRATED);
     }
 
-    bool NeedWhiteboardInfo(const NKikimrBlobStorage::TBaseConfig& pbConfig) {
-        if (IsSpecificDatabaseFilter()) {
-            return false;
-        }
+    void AggregateUnknownStatusStaticGroups() {
+        const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(BaseConfig->Record);
+        const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
+        const NKikimrBlobStorage::TBaseConfig& pbConfig(pbStatus.GetBaseConfig());
         for (const NKikimrBlobStorage::TBaseConfig::TGroup& group : pbConfig.GetGroup()) {
             if (NeedWhiteboardInfo(group)) {
-                return true;
+                UnknownStaticGroups.emplace(group.groupid());
             }
         }
-        return false;
+    }
+
+    bool NeedWhiteboardForStaticGroupsWithUnknownStatus() {
+        return RequestedStorageConfig && !IsSpecificDatabaseFilter();
     }
 
     bool ReadyBscInfo(TGroupId groupId) {
@@ -1002,13 +1022,9 @@ public:
             const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
             if (pbStatus.HasBaseConfig()) {
                 BaseConfig = ev->Release();
-                const NKikimrBlobStorage::TBaseConfig& pbConfig(pbStatus.GetBaseConfig());
-                if (NeedWhiteboardInfo(pbConfig)) {
-                    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false));
-                    ++Requests;
-                    for (const NKikimrBlobStorage::TBaseConfig::TPDisk& pDisk : pbConfig.GetPDisk()) {
-                        RequestStorageNode(pDisk.GetNodeId());
-                    }
+                AggregateUnknownStatusStaticGroups();
+                if (UnknownStaticGroups.size() > 0) {
+                    RequestStorageConfig();
                 }
             }
         }
@@ -2452,7 +2468,7 @@ public:
         for (auto groupId : pool.Groups) {
             if (ReadyBscInfo(groupId)) {
                 FillGroupStatus(groupId, *storagePoolStatus.add_groups(), {&context, "STORAGE_GROUP"});
-            } else {
+            } else if (IsStaticGroup(groupId)) {
                 auto itGroup = MergedBSGroupState.find(groupId);
                 if (itGroup != MergedBSGroupState.end()) {
                     FillGroupStatusWithWhiteboard(groupId, *itGroup->second, *storagePoolStatus.add_groups(), {&context, "STORAGE_GROUP"});
@@ -2480,14 +2496,13 @@ public:
     }
 
     void FillStorage(TDatabaseState& databaseState, Ydb::Monitoring::StorageStatus& storageStatus, TSelfCheckContext context) {
-        if (BaseConfig && databaseState.StoragePools.empty()
-                || !BaseConfig && databaseState.StoragePoolNames.empty()) {
+        if (BaseConfig && databaseState.StoragePools.empty()) {
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no storage pools", ETags::StorageState);
         } else {
             if (BaseConfig) {
                 for (const ui64 poolId : databaseState.StoragePools) {
                     auto itStoragePoolState = StoragePoolState.find(poolId);
-                    if (itStoragePoolState != StoragePoolState.end()) {
+                    if (itStoragePoolState != StoragePoolState.end() && itStoragePoolState->second.Groups) {
                         FillPoolStatus(itStoragePoolState->second, *storageStatus.add_pools(), {&context, "STORAGE_POOL"});
                         StoragePoolSeen.emplace(poolId);
                     }
@@ -2514,6 +2529,9 @@ public:
                     break;
                 default:
                     break;
+            }
+            if (!BaseConfig) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide information", ETags::StorageState);
             }
         }
         if (databaseState.StorageQuota > 0) {

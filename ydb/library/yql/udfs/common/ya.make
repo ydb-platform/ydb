@@ -14,6 +14,7 @@ RECURSE(
     pire
     protobuf
     re2
+    roaring
     set
     stat
     streaming

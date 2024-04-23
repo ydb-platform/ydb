@@ -1129,7 +1129,7 @@ Confirmation of message processing (commit) informs the server that the message 
 
 For example, if messages 1, 2, 3 are received from the server, the program processes them in parallel and sends confirmations in the following order: 1, 3, 2. In this case, message 1 will be committed first, and messages 2 and 3 will be committed only after the server receives confirmation of the processing of message 2.
 
-If commit fails with error, application should log it and continue, it makes no sense to retry commit. It is not known at this point if the message was actually confirmed.
+If a commit fails with an error, the application should log it and continue; it makes no sense to retry the commit. At this point, it is not known if the message was actually confirmed.
 
 #### Reading messages one by one with commits
 

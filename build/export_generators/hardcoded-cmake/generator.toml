@@ -49,13 +49,13 @@ template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
 [attrs.root]
 project_name="str"
 project_language_list="list"
-platform_cmakelists="list"
 platform_vars="list"
 includes="sorted_set"
 use_conan="bool"
 vanilla_protobuf="flag"
 
 [attrs.dir]
+# DEPRECATED
 prologue="str"
 epilogue="str"
 

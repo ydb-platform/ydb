@@ -3,7 +3,7 @@ import time
 import random
 import subprocess
 import ydb.apps.dstool.lib.grouptool as grouptool
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 import sys
 
@@ -215,7 +215,7 @@ def do(args):
 
         ################################################################################################################
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         while recent_restarts and recent_restarts[0] + timedelta(minutes=1) < now:
             recent_restarts.pop(0)
 
@@ -283,7 +283,7 @@ def do(args):
         ################################################################################################################
 
         action_name, action = random.choice(possible_actions)
-        print('%s %s' % (action_name, datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S')))
+        print('%s %s' % (action_name, datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')))
 
         try:
             action[0](*action[1:])

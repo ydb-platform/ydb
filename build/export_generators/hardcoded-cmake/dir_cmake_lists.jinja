@@ -1,7 +1,4 @@
-{# DEPRECATED -#}
-{% include prologue ignore missing %}
-{#- ENABLE AFTER yexport RELEASE #}
-{#- include 'prologue.cmake' ignore missing #}
+{% include 'prologue.cmake' ignore missing %}
 {% include '[generator]/disclaimer.jinja' -%}
 
 {% for package in packages -%}
@@ -37,7 +34,4 @@ add_subdirectory({{ subdir }})
 {%-     set dependencies = target.dependencies -%}
 {%-     include '[generator]/target_cmake_lists.jinja' %}{{"\n"}}
 {%- endfor %}
-{# DEPRECATED -#}
-{% include epilogue ignore missing %}
-{#- ENABLE AFTER yexport RELEASE #}
-{#- include 'epilogue.cmake' ignore missing #}
+{% include 'epilogue.cmake' ignore missing %}

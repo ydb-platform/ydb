@@ -55,9 +55,6 @@ use_conan="bool"
 vanilla_protobuf="flag"
 
 [attrs.dir]
-# DEPRECATED
-prologue="str"
-epilogue="str"
 
 [attrs.target]
 is_interface="bool"

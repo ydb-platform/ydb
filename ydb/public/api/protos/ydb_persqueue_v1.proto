@@ -6,6 +6,8 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 
+import "google/protobuf/duration.proto";
+
 package Ydb.PersQueue.V1;
 
 option java_package = "com.yandex.ydb.persqueue";
@@ -1080,6 +1082,18 @@ message Credentials {
     }
 }
 
+enum AutoscalingStrategy {
+    // The autoscaling algorithm is not specified. The default value will be used.
+    AUTOSCALING_STRATEGY_UNSPECIFIED = 0;
+    // The autoscaling is disabled.
+    AUTOSCALING_STRATEGY_DISABLED = 1;
+    // The autoscaling algorithm will increase partitions count depending on the load characteristics.
+    // The autoscaling algorithm will never decrease the number of partitions.
+    AUTOSCALING_STRATEGY_SCALE_UP = 2;
+    // The autoscaling algorithm will both increase and decrease partitions count depending on the load characteristics.
+    AUTOSCALING_STRATEGY_SCALE_UP_AND_DOWN = 3;
+}
+
 /**
  * Message for describing topic internals.
  */
@@ -1089,8 +1103,13 @@ message TopicSettings {
         FORMAT_BASE = 1;
     }
 
-    // How many partitions in topic. Must less than database limit. Default limit - 10.
-    int32 partitions_count = 1 [(value) = "> 0"];
+    oneof partitioning {
+        // How many partitions in topic. Must less than database limit. Default limit - 10.
+        int32 partitions_count = 1 [(value) = "> 0"];
+        // Settings for the partitions count autoscaling.
+        AutoscalingSettings autoscaling_settings = 15;
+    };
+
     oneof retention {
         // How long data in partition should be stored. Must be greater than 0 and less than limit for this database.
         // Default limit - 36 hours.
@@ -1163,6 +1182,40 @@ message TopicSettings {
     }
     // remote mirror rule for this topic.
     RemoteMirrorRule remote_mirror_rule = 11;
+}
+
+message AutoscalingSettings {
+    // Strategy of autoscaling.
+    AutoscalingStrategy strategy = 1;
+
+    // Auto merge would stop working when the partitions count reaches min_active_partitions.
+    // Zero value means default - 1.
+    int64 min_active_partitions = 2 [(Ydb.value) = ">= 0"];
+    // Auto split would stop working when the partitions count reaches max_active_partitions.
+    // Zero value means default - 1.
+    int64 max_active_partitions = 3 [(Ydb.value) = ">= 0"];
+    // Limit for total partition count, including active (open for write) and read-only partitions.
+    // Zero value means default - 100.
+    int64 partition_count_limit = 4 [(Ydb.value) = ">= 0", deprecated = true];
+
+    // Partition write speed autoscaling options.
+    AutoscalingPartitionWriteSpeedStrategy partition_write_speed = 5;
+}
+
+message AutoscalingPartitionWriteSpeedStrategy {
+    //Partition will be autoscaled up (divided into 2 partitions)
+    //after write speed to the partition exceeds scale_up_threshold_percent (in percentage of maximum write speed to the partition) for the period of time threshold_time_seconds
+
+    //Partition will become a candidate to the autoscaling down
+    //after write speed doesn’t reach scale_down_threshold_percent (in percentage of maximum write speed to the partition) for the period of time threshold_time_seconds
+    //This candidate partition will be autoscaled down when other neighbour partition will become a candidate to the autoscaling down and not earlier than a retention period.
+
+    // Zero value means default - 300.
+    google.protobuf.Duration threshold_time = 1;
+    // Zero value means default - 90.
+    int32 scale_up_threshold_percent = 2 [(Ydb.value) = ">= 0"];
+    // Zero value means default - 30.
+    int32 scale_down_threshold_percent = 3 [(Ydb.value) = ">= 0"];
 }
 
 /**

@@ -615,6 +615,58 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKikimrMiniKQL::TResul
     FillLiteralProtoImpl(literal, proto);
 }
 
+bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral) {
+    return maybeLiteral.Ptr()->IsCallable() &&
+        maybeLiteral.Ptr()->Content() == "PgCast" && maybeLiteral.Ptr()->ChildrenSize() >= 1 &&
+        maybeLiteral.Ptr()->Child(0)->IsCallable() && maybeLiteral.Ptr()->Child(0)->Content() == "Null";
+}
+
+std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto)
+{
+    if (auto maybeJust = maybeLiteral.Maybe<TCoJust>()) {
+        maybeLiteral = maybeJust.Cast().Input();
+    }
+
+    if (auto literal = maybeLiteral.Maybe<TCoDataCtor>()) {
+        FillLiteralProto(literal.Cast(), proto);
+        return std::nullopt;
+    }
+
+    const bool isPgNull = IsPgNullExprNode(maybeLiteral);
+    if (maybeLiteral.Maybe<TCoPgConst>() || isPgNull) {
+        YQL_ENSURE(valueType);
+        auto actualPgType = valueType->Cast<TPgExprType>();
+        YQL_ENSURE(actualPgType);
+
+        auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
+        if (!typeDesc) {
+            return TStringBuilder() << "Failed to parse default expr typename " << actualPgType->GetName();
+        }
+
+        if (isPgNull) {
+            proto.mutable_value()->set_null_flag_value(NProtoBuf::NULL_VALUE);
+        } else {
+            YQL_ENSURE(maybeLiteral.Maybe<TCoPgConst>());
+            auto pgConst = maybeLiteral.Cast<TCoPgConst>();
+            TString content = TString(pgConst.Value().Value());
+            auto parseResult = NKikimr::NPg::PgNativeBinaryFromNativeText(content, typeDesc);
+            if (parseResult.Error) {
+                return TStringBuilder() << "Failed to parse default expr for typename " << actualPgType->GetName()
+                    << ", error reason: " << *parseResult.Error;
+            }
+
+            proto.mutable_value()->set_bytes_value(parseResult.Str);
+        }
+
+        auto* pg = proto.mutable_type()->mutable_pg_type();
+        pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+        pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
+        return std::nullopt;
+    }
+
+    return TStringBuilder() << "Unsupported type of literal: " << maybeLiteral.Ptr()->Content();
+}
+
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto)
 {
     auto type = literal.Ref().GetTypeAnn();

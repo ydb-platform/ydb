@@ -50,6 +50,7 @@ class TYtProviderContext: public TDummyProviderContext {
 public:
     TYtProviderContext() { }
 
+    TVector<std::unique_ptr<TVector<TString>>> PrimaryKeyHolder;
     bool HasForceSortedMerge = false;
     bool HasHints = false;
 };
@@ -76,7 +77,7 @@ public:
     TYtJoinNodeOp::TPtr Do() {
         std::shared_ptr<IBaseOptimizerNode> tree;
         std::shared_ptr<IProviderContext> ctx;
-        BuildOptimizerJoinTree(tree, ctx, Root);
+        BuildOptimizerJoinTree(Ctx, tree, ctx, Root);
         auto ytCtx = std::static_pointer_cast<TYtProviderContext>(ctx);
 
         std::function<void(const TString& str)> log;
@@ -169,8 +170,9 @@ public:
 class TOptimizerTreeBuilder
 {
 public:
-    TOptimizerTreeBuilder(std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& ctx, TYtJoinNodeOp::TPtr inputTree)
-        : Tree(tree)
+    TOptimizerTreeBuilder(TExprContext& Ctx, std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& ctx, TYtJoinNodeOp::TPtr inputTree)
+        : ExprCtx(Ctx)
+        , Tree(tree)
         , OutCtx(ctx)
         , InputTree(inputTree)
     { }
@@ -231,7 +233,21 @@ private:
         }
 
         TYtSection section{leaf->Section};
-        auto stat = std::make_shared<TOptimizerStatistics>();
+        std::shared_ptr<TOptimizerStatistics> stat = std::make_shared<TOptimizerStatistics>();
+        if (ExprCtx.IsConstraintEnabled<TSortedConstraintNode>()) {
+            auto sorted = section.Ref().GetConstraint<TSortedConstraintNode>();
+            if (sorted) {
+                TVector<TString> key;
+                for (int i = 0; i < std::ssize(sorted->GetContent()); ++i) {
+                    const auto& entry = sorted->GetContent()[i];
+                    for (const auto& path : entry.first) {
+                        key.push_back(TString(path.front()));
+                    }
+                }
+                Ctx->PrimaryKeyHolder.push_back(std::make_unique<TVector<TString>>(key));
+                stat = std::make_shared<TOptimizerStatistics>(BaseTable, 0.0, 0, 0.0, 0.0, *Ctx->PrimaryKeyHolder.back());
+            }
+        }
         if (Y_UNLIKELY(!section.Settings().Empty()) && Y_UNLIKELY(section.Settings().Item(0).Name() == "Test")) {
             for (const auto& setting : section.Settings()) {
                 if (setting.Name() == "Rows") {
@@ -253,6 +269,7 @@ private:
             );
     }
 
+    TExprContext& ExprCtx;
     std::shared_ptr<IBaseOptimizerNode>& Tree;
     std::shared_ptr<TYtProviderContext> Ctx;
     std::shared_ptr<IProviderContext>& OutCtx;
@@ -330,9 +347,9 @@ bool AreSimilarTrees(TYtJoinNode::TPtr node1, TYtJoinNode::TPtr node2) {
     }
 }
 
-void BuildOptimizerJoinTree(std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& ctx, TYtJoinNodeOp::TPtr op)
+void BuildOptimizerJoinTree(TExprContext& Ctx, std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& ctx, TYtJoinNodeOp::TPtr op)
 {
-    TOptimizerTreeBuilder(tree, ctx, op).Do();
+    TOptimizerTreeBuilder(Ctx, tree, ctx, op).Do();
 }
 
 TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TExprContext& ctx, TPositionHandle pos) {

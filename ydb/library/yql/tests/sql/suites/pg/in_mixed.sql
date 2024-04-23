@@ -18,5 +18,5 @@ select 1 in (1, NULL);
 
 -- non-PG types handling
 select index in ('2', 4, '8'::char(3)) from plato."Input";
-select '2'::text in (NULL, index) from plato."Input";
+select '2' in (NULL, index, index::text) from plato."Input";
 

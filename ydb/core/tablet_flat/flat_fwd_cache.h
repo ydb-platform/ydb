@@ -38,6 +38,7 @@ namespace NFwd {
             Offset = (Offset + 1) % Capacity;
 
             const ui64 releasedDataSize = LoadedPages[Offset].Data.size();
+            DataSize = DataSize - releasedDataSize + page.Size;
 
             LoadedPages[Offset].Data = page.Release();
             LoadedPages[Offset].PageId = page.PageId;
@@ -47,16 +48,13 @@ namespace NFwd {
         }
 
         ui64 GetDataSize() {
-            ui64 result = 0;
-            for (const auto& page : LoadedPages) {
-                result += page.Data.size();
-            }
-            return result;
+            return DataSize;
         }
 
     private:
         std::array<NPageCollection::TLoadedPage, Capacity> LoadedPages;
         ui32 Offset = 0;
+        ui64 DataSize = 0;
         TPageId FirstUnseenPageId = 0;
     };
 

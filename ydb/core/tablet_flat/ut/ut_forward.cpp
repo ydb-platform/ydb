@@ -543,11 +543,15 @@ Y_UNIT_TEST_SUITE(NFwd_TLoadedPagesCircularBuffer){
             UNIT_ASSERT_VALUES_EQUAL(result, pageId >= 5 ? (pageId - 5) * 10 + 1 : 0);
 
             // has trace
-            for (ui32 i = 0; i < Min(5u, pageId); i++) {
+            ui64 totalSize = 0;
+            for (ui32 i = 0; i < Min(5u, pageId + 1); i++) {
                 auto got = buffer.Get(pageId - i);
                 UNIT_ASSERT_VALUES_UNEQUAL(got, nullptr);
                 UNIT_ASSERT_VALUES_EQUAL(got->size(), (pageId - i) * 10 + 1);
+                totalSize += got->size();
             }
+            UNIT_ASSERT_VALUES_EQUAL(totalSize, buffer.GetDataSize());
+
             // doesn't have next
             UNIT_ASSERT_VALUES_EQUAL(buffer.Get(pageId + 1), nullptr);
         }

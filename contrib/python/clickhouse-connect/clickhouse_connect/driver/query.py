@@ -399,13 +399,13 @@ def format_query_value(value: Any, server_tz: tzinfo = pytz.UTC):
     if isinstance(value, date):
         return f"'{value.isoformat()}'"
     if isinstance(value, list):
-        return f"[{', '.join(format_query_value(x, server_tz) for x in value)}]"
+        return f"[{', '.join(str_query_value(x, server_tz) for x in value)}]"
     if isinstance(value, tuple):
-        return f"({', '.join(format_query_value(x, server_tz) for x in value)})"
+        return f"({', '.join(str_query_value(x, server_tz) for x in value)})"
     if isinstance(value, dict):
         if common.get_setting('dict_parameter_format') == 'json':
             return format_str(any_to_json(value).decode())
-        pairs = [format_query_value(k, server_tz) + ':' + format_query_value(v, server_tz)
+        pairs = [str_query_value(k, server_tz) + ':' + str_query_value(v, server_tz)
                  for k, v in value.items()]
         return f"{{{', '.join(pairs)}}}"
     if isinstance(value, Enum):
@@ -413,6 +413,10 @@ def format_query_value(value: Any, server_tz: tzinfo = pytz.UTC):
     if isinstance(value, (uuid.UUID, ipaddress.IPv4Address, ipaddress.IPv6Address)):
         return f"'{value}'"
     return value
+
+
+def str_query_value(value: Any, server_tz: tzinfo = pytz.UTC):
+    return str(format_query_value(value, server_tz))
 
 
 # pylint: disable=too-many-branches

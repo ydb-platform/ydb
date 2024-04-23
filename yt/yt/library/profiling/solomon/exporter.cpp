@@ -1031,7 +1031,7 @@ TSharedRef TSolomonExporter::DumpSensors()
     Registry_->ProcessRegistrations();
     Registry_->Collect(OffloadThreadPool_->GetInvoker());
 
-    return SerializeProtoToRef(Registry_->DumpSensors());
+    return SerializeProtoToRef(Registry_->DumpSensors(Config_->Host, Config_->InstanceTags));
 }
 
 void TSolomonExporter::AttachRemoteProcess(TCallback<TFuture<TSharedRef>()> dumpSensors)

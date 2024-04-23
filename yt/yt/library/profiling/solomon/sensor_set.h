@@ -219,7 +219,7 @@ public:
         const TTagRegistry& tagRegistry,
         NYTree::TFluentAny fluent) const;
 
-    void DumpCube(NProto::TCube* cube) const;
+    void DumpCube(NProto::TCube* cube, const std::vector<TTagId>& extraTags) const;
 
     int GetGridFactor() const;
     int GetObjectCount() const;

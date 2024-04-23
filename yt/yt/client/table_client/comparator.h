@@ -28,7 +28,7 @@ public:
 
 public:
     TComparator() = default;
-    TComparator(std::vector<ESortOrder> sortOrders, TCallback<TUUComparerSignature> CGComparator = {});
+    explicit TComparator(std::vector<ESortOrder> sortOrders, TCallback<TUUComparerSignature> cgComparator = {});
 
     void Persist(const TPersistenceContext& context);
 

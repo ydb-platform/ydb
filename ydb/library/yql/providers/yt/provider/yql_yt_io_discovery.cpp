@@ -537,11 +537,9 @@ public:
         CanonizeFuture_ = {};
         CanonizationRangesFoldersFuture_ = {};
 
-        if (!PendingWalkFolders_.empty()) {
+        if (status == TStatus::Ok && !PendingWalkFolders_.empty()) {
             const auto walkFoldersStatus = RewriteWalkFoldersOnAsyncOrEvalChanges(output, ctx);
-            if (walkFoldersStatus != TStatus::Ok) {
-                return walkFoldersStatus;
-            }
+            return walkFoldersStatus;
         }
 
         YQL_CLOG(INFO, ProviderYt) << "YtIODiscovery DoApplyAsyncChanges - finish";
@@ -665,7 +663,7 @@ private:
         auto& args = key.GetWalkFolderArgs().GetRef();
 
         TWalkFoldersImpl walkFolders {State_->SessionId, cluster, State_->Configuration->Snapshot(), 
-                         pos, std::move(args), State_->Gateway};
+                         pos, args, State_->Gateway};
         YQL_CLOG(INFO, ProviderYt) << "Initialized WalkFolders from " << cluster << ".`" 
             << args.InitialFolder.Prefix << "`" << " with root attributes cnt: " 
             << args.InitialFolder.Attributes.size();

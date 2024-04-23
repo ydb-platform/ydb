@@ -135,7 +135,11 @@ namespace {
             TIterator(roaring_bitmap_t* Roaring) {
                 Iter_ = roaring_iterator_create(Roaring);
             }
-            // Any iterator.
+
+            ~TIterator() {
+                roaring_uint32_iterator_free(Iter_);
+            }
+
             bool Skip() override {
                 if (!Iter_->has_value) {
                     return false;
@@ -144,7 +148,6 @@ namespace {
                 return true;
             };
 
-            // List iterator.
             bool Next(TUnboxedValue& value) override {
                 if (!Iter_->has_value) {
                     return false;

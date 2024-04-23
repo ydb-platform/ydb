@@ -217,9 +217,9 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         }
 
         // Corrupt state.
-        TString corruptedBlob = state.GetData(0).GetStateData().GetBlob();
+        TString corruptedBlob = state.Data.front().Blob;
         corruptedBlob.append('a');
-        state.MutableData(0)->MutableStateData()->SetBlob(corruptedBlob);
+        state.Data.front().Blob = corruptedBlob;
 
         {
             TPqIoTestFixture setup2;
@@ -259,7 +259,8 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             Cerr << "State 2 saved" << Endl;
 
             // Add state1 to state2
-            *state2.AddData() = state1.GetData(0);
+            state2.Data.push_back(state1.Data.front());
+            //*state2.AddData() = state1.Data.front();
         }
 
         TPqIoTestFixture setup2;

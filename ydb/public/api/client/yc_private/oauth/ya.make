@@ -4,7 +4,6 @@ PY_NAMESPACE(yandex.cloud.priv.oauth.v1)
 
 GRPC()
 SRCS(
-    cloud_user.proto
     claims.proto
 )
 

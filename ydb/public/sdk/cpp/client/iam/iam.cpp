@@ -1,7 +1,7 @@
 #include <ydb/public/sdk/cpp/client/iam/common/iam.h>
 
-#include <ydb/public/api/client/yc_public/iam/iam_token_service.pb.h>
-#include <ydb/public/api/client/yc_public/iam/iam_token_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_public/iam/v1/iam_token_service.pb.h>
+#include <ydb/public/api/client/yc_public/iam/v1/iam_token_service.grpc.pb.h>
 
 using namespace yandex::cloud::iam::v1;
 

@@ -1750,7 +1750,7 @@ message TModifyScheme {
     optional TAlterContinuousBackup AlterContinuousBackup = 69;
     optional TDropContinuousBackup DropContinuousBackup = 70;
 
-    optional bool RestrictedOperation = 71;
+    optional bool RestrictedOperation = 71 [default = true];
 }
 
 message TCopySequence {

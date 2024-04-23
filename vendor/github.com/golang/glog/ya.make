@@ -10,6 +10,7 @@ SRCS(
 
 GO_TEST_SRCS(
     glog_bench_test.go
+    glog_context_test.go
     glog_test.go
     glog_vmodule_test.go
 )

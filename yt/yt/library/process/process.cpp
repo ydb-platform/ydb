@@ -377,7 +377,7 @@ TFuture<void> TProcessBase::Spawn()
 void TSimpleProcess::DoSpawn()
 {
 #ifdef _unix_
-    auto finally = Finally([&] () {
+    auto finally = Finally([&] {
         StdPipes_[STDIN_FILENO].CloseReadFD();
         StdPipes_[STDOUT_FILENO].CloseWriteFD();
         StdPipes_[STDERR_FILENO].CloseWriteFD();
@@ -433,7 +433,7 @@ void TSimpleProcess::DoSpawn()
 
     if (!WorkingDirectory_.empty()) {
         SpawnActions_.push_back(TSpawnAction{
-            [&] () {
+            [&] {
                 NFs::SetCurrentWorkingDirectory(WorkingDirectory_);
                 return true;
             },
@@ -443,7 +443,7 @@ void TSimpleProcess::DoSpawn()
 
     if (CreateProcessGroup_) {
         SpawnActions_.push_back(TSpawnAction{
-            [&] () {
+            [&] {
                 setpgrp();
                 return true;
             },

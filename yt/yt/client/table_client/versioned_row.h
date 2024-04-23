@@ -294,7 +294,6 @@ void ValidateDuplicateAndRequiredValueColumns(
     TVersionedRow row,
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
-    std::vector<bool>* columnPresenceBuffer,
     const TTimestamp* writeTimestamps,
     int writeTimestampCount);
 

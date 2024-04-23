@@ -210,7 +210,7 @@ private:
                 };
 
                 if (rowsWithStatistics.Rows.Empty()) {
-                    return ExpectEndOfStream(Underlying_).Apply(BIND([=] () {
+                    return ExpectEndOfStream(Underlying_).Apply(BIND([=] {
                         return std::move(rowsWithStatistics);
                     }));
                 }

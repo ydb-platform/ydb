@@ -6,6 +6,8 @@
 
 #include <library/cpp/yt/coding/varint.h>
 
+#include <library/cpp/yt/memory/tls_scratch.h>
+
 #include <numeric>
 
 namespace NYT::NTableClient {
@@ -220,7 +222,6 @@ void ValidateDuplicateAndRequiredValueColumns(
     TVersionedRow row,
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
-    std::vector<bool>* columnPresenceBuffer,
     const TTimestamp* writeTimestamps,
     int writeTimestampCount)
 {
@@ -228,9 +229,7 @@ void ValidateDuplicateAndRequiredValueColumns(
         return;
     }
 
-    auto& columnSeen = *columnPresenceBuffer;
-    YT_VERIFY(std::ssize(columnSeen) >= schema.GetColumnCount());
-    std::fill(columnSeen.begin(), columnSeen.end(), 0);
+    auto columnSeenFlags = GetTlsScratchBuffer<bool>(schema.GetColumnCount());
 
     for (const auto *valueGroupBeginIt = row.BeginValues(), *valueGroupEndIt = valueGroupBeginIt;
         valueGroupBeginIt != row.EndValues();
@@ -246,11 +245,11 @@ void ValidateDuplicateAndRequiredValueColumns(
         }
         const auto& column = schema.Columns()[mappedId];
 
-        if (columnSeen[mappedId]) {
+        if (columnSeenFlags[mappedId]) {
             THROW_ERROR_EXCEPTION("Duplicate value group %v in versioned row",
                 column.GetDiagnosticNameString());
         }
-        columnSeen[mappedId] = true;
+        columnSeenFlags[mappedId] = true;
 
         if (column.Required()) {
             auto mismatch = std::mismatch(
@@ -279,7 +278,7 @@ void ValidateDuplicateAndRequiredValueColumns(
     }
 
     for (int index = schema.GetKeyColumnCount(); index < schema.GetColumnCount(); ++index) {
-        if (!columnSeen[index] && schema.Columns()[index].Required()) {
+        if (!columnSeenFlags[index] && schema.Columns()[index].Required()) {
             THROW_ERROR_EXCEPTION("Missing values for required column %v",
                 schema.Columns()[index].GetDiagnosticNameString());
         }

@@ -63,8 +63,7 @@ struct TJournalWriterOptions
 {
     TJournalWriterConfigPtr Config;
     bool EnableMultiplexing = true;
-    // TODO(babenko): enable by default
-    bool EnableChunkPreallocation = false;
+    bool EnableChunkPreallocation = true;
 
     i64 ReplicaLagLimit = NJournalClient::DefaultReplicaLagLimit;
 

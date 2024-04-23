@@ -256,8 +256,7 @@ class Client(ABC):
                   settings: Optional[Dict[str, Any]] = None,
                   fmt: str = None,
                   use_database: bool = True,
-                  external_data: Optional[ExternalData] = None,
-                  stream: bool = False) -> Union[bytes, io.IOBase]:
+                  external_data: Optional[ExternalData] = None) -> bytes:
         """
         Query method that simply returns the raw ClickHouse format bytes
         :param query: Query statement/format string
@@ -269,6 +268,25 @@ class Client(ABC):
         :param external_data  External data to send with the query
         :return: bytes representing raw ClickHouse return value based on format
         """
+
+    @abstractmethod
+    def raw_stream(self, query: str,
+                   parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
+                   settings: Optional[Dict[str, Any]] = None,
+                   fmt: str = None,
+                   use_database: bool = True,
+                   external_data: Optional[ExternalData] = None) -> io.IOBase:
+        """
+       Query method that returns the result as an io.IOBase iterator
+       :param query: Query statement/format string
+       :param parameters: Optional dictionary used to format the query
+       :param settings: Optional dictionary of ClickHouse settings (key/string values)
+       :param fmt: ClickHouse output format
+       :param use_database  Send the database parameter to ClickHouse so the command will be executed in the client
+        database context.
+       :param external_data  External data to send with the query
+       :return: io.IOBase stream/iterator for the result
+       """
 
     # pylint: disable=duplicate-code,too-many-arguments,unused-argument
     def query_np(self,
@@ -487,12 +505,11 @@ class Client(ABC):
         :return: Generator that yields a PyArrow.Table for per block representing the result set
         """
         settings = self._update_arrow_settings(settings, use_strings)
-        return to_arrow_batches(self.raw_query(query,
-                                               parameters,
-                                               settings,
-                                               fmt='ArrowStream',
-                                               external_data=external_data,
-                                               stream=True))
+        return to_arrow_batches(self.raw_stream(query,
+                                                parameters,
+                                                settings,
+                                                fmt='ArrowStream',
+                                                external_data=external_data))
 
     def _update_arrow_settings(self,
                                settings: Optional[Dict[str, Any]],

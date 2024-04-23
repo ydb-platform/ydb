@@ -40,6 +40,12 @@ copy=[
     "cmake/global_flags.cmake",
 ]
 
+[common]
+template={ path="common_cmake_lists.jinja", dest="CMakeLists.txt" }
+
+[dir]
+template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
+
 [attrs.root]
 project_name="str"
 project_language_list="list"

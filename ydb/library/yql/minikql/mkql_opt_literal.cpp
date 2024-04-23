@@ -240,12 +240,10 @@ TRuntimeNode OptimizeCoalesce(TCallable& callable, const TTypeEnvironment& env) 
 
     auto optionalInput = callable.GetInput(0);
     auto defaultInput = callable.GetInput(1);
-    bool isDefaultOptional;
-    UnpackOptional(defaultInput, isDefaultOptional);
     if (optionalInput.HasValue()) {
         auto optionalData = AS_VALUE(TOptionalLiteral, optionalInput);
         if (optionalData->HasItem()) {
-            return isDefaultOptional ? optionalInput : optionalData->GetItem();
+            return optionalInput.GetStaticType()->IsSameType(*defaultInput.GetStaticType())  ? optionalInput : optionalData->GetItem();
         } else {
             return defaultInput;
         }

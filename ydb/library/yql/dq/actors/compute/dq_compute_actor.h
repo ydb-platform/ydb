@@ -4,7 +4,6 @@
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-//#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/runtime/dq_async_stats.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
@@ -18,42 +17,6 @@
 namespace NYql {
 namespace NDq {
 
-
-// struct TStateData {
-//     TString Blob;
-//     ui64 Version{0};
-// };
-
-// struct TMiniKqlProgramState {
-//     TStateData Data;
-//     ui64 RuntimeVersion{0};
-// };
-
-// struct TSourceState {
-// // State data for source.
-// // Typically there is only one element with state that
-// // source saved. But when we are migrating states
-// // between tasks there can be state
-// // from several different tasks sources.
-//     std::list<TStateData> Data;
-//     ui64 InputIndex;
-// };
-
-// struct TSinkState {
-//     TStateData Data;
-//     ui64 OutputIndex;
-// };
-
-// // Checkpoint for single compute actor.
-// struct TComputeActorState {
-//     TMiniKqlProgramState MiniKqlProgram;
-//     std::list<TSourceState> Sources;
-//     std::list<TSinkState> Sinks;
-
-//     void Clear() {
-//         // TODO;
-//     }
-// };
 
 struct TEvDqCompute {
     struct TEvState : public NActors::TEventPB<TEvState, NDqProto::TEvComputeActorState, TDqComputeEvents::EvState> {};

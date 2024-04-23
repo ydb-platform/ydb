@@ -2,7 +2,6 @@
 
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
 
-// #include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>

@@ -1,4 +1,4 @@
-#include <ydb/library/yql/core/qplayer/storage/memory/yql_qstorage_memory.h>
+#include <ydb/library/yql/core/qplayer/storage/file/yql_qstorage_file.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -6,6 +6,6 @@
 
 using namespace NYql;
 
-Y_UNIT_TEST_SUITE(TQStorageMemoryTests) {
-    GENERATE_TESTS(MakeMemoryQStorage)
+Y_UNIT_TEST_SUITE(TQStorageFileTests) {
+    GENERATE_TESTS(MakeFileQStorage)
 }

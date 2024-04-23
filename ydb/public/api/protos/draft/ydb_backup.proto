@@ -110,7 +110,7 @@ message FetchBackupCollectionsResponse {
 }
 
 message FetchBackupCollectionsResult {
-    repeated BackupCollection backup_collection = 1;
+    repeated BackupCollection backup_collections = 1;
 }
 
 message ListBackupCollectionsRequest {

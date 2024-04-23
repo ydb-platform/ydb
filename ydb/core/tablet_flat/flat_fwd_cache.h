@@ -467,7 +467,7 @@ namespace NFwd {
                     (level.Pages.empty() 
                         ? 0 
                         // Note: for simplicity consider pages as sequential
-                        : level.Pages.back().EndDataSize - level.Pages.begin()->EndDataSize + level.Pages.front().Size);
+                        : level.Pages.back().EndDataSize - level.Pages.front().EndDataSize + level.Pages.front().Size);
             } else {
                 return level.Pages.empty() 
                     ? 0 

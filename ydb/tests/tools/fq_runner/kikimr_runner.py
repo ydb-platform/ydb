@@ -547,7 +547,7 @@ class StreamingOverKikimrConfig:
                  tenant_mapping=None,  # dict[str, str]
                  cloud_mapping=None,  # dict
                  dc_mapping=None,  # dict
-                 mvp_external_ydb_endpoint=None # str
+                 mvp_external_ydb_endpoint=None  # str
                  ):
         if tenant_mapping is None:
             tenant_mapping = {}

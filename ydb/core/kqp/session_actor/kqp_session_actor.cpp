@@ -577,13 +577,6 @@ public:
     }
 
     void OnSuccessCompileRequest() {
-        if (QueryState->HasTxControl()) {
-            const auto& txControl = QueryState->GetTxControl();
-            if (txControl.tx_selector_case() == Ydb::Table::TransactionControl::kTxId) {
-                LOG_E("TTTTTXXXXXX IIIIIDDDDD " << txControl.tx_id());
-            }
-        }
-
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE ||
             QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN)
         {
@@ -2078,9 +2071,7 @@ public:
         } else {
             CleanupCtx.reset();
             bool doNotKeepSession = QueryState && !QueryState->KeepSession;
-            //if (!QueryState || QueryState->ProcessingLastStatement()) {
-                QueryState.reset();
-            //}
+            QueryState.reset();
             if (doNotKeepSession) {
                 // TEvCloseSessionRequest was received in final=false CleanupState, so actor should rerun Cleanup with final=true
                 CleanupAndPassAway();

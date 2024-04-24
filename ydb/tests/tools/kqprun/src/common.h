@@ -9,6 +9,8 @@
 
 namespace NKqpRun {
 
+constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
+
 struct TYdbSetupSettings {
     TString DomainName = "Root";
 
@@ -16,7 +18,7 @@ struct TYdbSetupSettings {
     TMaybe<TString> LogOutputFile;
 
     TString YqlToken;
-    TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry = nullptr;
+    TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     NKikimrConfig::TAppConfig AppConfig;
 };
 

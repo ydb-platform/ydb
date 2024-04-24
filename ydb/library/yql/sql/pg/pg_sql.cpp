@@ -2781,10 +2781,6 @@ public:
                                     }
                                 break;
                             }
-                            case T_String: {
-                                options.emplace_back(QL(QAX(nameElem), QA(strVal(defElem->arg))));
-                                break;
-                            }
                             default:
                                 NodeNotImplemented(defElem->arg);
                                 return nullptr;

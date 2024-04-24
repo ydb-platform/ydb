@@ -329,7 +329,8 @@ class YdbMvpExtension(ExtensionPoint):
         configuration.mvp_external_ydb_endpoint = self.mvp_external_ydb_endpoint
 
     def apply_to_kikimr(self, request, kikimr):
-        kikimr.compute_plane.qs_config['generic']['ydb_mvp_endpoint'] = kikimr.control_plane.fq_config['common']['ydb_mvp_cloud_endpoint']
+        if 'generic' in kikimr.compute_plane.qs_config:
+            kikimr.compute_plane.qs_config['generic']['ydb_mvp_endpoint'] = kikimr.control_plane.fq_config['common']['ydb_mvp_cloud_endpoint']
 
 
 class TokenAccessorExtension(ExtensionPoint):

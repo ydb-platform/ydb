@@ -1330,9 +1330,9 @@ void TDescribePartitionActor::HandleFirstCacheNavigateResponse(TEvTxProxySchemeC
     auto const& entries = ev->Get()->Request.Get()->ResultSet;
     Y_ABORT_UNLESS(entries.size() == 1);
 
+    CheckAccessWithUpdateRowPermission = false;
     if (entries.front().Status == NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied) {
         // We do not have the UpdateRow permission. Check if we're allowed to DescribeSchema.
-        CheckAccessWithUpdateRowPermission = false;
         SendDescribeProposeRequest(ActorContext());
     } else {
         // We do have access to the requested entity or there was an error, let the StateWork method process the response.

@@ -204,7 +204,7 @@ public:
             ValueCleanup(GetValueRepresentation(Types_[idx]), value, ctx, block);
         }
 
-        const auto next = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULT, increment, ConstantInt::get(indexType, MaxLength_), "next", block);
+        const auto next = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULE, increment, ConstantInt::get(indexType, MaxLength_), "next", block);
         BranchInst::Create(second_cond, work, next, block);
 
         block = second_cond;

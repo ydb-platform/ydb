@@ -774,7 +774,8 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
 
     Y_UNIT_TEST(TestAstWithCompression) {
         NKikimrConfig::TAppConfig appCfg;
-        appCfg.MutableFederatedQueryConfig()->MutableCommon()->SetQueryArtifactsCompressionMethod("zstd_6");
+        appCfg.MutableQueryServiceConfig()->SetQueryArtifactsCompressionMinSize(0);
+        appCfg.MutableQueryServiceConfig()->SetQueryArtifactsCompressionMethod("zstd_6");
 
         auto kikimr = DefaultKikimrRunner({}, appCfg);
         auto db = kikimr.GetQueryClient();

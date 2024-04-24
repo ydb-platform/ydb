@@ -383,6 +383,16 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/seq", true),
+            {
+                NLs::SequenceIncrement(1),
+                NLs::SequenceMinValue(1),
+                NLs::SequenceCache(1),
+                NLs::SequenceStartValue(1),
+                NLs::SequenceCycle(false)
+            }
+        );
+
         auto value = DoNextVal(runtime, "/MyRoot/seq");
         UNIT_ASSERT_VALUES_EQUAL(value, 1);
 
@@ -431,6 +441,33 @@ Y_UNIT_TEST_SUITE(TSequence) {
         UNIT_ASSERT_VALUES_EQUAL(value, 4);
 
         DoNextVal(runtime, "/MyRoot/seq", Ydb::StatusIds::SCHEME_ERROR);
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Cycle: false
+            MinValue: 7
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Cycle: false
+            MinValue: 3
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Cycle: false
+            MinValue: 3
+            StartValue: 3
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Cycle: false
+            MinValue: 3
+            MaxValue: 2
+        )", {NKikimrScheme::StatusInvalidParameter});
     }
 
 } // Y_UNIT_TEST_SUITE(TSequence)

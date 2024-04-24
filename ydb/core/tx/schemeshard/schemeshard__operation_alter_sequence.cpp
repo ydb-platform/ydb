@@ -226,6 +226,67 @@ public:
     }
 };
 
+std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription(
+        const NKikimrSchemeOp::TSequenceDescription& sequence, const NKikimrSchemeOp::TSequenceDescription& alter,
+        TString& errStr, NKikimrScheme::EStatus& status) {
+
+    NKikimrSchemeOp::TSequenceDescription result = sequence;
+
+    i64 minValue = result.GetMinValue();
+    i64 maxValue = result.GetMaxValue();
+
+    if (alter.HasMinValue()) {
+        minValue = alter.GetMinValue();
+    }
+    if (alter.HasMaxValue()) {
+        maxValue = alter.GetMaxValue();
+    }
+
+    if (minValue >= maxValue) {
+        errStr = Sprintf("MINVALUE (%ld) must be less than MAXVALUE (%ld)", minValue, maxValue);
+        status = NKikimrScheme::StatusInvalidParameter;
+        return std::nullopt;
+	}
+
+    i64 startValue = result.GetStartValue();
+    if (alter.HasStartValue()) {
+        startValue = alter.GetStartValue();
+    }
+
+    if (startValue > maxValue) {
+        errStr = Sprintf("START value (%ld) cannot be greater than MAXVALUE (%ld)", startValue, maxValue);
+        status = NKikimrScheme::StatusInvalidParameter;
+        return std::nullopt;
+	}
+    if (startValue < minValue) {
+        errStr = Sprintf("START value (%ld) cannot be less than MINVALUE (%ld)",  startValue, minValue);
+        status = NKikimrScheme::StatusInvalidParameter;
+        return std::nullopt;
+	}
+
+    i64 increment = result.GetIncrement();
+    if (alter.HasIncrement()) {
+        increment = alter.GetIncrement();
+    }
+    ui64 cache = result.GetCache();
+    if (alter.HasCache()) {
+        cache = alter.GetCache();
+    }
+    bool cycle = result.GetCycle();
+    if (alter.HasCycle()) {
+        cycle = alter.GetCycle();
+    }
+
+    result.SetMinValue(minValue);
+    result.SetMaxValue(maxValue);
+    result.SetIncrement(increment);
+    result.SetCycle(cycle);
+    result.SetCache(cache);
+    result.SetStartValue(startValue);
+
+    return result;
+}
+
 class TAlterSequence: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::ConfigureParts;
@@ -345,15 +406,22 @@ public:
         TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(dstPath->PathId);
         Y_ABORT_UNLESS(!sequenceInfo->AlterData);
 
-        TSequenceInfo::TPtr alterData = sequenceInfo->CreateNextVersion();
-        Y_ABORT_UNLESS(alterData);
-
         if (sequenceAlter.HasSetVal()) {
             errStr = "Set value by alter sequence is not supported";
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
-        alterData->Description = sequenceAlter;
+
+        auto description = GetAlterSequenceDescription(
+                sequenceInfo->Description, sequenceAlter, errStr, status);
+        if (!description) {
+            result->SetError(status, errStr);
+            return result;
+        }
+
+        TSequenceInfo::TPtr alterData = sequenceInfo->CreateNextVersion();
+        Y_ABORT_UNLESS(alterData);
+        alterData->Description = *description;
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterSequence, dstPath->PathId);
         txState.State = TTxState::ConfigureParts;

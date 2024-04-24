@@ -1,13 +1,11 @@
 #include "kqp_opt_phy_rules.h"
+#include "predicate_collector.h"
 
 #include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
-#include <ydb/library/yql/providers/common/pushdown/collection.h>
-#include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
 
 #include <unordered_set>
 
@@ -24,30 +22,6 @@ static const std::unordered_set<std::string> SecondLevelFilters = {
     "string_contains",
     "starts_with",
     "ends_with"
-};
-
-struct TPushdownSettings : public NPushdown::TSettings {
-    TPushdownSettings()
-        : NPushdown::TSettings(NYql::NLog::EComponent::ProviderKqp)
-    {
-        using EFlag = NPushdown::TSettings::EFeatureFlag;
-        Enable(EFlag::LikeOperator, NSsa::RuntimeVersion >= 2U);
-        Enable(EFlag::LikeOperatorOnlyForUtf8, NSsa::RuntimeVersion < 3U);
-        Enable(EFlag::JsonQueryOperators | EFlag::JsonExistsOperator, NSsa::RuntimeVersion >= 3U);
-        Enable(EFlag::ArithmeticalExpressions
-            | EFlag::UnaryOperators
-            | EFlag::DoNotCheckCompareArgumentsTypes
-            | EFlag::TimestampCtor, NSsa::RuntimeVersion >= 4U);
-        Enable(EFlag::LogicalXorOperator
-            | EFlag::ParameterExpression
-            | EFlag::CastExpression
-            | EFlag::StringTypes
-            | EFlag::DateTimeTypes
-            | EFlag::UuidType
-            | EFlag::DecimalType
-            | EFlag::DyNumberType);
-        Enable(EFlag::JustPassthroughOperators, NSsa::RuntimeVersion >= 5U);
-    }
 };
 
 struct TFilterOpsLevels {
@@ -357,7 +331,7 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
         compareOperator = "gt";
     } else if (predicate.Maybe<TCoCmpGreaterOrEqual>() && !forceStrictComparison) {
         compareOperator = "gte";
-    } else if (NKikimr::NSsa::RuntimeVersion >= 2U) {
+    } else if constexpr (NKikimr::NSsa::RuntimeVersion >= 2U) {
         // We introduced LIKE pushdown in v2 of SSA program
         if (predicate.Maybe<TCoCmpStringContains>()) {
             compareOperator = "string_contains";
@@ -667,16 +641,16 @@ TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, TExprContext& ctx
     return TFilterOpsLevels(ops, NullNode);
 }
 
-void SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree, NPushdown::TPredicateNode& predicatesToPush, NPushdown::TPredicateNode& remainingPredicates,
+void SplitForPartialPushdown(const TPredicateNode& predicateTree, TPredicateNode& predicatesToPush, TPredicateNode& remainingPredicates,
     TExprContext& ctx, TPositionHandle pos)
 {
     if (predicateTree.CanBePushed) {
         predicatesToPush = predicateTree;
-        remainingPredicates.ExprNode = Build<TCoBool>(ctx, pos).Literal().Build("true").Done();
+        remainingPredicates.ExprNode = MakeBool<true>(pos, ctx);
         return;
     }
 
-    if (predicateTree.Op != NPushdown::EBoolOp::And) {
+    if (predicateTree.Op != TPredicateNode::EBoolOp::And) {
         // We can partially pushdown predicates from AND operator only.
         // For OR operator we would need to have several read operators which is not acceptable.
         // TODO: Add support for NOT(op1 OR op2), because it expands to (!op1 AND !op2).
@@ -685,9 +659,8 @@ void SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree, NPu
     }
 
     bool isFoundNotStrictOp = false;
-    std::vector<NPushdown::TPredicateNode> pushable;
-    std::vector<NPushdown::TPredicateNode> remaining;
-    for (auto& predicate : predicateTree.Children) {
+    std::vector<TPredicateNode> pushable, remaining;
+    for (const auto& predicate : predicateTree.Children) {
         if (predicate.CanBePushed && !isFoundNotStrictOp) {
             pushable.emplace_back(predicate);
         } else {
@@ -701,91 +674,11 @@ void SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree, NPu
     remainingPredicates.SetPredicates(remaining, ctx, pos);
 }
 
-bool IsGoodTypeForPushdown(const TTypeAnnotationNode& type) {
-    return NUdf::EDataTypeFeatures::NumericType & NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
-}
-
-bool IsGoodTypesForPushdownCompare(const TTypeAnnotationNode& typeOne, const TTypeAnnotationNode& typeTwo) {
-    const auto& rawOne = RemoveOptionality(typeOne);
-    const auto& rawTwo = RemoveOptionality(typeTwo);
-    if (IsSameAnnotation(rawOne, rawTwo))
-        return true;
-
-    const auto kindOne = rawOne.GetKind();
-    const auto kindTwo = rawTwo.GetKind();
-    if (ETypeAnnotationKind::Null == kindOne || ETypeAnnotationKind::Null == kindTwo)
-        return true;
-
-    if (kindTwo != kindOne)
-        return false;
-
-    switch (kindOne) {
-        case ETypeAnnotationKind::Tuple: {
-            const auto& itemsOne = rawOne.Cast<TTupleExprType>()->GetItems();
-            const auto& itemsTwo = rawTwo.Cast<TTupleExprType>()->GetItems();
-            const auto size = itemsOne.size();
-            if (size != itemsTwo.size())
-                return false;
-            for (auto i = 0U; i < size; ++i) {
-                if (!IsGoodTypesForPushdownCompare(*itemsOne[i], *itemsTwo[i])) {
-                    return false;
-                }
-            }
-            return true;
-        }
-        case ETypeAnnotationKind::Data: {
-            const auto fOne = NUdf::GetDataTypeInfo(rawOne.Cast<TDataExprType>()->GetSlot()).Features;
-            const auto fTwo = NUdf::GetDataTypeInfo(rawTwo.Cast<TDataExprType>()->GetSlot()).Features;
-            return ((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & fOne) && (NUdf::EDataTypeFeatures::CanCompare  & fOne)
-                && ((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & fTwo) && (NUdf::EDataTypeFeatures::CanCompare  & fTwo);
-        }
-        default: break;
-    }
-    return false;
-}
-
-bool IsGoodNodeForPushdown(const TExprBase& node) {
-    if (const auto maybeCompare = node.Maybe<TCoCompare>()) {
-        const auto compare = maybeCompare.Cast();
-        return IsGoodTypesForPushdownCompare(*compare.Left().Ref().GetTypeAnn(), *compare.Right().Ref().GetTypeAnn())
-            && IsGoodNodeForPushdown(compare.Left()) && IsGoodNodeForPushdown(compare.Right());
-    } else if (const auto maybeUnaryOp = node.Maybe<TCoUnaryArithmetic>()) {
-        return IsGoodTypeForPushdown(*node.Ref().GetTypeAnn()) && IsGoodNodeForPushdown(maybeUnaryOp.Cast().Arg());
-    } else if (const auto maybeBinaryOp = node.Maybe<TCoBinaryArithmetic>()) {
-        const auto binaryOp = maybeBinaryOp.Cast();
-        return IsGoodTypeForPushdown(*binaryOp.Ref().GetTypeAnn()) && !binaryOp.Maybe<TCoAggrAdd>()
-            && IsGoodNodeForPushdown(binaryOp.Left()) && IsGoodNodeForPushdown(binaryOp.Right());
-    } else if (const auto maybeCoalesce = node.Maybe<TCoCoalesce>()) {
-        const auto coalesce = maybeCoalesce.Cast();
-        return IsGoodNodeForPushdown(coalesce.Predicate()) && IsGoodNodeForPushdown(coalesce.Value());
-    } else if (const auto maybeIf = node.Maybe<TCoIf>()) {
-        const auto ifOp = maybeIf.Cast();
-        return IsGoodNodeForPushdown(ifOp.Predicate()) && IsGoodNodeForPushdown(ifOp.ThenValue()) && IsGoodNodeForPushdown(ifOp.ElseValue());
-    } else if (const auto maybeJust = node.Maybe<TCoJust>()) {
-        return IsGoodNodeForPushdown(maybeJust.Cast().Input());
-    }
-    return true;
-}
-
-void UpdatePushableFlagWithOlapSpecific(NPushdown::TPredicateNode& tree) {
-    if constexpr (NSsa::RuntimeVersion < 4U)
-        return;
-
-    std::for_each(tree.Children.begin(), tree.Children.end(), std::bind(&UpdatePushableFlagWithOlapSpecific, std::placeholders::_1));
-    tree.CanBePushed = tree.CanBePushed && std::all_of(tree.Children.cbegin(), tree.Children.cend(), [](const NPushdown::TPredicateNode& node) { return node.CanBePushed; });
-
-    if (tree.CanBePushed && NPushdown::EBoolOp::Undefined == tree.Op) {
-        tree.CanBePushed = IsGoodNodeForPushdown(tree.ExprNode.Cast());
-    }
-}
-
 } // anonymous namespace end
 
 TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TTypeAnnotationContext& typesCtx)
 {
-    Y_UNUSED(typesCtx);
-
     if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
         return node;
     }
@@ -830,14 +723,12 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         }
     }
 
-    NPushdown::TPredicateNode predicateTree(predicate);
-    auto lambdaArg = lambda.Args().Arg(0).Raw();
-    CollectPredicates(predicate, predicateTree, lambdaArg, read.Process().Body(), TPushdownSettings());
+    TPredicateNode predicateTree(predicate);
+    const auto lambdaArg = lambda.Args().Arg(0).Raw();
+    CollectPredicates(predicate, predicateTree, lambdaArg, read.Process().Body());
     YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
-    UpdatePushableFlagWithOlapSpecific(predicateTree);
 
-    NPushdown::TPredicateNode predicatesToPush;
-    NPushdown::TPredicateNode remainingPredicates;
+    TPredicateNode predicatesToPush, remainingPredicates;
     SplitForPartialPushdown(predicateTree, predicatesToPush, remainingPredicates, ctx, node.Pos());
     if (!predicatesToPush.IsValid()) {
         return node;

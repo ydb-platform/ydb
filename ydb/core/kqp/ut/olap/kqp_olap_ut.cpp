@@ -943,12 +943,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` = Int8("1"))",
             R"(`level` = Int16("1"))",
             R"(`level` = Int32("1"))",
-            R"((`level`, `uid`, `resource_id`) = (Int32("1"), "uid_3000001", "10001"))",
             R"(`level` > Int32("3"))",
             R"(`level` < Int32("1"))",
             R"(`level` >= Int32("4"))",
             R"(`level` <= Int32("0"))",
             R"(`level` != Int32("0"))",
+            R"((`level`, `uid`, `resource_id`) = (Int32("1"), "uid_3000001", "10001"))",
             R"((`level`, `uid`, `resource_id`) > (Int32("1"), "uid_3000001", "10001"))",
             R"((`level`, `uid`, `resource_id`) > (Int32("1"), "uid_3000000", "10001"))",
             R"((`level`, `uid`, `resource_id`) < (Int32("1"), "uid_3000002", "10001"))",
@@ -1015,9 +1015,16 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` * 3. > 4.f)",
             R"(`level` / 2.f <= 1.)",
             R"(`level` % 3. != 1.f)",
-            R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z"))",
-            R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z") AND `level` > 3)",
-            R"((`timestamp`, `level`) >= (Timestamp("1970-01-01T00:00:00.000001Z"), 3))",
+            //R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z"))",
+            R"(`timestamp` >= Timestamp("1970-01-01T00:00:03.000001Z") AND `level` < 4)",
+            R"((`timestamp`, `level`) >= (Timestamp("1970-01-01T00:00:03.000001Z"), 3))",
+#endif
+#if SSA_RUNTIME_VERSION >= 5U
+            R"(IF(`level` > 3, -`level`, +`level`) < 2)",
+            R"(StartsWith(`message` ?? `resource_id`, "10000"))",
+            R"(NOT EndsWith(`message` ?? `resource_id`, "xxx"))",
+            R"(ChooseMembers(TableRow(), ['level', 'uid', 'resource_id']) == <|level:1, uid:"uid_3000001", resource_id:"10001"|>)",
+            R"(ChooseMembers(TableRow(), ['level', 'uid', 'resource_id']) != <|level:1, uid:"uid_3000001", resource_id:"10001"|>)",
 #endif
         };
 

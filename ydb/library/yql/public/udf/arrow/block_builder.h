@@ -521,12 +521,12 @@ class TFixedSizeArrayBuilder final: public TFixedSizeArrayBuilderBase<TLayout, N
     using TBase = TFixedSizeArrayBuilderBase<TLayout, Nullable, TSelf>;
 
 public:
-    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
-        : TBase(typeInfoHelper, std::move(arrowType), pool, maxLen)
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated = nullptr)
+        : TBase(typeInfoHelper, std::move(arrowType), pool, maxLen, totalAllocated)
     {}
 
-    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
-        : TBase(typeInfoHelper, type, pool, maxLen)
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated = nullptr)
+        : TBase(typeInfoHelper, type, pool, maxLen, totalAllocated)
     {}
 
     void DoAddNotNull(TUnboxedValuePod value) {
@@ -949,8 +949,8 @@ private:
 template<bool Nullable, typename TDerived>
 class TTupleArrayBuilderBase : public TArrayBuilderBase {
 public:
-    TTupleArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
-        : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen)
+    TTupleArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated = nullptr)
+        : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen, totalAllocated)
     {
         Reserve();
     }
@@ -1089,8 +1089,8 @@ class TTupleArrayBuilder final : public TTupleArrayBuilderBase<Nullable, TTupleA
 public:
 
     TTupleArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen,
-                       TVector<TArrayBuilderBase::Ptr>&& children)
-        : TTupleArrayBuilderBase<Nullable, TTupleArrayBuilder<Nullable>>(typeInfoHelper, type, pool, maxLen)
+                       TVector<TArrayBuilderBase::Ptr>&& children, size_t* totalAllocated = nullptr)
+        : TTupleArrayBuilderBase<Nullable, TTupleArrayBuilder<Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated)
         , Children_(std::move(children)) {}
 
     void AddToChildrenDefault() {
@@ -1164,8 +1164,8 @@ class TTzDateArrayBuilder final : public TTupleArrayBuilderBase<Nullable, TTzDat
     static constexpr auto DataSlot = TDataType<TDate>::Slot;
 
 public:
-    TTzDateArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
-        : TTupleArrayBuilderBase<Nullable, TTzDateArrayBuilder<TDate, Nullable>>(typeInfoHelper, type, pool, maxLen)
+    TTzDateArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated = nullptr)
+        : TTupleArrayBuilderBase<Nullable, TTzDateArrayBuilder<TDate, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated)
         , DateBuilder_(typeInfoHelper, NKikimr::NMiniKQL::MakeTzLayoutArrowType<DataSlot>(), pool, maxLen)
         , TimezoneBuilder_(typeInfoHelper, arrow::uint16(), pool, maxLen)
         {

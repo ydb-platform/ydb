@@ -127,7 +127,7 @@ If you evolve the Group entity by adding the `deparment` field:
 val department: String
 ```
 
-Hibernate, at the start of the application, update the database schema if the `update` mode is set:
+At the start of the application, Hibernate will update the database schema if the `update` mode is set in properties:
 
 ```properties
 jakarta.persistence.schema-generation.database.action=update

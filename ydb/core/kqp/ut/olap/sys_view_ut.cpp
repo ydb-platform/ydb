@@ -21,6 +21,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         for (ui64 i = 0; i < 100; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 1000);
         }
+        csController->WaitCompactions(TDuration::Seconds(10));
 
         auto tableClient = kikimr.GetTableClient();
         auto selectQuery = TString(R"(
@@ -65,6 +66,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i*10000, 1000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i*10000, 2000);
         }
+        csController->WaitCompactions(TDuration::Seconds(10));
 
         auto tableClient = kikimr.GetTableClient();
         {
@@ -199,6 +201,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore");
         helper.CreateTestOlapTable();
         helper.FillPKOnly(0, 800000);
+        csController->WaitCompactions(TDuration::Seconds(10));
+
         helper.GetVolumes(rawBytesPK1, bytesPK1, false, {"pk_int"});
         auto tableClient = kikimr.GetTableClient();
         {
@@ -228,14 +232,15 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 bytes1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);
         helper.CreateTestOlapTable();
         NArrow::NConstruction::TStringPoolFiller sPool(3, 52);
         helper.FillTable(sPool, 0, 800000);
+        csController->WaitCompactions(TDuration::Seconds(10));
+
         helper.GetVolumes(rawBytes1, bytes1, false, {"new_column_ui64"});
         AFL_VERIFY(rawBytes1 == 0);
         AFL_VERIFY(bytes1 == 0);
@@ -265,6 +270,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         helper.CreateTestOlapTable();
         NArrow::NConstruction::TStringPoolFiller sPool(3, 52);
         helper.FillTable(sPool, 0, 800000);
+        csController->WaitCompactions(TDuration::Seconds(10));
+
         helper.GetVolumes(rawBytes1, bytes1, false, {"field"});
         auto tableClient = kikimr.GetTableClient();
         {
@@ -301,6 +308,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         helper.CreateTestOlapTable();
         NArrow::NConstruction::TStringPoolFiller sPool(3, 52);
         helper.FillTable(sPool, 0, 800000);
+        csController->WaitCompactions(TDuration::Seconds(10));
+
         helper.GetVolumes(rawBytes1, bytes1, false, {"field"});
         auto tableClient = kikimr.GetTableClient();
         {
@@ -354,6 +363,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         for (ui64 i = 0; i < 10; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i*10000, 2000);
         }
+        csController->WaitCompactions(TDuration::Seconds(10));
 
         auto tableClient = kikimr.GetTableClient();
 
@@ -417,6 +427,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i*10000, 3000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable_3", 0, 1000000 + i*10000, 5000);
         }
+        csController->WaitCompactions(TDuration::Seconds(10));
 
         auto tableClient = kikimr.GetTableClient();
 
@@ -502,6 +513,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         for (ui64 i = 0; i < 10; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i*10000, 2000);
         }
+        csController->WaitCompactions(TDuration::Seconds(10));
 
         auto tableClient = kikimr.GetTableClient();
 
@@ -569,10 +581,11 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_3");
 
         for (ui64 i = 0; i < 100; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i*10000, 1000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i*10000, 2000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable_3", 0, 1000000 + i*10000, 3000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i * 10000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i * 10000, 2000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable_3", 0, 1000000 + i * 10000, 3000);
         }
+        csController->WaitCompactions(TDuration::Seconds(10));
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 

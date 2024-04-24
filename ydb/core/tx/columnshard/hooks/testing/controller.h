@@ -206,6 +206,19 @@ protected:
     }
 
 public:
+    void WaitCompactions(const TDuration d) const {
+        TInstant start = TInstant::Now();
+        ui32 compactionsStart = GetCompactionStartedCounter().Val();
+        while (Now() - start < d) {
+            if (compactionsStart != GetCompactionStartedCounter().Val()) {
+                compactionsStart = GetCompactionStartedCounter().Val();
+                start = TInstant::Now();
+            }
+            Cerr << "WAIT_COMPACTION: " << GetCompactionStartedCounter().Val() << Endl;
+            Sleep(TDuration::Seconds(1));
+        }
+    }
+
     virtual TDuration GetRemovedPortionLivetime(const TDuration /*def*/) const override {
         return TDuration::Zero();
     }

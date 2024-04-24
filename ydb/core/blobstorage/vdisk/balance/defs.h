@@ -3,6 +3,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hulllogctx.h>
 
 
@@ -10,6 +11,7 @@ namespace NKikimr {
     struct TBalancingCtx {
         TIntrusivePtr<TVDiskContext> VCtx;
         TPDiskCtxPtr PDiskCtx;
+        THugeBlobCtxPtr HugeBlobCtx;
         TActorId SkeletonId;
         NMonGroup::TBalancingGroup MonGroup;
 
@@ -23,6 +25,7 @@ namespace NKikimr {
         TBalancingCtx(
             TIntrusivePtr<TVDiskContext> vCtx,
             TPDiskCtxPtr pDiskCtx,
+            THugeBlobCtxPtr hugeBlobCtx,
             TActorId skeletonId,
             NKikimr::THullDsSnap snap,
             TIntrusivePtr<TVDiskConfig> vDiskCfg,
@@ -30,6 +33,7 @@ namespace NKikimr {
         )
             : VCtx(std::move(vCtx))
             , PDiskCtx(std::move(pDiskCtx))
+            , HugeBlobCtx(std::move(hugeBlobCtx))
             , SkeletonId(skeletonId)
             , MonGroup(VCtx->VDiskCounters, "subsystem", "balancing")
             , Snap(std::move(snap))

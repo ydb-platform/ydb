@@ -1,4 +1,4 @@
-   Ь# Managing {{ ydb-short-name }} using Terraform
+# Managing {{ ydb-short-name }} using Terraform
 
 [Terraform](https://www.terraform.io/) can create, delete, and modify the following objects inside a {{ ydb-short-name }} cluster:
 

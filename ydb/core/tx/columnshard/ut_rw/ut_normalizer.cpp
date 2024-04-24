@@ -1,3 +1,4 @@
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>

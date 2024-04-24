@@ -5,6 +5,7 @@
 #include <arrow/api.h>
 #include <arrow/ipc/reader.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>

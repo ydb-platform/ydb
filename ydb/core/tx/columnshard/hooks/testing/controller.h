@@ -232,6 +232,36 @@ public:
         }
     }
 
+    template <class TTester>
+    void WaitCondition(const TDuration d, const TTester& test) const {
+        const TInstant start = TInstant::Now();
+        while (TInstant::Now() - start < d) {
+            if (test()) {
+                Cerr << "condition SUCCESS!!..." << TInstant::Now() - start << Endl;
+                return;
+            } else {
+                Cerr << "waiting condition..." << TInstant::Now() - start << Endl;
+                Sleep(TDuration::Seconds(1));
+            }
+        }
+        AFL_VERIFY(false)("reason", "condition not reached");
+    }
+
+    void WaitActualization(const TDuration d) const {
+        TInstant start = TInstant::Now();
+        const i64 startVal = NeedActualizationCount.Val();
+        i64 predVal = NeedActualizationCount.Val();
+        while (TInstant::Now() - start < d && (!startVal || NeedActualizationCount.Val())) {
+            Cerr << "waiting actualization: " << NeedActualizationCount.Val() << "/" << TInstant::Now() - start << Endl;
+            if (NeedActualizationCount.Val() != predVal) {
+                predVal = NeedActualizationCount.Val();
+                start = TInstant::Now();
+            }
+            Sleep(TDuration::Seconds(1));
+        }
+        AFL_VERIFY(!NeedActualizationCount.Val());
+    }
+
     virtual TDuration GetRemovedPortionLivetime(const TDuration /*def*/) const override {
         return TDuration::Zero();
     }
@@ -264,15 +294,6 @@ public:
     void EnableBackground(const EBackground id) {
         TGuard<TMutex> g(Mutex);
         DisabledBackgrounds.erase(id);
-    }
-
-    void WaitActualization(const TDuration d) const {
-        const TInstant start = TInstant::Now();
-        while (TInstant::Now() - start < d && NeedActualizationCount.Val()) {
-            Cerr << "waiting actualization: " << NeedActualizationCount.Val() << "/" << TInstant::Now() - start << Endl;
-            Sleep(TDuration::Seconds(1));
-        }
-        AFL_VERIFY(!NeedActualizationCount.Val());
     }
 
     std::vector<ui64> GetShardActualIds() const {

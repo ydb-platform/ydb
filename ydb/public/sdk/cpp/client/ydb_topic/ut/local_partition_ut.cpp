@@ -611,27 +611,20 @@ namespace NYdb::NTopic::NTests {
         }
 
         Y_UNIT_TEST(DirectWriteWithoutDescribeResourcesPermission) {
-            // It should be possible to use DirectWrite option with UpdateRow permission only.
-            // In this test we don't grant DescribeSchema permission and check that direct write still works.
-
-            auto existingTopic = GetTestParam("existing", "yes") == "yes";
-            auto allowUpdateRow = GetTestParam("update", "allow") == "allow";
-            auto allowDescribe = GetTestParam("describe") == "allow";
-            auto authToken = GetTestParam("token", "x-user-x@builtin");
+            // The DirectWrite option makes the write session send a DescribePartitionRequest to locate the partition's node.
+            // Previously, it required DescribeSchema (DescribeResources) permission. However, this permission is too broad
+            // to be granted to anyone who needs the DirectWrite option. The DescribePartitionRequest should work when either
+            // UpdateRow (WriteTopic) or DescribeSchema permission is granted.
+            //
+            // In this test, we don't grant DescribeSchema permission and check that direct write works anyway.
 
             auto setup = CreateSetup(TEST_CASE_NAME);
-            setup->GetServer().EnableLogs({NKikimrServices::TX_PROXY_SCHEME_CACHE}, NActors::NLog::PRI_TRACE);
+            auto authToken = "x-user-x@builtin";
 
             {
-                // Add UpdateRow permission.
+                // Allow UpdateRow only, no DescribeSchema permission.
                 NACLib::TDiffACL acl;
-                if (allowUpdateRow) {
-                    acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, authToken);
-                }
-                // DescribePartitionRequest should work without DescribeSchema permission.
-                if (allowDescribe) {
-                    acl.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, authToken);
-                }
+                acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, authToken);
                 setup->GetServer().AnnoyingClient->ModifyACL("/Root", TEST_TOPIC, acl.SerializeAsString());
             }
 
@@ -642,14 +635,10 @@ namespace NYdb::NTopic::NTests {
                 .SetLog(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}))
                 .SetAuthToken(authToken);
             TDriver driver(driverConfig);
-
-            auto clientSettings = TTopicClientSettings()
-                .Database("/Root");
-
-            TTopicClient client(driver, clientSettings);
+            TTopicClient client(driver);
 
             auto sessionSettings = TWriteSessionSettings()
-                .Path(existingTopic ? TEST_TOPIC : "non-existent")
+                .Path(TEST_TOPIC)
                 .ProducerId(TEST_MESSAGE_GROUP_ID)
                 .MessageGroupId(TEST_MESSAGE_GROUP_ID)
                 .DirectWriteToPartition(true);
@@ -657,6 +646,18 @@ namespace NYdb::NTopic::NTests {
             auto writeSession = client.CreateSimpleBlockingWriteSession(sessionSettings);
             UNIT_ASSERT(writeSession->Write("message"));
             writeSession->Close();
+
+            TExpectedTrace expected{
+                "InitRequest",
+                "InitResponse partition_id=0",
+                "DescribePartitionRequest partition_id=0",
+                "DescribePartitionResponse partition_id=0 pl_generation=1",
+                "PreferredPartitionLocation Generation=1",
+                "InitRequest pwg_partition_id=0 pwg_generation=1",
+                "InitResponse partition_id=0",
+            };
+            auto const events = tracingBackend->GetEvents();
+            UNIT_ASSERT(expected.Matches(events));
         }
 
         Y_UNIT_TEST(WithoutPartitionWithSplit) {

@@ -162,6 +162,14 @@ void TBaseChangeSender::SendRecords() {
     bool needToResolve = false;
 
     while (it != PendingSent.end()) {
+        if (Enqueued && Enqueued.begin()->Order <= it->first) {
+            break;
+        }
+
+        if (PendingBody && PendingBody.begin()->Order <= it->first) {
+            break;
+        }
+
         if (!it->second->IsBroadcast()) {
             const ui64 partitionId = Resolver->GetPartitionId(it->second);
             if (!Senders.contains(partitionId)) {

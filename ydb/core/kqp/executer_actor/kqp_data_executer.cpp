@@ -1494,6 +1494,7 @@ private:
                 case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                 case NKqpProto::TKqpPhyTableOperation::kReadRange:
                 case NKqpProto::TKqpPhyTableOperation::kLookup: {
+                    YQL_ENSURE(false);
                     bool isFullScan = false;
                     auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv(), isFullScan);
                     auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
@@ -1836,6 +1837,7 @@ private:
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
         size_t sourceScanPartitionsCount = 0;
+        size_t sinksCount = 0;
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
@@ -1879,8 +1881,9 @@ private:
                             if (auto partitionsCount = BuildScanTasksFromSource(
                                     stageInfo,
                                     /* shardsResolved */ StreamResult,
-                                    /* limitTasksPerNode */ StreamResult)) {
-                                sourceScanPartitionsCount += *partitionsCount;
+                                    /* limitTasksPerNode */ StreamResult); partitionsCount.ReadPartitionsCount) {
+                                sourceScanPartitionsCount += *partitionsCount.ReadPartitionsCount;
+                                sinksCount += partitionsCount.SinksCount;
                             } else {
                                 UnknownAffectedShardCount = true;
                             }
@@ -1892,12 +1895,13 @@ private:
                             YQL_ENSURE(false, "unknown source type");
                     }
                 } else if (StreamResult && stageInfo.Meta.IsOlap() && stage.SinksSize() == 0) {
-                    BuildScanTasksFromShards(stageInfo);
+                    sinksCount += BuildScanTasksFromShards(stageInfo).SinksCount;
                 } else if (stageInfo.Meta.IsSysView()) {
-                    BuildSysViewScanTasks(stageInfo);
+                    sinksCount += BuildSysViewScanTasks(stageInfo).SinksCount;
                 } else if (stageInfo.Meta.ShardOperations.empty() || stage.SinksSize() > 0) {
-                    BuildComputeTasks(stageInfo, std::max<ui32>(ShardsOnNode.size(), ResourceSnapshot.size()));
+                    sinksCount += BuildComputeTasks(stageInfo, std::max<ui32>(ShardsOnNode.size(), ResourceSnapshot.size())).SinksCount;
                 } else {
+                    YQL_ENSURE(!UseEvWrite);
                     BuildDatashardTasks(stageInfo);
                 }
 
@@ -1983,11 +1987,11 @@ private:
         TTopicTabletTxs topicTxs;
         TDatashardTxs datashardTxs;
         TEvWriteTxs evWriteTxs;
-        BuildDatashardTxs(datashardTasks, datashardTxs, evWriteTxs, topicTxs);
+        BuildTxs(datashardTasks, datashardTxs, evWriteTxs, topicTxs);
         YQL_ENSURE(evWriteTxs.empty() || datashardTxs.empty());
 
         // Single-shard datashard transactions are always immediate
-        ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) == 1
+        ImmediateTx = (datashardTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount + sinksCount) <= 1
                     && !UnknownAffectedShardCount
                     && evWriteTxs.empty()
                     && !HasOlapTable;
@@ -2016,6 +2020,8 @@ private:
             YQL_ENSURE(!VolatileTx);
             ImmediateTx = true;
         }
+
+        TasksGraph.GetMeta().SetImmediateTx(ImmediateTx);
 
         ComputeTasks = std::move(computeTasks);
         TopicTxs = std::move(topicTxs);
@@ -2189,7 +2195,7 @@ private:
         }
     }
 
-    void BuildDatashardTxs(
+    void BuildTxs(
             THashMap<ui64, TVector<NDqProto::TDqTask*>>& datashardTasks,
             TDatashardTxs& datashardTxs,
             TEvWriteTxs& evWriteTxs,

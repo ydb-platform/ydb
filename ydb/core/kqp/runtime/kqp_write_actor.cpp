@@ -642,7 +642,8 @@ private:
     }
 
     void SendBatchesToShards() {
-        YQL_ENSURE(!ImmediateTx || ShardsInfo.GetShards().size());
+        // TODO: avoid splitting in immediate tx (needs shardhint)
+        YQL_ENSURE(!ImmediateTx || ShardsInfo.GetShards().size() == 1);
 
         for (const size_t shardId : ShardsInfo.GetPendingShards()) {
             const auto& shard = ShardsInfo.GetShard(shardId);
@@ -675,7 +676,6 @@ private:
             // Last immediate write (only for datashard)
             if (shard.GetLock()) {
                 // multi immediate evwrite
-                // TODO: rollback on error!!!
                 auto* locks = evWrite->Record.MutableLocks();
                 locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
                 locks->AddSendingShards(shardId);

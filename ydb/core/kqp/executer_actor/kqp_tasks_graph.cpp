@@ -1045,6 +1045,13 @@ void FillOutputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskOutpu
             sink->SetType(output.SinkType);
             YQL_ENSURE(output.SinkSettings);
             sink->MutableSettings()->CopyFrom(*output.SinkSettings);
+
+            if (sink->GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                NKikimrKqp::TKqpTableSinkSettings settings;
+                YQL_ENSURE(sink->GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                settings.SetImmediateTx(tasksGraph.GetMeta().ImmediateTx);
+                sink->MutableSettings()->PackFrom(settings);
+            }            
             break;
         }
 

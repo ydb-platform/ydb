@@ -724,7 +724,7 @@ message TKqpTableSinkSettings {
     optional uint64 LockTxId = 6;
     optional uint64 LockNodeId = 7;
     optional bool ImmediateTx = 8;
-    optional uint64 ShardIdHint = 9;
+    optional uint64 ShardIdHint = 9; // TODO: faster immediate write
 }
 
 message TKqpStreamLookupSettings {

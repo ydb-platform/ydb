@@ -488,12 +488,9 @@ class YqTenant(BaseTenant):
         if self.compute_services:
             # yq services
             fq_config['pinger']['ping_period'] = "5s"  # == "10s" / 2
-            if self.control_services:
-                fq_config['private_api']['loopback'] = True
-            else:
-                fq_config['private_api']['task_service_endpoint'] = "localhost:" + str(
-                    control_plane.port_allocator.get_node_port_allocator(1).grpc_port)
-                fq_config['private_api']['task_service_database'] = control_plane.tenant_name
+            fq_config['private_api']['task_service_endpoint'] = "localhost:" + str(
+                control_plane.port_allocator.get_node_port_allocator(1).grpc_port)
+            fq_config['private_api']['task_service_database'] = control_plane.tenant_name
             if len(self.config_generator.dc_mapping) > 0:
                 fq_config['nodes_manager']['use_data_center'] = True
             fq_config['enable_task_counters'] = True

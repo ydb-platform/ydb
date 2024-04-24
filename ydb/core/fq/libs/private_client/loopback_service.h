@@ -8,7 +8,7 @@
 
 namespace NFq {
 
-NActors::IActor* CreateLoopbackServiceActor(const ::NFq::TSigner::TPtr& signer,
-                                            const ::NMonitoring::TDynamicCounterPtr& counters);
+NActors::IActor* CreateLoopbackServiceActor(
+    const ::NMonitoring::TDynamicCounterPtr& counters);
 
 } /* NFq */

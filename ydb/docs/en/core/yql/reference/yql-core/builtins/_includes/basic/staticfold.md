@@ -5,7 +5,8 @@ StaticFold(obj:Struct/Tuple, initVal, updateLambda)
 StaticFold1(obj:Struct/Tuple, initLambda, updateLambda)
 ```
 
-Fold over struct/tuple elements.
+Left fold over struct/tuple elements. 
+The folding of tuples is done in order from the element with the lower index to the element with the larger one; for structures, the order is not guaranteed.
 
 - `obj` - object to fold
 - `initVal` - _(for StaticFold)_ initial fold state

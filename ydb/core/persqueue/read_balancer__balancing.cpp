@@ -955,7 +955,11 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, const TActorContext& c
                 // The partition was obtained as a result of the merge.
                 for (auto* c : node->Children) {
                     if (c->Id == family->Id) {
-
+                        continue;
+                    }
+                    auto* other = FindFamily(c->Id);
+                    if (other) {
+                        MergeFamilies(family, other, ctx);
                     }
                 }
             } else {

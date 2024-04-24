@@ -709,17 +709,21 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
     family->UpdateSpecialSessions();
 
     if (destroy) {
-        if (family->Status == TPartitionFamily::EStatus::Active) {
-            family->Release(ctx, TPartitionFamily::EStatus::Destroyed);
-        } else if (family->Status == TPartitionFamily::EStatus::Releasing) {
-            family->TargetStatus = TPartitionFamily::EStatus::Destroyed;
-        } else {
-            // Free
-            family->Reset(TPartitionFamily::EStatus::Destroyed, ctx);
-        }
+        DestroyFamily(family, ctx);
     }
 
     return !newFamilies.empty();
+}
+
+void TConsumer::DestroyFamily(TPartitionFamily* family, const TActorContext& ctx) {
+    if (family->Status == TPartitionFamily::EStatus::Active) {
+        family->Release(ctx, TPartitionFamily::EStatus::Destroyed);
+    } else if (family->Status == TPartitionFamily::EStatus::Releasing) {
+        family->TargetStatus = TPartitionFamily::EStatus::Destroyed;
+    } else {
+        // Free
+        family->Reset(TPartitionFamily::EStatus::Destroyed, ctx);
+    }
 }
 
 TPartitionFamily* TConsumer::FindFamily(ui32 partitionId) {
@@ -901,13 +905,15 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
         GetPartitionGraph().Travers(partitionId, [&](ui32 partitionId) {
             // TODO несколько партиции в одном family
             auto* partition = GetPartition(partitionId);
-            auto* family = FindFamily(partitionId);
+            auto* f = FindFamily(partitionId);
 
-            if (family) {
+            if (f) {
                 if (partition && partition->Reset()) {
-                    family->ActivatePartition(partitionId);
+                    f->ActivatePartition(partitionId);
                 }
-                family->Release(ctx, TPartitionFamily::EStatus::Destroyed);
+                if (f != family) {
+                    DestroyFamily(f, ctx);
+                }
             }
 
             return true;

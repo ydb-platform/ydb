@@ -47,6 +47,8 @@ namespace {
         void ScheduleJobQuant(const TActorId& selfId) {
             Result.resize(Min(Parts.size(), BatchSize));
             ExpectedResponses = 0;
+            THashMap<TVDiskID, std::unique_ptr<TEvBlobStorage::TEvVGet>> vDiskToQueries;
+
             for (ui64 i = 0; i < BatchSize && !Parts.empty(); ++i) {
                 auto key = Parts.front();
                 Parts.pop();
@@ -57,12 +59,18 @@ namespace {
 
                 auto vDiskId = GetMainReplicaVDiskId(*GInfo, key);
 
-                // query which would tell us which parts are realy on main (not by ingress)
-                auto ev = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(
-                    vDiskId, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::AsyncRead,
-                    TEvBlobStorage::TEvVGet::EFlags::None, i,
-                    {{key.FullID(), 0, 0}}
-                );
+                auto& ev = vDiskToQueries[vDiskId];
+                if (!ev) {
+                    ev = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(
+                        vDiskId, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::AsyncRead,
+                        TEvBlobStorage::TEvVGet::EFlags::None, 0
+                    );
+                }
+
+                ev->AddExtremeQuery(key.FullID(), 0, 0, &i);
+            }
+
+            for (auto& [vDiskId, ev]: vDiskToQueries) {
                 ui32 msgSize = ev->CalculateSerializedSize();
                 TReplQuoter::QuoteMessage(
                     Quoter,
@@ -88,11 +96,14 @@ namespace {
             if (msg.GetStatus() != NKikimrProto::EReplyStatus::OK) {
                 return;
             }
-            ui64 i = msg.GetCookie();
-            auto res = msg.GetResult().at(0);
-            for (ui32 partId: res.GetParts()) {
-                if (partId == Result[i].Key.PartId()) {
-                    Result[i].HasOnMain = true;
+
+            for (const auto& res: msg.GetResult()) {
+                auto i = res.GetCookie();
+                Y_DEBUG_ABORT_UNLESS(i < Result.size());
+                for (ui32 partId: res.GetParts()) {
+                    if (partId == Result[i].Key.PartId()) {
+                        Result[i].HasOnMain = true;
+                    }
                 }
             }
         }

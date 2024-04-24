@@ -396,26 +396,21 @@ namespace NYdb::NTopic::NTests {
             for (auto [existing, update, describe, status, issue] : expectations) {
                 auto result = RunPermissionTest(setup, userId++, existing, update, describe);
                 auto resultStatus = result.GetStatus();
-                auto line = TStringBuilder() << "status=" << resultStatus;
+                auto line = TStringBuilder() << "=== status=" << resultStatus;
                 NYql::TIssueCode resultIssue = 0;
                 if (!result.GetIssues().Empty()) {
                     resultIssue = result.GetIssues().begin()->GetCode();
                     line << " issueCode=" << resultIssue;
                 }
-                line << " issues=" << result.GetIssues().ToOneLineString() << Endl;
-                Cerr << line;
+                Cerr << (line << " issues=" << result.GetIssues().ToOneLineString() << Endl);
 
-                if (resultStatus == EStatus::SUCCESS) {
-                    auto& p = result.GetPartitionDescription().GetPartition();
-                    TRACE_LAZY(setup.GetLog(), "PartitionDescription",
-                        TRACE_KV("partition_id", p.GetPartitionId()),
-                        TRACE_KV("is_active", p.GetActive()),
-                        TRACE_IF(p.GetPartitionLocation().Defined(),
-                            TRACE_KV("node_id", p.GetPartitionLocation()->GetNodeId()),
-                            TRACE_KV("generation", p.GetPartitionLocation()->GetGeneration())));
-                }
                 UNIT_ASSERT_EQUAL(resultStatus, status);
                 UNIT_ASSERT_EQUAL(resultIssue, issue);
+                if (resultStatus == EStatus::SUCCESS) {
+                    auto& p = result.GetPartitionDescription().GetPartition();
+                    UNIT_ASSERT(p.GetActive());
+                    UNIT_ASSERT(p.GetPartitionLocation().Defined());
+                }
             }
         }
     }

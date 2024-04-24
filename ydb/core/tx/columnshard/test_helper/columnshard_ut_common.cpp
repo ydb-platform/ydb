@@ -1,7 +1,7 @@
 #include "columnshard_ut_common.h"
 
-#include "common/tests/shard_reader.h"
-#include "engines/reader/sys_view/portions/portions.h"
+#include <ydb/core/tx/columnshard/common/tests/shard_reader.h>
+#include <ydb/core/tx/columnshard/engines/reader/sys_view/portions/portions.h>
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>

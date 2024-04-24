@@ -6,6 +6,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/test_helper/controllers.h>
 
 namespace NKikimr::NKqp {
 
@@ -14,9 +15,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        static ui32 numKinds = 2;
 
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         TLocalHelper(kikimr).CreateTestOlapTable();
         for (ui64 i = 0; i < 100; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 1000);
@@ -26,45 +26,39 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         auto tableClient = kikimr.GetTableClient();
         auto selectQuery = TString(R"(
             SELECT PathId, Kind, TabletId, Sum(Rows) as Rows
-            FROM `/Root/olapStore/.sys/store_primary_index_stats`
+            FROM `/Root/olapStore/.sys/store_primary_index_portion_stats`
             GROUP BY PathId, Kind, TabletId
             ORDER BY TabletId, Kind, PathId
         )");
 
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-        UNIT_ASSERT_VALUES_EQUAL(rows.size(), numKinds*3);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3ull);
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), 3ull);
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("PathId")), 3ull);
         UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
-        UNIT_ASSERT_GE(GetUint64(rows[0].at("TabletId")), 72075186224037888ull);
-        UNIT_ASSERT_GE(GetUint64(rows[2].at("TabletId")), 72075186224037889ull);
-        UNIT_ASSERT_GE(GetUint64(rows[4].at("TabletId")), 72075186224037890ull);
-        UNIT_ASSERT_GE(GetUint64(rows[1].at("TabletId")), GetUint64(rows[0].at("TabletId")));
+        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[1].at("Kind")), "INSERTED");
         UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[2].at("Kind")), "INSERTED");
-        UNIT_ASSERT_GE(GetUint64(rows[2].at("TabletId")), GetUint64(rows[1].at("TabletId")));
-        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[3].at("PathId")), 3ull);
-        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[3].at("Kind")), "SPLIT_COMPACTED");
-        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[3].at("TabletId")), GetUint64(rows[2].at("TabletId")));
-        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[4].at("Kind")), "INSERTED");
-        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[4].at("TabletId")), GetUint64(rows[5].at("TabletId")));
-        UNIT_ASSERT_GE(
-            GetUint64(rows[0].at("Rows")) + GetUint64(rows[1].at("Rows")) + GetUint64(rows[2].at("Rows")) +
-            GetUint64(rows[3].at("Rows")) + GetUint64(rows[4].at("Rows")) + GetUint64(rows[5].at("Rows")),
-            0.3*0.9*100*1000); // >= 90% of 100K inserted rows
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("TabletId")), 72075186224037888ull);
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("TabletId")), 72075186224037889ull);
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("TabletId")), 72075186224037890ull);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetUint64(rows[0].at("Rows")) + GetUint64(rows[1].at("Rows")) + GetUint64(rows[2].at("Rows")),
+            100 * 1000); // >= 90% of 100K inserted rows
     }
 
     Y_UNIT_TEST(StatsSysViewTable) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        static ui32 numKinds = 5;
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
 
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable_1");
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable_2");
         for (ui64 i = 0; i < 10; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i*10000, 1000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i*10000, 2000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i * 10000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i * 10000, 2000);
         }
         csController->WaitCompactions(TDuration::Seconds(10));
 
@@ -79,8 +73,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            UNIT_ASSERT_GT(rows.size(), 1*numKinds);
-            UNIT_ASSERT_LE(rows.size(), 3*numKinds);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("PathId")), 3ull);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.back().at("PathId")), 3ull);
         }
@@ -94,8 +87,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            UNIT_ASSERT_GT(rows.size(), 1*numKinds);
-            UNIT_ASSERT_LE(rows.size(), 3*numKinds);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("PathId")), 4ull);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.back().at("PathId")), 4ull);
         }
@@ -118,8 +110,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 rawBytesPK1;
         ui64 bytesPK1;
         {
-            auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-            csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+            auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
             auto settings = TKikimrSettings()
                 .SetWithSampleTables(false);
             TKikimrRunner kikimr(settings);
@@ -127,10 +118,11 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore12");
             helper.CreateTestOlapTable();
             helper.FillPKOnly(0, 800000);
+            csController->WaitCompactions(TDuration::Seconds(10));
             helper.GetVolumes(rawBytesPK1, bytesPK1, false);
         }
 
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         ui64 rawBytesUnpack1PK = 0;
         ui64 bytesUnpack1PK = 0;
         ui64 rawBytesPackAndUnpack2PK;
@@ -146,6 +138,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             helper.CreateTestOlapTable();
             NArrow::NConstruction::TStringPoolFiller sPool(groupsCount, 52);
             helper.FillTable(sPool, 0, rowsCount);
+            csController->WaitCompactions(TDuration::Seconds(10));
             helper.PrintCount();
             {
                 auto d = helper.GetDistribution();
@@ -154,14 +147,12 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
                 Y_ABORT_UNLESS(d.GetMaxCount() - d.GetMinCount() <= 1);
             }
             helper.GetVolumes(rawBytesUnpack1PK, bytesUnpack1PK, false);
-            Sleep(TDuration::Seconds(5));
             auto tableClient = kikimr.GetTableClient();
             helper.ExecuteSchemeQuery(TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `ENCODING.DICTIONARY.ENABLED`=`true`);");
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field1, `ENCODING.DICTIONARY.ENABLED`=`true`);", NYdb::EStatus::SCHEME_ERROR);
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `ENCODING.DICTIONARY.ENABLED1`=`true`);", NYdb::EStatus::GENERIC_ERROR);
-            Sleep(TDuration::Seconds(5));
             helper.FillTable(sPool, 1, rowsCount);
-            Sleep(TDuration::Seconds(5));
+            csController->WaitCompactions(TDuration::Seconds(10));
             {
                 helper.GetVolumes(rawBytesPackAndUnpack2PK, bytesPackAndUnpack2PK, false);
                 helper.PrintCount();
@@ -174,6 +165,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
                 }
             }
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`);");
+            csController->WaitCompactions(TDuration::Seconds(10));
         }
         const ui64 rawBytesUnpack = rawBytesUnpack1PK - rawBytesPK1;
         const ui64 bytesUnpack = bytesUnpack1PK - bytesPK1;
@@ -192,8 +184,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     Y_UNIT_TEST(StatsSysViewBytesPackActualization) {
         ui64 rawBytesPK1;
         ui64 bytesPK1;
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -230,8 +221,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     Y_UNIT_TEST(StatsSysViewBytesColumnActualization) {
         ui64 rawBytes1;
         ui64 bytes1;
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -260,8 +250,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     Y_UNIT_TEST(StatsSysViewBytesDictActualization) {
         ui64 rawBytes1;
         ui64 bytes1;
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -299,8 +288,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     Y_UNIT_TEST(StatsSysViewBytesDictStatActualization) {
         ui64 rawBytes1;
         ui64 bytes1;
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -356,12 +344,12 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
     Y_UNIT_TEST(StatsSysViewColumns) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable();
         for (ui64 i = 0; i < 10; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i*10000, 2000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 2000);
         }
         csController->WaitCompactions(TDuration::Seconds(10));
 
@@ -398,16 +386,15 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         }
         {
             auto selectQuery = TString(R"(
-                SELECT Sum(Rows) as Rows, Kind, Sum(RawBytes) as RawBytes, Sum(Rows) as Rows2, Sum(Rows) as Rows3, PathId
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                SELECT Sum(Rows) as Rows, Kind, Sum(ColumnRawBytes) as RawBytes, PathId
+                FROM `/Root/olapStore/.sys/store_primary_index_portion_stats`
                 GROUP BY Kind, PathId
-                ORDER BY PathId, Kind, Rows3
+                ORDER BY PathId, Kind, Rows
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("Rows2")), GetUint64(rows[0].at("Rows3")));
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("Rows")), GetUint64(rows[1].at("Rows3")));
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("Rows")), 20000);
         }
     }
 
@@ -423,9 +410,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable_3");
 
         for (ui64 i = 0; i < 10; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i*10000, 2000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i*10000, 3000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable_3", 0, 1000000 + i*10000, 5000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i * 10000, 2000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i * 10000, 3000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable_3", 0, 1000000 + i * 10000, 5000);
         }
         csController->WaitCompactions(TDuration::Seconds(10));
 
@@ -472,12 +459,12 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            ui32 numExpected = 3*3;
+            ui32 numExpected = 3 * 3;
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), numExpected);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5ull);
             UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected-1].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[numExpected-1].at("Kind")), "INSERTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected - 1].at("PathId")), 3ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[numExpected - 1].at("Kind")), "INSERTED");
         }
 
         {
@@ -495,23 +482,23 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            ui32 numExpected = 2*3;
+            ui32 numExpected = 2 * 3;
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), numExpected);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5ull);
             UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected-1].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[numExpected-1].at("Kind")), "INSERTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected - 1].at("PathId")), 3ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[numExpected - 1].at("Kind")), "INSERTED");
         }
     }
 
     Y_UNIT_TEST(StatsSysViewFilter) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
 
         TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable();
         for (ui64 i = 0; i < 10; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i*10000, 2000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 2000);
         }
         csController->WaitCompactions(TDuration::Seconds(10));
 
@@ -560,21 +547,21 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             auto selectQuery = TString(R"(
                 SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE Kind IN ('SPLIT_COMPACTED', 'INACTIVE', 'EVICTED')
+                WHERE Kind IN ('SPLIT_COMPACTED', 'INACTIVE', 'EVICTED', 'INSERTED')
                 GROUP BY PathId, Kind, TabletId
                 ORDER BY PathId, Kind, TabletId;
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            UNIT_ASSERT_GE(rows.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
         }
     }
 
     Y_UNIT_TEST(StatsSysViewAggregation) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
 
         TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_1");
         TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_2");
@@ -697,22 +684,22 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             // 3 Tables with 3 Shards each and 2 KindId-s of stats
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3 * 3 * 2);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3 * 3);
         }
 
         {
             auto selectQuery = TString(R"(
                 SELECT
-                    count(distinct(PathId)),
-                    count(distinct(Kind)),
-                    count(distinct(TabletId))
+                    count(distinct(PathId)) as PathsCount,
+                    count(distinct(Kind)) as KindsCount,
+                    count(distinct(TabletId)) as TabletsCount
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column0")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column1")), 2);
-            UNIT_ASSERT_GE(GetUint64(rows[0].at("column2")), 3ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathsCount")), 3ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("KindsCount")), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("TabletsCount")), 4);
         }
 
         {

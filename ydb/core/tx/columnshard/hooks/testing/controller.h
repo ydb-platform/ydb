@@ -219,6 +219,19 @@ public:
         }
     }
 
+    void WaitIndexation(const TDuration d) const {
+        TInstant start = TInstant::Now();
+        ui32 compactionsStart = GetInsertStartedCounter().Val();
+        while (Now() - start < d) {
+            if (compactionsStart != GetInsertStartedCounter().Val()) {
+                compactionsStart = GetInsertStartedCounter().Val();
+                start = TInstant::Now();
+            }
+            Cerr << "WAIT_INDEXATION: " << GetInsertStartedCounter().Val() << Endl;
+            Sleep(TDuration::Seconds(1));
+        }
+    }
+
     virtual TDuration GetRemovedPortionLivetime(const TDuration /*def*/) const override {
         return TDuration::Zero();
     }

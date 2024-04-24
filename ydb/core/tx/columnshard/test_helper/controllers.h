@@ -37,6 +37,10 @@ protected:
         return TDuration::Seconds(1);
     }
 public:
+    TWaitCompactionController() {
+        SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+    }
+
     ui32 GetFinishedExportsCount() const {
         return ExportsFinishedCount.Val();
     }

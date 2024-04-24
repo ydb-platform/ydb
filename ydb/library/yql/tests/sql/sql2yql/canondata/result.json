@@ -6957,6 +6957,20 @@
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_in-in_noansi_list_dict_/sql.yql"
         }
     ],
+    "test_sql2yql.test[in-in_nonliteral_tuple]": [
+        {
+            "checksum": "ba45ee716aa807a16f1f773edbee5851",
+            "size": 1145,
+            "uri": "https://{canondata_backend}/1937424/677402a69ee72f43067364c12feb7d084f4e8974/resource.tar.gz#test_sql2yql.test_in-in_nonliteral_tuple_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[in-in_nonliteral_tuple_ansi]": [
+        {
+            "checksum": "b02af9e81d355110c65a1245811d28b2",
+            "size": 1153,
+            "uri": "https://{canondata_backend}/1937424/677402a69ee72f43067364c12feb7d084f4e8974/resource.tar.gz#test_sql2yql.test_in-in_nonliteral_tuple_ansi_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[in-in_scalar_vector_subquery]": [
         {
             "checksum": "42ee2811cea6b9225e68b4ac96bbf777",
@@ -25358,6 +25372,20 @@
             "checksum": "14f0a8806e0d3ff56b48eb3bcc5afcd5",
             "size": 438,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_in-in_noansi_list_dict_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[in-in_nonliteral_tuple]": [
+        {
+            "checksum": "931b2ea7e3274b7d33e16887b20f538e",
+            "size": 112,
+            "uri": "https://{canondata_backend}/1937424/677402a69ee72f43067364c12feb7d084f4e8974/resource.tar.gz#test_sql_format.test_in-in_nonliteral_tuple_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[in-in_nonliteral_tuple_ansi]": [
+        {
+            "checksum": "974c0221f872a06d25af87b6b541b4c5",
+            "size": 105,
+            "uri": "https://{canondata_backend}/1937424/677402a69ee72f43067364c12feb7d084f4e8974/resource.tar.gz#test_sql_format.test_in-in_nonliteral_tuple_ansi_/formatted.sql"
         }
     ],
     "test_sql_format.test[in-in_scalar_vector_subquery]": [

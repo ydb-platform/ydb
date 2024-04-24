@@ -213,6 +213,16 @@ class BaseTenant(abc.ABC):
             {"subsystem": "worker_manager", "sensor": "ActiveWorkers"})
         return result if result is not None else 0
 
+    def wait_worker_count(self, node_index, activity, expected_count, timeout=yatest_common.plain_or_under_sanitizer(30, 150)):
+        deadline = time.time() + timeout
+        while True:
+            count = self.get_actor_count(node_index, activity)
+            if count >= expected_count:
+                break
+            assert time.time() < deadline, "Wait actor count failed"
+            time.sleep(yatest_common.plain_or_under_sanitizer(0.5, 2))
+        pass
+
     def get_mkql_limit(self, node_index):
         result = self.get_sensors(node_index, "yq").find_sensor(
             {"subsystem": "worker_manager", "sensor": "MkqlMemoryLimit"})

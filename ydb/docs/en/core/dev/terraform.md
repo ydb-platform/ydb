@@ -1,6 +1,6 @@
 # Managing {{ ydb-short-name }} using Terraform
 
-Using [Terraform](https://www.terraform.io/) you can create, delete, and modify the following objects inside the cluster {{ ydb-short-name }}:
+[Terraform](https://www.terraform.io/) can create, delete, and modify the following objects inside a {{ ydb-short-name }} cluster:
 
 * [tables](../concepts/datamodel/table.md);
 * [indexes](../concepts/secondary_indexes.md) of tables;
@@ -9,7 +9,7 @@ Using [Terraform](https://www.terraform.io/) you can create, delete, and modify 
 
 {% note warning %}
 
-At the moment {{ ydb-short-name }} the provider for Terraform is under development and its functionality will be expanded.
+Currently, the {{ ydb-short-name }}  provider for Terraform is under development and its functionality will be expanded.
 
 {% endnote %}
 
@@ -81,7 +81,7 @@ For ease of use, it is recommended to name terraform files as follows:
 
 ### Database connection (DB) {#connection_string}
 
-For all resources describing data schema objects, you must specify the details of the database in which they are located. To do this, specify one of the two arguments:
+For all resources describing data schema objects, you must specify the database details in which they are located. To do this, provide one of the two arguments:
 
 * The connection string `connection_string` is an expression of the form `grpc(s)://HOST:PORT/?database=/database/path`, where `grpc(s)://HOST:PORT/` endpoint, and `/database/path` is the path of the database.
   For example, `grpcs://example.com:2135?database=/Root/testdb0`.
@@ -89,7 +89,7 @@ For all resources describing data schema objects, you must specify the details o
 
 {% note info %}
 
-If required, the user can transfer the connection string to the database using standard Terraform tools - via [variables](https://developer.hashicorp.com/terraform/language/values/variables).
+The user can transfer the connection string to the database using standard Terraform tools - via [variables](https://developer.hashicorp.com/terraform/language/values/variables).
 
 {% endnote %}
 
@@ -191,13 +191,13 @@ resource "ydb_topic" "test" {
 }
 ```
 
-All resources of the {{ ydb-short-name }} Terraform provider will be described in detail below
+All resources of the {{ ydb-short-name }} Terraform provider will be described in detail below.
 
 ### String table {#ydb-table}
 
 {% note info %}
 
-Working with column tables via Terraform is not yet available.
+Working with column-oriented tables via Terraform is not yet available.
 
 {% endnote %}
 
@@ -242,15 +242,15 @@ Example:
 
 The following arguments are supported:
 
-* `path` - (required) is the path of the table, relative to the root of the database (example - `/path/to/table`).
+* `path` - (required) is the path of the table relative to the root of the database (example - `/path/to/table`).
 * `connection_string` — (required) [connection string](#connection_string).
 
 * `column` — (required) column properties (see the [column](#column) argument).
-* `family` - (optional) is an column group (see the [family](#family) argument).
-* `primary_key` — (required) [primary key](../yql/reference/syntax/create_table.md#columns) of the table, contains an ordered list of column names of the primary key.
+* `family` - (optional) is a column group (see the [family](#family) argument).
+* `primary_key` — (required) [primary key](../yql/reference/syntax/create_table.md#columns) of the table that contains an ordered list of column names of the primary key.
 * `ttl` — (optional) TTL (see the [ttl](#ttl) argument).
 * `partitioning_settings` — (optional) partitioning settings (see the argument [partitioning_settings](#partitioning-settings)).
-* `key_bloom_filter` — (optional) (bool) use [Bloom filter for primary key](../concepts/datamodel/table.md#bloom-filter), default value is false.
+* `key_bloom_filter` — (optional) (bool) use [Bloom filter for primary key](../concepts/datamodel/table.md#bloom-filter), the default value is false.
 * `read_replicas_settings` — (optional) settings for [read replicas](../concepts/datamodel/table.md#read_only_replicas).
 
 #### column {#column}
@@ -259,7 +259,7 @@ The `column` argument describes the [column properties](../yql/reference/syntax/
 
 {% note warning %}
 
-Using Terraform, you cannot delete a column, you can only add it. To delete a column, use the {{ ydb-short-name }} tools, then delete the column from the resource description. When trying to "roll" changes to the columns of the table (changing the type, name), Terraform will not try to delete them, but will try to do an update-in-place, but the changes will not be applied.
+Using Terraform, you cannot only add columns but not delete them. To delete a column, use the {{ ydb-short-name }} tools, then delete the column from the resource description. When trying to apply changes to the table's columns (changing the data type or name), Terraform will not try to delete them but will try to do an update-in-place, though the changes will not be applied.
 
 {% endnote %}
 
@@ -274,10 +274,10 @@ column {
 }
 ```
 
-* `name` - (required) is the name of the column.
-* `type` — (required) [YQL data type](../yql/reference/types/primitive.html) columns. It is allowed to use simple column types. As an example, container types cannot be used as data types of table columns.
+* `name` - (required) is the column's name.
+* `type` — (required) [YQL data type](../yql/reference/types/primitive.html) columns. Simple column types are allowed. However, container types cannot be used as data types of table columns.
 * `family` - (optional) is the name of the column group (see the [family](#family) argument).
-* `not_null` — (optional) column cannot contain `NULL`. Default value: `false`.
+* `not_null` — (optional) column cannot contain `NULL`. The default value: `false`.
 
 #### family {#family}
 
@@ -320,7 +320,7 @@ partitioning_settings {
 * `auto_partitioning_by_size_enabled` — (optional) enabling auto-partitioning by size (bool), enabled by default (true).
 * `auto_partitioning_by_load` — (optional) enabling [autopartition by load](../concepts/datamodel/table.md#auto_partitioning_by_load) (bool), disabled by default (false).
 
-For more information about the parameters and their default values, see the links above.
+See the links above for more information about the parameters and their default values.
 
 #### ttl {#ttl}
 
@@ -332,7 +332,7 @@ Example:
 ttl {
   column_name     = "column_name"
   expire_interval = "PT1H" # 1 hour
-  unit = "seconds" # for numeric column types (non ISO 8601)
+  unit = "seconds" # for numeric column types (non-ISO8601)
 }
 ```
 
@@ -346,7 +346,7 @@ ttl {
 
 ### Secondary index of the table {#ydb-table-index}
 
-The [ydb_table_index](../concepts/secondary_indexes.md) resource is used to work with the table index.
+The [ydb_table_index](../concepts/secondary_indexes.md) resource is used to work with a table index.
 
 Example:
 
@@ -365,11 +365,11 @@ The following arguments are supported:
 
 * `table_path` - is the path of the table. Specified if `table_id` is not specified.
 * `connection_string` — [connection string](#connection_string). Specified if `table_id` is not specified.
-* `table_id` - terraform-table identifier. Specified if `table_path` or `connection_string` is not specified.
+* `table_id` - terraform-table identifier. Specify if `table_path` or `connection_string` is not specified.
 
 * `name` - (required) is the name of the index.
 * `type` - (required) is the index type [global_sync | global_async](../yql/reference/syntax/create_table.md#secondary_index).
-* `columns` - (required) is a ordered list of column names participating in the index.
+* `columns` - (required) is an ordered list of column names participating in the index.
 * `cover` - (required) is a list of additional columns for the covering index.
 
 ### Change Data Capture {#ydb-table-changefeed}
@@ -391,20 +391,20 @@ The following arguments are supported:
 
 * `table_path` - is the path of the table. Specified if `table_id` is not specified.
 * `connection_string` — [connection string](#connection_string). Specified if `table_id` is not specified.
-* `table_id` — terraform-table identifier. Specified if `table_path` or `connection_string` is not specified.
+* `table_id` — terraform-table identifier. Specify if `table_path` or `connection_string` is not specified.
 
 * `name` - (required) is the name of the change stream.
 * `mode` - (required) is the mode of operation of the [change data capture](../yql/reference/syntax/alter_table#changefeed-options).
 * `format` - (required) is the format of the [change data capture](../yql/reference/syntax/alter_table#changefeed-options).
 * `virtual_timestamps` — (optional) using [virtual timestamps](../concepts/cdc.md#virtual-timestamps).
 * `retention_period` — (optional) data storage time in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format.
-* `consumer` - (optional) is an reader of the change data capture (see the argument [#consumer](#consumer)).
+* `consumer` - (optional) is a reader of the change data capture (see the argument [#consumer](#consumer)).
 
 #### consumer {#consumer}
 
 The `consumer` argument describes the [reader](cdc.md#read) of the change data capture.
 
-* `name` - (required) is the name of the reader.
+* `name` - (required) is the reader's name.
 * `supported_codecs` — (optional) supported data codec.
 * `starting_message_timestamp_ms` — (optional) timestamp in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format in milliseconds, from which the reader will start reading the data.
 
@@ -543,7 +543,7 @@ The `ydb_topic` resource is used to work with [topics](../concepts/topic.md)
 
 {% note info %}
 
-The topic cannot be created in the root of the database, you need to specify at least one directory in the name of the topic. When trying to create a topic in the root of the database, the provider will give an error.
+The topic cannot be created in the root of the database; you need to specify at least one directory in the name of the topic. When trying to create a topic in the root of the database, the provider will return an error.
 
 {% endnote %}
 
@@ -581,13 +581,14 @@ The following arguments are supported:
 
 * `name` - (required) is the name of the topic.
 * `database_endpoint` - (required) is the full path to the database, for example: `"grpcs://example.com:2135/?database=/Root/testdb0"`; analogous to `connection_string` for tables.
-* `retention_period_ms` - the duration of data storage in milliseconds, the default value is `86400000` (day).
-* `partitions_count` - the number of partitions, the default value is `2`.
+* `retention_period_ms` - the duration of data storage in milliseconds; the default value is `86400000` (day).
+* `partitions_count` - the number of partitions; the default value is `2`.
 * `supported_codecs` - supported data compression codecs, the default value is `"gzip", "raw", "zstd"`.
 * `consumer` - readers for the topic.
 
 Description of the data consumer `consumer`:
 
-* `name` - (required) is the name of the reader.
+* `name` - (required) is the reader's name.
 * `supported_codecs` - supported data compression encodings, by default - `"gzip", "raw", "zstd"`.
-* `starting_message_timestamp_ms` - timestamp in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format in milliseconds, from which the reader will start reading the data, by default - 0, that is, from the beginning of delivery.
+* `starting_message_timestamp_ms` - timestamp in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format in milliseconds, from which the reader will start reading the data; the default value is  0, which means "from the beginning".
+

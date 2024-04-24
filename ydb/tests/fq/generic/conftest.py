@@ -16,14 +16,18 @@ from utils.settings import Settings
 def settings() -> Settings:
     return Settings.from_env()
 
+@pytest.fixture
+def mvp_external_ydb_endpoint(request) -> str:
+    return request.param["endpoint"] if request is not None else None
+
 
 @pytest.fixture
-def kikimr(request: pytest.FixtureRequest, settings: Settings, yq_version: str):
+def kikimr(request: pytest.FixtureRequest, settings: Settings, yq_version: str, mvp_external_ydb_endpoint: str):
     kikimr_extensions = [
         ConnectorExtension(settings.connector.grpc_host, settings.connector.grpc_port, False),
         TokenAccessorExtension(settings.token_accessor_mock.endpoint, settings.token_accessor_mock.hmac_secret_file),
         MDBExtension(settings.mdb_mock.endpoint),
-        YdbMvpExtension(settings.ydb_mvp_mock.endpoint),
+        YdbMvpExtension(mvp_external_ydb_endpoint),
         YQv2Extension(yq_version),
     ]
     with start_kikimr(request, kikimr_extensions) as kikimr:

@@ -23,12 +23,6 @@ class Settings:
     mdb_mock: MdbMock
 
     @dataclass
-    class YdbMvpMock:
-        endpoint: str
-
-    ydb_mvp_mock: YdbMvpMock
-
-    @dataclass
     class TokenAccessorMock:
         endpoint: str
         hmac_secret_file: str
@@ -72,9 +66,6 @@ class Settings:
             ),
             mdb_mock=cls.MdbMock(
                 endpoint=environ['MDB_MOCK_ENDPOINT'],
-            ),
-            ydb_mvp_mock=cls.YdbMvpMock(
-                endpoint=environ['YDB_MVP_MOCK_ENDPOINT'],
             ),
             token_accessor_mock=cls.TokenAccessorMock(
                 endpoint=environ['TOKEN_ACCESSOR_MOCK_ENDPOINT'],

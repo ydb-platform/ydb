@@ -1034,14 +1034,12 @@ inline bool TComputationContext::CheckAdjustedMemLimit(ui64 memLimit, ui64 initM
 
 void GetDictionaryKeyTypes(const TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash, bool expandTuple = true);
 
+bool GetKeyTypesForContainerHelper(const TType* keyType, TKeyTypes& types, bool& isTupleOrStruct);
 template<bool SupportEqual, bool SupportHash, bool SupportLess>
 class TKeyTypeContanerHelper {
 public:
     TKeyTypeContanerHelper(const TType* type) {
-        bool encoded;
-        bool useIHash;
-        GetDictionaryKeyTypes(type, KeyTypes, IsTuple, encoded, useIHash);
-        if (useIHash) {
+        if (!GetKeyTypesForContainerHelper(type, KeyTypes, IsTuple)) {
             if constexpr(SupportEqual) {
                 Equate = MakeEquateImpl(type);
             }

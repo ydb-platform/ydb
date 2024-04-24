@@ -2,16 +2,18 @@ import logging
 import pytest
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v2
+from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from utils.settings import Settings
 
 
 class TestJoin:
-    @yq_v2
+    @yq_all
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-ydb:2136"}], indirect=True)
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_simple(self, fq_client: FederatedQueryClient, settings: Settings):
+    @pytest.mark.parametrize("query_type", [fq.QueryContent.QueryType.ANALYTICS, fq.QueryContent.QueryType.STREAMING])
+    def test_simple(self, fq_client: FederatedQueryClient, settings: Settings, query_type):
         table_name = 'join_table'
         ch_conn_name = f'ch_conn_{table_name}'
         pg_conn_name = f'pg_conn_{table_name}'
@@ -48,7 +50,7 @@ class TestJoin:
             ON pg.id = ydb.id;
             '''
 
-        query_id = fq_client.create_query(query_name, sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        query_id = fq_client.create_query(query_name, sql, type=query_type).result.query_id
         fq_client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         data = fq_client.get_result_data(query_id)

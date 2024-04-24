@@ -3,6 +3,7 @@
 
 import boto3
 import logging
+import os
 import pytest
 import time
 import ydb.public.api.protos.draft.fq_pb2 as fq
@@ -296,6 +297,7 @@ Pear,15,33'''
 
     @yq_v1
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_checkpoints_on_join_s3_with_yds(self, kikimr, s3, client, unique_prefix):
         # Prepare S3
         resource = boto3.resource(

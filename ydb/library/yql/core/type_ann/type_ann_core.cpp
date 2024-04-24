@@ -12384,7 +12384,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockNot"] = &BlockLogicalWrapper;
         Functions["BlockIf"] = &BlockIfWrapper;
         Functions["BlockJust"] = &BlockJustWrapper;
-        Functions["BlockAsStruct"] = &BlockAsStructWrapper;
         Functions["BlockAsTuple"] = &BlockAsTupleWrapper;
         Functions["BlockMember"] = &BlockMemberWrapper;
         Functions["BlockNth"] = &BlockNthWrapper;

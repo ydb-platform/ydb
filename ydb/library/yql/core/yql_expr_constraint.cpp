@@ -155,7 +155,6 @@ public:
         Functions["Limit"] = &TCallableConstraintTransformer::TakeWrap;
         Functions["Member"] = &TCallableConstraintTransformer::MemberWrap;
         Functions["AsStruct"] = &TCallableConstraintTransformer::AsStructWrap;
-        Functions["BlockAsStruct"] = &TCallableConstraintTransformer::AsStructWrap;
         Functions["Just"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfSortedConstraintNode, TPartOfChoppedConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["Unwrap"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfSortedConstraintNode, TPartOfChoppedConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["Ensure"] = &TCallableConstraintTransformer::CopyAllFrom<0>;

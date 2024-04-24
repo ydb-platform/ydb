@@ -1314,19 +1314,37 @@ void TDescribePartitionActor::Bootstrap(const NActors::TActorContext& ctx) {
     CheckAccessWithUpdateRowPermission = true;
     TBase::Bootstrap(ctx);
     SendDescribeProposeRequest(ctx);
+    Become(&TDescribePartitionActor::StateFirstRequest);
+}
+
+void TDescribePartitionActor::StateFirstRequest(TAutoPtr<IEventHandle>& ev) {
+    ALOG_DEBUG(NKikimrServices::PQ_READ_PROXY, "TDescribePartitionActor" << SelfId() << ": StateFirstRequest");
+    switch (ev->GetTypeRewrite()) {
+        hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleFirstCacheNavigateResponse);
+    }
+}
+
+void TDescribePartitionActor::HandleFirstCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    ALOG_DEBUG(NKikimrServices::PQ_READ_PROXY, "TDescribePartitionActor" << SelfId() << ": HandleFirstCacheNavigateResponse");
+
+    auto const& entries = ev->Get()->Request.Get()->ResultSet;
+    Y_ABORT_UNLESS(entries.size() == 1);
+
+    if (entries.front().Status == NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied) {
+        // We do not have the UpdateRow permission. Check if we're allowed to DescribeSchema.
+        CheckAccessWithUpdateRowPermission = false;
+        SendDescribeProposeRequest(ActorContext());
+    } else {
+        // We do have access to the requested entity or there was an error, let the StateWork method process the response.
+        Send(SelfId(), ev->Release());
+    }
+
     Become(&TDescribePartitionActor::StateWork);
 }
 
 void TDescribePartitionActor::StateWork(TAutoPtr<IEventHandle>& ev) {
+    ALOG_DEBUG(NKikimrServices::PQ_READ_PROXY, "TDescribePartitionActor" << SelfId() << ": StateWork");
     switch (ev->GetTypeRewrite()) {
-        case TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType:
-            if (NeedToRequestWithDescribeSchema(ev)) {
-                // We do not have the UpdateRow permission. Check if we're allowed to DescribeSchema.
-                CheckAccessWithUpdateRowPermission = false;
-                SendDescribeProposeRequest(ActorContext());
-                break;
-            }
-            [[fallthrough]];
         default:
             if (!TDescribeTopicActorImpl::StateWork(ev, ActorContext())) {
                 TBase::StateWork(ev);
@@ -1334,29 +1352,8 @@ void TDescribePartitionActor::StateWork(TAutoPtr<IEventHandle>& ev) {
     }
 }
 
-// Return true if we need to send a second request to SchemeCache with DescribeSchema permission,
-// because the first request checking the UpdateRow permission resulted in an AccessDenied error.
-bool TDescribePartitionActor::NeedToRequestWithDescribeSchema(TAutoPtr<IEventHandle>& ev) {
-    if (!CheckAccessWithUpdateRowPermission) {
-        // We've already sent a request with DescribeSchema, ev is a response to it.
-        return false;
-    }
-
-    auto evNav = *reinterpret_cast<typename TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
-    auto const& entries = evNav->Get()->Request.Get()->ResultSet;
-    Y_ABORT_UNLESS(entries.size() == 1);
-
-    if (entries.front().Status != NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied) {
-        // We do have access to the requested entity or there was an error.
-        // Transfer ownership to the ev pointer, and let the base classes' StateWork methods handle the response.
-        ev = *reinterpret_cast<TAutoPtr<IEventHandle>*>(&evNav);
-        return false;
-    }
-
-    return true;
-}
-
 void TDescribePartitionActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    ALOG_DEBUG(NKikimrServices::PQ_READ_PROXY, "TDescribePartitionActor" << SelfId() << ": HandleCacheNavigateResponse");
     auto const& entries = ev->Get()->Request.Get()->ResultSet;
     Y_ABORT_UNLESS(entries.size() == 1); // describe for only one topic
     if (ReplyIfNotTopic(ev)) {

@@ -253,8 +253,10 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
-    void StateWork(TAutoPtr<IEventHandle>& ev);
+    void StateFirstRequest(TAutoPtr<IEventHandle>& ev);
+    void HandleFirstCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
 
+    void StateWork(TAutoPtr<IEventHandle>& ev);
     void RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode,
                     const Ydb::StatusIds::StatusCode status, const TActorContext& ctx) override;
     void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) override;

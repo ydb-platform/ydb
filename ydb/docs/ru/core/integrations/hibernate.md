@@ -255,7 +255,7 @@ val employee = Employee(
     23
 )
 
-/* SQL will be executed: 
+/* The following SQL will be executed:
 INSERT INTO employee (age,department,email,full_name,hire_date,is_active,limit_date_password,salary,id) 
 VALUES (?,?,?,?,?,?,?,?,?) 
 */
@@ -263,7 +263,7 @@ employeeRepository.save(employee)
 
 assertEquals(employee, employeeRepository.findByIdOrNull(employee.id))
 
-/* SQL will be executed:
+/* The following SQL will be executed: 
 DELETE FROM employee WHERE id=?
  */
 employeeRepository.delete(employee)

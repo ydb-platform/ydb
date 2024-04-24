@@ -57,20 +57,24 @@ struct TPartitionFamily {
     enum class EStatus {
         Active,    // The family are reading
         Releasing, // The family is waiting for partition to be released
-        Free,      // The family isn't reading
-        Destroyed  // The family will destroyed after releasing
+        Free
+    };
+
+    enum class ETargetStatus {
+        Free,      // The family will be free for balancing.
+        Destroy,   // The family will be destroyed after releasing.
+        Merge      // The family will be merged with other family.
     };
 
     TConsumer& Consumer;
 
     size_t Id;
     EStatus Status;
-    EStatus TargetStatus;
+    ETargetStatus TargetStatus;
 
+    std::vector<ui32> RootPartitions;
     // Partitions that are in the family
     std::vector<ui32> Partitions;
-    // Partitions wich was added to the family.
-    std::unordered_set<ui32> AttachedPartitions;
 
     std::unordered_set<ui32> WantedPartitions;
 
@@ -88,27 +92,31 @@ struct TPartitionFamily {
     std::unordered_map<TActorId, TSession*> SpecialSessions;
 
     TActorId LastPipe;
+    size_t MergeTo;
 
     TPartitionFamily(TConsumer& consumerInfo, size_t id, std::vector<ui32>&& partitions);
     ~TPartitionFamily() = default;
 
     bool IsActive() const;
+    bool IsFree() const;
+    bool IsRelesing() const;
 
     bool IsLonely() const;
     bool HasActivePartitions() const;
 
     // Releases all partitions of the family.
-    void Release(const TActorContext& ctx, EStatus targetStatus = EStatus::Free);
+    void Release(const TActorContext& ctx, ETargetStatus targetStatus = ETargetStatus::Free);
     // Processes the signal from the reading session that the partition has been released.
     // Return true if all partitions has been unlocked.
     bool Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx);
     // Processes the signal that the reading session has ended.
     bool Reset(const TActorContext& ctx);
-    bool Reset(EStatus targetStatus, const TActorContext& ctx);
+    bool Reset(ETargetStatus targetStatus, const TActorContext& ctx);
     // Starts reading the family in the specified reading session.
     void StartReading(TSession& session, const TActorContext& ctx);
     // Add partitions to the family.
     void AttachePartitions(const std::vector<ui32>& partitions, const TActorContext& ctx);
+    void Merge(TPartitionFamily* other);
 
     // The partition became active
     void ActivatePartition(ui32 partitionId);
@@ -121,6 +129,7 @@ struct TPartitionFamily {
 
 private:
     void Destroy(const TActorContext& ctx);
+    void AfterRelease();
 
 private:
     const TString& Topic() const;
@@ -202,6 +211,7 @@ struct TConsumer {
     TPartitionFamily* CreateFamily(std::vector<ui32>&& partitions, TPartitionFamily::EStatus status, const TActorContext& ctx);
     bool BreakUpFamily(ui32 partitionId, bool destroy, const TActorContext& ctx);
     bool BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool destroy, const TActorContext& ctx);
+    bool MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, const TActorContext& ctx);
     void DestroyFamily(TPartitionFamily* family, const TActorContext& ctx);
     TPartitionFamily* FindFamily(ui32 partitionId);
 

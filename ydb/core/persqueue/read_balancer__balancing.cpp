@@ -81,9 +81,11 @@ TPartitionFamily::TPartitionFamily(TConsumer& consumerInfo, size_t id, std::vect
     : Consumer(consumerInfo)
     , Id(id)
     , Status(EStatus::Free)
-    , TargetStatus(EStatus::Free)
+    , TargetStatus(ETargetStatus::Free)
+    , RootPartitions(partitions)
     , Partitions(std::move(partitions))
     , Session(nullptr)
+    , MergeTo(0)
 {
     ClassifyPartitions();
     UpdatePartitionMapping(Partitions);
@@ -92,6 +94,14 @@ TPartitionFamily::TPartitionFamily(TConsumer& consumerInfo, size_t id, std::vect
 
 bool TPartitionFamily::IsActive() const {
     return Status == EStatus::Active;
+}
+
+bool TPartitionFamily::IsFree() const {
+    return Status == EStatus::Free;
+}
+
+bool TPartitionFamily::IsRelesing() const {
+    return Status == EStatus::Releasing;
 }
 
 bool TPartitionFamily::IsLonely() const {
@@ -135,7 +145,7 @@ TString TPartitionFamily::GetPrefix() const {
 }
 
 
-void TPartitionFamily::Release(const TActorContext& ctx, EStatus targetStatus) {
+void TPartitionFamily::Release(const TActorContext& ctx, ETargetStatus targetStatus) {
     if (Status != EStatus::Active) {
         LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 GetPrefix() << "releasing the family " << DebugStr() << " that isn't active");
@@ -207,45 +217,42 @@ bool TPartitionFamily::Reset(const TActorContext& ctx) {
     return Reset(TargetStatus, ctx);
 }
 
-bool TPartitionFamily::Reset(EStatus targetStatus, const TActorContext& ctx) {
+bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ctx) {
     if (IsActive()) {
         --Consumer.ActiveFamilyCount;
     }
 
-    Status = targetStatus;
-
     Session->Families.erase(this);
     Session = nullptr;
 
-    if (Status == EStatus::Destroyed) {
-        Destroy(ctx);
-        return false;
-    } else if (Status == EStatus::Free) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << " is free.");
+    switch (targetStatus) {
+        case ETargetStatus::Destroy:
+            Destroy(ctx);
+            return false;
 
-        Consumer.UnreadableFamilies[Id] = this;
-        Consumer.FamiliesRequireBalancing.erase(Id);
+        case ETargetStatus::Free:
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                    GetPrefix() << " is free.");
+
+            Status = EStatus::Free;
+            AfterRelease();
+
+            return true;
+
+        case ETargetStatus::Merge:
+            Status = EStatus::Free;
+            AfterRelease();
+
+            auto it = Consumer.Families.find(MergeTo);
+            if (it == Consumer.Families.end()) {
+                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                        GetPrefix() << " has been released for merge but target family is not exists.");
+                return true;
+            }
+            Consumer.MergeFamilies(it->second.get(), this, ctx);
+
+            return true;
     }
-
-    if (!AttachedPartitions.empty()) {
-
-        auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(AttachedPartitions);
-        ActivePartitionCount -= activePartitionCount;
-        InactivePartitionCount -= inactivePartitionCount;
-
-        // The attached partitions are always at the end of the list.
-        Partitions.resize(Partitions.size() - AttachedPartitions.size());
-        for (auto partitionId : AttachedPartitions) {
-            Consumer.PartitionMapping.erase(partitionId);
-        }
-        AttachedPartitions.clear();
-
-        // After reducing the number of partitions in the family, the list of reading sessions that can read this family may expand.
-        UpdateSpecialSessions();
-    }
-
-    return true;
 }
 
 void TPartitionFamily::Destroy(const TActorContext& ctx) {
@@ -258,6 +265,23 @@ void TPartitionFamily::Destroy(const TActorContext& ctx) {
     Consumer.UnreadableFamilies.erase(Id);
     Consumer.FamiliesRequireBalancing.erase(Id);
     Consumer.Families.erase(Id);
+}
+
+void TPartitionFamily::AfterRelease() {
+    Consumer.UnreadableFamilies[Id] = this;
+    Consumer.FamiliesRequireBalancing.erase(Id);
+
+    for (auto partitionId : Partitions) {
+        Consumer.PartitionMapping.erase(partitionId);
+    }
+
+    Partitions.clear();
+    Partitions.insert(Partitions.end(), RootPartitions.begin(), RootPartitions.end());
+
+    ClassifyPartitions();
+    UpdatePartitionMapping(Partitions);
+    // After reducing the number of partitions in the family, the list of reading sessions that can read this family may expand.
+    UpdateSpecialSessions();
 }
 
 void TPartitionFamily::StartReading(TSession& session, const TActorContext& ctx) {
@@ -294,14 +318,18 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
             GetPrefix() << "attaching partitions [" << JoinRange(", ", partitions.begin(), partitions.end()) << "]");
 
+    std::unordered_set<ui32> existedPartitions;
+    existedPartitions.insert(Partitions.begin(), Partitions.end());
+
     std::vector<ui32> newPartitions;
     newPartitions.reserve(partitions.size());
     for (auto partitionId : partitions) {
-        if (AttachedPartitions.contains(partitionId)) {
+        if (existedPartitions.contains(partitionId)) {
             continue;
         }
 
         newPartitions.push_back(partitionId);
+        existedPartitions.insert(partitionId);
     }
 
     auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(newPartitions);
@@ -338,7 +366,6 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
         Partitions.insert(Partitions.end(), newPartitions.begin(), newPartitions.end());
         UpdatePartitionMapping(newPartitions);
 
-        AttachedPartitions.insert(newPartitions.begin(), newPartitions.end());
         LockedPartitions.insert(newPartitions.begin(), newPartitions.end());
     }
 
@@ -377,6 +404,26 @@ void TPartitionFamily::InactivatePartition(ui32 partitionId) {
         --Session->ActivePartitionCount;
         ++Session->InactivePartitionCount;
     }
+}
+
+void TPartitionFamily::Merge(TPartitionFamily* other) {
+        Partitions.insert(Partitions.end(), other->Partitions.begin(), other->Partitions.end());
+        UpdatePartitionMapping(other->Partitions);
+        other->Partitions.clear();
+
+        RootPartitions.insert(RootPartitions.end(), other->RootPartitions.begin(), other->RootPartitions.end());
+        other->RootPartitions.clear();
+
+        WantedPartitions.insert(other->WantedPartitions.begin(), other->WantedPartitions.end());
+        WantedPartitions.clear();
+
+        ActivePartitionCount += other->ActivePartitionCount;
+        other->ActivePartitionCount = 0;
+
+        InactivePartitionCount += other->InactivePartitionCount;
+        other->InactivePartitionCount = 0;
+
+        UpdateSpecialSessions();
 }
 
 TString TPartitionFamily::DebugStr() const {
@@ -650,7 +697,6 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
                 }
 
                 std::vector<ui32> members;
-                members.push_back(id);
 
                 GetPartitionGraph().Travers(id, [&](auto childId) {
                     if (partitions.contains(childId)) {
@@ -665,12 +711,11 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
                     return false;
                 });
 
-                auto* f = CreateFamily(std::move(members), family->Status, ctx);
+                auto* f = CreateFamily({id}, family->Status, ctx);
+                f->Partitions.insert(f->Partitions.end(), members.begin(), members.end());
                 f->TargetStatus = family->TargetStatus;
                 f->Session = family->Session;
                 f->LockedPartitions = Intercept(family->LockedPartitions, f->Partitions);
-                f->AttachedPartitions = Intercept(family->AttachedPartitions, f->Partitions);
-                f->AttachedPartitions.erase(id);
                 f->LastPipe = family->LastPipe;
                 if (f->Session) {
                     f->Session->Families.insert(f);
@@ -687,8 +732,6 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
             if (locked) {
                 family->LockedPartitions.insert(partitionId);
             }
-
-            family->AttachedPartitions.clear();
 
             family->ClassifyPartitions();
 
@@ -715,14 +758,55 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
     return !newFamilies.empty();
 }
 
+bool TConsumer::MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, const TActorContext& ctx) {
+    if (lhs->IsFree() && rhs->IsFree() ||
+        lhs->IsActive() && rhs->IsActive() && lhs->Session == rhs->Session ||
+        lhs->IsRelesing() && rhs->IsRelesing() && lhs->Session == rhs->Session && lhs->TargetStatus == rhs->TargetStatus) {
+
+        lhs->Merge(rhs);
+        rhs->Destroy(ctx);
+
+        return true;
+    }
+
+    if (lhs->IsFree() && (rhs->IsActive() || rhs->IsRelesing())) {
+        std::swap(lhs, rhs);
+    }
+    if ((lhs->IsActive() || lhs->IsRelesing()) && rhs->IsFree()) {
+        lhs->AttachePartitions(rhs->Partitions, ctx); // TODO root partition
+
+        rhs->Partitions.clear();
+        rhs->Destroy(ctx);
+
+        return false;
+    }
+
+    if (lhs->IsActive() && rhs->IsActive()) { // lhs->Session != rhs->Session
+        rhs->Release(ctx);
+    }
+    if (lhs->IsRelesing() && rhs->IsActive()) {
+        std::swap(rhs, lhs);
+    }
+    if (lhs->IsActive() && rhs->IsRelesing() && rhs->TargetStatus == TPartitionFamily::ETargetStatus::Free) {
+        lhs->TargetStatus = TPartitionFamily::ETargetStatus::Merge;
+        lhs->MergeTo = rhs->Id;
+
+        return false;
+    }
+
+    // In this case, one of the families is either already being merged or is being destroyed. In any case, they cannot be merged.
+
+    return false;
+}
+
 void TConsumer::DestroyFamily(TPartitionFamily* family, const TActorContext& ctx) {
     if (family->Status == TPartitionFamily::EStatus::Active) {
-        family->Release(ctx, TPartitionFamily::EStatus::Destroyed);
+        family->Release(ctx, TPartitionFamily::ETargetStatus::Destroy);
     } else if (family->Status == TPartitionFamily::EStatus::Releasing) {
-        family->TargetStatus = TPartitionFamily::EStatus::Destroyed;
+        family->TargetStatus = TPartitionFamily::ETargetStatus::Destroy;
     } else {
         // Free
-        family->Reset(TPartitionFamily::EStatus::Destroyed, ctx);
+        family->Reset(TPartitionFamily::ETargetStatus::Destroy, ctx);
     }
 }
 
@@ -869,11 +953,7 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, const TActorContext& c
     } else {
         for (auto p : newPartitions) {
             auto* f = FindFamily(p);
-            if (f) {
-                if (f->Status == TPartitionFamily::EStatus::Releasing) {
-                    f->TargetStatus = TPartitionFamily::EStatus::Free;
-                }
-            } else {
+            if (!f) {
                 CreateFamily({p}, ctx);
             }
         }

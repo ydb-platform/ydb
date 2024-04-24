@@ -128,18 +128,17 @@ namespace NKikimr::NGRpcProxy::V1 {
             return false;
         };
 
-        void SendDescribeProposeRequest(const NActors::TActorContext& ctx, bool showPrivate) {
+        void SendDescribeProposeRequest(const NActors::TActorContext& ctx, bool showPrivate, NACLib::EAccessRights access = NACLib::DescribeSchema) {
             auto navigateRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
             if (!SetRequestToken(navigateRequest.get())) {
-                AddIssue(FillIssue("Unauthenticated access is forbidden, please provide credentials",
-                                   Ydb::PersQueue::ErrorCode::ACCESS_DENIED));
+                AddIssue(FillIssue("Unauthenticated access is forbidden, please provide credentials", Ydb::PersQueue::ErrorCode::ACCESS_DENIED));
                 return RespondWithCode(Ydb::StatusIds::UNAUTHORIZED);
             }
 
             navigateRequest->DatabaseName = CanonizePath(Database);
             navigateRequest->ResultSet.emplace_back(NSchemeCache::TSchemeCacheNavigate::TEntry{
                 .Path = NKikimr::SplitPath(GetTopicPath()),
-                .Access = CheckAccessWithUpdateRowPermission ? NACLib::UpdateRow : NACLib::DescribeSchema,
+                .Access = access,
                 .Operation = NSchemeCache::TSchemeCacheNavigate::OpList,
                 .ShowPrivatePath = showPrivate,
                 .SyncVersion = true,
@@ -250,7 +249,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
     protected:
         bool IsDead = false;
-        bool CheckAccessWithUpdateRowPermission = false;
         const TString TopicPath;
         const TString Database;
     };
@@ -329,8 +327,8 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        void SendDescribeProposeRequest(const NActors::TActorContext& ctx, bool showPrivate = false) {
-            return TActorBase::SendDescribeProposeRequest(ctx, showPrivate || PrivateTopicName.Defined());
+        void SendDescribeProposeRequest(const NActors::TActorContext& ctx, bool showPrivate = false, NACLib::EAccessRights access = NACLib::DescribeSchema) {
+            return TActorBase::SendDescribeProposeRequest(ctx, showPrivate || PrivateTopicName.Defined(), access);
         }
 
         bool SetRequestToken(NSchemeCache::TSchemeCacheNavigate* request) const override {

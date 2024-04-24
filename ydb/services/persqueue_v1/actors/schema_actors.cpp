@@ -1311,9 +1311,8 @@ TDescribePartitionActor::TDescribePartitionActor(NKikimr::NGRpcService::IRequest
 
 void TDescribePartitionActor::Bootstrap(const NActors::TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "TDescribePartitionActor" << ctx.SelfID.ToString() << ": Bootstrap");
-    CheckAccessWithUpdateRowPermission = true;
     TBase::Bootstrap(ctx);
-    SendDescribeProposeRequest(ctx);
+    SendDescribeProposeRequest(ctx, false, NACLib::UpdateRow);
     Become(&TDescribePartitionActor::StateFirstRequest);
 }
 
@@ -1330,7 +1329,6 @@ void TDescribePartitionActor::HandleFirstCacheNavigateResponse(TEvTxProxySchemeC
     auto const& entries = ev->Get()->Request.Get()->ResultSet;
     Y_ABORT_UNLESS(entries.size() == 1);
 
-    CheckAccessWithUpdateRowPermission = false;
     if (entries.front().Status == NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied) {
         // We do not have the UpdateRow permission. Check if we're allowed to DescribeSchema.
         SendDescribeProposeRequest(ActorContext());

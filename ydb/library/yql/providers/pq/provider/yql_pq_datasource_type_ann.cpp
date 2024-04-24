@@ -111,7 +111,7 @@ public:
         }
 
         auto format = read.Format().Ref().Content();
-        if (!NCommon::ValidateFormatForInput(
+        if (!State_->IsRtmrMode() && !NCommon::ValidateFormatForInput(
             format,
             schema->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(),
             [](TStringBuf fieldName) {return FindPqMetaFieldDescriptorBySysColumn(TString(fieldName)); },

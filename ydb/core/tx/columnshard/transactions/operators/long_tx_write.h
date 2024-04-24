@@ -4,14 +4,14 @@
 
 namespace NKikimr::NColumnShard {
 
-    class TLongTxTransactionOperator : public TTxController::ITransactionOperatior {
-        using TBase = TTxController::ITransactionOperatior;
+    class TLongTxTransactionOperator : public TTxController::ITransactionOperator {
+        using TBase = TTxController::ITransactionOperator;
         using TProposeResult = TTxController::TProposeResult;
         static inline auto Registrator = TFactory::TRegistrator<TLongTxTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT);
     public:
         using TBase::TBase;
 
-        bool Parse(const TString& data) override {
+        bool Parse(TColumnShard& /*owner*/, const TString& data) override {
             NKikimrTxColumnShard::TCommitTxBody commitTxBody;
             if (!commitTxBody.ParseFromString(data)) {
                 return false;
@@ -31,7 +31,7 @@ namespace NKikimr::NColumnShard {
             }
         }
 
-        TProposeResult Propose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& /*txc*/, bool /*proposed*/) const override {
+        TProposeResult ExecuteOnPropose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& /*txc*/) const override {
             if (WriteIds.empty()) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
                                         TStringBuilder() << "Commit TxId# " << GetTxId() << " has an empty list of write ids");
@@ -55,7 +55,11 @@ namespace NKikimr::NColumnShard {
             return TProposeResult();;
         }
 
-        bool Progress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
+        bool CompleteOnPropose(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) const override {
+            return true;
+        }
+
+        bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
             TBlobGroupSelector dsGroupSelector(owner.Info());
             NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
@@ -78,7 +82,7 @@ namespace NKikimr::NColumnShard {
             return true;
         }
 
-        bool Complete(TColumnShard& owner, const TActorContext& ctx) override {
+        bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) override {
             auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(
                 owner.TabletID(), TxInfo.TxKind, GetTxId(), NKikimrTxColumnShard::SUCCESS);
                 result->Record.SetStep(TxInfo.PlanStep);
@@ -86,7 +90,7 @@ namespace NKikimr::NColumnShard {
             return true;
         }
 
-        bool Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override {
+        virtual bool ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override {
             NIceDb::TNiceDb db(txc.DB);
             for (TWriteId writeId : WriteIds) {
                 owner.RemoveLongTxWrite(db, writeId, GetTxId());
@@ -94,6 +98,9 @@ namespace NKikimr::NColumnShard {
             TBlobGroupSelector dsGroupSelector(owner.Info());
             NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
             owner.InsertTable->Abort(dbTable, WriteIds);
+            return true;
+        }
+        virtual bool CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
             return true;
         }
 

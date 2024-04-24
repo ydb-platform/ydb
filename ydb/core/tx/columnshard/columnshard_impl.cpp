@@ -521,7 +521,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SendPeriodicStats();
 
     if (!TablesManager.HasPrimaryIndex()) {
-        LOG_S_NOTICE("Background activities cannot be started: no index at tablet " << TabletID());
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("problem", "Background activities cannot be started: no index at tablet");
         return;
     }
 //  !!!!!! MUST BE FIRST THROUGH DATA HAVE TO BE SAME IN SESSIONS AFTER TABLET RESTART
@@ -855,11 +855,16 @@ void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, co
 void TColumnShard::SetupCleanupInsertTable() {
     auto writeIdsToCleanup = InsertTable->OldWritesToAbort(AppData()->TimeProvider->Now());
 
+    if (BackgroundController.IsCleanupInsertTableActive()) {
+        ACFL_DEBUG("background", "cleanup_insert_table")("skip_reason", "in_progress");
+        return;
+    }
+
     if (!InsertTable->GetAborted().size() && !writeIdsToCleanup.size()) {
         return;
     }
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "cleanup_started")("aborted", InsertTable->GetAborted().size())("to_cleanup", writeIdsToCleanup.size());
-
+    BackgroundController.StartCleanupInsertTable();
     Execute(new TTxInsertTableCleanup(this, std::move(writeIdsToCleanup)), TActorContext::AsActorContext());
 }
 

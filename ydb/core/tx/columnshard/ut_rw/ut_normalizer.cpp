@@ -1,4 +1,5 @@
-#include "columnshard_ut_common.h"
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -233,6 +234,11 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         {
             auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 20048);
+            while (!csControllerGuard->GetInsertFinishedCounter().Val()) {
+                Cerr << csControllerGuard->GetInsertStartedCounter().Val() << Endl;
+                Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
         }
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
 

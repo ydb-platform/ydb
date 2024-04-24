@@ -12,6 +12,7 @@ private:
     ui32 TiersModificationsCount = 0;
     YDB_READONLY(TAtomicCounter, StatisticsUsageCount, 0);
     YDB_READONLY(TAtomicCounter, MaxValueUsageCount, 0);
+    YDB_ACCESSOR_DEF(std::optional<ui64>, SmallSizeDetector);
 protected:
     virtual void OnTieringModified(const std::shared_ptr<NKikimr::NColumnShard::TTiersManager>& /*tiers*/) override;
     virtual void OnExportFinished() override {
@@ -21,7 +22,7 @@ protected:
         return true;
     }
     virtual ui64 GetSmallPortionSizeDetector(const ui64 /*def*/) const override {
-        return 0;
+        return SmallSizeDetector.value_or(0);
     }
     virtual TDuration GetOptimizerFreshnessCheckDuration(const TDuration /*defaultValue*/) const override {
         return TDuration::Zero();
@@ -29,10 +30,17 @@ protected:
     virtual TDuration GetLagForCompactionBeforeTierings(const TDuration /*def*/) const override {
         return TDuration::Zero();
     }
+    virtual TDuration GetCompactionActualizationLag(const TDuration /*def*/) const override {
+        return TDuration::Zero();
+    }
     virtual TDuration GetTTLDefaultWaitingDuration(const TDuration /*defaultValue*/) const override {
         return TDuration::Seconds(1);
     }
 public:
+    TWaitCompactionController() {
+        SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+    }
+
     ui32 GetFinishedExportsCount() const {
         return ExportsFinishedCount.Val();
     }

@@ -88,6 +88,10 @@ public:
     using TPtr = std::shared_ptr<ICSController>;
     virtual ~ICSController() = default;
 
+    virtual TDuration GetCompactionActualizationLag(const TDuration def) const {
+        return def;
+    }
+
     virtual NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(const NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& /*actions*/) const {
         return original;
     }

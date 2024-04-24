@@ -142,8 +142,8 @@ private:
                 .NotResolved();
         }
 
-        if (!tx.GetRestrictedOperation()) {
-            checks.NotRestricted();
+        if (!tx.GetTemporary()) {
+            checks.NotTemporary();
         }
 
         if (checks) {
@@ -178,8 +178,8 @@ private:
             .IsExternalDataSource()
             .NotUnderOperation();
 
-        if (!tx.GetRestrictedOperation()) {
-            checks.NotRestricted();
+        if (!tx.GetTemporary()) {
+            checks.NotTemporary();
         }
 
         if (!checks) {

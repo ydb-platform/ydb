@@ -196,7 +196,7 @@ private:
                 checks
                     .IsAtLocalSchemeShard()
                     .HasResolvedPrefix()
-                    .NotRestricted();
+                    .NotTemporary();
 
                 if (path.IsResolved()) {
                     checks

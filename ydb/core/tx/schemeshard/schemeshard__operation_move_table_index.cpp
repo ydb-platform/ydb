@@ -367,8 +367,8 @@ public:
                 .NotDeleted()
                 .IsTableIndex();
 
-            if (!Transaction.GetRestrictedOperation()) {
-                checks.NotRestricted();
+            if (!Transaction.GetTemporary()) {
+                checks.NotTemporary();
             }
 
             if (!checks) {
@@ -392,8 +392,8 @@ public:
                 .NotAsyncReplicaTable()
                 .IsUnderTheSameOperation(OperationId.GetTxId());
 
-            if (!Transaction.GetRestrictedOperation()) {
-                checks.NotRestricted();
+            if (!Transaction.GetTemporary()) {
+                checks.NotTemporary();
             }
 
             if (!checks) {
@@ -412,8 +412,8 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved();
 
-            if (!Transaction.GetRestrictedOperation()) {
-                checks.NotRestricted();
+            if (!Transaction.GetTemporary()) {
+                checks.NotTemporary();
             }
 
             if (dstParentPath.IsUnderOperation()) {
@@ -464,8 +464,8 @@ public:
                     .NotResolved();
             }
 
-            if (!Transaction.GetRestrictedOperation()) {
-                checks.NotRestricted();
+            if (!Transaction.GetTemporary()) {
+                checks.NotTemporary();
             }
 
             if (checks) {

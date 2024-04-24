@@ -121,9 +121,9 @@ public:
             return result;
         }
 
-        if (Transaction.HasTempDirOwnerActorId() && !Transaction.GetRestrictedOperation()) {
+        if (Transaction.HasTempDirOwnerActorId() && !Transaction.GetTemporary()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                TStringBuilder() << "It is not allowed to create temporary objects in dirs without restricted flag: " << name);
+                TStringBuilder() << "It is not allowed to create temporary objects without temporary flag: " << name);
             return result;
         }
 
@@ -139,8 +139,8 @@ public:
                 .IsCommonSensePath()
                 .IsLikeDirectory();
             
-            if (!Transaction.GetRestrictedOperation()) {
-                checks.NotRestricted();
+            if (!Transaction.GetTemporary()) {
+                checks.NotTemporary();
             }
 
             if (!checks) {
@@ -171,8 +171,8 @@ public:
                     .NotResolved();
             }
 
-            if (!Transaction.GetRestrictedOperation()) {
-                checks.NotRestricted();
+            if (!Transaction.GetTemporary()) {
+                checks.NotTemporary();
             }
 
             if (checks) {
@@ -235,8 +235,8 @@ public:
         newDir->PathType = TPathElement::EPathType::EPathTypeDir;
         newDir->UserAttrs->AlterData = userAttrs;
         newDir->DirAlterVersion = 1;
-        newDir->Restricted = Transaction.GetRestrictedOperation()
-            || parentPath.Base()->IsRestricted();
+        newDir->Temporary = Transaction.GetTemporary()
+            || parentPath.Base()->IsTemporary();
 
         if (Transaction.HasTempDirOwnerActorId()) {
             newDir->TempDirOwnerActorId = ActorIdFromProto(Transaction.GetTempDirOwnerActorId());

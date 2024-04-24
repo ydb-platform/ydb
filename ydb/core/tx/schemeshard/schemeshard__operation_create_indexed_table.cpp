@@ -78,8 +78,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         .PathsLimit(pathToCreate)
         .ShardsLimit(shardsToCreate);
     
-    if (!tx.GetRestrictedOperation()) {
-        checks.NotRestricted();
+    if (!tx.GetTemporary()) {
+        checks.NotTemporary();
     }
 
     if (!checks) {
@@ -197,7 +197,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     {
         auto scheme = TransactionTemplate(tx.GetWorkingDir(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         scheme.SetFailOnExist(tx.GetFailOnExist());
-        scheme.SetRestrictedOperation(tx.GetRestrictedOperation());
+        scheme.SetTemporary(tx.GetTemporary());
 
         scheme.MutableCreateTable()->CopyFrom(baseTableDescription);
         if (tx.HasAlterUserAttributes()) {
@@ -213,7 +213,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName(),
                 NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
             scheme.SetFailOnExist(tx.GetFailOnExist());
-            scheme.SetRestrictedOperation(tx.GetRestrictedOperation());
+            scheme.SetTemporary(tx.GetTemporary());
 
             scheme.MutableCreateTableIndex()->CopyFrom(indexDescription);
             if (!indexDescription.HasType()) {
@@ -233,7 +233,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName() + "/" + indexDescription.GetName(),
                 NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
             scheme.SetFailOnExist(tx.GetFailOnExist());
-            scheme.SetRestrictedOperation(tx.GetRestrictedOperation());
+            scheme.SetTemporary(tx.GetTemporary());
 
             const auto& implTableColumns = indexes.at(indexDescription.GetName());
 
@@ -251,7 +251,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             tx.GetWorkingDir() + "/" + baseTableDescription.GetName(),
             NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
         scheme.SetFailOnExist(tx.GetFailOnExist());
-        scheme.SetRestrictedOperation(tx.GetRestrictedOperation());
+        scheme.SetTemporary(tx.GetTemporary());
 
         *scheme.MutableSequence() = sequenceDescription;
 

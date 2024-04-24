@@ -260,8 +260,8 @@ public:
                 .IsCommonSensePath()
                 .IsLikeDirectory();
 
-            if (!Transaction.GetRestrictedOperation()) {
-                checks.NotRestricted();
+            if (!Transaction.GetTemporary()) {
+                checks.NotTemporary();
             }
 
             if (!checks) {
@@ -276,8 +276,8 @@ public:
             checks
                 .IsAtLocalSchemeShard();
 
-            if (!Transaction.GetRestrictedOperation()) {
-                checks.NotRestricted();
+            if (!Transaction.GetTemporary()) {
+                checks.NotTemporary();
             }
 
             if (path.IsResolved()) {

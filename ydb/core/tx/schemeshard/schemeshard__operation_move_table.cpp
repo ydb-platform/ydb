@@ -584,8 +584,8 @@ public:
                 .NotUnderTheSameOperation(OperationId.GetTxId())
                 .NotUnderOperation();
 
-            if (!Transaction.GetRestrictedOperation()) {
-                checks.NotRestricted();
+            if (!Transaction.GetTemporary()) {
+                checks.NotTemporary();
             }
 
             if (!checks) {
@@ -604,8 +604,8 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved();
 
-                if (!Transaction.GetRestrictedOperation()) {
-                    checks.NotRestricted();
+                if (!Transaction.GetTemporary()) {
+                    checks.NotTemporary();
                 }
 
                 if (dstParent.IsUnderDeleting()) {
@@ -663,8 +663,8 @@ public:
                     .NotResolved();
             }
 
-            if (!Transaction.GetRestrictedOperation()) {
-                checks.NotRestricted();
+            if (!Transaction.GetTemporary()) {
+                checks.NotTemporary();
             }
 
             if (checks) {

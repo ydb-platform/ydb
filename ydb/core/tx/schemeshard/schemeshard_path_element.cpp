@@ -219,8 +219,8 @@ bool TPathElement::IsView() const {
     return PathType == EPathType::EPathTypeView;
 }
 
-bool TPathElement::IsRestricted() const {
-    return Restricted;
+bool TPathElement::IsTemporary() const {
+    return Temporary;
 }
 
 void TPathElement::SetDropped(TStepId step, TTxId txId) {

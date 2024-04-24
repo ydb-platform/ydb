@@ -111,8 +111,8 @@ class TCreateExternalDataSource : public TSubOperation {
                 .NotResolved();
         }
 
-        if (!tx.GetRestrictedOperation()) {
-            checks.NotRestricted();
+        if (!tx.GetTemporary()) {
+            checks.NotTemporary();
         }
 
         if (checks) {

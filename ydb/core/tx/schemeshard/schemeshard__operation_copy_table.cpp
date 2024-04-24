@@ -431,8 +431,8 @@ public:
                     .NotResolved();
             }
 
-            if (!Transaction.GetRestrictedOperation()) {
-                checks.NotRestricted();
+            if (!Transaction.GetTemporary()) {
+                checks.NotTemporary();
             }
 
             if (checks) {
@@ -726,8 +726,8 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             .NotUnderOperation()
             .IsCommonSensePath(); //forbid copy impl index tables directly
 
-        if (!tx.GetRestrictedOperation()) {
-            checks.NotRestricted();
+        if (!tx.GetTemporary()) {
+            checks.NotTemporary();
         }
 
         if (!checks) {

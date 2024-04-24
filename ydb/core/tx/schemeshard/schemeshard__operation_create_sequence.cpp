@@ -373,8 +373,8 @@ public:
                 .NotUnderDeleting()
                 .IsCommonSensePath();
 
-            if (!Transaction.GetRestrictedOperation()) {
-                checks.NotRestricted();
+            if (!Transaction.GetTemporary()) {
+                checks.NotTemporary();
             }
 
             if (checks) {
@@ -424,8 +424,8 @@ public:
                     .NotResolved();
             }
 
-            if (!Transaction.GetRestrictedOperation()) {
-                checks.NotRestricted();
+            if (!Transaction.GetTemporary()) {
+                checks.NotTemporary();
             }
 
             if (checks) {

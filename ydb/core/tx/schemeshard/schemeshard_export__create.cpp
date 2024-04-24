@@ -209,7 +209,7 @@ private:
                     .NotDeleted()
                     .NotUnderDeleting()
                     .IsTable()
-                    .NotRestricted();
+                    .NotTemporary();
 
                 if (!checks) {
                     explain = checks.GetError();

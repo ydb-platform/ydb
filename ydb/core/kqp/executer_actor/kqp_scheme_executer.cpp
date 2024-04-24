@@ -94,9 +94,9 @@ public:
         }
 
         auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme->SetRestrictedOperation(true);
         modifyScheme->SetWorkingDir(GetSessionDirsBasePath(Database));
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
+        modifyScheme->SetTemporary(true);
         auto* makeDir = modifyScheme->MutableMkDir();
         makeDir->SetName(SessionId);
         ActorIdToProto(KqpTempTablesAgentActor, modifyScheme->MutableTempDirOwnerActorId());
@@ -148,7 +148,7 @@ public:
                     }
                     tableDesc->SetName(GetCreateTempTablePath(Database, SessionId, JoinPath({tableDesc->GetPath(), tableDesc->GetName()})));
                     tableDesc->SetPath(Database);
-                    modifyScheme.SetRestrictedOperation(true);
+                    modifyScheme.SetTemporary(true);
                 }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;

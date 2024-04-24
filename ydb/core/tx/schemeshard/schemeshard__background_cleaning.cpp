@@ -91,7 +91,6 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
         auto tablePath = TPath::Init(tablePathId, this);
 
         auto& modifyScheme = *record.AddTransaction();
-        modifyScheme.SetRestrictedOperation(true);
         modifyScheme.SetWorkingDir(tablePath.Parent().PathString());
         modifyScheme.SetInternal(true);
 
@@ -231,7 +230,6 @@ bool TSchemeShard::ContinueBackgroundCleaning(const TPathId& pathId) {
         auto dirPath = TPath::Init(nextDirPathId, this);
 
         auto& modifyScheme = *record.AddTransaction();
-        modifyScheme.SetRestrictedOperation(true);
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpRmDir);
         modifyScheme.SetWorkingDir(dirPath.Parent().PathString());
         modifyScheme.SetInternal(true);

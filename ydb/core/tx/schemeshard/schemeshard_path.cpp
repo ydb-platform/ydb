@@ -850,14 +850,14 @@ const TPath::TChecker& TPath::TChecker::IsView(EStatus status) const {
     );
 }
 
-const TPath::TChecker& TPath::TChecker::NotRestricted(EStatus status) const {
+const TPath::TChecker& TPath::TChecker::NotTemporary(EStatus status) const {
     if (Failed) {
         return *this;
     }
 
     for (const auto& element : Path.Elements) {
-        if (element->IsRestricted()) {
-            return Fail(status, TStringBuilder() << "path is restricted"
+        if (element->IsTemporary()) {
+            return Fail(status, TStringBuilder() << "path is temporary"
                 << " (" << BasicPathInfo(Path.Base()) << ")"
             );
         }

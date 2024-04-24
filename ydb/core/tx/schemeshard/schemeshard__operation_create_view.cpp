@@ -135,8 +135,8 @@ public:
                 .IsCommonSensePath()
                 .IsLikeDirectory();
 
-            if (!Transaction.GetRestrictedOperation()) {
-                checks.NotRestricted();
+            if (!Transaction.GetTemporary()) {
+                checks.NotTemporary();
             }
 
             if (!checks) {
@@ -160,8 +160,8 @@ public:
                     .NotEmpty();
             }
 
-            if (!Transaction.GetRestrictedOperation()) {
-                checks.NotRestricted();
+            if (!Transaction.GetTemporary()) {
+                checks.NotTemporary();
             }
 
             if (checks) {

@@ -1160,7 +1160,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             auto resultCreateRestricted = session.ExecuteQuery(queryCreateRestricted, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT(!resultCreateRestricted.IsSuccess());
-            UNIT_ASSERT_C(resultCreateRestricted.GetIssues().ToString().Contains("error: path is restricted"), resultCreateRestricted.GetIssues().ToString());
+            UNIT_ASSERT_C(resultCreateRestricted.GetIssues().ToString().Contains("error: path is temporary"), resultCreateRestricted.GetIssues().ToString());
 
             bool allDoneOk = true;
             NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);

@@ -307,8 +307,8 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
             .IsCommonSensePath()
             .IsLikeDirectory();
 
-        if (!Transaction.GetRestrictedOperation()) {
-            checks.NotRestricted();
+        if (!Transaction.GetTemporary()) {
+            checks.NotTemporary();
         }
 
         if (!checks) {
@@ -334,8 +334,8 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
                 .NotResolved();
         }
 
-        if (!Transaction.GetRestrictedOperation()) {
-            checks.NotRestricted();
+        if (!Transaction.GetTemporary()) {
+            checks.NotTemporary();
         }
 
         if (checks) {

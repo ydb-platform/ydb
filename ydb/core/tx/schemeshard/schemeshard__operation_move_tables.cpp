@@ -36,8 +36,8 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
               .NotAsyncReplicaTable()
               .IsCommonSensePath();
 
-        if (!tx.GetRestrictedOperation()) {
-            checks.NotRestricted();
+        if (!tx.GetTemporary()) {
+            checks.NotTemporary();
         }
 
         if (!checks) {

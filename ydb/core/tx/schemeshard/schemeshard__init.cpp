@@ -109,7 +109,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::UserAttrsAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::ACLVersion>(0),
             rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorId>(),
-            rowSet.template GetValueOrDefault<typename SchemaTable::Restricted>()
+            rowSet.template GetValueOrDefault<typename SchemaTable::Temporary>()
         );
     }
 
@@ -152,7 +152,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             path->UserAttrs->AlterVersion,
             path->ACLVersion,
             tempDirOwnerActorId,
-            path->Restricted) = rec;
+            path->Temporary) = rec;
 
         path->PathState = TPathElement::EPathState::EPathStateNoChanges;
         if (path->StepDropped) {

@@ -1947,14 +1947,14 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
         AppTxCounters->TxCumulative(txType, COUNTER_TT_POSTPONED).Increment(1);
 
     // Note: count all new touched pages (were obtained from cache), even not on the first attempt
-    Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(newTouchedBytes);
     Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(newTouchedPages);
+    Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(newTouchedBytes);
     if (pad->Seat->Retries == 1) {
         Counters->Cumulative()[TExecutorCounters::TX_RETRIED].Increment(1);
     }
 
-    Counters->Cumulative()[TExecutorCounters::TX_BYTES_READ].Increment(loadBytes);
     Counters->Cumulative()[TExecutorCounters::TX_CACHE_MISSES].Increment(loadPages);
+    Counters->Cumulative()[TExecutorCounters::TX_BYTES_READ].Increment(loadBytes);
     if (AppTxCounters && txType != UnknownTxType) {
         AppTxCounters->TxCumulative(txType, COUNTER_TT_LOADED_BLOCKS).Increment(loadPages);
         AppTxCounters->TxCumulative(txType, COUNTER_TT_BYTES_READ).Increment(loadBytes);
@@ -1979,8 +1979,8 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
     ui32 newTouchedPages = 0;
     ui64 newTouchedBytes = 0;
     PrivatePageCache->CountNewTouches(seat->Pinned, newTouchedPages, newTouchedBytes);
-    Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(newTouchedBytes);
     Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(newTouchedPages);
+    Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(newTouchedBytes);
 
     UnpinTransactionPages(*seat);
 

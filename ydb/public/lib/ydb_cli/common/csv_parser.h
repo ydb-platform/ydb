@@ -24,14 +24,11 @@ public:
                const std::map<TString, TType>* paramTypes = nullptr,
                const std::map<TString, TString>* paramSources = nullptr);
 
-    void GetParams(TString&& data, TParamsBuilder& builder) const;
-    void GetValue(TString&& data, TValueBuilder& builder, const TType& type) const;
+    void GetParams(ui64 line, TString&& data, TParamsBuilder& builder) const;
+    void GetValue(ui64 line, TString&& data, TValueBuilder& builder, const TType& type) const;
     TType GetColumnsType() const;
-    TStringBuf Consume(NCsvFormat::CsvSplitter& splitter) const;
 
 private:
-    TValue FieldToValue(TTypeParser& parser, TStringBuf token) const;
-
     TVector<TString> Header;
     TString HeaderRow;
     char Delimeter;

@@ -41,6 +41,7 @@ private:
     THolder<IParamStream> Input;
     bool IsFirstEncounter = true;
     size_t SkipRows = 0;
+    ui64 Row = 0;
     char Delimiter;
     TCsvParser CsvParser;
 

@@ -449,12 +449,12 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
     std::vector<TAsyncStatus> inFlightRequests;
     std::vector<TString> buffer;
 
-    auto upsertCsv = [&](std::vector<TString>&& buffer) {
+    auto upsertCsv = [&](ui64 row, std::vector<TString>&& buffer) {
         TValueBuilder builder;
         builder.BeginList();
         for (auto&& line : buffer) {
             builder.AddListItem();
-            parser.GetValue(std::move(line), builder, lineType);
+            parser.GetValue(row, std::move(line), builder, lineType);
         }
         builder.EndList();
         return UpsertTValueBuffer(dbPath, builder).ExtractValueSync();
@@ -491,8 +491,8 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
             progressCallback(readBytes, *inputSizeHint);
         }
 
-        auto asyncUpsertCSV = [&, buffer = std::move(buffer)]() mutable {
-            return upsertCsv(std::move(buffer));
+        auto asyncUpsertCSV = [&upsertCsv, row, buffer = std::move(buffer)]() mutable {
+            return upsertCsv(row, std::move(buffer));
         };
 
         batchBytes = 0;
@@ -507,7 +507,7 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
     }
 
     if (!buffer.empty() && countInput.Counter() > 0) {
-        upsertCsv(std::move(buffer));
+        upsertCsv(row, std::move(buffer));
     }
 
     return WaitForQueue(0, inFlightRequests);
@@ -536,7 +536,7 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath, const TStr
                 builder.BeginList();
                 for (auto&& line : buffer) {
                     builder.AddListItem();
-                    parser.GetValue(std::move(line), builder, lineType);
+                    parser.GetValue(0, std::move(line), builder, lineType);
                 }
                 builder.EndList();
                 return UpsertTValueBuffer(dbPath, builder);

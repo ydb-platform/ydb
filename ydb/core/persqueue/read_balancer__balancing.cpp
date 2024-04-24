@@ -949,7 +949,19 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, const TActorContext& c
     });
 
     if (partition.NeedReleaseChildren()) {
-        family->AttachePartitions(newPartitions, ctx);
+        for (auto id : newPartitions) {
+            auto* node = GetPartitionGraph().GetPartition(id);
+            if (node->Children.size() > 1) {
+                // The partition was obtained as a result of the merge.
+                for (auto* c : node->Children) {
+                    if (c->Id == family->Id) {
+
+                    }
+                }
+            } else {
+                family->AttachePartitions(newPartitions, ctx);
+            }
+        }
     } else {
         for (auto p : newPartitions) {
             auto* f = FindFamily(p);

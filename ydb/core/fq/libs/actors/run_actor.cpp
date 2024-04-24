@@ -1528,7 +1528,7 @@ private:
         bool enableCheckpointCoordinator =
             Params.QueryType == FederatedQuery::QueryContent::STREAMING && 
             Params.Config.GetCheckpointCoordinator().GetEnabled() && 
-            !dqConfiguration->DisableCheckpointsForStreamingQueries.Get().GetOrElse(false);
+            !dqConfiguration->DisableCheckpoints.Get().GetOrElse(false);
 
         ExecuterId = Register(NYql::NDq::MakeDqExecuter(MakeNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, QueryCounters.Counters, TInstant::Now(), enableCheckpointCoordinator));
 

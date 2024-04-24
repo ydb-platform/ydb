@@ -40,7 +40,7 @@ class TestPqReadWrite(TestYdsBase):
         self.init_topics("pq_test_pq_read_write")
         sql = Rf'''
             PRAGMA dq.MaxTasksPerStage="2";
-            PRAGMA dq.DisableCheckpointsForStreamingQueries="{not with_checkpoints}";
+            PRAGMA dq.DisableCheckpoints="{not with_checkpoints}";
 
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT STREAM
@@ -119,7 +119,7 @@ class TestPqReadWrite(TestYdsBase):
         self.init_topics("pq_test_pq_read_schema_metadata")
         sql = Rf'''
                 PRAGMA dq.MaxTasksPerStage="2";
-                PRAGMA dq.DisableCheckpointsForStreamingQueries="{not with_checkpoints}";
+                PRAGMA dq.DisableCheckpoints="{not with_checkpoints}";
 
                 INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
                 SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow())))

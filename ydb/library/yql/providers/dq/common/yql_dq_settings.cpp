@@ -97,7 +97,7 @@ TDqConfiguration::TDqConfiguration() {
         });
 
     REGISTER_SETTING(*this, _MaxAttachmentsSize);
-    REGISTER_SETTING(*this, DisableCheckpointsForStreamingQueries);
+    REGISTER_SETTING(*this, DisableCheckpoints);
 }
 
 } // namespace NYql

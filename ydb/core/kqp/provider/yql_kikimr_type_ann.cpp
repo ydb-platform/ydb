@@ -293,6 +293,96 @@ namespace {
         }
         return true;
     }
+
+    bool ParseConstraintNode(TExprContext& ctx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple, TCoNameValueTuple constraint,  TKikimrConfiguration& config, bool isAlter = false) {
+        auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
+        auto typeNode = columnTuple.Item(1);
+
+        auto columnName = TString(nameNode.Value());
+        auto columnType = typeNode.Ref().GetTypeAnn();
+        auto type = columnType->Cast<TTypeExprType>()->GetType();
+        auto isOptional = type->GetKind() == ETypeAnnotationKind::Optional;
+        auto actualType = !isOptional ? type : type->Cast<TOptionalExprType>()->GetItemType();
+        if (constraint.Name() == "default") {
+            auto defaultType = constraint.Value().Ref().GetTypeAnn();
+            YQL_ENSURE(constraint.Value().IsValid());
+            TExprBase constrValue = constraint.Value().Cast();
+
+            if (!config.EnableColumnsWithDefault) {
+                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                    "Columns with default values are not supported yet."));
+                return false;
+            }
+
+            const bool isNull = IsPgNullExprNode(constrValue) || defaultType->HasNull();
+            if (isNull && columnMeta.NotNull) {
+                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
+                    << " is nullable or optional, but column has not null constraint. "));
+                return false;
+            }
+
+            // unwrap optional
+            if (defaultType->GetKind() == ETypeAnnotationKind::Optional) {
+                defaultType = defaultType->Cast<TOptionalExprType>()->GetItemType();
+            }
+
+            if (defaultType->GetKind() != actualType->GetKind()) {
+                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
+                    << " type mismatch, expected: " << (*actualType) << ", actual: " << *(defaultType)));
+                return false;
+            }
+
+            bool skipAnnotationValidation = false;
+            if (defaultType->GetKind() == ETypeAnnotationKind::Pg) {
+                auto defaultPgType = defaultType->Cast<TPgExprType>();
+                if (defaultPgType->GetName() == "unknown") {
+                    skipAnnotationValidation = true;
+                }
+            }
+
+            if (!skipAnnotationValidation && !IsSameAnnotation(*defaultType, *actualType)) {
+                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
+                    << " type mismatch, expected: " << (*actualType) << ", actual: " << *(defaultType)));
+                    return false;
+            }
+
+            if (columnMeta.IsDefaultKindDefined()) {
+                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default setting for " << columnName
+                    << " column is already set: "
+                    << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
+                return false;
+            }
+
+            columnMeta.SetDefaultFromLiteral();
+            auto err = FillLiteralProto(constrValue, actualType, columnMeta.DefaultFromLiteral);
+            if (err) {
+                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), err.value()));
+                return false;
+            }
+
+        } else if (constraint.Name().Value() == "serial") {
+            if (isAlter) {
+                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                     "Column addition with serial data type is unsupported"));
+                return false;
+            }
+
+            if (columnMeta.IsDefaultKindDefined()) {
+                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default setting for "
+                    << columnName << " column is already set: "
+                    << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
+                return false;
+            }
+
+            columnMeta.DefaultFromSequence = "_serial_column_" + columnMeta.Name;
+            columnMeta.SetDefaultFromSequence();
+            columnMeta.NotNull = true;
+        } else if (constraint.Name().Value() == "not_null") {
+            columnMeta.NotNull = true;
+        }
+
+        return true;
+    }
 }
 
 class TKiSinkTypeAnnotationTransformer : public TKiSinkVisitorTransformer
@@ -777,119 +867,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             if (columnTuple.Size() > 2) {
                 const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                 for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
-                    if (constraint.Name().Value() == "default") {
-                        auto defaultType = constraint.Value().Ref().GetTypeAnn();
-
-                        if (!SessionCtx->Config().EnableColumnsWithDefault) {
-                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                                "Columns with default values are not supported yet."));
-                            return TStatus::Error;
-                        }
-
-                        if (defaultType->HasNull() && columnMeta.NotNull) {
-                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
-                                << " is nullable or optional, but column has not null constraint. "));
-                            return TStatus::Error;
-                        }
-
-                        if (defaultType->GetKind() != actualType->GetKind()) {
-                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
-                                << " type mismatch, expected: " << (*actualType) << ", actual: " << *(defaultType)));
-
-                            return TStatus::Error;
-                        }
-
-                        bool skipAnnotationValidation = false;
-                        if (defaultType->GetKind() == ETypeAnnotationKind::Pg) {
-                            auto defaultPgType = defaultType->Cast<TPgExprType>();
-                            if (defaultPgType->GetName() == "unknown") {
-                                skipAnnotationValidation = true;
-                            }
-                        }
-
-                        if (!skipAnnotationValidation) {
-                            if (!IsSameAnnotation(*defaultType, *actualType)) {
-                                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
-                                    << " type mismatch, expected: " << (*actualType) << ", actual: " << *(defaultType)));
-                                return TStatus::Error;
-                            }
-                        }
-
-                        if (columnMeta.IsDefaultKindDefined()) {
-                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default setting for " << columnName
-                                << " column is already set: "
-                                << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
-                            return TStatus::Error;
-                        }
-
-                        columnMeta.SetDefaultFromLiteral();
-
-                        YQL_ENSURE(constraint.Value().IsValid());
-                        const auto& constrValue = constraint.Value().Cast();
-                        bool isPgNull = constrValue.Ptr()->IsCallable() &&
-                            constrValue.Ptr()->Content() == "PgCast" && constrValue.Ptr()->ChildrenSize() >= 1 &&
-                            constrValue.Ptr()->Child(0)->IsCallable() && constrValue.Ptr()->Child(0)->Content() == "Null";
-
-                        if (constrValue.Maybe<TCoPgConst>() || isPgNull) {
-                            auto actualPgType = actualType->Cast<TPgExprType>();
-                            YQL_ENSURE(actualPgType);
-
-                            auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
-                            if (!typeDesc) {
-                                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                                    TStringBuilder() << "Failed to parse default expr typename " << actualPgType->GetName()));
-                                return TStatus::Error;
-                            }
-
-                            if (isPgNull) {
-                                if (columnMeta.NotNull) {
-                                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
-                                        << " is nullable or optional, but column has not null constraint. "));
-                                    return TStatus::Error;
-                                }
-
-                                columnMeta.DefaultFromLiteral.mutable_value()->set_null_flag_value(NProtoBuf::NULL_VALUE);
-
-                            } else {
-                                YQL_ENSURE(constrValue.Maybe<TCoPgConst>());
-                                auto pgConst = constrValue.Cast<TCoPgConst>();
-                                TString content = TString(pgConst.Value().Value());
-                                auto parseResult = NKikimr::NPg::PgNativeBinaryFromNativeText(content, typeDesc);
-                                if (parseResult.Error) {
-                                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                                        TStringBuilder() << "Failed to parse default expr for typename " << actualPgType->GetName()
-                                        << ", error reason: " << *parseResult.Error));
-                                    return TStatus::Error;
-                                }
-
-                                columnMeta.DefaultFromLiteral.mutable_value()->set_bytes_value(parseResult.Str);
-                            }
-
-                            auto* pg = columnMeta.DefaultFromLiteral.mutable_type()->mutable_pg_type();
-                            pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
-                            pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
-                        } else if (auto literal = constrValue.Maybe<TCoDataCtor>()) {
-                            FillLiteralProto(literal.Cast(), columnMeta.DefaultFromLiteral);
-                        } else {
-                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                                TStringBuilder() << "Unsupported type of default value"));
-                            return TStatus::Error;
-                        }
-
-                    } else if (constraint.Name().Value() == "serial") {
-
-                        if (columnMeta.IsDefaultKindDefined()) {
-                            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder() << "Default setting for "
-                                << columnName << " column is already set: "
-                                << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
-                            return TStatus::Error;
-                        }
-
-                        columnMeta.DefaultFromSequence = "_serial_column_" + columnMeta.Name;
-                        columnMeta.SetDefaultFromSequence();
-                        columnMeta.NotNull = true;
-                    } else if (constraint.Name().Value() == "not_null") {
-                        columnMeta.NotNull = true;
+                    if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, SessionCtx->Config())) {
+                        return TStatus::Error;
                     }
                 }
             }
@@ -1297,23 +1276,14 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         return IGraphTransformer::TStatus::Error;
                     }
 
+                    TKikimrColumnMetadata columnMeta;
+                    // columnMeta.Name = columnName;
+                    columnMeta.Type = GetColumnTypeName(actualType);
                     if (columnTuple.Size() > 2) {
                         const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                         for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
-                            if (constraint.Name().Value() == "default") {
-                                auto defaultType = constraint.Value().Ref().GetTypeAnn();
-
-                                if (!SessionCtx->Config().EnableColumnsWithDefault) {
-                                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                                        "Columns with default values are not supported yet."));
-                                    return TStatus::Error;
-                                }
-
-                                if (!IsSameAnnotation(*defaultType, *actualType)) {
-                                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << name
-                                        << " type mismatch, expected: " << (*type) << ", actual: " << *(actualType)));
-                                    return TStatus::Error;
-                                }
+                            if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, SessionCtx->Config(), true)) {
+                                return TStatus::Error;
                             }
                         }
                     }

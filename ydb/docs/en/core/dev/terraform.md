@@ -1,15 +1,15 @@
-# Managing {{ ydb-short-name }} using Terraform
+   Ь# Managing {{ ydb-short-name }} using Terraform
 
-[Terraform](https://www.terraform.io/) can create, delete, and modify the following objects inside a {{ ydb-short-name }} cluster :
+[Terraform](https://www.terraform.io/) can create, delete, and modify the following objects inside a {{ ydb-short-name }} cluster:
 
-* [tables](../concepts/datamodel/table.md);
-* [indexes](../concepts/secondary_indexes.md) of tables;
-* [change data capture](../concepts/cdc.md) for tables;
-* [topics](../concepts/topic.md).
+* [tables](../concepts/datamodel/table.md)
+* [indexes](../concepts/secondary_indexes.md) of tables
+* [change data capture](../concepts/cdc.md) for tables
+* [topics](../concepts/topic.md)
 
 {% note warning %}
 
-Currently, the {{ ydb-short-name }}  provider for Terraform is under development and its functionality will be expanded.
+Currently, the {{ ydb-short-name }}  provider for Terraform is under development, and its functionality will be expanded.
 
 {% endnote %}
 

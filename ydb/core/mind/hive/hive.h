@@ -202,6 +202,10 @@ TResourceNormalizedValues NormalizeRawValues(const TResourceRawValues& values, c
 NMetrics::EResource GetDominantResourceType(const TResourceRawValues& values, const TResourceRawValues& maximum);
 NMetrics::EResource GetDominantResourceType(const TResourceNormalizedValues& normValues);
 
+// We calculate resource standard deviation to eliminate pointless tablet moves
+// Because counter is by default normalized by 1 000 000, a single tablet move
+// might have a very small effect on overall deviation. We must not let numerical
+// error be larger than the effect, so we use a more stable algorithm for computing the sum:
 // https://en.wikipedia.org/wiki/Kahan_summation_algorithm
 template<std::ranges::range TRange>
 std::ranges::range_value_t<TRange> StableSum(const TRange& values) {

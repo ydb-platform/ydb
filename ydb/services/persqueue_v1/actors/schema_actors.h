@@ -267,10 +267,6 @@ public:
     virtual void Reply(const TActorContext& ctx) override;
 
 private:
-
-    bool NeedToRequestWithDescribeSchema(TAutoPtr<IEventHandle>& ev);
-
-private:
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
     Ydb::Topic::DescribePartitionResult Result;
 };

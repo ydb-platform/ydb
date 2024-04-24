@@ -96,8 +96,9 @@ public:
         const TCheckpointId& checkpointId,
         const NYql::NDq::TComputeActorState& state)
     {
-        auto issues = storage->SaveState(taskId, graphId, checkpointId, state).GetValueSync();
+        auto [size, issues] = storage->SaveState(taskId, graphId, checkpointId, state).GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
+        UNIT_ASSERT(size > 0);
     }
 
     NYql::NDq::TComputeActorState GetState(
@@ -114,8 +115,9 @@ public:
 
     void ShouldSaveGetStateImpl(const char* tablePrefix, const NYql::NDq::TComputeActorState& state) {
         auto storage = GetStateStorage(tablePrefix);
-        auto issues = storage->SaveState(1, "graph1", CheckpointId1, state).GetValueSync();
+        auto [size, issues] = storage->SaveState(1, "graph1", CheckpointId1, state).GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
+        UNIT_ASSERT(size > 0);
 
         auto [states, getIssues] = storage->GetState({1}, "graph1", CheckpointId1).GetValueSync();
         UNIT_ASSERT_C(getIssues.Empty(), getIssues.ToString());
@@ -326,8 +328,9 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
     Y_UNIT_TEST_F(ShouldIssueErrorOnNonExistentState, TFixture) {
         auto storage = GetStateStorage("TStateStorageTestShouldIssueErrorOnNonExistentState");
 
-        auto issues = storage->SaveState(1, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
+        auto [size, issues] = storage->SaveState(1, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
         UNIT_ASSERT(issues.Empty());
+        UNIT_ASSERT(size > 0);
 
         auto getResult = storage->GetState({1}, "graph1", CheckpointId1).GetValueSync();
         UNIT_ASSERT(getResult.second.Empty());
@@ -347,13 +350,14 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         auto state3 = MakeStateFromBlob(YdbRowSizeLimit * 6);
         auto state4 = MakeIncrementState(YdbRowSizeLimit * 3);
 
-        auto issues = storage->SaveState(1, "graph1", CheckpointId1, state1).GetValueSync();
+        auto [size, issues] = storage->SaveState(1, "graph1", CheckpointId1, state1).GetValueSync();
         UNIT_ASSERT(issues.Empty());
-        issues = storage->SaveState(42, "graph1", CheckpointId1, state2).GetValueSync();
+        UNIT_ASSERT(size > 0);
+        issues = storage->SaveState(42, "graph1", CheckpointId1, state2).GetValueSync().second;
         UNIT_ASSERT(issues.Empty());
-        issues = storage->SaveState(7, "graph1", CheckpointId1, state3).GetValueSync();
+        issues = storage->SaveState(7, "graph1", CheckpointId1, state3).GetValueSync().second;
         UNIT_ASSERT(issues.Empty());
-        issues = storage->SaveState(13, "graph1", CheckpointId1, state4).GetValueSync();
+        issues = storage->SaveState(13, "graph1", CheckpointId1, state4).GetValueSync().second;
         UNIT_ASSERT(issues.Empty());
 
         auto [states, getIssues] = storage->GetState({1, 42, 7, 13}, "graph1", CheckpointId1).GetValueSync();

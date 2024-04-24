@@ -295,7 +295,7 @@ public:
 
     TFuture<TIssues> Init() override;
 
-    TFuture<TIssues> SaveState(
+    TFuture<TSaveStateResult> SaveState(
         ui64 taskId,
         const TString& graphId,
         const TCheckpointId& checkpointId,
@@ -332,8 +332,9 @@ private:
     TFuture<TStatus> ListStates(
         const TContextPtr& context);
 
-    std::list<TString> SerializeState(
-        const NYql::NDq::TComputeActorState& state);
+    size_t SerializeState(
+        const NYql::NDq::TComputeActorState& state,
+        std::list<TString>& outSerializedState);
     
     EStateType DeserializeState(
         TContext::TaskInfo& taskInfo);
@@ -424,26 +425,30 @@ EStateType TStateStorage::DeserializeState(TContext::TaskInfo& taskInfo) {
     return TIncrementLogic::GetStateType(state);
 }
 
-std::list<TString> TStateStorage::SerializeState(const NYql::NDq::TComputeActorState& state) {
-    std::list<TString> result;
+size_t TStateStorage::SerializeState(
+    const NYql::NDq::TComputeActorState& state,
+    std::list<TString>& outSerializedState) {
+    outSerializedState.clear();
+
     TString serializedState;
     if (!state.SerializeToString(&serializedState)) {
-        return result;
+        return 0;
     }
 
     auto size = serializedState.size();
+    size_t result = size;
     size_t rowLimit = Config.GetStateStorageLimits().GetMaxRowSizeBytes();
     size_t offset = 0;
     while (size) {
         size_t chunkSize = (rowLimit && (size > rowLimit)) ? rowLimit : size;
-        result.push_back(serializedState.substr(offset, chunkSize));
+        outSerializedState.push_back(serializedState.substr(offset, chunkSize));
         offset += chunkSize;
         size -= chunkSize;
     }
     return result;
 }
 
-TFuture<TIssues> TStateStorage::SaveState(
+TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
     ui64 taskId,
     const TString& graphId,
     const TCheckpointId& checkpointId,
@@ -451,15 +456,16 @@ TFuture<TIssues> TStateStorage::SaveState(
 
     std::list<TString> serializedState;
     EStateType type = EStateType::Snapshot;
+    size_t size = 0;
 
     try {
         type = TIncrementLogic::GetStateType(state);
-        serializedState = SerializeState(state);
-        if (serializedState.empty()) {
-            return MakeFuture(NYql::TIssues{NYql::TIssue{"Failed to serialize compute actor state"}});
+        size = SerializeState(state, serializedState);
+        if (!size || serializedState.empty()) {
+            return MakeFuture(TSaveStateResult(0, NYql::TIssues{NYql::TIssue{"Failed to serialize compute actor state"}}));
         }
     } catch (...) {
-        return MakeFuture(NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}});
+        return MakeFuture(TSaveStateResult(0, NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}}));
     }
 
     auto context = MakeIntrusive<TContext>(
@@ -472,15 +478,14 @@ TFuture<TIssues> TStateStorage::SaveState(
         serializedState,
         type);
 
-    auto promise = NewPromise<TIssues>();
+    auto promise = NewPromise<TSaveStateResult>();
     auto future = UpsertRow(context);
 
-    context->Callback = [promise, context, thisPtr = TIntrusivePtr(this)] (TFuture<TStatus> upsertRowStatus) mutable {
-        
+    context->Callback = [promise, context, size, thisPtr = TIntrusivePtr(this)] (TFuture<TStatus> upsertRowStatus) mutable {
         TStatus status = upsertRowStatus.GetValue();
         if (!status.IsSuccess()) {
             context->Callback = nullptr;
-            promise.SetValue(StatusToIssues(status));
+            promise.SetValue(TSaveStateResult(0, StatusToIssues(status)));
             return;
         }
         auto& taskInfo = context->Tasks[context->CurrentProcessingTaskIndex];
@@ -493,7 +498,7 @@ TFuture<TIssues> TStateStorage::SaveState(
             return;
         }
         context->Callback = nullptr;
-        promise.SetValue(StatusToIssues(status));
+        promise.SetValue(TSaveStateResult(size, StatusToIssues(status)));
     };
     future.Subscribe(context->Callback);
     return promise.GetFuture();

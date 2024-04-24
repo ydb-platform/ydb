@@ -2539,7 +2539,7 @@ namespace NKikimr {
                 ActiveActors.Erase(BalancingId);
             }
             auto balancingCtx = std::make_shared<TBalancingCtx>(
-                VCtx, PDiskCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo
+                VCtx, PDiskCtx, HugeBlobCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo
             );
             BalancingId = ctx.Register(CreateBalancingActor(balancingCtx));
             ActiveActors.Insert(BalancingId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);

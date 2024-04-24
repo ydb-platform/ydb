@@ -63,6 +63,7 @@ public:
         if (!!Self->ProgressTxController->GetPlannedTx()) {
             Self->EnqueueProgressTx(ctx);
         }
+        Self->SetupIndexation();
     }
 
 private:

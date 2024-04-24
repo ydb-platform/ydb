@@ -204,14 +204,14 @@ public:
             ValueCleanup(GetValueRepresentation(Types_[idx]), value, ctx, block);
         }
 
-        const auto next = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULE, increment, ConstantInt::get(indexType, MaxLength_), "next", block);
+        const auto next = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULT, increment, ConstantInt::get(indexType, MaxLength_), "next", block);
         BranchInst::Create(second_cond, work, next, block);
 
         block = second_cond;
         
         const auto read_allocated_size = new LoadInst(indexType, allocatedSizePtr, "read_allocated_size", block);
         const auto read_max_allocated_size = new LoadInst(indexType, maxAllocatedSizePtr, "read_max_allocated_size", block);
-        const auto next2 = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULT, read_allocated_size, read_max_allocated_size, "next2", block);
+        const auto next2 = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULE, read_allocated_size, read_max_allocated_size, "next2", block);
         BranchInst::Create(read, work, next2, block);
 
         block = stop;

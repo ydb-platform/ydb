@@ -264,7 +264,9 @@ public:
 
     virtual void Reply(const TActorContext& ctx) override;
 
-    bool MaybeRequestWithDescribeSchema(TAutoPtr<IEventHandle>& ev);
+private:
+
+    bool NeedToRequestWithDescribeSchema(TAutoPtr<IEventHandle>& ev);
 
 private:
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;

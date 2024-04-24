@@ -222,7 +222,7 @@ i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet) const {
 
 bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState) const {
     if (tablet.IsAliveOnLocal(Local)) {
-        return !IsOverloaded() || !tablet.HasAllowedMetric(EResourceToBalance::ComputeResources);
+        return !(IsOverloaded() && tablet.HasAllowedMetric(EResourceToBalance::ComputeResources));
     }
     if (tablet.IsLeader()) {
         const TLeaderTabletInfo& leader = tablet.AsLeader();

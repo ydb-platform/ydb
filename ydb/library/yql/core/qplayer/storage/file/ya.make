@@ -7,6 +7,7 @@ SRCS(
 PEERDIR(
     ydb/library/yql/core/qplayer/storage/interface
     ydb/library/yql/core/qplayer/storage/memory
+    library/cpp/digest/old_crc
 )
 
 END()

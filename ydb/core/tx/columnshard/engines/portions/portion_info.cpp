@@ -119,18 +119,17 @@ void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
     }
 }
 
-void TPortionInfo::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool /*saveOnlyMeta*/) const {
+void TPortionInfo::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const {
     FullValidation();
     db.WritePortion(*this);
-//    if (saveOnlyMeta) {
-//    } else {
+   if (!saveOnlyMeta) {
         for (auto& record : Records) {
             db.WriteColumn(*this, record, firstPKColumnId);
         }
         for (auto& record : Indexes) {
             db.WriteIndex(*this, record);
         }
-//    }
+    }
 }
 
 std::vector<NKikimr::NOlap::TPortionInfo::TPage> TPortionInfo::BuildPages() const {
@@ -216,7 +215,8 @@ ui64 TPortionInfo::GetTxVolume() const {
 void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
     proto.SetPathId(PathId);
     proto.SetPortionId(Portion);
-    *proto.MutableMinSnapshot() = MinSnapshotDeprecated.SerializeToProto();
+    proto.SetSchemaVersion(GetSchemaVersionVerified());
+    *proto.MutableMinSnapshotDeprecated() = MinSnapshotDeprecated.SerializeToProto();
     if (!RemoveSnapshot.IsZero()) {
         *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
     }
@@ -238,6 +238,7 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
 TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info) {
     PathId = proto.GetPathId();
     Portion = proto.GetPortionId();
+    SchemaVersion = proto.GetSchemaVersion();
     for (auto&& i : proto.GetBlobIds()) {
         auto blobId = TUnifiedBlobId::BuildFromProto(i);
         if (!blobId) {
@@ -246,7 +247,7 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
         BlobIds.emplace_back(blobId.DetachResult());
     }
     {
-        auto parse = MinSnapshotDeprecated.DeserializeFromProto(proto.GetMinSnapshot());
+        auto parse = MinSnapshotDeprecated.DeserializeFromProto(proto.GetMinSnapshotDeprecated());
         if (!parse) {
             return parse;
         }
@@ -338,6 +339,7 @@ const TString& TPortionInfo::GetEntityStorageId(const ui32 columnId, const TInde
 }
 
 ISnapshotSchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) const {
+    AFL_VERIFY(SchemaVersion);
     if (SchemaVersion) {
         auto schema = index.GetSchema(SchemaVersion.value());
         AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion.value());

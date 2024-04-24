@@ -43,7 +43,7 @@
 
 
 #include <ydb/core/tx/columnshard/normalizer/granule/normalizer.h>
-#include <ydb/core/tx/columnshard/normalizer/portion/min_max.h>
+#include <ydb/core/tx/columnshard/normalizer/portion/portion.h>
 #include <ydb/core/tx/columnshard/normalizer/portion/chunks.h>
 
 namespace NKikimr::NColumnShard {

@@ -150,57 +150,26 @@ public:
     }
 };
 
-class TMinMaxCleaner : public NYDBTest::ILocalDBModifier {
+class TPortinosCleaner : public NYDBTest::ILocalDBModifier {
 public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
 
-        std::vector<TPortionRecord> portion2Key;
-        std::optional<ui64> pathId;
+        std::vector<NOlap::TPortionAddress> portions;
         {
-            auto rowset = db.Table<Schema::IndexColumns>().Select();
+            auto rowset = db.Table<Schema::IndexPortions>().Select();
             UNIT_ASSERT(rowset.IsReady());
 
             while (!rowset.EndOfSet()) {
-                TPortionRecord key;
-                key.Index = rowset.GetValue<Schema::IndexColumns::Index>();
-                key.Granule = rowset.GetValue<Schema::IndexColumns::Granule>();
-                key.ColumnIdx = rowset.GetValue<Schema::IndexColumns::ColumnIdx>();
-                key.PlanStep = rowset.GetValue<Schema::IndexColumns::PlanStep>();
-                key.TxId = rowset.GetValue<Schema::IndexColumns::TxId>();
-                key.Portion = rowset.GetValue<Schema::IndexColumns::Portion>();
-                key.Chunk = rowset.GetValue<Schema::IndexColumns::Chunk>();
-
-                key.XPlanStep = rowset.GetValue<Schema::IndexColumns::XPlanStep>();
-                key.XTxId = rowset.GetValue<Schema::IndexColumns::XTxId>();
-                key.Blob = rowset.GetValue<Schema::IndexColumns::Blob>();
-                key.Metadata = rowset.GetValue<Schema::IndexColumns::Metadata>();
-                key.Offset = rowset.GetValue<Schema::IndexColumns::Offset>();
-                key.Size = rowset.GetValue<Schema::IndexColumns::Size>();
-
-                pathId = rowset.GetValue<Schema::IndexColumns::PathId>();
-
-                portion2Key.emplace_back(std::move(key));
-
+                NOlap::TPortionAddress addr(rowset.GetValue<Schema::IndexPortions::PathId>(), rowset.GetValue<Schema::IndexPortions::PortionId>());
+                portions.emplace_back(addr);
                 UNIT_ASSERT(rowset.Next());
             }
         }
 
-        UNIT_ASSERT(pathId.has_value());
-
-        for (auto&& key: portion2Key) {
-            NKikimrTxColumnShard::TIndexColumnMeta metaProto;
-            UNIT_ASSERT(metaProto.ParseFromArray(key.Metadata.data(), key.Metadata.size()));
-            if (metaProto.HasPortionMeta()) {
-                metaProto.MutablePortionMeta()->ClearRecordSnapshotMax();
-                metaProto.MutablePortionMeta()->ClearRecordSnapshotMin();
-            }
-
-            db.Table<Schema::IndexColumns>().Key(key.Index, key.Granule, key.ColumnIdx,
-            key.PlanStep, key.TxId, key.Portion, key.Chunk).Update(
-                NIceDb::TUpdate<Schema::IndexColumns::Metadata>(metaProto.SerializeAsString())
-            );
+        for (auto&& key: portions) {
+            db.Table<Schema::IndexPortions>().Key(key.GetPathId(), key.GetPortionId()).Delete();
         }
     }
 };
@@ -281,8 +250,8 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TestNormalizerImpl<TColumnChunksCleaner>();
     }
 
-    Y_UNIT_TEST(MinMaxNormalizer) {
-        TestNormalizerImpl<TMinMaxCleaner>();
+    Y_UNIT_TEST(PortionsNormalizer) {
+        TestNormalizerImpl<TPortinosCleaner>();
     }
 }
 

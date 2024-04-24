@@ -763,6 +763,8 @@ private:
         TCounterPtr ScanBytes;
         TCounterPtr DatashardRowCount;
         TCounterPtr DatashardSizeBytes;
+        TCounterPtr DatashardCacheHitBytes;
+        TCounterPtr DatashardCacheMissBytes;
         TCounterPtr ColumnShardScanRows_;
         TCounterPtr ColumnShardScanBytes_;
         TCounterPtr ColumnShardBulkUpsertRows_;
@@ -795,6 +797,8 @@ private:
         TCounterPtr DbUniqueRowsTotal;
         TCounterPtr DbUniqueDataBytes;
         THistogramPtr ConsumedCpuHistogram;
+        TCounterPtr TxCachedBytes;
+        TCounterPtr TxReadBytes;
 
         TCounterPtr ColumnShardScannedBytes_;
         TCounterPtr ColumnShardScannedRows_;
@@ -839,6 +843,11 @@ private:
                 "table.datashard.row_count", false);
             DatashardSizeBytes = ydbGroup->GetNamedCounter("name",
                 "table.datashard.size_bytes", false);
+
+            DatashardCacheHitBytes = ydbGroup->GetNamedCounter("name",
+                "table.datashard.cache_hit.bytes", true);
+            DatashardCacheMissBytes = ydbGroup->GetNamedCounter("name",
+                "table.datashard.cache_miss.bytes", true);
 
             ColumnShardScanRows_ = ydbGroup->GetNamedCounter("name",
                 "table.columnshard.scan.rows", true);
@@ -902,6 +911,8 @@ private:
                 DbUniqueRowsTotal = execGroup->GetCounter("SUM(DbUniqueRowsTotal)");
                 DbUniqueDataBytes = execGroup->GetCounter("SUM(DbUniqueDataBytes)");
                 ConsumedCpuHistogram = execGroup->FindHistogram("HIST(ConsumedCPU)");
+                TxCachedBytes = execGroup->GetCounter("TxCachedBytes");
+                TxReadBytes = execGroup->GetCounter("TxReadBytes");
             }
 
             if (hasColumnShard && !ColumnShardScannedBytes_) {
@@ -944,6 +955,8 @@ private:
                 ScanBytes->Set(ScannedBytes->Val());
                 DatashardRowCount->Set(DbUniqueRowsTotal->Val());
                 DatashardSizeBytes->Set(DbUniqueDataBytes->Val());
+                DatashardCacheHitBytes->Set(TxCachedBytes->Val());
+                DatashardCacheMissBytes->Set(TxReadBytes->Val());
 
                 if (ConsumedCpuHistogram) {
                     TransferBuckets(ShardCpuUtilization, ConsumedCpuHistogram);

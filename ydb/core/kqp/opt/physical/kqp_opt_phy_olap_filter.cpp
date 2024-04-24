@@ -641,7 +641,32 @@ TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, TExprContext& ctx
     return TFilterOpsLevels(ops, NullNode);
 }
 
-void SplitForPartialPushdown(const TPredicateNode& predicateTree, TPredicateNode& predicatesToPush, TPredicateNode& remainingPredicates,
+TOLAPPredicateNode WrapPredicates(const std::vector<TOLAPPredicateNode>& predicates, TExprContext& ctx, TPositionHandle pos) {
+    if (predicates.empty()) {
+        return {};
+    }
+
+    if (const auto predicatesSize = predicates.size(); 1U == predicatesSize) {
+        return predicates.front();
+    } else {
+        TOLAPPredicateNode result;
+        result.Children = predicates;
+        result.CanBePushed = true;
+
+        TVector<NNodes::TExprBase> exprNodes;
+        exprNodes.reserve(predicatesSize);
+        for (const auto& pred : predicates) {
+            exprNodes.emplace_back(pred.ExprNode);
+            result.CanBePushed &= pred.CanBePushed;
+        }
+        result.ExprNode = NNodes::Build<NNodes::TCoAnd>(ctx, pos)
+            .Add(exprNodes)
+            .Done().Ptr();
+        return result;
+    }
+}
+
+void SplitForPartialPushdown(const TOLAPPredicateNode& predicateTree, TOLAPPredicateNode& predicatesToPush, TOLAPPredicateNode& remainingPredicates,
     TExprContext& ctx, TPositionHandle pos)
 {
     if (predicateTree.CanBePushed) {
@@ -650,7 +675,7 @@ void SplitForPartialPushdown(const TPredicateNode& predicateTree, TPredicateNode
         return;
     }
 
-    if (predicateTree.Op != TPredicateNode::EBoolOp::And) {
+    if (!TCoAnd::Match(predicateTree.ExprNode.Get())) {
         // We can partially pushdown predicates from AND operator only.
         // For OR operator we would need to have several read operators which is not acceptable.
         // TODO: Add support for NOT(op1 OR op2), because it expands to (!op1 AND !op2).
@@ -659,19 +684,19 @@ void SplitForPartialPushdown(const TPredicateNode& predicateTree, TPredicateNode
     }
 
     bool isFoundNotStrictOp = false;
-    std::vector<TPredicateNode> pushable, remaining;
+    std::vector<TOLAPPredicateNode> pushable, remaining;
     for (const auto& predicate : predicateTree.Children) {
         if (predicate.CanBePushed && !isFoundNotStrictOp) {
             pushable.emplace_back(predicate);
         } else {
-            if (!IsStrict(predicate.ExprNode.Cast().Ptr())) {
+            if (!IsStrict(predicate.ExprNode)) {
                 isFoundNotStrictOp = true;
             }
             remaining.emplace_back(predicate);
         }
     }
-    predicatesToPush.SetPredicates(pushable, ctx, pos);
-    remainingPredicates.SetPredicates(remaining, ctx, pos);
+    predicatesToPush = WrapPredicates(pushable, ctx, pos);
+    remainingPredicates = WrapPredicates(remaining, ctx, pos);
 }
 
 } // anonymous namespace end
@@ -723,12 +748,13 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         }
     }
 
-    TPredicateNode predicateTree(predicate);
+    TOLAPPredicateNode predicateTree;
+    predicateTree.ExprNode = predicate.Ptr();
     const auto lambdaArg = lambda.Args().Arg(0).Raw();
     CollectPredicates(predicate, predicateTree, lambdaArg, read.Process().Body());
     YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
 
-    TPredicateNode predicatesToPush, remainingPredicates;
+    TOLAPPredicateNode predicatesToPush, remainingPredicates;
     SplitForPartialPushdown(predicateTree, predicatesToPush, remainingPredicates, ctx, node.Pos());
     if (!predicatesToPush.IsValid()) {
         return node;
@@ -737,7 +763,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     YQL_ENSURE(predicatesToPush.IsValid(), "Predicates to push is invalid");
     YQL_ENSURE(remainingPredicates.IsValid(), "Remaining predicates is invalid");
 
-    const auto pushedFilters = PredicatePushdown(predicatesToPush.ExprNode.Cast(), ctx, node.Pos());
+    const auto pushedFilters = PredicatePushdown(TExprBase(predicatesToPush.ExprNode), ctx, node.Pos());
     YQL_ENSURE(pushedFilters.IsValid(), "Pushed predicate should be always valid!");
 
     TMaybeNode<TExprBase> olapFilter;
@@ -795,7 +821,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             .Args({"new_arg"})
             .Body<TCoOptionalIf>()
                 .Predicate<TExprApplier>()
-                    .Apply(remainingPredicates.ExprNode.Cast())
+                    .Apply(TExprBase(remainingPredicates.ExprNode))
                     .With(lambda.Args().Arg(0), "new_arg")
                     .Build()
                 .Value<TExprApplier>()

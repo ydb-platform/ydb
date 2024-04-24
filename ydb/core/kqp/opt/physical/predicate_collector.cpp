@@ -275,16 +275,16 @@ bool ExistsCanBePushed(const TCoExists& exists, const TExprNode* lambdaArg) {
     return IsMemberColumn(exists.Optional(), lambdaArg);
 }
 
-void CollectChildrenPredicates(const TExprNode& opNode, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
+void CollectChildrenPredicates(const TExprNode& opNode, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
     predicateTree.Children.reserve(opNode.ChildrenSize());
     predicateTree.CanBePushed = true;
     for (const auto& childNodePtr: opNode.Children()) {
-        TPredicateNode child(childNodePtr);
-        const TExprBase base(childNodePtr);
-        if (const auto maybeCtor = base.Maybe<TCoDataCtor>())
+        TOLAPPredicateNode child;
+        child.ExprNode = childNodePtr;
+        if (const auto maybeCtor = TMaybeNode<TCoDataCtor>(child.ExprNode))
             child.CanBePushed = IsSupportedDataType(maybeCtor.Cast());
         else
-            CollectPredicates(base, child, lambdaArg, lambdaBody);
+            CollectPredicates(TExprBase(child.ExprNode), child, lambdaArg, lambdaBody);
         predicateTree.Children.emplace_back(child);
         predicateTree.CanBePushed &= child.CanBePushed;
     }
@@ -292,14 +292,16 @@ void CollectChildrenPredicates(const TExprNode& opNode, TPredicateNode& predicat
 
 }
 
-void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
+void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
     if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
         if (predicate.Maybe<TCoIf>() || predicate.Maybe<TCoJust>() || predicate.Maybe<TCoCoalesce>()) {
             return CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody);
         }
     }
 
-    if (const auto maybeCoalesce = predicate.Maybe<TCoCoalesce>()) {
+    if (predicate.Maybe<TCoNot>() || predicate.Maybe<TCoAnd>() || predicate.Maybe<TCoOr>() || predicate.Maybe<TCoXor>()) {
+        return CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody);
+    } else if (const auto maybeCoalesce = predicate.Maybe<TCoCoalesce>()) {
         predicateTree.CanBePushed = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, lambdaBody);
     } else if (const auto maybeCompare = predicate.Maybe<TCoCompare>()) {
         predicateTree.CanBePushed = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody);
@@ -307,46 +309,9 @@ void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree
         predicateTree.CanBePushed = ExistsCanBePushed(maybeExists.Cast(), lambdaArg);
     } else if (const auto maybeJsonExists = predicate.Maybe<TCoJsonExists>()) {
         predicateTree.CanBePushed = JsonExistsCanBePushed(maybeJsonExists.Cast(), lambdaArg);
-    } else if (predicate.Maybe<TCoNot>()) {
-        predicateTree.Op = TPredicateNode::EBoolOp::Not;
-        return CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody);
-    } else if (predicate.Maybe<TCoAnd>()) {
-        predicateTree.Op = TPredicateNode::EBoolOp::And;
-        return CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody);
-    } else if (predicate.Maybe<TCoOr>()) {
-        predicateTree.Op = TPredicateNode::EBoolOp::Or;
-        return CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody);
-    } else if (predicate.Maybe<TCoXor>()) {
-        predicateTree.Op = TPredicateNode::EBoolOp::Xor;
-        return CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody);
     } else {
         predicateTree.CanBePushed = false;
     }
 }
 
-void TPredicateNode::SetPredicates(const std::vector<TPredicateNode>& predicates, TExprContext& ctx, TPositionHandle pos) {
-    if (predicates.empty())
-        return;
-
-    if (const auto predicatesSize = predicates.size(); 1U == predicatesSize) {
-        *this = predicates.front();
-    } else {
-        Op = EBoolOp::And;
-        Children = predicates;
-        CanBePushed = true;
-
-        TVector<NNodes::TExprBase> exprNodes;
-        exprNodes.reserve(predicatesSize);
-        for (const auto& pred : predicates) {
-            exprNodes.emplace_back(pred.ExprNode.Cast());
-            CanBePushed &= pred.CanBePushed;
-        }
-        ExprNode = NNodes::Build<NNodes::TCoAnd>(ctx, pos)
-            .Add(exprNodes)
-            .Done();
-    }
 }
-
-
-}
-

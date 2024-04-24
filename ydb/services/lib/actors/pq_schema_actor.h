@@ -202,8 +202,6 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return static_cast<TDerived*>(this)->HandleCacheNavigateResponse(ev);
             }
             break;
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
-                [[fallthrough]];
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown: {
                 AddIssue(
                     FillIssue(

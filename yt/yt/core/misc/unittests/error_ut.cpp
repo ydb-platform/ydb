@@ -832,7 +832,7 @@ TEST(TErrorTest, SimpleLoadAfterSave)
 
 TEST(TErrorTest, AttributeSerialization)
 {
-    auto getWeededText = [](const TError& err) {
+    auto getWeededText = [] (const TError& err) {
         std::vector<TString> lines;
         for (const auto& line : StringSplitter(ToString(err)).Split('\n')) {
             if (!line.Contains("origin") && !line.Contains("datetime")) {

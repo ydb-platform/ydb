@@ -381,7 +381,7 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, DoNotOverloadUnderlyingWhenTh
     EXPECT_CALL(*Underlying_, Throttle(_))
         .Times(AtMost(9))
         .WillRepeatedly(DoAll(
-            [&] () { lastRequest = requests.emplace_back(NewPromise<void>()); },
+            [&] { lastRequest = requests.emplace_back(NewPromise<void>()); },
             ReturnPointee(&lastRequest)
         ));
 
@@ -402,7 +402,7 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, DoNotHangUpAfterAnError)
     EXPECT_CALL(*Underlying_, Throttle(_))
         .Times(AtLeast(2))
         .WillRepeatedly(DoAll(
-            [&] () { lastRequest = requests.emplace_back(NewPromise<void>()); },
+            [&] { lastRequest = requests.emplace_back(NewPromise<void>()); },
             ReturnPointee(&lastRequest)
         ));
 
@@ -496,7 +496,7 @@ TEST_P(TPrefetchingStressTest, Stress)
         EXPECT_CALL(*Underlying_, Throttle(_))
             .WillRepeatedly(DoAll(
                 SaveArg<0>(&lastUnderlyingAmount),
-                [&] () {
+                [&] {
                     lastRequest = requests.emplace_back(NewPromise<void>());
                     ++underlyingRequestCount;
                     iterationUnderlyingAmount += lastUnderlyingAmount;
@@ -504,7 +504,7 @@ TEST_P(TPrefetchingStressTest, Stress)
                 ReturnPointee(&lastRequest)
             ));
 
-        auto processUnderlyingRequest = [&](double errorProbability) {
+        auto processUnderlyingRequest = [&] (double errorProbability) {
             if (!requests.empty()) {
                 if (probabilisticOutcome(engine) < errorProbability) {
                     requests.front().Set(TError(NYT::EErrorCode::Generic, "Test error"));

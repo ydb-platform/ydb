@@ -290,17 +290,24 @@ namespace NKikimr::NBlobDepot {
         TActorId GroupAssimilatorId;
         EDecommitState DecommitState = EDecommitState::Default;
         std::optional<TString> AssimilatorState;
-        TString AssimilatorPosition;
-        TInstant AssimilatorLatestErrorGet;
-        TInstant AssimilatorLatestOkGet;
-        TInstant AssimilatorLatestErrorPut;
-        TInstant AssimilatorLatestOkPut;
-        TLogoBlobID AssimilatorLastReadBlobId;
-        ui64 AssimilatorBlobsReadOk = 0;
-        ui64 AssimilatorBlobsReadNoData = 0;
-        ui64 AssimilatorBlobsReadError = 0;
-        ui64 AssimilatorBlobsPutOk = 0;
-        ui64 AssimilatorBlobsPutError = 0;
+        struct {
+            TString Position;
+            TInstant LatestErrorGet;
+            TInstant LatestOkGet;
+            TInstant LatestErrorPut;
+            TInstant LatestOkPut;
+            TLogoBlobID LastReadBlobId;
+            ui64 BytesToCopy = 0;
+            ui64 BytesCopied = 0;
+            ui64 CopySpeed = 0;
+            TDuration CopyTimeRemaining = TDuration::Max();
+            ui64 BlobsReadOk = 0;
+            ui64 BlobsReadNoData = 0;
+            ui64 BlobsReadError = 0;
+            ui64 BlobsPutOk = 0;
+            ui64 BlobsPutError = 0;
+            ui32 CopyIteration = 0;
+        } Assimilator;
 
         class TGroupAssimilator;
 

@@ -1605,6 +1605,7 @@ private:
 
     void ExecuteDatashardTransaction(ui64 shardId, NKikimrTxDataShard::TKqpTransaction& kqpTx, const bool isOlap)
     {
+        YQL_ENSURE(!UseEvWrite);
         TShardState shardState;
         shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
         shardState.DatashardState.ConstructInPlace();
@@ -1652,7 +1653,6 @@ private:
 
         std::unique_ptr<IEventBase> ev;
         if (isOlap) {
-            YQL_ENSURE(!UseEvWrite);
             const ui32 flags =
                 (ImmediateTx ? NKikimrTxColumnShard::ETransactionFlag::TX_FLAG_IMMEDIATE: 0);
             ev.reset(new TEvColumnShard::TEvProposeTransaction(
@@ -1984,10 +1984,11 @@ private:
         BuildDatashardTxs(datashardTasks, datashardTxs, evWriteTxs, topicTxs);
         YQL_ENSURE(evWriteTxs.empty() || datashardTxs.empty());
 
-        // Single-shard transactions are always immediate
-        ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) <= 1
+        // Single-shard datashard transactions are always immediate
+        ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) == 1
                     && !UnknownAffectedShardCount
-                    && evWriteTxs.empty();
+                    && evWriteTxs.empty()
+                    && !HasOlapTable;
 
         switch (Request.IsolationLevel) {
             // OnlineRO with AllowInconsistentReads = true

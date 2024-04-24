@@ -26,11 +26,11 @@ TDataShard::TTxWrite::TTxWrite(TDataShard* self,
 
 bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxWrite:: execute at tablet# " << Self->TabletID());
-    auto* request = Ev->Get();
-    const auto& record = request->Record;
-    Y_UNUSED(record);
 
-    LWTRACK(WriteExecute, request->GetOrbit());
+    if (Ev) {
+        auto* request = Ev->Get();
+        LWTRACK(WriteExecute, request->GetOrbit());
+    }
 
     if (!Acked) {
         // Ack event on the first execute (this will schedule the next event if any)

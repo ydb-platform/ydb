@@ -145,7 +145,8 @@ public:
     }
 
 private:
-    void NextBuffer() {
+    void NextBuffer()
+    {
         if (Data_.empty()) {
             CurrentInput_.reset();
         } else {

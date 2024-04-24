@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.50.0)
+VERSION(4.51.0)
 
 LICENSE(MIT)
 
@@ -163,6 +163,7 @@ PY_SRCS(
     fontTools/ttLib/__main__.py
     fontTools/ttLib/macUtils.py
     fontTools/ttLib/removeOverlaps.py
+    fontTools/ttLib/reorderGlyphs.py
     fontTools/ttLib/scaleUpem.py
     fontTools/ttLib/sfnt.py
     fontTools/ttLib/standardGlyphOrder.py

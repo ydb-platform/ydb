@@ -50,6 +50,7 @@ public:
     virtual ~IQWriter() = default;
 
     virtual NThreading::TFuture<void> Put(const TQItemKey& key, const TString& value) = 0;
+    // Commmit should be called at most once, no more Put are allowed after it
     virtual NThreading::TFuture<void> Commit() = 0;
 };
 
@@ -75,6 +76,7 @@ class IQStorage {
 public:
     virtual ~IQStorage() = default;
 
+    // it's an UB to open writer twice for the same operationId, implementations may check it
     virtual IQWriterPtr MakeWriter(const TString& operationId) const = 0;
     // readers & iterators may not see results of writer until commit
     virtual IQReaderPtr MakeReader(const TString& operationId) const = 0;
@@ -96,6 +98,9 @@ public:
         : Writer_(writer)
     {}
 
+    TQContext(const TQContext&) = default;
+    TQContext& operator=(const TQContext&) = default;
+
     bool CanRead() const {
         return Reader_ != nullptr;
     }
@@ -113,8 +118,8 @@ public:
     }
 
 private:
-    const IQReaderPtr Reader_;
-    const IQWriterPtr Writer_;
+    IQReaderPtr Reader_;
+    IQWriterPtr Writer_;
 };
 
 }

@@ -19,9 +19,9 @@ static const TLogger Logger("TableClientComparator");
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TComparator::TComparator(std::vector<ESortOrder> sortOrders, TCallback<TUUComparerSignature> CGComparator)
+TComparator::TComparator(std::vector<ESortOrder> sortOrders, TCallback<TUUComparerSignature> cgComparator)
     : SortOrders_(std::move(sortOrders))
-    , CGComparator_(CGComparator)
+    , CGComparator_(std::move(cgComparator))
 { }
 
 void TComparator::Persist(const TPersistenceContext& context)

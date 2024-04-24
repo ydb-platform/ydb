@@ -424,12 +424,12 @@ private:
         i64 batchBeginRowIndex = -1;
 
 
-        auto beginBatch = [&] () {
+        auto beginBatch = [&] {
             YT_VERIFY(batchBeginRowIndex < 0);
             batchBeginRowIndex = currentRowIndex;
         };
 
-        auto endBatch = [&] () {
+        auto endBatch = [&] {
             if (batchBeginRowIndex < 0) {
                 return;
             }

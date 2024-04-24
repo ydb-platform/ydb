@@ -381,7 +381,7 @@ public:
 
     TTableSchemaPtr ToModifiedSchema(ETableSchemaModification schemaModification) const;
 
-    TComparator ToComparator(TCallback<TUUComparerSignature> CGComparator = {}) const;
+    TComparator ToComparator(TCallback<TUUComparerSignature> cgComparator = {}) const;
 
     TKeyColumnTypes GetKeyColumnTypes() const;
 

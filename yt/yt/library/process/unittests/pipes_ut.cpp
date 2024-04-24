@@ -359,7 +359,7 @@ TEST_P(TPipeBigReadWriteTest, RealReadWrite)
 
     std::vector<char> data(dataSize, 'a');
 
-    YT_UNUSED_FUTURE(BIND([&] () {
+    YT_UNUSED_FUTURE(BIND([&] {
         auto dice = std::bind(
             std::uniform_int_distribution<int>(0, 127),
             std::default_random_engine());

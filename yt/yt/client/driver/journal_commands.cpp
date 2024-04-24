@@ -84,7 +84,7 @@ void TReadJournalCommand::DoExecute(ICommandContextPtr context)
 
     // TODO(babenko): provide custom allocation tag
     TBlobOutput buffer;
-    auto flushBuffer = [&] () {
+    auto flushBuffer = [&] {
         WaitFor(output->Write(buffer.Flush()))
             .ThrowOnError();
     };
@@ -268,10 +268,8 @@ private:
 void TWriteJournalCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("path", &TThis::Path);
-
     registrar.Parameter("journal_writer", &TThis::JournalWriter)
         .Default();
-
     registrar.ParameterWithUniversalAccessor<bool>(
         "enable_chunk_preallocation",
         [] (TThis* command) -> auto& {

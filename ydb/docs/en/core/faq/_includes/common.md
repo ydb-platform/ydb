@@ -29,7 +29,7 @@ To design a primary key properly, follow the rules below.
 * The fewer table partitions a query uses, the faster it runs. For greater performance, follow the one query — one partition rule.
 * Avoid situations where a small part of the DB is under much heavier load than the rest of the DB.
 
-For more information, see [choosing a primary key](../../dba/primary-key/index.md).
+For more information, see [choosing a primary key](../../dev/primary-key/index.md).
 
 #### How do I evenly distribute load across table partitions? {#balance-shard-load}
 
@@ -40,7 +40,7 @@ You can use the following techniques to distribute the load evenly across table 
    * use a hash of the key column values as the primary key.
 * Reduce the number of partitions used in a single query.
 
-For more information, see [choosing a primary key](../../dba/primary-key/index.md).
+For more information, see [choosing a primary key](../../dev/primary-key/index.md).
 
 #### Can I use NULL in a key column? {#null}
 

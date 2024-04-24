@@ -44,6 +44,8 @@ namespace {
 
 const size_t DEFAULT_AST_BUF_SIZE = 1024;
 const size_t DEFAULT_PLAN_BUF_SIZE = 1024;
+const TString FacadeComponent = "Facade";
+const TString SourceCodeLabel = "SourceCode";
 
 class TUrlLoader : public IUrlLoader {
 public:
@@ -311,6 +313,12 @@ TProgram::~TProgram() {
     }
 }
 
+void TProgram::SetQContext(const TQContext& qContext) {
+    YQL_PROFILE_FUNC(TRACE);
+    YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
+    QContext_ = qContext;
+}
+
 void TProgram::ConfigureYsonResultFormat(NYson::EYsonFormat format) {
     ResultFormat_ = format;
     OutputFormat_ = format;
@@ -468,12 +476,24 @@ void TProgram::AddUserDataTable(const TUserDataTable& userDataTable) {
     }
 }
 
+void TProgram::HandleSourceCode(TString& sourceCode) {
+    if (QContext_.CanWrite()) {
+        QContext_.GetWriter()->Put({FacadeComponent, SourceCodeLabel}, sourceCode).GetValueSync();
+    } else if (QContext_.CanRead()) {
+        auto loaded = QContext_.GetReader()->Get({FacadeComponent, SourceCodeLabel}).GetValueSync();
+        Y_ENSURE(loaded.Defined(), "No source code");
+        sourceCode = loaded->Value;
+    }
+}
+
 bool TProgram::ParseYql() {
     YQL_PROFILE_FUNC(TRACE);
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
     SourceSyntax_ = ESourceSyntax::Yql;
     SyntaxVersion_ = 1;
-    return FillParseResult(ParseAst(SourceCode_));
+    auto sourceCode = SourceCode_;
+    HandleSourceCode(sourceCode);
+    return FillParseResult(ParseAst(sourceCode));
 }
 
 bool TProgram::ParseSql() {
@@ -495,7 +515,9 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     SourceSyntax_ = ESourceSyntax::Sql;
     SyntaxVersion_ = settings.SyntaxVersion;
     NYql::TWarningRules warningRules;
-    return FillParseResult(SqlToYql(SourceCode_, settings, &warningRules), &warningRules);
+    auto sourceCode = SourceCode_;
+    HandleSourceCode(sourceCode);
+    return FillParseResult(SqlToYql(sourceCode, settings, &warningRules), &warningRules);
 }
 
 bool TProgram::Compile(const TString& username, bool skipLibraries) {

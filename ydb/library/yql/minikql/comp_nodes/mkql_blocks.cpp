@@ -260,14 +260,17 @@ private:
         size_t BuilderAllocatedSize_ = 0;
         size_t MaxBuilderAllocatedSize_ = 0;
         std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
+        static const size_t MaxAllocatedFactor_ = 4;
+
         TState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types, size_t maxLength, NUdf::TUnboxedValue**const fields)
             : TBlockState(memInfo, types.size() + 1U)
             , Builders_(types.size())
         {
             for (size_t i = 0; i < types.size(); ++i) {
                 fields[i] = &Values[i];
-                Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i], ctx.ArrowMemoryPool, maxLength, &ctx.Builder->GetPgBuilder());
+                Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i], ctx.ArrowMemoryPool, maxLength, &ctx.Builder->GetPgBuilder(), &BuilderAllocatedSize_);
             }
+            MaxBuilderAllocatedSize_ = MaxAllocatedFactor_ * BuilderAllocatedSize_;
         }
 
         void Add(const NUdf::TUnboxedValuePod value, size_t idx) {
@@ -277,6 +280,7 @@ private:
         void MakeBlocks(const THolderFactory& holderFactory) {
             Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Rows_)));
             Rows_ = 0;
+            BuilderAllocatedSize_ = 0;
 
             for (size_t i = 0; i < Builders_.size(); ++i) {
                 if (const auto builder = Builders_[i].get()) {

@@ -2,7 +2,7 @@ LIBRARY()
 
 SRCS(
     normalizer.cpp
-    min_max.cpp
+    portion.cpp
     chunks.cpp
 )
 

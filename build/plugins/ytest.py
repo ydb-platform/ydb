@@ -192,8 +192,6 @@ def validate_test(unit, kw):
     else:
         if is_force_sandbox:
             errors.append('ya:force_sandbox can be used with LARGE tests only')
-        if consts.YaTestTags.NoFuse in tags:
-            errors.append('ya:nofuse can be used with LARGE tests only')
         if consts.YaTestTags.Privileged in tags:
             errors.append("ya:privileged can be used with LARGE tests only")
         if in_autocheck and size == consts.TestSize.Large:

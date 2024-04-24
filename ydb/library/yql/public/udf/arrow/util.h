@@ -158,6 +158,10 @@ public:
         return Len;
     }
 
+    inline size_t Capacity() const {
+        return Buffer ? size_t(Buffer->capacity()) : 0;
+    }
+
     inline T* MutableData() {
         return reinterpret_cast<T*>(Buffer->mutable_data());
     }

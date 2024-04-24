@@ -89,10 +89,12 @@ namespace NKikimr::NBlobDepot {
             if (stateBits & TStateBits::Blobs) {
                 Load(&stream, SkipBlobsUpTo.emplace());
             }
+            UpdateAssimilatorPosition();
         }
 
         Become(&TThis::StateFunc);
         Action();
+        UpdateBytesCopiedQ();
     }
 
     void TAssimilator::PassAway() {
@@ -115,12 +117,14 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvBlobStorage::TEvControllerGroupDecommittedResponse, Handle);
             cFunc(TEvPrivate::EvResume, Action);
+            cFunc(TEvPrivate::EvResumeScanDataForPlanning, HandleResumeScanDataForPlanning);
             cFunc(TEvPrivate::EvResumeScanDataForCopying, HandleResumeScanDataForCopying);
             fFunc(TEvPrivate::EvTxComplete, HandleTxComplete);
+            cFunc(TEvPrivate::EvUpdateBytesCopiedQ, UpdateBytesCopiedQ);
             cFunc(TEvents::TSystem::Poison, PassAway);
 
             default:
-                Y_DEBUG_ABORT_UNLESS(false, "unexpected event Type# %08" PRIx32, type);
+                Y_DEBUG_ABORT("unexpected event Type# %08" PRIx32, type);
                 STLOG(PRI_CRIT, BLOB_DEPOT, BDT00, "unexpected event", (Id, Self->GetLogId()), (Type, type));
                 break;
         }
@@ -133,7 +137,11 @@ namespace NKikimr::NBlobDepot {
         if (Self->DecommitState < EDecommitState::BlobsFinished) {
             SendAssimilateRequest();
         } else if (Self->DecommitState < EDecommitState::BlobsCopied) {
-            ScanDataForCopying();
+            if (PlanningComplete) {
+                ScanDataForCopying();
+            } else {
+                ScanDataForPlanning();
+            }
         } else if (Self->DecommitState == EDecommitState::BlobsCopied) {
             Y_ABORT_UNLESS(!PipeId);
             CreatePipe();
@@ -255,6 +263,7 @@ namespace NKikimr::NBlobDepot {
 
             void Complete(const TActorContext&) override {
                 Self->Self->Data->CommitTrash(this);
+                Self->UpdateAssimilatorPosition();
 
                 if (MoreData) {
                     Self->Self->Execute(std::make_unique<TTxPutAssimilatedData>(*this));
@@ -281,7 +290,61 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
+    void TAssimilator::ScanDataForPlanning() {
+        if (ResumeScanDataForPlanningInFlight) {
+            return;
+        }
+
+        THPTimer timer;
+        ui32 numItems = 0;
+        bool timeout = false;
+
+        if (!LastPlanScannedKey) {
+            ++Self->Assimilator.CopyIteration;
+            Self->Assimilator.BytesToCopy = 0;
+        }
+
+        TData::TScanRange range{
+            LastPlanScannedKey ? TData::TKey(*LastPlanScannedKey) : TData::TKey::Min(),
+            TData::TKey::Max(),
+        };
+        Self->Data->ScanRange(range, nullptr, nullptr, [&](const TData::TKey& key, const TData::TValue& value) {
+            if (++numItems == 1000) {
+                numItems = 0;
+                if (TDuration::Seconds(timer.Passed()) >= TDuration::MilliSeconds(1)) {
+                    timeout = true;
+                    return false;
+                }
+            }
+            if (value.GoingToAssimilate) {
+                Self->Assimilator.BytesToCopy += key.GetBlobId().BlobSize();
+            }
+            LastPlanScannedKey.emplace(key.GetBlobId());
+            return true;
+        });
+
+        if (timeout) {
+            ResumeScanDataForPlanningInFlight = true;
+            TActivationContext::Send(new IEventHandle(TEvPrivate::EvResumeScanDataForPlanning, 0, SelfId(), {}, nullptr, 0));
+            return;
+        }
+
+        ActionInProgress = false;
+        PlanningComplete = true;
+        Action();
+    }
+
+    void TAssimilator::HandleResumeScanDataForPlanning() {
+        Y_ABORT_UNLESS(ResumeScanDataForPlanningInFlight);
+        ResumeScanDataForPlanningInFlight = false;
+        ScanDataForPlanning();
+    }
+
     void TAssimilator::ScanDataForCopying() {
+        if (ResumeScanDataForCopyingInFlight) {
+            return;
+        }
+
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT54, "TAssimilator::ScanDataForCopying", (Id, Self->GetLogId()),
             (LastScannedKey, LastScannedKey), (NumGetsUnprocessed, GetIdToUnprocessedPuts.size()));
 
@@ -322,11 +385,8 @@ namespace NKikimr::NBlobDepot {
                 (EntriesToProcess, EntriesToProcess), (Timeout, timeout), (NumGetsUnprocessed, GetIdToUnprocessedPuts.size()));
 
             if (timeout) { // timeout hit, reschedule work
-                if (!ResumeScanDataForCopyingInFlight) {
-                    TActivationContext::Send(new IEventHandle(TEvPrivate::EvResumeScanDataForCopying, 0, SelfId(), {}, nullptr, 0));
-                    ResumeScanDataForCopyingInFlight = true;
-                }
-                break;
+                TActivationContext::Send(new IEventHandle(TEvPrivate::EvResumeScanDataForCopying, 0, SelfId(), {}, nullptr, 0));
+                ResumeScanDataForCopyingInFlight = true;
             } else if (!ScanQ.empty()) {
                 using TQuery = TEvBlobStorage::TEvGet::TQuery;
                 const ui32 sz = ScanQ.size();
@@ -343,15 +403,18 @@ namespace NKikimr::NBlobDepot {
                 GetIdToUnprocessedPuts.try_emplace(getId);
                 ScanQ.clear();
                 TotalSize = 0;
-            } else if (!GetIdToUnprocessedPuts.empty()) { // there are some unprocessed get queries, still have to wait
-                break;
+                continue;
+            } else if (!GetIdToUnprocessedPuts.empty()) {
+                // there are some unprocessed get queries, still have to wait
             } else if (!EntriesToProcess) { // we have finished scanning the whole table without any entries, copying is done
                 OnCopyDone();
-                break;
             } else { // we have finished scanning, but we have replicated some data, restart scanning to ensure that nothing left
                 LastScannedKey.reset();
-                EntriesToProcess = false;
+                LastPlanScannedKey.reset();
+                EntriesToProcess = PlanningComplete = ActionInProgress = false;
+                Action();
             }
+            break;
         }
     }
 
@@ -363,6 +426,7 @@ namespace NKikimr::NBlobDepot {
 
     void TAssimilator::Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
         auto& msg = *ev->Get();
+        (msg.Status == NKikimrProto::OK ? Self->Assimilator.LatestOkGet : Self->Assimilator.LatestErrorGet) = TInstant::Now();
         const auto it = GetIdToUnprocessedPuts.find(ev->Cookie);
         Y_ABORT_UNLESS(it != GetIdToUnprocessedPuts.end());
         ui32 getBytes = 0;
@@ -386,20 +450,25 @@ namespace NKikimr::NBlobDepot {
                     ++it->second;
                 }
                 getBytes += resp.Id.BlobSize();
+                ++Self->Assimilator.BlobsReadOk;
             } else if (resp.Status == NKikimrProto::NODATA) {
                 Self->Data->ExecuteTxCommitAssimilatedBlob(NKikimrProto::NODATA, TBlobSeqId(), TData::TKey(resp.Id),
                     TEvPrivate::EvTxComplete, SelfId(), it->first);
                 ++it->second;
+                ++Self->Assimilator.BlobsReadNoData;
+                Self->Assimilator.BytesToCopy -= resp.Id.BlobSize();
+            } else {
+                ++Self->Assimilator.BlobsReadError;
+                continue;
             }
+            Self->Assimilator.LastReadBlobId = resp.Id;
         }
         if (getBytes) {
             Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_DECOMMIT_GET_BYTES] += getBytes;
         }
         if (!it->second) {
             GetIdToUnprocessedPuts.erase(it);
-            if (!ResumeScanDataForCopyingInFlight) {
-                ScanDataForCopying();
-            }
+            ScanDataForCopying();
         }
     }
 
@@ -408,16 +477,20 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT_UNLESS(it != GetIdToUnprocessedPuts.end());
         if (!--it->second) {
             GetIdToUnprocessedPuts.erase(it);
-            if (!ResumeScanDataForCopyingInFlight) {
-                ScanDataForCopying();
-            }
+            ScanDataForCopying();
         }
     }
 
     void TAssimilator::Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
         auto& msg = *ev->Get();
+        (msg.Status == NKikimrProto::OK ? Self->Assimilator.LatestOkPut : Self->Assimilator.LatestErrorPut) = TInstant::Now();
         if (msg.Status == NKikimrProto::OK) {
             Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_DECOMMIT_PUT_OK_BYTES] += msg.Id.BlobSize();
+            ++Self->Assimilator.BlobsPutOk;
+            Self->Assimilator.BytesToCopy -= msg.Id.BlobSize();
+            Self->Assimilator.BytesCopied += msg.Id.BlobSize();
+        } else {
+            ++Self->Assimilator.BlobsPutError;
         }
         const auto it = PutIdToKey.find(ev->Cookie);
         Y_ABORT_UNLESS(it != PutIdToKey.end());
@@ -538,6 +611,42 @@ namespace NKikimr::NBlobDepot {
         }
 
         return stream.Str();
+    }
+
+    void TAssimilator::UpdateAssimilatorPosition() const {
+        Self->Assimilator.Position = TStringBuilder()
+            << "SkipBlocksUpTo# " << (SkipBlocksUpTo ? ToString(*SkipBlocksUpTo) : "<none>") << Endl
+            << "SkipBarriersUpTo# " << (SkipBarriersUpTo
+                ? TString(TStringBuilder() << std::get<0>(*SkipBarriersUpTo) << ':' << (int)std::get<1>(*SkipBarriersUpTo))
+                : "<none>") << Endl
+            << "SkipBlobsUpTo# " << (SkipBlobsUpTo ? SkipBlobsUpTo->ToString() : "<none>");
+    }
+
+    void TAssimilator::UpdateBytesCopiedQ() {
+        while (BytesCopiedQ.size() >= 3) {
+            BytesCopiedQ.pop_front();
+        }
+        BytesCopiedQ.emplace_back(TActivationContext::Monotonic(), Self->Assimilator.BytesCopied);
+
+        Self->Assimilator.CopySpeed = 0;
+        Self->Assimilator.CopyTimeRemaining = TDuration::Max();
+
+        if (BytesCopiedQ.size() > 1) {
+            const auto& [frontTs, frontBytes] = BytesCopiedQ.front();
+            const auto& [backTs, backBytes] = BytesCopiedQ.back();
+            const TDuration deltaTs = backTs - frontTs;
+            const ui64 deltaBytes = backBytes - frontBytes;
+            if (deltaTs != TDuration::Zero()) {
+                Self->Assimilator.CopySpeed = deltaBytes * 1'000'000 / deltaTs.MicroSeconds();
+            }
+            if (deltaBytes) {
+                Self->Assimilator.CopyTimeRemaining = TDuration::MicroSeconds(Self->Assimilator.BytesToCopy *
+                    deltaTs.MicroSeconds() / deltaBytes);
+            }
+        }
+
+        TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvUpdateBytesCopiedQ, 0,
+            SelfId(), {}, nullptr, 0));
     }
 
     void TBlobDepot::TData::ExecuteTxCommitAssimilatedBlob(NKikimrProto::EReplyStatus status, TBlobSeqId blobSeqId,

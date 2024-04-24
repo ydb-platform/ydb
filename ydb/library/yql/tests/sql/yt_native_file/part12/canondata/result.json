@@ -486,7 +486,7 @@
         {
             "checksum": "6652cd5761c3af50b3c30de660f1664e",
             "size": 4380,
-            "uri": "https://{canondata_backend}/1946324/3d31b9d61b72ca9cdd0bdf31714fd56ff70a0fb3/resource.tar.gz#test.test_blocks-lazy_nonstrict_with_scalar_ctx--Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1942278/90a4195afff0e9c50d03b8fbd12c9ece91506f18/resource.tar.gz#test.test_blocks-lazy_nonstrict_with_scalar_ctx--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-lazy_nonstrict_with_scalar_ctx--Plan]": [

@@ -189,7 +189,7 @@ void TOperation::AddRepeatableReadConflict(const TOperation::TPtr &op) {
     Y_DEBUG_ABORT_UNLESS(!op->IsImmediate());
 
     if (IsMvccSnapshotRepeatable()) {
-        AddDependency(this);
+        AddDependency(op);
         return;
     }
 

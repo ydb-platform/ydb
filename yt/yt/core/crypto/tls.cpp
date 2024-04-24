@@ -268,7 +268,7 @@ public:
     {
         auto promise = NewPromise<size_t>();
         ++ActiveIOCount_;
-        Invoker_->Invoke(BIND([this, this_ = MakeStrong(this), promise, buffer] () {
+        Invoker_->Invoke(BIND([this, this_ = MakeStrong(this), promise, buffer] {
             ReadBuffer_ = buffer;
             ReadPromise_ = promise;
 
@@ -289,7 +289,7 @@ public:
     {
         auto promise = NewPromise<void>();
         ++ActiveIOCount_;
-        Invoker_->Invoke(BIND([this, this_ = MakeStrong(this), promise, buffer] () {
+        Invoker_->Invoke(BIND([this, this_ = MakeStrong(this), promise, buffer] {
             WriteBuffer_ = buffer;
             WritePromise_ = promise;
 
@@ -316,7 +316,7 @@ public:
     TFuture<void> Close() override
     {
         ++ActiveIOCount_;
-        return BIND([this, this_ = MakeStrong(this)] () {
+        return BIND([this, this_ = MakeStrong(this)] {
             CloseRequested_ = true;
 
             DoRun();
@@ -332,7 +332,7 @@ public:
 
     TFuture<void> Abort() override
     {
-        return BIND([this, this_ = MakeStrong(this)] () {
+        return BIND([this, this_ = MakeStrong(this)] {
             if (Error_.IsOK()) {
                 Error_ = TError("TLS connection aborted");
                 CheckError();
@@ -562,7 +562,7 @@ public:
     TFuture<IConnectionPtr> Dial(const TNetworkAddress& remote, TDialerContextPtr context) override
     {
         return Underlying_->Dial(remote)
-            .Apply(BIND([ctx = Ctx_, poller = Poller_, context = std::move(context)](const IConnectionPtr& underlying) -> IConnectionPtr {
+            .Apply(BIND([ctx = Ctx_, poller = Poller_, context = std::move(context)] (const IConnectionPtr& underlying) -> IConnectionPtr {
                 auto connection = New<TTlsConnection>(ctx, poller, underlying);
                 if (context != nullptr && context->Host != std::nullopt) {
                     connection->SetHost(*(context->Host));

@@ -1449,7 +1449,7 @@ namespace NKikimr {
                         LOG_CRIT_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
                             << "VDiskId mismatch expected# " << SelfVDiskId << " provided# " << vdiskId
                             << " Marker# BSVSF05");
-                        Y_DEBUG_ABORT_UNLESS(false, "VDiskId mismatch");
+                        Y_DEBUG_ABORT("VDiskId mismatch");
                         return Reply(ev, ctx, NKikimrProto::ERROR, "VDiskId mismatch", TAppData::TimeProvider->Now());
                     }
                     if (vdiskId != SelfVDiskId) {
@@ -1982,7 +1982,7 @@ namespace NKikimr {
                     LOG_CRIT_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
                         << "VDiskId mismatch expected# " << SelfVDiskId << " provided# " << vdiskId
                         << " Type# " << TypeName<TEventType>() << " Marker# BSVSF06");
-                    Y_DEBUG_ABORT_UNLESS(false, "VDiskId mismatch");
+                    Y_DEBUG_ABORT("VDiskId mismatch");
                     return Reply(ev, ctx, NKikimrProto::ERROR, "VDiskId mismatch", TAppData::TimeProvider->Now());
                 } else if (!vdiskId.SameDisk(SelfVDiskId)) {
                     return Reply(ev, ctx, NKikimrProto::RACE, "group generation mismatch", TAppData::TimeProvider->Now());
@@ -2089,7 +2089,7 @@ namespace NKikimr {
                 HFuncStatus(TEvBlobStorage::TEvVGetBlock, status, errorReason, now, wstatus);
                 HFuncStatus(TEvBlobStorage::TEvVCollectGarbage, status, errorReason, now, wstatus);
                 HFuncStatus(TEvBlobStorage::TEvVGetBarrier, status, errorReason, now, wstatus);
-                default: Y_DEBUG_ABORT_UNLESS(false, "Unsupported message %d", ev->GetTypeRewrite());
+                default: Y_DEBUG_ABORT("Unsupported message %d", ev->GetTypeRewrite());
             }
         }
 

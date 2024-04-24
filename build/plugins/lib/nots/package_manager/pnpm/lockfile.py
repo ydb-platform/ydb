@@ -112,6 +112,16 @@ class PnpmLockfile(BaseLockfile):
 
         return (not invalid_keys, invalid_keys)
 
+    def get_requires_build_packages(self):
+        packages = self.data.get("packages", {})
+        requires_build_packages = []
+
+        for key, meta in iteritems(packages):
+            if meta.get("requiresBuild"):
+                requires_build_packages.append(key[1:])  # strip leading slash from key
+
+        return requires_build_packages
+
 
 def _parse_package_meta(key, meta, allow_file_protocol=False):
     """

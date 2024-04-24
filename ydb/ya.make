@@ -1,9 +1,6 @@
 RECURSE(
     apps
     core
-    docs
-    docs/en/core
-    docs/ru/core
     library
     mvp
     public

@@ -2875,20 +2875,28 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         const TString query = R"(
             CREATE TABLE `/Root/DataShard` (
-                Col1 Uint64 NOT NULL,
+                Col1 Uint32 NOT NULL,
                 Col2 String,
                 Col3 Int32 NOT NULL,
                 PRIMARY KEY (Col1)
             )
-            WITH (UNIFORM_PARTITIONS = 2, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+            WITH (
+                AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16,
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 16,
+                UNIFORM_PARTITIONS = 16);
 
             CREATE TABLE `/Root/DataShard2` (
-                Col1 Uint64 NOT NULL,
+                Col1 Uint32 NOT NULL,
                 Col2 String,
                 Col3 Int32 NOT NULL,
                 PRIMARY KEY (Col1)
             )
-            WITH (UNIFORM_PARTITIONS = 2, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+            WITH (
+                AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 17,
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 17,
+                UNIFORM_PARTITIONS = 17);
         )";
 
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -2898,7 +2906,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
-                    (10u, "test1", 10), (20u, "test2", 11), (30u, "test3", 12), (40u, NULL, 13);
+                    (10u, "test1", 10), (20u, "test2", 11), (2147483647u, "test3", 12), (2147483640u, NULL, 13);
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
@@ -2930,6 +2938,26 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             CompareYson(
                 output,
                 R"([[4u]])");
+        }
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/DataShard2` (Col1, Col2, Col3) VALUES
+                    (11u, "test1", 10), (21u, "test2", 11), (2147483646u, "test3", 12), (2147483641u, NULL, 13);
+                SELECT COUNT(*) FROM `/Root/DataShard`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/DataShard2`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(
+                output,
+                R"([[8u]])");
         }
     }
 }

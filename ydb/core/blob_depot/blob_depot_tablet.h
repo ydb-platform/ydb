@@ -290,6 +290,24 @@ namespace NKikimr::NBlobDepot {
         TActorId GroupAssimilatorId;
         EDecommitState DecommitState = EDecommitState::Default;
         std::optional<TString> AssimilatorState;
+        struct {
+            TString Position;
+            TInstant LatestErrorGet;
+            TInstant LatestOkGet;
+            TInstant LatestErrorPut;
+            TInstant LatestOkPut;
+            TLogoBlobID LastReadBlobId;
+            ui64 BytesToCopy = 0;
+            ui64 BytesCopied = 0;
+            ui64 CopySpeed = 0;
+            TDuration CopyTimeRemaining = TDuration::Max();
+            ui64 BlobsReadOk = 0;
+            ui64 BlobsReadNoData = 0;
+            ui64 BlobsReadError = 0;
+            ui64 BlobsPutOk = 0;
+            ui64 BlobsPutError = 0;
+            ui32 CopyIteration = 0;
+        } Assimilator;
 
         class TGroupAssimilator;
 
@@ -301,6 +319,8 @@ namespace NKikimr::NBlobDepot {
         ui64 BytesRead = 0;
         ui64 BytesWritten = 0;
         std::deque<std::tuple<TMonotonic, ui64, ui64>> MetricsQ;
+        ui64 ReadThroughput = 0;
+        ui64 WriteThroughput = 0;
 
         void DoGroupMetricsExchange();
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);

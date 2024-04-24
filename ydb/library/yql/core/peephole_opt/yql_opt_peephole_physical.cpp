@@ -5672,7 +5672,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         std::string_view arrowFunctionName;
         const bool rewriteAsIs = node->IsCallable({"AssumeStrict", "AssumeNonStrict", "Likely"});
         if (node->IsList() || rewriteAsIs ||
-            node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "AsStruct", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
+            node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
         {
             if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), ctx, types)) {
                 return true;
@@ -5708,29 +5708,6 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                     funcArgs.push_back(rit->second);
                 } else {
                     return true;
-                }
-            }
-
-            // <AsStruct> arguments (i.e. members of the resulting structure)
-            // are literal tuples, that don't propagate their child rewrites.
-            // Hence, process these rewrites the following way: wrap the
-            // complete expressions, supported by the block engine, with
-            // <AsScalar> callable or apply the rewrite of one is found.
-            // Otherwise, abort this <AsStruct> rewrite, since one of its
-            // arguments is neither block nor scalar.
-            if (node->IsCallable("AsStruct")) {
-                for (ui32 index = 0; index < node->ChildrenSize(); index++) {
-                    auto member = funcArgs[index];
-                    auto child = member->TailPtr();
-                    TExprNodePtr rewrite;
-                    if (child->IsComplete() && IsSupportedAsBlockType(child->Pos(), *child->GetTypeAnn(), ctx, types)) {
-                        rewrite = ctx.NewCallable(child->Pos(), "AsScalar", { child });
-                    } else if (auto rit = rewrites.find(child.Get()); rit != rewrites.end()) {
-                        rewrite = rit->second;
-                    } else {
-                        return true;
-                    }
-                    funcArgs[index] = ctx.NewList(member->Pos(), {member->HeadPtr(), rewrite});
                 }
             }
 
@@ -8147,16 +8124,23 @@ TExprNode::TPtr DropAssume(const TExprNode::TPtr& node, TExprContext&) {
 }
 
 TExprNode::TPtr OptimizeCoalesce(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (const auto& input = node->Head(); input.IsCallable("If") && (input.Child(1U)->IsComplete() || input.Child(2U)->IsComplete())) {
+    if (const auto& input = node->Head(); input.IsCallable("If") && input.ChildrenSize() == 3U &&
+        (input.Child(1U)->IsComplete() || input.Child(2U)->IsComplete())) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Dive " << node->Content() << " into " << input.Content();
         return ctx.ChangeChildren(input, {
             input.HeadPtr(),
             ctx.ChangeChild(*node, 0U, input.ChildPtr(1U)),
             ctx.ChangeChild(*node, 0U, input.ChildPtr(2U))
         });
-    } else if (input.IsCallable("Nothing")) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << input.Content();
-        return node->TailPtr();
+    } else if (node->ChildrenSize() == 2U) {
+        if (input.IsCallable("Nothing")) {
+            YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << input.Content();
+            return node->TailPtr();
+        } else if (input.IsCallable("Just")) {
+            YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << input.Content();
+            return IsSameAnnotation(*node->GetTypeAnn(), *input.GetTypeAnn()) ?
+                node->HeadPtr() : input.HeadPtr();
+        }
     }
     return node;
 }

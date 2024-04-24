@@ -1031,12 +1031,12 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
 }
 
 ui32 TDataShard::GetFreeChangeQueueCapacity(ui64 cookie) {
-    const auto sizeLimit = AppData()->DataShardConfig.GetChangesQueueItemsLimit();
+    const ui64 sizeLimit = AppData()->DataShardConfig.GetChangesQueueItemsLimit();
     if (sizeLimit < ChangesQueue.size()) {
         return 0;
     }
 
-    const auto free = Min(sizeLimit - ChangesQueue.size(), Max(sizeLimit / 2, 1ul));
+    const ui64 free = Min<ui64>(sizeLimit - ChangesQueue.size(), Max<ui64>(sizeLimit / 2, 1));
 
     ui32 reserved = ChangeQueueReservedCapacity;
     if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
@@ -1051,8 +1051,8 @@ ui32 TDataShard::GetFreeChangeQueueCapacity(ui64 cookie) {
 }
 
 ui64 TDataShard::ReserveChangeQueueCapacity(ui32 capacity) {
-    const auto sizeLimit = AppData()->DataShardConfig.GetChangesQueueItemsLimit();
-    if (Max(sizeLimit / 2, 1ul) < ChangeQueueReservedCapacity) {
+    const ui64 sizeLimit = AppData()->DataShardConfig.GetChangesQueueItemsLimit();
+    if (Max<ui64>(sizeLimit / 2, 1) < ChangeQueueReservedCapacity) {
         return 0;
     }
 

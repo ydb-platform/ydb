@@ -131,7 +131,7 @@ public:
 
     EReady SeekLast() override {
         if (Y_UNLIKELY(GetEndRowId() == 0)) {
-            Y_DEBUG_ABORT_UNLESS(false, "TPart can't be empty");
+            Y_DEBUG_ABORT("TPart can't be empty");
             return Exhaust();
         }
         return Seek(GetEndRowId() - 1);

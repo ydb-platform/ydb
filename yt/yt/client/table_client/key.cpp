@@ -143,7 +143,7 @@ void Serialize(const TKey& key, IYsonConsumer* consumer)
 {
     if (key) {
         BuildYsonFluently(consumer)
-            .DoListFor(MakeRange(key.Begin(), key.End()), [&](TFluentList fluent, const TUnversionedValue& value) {
+            .DoListFor(MakeRange(key.Begin(), key.End()), [&] (TFluentList fluent, const TUnversionedValue& value) {
                 fluent
                     .Item()
                     .Value(value);

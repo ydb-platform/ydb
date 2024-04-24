@@ -370,4 +370,67 @@ Y_UNIT_TEST_SUITE(TSequence) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(AlterSequence) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+
+        TestCreateSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto value = DoNextVal(runtime, "/MyRoot/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 1);
+
+        value = DoNextVal(runtime, "/MyRoot/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 2);
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Increment: 2
+            MaxValue: 5
+            MinValue: 2
+            Cache: 1
+            StartValue: 2
+            Cycle: true
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/seq", true),
+                {
+                    NLs::SequenceIncrement(2),
+                    NLs::SequenceMaxValue(5),
+                    NLs::SequenceMinValue(2),
+                    NLs::SequenceCache(1),
+                    NLs::SequenceStartValue(2),
+                    NLs::SequenceCycle(true)
+                }
+        );
+
+        value = DoNextVal(runtime, "/MyRoot/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 3);
+
+        value = DoNextVal(runtime, "/MyRoot/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 5);
+
+        value = DoNextVal(runtime, "/MyRoot/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 2);
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Cycle: false
+            MaxValue: 4
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        value = DoNextVal(runtime, "/MyRoot/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 4);
+
+        DoNextVal(runtime, "/MyRoot/seq", Ydb::StatusIds::SCHEME_ERROR);
+    }
+
 } // Y_UNIT_TEST_SUITE(TSequence)

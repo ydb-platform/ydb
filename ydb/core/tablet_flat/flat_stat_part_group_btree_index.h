@@ -76,7 +76,7 @@ public:
                     continue; // don't go deeper
                 }
 
-                auto page = Env->TryGetPage(Part, nodeState.PageId);
+                auto page = Env->TryGetPage(Part, nodeState.PageId, {});
                 if (!page) {
                     ready = false;
                     continue; // continue requesting other nodes

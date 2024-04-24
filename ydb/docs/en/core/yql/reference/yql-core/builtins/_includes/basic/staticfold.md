@@ -8,8 +8,8 @@ StaticFold1(obj:Struct/Tuple, initLambda, updateLambda)
 Fold over struct/tuple elements.
 
 - `obj` - object to fold
-- `initVal` - _(StaticFold)_ initial fold state
-- `initLambda` - _(StaticFold1)_ lambda that produces initial fold state by first element
+- `initVal` - _(for StaticFold)_ initial fold state
+- `initLambda` - _(for StaticFold1)_ lambda that produces initial fold state from the first element
 - `updateLambda` - lambda that produces the new state (arguments are the next element and the previous state)
 
 
@@ -21,6 +21,7 @@ $f($el_n, ...$f($el_2, $f($init, el_1))...)
 ```yql
 $f($el_n, ...$f($el_2, $f($f0($init), el_1))...)
 ```
-`StaticFold1(<||>, $f0, $f)` is Null
+
+`StaticFold1(<||>, $f0, $f)` returns `NULL`.
 
 Works with tuples in the same way.

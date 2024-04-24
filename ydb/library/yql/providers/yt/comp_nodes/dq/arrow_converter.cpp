@@ -156,6 +156,10 @@ public:
     const char* Data() {
         return Data_;
     }
+    
+    size_t Available() const {
+        return Available_;
+    }
 private:
     const char* Data_;
     size_t Available_;
@@ -328,10 +332,9 @@ public:
     }
 
     NUdf::TBlockItem GetNotNull(TYsonReaderDetails& buf) override final {
-        YQL_ENSURE(buf.Current() == StringMarker);
-        using TLayout = NUdf::TDataType<T>::TLayout;
-        buf.Next();
-        const ui32 length = buf.ReadVarI32();
+        using TLayout = typename NUdf::TDataType<T>::TLayout;
+        size_t length = sizeof(TLayout) + sizeof(NUdf::TTimezoneId);
+        Y_ASSERT(buf.Available() == length);
 
         TLayout date;
         NUdf::TTimezoneId tz;

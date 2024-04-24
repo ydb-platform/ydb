@@ -457,7 +457,7 @@ private:
 };
 
 template<typename TDate, bool Nullable>
-class TTzDateBlockSerializer final : public TTupleBlockSerializerBase<Nullable, TTupleBlockSerializer<Nullable>> {
+class TTzDateBlockSerializer final : public TTupleBlockSerializerBase<Nullable, TTzDateBlockSerializer<TDate, Nullable>> {
 public:
     TTzDateBlockSerializer() = default;
 

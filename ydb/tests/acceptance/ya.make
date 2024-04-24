@@ -17,6 +17,7 @@ SIZE(MEDIUM)
 
 DEPENDS(
     ydb/apps/ydbd
+    ydb/tools/ydbd_slice
 )
 
 PEERDIR(

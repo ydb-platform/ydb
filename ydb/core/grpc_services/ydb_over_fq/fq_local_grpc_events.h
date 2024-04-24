@@ -40,8 +40,6 @@ enum EEventTypes {
     EvDescribeQueryResponse,
     EvGetResultDataRequest,
     EvGetResultDataResponse,
-    EvListConnectionsRequest,
-    EvListConnectionsResponse,
     EvListBindingsRequest,
     EvListBindingsResponse,
     EvDescribeBindingRequest,
@@ -86,7 +84,6 @@ DEFINE_LOCAL_GRPC_CALL(GetQueryStatus)
 DEFINE_LOCAL_GRPC_CALL(DescribeQuery)
 DEFINE_LOCAL_GRPC_CALL(GetResultData)
 DEFINE_LOCAL_GRPC_CALL(ListBindings)
-DEFINE_LOCAL_GRPC_CALL(ListConnections)
 DEFINE_LOCAL_GRPC_CALL(DescribeBinding)
 
 #undef DEFINE_EVENT

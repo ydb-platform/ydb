@@ -975,6 +975,30 @@
             "uri": "file://test.test_expr-non_persistable_group_by_column_fail--Results_/extracted"
         }
     ],
+    "test.test[expr-struct_merge-default.txt-Debug]": [
+        {
+            "checksum": "fce2c844c988321c6ccf211c25b76535",
+            "size": 741,
+            "uri": "https://{canondata_backend}/1881367/84017fd57088f9d554efcf1a44f82b22e5b164b7/resource.tar.gz#test.test_expr-struct_merge-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[expr-struct_merge-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1881367/84017fd57088f9d554efcf1a44f82b22e5b164b7/resource.tar.gz#test.test_expr-struct_merge-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[expr-struct_merge-default.txt-Results]": [
+        {
+            "checksum": "097dcae2cb7a16670e086b0504a22355",
+            "size": 8522,
+            "uri": "https://{canondata_backend}/1881367/84017fd57088f9d554efcf1a44f82b22e5b164b7/resource.tar.gz#test.test_expr-struct_merge-default.txt-Results_/results.txt"
+        },
+        {
+            "uri": "file://test.test_expr-struct_merge-default.txt-Results_/extracted"
+        }
+    ],
     "test.test[flatten_by-flatten_one_field--Debug]": [
         {
             "checksum": "1e1f4bdf8614f3314eb9a5b53d01d8db",

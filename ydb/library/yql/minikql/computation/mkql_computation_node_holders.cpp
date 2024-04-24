@@ -3540,6 +3540,52 @@ void GetDictionaryKeyTypes(const TType* keyType, TKeyTypes& types, bool& isTuple
     }
 }
 
+bool GetKeyTypesForContainerHelper(const TType* keyType, TKeyTypes& types, bool& isTupleOrStruct) {
+    types.clear();
+    isTupleOrStruct = false;
+    if (!keyType->IsPresortSupported()) {
+        return false;
+    }
+    const bool isOptional = keyType->IsOptional();
+    if (isOptional) {
+        keyType = AS_TYPE(TOptionalType, keyType)->GetItemType();
+    }
+    if (keyType->IsTuple()) {
+        auto tuple = AS_TYPE(TTupleType, keyType);
+        for (ui32 i = 0; i < tuple->GetElementsCount(); ++i) {
+            bool isOptional;
+            auto unpacked = UnpackOptional(tuple->GetElementType(i), isOptional);
+            if (!unpacked->IsData()) {
+                types.clear();
+                return false;
+            }
+            types.emplace_back(*AS_TYPE(TDataType, unpacked)->GetDataSlot(), isOptional);
+        }
+        isTupleOrStruct = true;
+        return true;
+    }
+    if (keyType->IsStruct()) {
+        auto s = AS_TYPE(TStructType, keyType);
+        for (ui32 i = 0; i < s->GetMembersCount(); ++i) {
+            bool isOptional;
+            auto unpacked = UnpackOptional(s->GetMemberType(i), isOptional);
+            if (!unpacked->IsData()) {
+                types.clear();
+                return false;
+            }
+            types.emplace_back(*AS_TYPE(TDataType, unpacked)->GetDataSlot(), isOptional);
+        }
+        isTupleOrStruct = true;
+        return true;
+    }
+    if (keyType->IsData()) {
+        types.emplace_back(*AS_TYPE(TDataType, keyType)->GetDataSlot(), isOptional);
+        return true;
+    }
+    return false;
+}
+
+
 TPlainContainerCache::TPlainContainerCache() {
     Clear();
 }

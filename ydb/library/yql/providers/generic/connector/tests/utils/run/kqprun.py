@@ -192,13 +192,25 @@ class KqpRunner(Runner):
 
         # For debug add option --trace-opt to args
         cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full'
-        out = subprocess.run(cmd, shell=True, capture_output=True)
 
+        output = None
         data_out = None
         data_out_with_types = None
         schema = None
+        returncode = 0
 
-        if out.returncode == 0:
+        try:
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, timeout=60)
+        except subprocess.CalledProcessError as e:
+            LOGGER.error(
+                'Execution failed:\n\nSTDOUT: %s\n\nSTDERR: %s\n\n',
+                e.stdout.decode('utf-8') if e.stdout else None,
+                e.stderr.decode('utf-8') if e.stderr else None,
+            )
+
+            output = e.stdout
+            returncode = e.returncode
+        else:
             # Parse output
             with open(result_path, 'r') as f:
                 result = json.loads(f.read().encode('ascii'), strict=False)
@@ -225,24 +237,14 @@ class KqpRunner(Runner):
             artifacts.dump_json(data_out, test_name, "data_out.yson")
             artifacts.dump_str(data_out_with_types, test_name, "data_out_with_types.yson")
 
-        else:
-            LOGGER.error(
-                'Execution failed:\n\nSTDOUT: %s\n\nSTDERR: %s\n\n',
-                out.stdout.decode('utf-8'),
-                out.stderr.decode('utf-8'),
-            )
-
-        with open(artifacts.make_path(test_name, "kqprun.err"), "w") as f:
-            f.write(out.stderr.decode('utf-8'))
-
-        with open(artifacts.make_path(test_name, "kqprun.out"), "w") as f:
-            f.write(out.stdout.decode('utf-8'))
+        finally:
+            with open(artifacts.make_path(test_name, "kqprun.out"), "w") as f:
+                f.write(output.decode('utf-8'))
 
         return Result(
             data_out=data_out,
             data_out_with_types=data_out_with_types,
             schema=schema,
-            stdout=out.stdout.decode('utf-8'),
-            stderr=out.stderr.decode('utf-8'),
-            returncode=out.returncode,
+            output=output.decode('utf-8') if output else None,
+            returncode=returncode,
         )

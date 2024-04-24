@@ -2300,7 +2300,7 @@ public:
     bool DoInit(TContext& ctx, ISource* src) override {
         Scoped->UseCluster(ServiceId, Cluster);
 
-        auto keys = Y("Key", Q(Y(Q("id"), Y("String", BuildQuotedAtom(Pos, Id)))));
+        auto keys = Y("Key", Q(Y(Q("replication"), Y("String", BuildQuotedAtom(Pos, Id)))));
         auto options = FillOptions(Y(Q(Y(Q("mode"), Q(Mode)))));
 
         Add("block", Q(Y(
@@ -2328,7 +2328,7 @@ public:
             std::vector<std::pair<TString, TString>>&& targets,
             std::map<TString, TNodePtr>&& settings,
             const TObjectOperatorContext& context)
-        : TAsyncReplication(pos, id, "createAsyncReplication", context)
+        : TAsyncReplication(pos, id, "create", context)
         , Targets(std::move(targets))
         , Settings(std::move(settings))
     {
@@ -2379,27 +2379,58 @@ TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
 class TDropAsyncReplication final: public TAsyncReplication {
 public:
     explicit TDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context)
-        : TAsyncReplication(pos, id, "dropAsyncReplication", context)
-        , Cascade(cascade)
+        : TAsyncReplication(pos, id, cascade ? "dropCascade" : "drop", context)
     {
     }
 
 protected:
     INode::TPtr FillOptions(INode::TPtr options) const override {
-        if (Cascade) {
-            options = L(options, Q(Y(Q("cascade"))));
+        return options;
+    }
+
+}; // TDropAsyncReplication
+
+TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context) {
+    return new TDropAsyncReplication(pos, id, cascade, context);
+}
+
+class TAlterAsyncReplication final: public TAsyncReplication {
+public:
+    explicit TAlterAsyncReplication(TPosition pos, const TString& id,
+            std::map<TString, TNodePtr>&& settings,
+            const TObjectOperatorContext& context)
+        : TAsyncReplication(pos, id, "alter", context)
+        , Settings(std::move(settings))
+    {
+    }
+
+protected:
+    INode::TPtr FillOptions(INode::TPtr options) const override {
+        if (!Settings.empty()) {
+            auto settings = Y();
+            for (auto&& [k, v] : Settings) {
+                if (v) {
+                    settings = L(settings, Q(Y(BuildQuotedAtom(Pos, k), v)));
+                } else {
+                    settings = L(settings, Q(Y(BuildQuotedAtom(Pos, k))));
+                }
+            }
+            options = L(options, Q(Y(Q("settings"), Q(settings))));
         }
 
         return options;
     }
 
 private:
-    const bool Cascade;
+    std::map<TString, TNodePtr> Settings;
 
-}; // TDropAsyncReplication
+}; // TAlterAsyncReplication
 
-TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context) {
-    return new TDropAsyncReplication(pos, id, cascade, context);
+TNodePtr BuildAlterAsyncReplication(TPosition pos, const TString& id,
+        std::map<TString, TNodePtr>&& settings,
+        const TObjectOperatorContext& context)
+{
+    return new TAlterAsyncReplication(pos, id, std::move(settings), context);
 }
 
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR {

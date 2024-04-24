@@ -2124,7 +2124,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
             }
             Y_ABORT_UNLESS(partNo == totalParts);
         } else if (cmd.GetHeartbeat().GetData().size() > mSize) {
-            Y_DEBUG_ABORT_UNLESS(false, "This should never happen");
+            Y_DEBUG_ABORT("This should never happen");
             ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, TStringBuilder()
                 << "Too big heartbeat message, must be at most " << mSize << ", but got " << cmd.GetHeartbeat().GetData().size());
             return;
@@ -3173,8 +3173,15 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         return;
     }
 
-    if (txBody.GetImmediate() && !txBody.HasWriteId()) {
-        const TPartitionInfo& partition = Partitions.at(*partitionId);
+    if (txBody.GetImmediate()) {
+        TPartitionId originalPartitionId(txBody.GetOperations(0).GetPartitionId());
+        const TPartitionInfo& partition = Partitions.at(originalPartitionId);
+
+        if (txBody.HasWriteId()) {
+            Y_ABORT_UNLESS(Partitions.contains(*partitionId));
+            const TPartitionInfo& partition = Partitions.at(*partitionId);
+            ActorIdToProto(partition.Actor, event.MutableSupportivePartitionActor());
+        }
 
         ctx.Send(partition.Actor, ev.Release());
     } else {
@@ -4410,6 +4417,13 @@ void TPersQueue::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const
     }
 }
 
+void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx)
+{
+    if (ReadBalancerActorId) {
+        ctx.Send(ReadBalancerActorId, ev->Release().Release());
+    }
+}
+
 TString TPersQueue::LogPrefix() const {
     return TStringBuilder() << SelfId() << " ";
 }
@@ -4463,6 +4477,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPersQueue::TEvCancelTransactionProposal, Handle);
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
+        HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
         HFuncTraced(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
         HFuncTraced(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
         default:

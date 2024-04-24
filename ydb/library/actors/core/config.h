@@ -55,11 +55,17 @@ namespace NActors {
         ui32 MaxAvgPingUs;
     };
 
+    struct TExecutorPoolJailConfig {
+        ui32 MaxThreadsInJailCore = 0;
+        TCpuMask JailAffinity;
+    };
+
     struct TCpuManagerConfig {
         TVector<TBasicExecutorPoolConfig> Basic;
         TVector<TIOExecutorPoolConfig> IO;
         TVector<TSelfPingInfo> PingInfoByPool;
         TSharedExecutorPoolConfig Shared;
+        std::optional<TExecutorPoolJailConfig> Jail;
 
         ui32 GetExecutorsCount() const {
             return Basic.size() + IO.size();

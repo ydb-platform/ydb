@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
             IActor *actor = runtime.FindActor(event->Sender);
             if (actor && actor->GetActivityType() == 186) {
                 Cerr << "Ignore SchemeShard TEvCompactBorrowed from " << event->Sender << "(" << actor->GetActivityType() << ")" << " to " << event->Recipient << Endl;
-                Y_UNUSED(event.Release());
+                event.Reset();
             }
         });
 

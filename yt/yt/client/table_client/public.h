@@ -429,6 +429,9 @@ using TDynamicTableKeyMask = ui64;
 
 static_assert(sizeof(TDynamicTableKeyMask) * 8 == MaxKeyColumnCountInDynamicTable);
 
+// Function that compares two TUnversionedValue values.
+using TUUComparerSignature = int(const TUnversionedValue*, const TUnversionedValue*, int);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NTableClient

@@ -15,8 +15,8 @@ namespace {
     const NTest::TMass Mass(new NTest::TModelStd(false), 999);
 }
 
-using TCheckIt = NTest::TChecker<NTest::TWrapMemtable, TIntrusiveConstPtr<TMemTable>>;
-using TCheckReverseIt = NTest::TChecker<NTest::TWrapReverseMemtable, TIntrusiveConstPtr<TMemTable>>;
+using TCheckIter = NTest::TChecker<NTest::TWrapMemtable, TIntrusiveConstPtr<TMemTable>>;
+using TCheckReverseIter = NTest::TChecker<NTest::TWrapReverseMemtable, TIntrusiveConstPtr<TMemTable>>;
 
 Y_UNIT_TEST_SUITE(Memtable)
 {
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(Memtable)
         const auto foo = *TSchemedCookRow(*lay).Col(555_u32, "foo", 3.14, nullptr);
         const auto bar = *TSchemedCookRow(*lay).Col(777_u32, "bar", 2.72, true);
 
-        TCheckIt wrap(TCooker(lay).Add(foo).Add(bar).Unwrap(), { });
+        TCheckIter wrap(TCooker(lay).Add(foo).Add(bar).Unwrap(), { });
 
         wrap.To(10).Has(foo).Has(bar);
         wrap.To(11).NoVal(*TSchemedCookRow(*lay).Col(555_u32, "foo", 10.));
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(Memtable)
         const auto foo = *TSchemedCookRow(*lay).Col(555_u32, "foo", 3.14, nullptr);
         const auto bar = *TSchemedCookRow(*lay).Col(777_u32, "bar", 2.72, true);
 
-        TCheckReverseIt wrap(TCooker(lay).Add(foo).Add(bar).Unwrap(), { });
+        TCheckReverseIter wrap(TCooker(lay).Add(foo).Add(bar).Unwrap(), { });
 
         wrap.To(10).Has(foo).Has(bar);
         wrap.To(11).NoVal(*TSchemedCookRow(*lay).Col(555_u32, "foo", 10.));
@@ -122,8 +122,8 @@ Y_UNIT_TEST_SUITE(Memtable)
 
         TCooker cooker(lay);
 
-        TCheckIt(*cooker.Add(reset, ERowOp::Upsert), { }).To(10).Has(reset);
-        TCheckIt(*cooker.Add(null, ERowOp::Upsert), { }).To(11).Has(null);
+        TCheckIter(*cooker.Add(reset, ERowOp::Upsert), { }).To(10).Has(reset);
+        TCheckIter(*cooker.Add(null, ERowOp::Upsert), { }).To(11).Has(null);
     }
 
     Y_UNIT_TEST(Overlap)
@@ -140,19 +140,19 @@ Y_UNIT_TEST_SUITE(Memtable)
 
         TCooker cooker(lay);
 
-        TCheckIt(*cooker.Add(r0W, ERowOp::Upsert), { }).To(10).Has(r0W);
-        TCheckIt(*cooker.Add(r1W, ERowOp::Upsert), { }).To(11).Has(r1W);
-        TCheckIt(*cooker.Add(r2W, ERowOp::Upsert), { }).To(12).Has(r2R);
-        TCheckIt(*cooker.Add(r3W, ERowOp::Upsert), { }).To(13).Has(r3W);
-        TCheckIt(*cooker.Add(r4W, ERowOp::Upsert), { }).To(14).Has(r4R);
-        TCheckIt(*cooker.Add(r0W, ERowOp::Erase), { }).To(19).NoKey(r0W, false);
+        TCheckIter(*cooker.Add(r0W, ERowOp::Upsert), { }).To(10).Has(r0W);
+        TCheckIter(*cooker.Add(r1W, ERowOp::Upsert), { }).To(11).Has(r1W);
+        TCheckIter(*cooker.Add(r2W, ERowOp::Upsert), { }).To(12).Has(r2R);
+        TCheckIter(*cooker.Add(r3W, ERowOp::Upsert), { }).To(13).Has(r3W);
+        TCheckIter(*cooker.Add(r4W, ERowOp::Upsert), { }).To(14).Has(r4R);
+        TCheckIter(*cooker.Add(r0W, ERowOp::Erase), { }).To(19).NoKey(r0W, false);
     }
 
     Y_UNIT_TEST(Wreck)
     {
         auto egg = *TCooker(Mass.Model->Scheme).Add(Mass.Saved, ERowOp::Upsert);
 
-        TWreck<TCheckIt, TIntrusiveConstPtr<TMemTable>>(Mass, 666).Do(EWreck::Cached, egg);
+        TWreck<TCheckIter, TIntrusiveConstPtr<TMemTable>>(Mass, 666).Do(EWreck::Cached, egg);
     }
 
     Y_UNIT_TEST(Erased)
@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(Memtable)
                 .Add(Mass.Holes, ERowOp::Upsert)
                 .Add(Mass.Holes, ERowOp::Erase);
 
-        TWreck<TCheckIt, TIntrusiveConstPtr<TMemTable>>(Mass, 666).Do(EWreck::Cached, egg);
+        TWreck<TCheckIter, TIntrusiveConstPtr<TMemTable>>(Mass, 666).Do(EWreck::Cached, egg);
     }
 
 }

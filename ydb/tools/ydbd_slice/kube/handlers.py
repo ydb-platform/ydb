@@ -6,7 +6,7 @@ import logging
 from collections import defaultdict
 from kubernetes.client import Configuration
 
-from ydb.tools.ydbd_slice import nodes, handlers
+from ydb.tools.ydbd_slice import nodes
 from ydb.tools.ydbd_slice.kube import api, kubectl, yaml, generate, cms, dynconfig
 
 
@@ -230,10 +230,9 @@ def slice_nodeclaim_format(api_client, project_path, manifests):
         logger.info('no nodes found, nothing to format.')
         return
     node_list = nodes.Nodes(node_list)
-    handlers.format_drivers(node_list)
     cmd = r"sudo find /dev/disk/ -path '*/by-partlabel/kikimr_*' " \
           r"-exec dd if=/dev/zero of={} bs=1M count=1 status=none \;"
-    nodes.execute_async(cmd)
+    node_list.execute_async(cmd)
 
 
 def slice_nodeclaim_delete(api_client, project_path, manifests):

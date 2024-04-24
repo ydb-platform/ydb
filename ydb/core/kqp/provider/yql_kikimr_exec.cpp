@@ -310,6 +310,12 @@ namespace {
         return createSequenceSettings;
     }
 
+    TDropSequenceSettings ParseDropSequenceSettings(TKiDropSequence dropSequence) {
+        return TDropSequenceSettings{
+            .Name = TString(dropSequence.Sequence())
+        };
+    }
+
     [[nodiscard]] TString AddConsumerToTopicRequest(
             Ydb::Topic::Consumer* protoConsumer, const TCoTopicConsumer& consumer
     ) {
@@ -1689,6 +1695,27 @@ public:
             }, "Executing CREATE SEQUENCE");
         }
 
+        if (auto maybeDropSequence = TMaybeNode<TKiDropSequence>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeDropSequence.Cast().DataSink().Cluster());
+            TDropSequenceSettings dropSequenceSettings = ParseDropSequenceSettings(maybeDropSequence.Cast());
+
+            bool missingOk = (maybeDropSequence.MissingOk().Cast().Value() == "1");
+
+            auto future = Gateway->DropSequence(cluster, dropSequenceSettings, missingOk);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing DROP SEQUENCE");
+        }
+
         if (auto maybeAlter = TMaybeNode<TKiAlterTopic>(input)) {
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
@@ -1755,6 +1782,136 @@ public:
                                   auto resultNode = ctx.NewWorld(input->Pos());
                                   return resultNode;
                               }, "Executing DROP TOPIC");
+        }
+
+        if (auto maybeCreateReplication = TMaybeNode<TKiCreateReplication>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto createReplication = maybeCreateReplication.Cast();
+
+            TCreateReplicationSettings settings;
+            settings.Name = TString(createReplication.Replication());
+
+            for (auto target : createReplication.Targets()) {
+                settings.Targets.emplace_back(
+                    target.RemotePath().Cast<TCoAtom>().StringValue(),
+                    target.LocalPath().Cast<TCoAtom>().StringValue()
+                );
+            }
+
+            for (auto setting : createReplication.ReplicationSettings()) {
+                auto name = setting.Name().Value();
+                if (name == "connection_string") {
+                    settings.Settings.ConnectionString = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                } else if (name == "endpoint") {
+                    settings.Settings.Endpoint = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                } else if (name == "database") {
+                    settings.Settings.Database = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                } else if (name == "token") {
+                    settings.Settings.OAuthToken = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                } else if (name == "user") {
+                    settings.Settings.EnsureStaticCredentials().UserName =
+                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                } else if (name == "password") {
+                    settings.Settings.EnsureStaticCredentials().Password =
+                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                }
+            }
+
+            if (settings.Settings.ConnectionString && (settings.Settings.Endpoint || settings.Settings.Database)) {
+                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
+                    TStringBuilder() << "Connection string and Endpoint/Database are mutually exclusive"));
+                return SyncError();
+            }
+
+            if (settings.Settings.OAuthToken && settings.Settings.StaticCredentials) {
+                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
+                    TStringBuilder() << "Token and User/Password are mutually exclusive"));
+                return SyncError();
+            }
+
+            auto cluster = TString(createReplication.DataSink().Cluster());
+            auto future = Gateway->CreateReplication(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing CREATE ASYNC REPLICATION");
+        }
+
+        if (auto maybeAlterReplication = TMaybeNode<TKiAlterReplication>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto alterReplication = maybeAlterReplication.Cast();
+
+            TAlterReplicationSettings settings;
+            settings.Name = TString(alterReplication.Replication());
+
+            for (auto setting : alterReplication.ReplicationSettings()) {
+                auto name = setting.Name().Value();
+                if (name == "state") {
+                    auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                    if (to_lower(value) == "done") {
+                        settings.Settings.EnsureStateDone();
+                    } else {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                            TStringBuilder() << "Unknown replication state: " << value));
+                        return SyncError();
+                    }
+                } else if (name == "failover_mode") {
+                    auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                    if (to_lower(value) == "consistent") {
+                        settings.Settings.EnsureStateDone(TReplicationSettings::EFailoverMode::Consistent);
+                    } else if (to_lower(value) == "force") {
+                        settings.Settings.EnsureStateDone(TReplicationSettings::EFailoverMode::Force);
+                    } else {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                            TStringBuilder() << "Unknown failover mode: " << value));
+                        return SyncError();
+                    }
+                }
+            }
+
+            auto cluster = TString(alterReplication.DataSink().Cluster());
+            auto future = Gateway->AlterReplication(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing ALTER ASYNC REPLICATION");
+        }
+
+        if (auto maybeDropReplication = TMaybeNode<TKiDropReplication>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto dropReplication = maybeDropReplication.Cast();
+
+            TDropReplicationSettings settings;
+            settings.Name = TString(dropReplication.Replication());
+            settings.Cascade = (dropReplication.Cascade().Value() == "1");
+
+            auto cluster = TString(dropReplication.DataSink().Cluster());
+            auto future = Gateway->DropReplication(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing DROP ASYNC REPLICATION");
         }
 
         if (auto maybeGrantPermissions = TMaybeNode<TKiModifyPermissions>(input)) {

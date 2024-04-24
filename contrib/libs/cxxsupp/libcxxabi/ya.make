@@ -16,6 +16,7 @@ VERSION(16.0.6)
 ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-16.0.6.tar.gz)
 
 PEERDIR(
+    contrib/libs/libunwind
     library/cpp/sanitizer/include
 )
 
@@ -32,6 +33,7 @@ NO_RUNTIME()
 NO_UTIL()
 
 CFLAGS(
+    -D_LIBCPP_BUILDING_LIBRARY
     -D_LIBCXXABI_BUILDING_LIBRARY
 )
 

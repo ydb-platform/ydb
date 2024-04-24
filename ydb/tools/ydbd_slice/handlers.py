@@ -21,7 +21,7 @@ class CalledProcessError(subprocess.CalledProcessError):
 
 
 class Slice:
-    def __init__(self, components, nodes, cluster_details, configurator, do_clear_logs, args, walle_provider):
+    def __init__(self, components, nodes, cluster_details, configurator, do_clear_logs, yav_version, walle_provider):
         self.slice_kikimr_path = '/Berkanavt/kikimr/bin/kikimr'
         self.slice_cfg_path = '/Berkanavt/kikimr/cfg'
         self.slice_secrets_path = '/Berkanavt/kikimr/token'
@@ -30,7 +30,7 @@ class Slice:
         self.cluster_details = cluster_details
         self.configurator = configurator
         self.do_clear_logs = do_clear_logs
-        self.args = args
+        self.yav_version = yav_version
         self.walle_provider = walle_provider
 
     def _ensure_berkanavt_exists(self):
@@ -60,14 +60,7 @@ class Slice:
     def _format_drives(self):
         tasks = []
         for (host_name, drive_path) in self._get_all_drives():
-            cmd = "dd if=/dev/zero of={} bs=1M count=1 status=none conv=notrunc".format(drive_path)
-            tasks.extend(self.nodes.execute_async_ret(cmd, nodes=[host_name]))
-        self.nodes._check_async_execution(tasks)
-
-    def _check_drives_exist(self):
-        tasks = []
-        for (host_name, drive_path) in self._get_all_drives():
-            cmd = "echo 'Check existance of drive' && test -f {}".format(drive_path)
+            cmd = "sudo dd if=/dev/zero of={} bs=1M count=1 status=none conv=notrunc".format(drive_path)
             tasks.extend(self.nodes.execute_async_ret(cmd, nodes=[host_name]))
         self.nodes._check_async_execution(tasks)
 
@@ -132,16 +125,15 @@ class Slice:
             self._clear_logs()
 
         if 'kikimr' in self.components:
-            self._check_drives_exist()
             self._format_drives()
 
             if 'bin' in self.components.get('kikimr', []):
-                self._update_kikimr(self.nodes, self.configurator.kikimr_bin, self.configurator.kikimr_compressed_bin)
+                self._update_kikimr()
 
             if 'cfg' in self.components.get('kikimr', []):
                 static_cfg_path = self.configurator.create_static_cfg()
-                self._update_cfg(self.nodes, static_cfg_path)
-                self._deploy_secrets(self.nodes, self.args.yav_version)
+                self._update_cfg(static_cfg_path)
+                self._deploy_secrets()
 
             self._start_static()
             self._dynamic_configure()
@@ -344,8 +336,8 @@ mon={mon}""".format(
         tasks = self._stop_slot_ret(slot)
         self.nodes._check_async_execution(tasks, False)
 
-    def _stop_static(self, nodes):
-        nodes.execute_async("sudo service kikimr stop", check_retcode=False)
+    def _stop_static(self):
+        self.nodes.execute_async("sudo service kikimr stop", check_retcode=False)
 
     def _stop_dynamic(self):
         if 'dynamic_slots' in self.components:
@@ -360,44 +352,44 @@ mon={mon}""".format(
         self._stop_dynamic()
 
         if 'kikimr' in self.components:
-            self._stop_static(self.nodes)
+            self._stop_static()
 
-    def _update_kikimr(self, nodes, bin_path, compressed_path):
-        bin_directory = os.path.dirname(bin_path)
-        nodes.copy(bin_path, self.slice_kikimr_path, compressed_path=compressed_path)
+    def _update_kikimr(self):
+        bin_directory = os.path.dirname(self.configurator.kikimr_bin)
+        self.nodes.copy(self.configurator.kikimr_bin, self.slice_kikimr_path, compressed_path=self.configurator.kikimr_compressed_bin)
         for lib in ['libiconv.so', 'liblibaio-dynamic.so', 'liblibidn-dynamic.so']:
             lib_path = os.path.join(bin_directory, lib)
             if os.path.exists(lib_path):
                 remote_lib_path = os.path.join('/lib', lib)
-                nodes.copy(lib_path, remote_lib_path)
+                self.nodes.copy(lib_path, remote_lib_path)
 
-    def _update_cfg(self, nodes, cfg_path):
-        nodes.copy(cfg_path, self.slice_cfg_path, directory=True)
+    def _update_cfg(self, cfg_path):
+        self.nodes.copy(cfg_path, self.slice_cfg_path, directory=True)
 
-    def _deploy_secrets(self, nodes, yav_version):
-        if not yav_version:
+    def _deploy_secrets(self):
+        if not self.yav_version:
             return
 
-        nodes.execute_async(
+        self.nodes.execute_async(
             "sudo bash -c 'set -o pipefail && sudo mkdir -p {secrets} && "
             "yav get version {yav_version} -o auth_file | sudo tee {auth}'".format(
-                yav_version=yav_version,
+                yav_version=self.yav_version,
                 secrets=self.slice_secrets_path,
                 auth=os.path.join(self.slice_secrets_path, 'kikimr.token')
             )
         )
 
         # creating symlinks, to attach auth.txt to node
-        nodes.execute_async(
+        self.nodes.execute_async(
             "sudo ln -f {secrets_auth} {cfg_auth}".format(
                 secrets_auth=os.path.join(self.slice_secrets_path, 'kikimr.token'),
                 cfg_auth=os.path.join(self.slice_cfg_path, 'auth.txt')
             )
         )
 
-        nodes.execute_async(
+        self.nodes.execute_async(
             "sudo bash -c 'set -o pipefail && yav get version {yav_version} -o tvm_secret |  sudo tee {tvm_secret}'".format(
-                yav_version=yav_version,
+                yav_version=self.yav_version,
                 tvm_secret=os.path.join(self.slice_secrets_path, 'tvm_secret')
             )
         )
@@ -408,23 +400,23 @@ mon={mon}""".format(
 
         if 'kikimr' in self.components:
             if 'bin' in self.components.get('kikimr', []):
-                self._update_kikimr(self.nodes, self.configurator.kikimr_bin, self.configurator.kikimr_compressed_bin)
+                self._update_kikimr()
 
         self.slice_stop()
         if 'kikimr' in self.components:
             if 'cfg' in self.components.get('kikimr', []):
                 static = self.configurator.create_static_cfg()
-                self._update_cfg(self.nodes, static)
-                self._deploy_secrets(self.nodes, self.args.yav_version)
+                self._update_cfg(static)
+                self._deploy_secrets()
 
         self._deploy_slot_configs()
         self.slice_start()
 
-    def slice_update_raw_configs(self):
+    def slice_update_raw_configs(self, raw_config_path):
         self.slice_stop()
         if 'kikimr' in self.components:
             if 'cfg' in self.components.get('kikimr', []):
-                kikimr_cfg = os.path.join(self.args.raw_cfg.config_path, 'kikimr-static')
-                self._update_cfg(self.nodes, kikimr_cfg)
+                kikimr_cfg = os.path.join(raw_config_path, 'kikimr-static')
+                self._update_cfg(kikimr_cfg)
 
         self.slice_start()

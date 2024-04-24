@@ -350,7 +350,7 @@ public:
         size_t inflight, TType* type, std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> types, const THolderFactory& holderFactory, NKikimr::NMiniKQL::IStatsRegistry* jobStats)
         : HolderFactory(holderFactory)
         , Settings_(std::move(settings))
-        , Inputs_(std::move(Settings_->RawInputs))
+        , Inputs_(Settings_->Requests.size())
         , Listener_(std::make_shared<TListener>(Inputs_.size(), inflight))
         , JobStats_(jobStats)
     {
@@ -364,7 +364,6 @@ public:
 
         LocalListeners_.reserve(Inputs_.size());
         for (size_t i = 0; i < Inputs_.size(); ++i) {
-            InputsQueue_.emplace(i);
             auto& decoder = Settings_->Specs->Inputs[Settings_->OriginalIndexes[i]];
             bool native = decoder->NativeYtTypeFlags && !decoder->FieldsVec[i].ExplicitYson;
             LocalListeners_.emplace_back(std::make_shared<TLocalListener>(Listener_, Settings_->ColumnNameMapping, ptr, types, *Settings_->Pool, Settings_->PgBuilder, native, jobStats));
@@ -379,10 +378,28 @@ public:
         {
             std::lock_guard guard(Mtx_);
             if (InputsQueue_.empty()) {
-                return;
+                if (NextFreeInputIdx >= Inputs_.size()) {
+                    return;
+                }
+                inputIdx = NextFreeInputIdx++;
+            } else {
+                inputIdx = InputsQueue_.front();
+                InputsQueue_.pop();
             }
-            inputIdx = InputsQueue_.front();
-            InputsQueue_.pop();
+        }
+        if (!Inputs_[inputIdx]) {
+            CreateInputStream(Settings_->Requests[inputIdx]).SubscribeUnique(BIND([self = Self_, inputIdx] (NYT::TErrorOr<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>&& stream) {
+                self->Pool_->GetInvoker()->Invoke(BIND([inputIdx, self, stream = std::move(stream)]() mutable {
+                    try {
+                        self->Inputs_[inputIdx] = std::move(stream.ValueOrThrow());
+                        self->InputDone(inputIdx);
+                        self->RunRead();
+                    } catch (...) {
+                        self->Listener_->HandleError(CurrentExceptionMessage());
+                    }
+                }));
+            }));
+            return;
         }
         Inputs_[inputIdx]->Read().SubscribeUnique(BIND([inputIdx = inputIdx, self = Self_](NYT::TErrorOr<NYT::TSharedRef>&& res) {
             self->Pool_->GetInvoker()->Invoke(BIND([inputIdx, self, res = std::move(res)]() mutable {
@@ -529,6 +546,7 @@ private:
     TPtr Self_;
     size_t Inflight_;
     NKikimr::NMiniKQL::IStatsRegistry* JobStats_;
+    size_t NextFreeInputIdx = 0;
 };
 
 class TReaderState: public TComputationValue<TReaderState> {
@@ -584,8 +602,9 @@ public:
     TDqYtReadBlockWrapper(const TComputationNodeFactoryContext& ctx, const TString& clusterName,
         const TString& token, const NYT::TNode& inputSpec, const NYT::TNode& samplingSpec,
         const TVector<ui32>& inputGroups,
-        TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables, NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight,
-        size_t timeout) : TBaseComputation(ctx.Mutables, EValueRepresentation::Boxed)
+        TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables,
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets)
+        : TBaseComputation(ctx.Mutables, EValueRepresentation::Boxed)
         , Width_(AS_TYPE(TStructType, itemType)->GetMembersCount())
         , CodecCtx_(ctx.Env, ctx.FunctionRegistry, &ctx.HolderFactory)
         , ClusterName_(clusterName)
@@ -600,6 +619,7 @@ public:
         // TODO() Enable range indexes + row indexes
         Specs_.SetUseSkiff("", 0);
         Specs_.Init(CodecCtx_, inputSpec, inputGroups, tableNames, itemType, {}, {}, jobStats);
+        Specs_.SetTableOffsets(tableOffsets);
     }
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
@@ -641,9 +661,10 @@ private:
 IComputationNode* CreateDqYtReadBlockWrapper(const TComputationNodeFactoryContext& ctx, const TString& clusterName,
         const TString& token, const NYT::TNode& inputSpec, const NYT::TNode& samplingSpec,
         const TVector<ui32>& inputGroups,
-        TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables, NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight,
-        size_t timeout) 
+        TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables,
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets) 
 {
-    return new TDqYtReadBlockWrapper(ctx, clusterName, token, inputSpec, samplingSpec, inputGroups, itemType, tableNames, std::move(tables), jobStats, inflight, timeout);
+    return new TDqYtReadBlockWrapper(ctx, clusterName, token, inputSpec, samplingSpec, inputGroups, itemType,
+                                                tableNames, std::move(tables), jobStats, inflight, timeout, tableOffsets);
 }
 }

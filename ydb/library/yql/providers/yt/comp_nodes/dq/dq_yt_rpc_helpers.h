@@ -25,7 +25,7 @@ class TPayloadRPCReader : public NYT::TRawTableReader {
 public:
     TPayloadRPCReader(NYT::TSharedRef&& payload) : Payload_(std::move(payload)), PayloadStream_(Payload_.Begin(), Payload_.Size()) {}
 
-    bool Retry(const TMaybe<ui32>&, const TMaybe<ui64>&) override {
+    bool Retry(const TMaybe<ui32>&, const TMaybe<ui64>&, const std::exception_ptr&) override {
         return false;
     }
 
@@ -53,10 +53,10 @@ private:
 
 struct TSettingsHolder : public TNonCopyable {
     TSettingsHolder(NYT::NApi::IConnectionPtr&& connection, NYT::TIntrusivePtr<NYT::NApi::NRpcProxy::TClient>&& client,
-        TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>&& inputs, TVector<size_t>&& originalIndexes)
+        TVector<NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr>&& requests, TVector<size_t>&& originalIndexes)
         : Connection(std::move(connection))
         , Client(std::move(client))
-        , RawInputs(std::move(inputs))
+        , Requests(std::move(requests))
         , OriginalIndexes(std::move(originalIndexes)) {};
     void SetColumns(const TVector<TString>& columnNames) {
         for (ui32 i = 0; i < columnNames.size(); ++i) {
@@ -68,11 +68,13 @@ struct TSettingsHolder : public TNonCopyable {
     const TMkqlIOSpecs* Specs = nullptr;
     arrow::MemoryPool* Pool = nullptr;
     const NUdf::IPgBuilder* PgBuilder = nullptr;
-    TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> RawInputs;
+    TVector<NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr> Requests;
+
     TVector<size_t> OriginalIndexes;
     std::unordered_map<std::string, ui32> ColumnNameMapping;
 };
 
 std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString& token, const TString& clusterName, const ui64 timeout, bool unordered, const TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>& tables, NYT::TNode samplingSpec);
+NYT::TFuture<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> CreateInputStream(NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr requestPtr);
 
 };

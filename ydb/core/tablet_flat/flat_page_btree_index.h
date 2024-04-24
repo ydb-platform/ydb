@@ -340,7 +340,7 @@ namespace NKikimr::NTable::NPage {
         {
             const TRecIdx childrenCount = GetChildrenCount();
             if (on && on >= childrenCount) {
-                Y_DEBUG_ABORT_UNLESS(false, "Should point to some child");
+                Y_DEBUG_ABORT("Should point to some child");
                 on = { };
             }
 

@@ -140,6 +140,8 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
     size_t readPhases = 0;
     bool hasEffects = false;
+    bool hasSourceRead = false;
+    bool hasSinkWrite = false;
 
     for (const auto &tx : physicalQuery.GetTransactions()) {
         switch (tx.GetType()) {
@@ -155,10 +157,19 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         if (tx.GetHasEffects()) {
             hasEffects = true;
         }
+
+        for (const auto &stage : tx.GetStages()) {
+            hasSourceRead |= !stage.GetSources().empty();
+            hasSinkWrite |= !stage.GetSinks().empty();
+        }
     }
 
     if (txCtx.HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
         YQL_ENSURE(txCtx.EnableImmediateEffects);
+        return true;
+    }
+
+    if (hasSourceRead && hasSinkWrite) {
         return true;
     }
 

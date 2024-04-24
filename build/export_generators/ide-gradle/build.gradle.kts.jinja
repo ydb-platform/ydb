@@ -268,5 +268,9 @@ tasks.build.dependsOn(
 {% if publish -%}
 {% include 'publish.gradle.kts' ignore missing -%}
 {% endif -%}
+{# To disable redundant javadoc (it may fail the build) #}
+tasks.withType<Javadoc>().configureEach {
+    isEnabled = false
+}
 
 {%- include "[generator]/debug.jinja" ignore missing -%}

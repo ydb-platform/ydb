@@ -41,7 +41,7 @@ protected:
     }
 
     NOlap::TBlobWriteInfo& AddWriteTask(NOlap::TBlobWriteInfo&& task);
-    virtual void DoAbort() {
+    virtual void DoAbort(const TString& /*reason*/) {
     }
 public:
     const NOlap::TWriteActionsCollection& GetBlobActions() const {
@@ -61,11 +61,12 @@ public:
         return TStringBuilder() << "size=" << size << ";count=" << WriteTasks.size() << ";actions=" << sb << ";";
     }
 
-    void Abort() {
+    void Abort(const TString& reason) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "IWriteController aborted")("reason", reason);
         for (auto&& i : WritingActions) {
             i.second->Abort();
         }
-        DoAbort();
+        DoAbort(reason);
     }
 
     using TPtr = std::shared_ptr<IWriteController>;

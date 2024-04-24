@@ -2,9 +2,11 @@
 
 #include <ydb/core/grpc_services/table_settings.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/parser.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 
 namespace NKikimr::NKqp {
@@ -1462,6 +1464,49 @@ public:
         }
     }
 
+    TFuture<TGenericResult> DropSequence(const TString& cluster,
+            const NYql::TDropSequenceSettings& settings, bool missingOk) override {
+        CHECK_PREPARED_DDL(DropSequence);
+
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
+
+            std::pair<TString, TString> pathPair;
+            {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, false)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            }
+
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetWorkingDir(pathPair.first);
+            schemeTx.SetSuccessOnNotExist(missingOk);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropSequence);
+
+            NKikimrSchemeOp::TDrop* drop = schemeTx.MutableDrop();
+            drop->SetName(pathPair.second);
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableDropSequence()->Swap(&schemeTx);
+
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(schemeTx));
+            }
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
     TFuture<TGenericResult> CreateTableStore(const TString& cluster,
         const TCreateTableStoreSettings& settings, bool existingOk) override
     {
@@ -1679,6 +1724,172 @@ public:
             return MakeFuture(result);
         } else {
             return Gateway->DropExternalTable(cluster, settings, missingOk);
+        }
+    }
+
+    static TString AdjustPath(const TString& path, const TString& database) {
+        if (path.StartsWith('/')) {
+            if (!path.StartsWith(database)) {
+                throw yexception() << "Path '" << path << "' not in database '" << database << "'";
+            }
+            return path;
+        } else {
+            return database + '/' + path;
+        }
+    }
+
+    TFuture<TGenericResult> CreateReplication(const TString& cluster, const NYql::TCreateReplicationSettings& settings) override {
+        CHECK_PREPARED_DDL(CreateReplication);
+
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
+
+            TString error;
+            std::pair<TString, TString> pathPair;
+            if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, true)) {
+                return MakeFuture(ResultFromError<TGenericResult>(error));
+            }
+
+            NKikimrSchemeOp::TModifyScheme tx;
+            tx.SetWorkingDir(pathPair.first);
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateReplication);
+
+            auto& op = *tx.MutableReplication();
+            op.SetName(pathPair.second);
+
+            auto& config = *op.MutableConfig();
+            auto& params = *config.MutableSrcConnectionParams();
+            if (const auto& connectionString = settings.Settings.ConnectionString) {
+                const auto parseResult = NYdb::ParseConnectionString(*connectionString);
+                params.SetEndpoint(parseResult.Endpoint);
+                params.SetDatabase(parseResult.Database);
+            }
+            if (const auto& endpoint = settings.Settings.Endpoint) {
+                params.SetEndpoint(*endpoint);
+            }
+            if (const auto& database = settings.Settings.Database) {
+                params.SetDatabase(*database);
+            }
+            if (const auto& token = settings.Settings.OAuthToken) {
+                params.SetOAuthToken(*token);
+            }
+            if (const auto& creds = settings.Settings.StaticCredentials) {
+                params.MutableStaticCredentials()->SetUser(creds->UserName);
+                params.MutableStaticCredentials()->SetPassword(creds->Password);
+            }
+
+            auto& targets = *config.MutableSpecific();
+            for (const auto& [src, dst] : settings.Targets) {
+                auto& target = *targets.AddTargets();
+                target.SetSrcPath(AdjustPath(src, params.GetDatabase()));
+                target.SetDstPath(AdjustPath(dst, GetDatabase()));
+            }
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableCreateReplication()->Swap(&tx);
+
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(tx));
+            }
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> AlterReplication(const TString& cluster, const NYql::TAlterReplicationSettings& settings) override {
+        CHECK_PREPARED_DDL(AlterReplication);
+
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
+
+            std::pair<TString, TString> pathPair;
+            {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, false)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            }
+
+            NKikimrSchemeOp::TModifyScheme tx;
+            tx.SetWorkingDir(pathPair.first);
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterReplication);
+
+            auto& op = *tx.MutableAlterReplication();
+            op.SetName(pathPair.second);
+
+            auto& state = *op.MutableState();
+            if (const auto& done = settings.Settings.StateDone) {
+                state.MutableDone()->SetFailoverMode(
+                    static_cast<NKikimrReplication::TReplicationState::TDone::EFailoverMode>(done->FailoverMode));
+            }
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableAlterReplication()->Swap(&tx);
+
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(tx));
+            }
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> DropReplication(const TString& cluster, const NYql::TDropReplicationSettings& settings) override {
+        CHECK_PREPARED_DDL(DropReplication);
+
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
+
+            std::pair<TString, TString> pathPair;
+            {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, false)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            }
+
+            NKikimrSchemeOp::TModifyScheme tx;
+            tx.SetWorkingDir(pathPair.first);
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropReplication); // TODO(ilnaz): CASCADE
+
+            auto& op = *tx.MutableDrop();
+            op.SetName(pathPair.second);
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableDropReplication()->Swap(&tx);
+
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(tx));
+            }
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
         }
     }
 

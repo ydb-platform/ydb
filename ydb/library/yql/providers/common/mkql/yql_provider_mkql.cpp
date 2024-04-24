@@ -2932,6 +2932,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 
+    AddCallable({ "AssumeStrict", "AssumeNonStrict", "Likely" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        return MkqlBuildExpr(node.Head(), ctx);
+    });
+
     AddCallable("Merge", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto& args = GetAllArguments(node, ctx);
         auto extend = ctx.ProgramBuilder.Extend(args);

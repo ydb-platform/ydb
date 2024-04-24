@@ -49,34 +49,7 @@ public:
         Y_ABORT_UNLESS(!DataSchema || DataSchema->num_fields());
     }
 
-    void SkipToLowerBound(const TSortableBatchPosition& pos, const bool include) {
-        if (SortHeap.Empty()) {
-            return;
-        }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("pos", pos.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
-        while (!SortHeap.Empty()) {
-            const auto cmpResult = SortHeap.Current().GetKeyColumns().Compare(pos);
-            if (cmpResult == std::partial_ordering::greater) {
-                break;
-            }
-            if (cmpResult == std::partial_ordering::equivalent && include) {
-                break;
-            }
-            const TSortableBatchPosition::TFoundPosition skipPos = SortHeap.MutableCurrent().SkipToLower(pos);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("pos", pos.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
-            if (skipPos.IsEqual()) {
-                if (!include && !SortHeap.MutableCurrent().Next()) {
-                    SortHeap.RemoveTop();
-                } else {
-                    SortHeap.UpdateTop();
-                }
-            } else if (skipPos.IsLess()) {
-                SortHeap.RemoveTop();
-            } else {
-                SortHeap.UpdateTop();
-            }
-        }
-    }
+    void SkipToLowerBound(const TSortableBatchPosition& pos, const bool include);
 
     void SetPossibleSameVersion(const bool value) {
         PossibleSameVersionFlag = value;

@@ -3,7 +3,9 @@
 #include <ydb/core/formats/arrow/common/adapter.h>
 #include <ydb/core/formats/arrow/common/validation.h>
 #include <ydb/core/formats/arrow/reader/position.h>
+
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
@@ -65,7 +67,7 @@ public:
     std::optional<std::vector<ui64>> Execute(const std::shared_ptr<arrow::RecordBatch>& batch) const;
 
     template <class TDataContainer>
-    std::shared_ptr<arrow::Array> ExecuteToArray(const std::shared_ptr<TDataContainer>& batch, const std::string& hashFieldName) const {
+    std::shared_ptr<arrow::Array> ExecuteToArray(const std::shared_ptr<TDataContainer>& batch) const {
         std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> columns = GetColumns(batch);
         if (columns.empty()) {
             return nullptr;
@@ -77,7 +79,7 @@ public:
         }
 
 
-        auto builder = NArrow::MakeBuilder(std::make_shared<arrow::Field>(hashFieldName, arrow::TypeTraits<arrow::UInt64Type>::type_singleton()));
+        auto builder = NArrow::MakeBuilder(arrow::TypeTraits<arrow::UInt64Type>::type_singleton());
         auto& intBuilder = static_cast<arrow::UInt64Builder&>(*builder);
         TStatusValidator::Validate(intBuilder.Reserve(batch->num_rows()));
         {

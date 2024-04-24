@@ -219,7 +219,7 @@ The sequence of role executions and their brief descriptions:
 
 {% endcut %}
 
-As a result of executing the playbook, a {{ ydb-short-name }} cluster will be created, with a test database named `database`, a `root` user with maximum access rights created, and [Embedded UI](../../maintenance/embedded_monitoring/index.md) running on port 8765. To connect to the Embedded UI, you can set up SSH tunneling. For this, execute the command `ssh -L 8765:localhost:8765 -i <ssh private key> <user>@<first-ydb-static-node-ip>` on your local machine. After successfully establishing the connection, you can navigate to the URL [localhost:8765](http://localhost:8765):
+As a result of executing the playbook, a {{ ydb-short-name }} cluster will be created, with a test database named `database`, a `root` user with maximum access rights created, and [Embedded UI](../../reference/embedded-ui/index.md) running on port 8765. To connect to the Embedded UI, you can set up SSH tunneling. For this, execute the command `ssh -L 8765:localhost:8765 -i <ssh private key> <user>@<first-ydb-static-node-ip>` on your local machine. After successfully establishing the connection, you can navigate to the URL [localhost:8765](http://localhost:8765):
 
 ![ydb-web-ui](../../_assets/ydb-web-console.png)
 
@@ -238,7 +238,7 @@ You can check the state of the storage group in the `storage` section – [http:
 
 ![ydb-storage-gr-check](../../_assets/ydb-storage-gr-check.png)
 
-The `VDisks` indicators should be green, and the `state` status (found in the tooltip when hovering over the Vdisk indicator) should be `Ok`. More about the cluster state indicators and monitoring can be read in the article [{#T}](../../maintenance/embedded_monitoring/ydb_monitoring.md).
+The `VDisks` indicators should be green, and the `state` status (found in the tooltip when hovering over the Vdisk indicator) should be `Ok`. More about the cluster state indicators and monitoring can be read in the article [{#T}](../../reference/embedded-ui/ydb-monitoring.md).
 
 ## Cluster Testing { #testing }
 

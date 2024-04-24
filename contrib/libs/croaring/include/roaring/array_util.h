@@ -1,5 +1,5 @@
-#ifndef ARRAY_UTIL_H
-#define ARRAY_UTIL_H
+#ifndef CROARING_ARRAY_UTIL_H
+#define CROARING_ARRAY_UTIL_H
 
 #include <stddef.h>  // for size_t
 #include <stdint.h>

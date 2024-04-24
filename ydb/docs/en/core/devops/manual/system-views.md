@@ -8,7 +8,7 @@ Hereinafter, in the descriptions of available fields, the **Key** column contain
 
 {% note info %}
 
-There are also similar system views describing what's happening inside a given database, they are covered in a [separate article for DBAs](../../dba/system-views.md).
+There are also similar system views describing what's happening inside a given database, they are covered in a [separate article for DBAs](../../dev/system-views.md).
 
 {% endnote %}
 

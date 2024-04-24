@@ -1,6 +1,10 @@
 #include "result_builder.h"
-#include <ydb/library/actors/core/log.h>
+
 #include <ydb/core/formats/arrow/common/validation.h>
+
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+
 #include <util/string/builder.h>
 
 namespace NKikimr::NArrow::NMerger {

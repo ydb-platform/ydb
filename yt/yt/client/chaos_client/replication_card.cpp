@@ -834,6 +834,33 @@ TDuration ComputeReplicationProgressLag(
     return lag;
 }
 
+THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TReplicaInfo>& replicas)
+{
+    TReplicationProgress syncProgress;
+    for (const auto& [replicaId, replicaInfo] : replicas) {
+        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History.back())) {
+            if (syncProgress.Segments.empty()) {
+                syncProgress = replicaInfo.ReplicationProgress;
+            } else {
+                syncProgress = BuildMaxProgress(syncProgress, replicaInfo.ReplicationProgress);
+            }
+        }
+    }
+
+    THashMap<TReplicaId, TDuration> result;
+    for (const auto& [replicaId, replicaInfo] : replicas) {
+        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History.back())) {
+            result.emplace(replicaId, TDuration::Zero());
+        } else {
+            result.emplace(
+                replicaId,
+                ComputeReplicationProgressLag(syncProgress, replicaInfo.ReplicationProgress));
+        }
+    }
+
+    return result;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NChaosClient

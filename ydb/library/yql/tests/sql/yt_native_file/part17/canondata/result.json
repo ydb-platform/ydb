@@ -1327,6 +1327,39 @@
             "uri": "https://{canondata_backend}/1942415/9dc26178536314feaac77333a6a0e27c8703d1e2/resource.tar.gz#test.test_limit-zero_limit-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[lineage-list_literal1-default.txt-Debug]": [
+        {
+            "checksum": "05088d050002e47f22e4556ee84c71fc",
+            "size": 2982,
+            "uri": "https://{canondata_backend}/1946324/0c7001cd2b42d792815b94a3766d53f030706830/resource.tar.gz#test.test_lineage-list_literal1-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[lineage-list_literal1-default.txt-Lineage]": [
+        {
+            "checksum": "c666a20549017feb6005c08c4e3eaa11",
+            "size": 965,
+            "uri": "https://{canondata_backend}/1946324/0c7001cd2b42d792815b94a3766d53f030706830/resource.tar.gz#test.test_lineage-list_literal1-default.txt-Lineage_/results.txt"
+        }
+    ],
+    "test.test[lineage-list_literal1-default.txt-Plan]": [
+        {
+            "checksum": "f192642781367cb90076fdb4462458f7",
+            "size": 6796,
+            "uri": "https://{canondata_backend}/1946324/0c7001cd2b42d792815b94a3766d53f030706830/resource.tar.gz#test.test_lineage-list_literal1-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[lineage-list_literal1-default.txt-Results]": [
+        {
+            "checksum": "84d0a8bf52ee8bb643d0d6b10e048097",
+            "size": 23,
+            "uri": "https://{canondata_backend}/1946324/0c7001cd2b42d792815b94a3766d53f030706830/resource.tar.gz#test.test_lineage-list_literal1-default.txt-Results_/Output.txt"
+        },
+        {
+            "checksum": "61334977b5be2602899e6c3990021a8d",
+            "size": 374,
+            "uri": "https://{canondata_backend}/1946324/0c7001cd2b42d792815b94a3766d53f030706830/resource.tar.gz#test.test_lineage-list_literal1-default.txt-Results_/Output.yqlrun.txt.attr"
+        }
+    ],
     "test.test[match_recognize-alerts-default.txt-Debug]": [
         {
             "checksum": "e6883aec19c55794eb3df952b116a0f7",

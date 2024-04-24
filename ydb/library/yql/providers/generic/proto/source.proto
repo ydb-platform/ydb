@@ -5,6 +5,7 @@ option cc_enable_arenas = true;
 package NYql.Generic;
 
 import "ydb/library/yql/providers/generic/connector/api/service/protos/connector.proto";
+import "ydb/library/yql/providers/generic/connector/api/common/data_source.proto";
 
 message TSource {
     // Prepared Select expression
@@ -20,4 +21,18 @@ message TSource {
     string Token = 6;
 
     reserved 1, 3;
+}
+
+//TODO(YQ-3093) move SA creds to some common message
+message TLookupSource {
+    NYql.NConnector.NApi.TDataSourceInstance data_source_instance = 1;
+    string table = 2;
+    // Credentials used to access managed databases APIs.
+    // When working with external data source instances deployed in clouds,
+    // one should either set (ServiceAccountId, ServiceAccountIdSignature) pair 
+    // that will be resolved into IAM Token via Token Accessor, 
+    // or provide IAM Token directly.
+    string ServiceAccountId = 4;
+    string ServiceAccountIdSignature = 5;
+    string Token = 6;
 }

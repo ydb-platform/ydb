@@ -696,7 +696,7 @@ TExprNode::TPtr RemoveOptionalReduceOverData(const TExprNode::TPtr& node, TExprC
 }
 
 TExprNode::TPtr PropagateCoalesceWithConstIntoLogicalOps(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (node->Head().IsCallable({"Likely", "AssumeStrict"})) {
+    if (node->Head().IsCallable({"Likely", "AssumeStrict", "AssumeNonStrict"})) {
         const auto value = FromString<bool>(node->Child(1)->Head().Content());
         if (!value) {
             YQL_CLOG(DEBUG, Core) << "PropagateCoalesceWithConst over " << node->Head().Content() << " (false)";
@@ -4389,6 +4389,23 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             return ctx.ChangeChild(node->Head(), 0U, ExpandType(node->Pos(), *node->GetTypeAnn(), ctx));
         }
 
+        if (node->Head().IsCallable("If") && node->Head().ChildrenSize() == 3) {
+            TCoIf childIf(node->HeadPtr());
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return Build<TCoIf>(ctx, node->Pos())
+                .InitFrom(childIf)
+                .ThenValue<TCoNth>()
+                    .InitFrom(TCoNth(node))
+                    .Tuple(childIf.ThenValue())
+                .Build()
+                .ElseValue<TCoNth>()
+                    .InitFrom(TCoNth(node))
+                    .Tuple(childIf.ElseValue())
+                .Build()
+                .Done()
+                .Ptr();
+        }
+
         return node;
     };
 
@@ -4764,6 +4781,20 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["Top"] = std::bind(&OptimizeReorder<true, false>, _1, _2);
     map["TopSort"] = std::bind(&OptimizeReorder<true, true>, _1, _2);
+
+    map["AssumeStrict"] = map["AssumeNonStrict"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        if (node->Head().IsCallable({"AssumeStrict", "AssumeNonStrict"})) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
+        }
+        const auto maybeStrict = IsStrictNoRecurse(node->Head());
+        if (maybeStrict.Defined() && *maybeStrict == node->IsCallable("AssumeStrict")) {
+            YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " over "
+                << (*maybeStrict ? "strict " : "non strict ") << node->Head().Content();
+            return node->HeadPtr();
+        }
+        return node;
+    };
 
     map["Minus"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         if (node->Head().IsCallable("Minus")) {

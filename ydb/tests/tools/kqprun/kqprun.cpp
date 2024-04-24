@@ -14,6 +14,7 @@
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
 #include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
+#include <ydb/library/yql/public/udf/udf_static_registry.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 
 
@@ -22,6 +23,7 @@ struct TExecutionOptions {
     TString SchemeQuery;
 
     bool ClearExecution = false;
+    bool ForgetExecution = false;
     NKikimrKqp::EQueryAction ScriptQueryAction = NKikimrKqp::QUERY_ACTION_EXECUTE;
 
     TString TraceId = "kqprun";
@@ -54,6 +56,12 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
             Cout << colors.Yellow() << "Fetching script results..." << colors.Default() << Endl;
             if (!runner.FetchScriptResults()) {
                 ythrow yexception() << "Fetch script results failed";
+            }
+            if (executionOptions.ForgetExecution) {
+                Cout << colors.Yellow() << "Forgetting script execution operation..." << colors.Default() << Endl;
+                if (!runner.ForgetExecutionOperation()) {
+                    ythrow yexception() << "Forget script execution operation failed";
+                }
             }
         } else {
             if (!runner.ExecuteQuery(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
@@ -91,7 +99,7 @@ void ReplaceTemplate(const TString& variableName, const TString& variableValue, 
 }
 
 
-TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistry(const TString& udfsDirectory, TVector<TString> udfsPaths) {
+TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistry(const TString& udfsDirectory, TVector<TString> udfsPaths, bool excludeLinkedUdfs) {
     if (!udfsDirectory.empty() || !udfsPaths.empty()) {
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
         Cout << colors.Yellow() << "Fetching udfs..." << colors.Default() << Endl;
@@ -99,7 +107,17 @@ TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistr
 
     NKikimr::NMiniKQL::FindUdfsInDir(udfsDirectory, &udfsPaths);
     auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, udfsPaths)->Clone();
-    NKikimr::NMiniKQL::FillStaticModules(*functionRegistry);
+
+    if (excludeLinkedUdfs) {
+        for (const auto& wrapper : NYql::NUdf::GetStaticUdfModuleWrapperList()) {
+            auto [name, ptr] = wrapper();
+            if (!functionRegistry->IsLoadedUdfModule(name)) {
+                functionRegistry->AddModule(TString(NKikimr::NMiniKQL::StaticModulePrefix) + name, name, std::move(ptr));
+            }
+        }
+    } else {
+        NKikimr::NMiniKQL::FillStaticModules(*functionRegistry);
+    }
 
     return functionRegistry;
 }
@@ -128,6 +146,7 @@ void RunMain(int argc, const char* argv[]) {
 
     TVector<TString> udfsPaths;
     TString udfsDirectory;
+    bool excludeLinkedUdfs = false;
 
     NLastGetopt::TOpts options = NLastGetopt::TOpts::Default();
     options.AddLongOption('p', "script-query", "Script query to execute")
@@ -174,6 +193,11 @@ void RunMain(int argc, const char* argv[]) {
         .NoArgument()
         .DefaultValue(executionOptions.ClearExecution)
         .SetFlag(&executionOptions.ClearExecution);
+    options.AddLongOption('F', "forget", "Forget script execution operation after fetching results, cannot be used with -C")
+        .Optional()
+        .NoArgument()
+        .DefaultValue(executionOptions.ForgetExecution)
+        .SetFlag(&executionOptions.ForgetExecution);
     options.AddLongOption('T', "trace-opt", "print AST in the begin of each transformation, one of { scheme | script | all }")
         .Optional()
         .RequiredArgument("STR")
@@ -213,6 +237,11 @@ void RunMain(int argc, const char* argv[]) {
         .Optional()
         .RequiredArgument("PATH")
         .StoreResult(&udfsDirectory);
+    options.AddLongOption("exclude-linked-udfs", "Exclude linked udfs when same udf passed from -u or --udfs-dir")
+        .Optional()
+        .NoArgument()
+        .DefaultValue(excludeLinkedUdfs)
+        .SetFlag(&excludeLinkedUdfs);
 
     NLastGetopt::TOptsParseResult parsedOptions(&options, argc, argv);
 
@@ -272,7 +301,7 @@ void RunMain(int argc, const char* argv[]) {
     }
 
     runnerOptions.YdbSettings.YqlToken = yqlToken;
-    runnerOptions.YdbSettings.FunctionRegistry = CreateFunctionRegistry(udfsDirectory, udfsPaths).Get();
+    runnerOptions.YdbSettings.FunctionRegistry = CreateFunctionRegistry(udfsDirectory, udfsPaths, excludeLinkedUdfs).Get();
 
     TString appConfigData = TFileInput(appConfigFile).ReadAll();
     if (!google::protobuf::TextFormat::ParseFromString(appConfigData, &runnerOptions.YdbSettings.AppConfig)) {

@@ -81,9 +81,10 @@ class TBlobStorageController::TTxUpdateNodeDrives
 
             // update pdisk's LastSeenSerial if necessary
             if (pdiskInfo.LastSeenSerial != serial) {
-                getMutableItem()->LastSeenSerial = serial;
+                auto *item = getMutableItem();
+                item->LastSeenSerial = serial;
                 if (serial) {
-                    Self->ReadPDisk(pdiskId, pdiskInfo, result, NKikimrBlobStorage::RESTART);
+                    Self->ReadPDisk(pdiskId, *item, result, NKikimrBlobStorage::RESTART);
                 }
             }
 
@@ -311,7 +312,15 @@ public:
         Self->ReadGroups(groupsToDiscard, true, Response.get(), nodeId);
 
         for (auto it = Self->PDisks.lower_bound(minPDiskId); it != Self->PDisks.end() && it->first.NodeId == nodeId; ++it) {
-            Self->ReadPDisk(it->first, *it->second, Response.get(), NKikimrBlobStorage::INITIAL);
+            auto& pdisk = it->second;
+
+            NKikimrBlobStorage::EEntityStatus entityStatus = NKikimrBlobStorage::INITIAL;
+
+            if (pdisk->Mood == TPDiskMood::Restarting) {
+                entityStatus = NKikimrBlobStorage::RESTART;
+            }
+
+            Self->ReadPDisk(it->first, *pdisk, Response.get(), entityStatus);
         }
 
         Response->Record.SetInstanceId(Self->InstanceId);
@@ -320,6 +329,7 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
         auto& node = Self->GetNode(nodeId);
+        node.DeclarativePDiskManagement = record.GetDeclarativePDiskManagement();
         db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::LastConnectTimestamp>(node.LastConnectTimestamp);
 
         for (ui32 groupId : record.GetGroups()) {

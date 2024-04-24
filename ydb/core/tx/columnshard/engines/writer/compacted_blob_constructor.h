@@ -15,7 +15,7 @@ private:
     TActorId DstActor;
 protected:
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override;
-    virtual void DoAbort() override;
+    virtual void DoAbort(const TString& reason) override;
 public:
     const TBlobsAction& GetBlobsAction();
 

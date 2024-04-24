@@ -316,7 +316,15 @@ namespace NKikimr::NStorage {
         struct TExConfigError : yexception {};
 
         bool GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config);
-        void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config);
+
+        void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, ui32 groupId, ui32 groupGeneration,
+            TBlobStorageGroupType gtype, const NKikimrBlobStorage::TGroupGeometry& geometry,
+            const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TPDiskFilter>& pdiskFilters,
+            THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
+            const NBsController::TGroupMapper::TForbiddenPDisks& forbid,
+            i64 requiredSpace, NKikimrBlobStorage::TBaseConfig *baseConfig,
+            bool convertToDonor);
+
         void GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
             const NKikimrBlobStorage::TStorageConfig& baseConfig);
         bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config);
@@ -507,7 +515,7 @@ namespace NKikimr::NStorage {
             const TNodeWardenConfig& nwConfig, bool allowUnformatted) {
         auto makeError = [&](TString error) -> bool {
             STLOG(PRI_CRIT, BS_NODE, NWDC41, "configuration incorrect", (Error, error));
-            Y_DEBUG_ABORT_UNLESS(false, "%s", error.c_str());
+            Y_DEBUG_ABORT("%s", error.c_str());
             return false;
         };
         if (!config.HasBlobStorageConfig()) { // no storage config at all -- however, this is quite strange
@@ -562,6 +570,12 @@ namespace NKikimr::NStorage {
         for (const auto& vdisk : ss.GetVDisks()) {
             if (!vdisk.HasVDiskID() || !vdisk.HasVDiskLocation()) {
                 return makeError("incorrect TVDisk record");
+            }
+            if (vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
+                continue;
+            }
+            if (vdisk.HasDonorMode()) {
+                continue;
             }
             const auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
             const auto it = groups.find(vdiskId.GroupID);

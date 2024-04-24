@@ -599,6 +599,16 @@ Y_UNIT_TEST_SUITE(ComputationPatternCache) {
                 auto guard = entry->Env.BindAllocator();
                 entry->Pattern = MakeComputationPattern(explorer, progReturn, {}, opts);
             }
+
+            // XXX: There is no way to accurately define how the entry's
+            // allocator obtains the memory pages: using the free ones from the
+            // global page pool or the ones directly requested by <mmap>. At the
+            // same time, it is the total allocated bytes (not just the number
+            // of the borrowed pages) that is a good estimate of the memory
+            // consumed by the pattern cache entry for real life workload.
+            // Hence, to avoid undesired cache flushes, release the free pages
+            // of the allocator of the particular entry.
+            alloc.ReleaseFreePages();
             cache.EmplacePattern(TString((char)('a' + i)), entry);
         }
 

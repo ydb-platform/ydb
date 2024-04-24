@@ -32,8 +32,9 @@ public:
     TDqYtReadWrapperBase(const TComputationNodeFactoryContext& ctx, const TString& clusterName,
         const TString& token, const NYT::TNode& inputSpec, const NYT::TNode& samplingSpec,
         const TVector<ui32>& inputGroups,
-        TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables, NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight,
-        size_t timeout) : TBaseComputation(ctx.Mutables, this, EValueRepresentation::Boxed, EValueRepresentation::Boxed)
+        TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables,
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets)
+        : TBaseComputation(ctx.Mutables, this, EValueRepresentation::Boxed, EValueRepresentation::Boxed)
         , Width(AS_TYPE(TStructType, itemType)->GetMembersCount())
         , CodecCtx(ctx.Env, ctx.FunctionRegistry, &ctx.HolderFactory)
         , ClusterName(clusterName)
@@ -45,6 +46,7 @@ public:
     {
         Specs.SetUseSkiff("", TMkqlIOSpecs::ESystemField::RowIndex | TMkqlIOSpecs::ESystemField::RangeIndex);
         Specs.Init(CodecCtx, inputSpec, inputGroups, tableNames, itemType, {}, {}, jobStats);
+        Specs.SetTableOffsets(tableOffsets);
     }
 
     class TState: public TComputationValue<TState>, public IS {

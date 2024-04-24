@@ -1,6 +1,0 @@
-/** pqxx::stream_from class.
- *
- * pqxx::stream_from enables optimized batch reads from a database table.
- */
-// Actual definitions in .hxx file so editors and such recognize file type.
-#include "pqxx/stream_from.hxx"

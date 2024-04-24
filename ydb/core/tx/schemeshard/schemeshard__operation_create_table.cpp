@@ -650,6 +650,10 @@ public:
             tableInfo->OwnerActorId = ActorIdFromProto(Transaction.GetTempTableOwnerActorId());
         }
 
+        if (tableInfo->IsAsyncReplica()) {
+            newTable->SetAsyncReplica();
+        }
+
         context.SS->Tables[newTable->PathId] = tableInfo;
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
         context.SS->IncrementPathDbRefCount(newTable->PathId, "new path created");

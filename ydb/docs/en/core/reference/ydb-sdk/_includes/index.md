@@ -19,6 +19,10 @@ The SDK documentation contains the following sections:
 
 - [Installation](../install.md)
 - [Authentication](../auth.md)
-- [Test app](../example/index.md)
 - [Code recipes](../recipes/index.md)
 - [Comparison of SDK features](../feature-parity.md)
+
+See also:
+
+- [Documentation for Application Developers](../../../dev/index.md)
+- [Example applications](../../../dev/example-app/index.md)

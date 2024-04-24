@@ -42,9 +42,9 @@ struct THandlerActorYdbc : THandlerActorYdb {
         };
 
         struct TEvOperationResponse : NActors::TEventLocal<TEvOperationResponse, EvOperationResponse> {
-            yandex::cloud::priv::operation::Operation Operation;
+            ydb::yc::priv::operation::Operation Operation;
 
-            TEvOperationResponse(yandex::cloud::priv::operation::Operation&& operation)
+            TEvOperationResponse(ydb::yc::priv::operation::Operation&& operation)
                 : Operation(operation)
             {}
         };

@@ -1,5 +1,6 @@
 #include "composite_compare.h"
 
+#include <yt/yt/client/table_client/row_base.h>
 #include <yt/yt/core/yson/pull_parser.h>
 #include <yt/yt/core/yson/token_writer.h>
 
@@ -16,27 +17,28 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto Logger = NLogging::TLogger{"YsonCompositveCompare"};
+static const auto Logger = NLogging::TLogger{"YsonCompositeCompare"};
 
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace {
 
-// This file implements comparison for composite values.
+// This file implements comparison for composite and any values.
 // Composite types that supports comparison are:
 //   1. Optional
 //   2. List
 //   3. Tuple
 //   4. Variant
 //
-// When we compare composite values we assume that they are well-formed yson representations of same type supporting comparison.
+// When we compare composite or any values we assume that they are well-formed yson representations of same type supporting comparison.
 // And we compare them in following manner:
 //   1. We scan two values simultaneously and look at their yson tokens and find first mismatching token.
 //   2. If one of the token is EndList (this only can happen if we parsing values of list type
 //      and one list is shorter than another) that means that value containing EndList is less that other.
 //   3. Otherwise if one of the values is Entity (other value have to be non null value) that means
 //      that value containing Entity is less than other.
-//   4. Otherwise it's 2 values of the same type and we can easily compare them.
+//   4. Otherwise if values have different types we compare them using EValueType order (via MapItemTypeToValueType)
+//   5. Otherwise it's values of the same type and we can easily compare them.
 DEFINE_ENUM_WITH_UNDERLYING_TYPE(ECompareClass, ui32,
     ((Incomparable)(0))
     ((EndList)(1))
@@ -108,6 +110,30 @@ Y_FORCE_INLINE static int GetSign(int x)
     return static_cast<int>(0 < x) - static_cast<int>(0 > x);
 }
 
+Y_FORCE_INLINE static EValueType MapItemTypeToValueType(EYsonItemType itemType)
+{
+    static const TEnumIndexedArray<EYsonItemType, EValueType> mapping = {
+        {EYsonItemType::EndOfStream, EValueType::Min},
+        {EYsonItemType::BeginMap, EValueType::Min},
+        {EYsonItemType::EndMap, EValueType::Min},
+        {EYsonItemType::BeginAttributes, EValueType::Min},
+        {EYsonItemType::EndAttributes, EValueType::Min},
+        {EYsonItemType::BeginList, EValueType::Any},
+        {EYsonItemType::EndList, EValueType::Min},
+        {EYsonItemType::EntityValue, EValueType::Min},
+        {EYsonItemType::BooleanValue, EValueType::Boolean},
+        {EYsonItemType::Int64Value, EValueType::Int64},
+        {EYsonItemType::Uint64Value, EValueType::Uint64},
+        {EYsonItemType::DoubleValue, EValueType::Double},
+        {EYsonItemType::StringValue, EValueType::String},
+    };
+    auto valueType = mapping[itemType];
+    if (valueType == EValueType::Min) {
+        ThrowIncomparableYsonToken(itemType);
+    }
+    return valueType;
+}
+
 Y_FORCE_INLINE static int CompareYsonItems(const TYsonItem& lhs, const TYsonItem& rhs)
 {
     if (lhs.GetType() == rhs.GetType()) {
@@ -148,9 +174,7 @@ Y_FORCE_INLINE static int CompareYsonItems(const TYsonItem& lhs, const TYsonItem
     }
 
     if (lhsClass == ECompareClass::BeginValue && rhsClass == ECompareClass::BeginValue) {
-        THROW_ERROR_EXCEPTION("Incomparable scalar types %Qlv and %Qlv in YSON representation",
-            lhs.GetType(),
-            rhs.GetType());
+        return static_cast<int>(MapItemTypeToValueType(lhs.GetType())) - static_cast<int>(MapItemTypeToValueType(rhs.GetType()));
     }
     return ComparePrimitive(static_cast<ui32>(lhsClass), static_cast<ui32>(rhsClass));
 }
@@ -314,21 +338,21 @@ TFingerprint CompositeFarmHash(TYsonStringBuf value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::optional<TYsonString> TruncateCompositeValue(TYsonStringBuf value, i64 size)
+std::optional<TYsonString> TruncateYsonValue(TYsonStringBuf originalYson, i64 size)
 {
-    YT_VERIFY(value.GetType() == EYsonType::Node);
+    YT_VERIFY(originalYson.GetType() == EYsonType::Node);
 
     YT_VERIFY(size >= 0);
     if (!size) {
         return {};
     }
 
-    TMemoryInput valueIn(value.AsStringBuf());
+    TMemoryInput valueIn(originalYson.AsStringBuf());
     TYsonPullParser valueParser(&valueIn, EYsonType::Node);
 
     TString truncatedYson;
     TStringOutput output(truncatedYson);
-    output.Reserve(std::min(size, std::ssize(value.AsStringBuf())));
+    output.Reserve(std::min(size, std::ssize(originalYson.AsStringBuf())));
     TCheckedInDebugYsonTokenWriter writer(&output);
 
     i64 unclosedListCount = 0;
@@ -421,7 +445,7 @@ std::optional<TYsonString> TruncateCompositeValue(TYsonStringBuf value, i64 size
     YT_LOG_ALERT_IF(
         std::ssize(truncatedYson) > size,
         "Composite YSON truncation increased the value's binary size (OriginalValue: %v, TruncatedValue: %v)",
-        value.AsStringBuf(),
+        originalYson.AsStringBuf(),
         truncatedYson);
 
     return TYsonString(std::move(truncatedYson));

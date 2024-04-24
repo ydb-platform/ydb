@@ -91,6 +91,9 @@ DRAW_FLOAT_LABEL = calc_label_from_name("drawing a float")
 FLOAT_STRATEGY_DO_DRAW_LABEL = calc_label_from_name(
     "getting another float in FloatStrategy"
 )
+INTEGER_WEIGHTED_DISTRIBUTION = calc_label_from_name(
+    "drawing from a weighted distribution in integers"
+)
 
 InterestingOrigin = Tuple[
     Type[BaseException], str, int, Tuple[Any, ...], Tuple[Tuple[Any, ...], ...]
@@ -1673,6 +1676,7 @@ class HypothesisProvider(PrimitiveProvider):
         center: Optional[int] = None,
         forced: Optional[int] = None,
         fake_forced: bool = False,
+        _vary_effective_size: bool = True,
     ) -> int:
         assert lower <= upper
         assert forced is None or lower <= forced <= upper
@@ -1709,14 +1713,27 @@ class HypothesisProvider(PrimitiveProvider):
         bits = gap.bit_length()
         probe = gap + 1
 
-        if bits > 24 and self.draw_boolean(
-            7 / 8, forced=None if forced is None else False, fake_forced=fake_forced
+        if (
+            bits > 24
+            and _vary_effective_size
+            and self.draw_boolean(
+                7 / 8, forced=None if forced is None else False, fake_forced=fake_forced
+            )
         ):
+            self._cd.start_example(INTEGER_WEIGHTED_DISTRIBUTION)
             # For large ranges, we combine the uniform random distribution from draw_bits
             # with a weighting scheme with moderate chance.  Cutoff at 2 ** 24 so that our
             # choice of unicode characters is uniform but the 32bit distribution is not.
             idx = INT_SIZES_SAMPLER.sample(self._cd)
-            bits = min(bits, INT_SIZES[idx])
+            force_bits = min(bits, INT_SIZES[idx])
+            forced = self._draw_bounded_integer(
+                lower=center if above else max(lower, center - 2**force_bits - 1),
+                upper=center if not above else min(upper, center + 2**force_bits - 1),
+                _vary_effective_size=False,
+            )
+            self._cd.stop_example()
+
+            assert lower <= forced <= upper
 
         while probe > gap:
             self._cd.start_example(INTEGER_RANGE_DRAW_LABEL)
@@ -2273,13 +2290,13 @@ class ConjectureData:
         # (in fact, it is possible that giving up early here results in more time
         # for useful shrinks to run).
         if node.ir_type != ir_type:
-            self.mark_invalid()
+            self.mark_invalid(f"(internal) want a {ir_type} but have a {node.ir_type}")
 
         # if a node has different kwargs (and so is misaligned), but has a value
         # that is allowed by the expected kwargs, then we can coerce this node
         # into an aligned one by using its value. It's unclear how useful this is.
         if not ir_value_permitted(node.value, node.ir_type, kwargs):
-            self.mark_invalid()
+            self.mark_invalid(f"(internal) got a {ir_type} but outside the valid range")
 
         return node
 
@@ -2348,7 +2365,7 @@ class ConjectureData:
         strategy.validate()
 
         if strategy.is_empty:
-            self.mark_invalid("strategy is empty")
+            self.mark_invalid(f"empty strategy {self!r}")
 
         if self.depth >= MAX_DEPTH:
             self.mark_invalid("max depth exceeded")

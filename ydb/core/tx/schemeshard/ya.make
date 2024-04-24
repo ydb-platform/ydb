@@ -90,6 +90,7 @@ SRCS(
     schemeshard__operation_alter_kesus.cpp
     schemeshard__operation_alter_login.cpp
     schemeshard__operation_alter_pq.cpp
+    schemeshard__operation_alter_replication.cpp
     schemeshard__operation_alter_solomon.cpp
     schemeshard__operation_alter_subdomain.cpp
     schemeshard__operation_alter_table.cpp
@@ -173,6 +174,7 @@ SRCS(
     schemeshard_audit_log_fragment.cpp
     schemeshard_audit_log.cpp
     schemeshard_impl.cpp
+    schemeshard_backup.cpp
     schemeshard_impl.h
     schemeshard_billing_helpers.cpp
     schemeshard_cdc_stream_scan.cpp
@@ -192,7 +194,6 @@ SRCS(
     schemeshard_svp_migration.h
     schemeshard_svp_migration.cpp
     schemeshard_tx_infly.h
-    schemeshard_tables_storage.cpp
     schemeshard_types.cpp
     schemeshard_types.h
     schemeshard_user_attr_limits.h

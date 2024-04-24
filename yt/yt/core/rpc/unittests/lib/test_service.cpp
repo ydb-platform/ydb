@@ -28,10 +28,12 @@ public:
     TTestService(
         IInvokerPtr invoker,
         bool secure,
-        TTestCreateChannelCallback createChannel)
+        TTestCreateChannelCallback createChannel,
+        IMemoryUsageTrackerPtr memoryUsageTracker)
         : TServiceBase(
             invoker,
             TTestProxy::GetDescriptor(),
+            std::move(memoryUsageTracker),
             NLogging::TLogger("Main"))
         , Secure_(secure)
         , CreateChannel_(createChannel)
@@ -380,9 +382,14 @@ private:
 ITestServicePtr CreateTestService(
     IInvokerPtr invoker,
     bool secure,
-    TTestCreateChannelCallback createChannel)
+    TTestCreateChannelCallback createChannel,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
 {
-    return New<TTestService>(invoker, secure, createChannel);
+    return New<TTestService>(
+        invoker,
+        secure,
+        createChannel,
+        std::move(memoryUsageTracker));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

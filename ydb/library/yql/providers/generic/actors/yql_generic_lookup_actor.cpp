@@ -15,7 +15,7 @@
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
-#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
 #include <ydb/library/yql/providers/generic/proto/range.pb.h>
@@ -65,8 +65,7 @@ namespace NYql::NDq {
             TGenericTokenProvider::TPtr tokenProvider,
             NActors::TActorId&& parentId,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-            NYql::NConnector::NApi::TDataSourceInstance&& dataSource,
-            TString&& table,
+            NYql::Generic::TLookupSource&& lookupSource,
             const NKikimr::NMiniKQL::TStructType* keyType,
             const NKikimr::NMiniKQL::TStructType* payloadType,
             const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -76,8 +75,7 @@ namespace NYql::NDq {
             , TokenProvider(std::move(tokenProvider))
             , ParentId(std::move(parentId))
             , Alloc(alloc)
-            , DataSource(std::move(dataSource))
-            , Table(std::move(table))
+            , LookupSource(std::move(lookupSource))
             , KeyType(keyType)
             , PayloadType(payloadType)
             , SelectResultType(MergeStructTypes(typeEnv, keyType, payloadType))
@@ -88,13 +86,14 @@ namespace NYql::NDq {
         }
 
         void Bootstrap() {
+            auto dsi = LookupSource.data_source_instance();
             YQL_CLOG(INFO, ProviderGeneric) << "New generic proivider lookup source actor(ActorId=" << SelfId() << ") for"
-                                            << " kind=" << NYql::NConnector::NApi::EDataSourceKind_Name(DataSource.kind())
-                                            << ", endpoint=" << DataSource.endpoint().ShortDebugString()
-                                            << ", database=" << DataSource.database()
-                                            << ", use_tls=" << ToString(DataSource.use_tls())
-                                            << ", protocol=" << NYql::NConnector::NApi::EProtocol_Name(DataSource.protocol())
-                                            << ", table=" << Table;
+                                            << " kind=" << NYql::NConnector::NApi::EDataSourceKind_Name(dsi.kind())
+                                            << ", endpoint=" << dsi.endpoint().ShortDebugString()
+                                            << ", database=" << dsi.database()
+                                            << ", use_tls=" << ToString(dsi.use_tls())
+                                            << ", protocol=" << NYql::NConnector::NApi::EProtocol_Name(dsi.protocol())
+                                            << ", table=" << LookupSource.table();
             Become(&TGenericLookupActor::StateFunc);
         }
 
@@ -115,7 +114,8 @@ namespace NYql::NDq {
                       hFunc(TEvReadSplitsIterator, Handle);
                       hFunc(TEvReadSplitsPart, Handle);
                       hFunc(TEvReadSplitsFinished, Handle);
-                      hFunc(TEvError, Handle);)
+                      hFunc(TEvError, Handle);
+                      hFunc(NActors::TEvents::TEvPoison, Handle);)
 
         void Handle(TEvListSplitsIterator::TPtr ev) {
             auto& iterator = ev->Get()->Iterator;
@@ -138,7 +138,7 @@ namespace NYql::NDq {
             Y_ABORT_UNLESS(response.splits_size() == 1);
             auto& split = response.splits(0);
             NConnector::NApi::TReadSplitsRequest readRequest;
-            *readRequest.mutable_data_source_instance() = DataSource;
+            *readRequest.mutable_data_source_instance() = LookupSource.data_source_instance();
             *readRequest.add_splits() = split;
             readRequest.Setmode(NConnector::NApi::TReadSplitsRequest_EMode::TReadSplitsRequest_EMode_ORDERED);
             readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
@@ -170,6 +170,10 @@ namespace NYql::NDq {
 
         void Handle(TEvError::TPtr) {
             FinalizeRequest();
+        }
+
+        void Handle(NActors::TEvents::TEvPoison::TPtr) {
+            PassAway();
         }
 
     private:
@@ -245,11 +249,9 @@ namespace NYql::NDq {
         }
 
         void FinalizeRequest() {
-            if (!LookupResult.empty()) {
-                YQL_CLOG(INFO, ProviderGeneric) << "Sending lookup results with " << LookupResult.size() << " rows";
-                auto ev = new IDqAsyncLookupSource::TEvLookupResult(Alloc, std::move(LookupResult));
-                TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
-            }
+            YQL_CLOG(INFO, ProviderGeneric) << "Sending lookup results with " << LookupResult.size() << " rows";
+            auto ev = new IDqAsyncLookupSource::TEvLookupResult(Alloc, std::move(LookupResult));
+            TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
             LookupResult = {};
             ReadSplitsIterator = {};
             InProgress = false;
@@ -297,7 +299,7 @@ namespace NYql::NDq {
 
         NConnector::NApi::TSelect CreateSelect(const NKikimr::NMiniKQL::TUnboxedValueVector& keys) {
             NConnector::NApi::TSelect select;
-            *select.mutable_data_source_instance() = DataSource;
+            *select.mutable_data_source_instance() = LookupSource.data_source_instance();
             //Note: returned token may be stale and we have no way to check or recover here
             //Consider to redesign ICredentialsProvider
             TokenProvider->MaybeFillToken(*select.mutable_data_source_instance());
@@ -308,7 +310,7 @@ namespace NYql::NDq {
                 ExportTypeToProto(SelectResultType->GetMemberType(i), *c->mutable_type());
             }
 
-            select.mutable_from()->Settable(Table);
+            select.mutable_from()->Settable(LookupSource.table());
 
             NConnector::NApi::TPredicate_TDisjunction disjunction;
             for (const auto& k : keys) {
@@ -333,8 +335,7 @@ namespace NYql::NDq {
         TGenericTokenProvider::TPtr TokenProvider;
         const NActors::TActorId ParentId;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
-        const NYql::NConnector::NApi::TDataSourceInstance DataSource;
-        const TString Table;
+        const NYql::Generic::TLookupSource LookupSource;
         const NKikimr::NMiniKQL::TStructType* const KeyType;
         const NKikimr::NMiniKQL::TStructType* const PayloadType;
         const NKikimr::NMiniKQL::TStructType* const SelectResultType; //columns from KeyType + PayloadType
@@ -348,29 +349,23 @@ namespace NYql::NDq {
 
     std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateGenericLookupActor(
         NConnector::IClient::TPtr connectorClient,
-        const TString& serviceAccountId,
-        const TString& serviceAccountSignature,
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         NActors::TActorId&& parentId,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-        NYql::NConnector::NApi::TDataSourceInstance&& dataSource,
-        TString&& table,
+        NYql::Generic::TLookupSource&& lookupSource,
         const NKikimr::NMiniKQL::TStructType* keyType,
         const NKikimr::NMiniKQL::TStructType* payloadType,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const size_t maxKeysInRequest)
     {
-        auto creds = dataSource.Getcredentials();
-
-        auto tokenProvider = NYql::NDq::CreateGenericTokenProvider(creds.Gettoken().Getvalue(), serviceAccountId, serviceAccountSignature, credentialsFactory);
+        auto tokenProvider = NYql::NDq::CreateGenericTokenProvider(lookupSource.GetToken(), lookupSource.GetServiceAccountId(), lookupSource.GetServiceAccountIdSignature(), credentialsFactory);
         const auto actor = new TGenericLookupActor(
             connectorClient,
             std::move(tokenProvider),
             std::move(parentId),
             alloc,
-            std::move(dataSource),
-            std::move(table),
+            std::move(lookupSource),
             keyType,
             payloadType,
             typeEnv,

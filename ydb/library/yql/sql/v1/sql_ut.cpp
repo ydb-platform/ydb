@@ -2494,7 +2494,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
         ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL WITH (a=b, c=d, e=f) ON (col)",
-            "<main>:1:40: Error: local: alternative is not implemented yet: 719:7: local_index\n");
+            "<main>:1:40: Error: local: alternative is not implemented yet: 720:7: local_index\n");
     }
 
     Y_UNIT_TEST(OptionalAliases) {
@@ -2559,6 +2559,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             CREATE ASYNC REPLICATION MyReplication
             FOR table1 AS table2, table3 AS table4
             WITH (
+                CONNECTION_STRING = "grpc://localhost:2135/?database=/MyDatabase",
                 ENDPOINT = "localhost:2135",
                 DATABASE = "/MyDatabase"
             );
@@ -2569,14 +2570,16 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createAsyncReplication"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("create"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table1"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table2"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table3"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table4"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("ENDPOINT"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("connection_string"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("grpc://localhost:2135/?database=/MyDatabase"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("endpoint"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("localhost:2135"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("DATABASE"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("database"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("/MyDatabase"));
             }
         };
@@ -2585,6 +2588,94 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateAsyncReplicationUnsupportedSettings) {
+        auto reqTpl = R"(
+            USE plato;
+            CREATE ASYNC REPLICATION MyReplication
+            FOR table1 AS table2, table3 AS table4
+            WITH (
+                %s = "%s"
+            )
+        )";
+
+        auto settings = THashMap<TString, TString>{
+            {"STATE", "DONE"},
+            {"FAILOVER_MODE", "FORCE"},
+        };
+
+        for (const auto& [k, v] : settings) {
+            auto req = Sprintf(reqTpl, k.c_str(), v.c_str());
+            auto res = SqlToYql(req);
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), Sprintf("<main>:6:%zu: Error: %s is not supported in CREATE\n", 20 + k.size(), k.c_str()));
+        }
+    }
+
+    Y_UNIT_TEST(AlterAsyncReplicationParseCorrect) {
+        auto req = R"(
+            USE plato;
+            ALTER ASYNC REPLICATION MyReplication
+            SET (
+                STATE = "DONE",
+                FAILOVER_MODE = "FORCE"
+            );
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("alter"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("state"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("DONE"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("failover_mode"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("FORCE"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(AlterAsyncReplicationUnsupportedSettings) {
+        auto reqTpl = R"(
+            USE plato;
+            ALTER ASYNC REPLICATION MyReplication
+            SET (
+                %s = "%s"
+            )
+        )";
+
+        auto settings = THashMap<TString, TString>{
+            {"CONNECTION_STRING", "grpc://localhost:2135/?database=/MyDatabase"},
+            {"ENDPOINT", "localhost:2135"},
+            {"DATABASE", "/MyDatabase"},
+            {"TOKEN", "foo"},
+            {"USER", "user"},
+            {"PASSWORD", "bar"},
+        };
+
+        for (const auto& [k, v] : settings) {
+            auto req = Sprintf(reqTpl, k.c_str(), v.c_str());
+            auto res = SqlToYql(req);
+            UNIT_ASSERT(!res.Root);
+            UNIT_ASSERT_NO_DIFF(Err2Str(res), Sprintf("<main>:5:%zu: Error: %s is not supported in ALTER\n", 20 + k.size(), k.c_str()));
+        }
+    }
+
+    Y_UNIT_TEST(AsyncReplicationInvalidSettings) {
+        auto req = R"(
+            USE plato;
+            ALTER ASYNC REPLICATION MyReplication SET (FOO = "BAR");
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:62: Error: Unknown replication setting: FOO\n");
     }
 
     Y_UNIT_TEST(DropAsyncReplicationParseCorrect) {
@@ -2598,8 +2689,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropAsyncReplication"));
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("cascade"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("drop"));
             }
         };
 
@@ -2619,7 +2709,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("cascade"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropCascade"));
             }
         };
 

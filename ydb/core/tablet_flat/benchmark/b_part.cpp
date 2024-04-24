@@ -8,7 +8,7 @@
 #include <ydb/core/tablet_flat/test/libs/table/model/large.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_make.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_mixer.h>
-#include "ydb/core/tablet_flat/flat_part_btree_index_iter.h"
+#include "ydb/core/tablet_flat/flat_part_index_iter_bree_index.h"
 #include "ydb/core/tablet_flat/flat_stat_table.h"
 #include "ydb/core/tablet_flat/test/libs/table/wrap_iter.h"
 #include "ydb/core/tx/datashard/datashard.h"
@@ -26,8 +26,8 @@ namespace NKikimr::NTable {
 namespace {
     using namespace NTest;
 
-    using TCheckIt = TChecker<TWrapIter, TSubset>;
-    using TCheckReverseIt = TChecker<TWrapReverseIter, TSubset>;
+    using TCheckIter = TChecker<TWrapIter, TSubset>;
+    using TCheckReverseIter = TChecker<TWrapReverseIter, TSubset>;
 
     NPage::TConf PageConf(size_t groups, bool writeBTreeIndex) noexcept
     {
@@ -68,11 +68,11 @@ namespace {
             }
 
             if (history) {
-                Checker = new TCheckIt(*Subset, {new TTestEnv()}, TRowVersion(0, 8));
-                CheckerReverse = new TCheckReverseIt(*Subset, {new TTestEnv()}, TRowVersion(0, 8));
+                Checker = new TCheckIter(*Subset, {new TTestEnv()}, TRowVersion(0, 8));
+                CheckerReverse = new TCheckReverseIter(*Subset, {new TTestEnv()}, TRowVersion(0, 8));
             } else {
-                Checker = new TCheckIt(*Subset, {new TTestEnv()});
-                CheckerReverse = new TCheckReverseIt(*Subset, {new TTestEnv()});
+                Checker = new TCheckIter(*Subset, {new TTestEnv()});
+                CheckerReverse = new TCheckReverseIter(*Subset, {new TTestEnv()});
             }
 
             GroupId = TGroupId(groups, history);
@@ -82,8 +82,8 @@ namespace {
         TMersenne<ui64> Rnd;
         TAutoPtr<NTest::TMass> Mass;
         TAutoPtr<TSubset> Subset;
-        TAutoPtr<TCheckIt> Checker;
-        TAutoPtr<TCheckReverseIt> CheckerReverse;
+        TAutoPtr<TCheckIter> Checker;
+        TAutoPtr<TCheckReverseIter> CheckerReverse;
         TTestEnv Env;
         TGroupId GroupId;
         TPart const* Part;
@@ -94,12 +94,12 @@ BENCHMARK_DEFINE_F(TPartFixture, SeekRowId)(benchmark::State& state) {
     const bool useBTree = state.range(0);
 
     for (auto _ : state) {
-        THolder<IIndexIter> iter;
+        THolder<IPartGroupIndexIter> iter;
 
         if (useBTree) {
-            iter = MakeHolder<TPartBtreeIndexIt>(Part, &Env, GroupId);
+            iter = MakeHolder<TPartGroupBtreeIndexIter>(Part, &Env, GroupId);
         } else {
-            iter = MakeHolder<TPartIndexIt>(Part, &Env, GroupId);
+            iter = MakeHolder<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
         }
 
         iter->Seek(RandomNumber<ui32>(Part->Stat.Rows));    
@@ -109,12 +109,12 @@ BENCHMARK_DEFINE_F(TPartFixture, SeekRowId)(benchmark::State& state) {
 BENCHMARK_DEFINE_F(TPartFixture, Next)(benchmark::State& state) {
     const bool useBTree = state.range(0);
 
-    THolder<IIndexIter> iter;
+    THolder<IPartGroupIndexIter> iter;
 
     if (useBTree) {
-        iter = MakeHolder<TPartBtreeIndexIt>(Part, &Env, GroupId);
+        iter = MakeHolder<TPartGroupBtreeIndexIter>(Part, &Env, GroupId);
     } else {
-        iter = MakeHolder<TPartIndexIt>(Part, &Env, GroupId);
+        iter = MakeHolder<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
     }
 
     iter->Seek(RandomNumber<ui32>(Part->Stat.Rows));
@@ -130,12 +130,12 @@ BENCHMARK_DEFINE_F(TPartFixture, Next)(benchmark::State& state) {
 BENCHMARK_DEFINE_F(TPartFixture, Prev)(benchmark::State& state) {
     const bool useBTree = state.range(0);
 
-    THolder<IIndexIter> iter;
+    THolder<IPartGroupIndexIter> iter;
 
     if (useBTree) {
-        iter = MakeHolder<TPartBtreeIndexIt>(Part, &Env, GroupId);
+        iter = MakeHolder<TPartGroupBtreeIndexIter>(Part, &Env, GroupId);
     } else {
-        iter = MakeHolder<TPartIndexIt>(Part, &Env, GroupId);
+        iter = MakeHolder<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
     }
 
     iter->Seek(RandomNumber<ui32>(Part->Stat.Rows));
@@ -159,12 +159,12 @@ BENCHMARK_DEFINE_F(TPartFixture, SeekKey)(benchmark::State& state) {
     }
 
     for (auto _ : state) {
-        THolder<IIndexIter> iter;
+        THolder<IPartGroupIndexIter> iter;
 
         if (useBTree) {
-            iter = MakeHolder<TPartBtreeIndexIt>(Part, &Env, GroupId);
+            iter = MakeHolder<TPartGroupBtreeIndexIter>(Part, &Env, GroupId);
         } else {
-            iter = MakeHolder<TPartIndexIt>(Part, &Env, GroupId);
+            iter = MakeHolder<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
         }
 
         state.PauseTiming();

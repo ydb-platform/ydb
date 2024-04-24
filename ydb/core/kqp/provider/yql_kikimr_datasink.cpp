@@ -97,7 +97,31 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleCreateReplication(TKiCreateReplication node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
+    TStatus HandleAlterReplication(TKiAlterReplication node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
+    TStatus HandleDropReplication(TKiDropReplication node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
     TStatus HandleCreateSequence(NNodes::TKiCreateSequence node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
+    TStatus HandleDropSequence(NNodes::TKiDropSequence node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         Y_UNUSED(node);
         return TStatus::Ok;
@@ -308,6 +332,8 @@ private:
                 return TStatus::Ok;
             case TKikimrKey::Type::PGObject:
                 return TStatus::Ok;
+            case TKikimrKey::Type::Replication:
+                return TStatus::Ok;
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid table key type."));
@@ -473,6 +499,7 @@ public:
             || node.IsCallable(TKiAlterTable::CallableName())) {
             return true;
         }
+
         if (node.IsCallable(TKiCreateTopic::CallableName())
             || node.IsCallable(TKiAlterTopic::CallableName())
             || node.IsCallable(TKiDropTopic::CallableName())
@@ -480,7 +507,15 @@ public:
             return true;
         }
 
-        if (node.IsCallable(TKiCreateSequence::CallableName())) {
+        if (node.IsCallable(TKiCreateReplication::CallableName())
+            || node.IsCallable(TKiAlterReplication::CallableName())
+            || node.IsCallable(TKiDropReplication::CallableName())
+        ) {
+            return true;
+        }
+
+        if (node.IsCallable(TKiCreateSequence::CallableName())
+            || node.IsCallable(TKiDropSequence::CallableName())) {
             return true;
         }
 
@@ -560,9 +595,9 @@ public:
                 .Ptr();
     }
 
-    static TExprNode::TPtr MakeCreateSequence(const TExprNode::TPtr& node, const TKikimrKey& key, TExprContext& ctx)
+    static TExprNode::TPtr MakeCreateSequence(const TExprNode::TPtr& node,
+            const NCommon::TWriteSequenceSettings& settings, const TKikimrKey& key, TExprContext& ctx)
     {
-        NCommon::TWriteSequenceSettings settings = NCommon::ParseSequenceSettings(TExprList(node->Child(4)), ctx);
         YQL_ENSURE(settings.Mode);
         auto mode = settings.Mode.Cast();
         if (node->Child(3)->Content() != "Void") {
@@ -591,6 +626,23 @@ public:
                 .Build()
             .SequenceSettings(settings.SequenceSettings.Cast())
             .Settings(settings.Other)
+            .Done()
+            .Ptr();
+    }
+
+    static TExprNode::TPtr MakeDropSequence(const TExprNode::TPtr& node,
+            const NCommon::TWriteSequenceSettings& settings, const TKikimrKey& key, TExprContext& ctx)
+    {
+        bool missingOk = (settings.Mode.Cast().Value() == "drop_if_exists");
+
+        return Build<TKiDropSequence>(ctx, node->Pos())
+            .World(node->Child(0))
+            .DataSink(node->Child(1))
+            .Sequence().Build(key.GetPGObjectId())
+            .Settings(settings.Other)
+            .MissingOk<TCoAtom>()
+                .Value(missingOk)
+            .Build()
             .Done()
             .Ptr();
     }
@@ -1149,14 +1201,60 @@ public:
                 if (mode == "dropIndex") {
                     return MakePgDropObject(node, settings, key, ctx);
                 } else if (key.GetPGObjectType() == "pgSequence") {
+                    NCommon::TWriteSequenceSettings settings =
+                        NCommon::ParseSequenceSettings(TExprList(node->Child(4)), ctx);
                     if (mode == "create" || mode == "create_if_not_exists") {
-                        return MakeCreateSequence(node, key, ctx);
+                        return MakeCreateSequence(node, settings, key, ctx);
+                    } else if (mode == "drop" || mode == "drop_if_exists") {
+                        return MakeDropSequence(node, settings, key, ctx);
                     } else {
                         YQL_ENSURE(false, "unknown Sequence mode \"" << TString(mode) << "\"");
                     }
                 } else {
                     YQL_ENSURE(false, "unknown PGObject with type: \"" << key.GetPGObjectType() << "\"");
                 }
+                break;
+            }
+
+            case TKikimrKey::Type::Replication: {
+                auto settings = NCommon::ParseWriteReplicationSettings(TExprList(node->Child(4)), ctx);
+                YQL_ENSURE(settings.Mode);
+                auto mode = settings.Mode.Cast();
+
+                if (mode == "create") {
+                    return Build<TKiCreateReplication>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Replication().Build(key.GetReplicationPath())
+                        .Targets(settings.Targets.Cast())
+                        .ReplicationSettings(settings.ReplicationSettings.Cast())
+                        .Settings(settings.Other)
+                        .Done()
+                        .Ptr();
+                } else if (mode == "alter") {
+                    return Build<TKiAlterReplication>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Replication().Build(key.GetReplicationPath())
+                        .ReplicationSettings(settings.ReplicationSettings.Cast())
+                        .Settings(settings.Other)
+                        .Done()
+                        .Ptr();
+                } else if (mode == "drop" || mode == "dropCascade") {
+                    return Build<TKiDropReplication>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Replication().Build(key.GetReplicationPath())
+                        .Cascade<TCoAtom>()
+                            .Value(mode == "dropCascade")
+                            .Build()
+                        .Done()
+                        .Ptr();
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Unknown operation type for replication"));
+                    return nullptr;
+                }
+                break;
             }
         }
 
@@ -1248,6 +1346,18 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
         return HandleDropTopic(node.Cast(), ctx);
     }
 
+    if (auto node = TMaybeNode<TKiCreateReplication>(input)) {
+        return HandleCreateReplication(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiAlterReplication>(input)) {
+        return HandleAlterReplication(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiDropReplication>(input)) {
+        return HandleDropReplication(node.Cast(), ctx);
+    }
+
     if (auto node = TMaybeNode<TKiUpsertObject>(input)) {
         return HandleUpsertObject(node.Cast(), ctx);
     }
@@ -1296,7 +1406,7 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
         return HandleDropGroup(node.Cast(), ctx);
     }
 
-    if(auto node = TMaybeNode<TPgDropObject>(input)) {
+    if (auto node = TMaybeNode<TPgDropObject>(input)) {
         return HandlePgDropObject(node.Cast(), ctx);
     }
 
@@ -1330,6 +1440,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = callable.Maybe<TKiCreateSequence>()) {
         return HandleCreateSequence(node.Cast(), ctx);
+    }
+
+    if (auto node = callable.Maybe<TKiDropSequence>()) {
+        return HandleDropSequence(node.Cast(), ctx);
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "

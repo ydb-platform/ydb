@@ -265,7 +265,7 @@ namespace NFwd {
         }
 
     private:
-        THolder<IIndexIter> Index; /* Points on next to load page */
+        THolder<IPartGroupIndexIter> Index; /* Points on next to load page */
         EIndexState IndexState = DoStart;
         TRowId BeginRowId, EndRowId;
         TLoadedPagesCircularBuffer<TPart::Trace> Trace;

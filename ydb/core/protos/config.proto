@@ -296,7 +296,17 @@ message TBlobStorageConfig {
         repeated TCostMetricsConfig VDiskTypes = 1;
     };
 
+    message TVDiskPerformanceConfig {
+        optional NKikimrBlobStorage.EPDiskType PDiskType = 1;
+        optional uint32 MinHugeBlobSizeInBytes = 4;
+    }
+
+    message TVDiskPerformanceSettings {
+        repeated TVDiskPerformanceConfig VDiskTypes = 1;
+    };
+
     optional TCostMetricsSettings CostMetricsSettings = 7;
+    optional TVDiskPerformanceSettings VDiskPerformanceSettings = 8;
  }
 
 message TBlobStorageFormatConfig {
@@ -422,6 +432,10 @@ message TInterconnectConfig {
     optional NKikimrConfigUnits.TDuration ForceConfirmPeriodDuration = 27;
     optional NKikimrConfigUnits.TDuration LostConnectionDuration = 28;
     optional NKikimrConfigUnits.TDuration BatchPeriodDuration = 29;
+
+    optional NKikimrConfigUnits.TDuration FirstErrorSleep = 46;
+    optional NKikimrConfigUnits.TDuration MaxErrorSleep = 47;
+    optional double ErrorSleepRetryMultiplier = 48;
 
     optional uint32 OutgoingHandshakeInflightLimit = 43;
 }
@@ -1408,6 +1422,7 @@ message TColumnShardConfig {
 
     optional TIndexMetadataMemoryLimit IndexMetadataMemoryLimit = 12;
     optional bool CleanupEnabled = 13 [default = true];
+    optional uint32 RemovedPortionLivetimeSeconds = 14 [default = 600];
 }
 
 message TSchemeShardConfig {
@@ -1662,6 +1677,7 @@ message TLocalPgWireConfig {
     optional int32 ListeningPort = 1 [default = 5432];
     optional string SslCertificate = 5;
     optional string Address = 6 [default = "::"];
+    optional bool TcpNotDelay = 7 [default = true];
 }
 
 message TKafkaProxyConfig {

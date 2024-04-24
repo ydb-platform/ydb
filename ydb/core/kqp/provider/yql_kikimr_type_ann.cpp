@@ -219,6 +219,10 @@ private:
             {
                 return TStatus::Ok;
             }
+            case TKikimrKey::Type::Replication:
+            {
+                return TStatus::Ok;
+            }
         }
 
         return TStatus::Error;
@@ -1541,6 +1545,18 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         return TStatus::Ok;
     }
 
+    virtual TStatus HandleDropSequence(TKiDropSequence node, TExprContext& ctx) override {
+        for (const auto& setting : node.Settings()) {
+            auto name = setting.Name().Value();
+            ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                TStringBuilder() << "Unknown drop sequence setting: " << name));
+            return TStatus::Error;
+        }
+
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
     virtual TStatus HandleAlterTopic(TKiAlterTopic node, TExprContext& ctx) override {
         if (!CheckTopicSettings(node.Settings(), ctx)) {
             return TStatus::Error;
@@ -1588,6 +1604,66 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleDropTopic(TKiDropTopic node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    static bool CheckReplicationSettings(const TCoNameValueTupleList& settings, const THashSet<TString>& supported, TExprContext& ctx) {
+        for (const auto& setting : settings) {
+            auto name = setting.Name().Value();
+            if (!supported.contains(TString(name))) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), TStringBuilder() << "Unsupported setting"
+                    << ": " << name));
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    virtual TStatus HandleCreateReplication(TKiCreateReplication node, TExprContext& ctx) override {
+        const THashSet<TString> supportedSettings = {
+            "connection_string",
+            "endpoint",
+            "database",
+            "token",
+            "user",
+            "password",
+        };
+
+        if (!CheckReplicationSettings(node.ReplicationSettings(), supportedSettings, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!node.Settings().Empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Unsupported settings"));
+            return TStatus::Error;
+        }
+
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleAlterReplication(TKiAlterReplication node, TExprContext& ctx) override {
+        const THashSet<TString> supportedSettings = {
+            "state",
+            "failover_mode",
+        };
+
+        if (!CheckReplicationSettings(node.ReplicationSettings(), supportedSettings, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!node.Settings().Empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Unsupported settings"));
+            return TStatus::Error;
+        }
+
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleDropReplication(TKiDropReplication node, TExprContext&) override {
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

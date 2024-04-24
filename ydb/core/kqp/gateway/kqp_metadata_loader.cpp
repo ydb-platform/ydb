@@ -468,50 +468,7 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
 
 NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> LoadExternalDataSourceSecretValues(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TDuration maximalSecretsSnapshotWaitTime, TActorSystem* actorSystem) {
     const auto& authDescription = entry.ExternalDataSourceInfo->Description.GetAuth();
-    switch (authDescription.identity_case()) {
-        case NKikimrSchemeOp::TAuth::kServiceAccount: {
-            const TString& saSecretId = authDescription.GetServiceAccount().GetSecretName();
-            auto promise = NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {saSecretId}, promise, maximalSecretsSnapshotWaitTime));
-            return promise.GetFuture();
-        }
-
-        case NKikimrSchemeOp::TAuth::kNone:
-            return MakeFuture(TEvDescribeSecretsResponse::TDescription({}));
-
-        case NKikimrSchemeOp::TAuth::kBasic: {
-            const TString& passwordSecretId = authDescription.GetBasic().GetPasswordSecretName();
-            auto promise = NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {passwordSecretId}, promise, maximalSecretsSnapshotWaitTime));
-            return promise.GetFuture();
-        }
-
-        case NKikimrSchemeOp::TAuth::kMdbBasic: {
-            const TString& saSecretId = authDescription.GetMdbBasic().GetServiceAccountSecretName();
-            const TString& passwordSecreId = authDescription.GetMdbBasic().GetPasswordSecretName();
-            auto promise = NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {saSecretId, passwordSecreId}, promise, maximalSecretsSnapshotWaitTime));
-            return promise.GetFuture();
-        }
-
-        case NKikimrSchemeOp::TAuth::kAws: {
-            const TString& awsAccessKeyIdSecretId = authDescription.GetAws().GetAwsAccessKeyIdSecretName();
-            const TString& awsAccessKeyKeySecretId = authDescription.GetAws().GetAwsSecretAccessKeySecretName();
-            auto promise = NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {awsAccessKeyIdSecretId, awsAccessKeyKeySecretId}, promise, maximalSecretsSnapshotWaitTime));
-            return promise.GetFuture();
-        }
-
-        case NKikimrSchemeOp::TAuth::kToken: {
-            const TString& tokenSecretId = authDescription.GetToken().GetTokenSecretName();
-            auto promise = NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {tokenSecretId}, promise, maximalSecretsSnapshotWaitTime));
-            return promise.GetFuture();
-        }
-
-        case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
-            return MakeFuture(TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("identity case is not specified") }));
-    }
+    return DescribeExternalDataSourceSecrets(authDescription, userToken ? userToken->GetUserSID() : "", actorSystem, maximalSecretsSnapshotWaitTime);
 }
 
 } // anonymous namespace

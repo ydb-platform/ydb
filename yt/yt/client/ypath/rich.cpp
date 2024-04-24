@@ -128,7 +128,7 @@ auto RunAttributeAccessor(const TRichYPath& path, const TString& key, TFunc acce
 template <class T>
 T GetAttribute(const TRichYPath& path, const TString& key, const T& defaultValue)
 {
-    return RunAttributeAccessor(path, key, [&] () {
+    return RunAttributeAccessor(path, key, [&] {
         return path.Attributes().Get(key, defaultValue);
     });
 }
@@ -136,14 +136,14 @@ T GetAttribute(const TRichYPath& path, const TString& key, const T& defaultValue
 template <class T>
 typename TOptionalTraits<T>::TOptional FindAttribute(const TRichYPath& path, const TString& key)
 {
-    return RunAttributeAccessor(path, key, [&] () {
+    return RunAttributeAccessor(path, key, [&] {
         return path.Attributes().Find<T>(key);
     });
 }
 
 TYsonString FindAttributeYson(const TRichYPath& path, const TString& key)
 {
-    return RunAttributeAccessor(path, key, [&] () {
+    return RunAttributeAccessor(path, key, [&] {
         return path.Attributes().FindYson(key);
     });
 }

@@ -89,6 +89,7 @@ public:
 
 private:
     static const ui32 MAX_ERRORS_COUNT_TO_STORE = 10;
+    static const ui32 SCALE_REQUEST_REPEAT_MIN_SECONDS = 60;
 
 private:
     struct THasDataReq;
@@ -260,8 +261,8 @@ private:
     void ProcessDistrTx(const TActorContext& ctx);
 
     void AddImmediateTx(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> event);
-    void ProcessImmediateTxs(const TActorContext& ctx);
     void ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
+                            bool predicate,
                             const TActorContext& ctx);
 
     void AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act);
@@ -333,7 +334,7 @@ private:
                                                 const TActorContext& ctx);
 
     void Initialize(const TActorContext& ctx);
-
+    void InitSplitMergeSlidingWindow();
     template <typename T>
     void EmplacePendingRequest(T&& body, const TActorContext& ctx) {
         const auto now = ctx.Now();
@@ -358,10 +359,15 @@ private:
 
     void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
+    NKikimrPQ::EScaleStatus CheckScaleStatus(const TActorContext& ctx);
+    void ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus);
+
     TString LogPrefix() const;
 
     void Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr& ev, const TActorContext& ctx);
     void StartProcessChangeOwnerRequests(const TActorContext& ctx);
+
+    void CommitWriteOperations(const TActorContext& ctx);
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -608,6 +614,7 @@ private:
     template <class T> T& GetUserActionAndTransactionEventsFront();
     template <class T> T& GetCurrentEvent();
     TTransaction& GetCurrentTransaction();
+    TEvPersQueue::TEvProposeTransaction* TryGetCurrentImmediateTransaction();
 
     template <class T> void EnsureUserActionAndTransactionEventsFrontIs() const;
 
@@ -719,6 +726,10 @@ private:
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgWriteBytes;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> AvgReadBytes;
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgQuotaBytes;
+
+    std::unique_ptr<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> SplitMergeAvgWriteBytes;
+    TInstant LastScaleRequestTime = TInstant::Zero();
+    NKikimrPQ::EScaleStatus ScaleStatus = NKikimrPQ::EScaleStatus::NORMAL;
 
     ui64 ReservedSize;
     std::deque<THolder<TEvPQ::TEvReserveBytes>> ReserveRequests;

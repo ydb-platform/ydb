@@ -323,7 +323,7 @@ public:
     TFuture<TCellIdToSnapshotIdMap> BuildMasterSnapshots(
         const TBuildMasterSnapshotsOptions& options) override;
 
-    TFuture<TCellIdToSequenceNumberMap> GetMasterConsistentState(
+    TFuture<TCellIdToConsistentStateMap> GetMasterConsistentState(
         const TGetMasterConsistentStateOptions& options) override;
 
     TFuture<void> ExitReadOnly(

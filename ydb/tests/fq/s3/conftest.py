@@ -26,9 +26,11 @@ from library.recipes import common as recipes_common
 MOTO_SERVER_PATH = "contrib/python/moto/bin/moto_server"
 S3_PID_FILE = "s3.pid"
 
+
 @pytest.fixture(scope="module")
 def mvp_external_ydb_endpoint(request) -> str:
     return request.param["endpoint"] if request is not None and hasattr(request, 'param') else None
+
 
 @pytest.fixture(scope="module")
 def s3(request) -> S3:

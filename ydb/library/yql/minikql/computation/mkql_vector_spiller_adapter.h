@@ -28,7 +28,7 @@ public:
     }
 
     bool HasRunningAsyncIoOperatrion() const {
-        return (State == EState::SpillingData && !WriteOperation.HasValue()) || (State == EState::RestoringData && !ReadOperation.HasValue());
+        return WriteOperation.has_value() || ReadOperation.has_value();
     }
 
     ///Returns current stete of the adapter
@@ -71,9 +71,11 @@ public:
     void Update() {
         switch (State) {
             case EState::SpillingData:
-                if (!WriteOperation.HasValue()) return;
+                MKQL_ENSURE(WriteOperation.has_value(), "Internal logic error");
+                if (!WriteOperation->HasValue()) return;
 
-                StoredChunks.push(WriteOperation.ExtractValue());
+                StoredChunks.push(WriteOperation->ExtractValue());
+                WriteOperation = std::nullopt;
                 if (IsFinalizing) {
                     State = EState::AcceptingDataRequests;
                     return;
@@ -87,9 +89,11 @@ public:
                 SaveNextPartOfVector();
                 return;
             case EState::RestoringData:
-                if (!ReadOperation.HasValue()) return;
+                MKQL_ENSURE(ReadOperation.has_value(), "Internal logic error");
+                if (!ReadOperation->HasValue()) return;
                 // TODO: check spilling error here: YQL-17970
-                Buffer = std::move(ReadOperation.ExtractValue().value());
+                Buffer = std::move(ReadOperation->ExtractValue().value());
+                ReadOperation = std::nullopt;
                 StoredChunks.pop();
 
                 LoadNextVector();
@@ -202,8 +206,8 @@ private:
     std::queue<ISpiller::TKey> StoredChunks; 
     std::queue<size_t> StoredChunksElementsCount;
 
-    NThreading::TFuture<ISpiller::TKey> WriteOperation;
-    NThreading::TFuture<std::optional<TRope>> ReadOperation;
+    std::optional<NThreading::TFuture<ISpiller::TKey>> WriteOperation = std::nullopt;
+    std::optional<NThreading::TFuture<std::optional<TRope>>> ReadOperation = std::nullopt;
 
     bool IsFinalizing = false;
 };

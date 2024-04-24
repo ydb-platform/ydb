@@ -115,7 +115,7 @@ struct TTableSpilledBucket {
         }
         
         while (NextVectorToProcess != ENextVectorToProcess::None) {
-            // if (HasRunningAsyncIoOperation()) return;
+            if (HasRunningAsyncIoOperation()) return;
 
             switch (NextVectorToProcess) {
                 case ENextVectorToProcess::KeyAndVals:

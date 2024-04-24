@@ -767,8 +767,9 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
 
             // Collecting data for join and perform join (batch or full)
             while (!*JoinCompleted ) {
-                bool rightBusy = RightPacker->TablePtr->UpdateAndCheckIfBusy();
                 bool leftBusy = LeftPacker->TablePtr->UpdateAndCheckIfBusy();
+                bool rightBusy = RightPacker->TablePtr->UpdateAndCheckIfBusy();
+                
                 if (rightBusy || leftBusy) {
                     return EFetchResult::Yield;
                 }
@@ -873,11 +874,6 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                 if (resultRight == EFetchResult::Finish ) {
                     // RightPacker->TablePtr->FinalizeSpilling();
                     *HaveMoreRightRows = false;
-                }
-
-                if (resultRight == EFetchResult::Finish || resultLeft == EFetchResult::Finish) {
-                    if (LeftPacker->TablePtr->UpdateAndCheckIfBusy()) return EFetchResult::Yield;
-                    if (RightPacker->TablePtr->UpdateAndCheckIfBusy()) return EFetchResult::Yield;
                 }
 
                 if ((resultLeft == EFetchResult::Yield && (!*HaveMoreRightRows || resultRight == EFetchResult::Yield)) ||

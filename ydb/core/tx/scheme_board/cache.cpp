@@ -305,7 +305,7 @@ namespace {
                         SetErrorAndClear(
                             Context.Get(),
                             entry,
-                            !securityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Context->Request->UserToken));
+                            securityObject->CheckAccess(GetAccessForEnhancedError(), *Context->Request->UserToken));
                     }
                 }
             }

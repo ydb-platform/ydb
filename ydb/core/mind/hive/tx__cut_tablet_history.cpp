@@ -25,7 +25,6 @@ public:
             TTabletChannelInfo& channelInfo = tablet->TabletStorageInfo->Channels[channel];
             auto fromGeneration = msg->Record.GetFromGeneration();
             auto groupId = msg->Record.GetGroupID();
-            BLOG_D("THive::TTxCutTabletHistory(" << tabletId << ") " << "cut [" << fromGeneration << ", " << groupId << "]" << " for channel " << channel);
             auto it = std::find(
                         channelInfo.History.begin(),
                         channelInfo.History.end(),

@@ -370,7 +370,7 @@ Usage example:
    */
   employeeRepository.delete(employee);
   
-  assertNull(employeeRepository.findById(employee.getId()).get());
+  assertNull(employeeRepository.findById(employee.getId()).orElse(null));
   ```
 
 - Kotlin

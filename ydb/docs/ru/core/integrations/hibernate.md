@@ -372,7 +372,7 @@ spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/databas
    */
   employeeRepository.delete(employee);
   
-  assertNull(employeeRepository.findById(employee.getId()).get());
+  assertNull(employeeRepository.findById(employee.getId()).orElse(null));
   ```
 
 - Kotlin

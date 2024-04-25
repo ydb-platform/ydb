@@ -87,7 +87,7 @@ class Slice:
                 logger.info("run cmd '%s'", cmd)
                 try:
                     time.sleep(2)  # TODO: fix
-                    subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+                    subprocess.check_call(cmd)
                 except subprocess.CalledProcessError as er:
                     raise CalledProcessError(er)
 

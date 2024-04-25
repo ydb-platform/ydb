@@ -77,7 +77,6 @@ public:
         , SchemaVersion(portion.GetSchemaVersionOptional())
     {
         MetaConstructor = TPortionMetaConstructor(portion.Meta);
-        
         Indexes = std::move(portion.Indexes);
         Records = std::move(portion.Records);
         BlobIds = std::move(portion.BlobIds);

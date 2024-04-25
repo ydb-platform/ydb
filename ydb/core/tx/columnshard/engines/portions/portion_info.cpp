@@ -87,9 +87,9 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
     }
     sb << "chunks:(" << Records.size() << ");";
     if (IS_TRACE_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
-        std::vector<TBlobRangeLink16> blobRanges;
+        std::vector<TBlobRange> blobRanges;
         for (auto&& i : Records) {
-            blobRanges.emplace_back(i.BlobRange);
+            blobRanges.emplace_back(RestoreBlobRange(i.BlobRange));
         }
         sb << "blobs:" << JoinSeq(",", blobRanges) << ";ranges_count:" << blobRanges.size() << ";";
         sb << "blob_ids:" << JoinSeq(",", BlobIds) << ";blobs_count:" << BlobIds.size() << ";";
@@ -110,6 +110,7 @@ std::vector<const NKikimr::NOlap::TColumnRecord*> TPortionInfo::GetColumnChunksP
 }
 
 void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
+    db.ErasePortion(*this);
     for (auto& record : Records) {
         db.EraseColumn(*this, record);
     }
@@ -118,18 +119,17 @@ void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
     }
 }
 
-void TPortionInfo::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool /*saveOnlyMeta*/) const {
+void TPortionInfo::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const {
     FullValidation();
     db.WritePortion(*this);
-//    if (saveOnlyMeta) {
-//    } else {
+   if (!saveOnlyMeta) {
         for (auto& record : Records) {
             db.WriteColumn(*this, record, firstPKColumnId);
         }
         for (auto& record : Indexes) {
             db.WriteIndex(*this, record);
         }
-//    }
+    }
 }
 
 std::vector<NKikimr::NOlap::TPortionInfo::TPage> TPortionInfo::BuildPages() const {
@@ -215,7 +215,8 @@ ui64 TPortionInfo::GetTxVolume() const {
 void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
     proto.SetPathId(PathId);
     proto.SetPortionId(Portion);
-    *proto.MutableMinSnapshot() = MinSnapshotDeprecated.SerializeToProto();
+    proto.SetSchemaVersion(GetSchemaVersionVerified());
+    *proto.MutableMinSnapshotDeprecated() = MinSnapshotDeprecated.SerializeToProto();
     if (!RemoveSnapshot.IsZero()) {
         *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
     }
@@ -237,6 +238,7 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
 TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info) {
     PathId = proto.GetPathId();
     Portion = proto.GetPortionId();
+    SchemaVersion = proto.GetSchemaVersion();
     for (auto&& i : proto.GetBlobIds()) {
         auto blobId = TUnifiedBlobId::BuildFromProto(i);
         if (!blobId) {
@@ -245,7 +247,7 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
         BlobIds.emplace_back(blobId.DetachResult());
     }
     {
-        auto parse = MinSnapshotDeprecated.DeserializeFromProto(proto.GetMinSnapshot());
+        auto parse = MinSnapshotDeprecated.DeserializeFromProto(proto.GetMinSnapshotDeprecated());
         if (!parse) {
             return parse;
         }
@@ -337,6 +339,7 @@ const TString& TPortionInfo::GetEntityStorageId(const ui32 columnId, const TInde
 }
 
 ISnapshotSchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) const {
+    AFL_VERIFY(SchemaVersion);
     if (SchemaVersion) {
         auto schema = index.GetSchema(SchemaVersion.value());
         AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion.value());

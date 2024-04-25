@@ -397,7 +397,7 @@ public:
         }
 
         TProposeErrorCollector errors(*result);
-        TOlapStoreInfo::TPtr storeInfo = new TOlapStoreInfo;
+        TOlapStoreInfo::TPtr storeInfo = std::make_shared<TOlapStoreInfo>();
         if (!storeInfo->ParseFromRequest(createDescription, errors)) {
             return result;
         }
@@ -438,7 +438,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        TOlapStoreInfo::TPtr pending = new TOlapStoreInfo;
+        TOlapStoreInfo::TPtr pending = std::make_shared<TOlapStoreInfo>();
         pending->AlterData = storeInfo;
         context.SS->OlapStores[pathId] = pending;
         context.SS->PersistOlapStore(db, pathId, *pending);

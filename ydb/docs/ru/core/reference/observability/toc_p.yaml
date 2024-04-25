@@ -1,3 +1,9 @@
 items:
-- name: Справка по метрикам
-  href: metrics/index.md
+- name: Метрики
+  include:
+    mode: link
+    path: metrics/toc_p.yaml
+- name: Трассировка
+  include:
+    mode: link
+    path: tracing/toc_p.yaml

@@ -5497,6 +5497,109 @@ TExprNode::TPtr SplitByPairs(TPositionHandle pos, const TStringBuf& funcName, co
     return ctx.NewCallable(pos, funcName, { left, right });
 }
 
+using TExprNodePtrPred = std::function<bool(const TExprNode::TPtr&)>;
+
+TExprNodePtrPred MakeBlockRewriteStopPredicate(const TExprNode::TPtr& lambda) {
+    return [lambda](const TExprNode::TPtr& node) {
+        return node->IsArguments() || (node->IsLambda() && node != lambda);
+    };
+}
+
+void DoMarkLazy(const TExprNode::TPtr& node, TNodeSet& lazyNodes, const TExprNodePtrPred& needStop, TNodeSet& visited, bool markAll) {
+    if (!visited.insert(node.Get()).second) {
+        return;
+    }
+
+    if (needStop(node)) {
+        return;
+    }
+
+    if (markAll) {
+        lazyNodes.insert(node.Get());
+    }
+
+    const bool isLazyNode = node->IsCallable({"And", "Or", "If", "Coalesce"});
+    for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
+        DoMarkLazy(node->ChildPtr(i), lazyNodes, needStop, visited, markAll || (isLazyNode && i > 0));
+    }
+}
+
+void MarkLazy(const TExprNode::TPtr& node, TNodeSet& lazyNodes, const TExprNodePtrPred& needStop) {
+    TNodeSet visited;
+    DoMarkLazy(node, lazyNodes, needStop, visited, false);
+}
+
+void DoMarkNonLazy(const TExprNode::TPtr& node, TNodeSet& lazyNodes, const TExprNodePtrPred& needStop, TNodeSet& visited) {
+    if (!visited.insert(node.Get()).second) {
+        return;
+    }
+
+    if (needStop(node)) {
+        return;
+    }
+
+    lazyNodes.erase(node.Get());
+    ui32 endIndex = node->IsCallable({"And", "Or", "If", "Coalesce"}) ? 1 : node->ChildrenSize();
+    for (ui32 i = 0; i < endIndex; ++i) {
+        DoMarkNonLazy(node->ChildPtr(i), lazyNodes, needStop, visited);
+    }
+}
+
+void MarkNonLazy(const TExprNode::TPtr& node, TNodeSet& lazyNodes, const TExprNodePtrPred& needStop) {
+    TNodeSet visited;
+    DoMarkNonLazy(node, lazyNodes, needStop, visited);
+}
+
+TNodeSet CollectLazyNonStrictNodes(const TExprNode::TPtr& lambda) {
+    TNodeSet nonStrictNodes;
+    VisitExpr(lambda, [&](const TExprNode::TPtr& node) {
+        if (node->IsArguments() || node->IsArgument()) {
+            return false;
+        }
+
+        auto type = node->GetTypeAnn();
+        YQL_ENSURE(type);
+
+        // avoid visiting any possible scalar context
+        return type->IsComposable();
+    }, [&](const TExprNode::TPtr& node) {
+        YQL_ENSURE(!nonStrictNodes.contains(node.Get()));
+        if (node->IsCallable("AssumeStrict")) {
+            return true;
+        }
+        if (node->IsCallable("AssumeNonStrict")) {
+            nonStrictNodes.insert(node.Get());
+            return true;
+        }
+        if (AnyOf(node->ChildrenList(), [&](const auto& child) { return nonStrictNodes.contains(child.Get()); }))
+        {
+            nonStrictNodes.insert(node.Get());
+            return true;
+        }
+
+        if (auto maybeStrict = IsStrictNoRecurse(*node); maybeStrict.Defined() && !*maybeStrict) {
+            nonStrictNodes.insert(node.Get());
+            return true;
+        }
+
+        return true;
+    });
+
+    auto needStop = MakeBlockRewriteStopPredicate(lambda);
+
+    TNodeSet lazyNodes;
+    MarkLazy(lambda, lazyNodes, needStop);
+    MarkNonLazy(lambda, lazyNodes, needStop);
+
+    TNodeSet lazyNonStrict;
+    for (auto& node : lazyNodes) {
+        if (nonStrictNodes.contains(node)) {
+            lazyNonStrict.insert(node);
+        }
+    }
+    return lazyNonStrict;
+}
+
 bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputColumns, const TExprNode::TPtr& lambda,
     ui32& newNodes, TNodeMap<size_t>& rewritePositions,
     TExprNode::TPtr& blockLambda, TExprNode::TPtr& restLambda,
@@ -5534,17 +5637,12 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         rewrites[lambda->Head().Child(i)] = blockArgs[i];
     }
 
+    const TNodeSet lazyNonStrict = CollectLazyNonStrictNodes(lambda);
+    auto needStop = MakeBlockRewriteStopPredicate(lambda);
+
     newNodes = 0;
     VisitExpr(lambda, [&](const TExprNode::TPtr& node) {
-        if (node->IsArguments()) {
-            return false;
-        }
-
-        if (node->IsLambda() && node != lambda) {
-            return false;
-        }
-
-        return true;
+        return !needStop(node);
     }, [&](const TExprNode::TPtr& node) {
         if (rewrites.contains(node.Get())) {
             return true;
@@ -5563,6 +5661,10 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         }
 
         if (node->IsList() && (!node->GetTypeAnn()->IsComputable() || node->IsLiteralList())) {
+            return true;
+        }
+
+        if (lazyNonStrict.contains(node.Get())) {
             return true;
         }
 
@@ -8021,6 +8123,28 @@ TExprNode::TPtr DropAssume(const TExprNode::TPtr& node, TExprContext&) {
     return node->HeadPtr();
 }
 
+TExprNode::TPtr OptimizeCoalesce(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (const auto& input = node->Head(); input.IsCallable("If") && input.ChildrenSize() == 3U &&
+        (input.Child(1U)->IsComplete() || input.Child(2U)->IsComplete())) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Dive " << node->Content() << " into " << input.Content();
+        return ctx.ChangeChildren(input, {
+            input.HeadPtr(),
+            ctx.ChangeChild(*node, 0U, input.ChildPtr(1U)),
+            ctx.ChangeChild(*node, 0U, input.ChildPtr(2U))
+        });
+    } else if (node->ChildrenSize() == 2U) {
+        if (input.IsCallable("Nothing")) {
+            YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << input.Content();
+            return node->TailPtr();
+        } else if (input.IsCallable("Just")) {
+            YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << input.Content();
+            return IsSameAnnotation(*node->GetTypeAnn(), *input.GetTypeAnn()) ?
+                node->HeadPtr() : input.HeadPtr();
+        }
+    }
+    return node;
+}
+
 ui64 ToDate(ui64 now)      { return std::min<ui64>(NUdf::MAX_DATE - 1U, now / 86400000000ull); }
 ui64 ToDatetime(ui64 now)  { return std::min<ui64>(NUdf::MAX_DATETIME - 1U, now / 1000000ull); }
 ui64 ToTimestamp(ui64 now) { return std::min<ui64>(NUdf::MAX_TIMESTAMP - 1ULL, now); }
@@ -8060,7 +8184,6 @@ struct TPeepHoleRules {
         {"DictPayloads", &MapForOptionalContainer},
         {"HasItems", &MapForOptionalContainer},
         {"Length", &MapForOptionalContainer},
-        {"Size", &MapForOptionalContainer},
         {"ToIndexDict", &MapForOptionalContainer},
         {"Iterator", &WrapIteratorForOptionalList},
         {"IsKeySwitch", &ExpandIsKeySwitch},
@@ -8188,6 +8311,7 @@ struct TPeepHoleRules {
         {"TopSort", &OptimizeTopOrSort<true, true>},
         {"Sort", &OptimizeTopOrSort<true, false>},
         {"ToFlow", &OptimizeToFlow},
+        {"Coalesce", &OptimizeCoalesce},
     };
 
     const TExtPeepHoleOptimizerMap FinalStageExtRules = {};

@@ -6,7 +6,7 @@
 
 namespace NYql::NDq {
 
-#ifdef DEBUG
+#ifndef NDEBUG
     struct pair_hash {
         template <class T1, class T2>
         std::size_t operator () (const std::pair<T1,T2> &p) const {
@@ -97,7 +97,7 @@ private:
     size_t NNodes_;
     IProviderContext& Pctx_;  // Provider specific contexts?
     // FIXME: This is a temporary structure that needs to be extended to multiple providers.
-    #ifdef DEBUG
+    #ifndef NDEBUG
         THashMap<std::pair<TNodeSet, TNodeSet>, bool, pair_hash> CheckTable_;
     #endif
 private:
@@ -470,7 +470,7 @@ template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeS
         DpTable_[joined] = bestJoin;
     }
 
-    #ifdef DEBUG
+    #ifndef NDEBUG
         auto pair = std::make_pair(s1, s2);
         Y_ENSURE (!CheckTable_.contains(pair), "Check table already contains pair S1|S2");
         CheckTable_[ std::pair<TNodeSet,TNodeSet>(s1, s2) ] = true;

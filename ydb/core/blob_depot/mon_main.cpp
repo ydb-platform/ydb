@@ -445,6 +445,40 @@ namespace NKikimr::NBlobDepot {
                     })
                 }
             }
+
+            if (Configured && Config.GetIsDecommittingGroup()) {
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        s << "Decommission";
+                    }
+                    DIV_CLASS("panel-body") {
+                        KEYVALUE_TABLE({
+                            KEYVALUE_P("Now", TInstant::Now());
+                            KEYVALUE_P("Decommit state", DecommitState);
+                            KEYVALUE_P("Assimilator state", GroupAssimilatorId ? "running" : "stopped");
+                            KEYVALUE_P("Assimilator position", TStringBuilder() << "<pre>" << Assimilator.Position << "<pre/>");
+                            KEYVALUE_P("Last assimilated blob id", Data->LastAssimilatedBlobId ?
+                                Data->LastAssimilatedBlobId->ToString() : "<null>");
+                            KEYVALUE_P("Copy iteration", Assimilator.CopyIteration);
+                            KEYVALUE_P("Bytes to copy", Assimilator.BytesToCopy);
+                            KEYVALUE_P("Bytes already copied", Assimilator.BytesCopied);
+                            KEYVALUE_P("Copy speed, bytes per second", Assimilator.CopySpeed);
+                            KEYVALUE_P("Copy time remaining", Assimilator.CopyTimeRemaining);
+                            KEYVALUE_P("Last read blob id", Assimilator.LastReadBlobId);
+                            KEYVALUE_P("Latest successful get", Assimilator.LatestOkGet);
+                            KEYVALUE_P("Latest erroneous get", Assimilator.LatestErrorGet);
+                            KEYVALUE_P("Latest successful put", Assimilator.LatestOkPut);
+                            KEYVALUE_P("Latest erroneous put", Assimilator.LatestErrorPut);
+                            KEYVALUE_P("Blobs read with OK", Assimilator.BlobsReadOk);
+                            KEYVALUE_P("Blobs read with NODATA", Assimilator.BlobsReadNoData);
+                            KEYVALUE_P("Blobs read with error", Assimilator.BlobsReadError);
+                            KEYVALUE_P("Blobs put with OK", Assimilator.BlobsPutOk);
+                            KEYVALUE_P("Blobs put with error", Assimilator.BlobsPutError);
+                        })
+                    }
+                }
+            }
+
             DIV_CLASS("panel panel-info") {
                 DIV_CLASS("panel-heading") {
                     s << "Data";

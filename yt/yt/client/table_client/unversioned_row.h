@@ -439,8 +439,7 @@ void ValidateClientDataRow(
 void ValidateDuplicateAndRequiredValueColumns(
     TUnversionedRow row,
     const TTableSchema& schema,
-    const TNameTableToSchemaIdMapping& idMapping,
-    std::vector<bool>* columnPresenceBuffer);
+    const TNameTableToSchemaIdMapping& idMapping);
 
 //! Checks that #row contains write lock for non-key columns and returns true if any non-key columns encountered.
 bool ValidateNonKeyColumnsAgainstLock(

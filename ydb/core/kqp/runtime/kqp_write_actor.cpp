@@ -59,8 +59,8 @@ namespace {
         public:
             struct TInFlightBatch {
                 TString Data;
-                ui32 SendAttempts = 0;
                 ui64 Cookie = 0;
+                ui32 SendAttempts = 0;
             };
 
             size_t Size() const {
@@ -112,8 +112,8 @@ namespace {
                 YQL_ENSURE(!IsClosed());
                 Batches.push_back(TInFlightBatch{
                     .Data = std::move(data),
-                    .SendAttempts = 0,
                     .Cookie = ++NextCookie,
+                    .SendAttempts = 0,
                 });
                 Memory += Batches.back().Data.size();
             }
@@ -199,7 +199,7 @@ namespace {
         i64 Memory = 0;
     };
 
-    constexpr i64 kInFlightMemoryLimitPerActor = 100_MB;
+    constexpr i64 kInFlightMemoryLimitPerActor = 64_MB;
 }
 
 
@@ -293,10 +293,6 @@ private:
         const i64 result = Serializer
             ? MemoryLimit - Serializer->GetMemory() - ShardsInfo.GetMemory()
             : std::numeric_limits<i64>::min(); // Can't use zero here because compute can use overcommit!
-
-        if (result <= 0) {
-            CA_LOG_D("No free space left. FreeSpace=" << result << " bytes.");
-        }
         return result;
     }
 
@@ -329,19 +325,22 @@ private:
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
 
-        TResumeNotificationManager resumeNotificator(*this);
-        for (auto& [shardId, batches] : Serializer->FlushBatches()) {
-            for (auto& batch : batches) {
-                ShardsInfo.GetShard(shardId).PushBatch(std::move(batch));
+        if (Finished || GetFreeSpace() <= 0 || SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+            TResumeNotificationManager resumeNotificator(*this);
+            for (auto& [shardId, batches] : Serializer->FlushBatchesForce()) {
+                for (auto& batch : batches) {
+                    ShardsInfo.GetShard(shardId).PushBatch(std::move(batch));
+                }
             }
+            resumeNotificator.CheckMemory();
         }
-        resumeNotificator.CheckMemory();
-        YQL_ENSURE(!Finished || Serializer->IsFinished());
 
         if (Finished) {
             for (auto& [shardId, shardInfo] : ShardsInfo.GetShards()) {
                 shardInfo.Close();
             }
+
+            YQL_ENSURE(Serializer->IsFinished());
         }
 
         ProcessBatches();
@@ -458,6 +457,10 @@ private:
 
         switch (ev->Get()->GetStatus()) {
         case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED: {
+            CA_LOG_E("Got UNSPECIFIED for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << ".");
             RuntimeError(
                 TStringBuilder() << "Got UNSPECIFIED for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`.",
@@ -473,6 +476,10 @@ private:
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
+            CA_LOG_E("Got ABORTED for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << ".");
             RuntimeError(
                 TStringBuilder() << "Got ABORTED for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`.",
@@ -481,6 +488,10 @@ private:
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR: {
+            CA_LOG_E("Got INTERNAL ERROR for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << ".");
             RuntimeError(
                 TStringBuilder() << "Got INTERNAL ERROR for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`.",
@@ -489,12 +500,18 @@ private:
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
-            CA_LOG_D("Got OVERLOADED for table `"
-                << SchemeEntry->TableId.PathId.ToString() << "`. "
-                << "Ignored this error.");
+            CA_LOG_W("Got OVERLOADED for table `"
+                << SchemeEntry->TableId.PathId.ToString() << "`."
+                << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                << " Sink=" << this->SelfId() << "."
+                << " Ignored this error.");
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED: {
+            CA_LOG_E("Got CANCELLED for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << ".");
             RuntimeError(
                 TStringBuilder() << "Got CANCELLED for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`.",
@@ -503,6 +520,10 @@ private:
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST: {
+            CA_LOG_E("Got BAD REQUEST for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << ".");
             RuntimeError(
                 TStringBuilder() << "Got BAD REQUEST for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`.",
@@ -511,6 +532,10 @@ private:
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED: {
+            CA_LOG_E("Got SCHEME CHANGED for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << ".");
             RuntimeError(
                 TStringBuilder() << "Got SCHEME CHANGED for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`.",
@@ -519,6 +544,10 @@ private:
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
+            CA_LOG_E("Got LOCKS BROKEN for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << ".");
             RuntimeError(
                 TStringBuilder() << "Got LOCKS BROKEN for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`.",
@@ -557,15 +586,28 @@ private:
     }
 
     void ProcessBatches() {
+        MakeNewBatches();
         SendBatchesToShards();
-        if (ShardsInfo.IsFinished()) {
+        if (Finished && Serializer->IsFinished() && ShardsInfo.IsFinished()) {
             CA_LOG_D("Write actor finished");
             Callbacks->OnAsyncOutputFinished(GetOutputIndex());
         }
     }
 
+    void MakeNewBatches() {
+        for (const size_t shardId : Serializer->GetShardIds()) {
+            auto& shard = ShardsInfo.GetShard(shardId);
+            if (shard.IsEmpty()) {
+                auto batch = Serializer->FlushBatch(shardId);
+                if (!batch.empty()) {
+                    shard.PushBatch(std::move(batch));
+                }
+            }
+        }
+    }
+
     void SendBatchesToShards() {
-        for (size_t shardId : ShardsInfo.GetPendingShards()) {
+        for (const size_t shardId : ShardsInfo.GetPendingShards()) {
             auto& shard = ShardsInfo.GetShard(shardId);
             YQL_ENSURE(!shard.IsEmpty());
             SendDataToShard(shardId);
@@ -577,14 +619,20 @@ private:
         YQL_ENSURE(!shard.IsEmpty());
         auto& inFlightBatch = shard.CurrentBatch();
         if (inFlightBatch.SendAttempts >= BackoffSettings()->MaxWriteAttempts) {
+            CA_LOG_E("ShardId=" << shardId
+                    << " for table '" << Settings.GetTable().GetPath()
+                    << "': retry limit exceeded."
+                    << " Sink=" << this->SelfId() << ".");
             RuntimeError(
-                TStringBuilder() << "ShardId=" << shardId << " for table '" << Settings.GetTable().GetPath() << "': retry limit exceeded",
+                TStringBuilder()
+                    << "ShardId=" << shardId
+                    << " for table '" << Settings.GetTable().GetPath()
+                    << "': retry limit exceeded.",
                 NYql::NDqProto::StatusIds::UNAVAILABLE);
             return;
         }
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
-            std::get<ui64>(TxId),
             NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         YQL_ENSURE(!inFlightBatch.Data.empty());
 
@@ -608,7 +656,8 @@ private:
         CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << std::get<ui64>(TxId)
             << ", LockTxId=" << Settings.GetLockTxId() << ", LockNodeId=" << Settings.GetLockNodeId()
             << ", Size=" << inFlightBatch.Data.size() << ", Cookie=" << inFlightBatch.Cookie
-            << "; ShardBatchesLeft=" << shard.Size() << ", ShardClosed=" << shard.IsClosed());
+            << "; ShardBatchesLeft=" << shard.Size() << ", ShardClosed=" << shard.IsClosed()
+            << "; Attempts=" << inFlightBatch.SendAttempts);
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
@@ -630,16 +679,17 @@ private:
             return;
         }
 
-        CA_LOG_D("Retry ShardID=" << shardId);
+        CA_LOG_T("Retry ShardID=" << shardId << " with Cookie=" << ifCookieEqual.value_or(0));
         SendDataToShard(shardId);
     }
 
     void Handle(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
+        CA_LOG_W("Timeout shardID=" << ev->Get()->ShardId);
         RetryShard(ev->Get()->ShardId, ev->Cookie);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+        CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
         RetryShard(ev->Get()->TabletId, std::nullopt);
     }
 

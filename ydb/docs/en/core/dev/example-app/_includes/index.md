@@ -12,6 +12,12 @@ This section describes the code of same-type test apps implemented using {{ ydb-
 - [Node.js](../example-nodejs.md)
 - [Python](../python/index.md)
 
+{% node info %}
+
+Additional information on how these example applications work is available in [{{ ydb-short-name }} SDK reference documentation](../../../reference/ydb-sdk/index.md).
+
+{% endnote %}
+
 A test app performs the following steps:
 
 {% include [init.md](steps/01_init.md) %}

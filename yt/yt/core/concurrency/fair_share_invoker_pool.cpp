@@ -14,6 +14,8 @@
 
 #include <yt/yt/library/ytprof/api/api.h>
 
+#include <library/cpp/yt/misc/port.h>
+
 #include <library/cpp/yt/memory/weak_ptr.h>
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
@@ -30,14 +32,6 @@ using namespace NYTProf;
 ////////////////////////////////////////////////////////////////////////////////
 
 constinit YT_THREAD_LOCAL(TCpuProfilerTagGuard) FairShareInvokerPoolProfilerTagGuard;
-
-////////////////////////////////////////////////////////////////////////////////
-
-#if defined(_unix_)
-    #define NO_UNIQUE_ADDRESS [[no_unique_address]]
-#else
-    #define NO_UNIQUE_ADDRESS
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 

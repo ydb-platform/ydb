@@ -47,6 +47,9 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateTopic::CallableName());
         DataSinkNames.insert(TKiAlterTopic::CallableName());
         DataSinkNames.insert(TKiDropTopic::CallableName());
+        DataSinkNames.insert(TKiCreateReplication::CallableName());
+        DataSinkNames.insert(TKiAlterReplication::CallableName());
+        DataSinkNames.insert(TKiDropReplication::CallableName());
         DataSinkNames.insert(TKiCreateUser::CallableName());
         DataSinkNames.insert(TKiModifyPermissions::CallableName());
         DataSinkNames.insert(TKiAlterUser::CallableName());
@@ -103,6 +106,9 @@ struct TKikimrData {
             TYdbOperation::CreateTopic |
             TYdbOperation::AlterTopic |
             TYdbOperation::DropTopic |
+            TYdbOperation::CreateReplication |
+            TYdbOperation::AlterReplication |
+            TYdbOperation::DropReplication |
             TYdbOperation::CreateUser |
             TYdbOperation::AlterUser |
             TYdbOperation::DropUser |
@@ -407,6 +413,14 @@ bool TKikimrKey::Extract(const TExprNode& key) {
             return false;
         }
         Target = nameNode->Child(0)->Content();
+    } else if (tagName == "replication") {
+        KeyType = Type::Replication;
+        const TExprNode* nameNode = key.Child(0)->Child(1);
+        if (!nameNode->IsCallable("String")) {
+            Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "Expected String as replication key."));
+            return false;
+        }
+        Target = nameNode->Child(0)->Content();
     } else if(tagName == "permission") {
         KeyType = Type::Permission;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
@@ -613,6 +627,58 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKqpProto::TKqpPhyLite
 
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKikimrMiniKQL::TResult& proto) {
     FillLiteralProtoImpl(literal, proto);
+}
+
+bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral) {
+    return maybeLiteral.Ptr()->IsCallable() &&
+        maybeLiteral.Ptr()->Content() == "PgCast" && maybeLiteral.Ptr()->ChildrenSize() >= 1 &&
+        maybeLiteral.Ptr()->Child(0)->IsCallable() && maybeLiteral.Ptr()->Child(0)->Content() == "Null";
+}
+
+std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto)
+{
+    if (auto maybeJust = maybeLiteral.Maybe<TCoJust>()) {
+        maybeLiteral = maybeJust.Cast().Input();
+    }
+
+    if (auto literal = maybeLiteral.Maybe<TCoDataCtor>()) {
+        FillLiteralProto(literal.Cast(), proto);
+        return std::nullopt;
+    }
+
+    const bool isPgNull = IsPgNullExprNode(maybeLiteral);
+    if (maybeLiteral.Maybe<TCoPgConst>() || isPgNull) {
+        YQL_ENSURE(valueType);
+        auto actualPgType = valueType->Cast<TPgExprType>();
+        YQL_ENSURE(actualPgType);
+
+        auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
+        if (!typeDesc) {
+            return TStringBuilder() << "Failed to parse default expr typename " << actualPgType->GetName();
+        }
+
+        if (isPgNull) {
+            proto.mutable_value()->set_null_flag_value(NProtoBuf::NULL_VALUE);
+        } else {
+            YQL_ENSURE(maybeLiteral.Maybe<TCoPgConst>());
+            auto pgConst = maybeLiteral.Cast<TCoPgConst>();
+            TString content = TString(pgConst.Value().Value());
+            auto parseResult = NKikimr::NPg::PgNativeBinaryFromNativeText(content, typeDesc);
+            if (parseResult.Error) {
+                return TStringBuilder() << "Failed to parse default expr for typename " << actualPgType->GetName()
+                    << ", error reason: " << *parseResult.Error;
+            }
+
+            proto.mutable_value()->set_bytes_value(parseResult.Str);
+        }
+
+        auto* pg = proto.mutable_type()->mutable_pg_type();
+        pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+        pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
+        return std::nullopt;
+    }
+
+    return TStringBuilder() << "Unsupported type of literal: " << maybeLiteral.Ptr()->Content();
 }
 
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto)

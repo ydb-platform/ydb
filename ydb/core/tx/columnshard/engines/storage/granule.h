@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
@@ -244,7 +245,7 @@ public:
     }
 
     void ActualizeOptimizer(const TInstant currentInstant) const {
-        if (currentInstant - OptimizerPlanner->GetActualizationInstant() > TDuration::Seconds(1)) {
+        if (currentInstant - OptimizerPlanner->GetActualizationInstant() >= NYDBTest::TControllers::GetColumnShardController()->GetCompactionActualizationLag(TDuration::Seconds(1))) {
             OptimizerPlanner->Actualize(currentInstant);
         }
     }

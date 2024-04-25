@@ -11,14 +11,14 @@ items:
   include:
     mode: link
     path: devops/toc_p.yaml
-- name: For DBA
-  include:
-    mode: link
-    path: dba/toc_p.yaml
 - name: For Developers
   include:
     mode: link
     path: dev/toc_p.yaml
+- name: For Security Engineers
+  include:
+    mode: link
+    path: security/toc_p.yaml
 - name: For Contributors
   include:
     mode: link

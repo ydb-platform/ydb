@@ -137,6 +137,9 @@ namespace NKikimr::NStorage {
                 case TQuery::kStaticVDiskSlain:
                     return StaticVDiskSlain(record.GetStaticVDiskSlain());
 
+                case TQuery::kDropDonor:
+                    return DropDonor(record.GetDropDonor());
+
                 case TQuery::REQUEST_NOT_SET:
                     return FinishWithError(TResult::ERROR, "Request field not set");
             }
@@ -198,14 +201,24 @@ namespace NKikimr::NStorage {
             const auto& settings = bsConfig.GetAutoconfigSettings();
 
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
+            NBsController::TGroupMapper::TForbiddenPDisks forbid;
             for (const auto& vdisk : ss.GetVDisks()) {
-                if (VDiskIDFromVDiskID(vdisk.GetVDiskID()) == vdiskId) {
+                const TVDiskID currentVDiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
+                if (!currentVDiskId.SameExceptGeneration(vdiskId)) {
+                    continue;
+                }
+                if (currentVDiskId == vdiskId) {
                     NBsController::TPDiskId pdiskId;
                     if (cmd.HasPDiskId()) {
                         const auto& target = cmd.GetPDiskId();
                         pdiskId = {target.GetNodeId(), target.GetPDiskId()};
                     }
                     replacedDisks.emplace(vdiskId, pdiskId);
+                } else {
+                    Y_DEBUG_ABORT_UNLESS(vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY ||
+                        vdisk.HasDonorMode());
+                    const auto& loc = vdisk.GetVDiskLocation();
+                    forbid.emplace(loc.GetNodeID(), loc.GetPDiskID());
                 }
             }
 
@@ -214,7 +227,8 @@ namespace NKikimr::NStorage {
                     try {
                         Self->AllocateStaticGroup(&config, vdiskId.GroupID, vdiskId.GroupGeneration + 1,
                             TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies()),
-                            settings.GetGeometry(), settings.GetPDiskFilter(), replacedDisks, {}, 0, &ev->Get()->BaseConfig);
+                            settings.GetGeometry(), settings.GetPDiskFilter(), replacedDisks, forbid, 0,
+                            &ev->Get()->BaseConfig, cmd.GetConvertToDonor());
                     } catch (const TExConfigError& ex) {
                         STLOG(PRI_NOTICE, BS_NODE, NW49, "ReassignGroupDisk failed to allocate group", (Config, config),
                             (BaseConfig, ev->Get()->BaseConfig),
@@ -231,14 +245,18 @@ namespace NKikimr::NStorage {
         }
 
         void StaticVDiskSlain(const NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot::TStaticVDiskSlain& cmd) {
+            HandleDropDonorAndSlain(VDiskIDFromVDiskID(cmd.GetVDiskId()), cmd.GetVSlotId(), false);
+        }
+
+        void DropDonor(const NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot::TDropDonor& cmd) {
+            HandleDropDonorAndSlain(VDiskIDFromVDiskID(cmd.GetVDiskId()), cmd.GetVSlotId(), true);
+        }
+
+        void HandleDropDonorAndSlain(TVDiskID vdiskId, const NKikimrBlobStorage::TVSlotId& vslotId, bool isDropDonor) {
             if (!RunCommonChecks()) {
                 return;
             }
 
-            const TVDiskID slainVDiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
-            const auto& slainVSlotId = cmd.GetVSlotId();
-            const ui32 nodeId = slainVSlotId.GetNodeId();
-            const ui32 pdiskId = slainVSlotId.GetPDiskId();
             NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
             if (!config.HasBlobStorageConfig()) {
@@ -251,31 +269,78 @@ namespace NKikimr::NStorage {
             }
             auto *ss = bsConfig->MutableServiceSet();
 
-            bool pdiskIsUsed = false;
             bool changes = false;
+            ui32 pdiskUsageCount = 0;
+
+            ui32 actualGroupGeneration = 0;
+            for (const auto& group : ss->GetGroups()) {
+                if (group.GetGroupID() == vdiskId.GroupID) {
+                    actualGroupGeneration = group.GetGroupGeneration();
+                    break;
+                }
+            }
+            Y_ABORT_UNLESS(0 < actualGroupGeneration && vdiskId.GroupGeneration < actualGroupGeneration);
 
             for (size_t i = 0; i < ss->VDisksSize(); ++i) {
                 if (const auto& vdisk = ss->GetVDisks(i); vdisk.HasVDiskID() && vdisk.HasVDiskLocation()) {
-                    const auto& loc = vdisk.GetVDiskLocation();
-                    if (loc.GetNodeID() != nodeId || loc.GetPDiskID() != pdiskId) {
+                    const TVDiskID currentVDiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
+                    if (!currentVDiskId.SameExceptGeneration(vdiskId) ||
+                            vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
                         continue;
                     }
 
-                    const TVDiskID vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-                    if (vdiskId == slainVDiskId && loc.GetVDiskSlotID() == slainVSlotId.GetVSlotId() &&
-                            vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
+                    if (isDropDonor && !vdisk.HasDonorMode()) {
+                        Y_ABORT_UNLESS(currentVDiskId.GroupGeneration == actualGroupGeneration);
+                        auto *m = ss->MutableVDisks(i);
+                        if (vdiskId.GroupGeneration) { // drop specific donor
+                            for (size_t k = 0; k < m->DonorsSize(); ++k) {
+                                const auto& donor = m->GetDonors(k);
+                                const auto& loc = donor.GetVDiskLocation();
+                                if (VDiskIDFromVDiskID(donor.GetVDiskId()) == vdiskId && loc.GetNodeID() == vslotId.GetNodeId() &&
+                                        loc.GetPDiskID() == vslotId.GetPDiskId() && loc.GetVDiskSlotID() == vslotId.GetVSlotId()) {
+                                    m->MutableDonors()->DeleteSubrange(k, 1);
+                                    changes = true;
+                                    break;
+                                }
+                            }
+                        } else { // drop all of them
+                            m->ClearDonors();
+                            changes = true;
+                        }
+                        continue;
+                    }
+
+                    const auto& loc = vdisk.GetVDiskLocation();
+                    if (loc.GetNodeID() != vslotId.GetNodeId() || loc.GetPDiskID() != vslotId.GetPDiskId()) {
+                        continue;
+                    }
+                    ++pdiskUsageCount;
+
+                    if (loc.GetVDiskSlotID() != vslotId.GetVSlotId()) {
+                        continue;
+                    }
+
+                    Y_ABORT_UNLESS(currentVDiskId.GroupGeneration < actualGroupGeneration);
+
+                    if (!isDropDonor) {
+                        --pdiskUsageCount;
                         ss->MutableVDisks()->DeleteSubrange(i--, 1);
                         changes = true;
-                    } else {
-                        pdiskIsUsed = true;
+                    } else if (vdisk.HasDonorMode()) {
+                        if (currentVDiskId == vdiskId || vdiskId.GroupGeneration == 0) {
+                            auto *m = ss->MutableVDisks(i);
+                            m->ClearDonorMode();
+                            m->SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+                            changes = true;
+                        }
                     }
                 }
             }
 
-            if (!pdiskIsUsed) {
+            if (!isDropDonor && !pdiskUsageCount) {
                 for (size_t i = 0; i < ss->PDisksSize(); ++i) {
                     if (const auto& pdisk = ss->GetPDisks(i); pdisk.HasNodeID() && pdisk.HasPDiskID() &&
-                            pdisk.GetNodeID() == nodeId && pdisk.GetPDiskID() == pdiskId) {
+                            pdisk.GetNodeID() == vslotId.GetNodeId() && pdisk.GetPDiskID() == vslotId.GetPDiskId()) {
                         ss->MutablePDisks()->DeleteSubrange(i--, 1);
                         changes = true;
                         break;
@@ -283,7 +348,7 @@ namespace NKikimr::NStorage {
                 }
             }
 
-            if (!changes) { // no configuration updates required
+            if (!changes) {
                 return Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
             }
 

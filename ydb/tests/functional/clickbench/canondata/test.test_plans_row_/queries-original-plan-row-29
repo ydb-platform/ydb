@@ -89,10 +89,10 @@
                                                             "ResolutionWidth"
                                                         ],
                                                         "ReadRanges": [
-                                                            "EventTime (-\u221e, +\u221e)",
                                                             "CounterID (-\u221e, +\u221e)",
                                                             "EventDate (-\u221e, +\u221e)",
                                                             "UserID (-\u221e, +\u221e)",
+                                                            "EventTime (-\u221e, +\u221e)",
                                                             "WatchID (-\u221e, +\u221e)"
                                                         ],
                                                         "Table": "clickbench/plans/row/hits"
@@ -159,10 +159,10 @@
                                                                     "ResolutionWidth"
                                                                 ],
                                                                 "ReadRanges": [
-                                                                    "EventTime (-\u221e, +\u221e)",
                                                                     "CounterID (-\u221e, +\u221e)",
                                                                     "EventDate (-\u221e, +\u221e)",
                                                                     "UserID (-\u221e, +\u221e)",
+                                                                    "EventTime (-\u221e, +\u221e)",
                                                                     "WatchID (-\u221e, +\u221e)"
                                                                 ],
                                                                 "Table": "clickbench/plans/row/hits"
@@ -213,10 +213,10 @@
                                                                     "ResolutionWidth"
                                                                 ],
                                                                 "ReadRanges": [
-                                                                    "EventTime (-\u221e, +\u221e)",
                                                                     "CounterID (-\u221e, +\u221e)",
                                                                     "EventDate (-\u221e, +\u221e)",
                                                                     "UserID (-\u221e, +\u221e)",
+                                                                    "EventTime (-\u221e, +\u221e)",
                                                                     "WatchID (-\u221e, +\u221e)"
                                                                 ],
                                                                 "Table": "clickbench/plans/row/hits"
@@ -243,10 +243,10 @@
                                 "ResolutionWidth"
                             ],
                             "scan_by": [
-                                "EventTime (-\u221e, +\u221e)",
                                 "CounterID (-\u221e, +\u221e)",
                                 "EventDate (-\u221e, +\u221e)",
                                 "UserID (-\u221e, +\u221e)",
+                                "EventTime (-\u221e, +\u221e)",
                                 "WatchID (-\u221e, +\u221e)"
                             ],
                             "type": "FullScan"

@@ -523,6 +523,30 @@ void TStatisticsAggregator::PersistScanStartTime(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_ScanStartTime, ToString(ScanStartTime.MicroSeconds()));
 }
 
+template <typename T, typename S>
+void PrintContainerStart(const T& container, size_t count, TStringStream& str,
+    std::function<S(const typename T::value_type&)> extractor)
+{
+    if (container.empty()) {
+        return;
+    }
+    str << "    ";
+    size_t i = 0;
+    for (const auto& entry : container) {
+        if (i) {
+            str << ", ";
+        }
+        str << extractor(entry);
+        if (++i == count) {
+            break;
+        }
+    }
+    if (container.size() > count) {
+        str << " ...";
+    }
+    str << Endl;
+}
+
 bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
     const TActorContext& ctx)
 {
@@ -535,6 +559,69 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
         PRE() {
             str << "---- StatisticsAggregator ----" << Endl << Endl;
             str << "Database: " << Database << Endl;
+            str << "BaseStats: " << BaseStats.size() << Endl;
+            str << "SchemeShards: " << SchemeShards.size() << Endl;
+            {
+                std::function<TSSId(const std::pair<const TSSId, size_t>&)> extr =
+                    [](const auto& x) { return x.first; };
+                PrintContainerStart(SchemeShards, 4, str, extr);
+            }
+            str << "Nodes: " << Nodes.size() << Endl;
+            {
+                std::function<TNodeId(const std::pair<const TNodeId, size_t>&)> extr =
+                    [](const auto& x) { return x.first; };
+                PrintContainerStart(Nodes, 8, str, extr);
+            }
+            str << "RequestedSchemeShards: " << RequestedSchemeShards.size() << Endl;
+            {
+                std::function<TSSId(const TSSId&)> extr = [](const auto& x) { return x; };
+                PrintContainerStart(RequestedSchemeShards, 4, str, extr);
+            }
+            str << "FastCounter: " << FastCounter << Endl;
+            str << "FastCheckInFlight: " << FastCheckInFlight << Endl;
+            str << "FastSchemeShards: " << FastSchemeShards.size() << Endl;
+            {
+                std::function<TSSId(const TSSId&)> extr = [](const auto& x) { return x; };
+                PrintContainerStart(FastSchemeShards, 4, str, extr);
+            }
+            str << "FastNodes: " << FastNodes.size() << Endl;
+            {
+                std::function<TNodeId(const TNodeId&)> extr = [](const auto& x) { return x; };
+                PrintContainerStart(FastNodes, 8, str, extr);
+            }
+            str << "PropagationInFlight: " << PropagationInFlight << Endl;
+            str << "PropagationSchemeShards: " << PropagationSchemeShards.size() << Endl;
+            {
+                std::function<TSSId(const TSSId&)> extr = [](const auto& x) { return x; };
+                PrintContainerStart(PropagationSchemeShards, 4, str, extr);
+            }
+            str << "PropagationNodes: " << PropagationNodes.size() << Endl;
+            {
+                std::function<TNodeId(const TNodeId&)> extr = [](const auto& x) { return x; };
+                PrintContainerStart(FastNodes, 8, str, extr);
+            }
+            str << "LastSSIndex: " << LastSSIndex << Endl;
+            str << "PendingRequests: " << PendingRequests.size() << Endl;
+            str << "ProcessUrgentInFlight: " << ProcessUrgentInFlight << Endl << Endl;
+
+            str << "ScanTableId: " << ScanTableId << Endl;
+            str << "Columns: " << Columns.size() << Endl;
+            str << "ShardRanges: " << ShardRanges.size() << Endl;
+            str << "CountMinSketches: " << CountMinSketches.size() << Endl << Endl;
+
+            str << "ScanTablesByTime: " << ScanTablesByTime.size() << Endl;
+            if (!ScanTablesByTime.empty()) {
+                auto& scanTable = ScanTablesByTime.top();
+                str << "    top: " << scanTable.PathId
+                    << ", last update time: " << scanTable.LastUpdateTime << Endl;
+            }
+            str << "ScanTablesBySchemeShard: " << ScanTablesBySchemeShard.size() << Endl;
+            if (!ScanTablesBySchemeShard.empty()) {
+                str << "    " << ScanTablesBySchemeShard.begin()->first << Endl;
+                std::function<TPathId(const TPathId&)> extr = [](const auto& x) { return x; };
+                PrintContainerStart(ScanTablesBySchemeShard.begin()->second, 2, str, extr);
+            }
+            str << "ScanStartTime: " << ScanStartTime << Endl;
         }
     }
 

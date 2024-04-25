@@ -1829,28 +1829,35 @@ bool IsYieldTransparent(const TExprNode::TPtr& root, const TTypeAnnotationContex
     return !FindNonYieldTransparentNode(root, typeCtx);
 }
 
+TMaybe<bool> IsStrictNoRecurse(const TExprNode& node) {
+    if (node.IsCallable({"Unwrap", "Ensure", "ScripUdf"})) {
+        return false;
+    }
+    if (node.IsCallable("Udf")) {
+        return HasSetting(*node.Child(TCoUdf::idx_Settings), "strict");
+    }
+    return {};
+}
+
 bool IsStrict(const TExprNode::TPtr& root) {
     // TODO: add TExprNode::IsStrict() method (with corresponding flag). Fill it as part of type annotation pass
     bool isStrict = true;
-    size_t insideAssumeStrict = 0;
-
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
+        if (node->IsCallable("AssumeStrict")) {
+            return false;
+        }
+
         if (node->IsCallable("AssumeNonStrict")) {
             isStrict = false;
-        } else if (node->IsCallable("AssumeStrict")) {
-            ++insideAssumeStrict;
-        } else if (isStrict && !insideAssumeStrict && node->IsCallable({"Udf", "ScriptUdf", "Unwrap", "Ensure"})) {
-            if (!node->IsCallable("Udf") || !HasSetting(*node->Child(TCoUdf::idx_Settings), "strict")) {
-                isStrict = false;
-            }
+            return false;
         }
+
+        auto maybeStrict = IsStrictNoRecurse(*node);
+        if (maybeStrict.Defined() && !*maybeStrict) {
+            isStrict = false;
+        }
+
         return isStrict;
-    }, [&](const TExprNode::TPtr& node) {
-        if (node->IsCallable("AssumeStrict")) {
-            YQL_ENSURE(insideAssumeStrict > 0);
-            --insideAssumeStrict;
-        }
-        return true;
     });
 
     return isStrict;

@@ -101,7 +101,7 @@ public:
     void SetReadVersion(TRowVersion readVersion);
     void SetVolatileTxId(ui64 txId);
     void SetIsImmediateTx();
-    void SetIsRepeatableSnapshot();
+    void SetUsesMvccSnapshot();
 
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const;
     void ResetCollectedChanges();
@@ -110,6 +110,7 @@ public:
     const absl::flat_hash_set<ui64>& GetVolatileDependencies() const;
     std::optional<ui64> GetVolatileChangeGroup() const;
     bool GetVolatileCommitOrdered() const;
+    bool GetPerformedUserReads() const;
 
     void ResetCounters() { EngineHostCounters = TEngineHostCounters(); }
     const TEngineHostCounters& GetCounters() const { return EngineHostCounters; }

@@ -339,7 +339,7 @@ private:
             ReadInProgress = MakeHolder<typename IContext::TEvReadFinished>();
             Stream.Read(&ReadInProgress->Record, OnReadDoneTag.Prepare());
         } else {
-            Y_DEBUG_ABORT_UNLESS(false, "Multiple outstanding reads are unsafe in grpc streaming");
+            Y_DEBUG_ABORT("Multiple outstanding reads are unsafe in grpc streaming");
         }
 
         return true;
@@ -380,7 +380,7 @@ private:
             }
         } else {
             // We need to perform another read (likely unsafe)
-            Y_DEBUG_ABORT_UNLESS(false, "Multiple outstanding reads are unsafe in grpc streaming");
+            Y_DEBUG_ABORT("Multiple outstanding reads are unsafe in grpc streaming");
             ReadInProgress = MakeHolder<typename IContext::TEvReadFinished>();
             Stream.Read(&ReadInProgress->Record, OnReadDoneTag.Prepare());
         }

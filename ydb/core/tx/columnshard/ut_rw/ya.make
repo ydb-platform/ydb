@@ -32,7 +32,6 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    columnshard_ut_common.cpp
     ut_columnshard_read_write.cpp
     ut_normalizer.cpp
     ut_backup.cpp

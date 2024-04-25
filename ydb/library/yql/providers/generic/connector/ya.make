@@ -1,5 +1,4 @@
 RECURSE(
-    api
     libcpp
 )
 

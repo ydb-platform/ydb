@@ -8,7 +8,6 @@ NO_CHECK_IMPORTS()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/mdb_mock/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/token_accessor_mock/recipe.inc)
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/ydb_mvp_mock/recipe.inc)
 
 IF (AUTOCHECK) 
     # Temporarily disable these tests due to infrastructure incompatibility

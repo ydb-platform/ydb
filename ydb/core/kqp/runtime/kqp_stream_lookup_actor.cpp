@@ -205,9 +205,16 @@ private:
             ProcessInputRows();
         }
 
-        finished = (status == NUdf::EFetchStatus::Finish)
-            && AllReadsFinished()
-            && StreamLookupWorker->AllRowsProcessed();
+        const bool inputRowsFinished = status == NUdf::EFetchStatus::Finish;
+        const bool allReadsFinished = AllReadsFinished();
+        const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed();
+
+        if (inputRowsFinished && allReadsFinished && !allRowsProcessed) {
+            // all reads are completed, but we have unprocessed rows
+            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        }
+
+        finished = inputRowsFinished && allReadsFinished && allRowsProcessed;
 
         CA_LOG_D("Returned " << replyResultStats.ResultBytesCount << " bytes, " << replyResultStats.ResultRowsCount
             << " rows, finished: " << finished);

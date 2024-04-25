@@ -23,6 +23,10 @@ class TestStatus(Enum):
     SKIP = 3
     MUTE = 4
 
+    @property
+    def is_error(self):
+        return self in (TestStatus.FAIL, TestStatus.ERROR, TestStatus.MUTE)
+
     def __lt__(self, other):
         return self.value < other.value
 
@@ -79,6 +83,7 @@ class TestResult:
         log_urls = {
             'Log': get_property_value(testcase, "url:Log"),
             'log': get_property_value(testcase, "url:log"),
+            'logsdir': get_property_value(testcase, "url:logsdir"),
             'stdout': get_property_value(testcase, "url:stdout"),
             'stderr': get_property_value(testcase, "url:stderr"),
         }

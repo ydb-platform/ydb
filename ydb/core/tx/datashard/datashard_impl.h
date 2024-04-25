@@ -1995,8 +1995,10 @@ public:
     void StartWatchingSubDomainPathId();
 
     bool WaitPlanStep(ui64 step);
-    bool CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const;
     bool CheckTxNeedWait() const;
+    bool CheckTxNeedWait(const TRowVersion& mvccSnapshot) const;
+    bool CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const;
+    bool CheckTxNeedWait(const NEvents::TDataEvents::TEvWrite::TPtr& ev) const;
 
     void WaitPredictedPlanStep(ui64 step);
     void SchedulePlanPredictedTxs();

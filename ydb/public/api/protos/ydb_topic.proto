@@ -307,6 +307,7 @@ message StreamReadMessage {
             StopPartitionSessionRequest stop_partition_session_request = 9;
 
             UpdatePartitionSession update_partition_session = 10;
+            EndPartitionSession end_partition_session = 11;
         }
     }
 
@@ -321,6 +322,8 @@ message StreamReadMessage {
         string reader_name = 3;
         // Direct reading from a partition node.
         bool direct_read = 4;
+        // Indicates that the SDK supports autoscaling.
+        bool autoscaling_support = 5;
 
         message TopicReadSettings {
             // Topic path.
@@ -559,6 +562,20 @@ message StreamReadMessage {
         int64 direct_read_id = 2;
     }
 
+    // Signal from server that client has finished reading the partition and all messages have been read.
+    // Once a partition has been finished no further messages will ever arrive to that partition.
+    // This command is a hint to the client to commit offsets, after which the child partitions will be balanced independently in different reading sessions.
+    // Unlike StopPartitionSessionRequest, the client does not have to close the reading session.
+    // Client should not send a response to the command.
+    message EndPartitionSession {
+        // Partition session identifier.
+        int64 partition_session_id = 1;
+
+        // Ids of partitions which were merged with the ended partition.
+        repeated int64 adjacent_partition_ids = 2;
+        // Ids of partitions which was formed when the ended partition was split or merged.
+        repeated int64 child_partition_ids = 3;
+    }
 }
 
 // Messages for bidirectional streaming rpc StreamDirectRead
@@ -797,14 +814,55 @@ message AlterConsumer {
     map<string, string> alter_attributes = 6;
 }
 
+enum AutoscalingStrategy {
+    // The autoscaling algorithm is not specified. The default value will be used.
+    AUTOSCALING_STRATEGY_UNSPECIFIED = 0;
+    // The autoscaling is disabled.
+    AUTOSCALING_STRATEGY_DISABLED = 1;
+    // The autoscaling algorithm will increase partitions count depending on the load characteristics.
+    // The autoscaling algorithm will never decrease the number of partitions.
+    AUTOSCALING_STRATEGY_SCALE_UP = 2;
+    // The autoscaling algorithm will both increase and decrease partitions count depending on the load characteristics.
+    AUTOSCALING_STRATEGY_SCALE_UP_AND_DOWN = 3;
+}
+
 // Partitioning settings for topic.
 message PartitioningSettings {
-    // Minimum partition count auto merge would stop working at.
+    // Auto merge would stop working when the partitions count reaches min_active_partitions
     // Zero value means default - 1.
     int64 min_active_partitions = 1 [(Ydb.value) = ">= 0"];
+    // Auto split would stop working when the partitions count reaches max_active_partitions
+    // Zero value means default - 1.
+    int64 max_active_partitions = 3 [(Ydb.value) = ">= 0"];
     // Limit for total partition count, including active (open for write) and read-only partitions.
     // Zero value means default - 100.
-    int64 partition_count_limit = 2 [(Ydb.value) = ">= 0"];
+    // Use max_active_partitions
+    int64 partition_count_limit = 2 [(Ydb.value) = ">= 0", deprecated = true];
+    // Settings for the partitions count autoscaling.
+    AutoscalingSettings autoscaling_settings = 4;
+}
+
+message AutoscalingSettings {
+    // Strategy of autoscaling.
+    AutoscalingStrategy strategy = 1;
+    // Partition write speed autoscaling options.
+    AutoscalingPartitionWriteSpeedStrategy partition_write_speed = 2;
+}
+
+message AutoscalingPartitionWriteSpeedStrategy {
+    //Partition will be autoscaled up (divided into 2 partitions)
+    //after write speed to the partition exceeds scale_up_threshold_percent (in percentage of maximum write speed to the partition) for the period of time threshold_time_seconds
+
+    //Partition will become a candidate to the autoscaling down
+    //after write speed doesn’t reach scale_down_threshold_percent (in percentage of maximum write speed to the partition) for the period of time threshold_time_seconds
+    //This candidate partition will be autoscaled down when other neighbour partition will become a candidate to the autoscaling down and not earlier than a retention period.
+
+    // Zero value means default - 300.
+    google.protobuf.Duration threshold_time = 1;
+    // Zero value means default - 90.
+    int32 scale_up_threshold_percent = 2 [(Ydb.value) = ">= 0"];
+    // Zero value means default - 30.
+    int32 scale_down_threshold_percent = 3 [(Ydb.value) = ">= 0"];
 }
 
 // Partitioning settings for topic.
@@ -812,9 +870,37 @@ message AlterPartitioningSettings {
     // Minimum partition count auto merge would stop working at.
     // Zero value means default - 1.
     optional int64 set_min_active_partitions = 1 [(Ydb.value) = ">= 0"];
+    // Maximum partition count auto merge would stop working at.
+    // Zero value means default - 1.
+    optional int64 max_active_partitions = 3 [(Ydb.value) = ">= 0"];
     // Limit for total partition count, including active (open for write) and read-only partitions.
     // Zero value means default - 100.
-    optional int64 set_partition_count_limit = 2 [(Ydb.value) = ">= 0"];
+    // Use set_max_active_partitions
+    optional int64 set_partition_count_limit = 2 [(Ydb.value) = ">= 0", deprecated = true];
+    // Settings for autoscaling the partition number
+    optional AlterAutoscalingSettings alter_autoscaling_settings = 4;
+}
+
+message AlterAutoscalingSettings {
+    // Strategy of autoscaling
+    optional AutoscalingStrategy set_strategy = 1;
+    // Autoscaling partition write speed options.
+    optional AlterAutoscalingPartitionWriteSpeedStrategy set_partition_write_speed = 2;
+}
+
+message AlterAutoscalingPartitionWriteSpeedStrategy {
+    // The time of exceeding the threshold value, after which the partition will be
+    // autoscaling.
+    // Zero value means default - 300.
+    optional google.protobuf.Duration set_threshold_time = 1;
+    // The threshold value of the write speed to the partition as a percentage, when exceeded,
+    // the partition will be auto split.
+    // Zero value means default - 90.
+    optional int32 set_scale_up_threshold_percent = 2 [(Ydb.value) = ">= 0"];
+    // The threshold value of the write speed to the partition as a percentage, if it is not reached,
+    // the partition will be auto merged.
+    // Zero value means default - 30.
+    optional int32 set_scale_down_threshold_percent = 3 [(Ydb.value) = ">= 0"];
 }
 
 // Metering mode specifies the method used to determine consumption of resources by the topic.

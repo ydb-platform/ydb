@@ -478,7 +478,7 @@ void TTransaction::ModifyRows(
 
     if (future) {
         future
-            .Subscribe(BIND([=, this, this_ = MakeStrong(this)](const TError& error) {
+            .Subscribe(BIND([=, this, this_ = MakeStrong(this)] (const TError& error) {
                 if (!error.IsOK()) {
                     YT_LOG_DEBUG(error, "Error sending row modifications");
                     YT_UNUSED_FUTURE(Abort());

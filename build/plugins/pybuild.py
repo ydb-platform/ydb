@@ -172,6 +172,7 @@ def add_python_lint_checks(unit, py_ver, files):
             "testenv/",  # CI-3229
             "yt/yt/",  # YT-20053
             "yt/python/",  # YT-20053
+            "yt/python_py2/",
         )
 
         if not upath.startswith(no_lint_allowed_paths):

@@ -127,7 +127,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvRegisterCoord
     CC_LOG_D("Got TEvRegisterCoordinatorResponse; issues: " << ev->Get()->Issues.ToOneLineString());
     const auto& issues = ev->Get()->Issues;
     if (issues) {
-        CC_LOG_E("Can't register in storage: " + issues.ToOneLineString());
+        CC_LOG_E("StorageError: can't register in storage: " + issues.ToOneLineString());
         ++*Metrics.StorageError;
         OnInternalError("Can't register in storage", issues);
         return;
@@ -184,7 +184,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvGetCheckpoint
 
     if (event->Issues) {
         ++*Metrics.StorageError;
-        CC_LOG_E("Can't get checkpoints to restore: " + event->Issues.ToOneLineString());
+        CC_LOG_E("StorageError: can't get checkpoints to restore: " + event->Issues.ToOneLineString());
         OnInternalError("Can't get checkpoints to restore", event->Issues);
         return;
     }
@@ -226,7 +226,7 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
     CC_LOG_I("Will try to restore streaming offsets from checkpoint " << checkpoint.CheckpointId);
     if (!checkpoint.Graph) {
         ++*Metrics.StorageError;
-        const TString message = TStringBuilder() << "Can't get graph params from checkpoint " << checkpoint.CheckpointId;
+        const TString message = TStringBuilder() << "StorageError: can't get graph params from checkpoint " << checkpoint.CheckpointId;
         CC_LOG_I(message);
         OnInternalError(message);
         return;
@@ -302,6 +302,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
 
     if (status != NYql::NDqProto::TEvRestoreFromCheckpointResult_ERestoreStatus_OK) {
         CC_LOG_E("[" << checkpoint << "] Can't restore: " << statusName);
+        ++*Metrics.RestoringError;
         NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnError(NYql::NDqProto::StatusIds::ABORTED, "Can't restore: " + statusName, {});
         return;
     }
@@ -381,7 +382,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpo
     CC_LOG_D("[" << checkpointId << "] Got TEvCreateCheckpointResponse");
 
     if (issues) {
-        CC_LOG_E("[" << checkpointId << "] Can't create checkpoint: " << issues.ToOneLineString());
+        CC_LOG_E("[" << checkpointId << "] StorageError: can't create checkpoint: " << issues.ToOneLineString());
         PendingCheckpoints.erase(checkpointId);
         UpdateInProgressMetric();
         ++*Metrics.FailedToCreate;
@@ -462,7 +463,8 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvSaveTaskSt
             }
         }
     } else {
-        CC_LOG_E("[" << checkpointId << "] Can't save node state, aborting checkpoint");
+        CC_LOG_E("[" << checkpointId << "] StorageError: can't save node state, aborting checkpoint");
+        ++*Metrics.StorageError;
         CheckpointingSnapshotRotationIndex = CheckpointingSnapshotRotationPeriod;  // Next checkpoint is snapshot.
         Send(StorageProxy, new TEvCheckpointStorage::TEvAbortCheckpointRequest(CoordinatorId, checkpointId, "Can't save node state"), IEventHandle::FlagTrackDelivery);
     }
@@ -479,7 +481,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvSetCheckpoint
     }
 
     if (issues) {
-        CC_LOG_E("[" << checkpointId << "] Can't change checkpoint status to 'PendingCommit': " << issues.ToString());
+        CC_LOG_E("[" << checkpointId << "] StorageError: can't change checkpoint status to 'PendingCommit': " << issues.ToString());
         ++*Metrics.StorageError;
         PendingCheckpoints.erase(it);
         return;
@@ -541,7 +543,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCompleteCheck
         CC_LOG_I("[" << checkpointId << "] Checkpoint completed");
     } else {
         ++*Metrics.StorageError;
-        CC_LOG_E("[" << checkpointId << "] Can't change checkpoint status to 'Completed': " << issues.ToString());
+        CC_LOG_E("[" << checkpointId << "] StorageError: can't change checkpoint status to 'Completed': " << issues.ToString());
     }
     PendingCommitCheckpoints.erase(it);
     UpdateInProgressMetric();
@@ -552,7 +554,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvAbortCheckpoi
     CC_LOG_D("[" << checkpointId << "] Got TEvAbortCheckpointResponse");
     const auto& issues = ev->Get()->Issues;
     if (issues) {
-        CC_LOG_E("[" << checkpointId << "] Can't abort checkpoint: " << issues.ToString());
+        CC_LOG_E("[" << checkpointId << "] StorageError: can't abort checkpoint: " << issues.ToString());
         ++*Metrics.StorageError;
     } else {
         CC_LOG_W("[" << checkpointId << "] Checkpoint aborted");

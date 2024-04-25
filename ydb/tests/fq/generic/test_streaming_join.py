@@ -8,31 +8,6 @@ from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from utils.settings import Settings
 
-'''
-$input = select * from yds.`input-stream`
-with (
-    format=json_each_row,
-    SCHEMA (
-        id Uint64,
-        ts Uint64,
-        user Uint64,
-        attr Uint64
-    )
-);
-
-$enriched = select e.id, e.ts, e.user, u.age, u.ip, u.region
-    from
-        $input as e
-    left join /*+ streamlookup() */
-        ydb.users as u
-    on(e.user = u.id)
-;
-
-insert into yds.`output-stream`
-select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched
---limit 20;
-'''
-
 
 class TestStreamingJoin(TestYdsBase):
     @yq_v1

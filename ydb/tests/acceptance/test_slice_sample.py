@@ -16,7 +16,7 @@ class Test(object):
 
     @classmethod
     def teardown_class(cls):
-        cls.cluster.stop()
+        # cls.cluster.stop()
         pass
 
     def test_slice_sample(self):

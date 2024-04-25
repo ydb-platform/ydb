@@ -206,7 +206,7 @@ TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, si
 }
 
 void TTestReadSession::WaitAllMessages() {
-    DataPromise.GetFuture().GetValueSync();
+    DataPromise.GetFuture().GetValue(TDuration::Seconds(5));
 }
 
 void TTestReadSession::Commit() {

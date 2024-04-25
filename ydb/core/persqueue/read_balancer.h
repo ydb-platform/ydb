@@ -97,6 +97,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     // Begin balancing
     void Handle(TEvPQ::TEvWakeupReleasePartition::TPtr &ev, const TActorContext& ctx); // from self
+    void Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext& ctx); // from self
 
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx); // from Partition/PQ
     void Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx); // from ReadSession
@@ -332,6 +333,7 @@ public:
             HFunc(TEvPersQueue::TEvReadingPartitionStartedRequest, Handle);
             HFunc(TEvPersQueue::TEvReadingPartitionFinishedRequest, Handle);
             HFunc(TEvPQ::TEvWakeupReleasePartition, Handle);
+            HFunc(TEvPQ::TEvBalanceConsumer, Handle);
             // from PQ
             HFunc(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
             // from TPartitionScaleRequest

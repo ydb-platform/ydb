@@ -110,6 +110,43 @@ Y_UNIT_TEST_SUITE(Balancing) {
 
         readSession0.Close();
     }
-}
+
+/*     Y_UNIT_TEST(Many) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2000);
+
+        TTopicClient client = setup.MakeClient();
+
+        auto CreateClient = [&]() {
+            auto readSettings = TReadSessionSettings()
+                .ConsumerName(TEST_CONSUMER)
+                .AppendTopics(TEST_TOPIC);
+
+            return client.CreateReadSession(readSettings);
+        };
+
+        Cerr << ">>>>> " << TInstant::Now() << " Begin create sessions" << Endl << Flush;
+
+        std::deque<std::shared_ptr<IReadSession>> sessions;
+        for (int i = 0; i < 1000; ++i) {
+            sessions.push_back(CreateClient());
+        }
+
+        for (int i = 0 ; i < 500 ; ++i) {
+            Cerr << ">>>>> " << TInstant::Now() << " Close session " << i << Endl << Flush;
+
+            auto s = sessions.front();
+            s->Close();
+            sessions.pop_front();
+
+            Sleep(TDuration::MilliSeconds(250));
+
+            sessions.push_back(CreateClient());
+        }
+
+        Cerr << ">>>>> " << TInstant::Now() << " Finished" << Endl << Flush;
+        Sleep(TDuration::Seconds(10));
+    }
+ */}
 
 } // namespace NKikimr

@@ -191,6 +191,7 @@ struct TConsumer {
     std::unordered_map<ui32, TPartition> Partitions;
 
     size_t ActiveFamilyCount;
+    bool BalanceScheduled;
 
     TConsumer(TBalancer& balancer, const TString& consumerName);
     ~TConsumer() = default;
@@ -225,6 +226,7 @@ struct TConsumer {
     void StartReading(ui32 partitionId, const TActorContext& ctx);
     void FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx);
 
+    void ScheduleBalance(const TActorContext& ctx);
     void Balance(const TActorContext& ctx);
     void Release(ui32 partitionId, const TActorContext& ctx);
 
@@ -342,6 +344,8 @@ public:
     void Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext& ctx);
 
 private:
     TString GetPrefix() const;

@@ -567,6 +567,7 @@ TConsumer::TConsumer(TBalancer& balancer, const TString& consumerName)
     , ConsumerName(consumerName)
     , NextFamilyId(0)
     , ActiveFamilyCount(0)
+    , BalanceScheduled(false)
 {
 }
 
@@ -987,7 +988,7 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
 
     if (partition && partition->StartReading()) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                "Reading of the partition " << partitionId << " was started by " << ConsumerName << ". We stop reading from child partitions.");
+                GetPrefix() << "Reading of the partition " << partitionId << " was started by " << ConsumerName << ". We stop reading from child partitions.");
 
         auto* family = FindFamily(partitionId);
         if (family) {
@@ -1013,7 +1014,7 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
         });
     } else {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                "Reading of the partition " << partitionId << " was started by " << ConsumerName << ".");
+                GetPrefix() << "Reading of the partition " << partitionId << " was started by " << ConsumerName << ".");
     }
 }
 
@@ -1027,7 +1028,7 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
 
     if (!IsReadable(partitionId)) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    "Reading of the partition " << partitionId << " was finished by " << ConsumerName
+                    GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << ConsumerName
                     << " but the partition isn't readable");
         return;
     }
@@ -1035,13 +1036,13 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
     auto* family = FindFamily(partitionId);
     if (!family) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    "Reading of the partition " << partitionId << " was finished by " << ConsumerName
+                    GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << ConsumerName
                     << " but the partition hasn't family");
     }
 
     if (!family->Session) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    "Reading of the partition " << partitionId << " was finished by " << ConsumerName
+                    GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << ConsumerName
                     << " but the partition hasn't reading session");
     }
 
@@ -1049,22 +1050,37 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
 
     if (partition.SetFinishedState(r.GetScaleAwareSDK(), r.GetStartedReadingFromEndOffset())) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    "Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
+                    GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
                     << ", firstMessage=" << r.GetStartedReadingFromEndOffset() << ", " << GetSdkDebugString0(r.GetScaleAwareSDK()));
 
         if (ProccessReadingFinished(partitionId, ctx)) {
-            Balance(ctx);
+            ScheduleBalance(ctx);
         }
     } else if (!partition.IsInactive()) {
         auto delay = std::min<size_t>(1ul << partition.Iteration, Balancer.GetLifetimeSeconds()); // TODO Учесть время закрытия партиции на запись
 
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    "Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
+                    GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
                     << ". Scheduled release of the partition for re-reading. Delay=" << delay << " seconds,"
                     << " firstMessage=" << r.GetStartedReadingFromEndOffset() << ", " << GetSdkDebugString0(r.GetScaleAwareSDK()));
 
         ctx.Schedule(TDuration::Seconds(delay), new TEvPQ::TEvWakeupReleasePartition(ConsumerName, partitionId, partition.Cookie));
     }
+}
+
+void TConsumer::ScheduleBalance(const TActorContext& ctx) {
+    if (BalanceScheduled) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "rebalancing already was scheduled");
+        return;
+    }
+
+    BalanceScheduled = true;
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            GetPrefix() << "rebalancing was scheduled");
+
+    ctx.Send(Balancer.TopicActor.SelfId(), new TEvPQ::TEvBalanceConsumer(ConsumerName));
 }
 
 TOrderedSessions OrderSessions(
@@ -1447,7 +1463,7 @@ void TBalancer::UpdateConfig(std::vector<ui32> addedPartitions, std::vector<ui32
     }
 
     for (auto& [_, consumer] : Consumers) {
-        consumer->Balance(ctx);
+        consumer->ScheduleBalance(ctx);
     }
 }
 
@@ -1469,7 +1485,7 @@ bool TBalancer::SetCommittedState(const TString& consumerName, ui32 partitionId,
                 GetPrefix() << "The offset of the partition " << partitionId << " was commited by " << consumerName);
 
         if (consumer->ProccessReadingFinished(partitionId, ctx)) {
-            consumer->Balance(ctx);
+            consumer->ScheduleBalance(ctx);
         }
 
         return true;
@@ -1537,7 +1553,7 @@ void TBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActo
     }
 
     if (consumer->Unlock(sender, partitionId, ctx)) {
-        consumer->Balance(ctx);
+        consumer->ScheduleBalance(ctx);
     }
 }
 
@@ -1597,7 +1613,6 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
                 GetPrefix() << "pipe " << ev->Get()->ClientId << " client "
                 << session->ClientId << " disconnected session " << session->SessionName);
 
-        bool needBalance = false;
         auto* consumer = GetConsumer(session->ClientId);
         if (consumer) {
             consumer->UnregisterReadingSession(session.get(), ctx);
@@ -1605,15 +1620,11 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
             if (consumer->Sessions.empty()) {
                 Consumers.erase(consumer->ConsumerName);
             } else {
-                needBalance = true;;
+                consumer->ScheduleBalance(ctx);
             }
         }
 
         Sessions.erase(it);
-
-        if (needBalance) {
-            consumer->Balance(ctx);
-        }
     } else {
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 GetPrefix() << "pipe " << ev->Get()->ClientId << " disconnected no session");
@@ -1688,7 +1699,7 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
 
     auto* consumer = it->second.get();
     consumer->RegisterReadingSession(session, ctx);
-    consumer->Balance(ctx);
+    consumer->ScheduleBalance(ctx);
 }
 
 void TBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx) {
@@ -1739,8 +1750,16 @@ void TBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TAc
     ctx.Send(ev->Sender, response.release());
 }
 
+void TBalancer::Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext& ctx) {
+    auto* consumer = GetConsumer(ev->Get()->ConsumerName);
+    if (consumer) {
+        consumer->BalanceScheduled = false;
+        consumer->Balance(ctx);
+    }
+}
+
 TString TBalancer::GetPrefix() const {
-    return TStringBuilder() << "balancer: tablet " << TopicActor.TabletID() << " topic " << Topic() << " ";
+    return TStringBuilder() << "balancer: [" << TopicActor.TabletID() << "] topic " << Topic() << " ";
 }
 
 ui32 TBalancer::NextStep() {

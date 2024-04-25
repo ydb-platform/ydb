@@ -1156,6 +1156,10 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvWakeupReleasePartition::TPtr &ev, 
     Balancer->Handle(ev, ctx);
 }
 
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext& ctx) {
+    Balancer->Handle(ev, ctx);
+}
+
 void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx)
 {
     Balancer->Handle(ev, ctx);

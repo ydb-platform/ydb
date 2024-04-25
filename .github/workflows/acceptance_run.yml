@@ -36,6 +36,11 @@ jobs:
       with:
         ref: ${{ inputs.commit_sha }}
 
+    - name: Setup ssh
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+  
     - name: Build and test
       uses: ./.github/actions/build_and_test_ya
       with:

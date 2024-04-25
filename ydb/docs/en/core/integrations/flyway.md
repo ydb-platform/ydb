@@ -412,7 +412,7 @@ Command [clean](https://documentation.red-gate.com/flyway/flyway-cli-and-api/usa
 
 {% note warning %}
 
-Unlike other database management systems, {{ ydb-short-name }} does not have a concept of `SCHEMA`. Thus, the `clean` command **drops all the tables** in a given database.
+Unlike other database management systems, {{ ydb-short-name }} does not have a concept of `SCHEMA`. Thus, the `clean` command **drops all the user tables** in a given database.
 
 {% endnote %}
 

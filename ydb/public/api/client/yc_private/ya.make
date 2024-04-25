@@ -1,5 +1,6 @@
 RECURSE(
     access
+    accessservice
     compute
     iam
     kms

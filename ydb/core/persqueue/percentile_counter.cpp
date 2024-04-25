@@ -165,11 +165,11 @@ TPartitionCounterWrapper::operator bool() const {
     return Inited && (!DoReport || Counter);
 }
 
-void TPartitionHistogramWrapper::Setup(bool isSupportivePartition, NKikimr::NPQ::TPercentileCounter* histogram) {
+void TPartitionHistogramWrapper::Setup(bool isSupportivePartition, std::unique_ptr<NKikimr::NPQ::TPercentileCounter>&& histogram) {
     IsSupportivePartition = isSupportivePartition;
     Inited = true;
     if (!IsSupportivePartition) {
-        Histogram.Reset(histogram);
+        Histogram = std::move(histogram);
     } else {
         for (const auto& bucket : histogram->Ranges) {
             Values.insert(std::make_pair(bucket, 0));

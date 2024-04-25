@@ -19,6 +19,9 @@
 
 #include <util/generic/queue.h>
 
+#include <format>
+#include <thread>
+
 #include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
@@ -167,6 +170,8 @@ private:
                 TaskRunner->SetWatermarkIn(watermark);
             }
 
+            size_t threadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
+            std::cerr << std::format("[MISHA][{}] task{}\n", threadId, TaskId);
             res = TaskRunner->Run();
         }
 

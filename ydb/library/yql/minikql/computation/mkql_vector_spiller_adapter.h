@@ -28,7 +28,7 @@ public:
     }
 
     bool HasRunningAsyncIoOperatrion() const {
-        return WriteOperation.has_value() || ReadOperation.has_value();
+        return WriteOperation.has_value() && !WriteOperation->HasValue()|| ReadOperation.has_value();
     }
 
     ///Returns current stete of the adapter

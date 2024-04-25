@@ -6,6 +6,9 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 #include <ydb/library/yql/minikql/computation/mkql_vector_spiller_adapter.h>
 
+#include <thread>
+#include <format>
+
 namespace NKikimr {
 namespace NMiniKQL {
 namespace GraceJoin {
@@ -75,7 +78,8 @@ struct TTableSpilledBucket {
     TTableSpilledBucket(std::shared_ptr<ISpillerFactory> spillerFactory, size_t sizeLimit)
         : StateUi64Adapter(spillerFactory->CreateSpiller(), sizeLimit)
         , StateUi32Adapter(spillerFactory->CreateSpiller(), sizeLimit)
-        , StateCharAdapter(spillerFactory->CreateSpiller(), sizeLimit) {
+        , StateCharAdapter(spillerFactory->CreateSpiller(), sizeLimit)
+        , Ui64Spiller(spillerFactory->CreateSpiller()) {
     }
 
     TVectorSpillerAdapter<ui64, TMKQLAllocator<ui64>> StateUi64Adapter;
@@ -84,12 +88,38 @@ struct TTableSpilledBucket {
 
 
     bool HasRunningAsyncIoOperation() const {
+        return F.Initialized() && F.HasValue();
+        bool ui64Busy = StateUi64Adapter.HasRunningAsyncIoOperatrion();
+        bool ui32Busy = StateUi32Adapter.HasRunningAsyncIoOperatrion();
+        bool charBusy = StateCharAdapter.HasRunningAsyncIoOperatrion();
+
+        if (ui64Busy) {
+            size_t threadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
+            std::cerr << std::format("[MISHA][{}] ui64 busy\n", threadId);
+        }
+        if (ui32Busy) {
+            size_t threadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
+            std::cerr << std::format("[MISHA][{}] ui32 busy\n", threadId);
+        }
+        if (charBusy) {
+            size_t threadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
+            std::cerr << std::format("[MISHA][{}] char busy\n", threadId);
+        }
+
+        /*if (!ui64Busy && !ui32Busy && !charBusy) {
+            size_t threadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
+            std::cerr << std::format("[MISHA][{}] no spiller busy\n", threadId);
+        }*/
+        return ui64Busy || ui32Busy || charBusy;
         return StateUi64Adapter.HasRunningAsyncIoOperatrion()
             || StateUi32Adapter.HasRunningAsyncIoOperatrion()
             || StateCharAdapter.HasRunningAsyncIoOperatrion();
     }
 
     void Update() {
+        if (F.Initialized() && F.HasValue()) {
+            F.ExtractValue();
+        }
         StateUi64Adapter.Update();
         StateUi32Adapter.Update();
         StateCharAdapter.Update();
@@ -108,7 +138,6 @@ struct TTableSpilledBucket {
     }
 
     void ProcessBucketSpilling(TTableBucket& bucket) {
-        Update();
         if (NextVectorToProcess == ENextVectorToProcess::None) {
             NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
             BucketState = EBucketState::Spilled;
@@ -117,35 +146,39 @@ struct TTableSpilledBucket {
         while (NextVectorToProcess != ENextVectorToProcess::None) {
             if (HasRunningAsyncIoOperation()) return;
 
+            size_t count = bucket.DataIntVals.size() * sizeof(ui64);
+
             switch (NextVectorToProcess) {
                 case ENextVectorToProcess::KeyAndVals:
                     if (!StateUi64Adapter.IsAcceptingData()) return;
-                    StateUi64Adapter.AddData(std::move(bucket.KeyIntVals));
+                    F = Ui64Spiller->Put(TRope(TString(reinterpret_cast<const char*>(bucket.KeyIntVals.data()), count)));
+                    bucket.KeyIntVals.clear();
+                    // StateUi64Adapter.AddData(std::move(bucket.KeyIntVals));
                     NextVectorToProcess = ENextVectorToProcess::DataIntVals;
                     break;
                 case ENextVectorToProcess::DataIntVals:
                     if (!StateUi64Adapter.IsAcceptingData()) return;
-                    StateUi64Adapter.AddData(std::move(bucket.DataIntVals));
+                    // StateUi64Adapter.AddData(std::move(bucket.DataIntVals));
                     NextVectorToProcess = ENextVectorToProcess::StringsValues;
                     break;
                 case ENextVectorToProcess::StringsValues:
                     if (!StateCharAdapter.IsAcceptingData()) return;
-                    StateCharAdapter.AddData(std::move(bucket.StringsValues));
+                    // StateCharAdapter.AddData(std::move(bucket.StringsValues));
                     NextVectorToProcess = ENextVectorToProcess::StringsOffsets;
                     break;
                 case ENextVectorToProcess::StringsOffsets:
                     if (!StateUi32Adapter.IsAcceptingData()) return;
-                    StateUi32Adapter.AddData(std::move(bucket.StringsOffsets));
+                    // StateUi32Adapter.AddData(std::move(bucket.StringsOffsets));
                     NextVectorToProcess = ENextVectorToProcess::InterfaceValues;
                     break;
                 case ENextVectorToProcess::InterfaceValues:
                     if (!StateCharAdapter.IsAcceptingData()) return;
-                    StateCharAdapter.AddData(std::move(bucket.InterfaceValues));
+                    // StateCharAdapter.AddData(std::move(bucket.InterfaceValues));
                     NextVectorToProcess = ENextVectorToProcess::InterfaceOffsets;
                     break;
                 case ENextVectorToProcess::InterfaceOffsets:
                     if (!StateUi32Adapter.IsAcceptingData()) return;
-                    StateUi32Adapter.AddData(std::move(bucket.InterfaceOffsets));
+                    // StateUi32Adapter.AddData(std::move(bucket.InterfaceOffsets));
                     NextVectorToProcess = ENextVectorToProcess::None;
                     SpilledBucketsCount++;
 
@@ -255,6 +288,10 @@ struct TTableSpilledBucket {
     ui64 SpilledBucketsCount = 0;
 
     bool IsFinalizing = false;
+
+    ISpiller::TPtr Ui64Spiller;
+    NThreading::TFuture<ui64> F;
+
 };
 
 
@@ -404,11 +441,17 @@ public:
         for (ui64 i = 0; i < NumberOfBuckets; ++i) {
             if (!TableSpilledBuckets[i].IsProcessingFinished() && !TableSpilledBuckets[i].HasRunningAsyncIoOperation()) {
                 TableSpilledBuckets[i].ProcessBucketSpilling(TableBuckets[i]);
+                size_t threadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
+                std::cerr << std::format("[MISHA][{}] process bucket {}\n", threadId, i);
             }
         }
 
         for (ui64 i = 0; i < NumberOfBuckets; ++i) {
-            if (TableSpilledBuckets[i].HasRunningAsyncIoOperation()) return true;
+            if (TableSpilledBuckets[i].HasRunningAsyncIoOperation()) {
+                size_t threadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
+                std::cerr << std::format("[MISHA][{}] busy {}\n", threadId, i);
+                return true;
+            }
         }
 
         return false;

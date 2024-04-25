@@ -22,6 +22,8 @@
 
 #include <chrono>
 #include <limits>
+#include <thread>
+#include <format>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -771,6 +773,8 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                 bool rightBusy = RightPacker->TablePtr->UpdateAndCheckIfBusy();
                 
                 if (rightBusy || leftBusy) {
+                    size_t threadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
+                    std::cerr << std::format("[MISHA][{}] yield spilling\n", threadId);
                     return EFetchResult::Yield;
                 }
 
@@ -879,6 +883,8 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                 if ((resultLeft == EFetchResult::Yield && (!*HaveMoreRightRows || resultRight == EFetchResult::Yield)) ||
                     (resultRight == EFetchResult::Yield && !*HaveMoreLeftRows))
                 {
+                    size_t threadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
+                    std::cerr << std::format("[MISHA][{}] yield fetch\n", threadId);
                     return EFetchResult::Yield;
                 }
 

@@ -84,9 +84,8 @@ namespace NYql::NDq {
             , MaxKeysInRequest(maxKeysInRequest)
             , KeyTypeHelper(keyType)
             , RequestedKeys(1000,
-                KeyTypeHelper.GetValueHash(),
-                KeyTypeHelper.GetValueEqual()
-            )
+                            KeyTypeHelper.GetValueHash(),
+                            KeyTypeHelper.GetValueEqual())
         {
         }
 
@@ -261,7 +260,7 @@ namespace NYql::NDq {
         void FinalizeRequest() {
             YQL_CLOG(INFO, ProviderGeneric) << "Sending lookup results with " << LookupResult.size() << " filled rows, " << RequestedKeys.size() << " empty rows";
             auto guard = Guard(*Alloc);
-            for (auto&& k: RequestedKeys) {
+            for (auto&& k : RequestedKeys) {
                 LookupResult.emplace_back(std::move(k), NUdf::TUnboxedValue{});
             }
             RequestedKeys.clear();
@@ -363,8 +362,7 @@ namespace NYql::NDq {
             NUdf::TUnboxedValue,
             NKikimr::NMiniKQL::TValueHasher,
             NKikimr::NMiniKQL::TValueEqual,
-            NKikimr::NMiniKQL::TMKQLAllocator<NUdf::TUnboxedValue>
-        >;
+            NKikimr::NMiniKQL::TMKQLAllocator<NUdf::TUnboxedValue>>;
         TRequestedKeys RequestedKeys;
         NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator; //TODO move me to TEvReadSplitsPart
         NKikimr::NMiniKQL::TKeyPayloadPairVector LookupResult;

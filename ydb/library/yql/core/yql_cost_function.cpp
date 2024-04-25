@@ -75,6 +75,7 @@ TOptimizerStatistics NYql::ComputeJoinStats(
     if (IsPKJoin(rightStats,rightJoinKeys)) {
         switch (joinKind) {
             case EJoinKind::InnerJoin:
+            case EJoinKind::LeftSemi:
                 newCard = leftStats.Nrows * rightStats.Selectivity; break;
             case EJoinKind::LeftJoin:
             case EJoinKind::LeftOnly:
@@ -99,6 +100,7 @@ TOptimizerStatistics NYql::ComputeJoinStats(
     else if (IsPKJoin(leftStats,leftJoinKeys)) {
         switch (joinKind) {
             case EJoinKind::InnerJoin:
+            case EJoinKind::LeftSemi:
                 newCard = leftStats.Selectivity * rightStats.Nrows; break;
             default: {
                 newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;

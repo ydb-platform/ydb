@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
     }
 
     Y_UNIT_TEST(InvalidDropForExternalTableWithAuth) {
-        auto kikimr = MakeKikimrRunner(true);
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
 
         auto driver = kikimr->GetDriver();
         NScripting::TScriptingClient yqlScriptClient(driver);

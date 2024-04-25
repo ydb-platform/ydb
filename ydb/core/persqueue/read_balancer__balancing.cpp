@@ -140,7 +140,7 @@ TString TPartitionFamily::GetPrefix() const {
     sb << Consumer.GetPrefix() << "family " << Id << " status " << Status
         << " partitions [" << JoinRange(", ", Partitions.begin(), Partitions.end()) << "] ";
     if (Session) {
-        sb << "session \"" << Session->Session << "\" sender " << Session->Sender << " ";
+        sb << "session \"" << Session->SessionName << "\" sender " << Session->Sender << " ";
     }
     return sb;
 }
@@ -525,7 +525,7 @@ std::unique_ptr<TEvPersQueue::TEvReleasePartition> TPartitionFamily::MakeEvRelea
     auto res = std::make_unique<TEvPersQueue::TEvReleasePartition>();
     auto& r = res->Record;
 
-    r.SetSession(Session->Session);
+    r.SetSession(Session->SessionName);
     r.SetTopic(Topic());
     r.SetPath(TopicPath());
     r.SetGeneration(TabletGeneration());
@@ -540,7 +540,7 @@ std::unique_ptr<TEvPersQueue::TEvLockPartition> TPartitionFamily::MakeEvLockPart
     auto res = std::make_unique<TEvPersQueue::TEvLockPartition>();
     auto& r = res->Record;
 
-    r.SetSession(Session->Session);
+    r.SetSession(Session->SessionName);
     r.SetPartition(partitionId);
     r.SetTopic(Topic());
     r.SetPath(TopicPath());
@@ -1326,7 +1326,7 @@ template bool TSession::AllPartitionsReadable(const std::vector<ui32>& partition
 template bool TSession::AllPartitionsReadable(const std::unordered_set<ui32>& partitions) const;
 
 TString TSession::DebugStr() const {
-    return TStringBuilder() << "ReadingSession \"" << Session << "\" (Sender=" << Sender << ", Pipe=" << Pipe
+    return TStringBuilder() << "ReadingSession \"" << SessionName << "\" (Sender=" << Sender << ", Pipe=" << Pipe
             << ", Partitions=[" << JoinRange(", ", Partitions.begin(), Partitions.end())
             << "], ActiveFamilyCount=" << ActiveFamilyCount << ")";
 }
@@ -1403,7 +1403,7 @@ const TStatistics TBalancer::GetStatistics() const {
 
             auto* family = consumer->FindFamily(partitionId);
             if (family && family->Session && family->LockedPartitions.contains(partitionId)) {
-                p.Session = family->Session->Session;
+                p.Session = family->Session->SessionName;
                 p.State = 1;
             }
         }
@@ -1415,7 +1415,7 @@ const TStatistics TBalancer::GetStatistics() const {
     for (auto& [_, session] : Sessions) {
         result.Sessions.push_back(TStatistics::TSessionStatistics());
         auto& s = result.Sessions.back();
-        s.Session = session->Session;
+        s.Session = session->SessionName;
         s.ActivePartitionCount = session->ActivePartitionCount;
         s.InactivePartitionCount = session->InactivePartitionCount;
         s.SuspendedPartitionCount = session->ReleasingPartitionCount;
@@ -1592,10 +1592,10 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
         return;
     }
 
-    if (!session->Session.empty()) {
+    if (!session->SessionName.empty()) {
         LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 GetPrefix() << "pipe " << ev->Get()->ClientId << " client "
-                << session->ClientId << " disconnected session " << session->Session);
+                << session->ClientId << " disconnected session " << session->SessionName);
 
         bool needBalance = false;
         auto* consumer = GetConsumer(session->ClientId);
@@ -1672,7 +1672,7 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
 
     auto* session = jt->second.get();
     session->ClientId = r.GetClientId();
-    session->Session = r.GetSession();
+    session->SessionName = r.GetSession();
     session->Sender = ev->Sender;
     session->Partitions.insert(partitions.begin(), partitions.end());
     session->ClientNode = r.HasClientNode() ? r.GetClientNode() : "none";
@@ -1717,7 +1717,7 @@ void TBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TAc
                 Y_ABORT_UNLESS(session != nullptr);
                 pi->SetClientNode(session->ClientNode);
                 pi->SetProxyNodeId(session->ProxyNodeId);
-                pi->SetSession(session->Session);
+                pi->SetSession(session->SessionName);
                 pi->SetTimestamp(session->CreateTimestamp.Seconds());
                 pi->SetTimestampMs(session->CreateTimestamp.MilliSeconds());
             } else {
@@ -1731,7 +1731,7 @@ void TBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TAc
 
         for (auto& [_, session] : consumer->Sessions) {
             auto si = response->Record.AddReadSessions();
-            si->SetSession(session->Session);
+            si->SetSession(session->SessionName);
 
             ActorIdToProto(session->Sender, si->MutableSessionActor());
         }
@@ -1771,7 +1771,7 @@ bool SessionComparator::operator()(const TSession* lhs, const TSession* rhs) con
     if (lhs->Partitions.size() != rhs->Partitions.size()) {
         return lhs->Partitions.size() < rhs->Partitions.size();
     }
-    return lhs->Session < rhs->Session;
+    return lhs->SessionName < rhs->SessionName;
 }
 
 }

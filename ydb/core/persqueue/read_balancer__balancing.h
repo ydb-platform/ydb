@@ -244,7 +244,7 @@ struct TSession {
 
     // The consumer name
     TString ClientId;
-    TString Session;
+    TString SessionName;
     TActorId Sender;
 
     TString ClientNode;

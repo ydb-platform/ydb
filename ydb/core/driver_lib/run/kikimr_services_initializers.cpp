@@ -602,6 +602,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
         NDnsResolver::TOnDemandDnsResolverOptions resolverOptions;
         resolverOptions.MonCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "dns_resolver");
+        resolverOptions.ForceTcp = nsConfig.GetForceTcp();
+        resolverOptions.KeepSocket = nsConfig.GetKeepSocket();
         IActor *resolver = NDnsResolver::CreateOnDemandDnsResolver(resolverOptions);
 
         setup->LocalServices.emplace_back(

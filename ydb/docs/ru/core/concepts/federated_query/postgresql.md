@@ -7,7 +7,7 @@
     ```sql
     CREATE OBJECT postgresql_datasource_user_password (TYPE SECRET) WITH (value = "password");
     ```
-1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных в составе кластера PostgreSQL. При чтении по умолчанию используется [пространство имен](https://www.postgresql.org/docs/current/catalog-pg-namespace.html) `public`, но это значение можно изменить с помощью опционального параметра `SCHEMA`. Сетевое подключение выполняется по стандартному ([Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html)) по транспорту TCP (`PROTOCOL="NATIVE"`). При работе по защищенным TLS каналам связи используется системные сертификаты, расположенные на серверах {{ydb-full-name}}. 
+1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных в составе кластера PostgreSQL. При чтении по умолчанию используется [пространство имен](https://www.postgresql.org/docs/current/catalog-pg-namespace.html) `public`, но это значение можно изменить с помощью опционального параметра `SCHEMA`. Сетевое подключение выполняется по стандартному ([Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html)) по транспорту TCP (`PROTOCOL="NATIVE"`). При работе по защищенным TLS каналам связи используется системные сертификаты, расположенные на серверах {{ ydb-full-name}}. 
     ```sql
     CREATE EXTERNAL DATA SOURCE postgresql_datasource WITH (
         SOURCE_TYPE="PostgreSQL",
@@ -21,7 +21,7 @@
         SCHEMA="public"
     );
     ```
-1. Для корректного выполнения запроса необходимо [развернуть коннектор](../../deploy/manual/deploy-ydb-federated-query.md) и обеспечить сетевой доступ со всех хостов {{ydb-full-name}} к целевому кластеру PostgreSQL.
+1. Для корректного выполнения запроса необходимо [развернуть коннектор](../../deploy/manual/deploy-ydb-federated-query.md) и обеспечить сетевой доступ со всех хостов {{ ydb-full-name }} к целевому кластеру PostgreSQL.
 1. [Выполнить запрос](#query) к базе данных.
 
 ## Синтаксис запросов { #query }
@@ -37,7 +37,7 @@ SELECT * FROM postgresql_datasource.table_name
 
 ## Ограничения
 
-При работе с кластерами ClickHouse существует ряд ограничений:
+При работе с кластерами PostgreSQL существует ряд ограничений:
 
 1. Поддерживаются только запросы чтения данных - `SELECT`, остальные виды запросов не поддерживаются.
 1. {% include [!](_includes/datetime_limits.md) %}
@@ -45,9 +45,9 @@ SELECT * FROM postgresql_datasource.table_name
 
 ## Поддерживаемые типы данных
 
-Ниже приведена таблица соответствия типов PostgreSQL и типов {{ydb-full-name}}.
+Ниже приведена таблица соответствия типов PostgreSQL и типов {{ ydb-full-name }}.
 
-|Тип данных PostgreSQL|Тип данных {{ydb-full-name}}|Примечания|
+|Тип данных PostgreSQL|Тип данных {{ ydb-full-name }}|Примечания|
 |---|----|------|
 |`boolean`|`Bool`||
 |`smallint`|`Int16`||

@@ -45,9 +45,9 @@ SELECT * FROM clickhouse_datasource.table_name
 
 ## Поддерживаемые типы данных
 
-Ниже приведена таблица соответствия типов ClickHouse и типов {{ydb-full-name}}.
+Ниже приведена таблица соответствия типов ClickHouse и типов {{ ydb-full-name }}.
 
-|Тип данных ClickHouse|Тип данных {{ydb-full-name}}|Примечания|
+|Тип данных ClickHouse|Тип данных {{ ydb-full-name }}|Примечания|
 |---|----|------|
 |`Bool`|`Bool`||
 |`Int8`|`Int8`||

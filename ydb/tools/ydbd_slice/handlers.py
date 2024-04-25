@@ -85,6 +85,9 @@ class Slice:
             if os.path.isfile(script_path):
                 cmd = ["bash", script_path]
                 logger.info("run cmd '%s'", cmd)
+                subprocess.check_call(["echo START {}".format(script_path)])
+                subprocess.check_call(["ls", script_path])
+                subprocess.check_call(["echo END   {}".format(script_path)])
                 try:
                     time.sleep(2)  # TODO: fix
                     subprocess.check_call(cmd)

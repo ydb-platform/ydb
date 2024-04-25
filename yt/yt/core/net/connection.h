@@ -114,6 +114,12 @@ IConnectionWriterPtr CreateOutputConnectionFromPath(
     const TRefCountedPtr& pipeHolder,
     std::optional<int> capacity = {});
 
+IConnectionWriterPtr CreateDeliveryFencedOutputConnectionFromPath(
+    const TString& pipePath,
+    const NConcurrency::IPollerPtr& poller,
+    const TRefCountedPtr& pipeHolder,
+    std::optional<int> capacity = {});
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NNet

@@ -60,7 +60,7 @@ void TCoroutineBase::TTrampoLine<TBody>::DoRun()
         }
     }
 
-    owner->State_ = ECoroState::Completed;
+    owner->State_ = EState::Completed;
     owner->Suspend();
 
     YT_ABORT();

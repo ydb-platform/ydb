@@ -376,7 +376,7 @@ TFuture<void> TProcessBase::Spawn()
 
 void TSimpleProcess::DoSpawn()
 {
-#ifdef _unix_
+#ifdef _linux_
     auto finally = Finally([&] {
         StdPipes_[STDIN_FILENO].CloseReadFD();
         StdPipes_[STDOUT_FILENO].CloseWriteFD();

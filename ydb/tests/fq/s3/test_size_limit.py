@@ -13,9 +13,10 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 
 class TestS3(TestYdsBase):
     @yq_all
-    @pytest.mark.parametrize("limit", [5, 10, 15, 20, 100, 1000])
+    @pytest.mark.parametrize("kikimr_params", [{"raw": 20}, {"raw": 150}, {"raw": 1000}], indirect=True)
+    @pytest.mark.parametrize("limit", [5, 100, 500, 1500])
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_size_limit(self, kikimr, s3, client, limit, unique_prefix):
+    def test_size_limit(self, kikimr, s3, client, limit, kikimr_params, unique_prefix):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -33,25 +34,37 @@ class TestS3(TestYdsBase):
             aws_secret_access_key="secret_key"
         )
 
-        info = "Да и ты, читатель, разве ты не Ничья Рыба и одновременно разве не Рыба на Лине?"
+        # info = "Да и ты, читатель, разве ты не Ничья Рыба и одновременно разве не Рыба на Лине?"
+        info = """
+            01234567890123456789012345678901234567890123456789
+            01234567890123456789012345678901234567890123456789
+            01234567890123456789012345678901234567890123456789
+            01234567890123456789012345678901234567890123456789
+        """
+
         s3_client.put_object(Body=info, Bucket='fbucket', Key='info.txt', ContentType='text/plain')
         kikimr.control_plane.wait_bootstrap(1)
         storage_connection_name = unique_prefix + "test-connection"
         client.create_storage_connection(storage_connection_name, "fbucket")
 
-        sql = R'''
+        sql = f'''
                 SELECT
                     data
                 FROM
-                    `{}`.`info.txt`
+                    `{storage_connection_name}`.`info.txt`
                 WITH(
-                read_max_bytes="{}",
+                read_max_bytes="{limit}",
                 format=raw,
                 SCHEMA (data String,
                     ))
-            '''.format(storage_connection_name, limit)
+            '''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+
+        if kikimr_params.param['raw'] < min(len(info), limit):
+            client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+            return
+
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         data = client.get_result_data(query_id)

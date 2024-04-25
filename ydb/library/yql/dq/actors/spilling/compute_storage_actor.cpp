@@ -9,9 +9,6 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
-#include <thread>
-#include <format>
-
 
 namespace NYql::NDq {
 
@@ -164,8 +161,6 @@ private:
         StoredBlobs_.emplace(msg.BlobId);
 
         WritingBlobs_.erase(it);
-        size_t threadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
-        std::cerr << std::format("[MISHA][{}] wakeup\n", threadId);
         WakeupCallback_();
     }
 

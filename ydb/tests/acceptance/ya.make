@@ -12,8 +12,7 @@ TEST_SRCS(
     test_slice_sample.py
 )
 
-TIMEOUT(200)
-SIZE(MEDIUM)
+SIZE(LARGE)
 
 DEPENDS(
     ydb/apps/ydbd

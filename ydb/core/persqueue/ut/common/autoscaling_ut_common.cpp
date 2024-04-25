@@ -244,8 +244,9 @@ NThreading::TFuture<std::set<size_t>> TTestReadSession::Wait(std::set<size_t> pa
 }
 
 void TTestReadSession::Assert(const std::set<size_t>& expected, NThreading::TFuture<std::set<size_t>> f, const TString& message) {
-    Cerr << ">>>>> " << Name << " Partitions " << Partitions << " received #2" << Endl << Flush;
-    UNIT_ASSERT_VALUES_EQUAL_C(expected, f.HasValue() ? f.GetValueSync() : Partitions, message);
+    auto actual = f.HasValue() ? f.GetValueSync() : GetPartitions();
+    Cerr << ">>>>> " << Name << " Partitions " << actual << " received #2" << Endl << Flush;
+    UNIT_ASSERT_VALUES_EQUAL_C(expected, actual, message);
     Release();
 }
 
@@ -263,6 +264,7 @@ void TTestReadSession::Run() {
 
 void TTestReadSession::Close() {
     Run();
+    Cerr << ">>>>> " << Name << " Closing reading session " << Endl << Flush;
     Session->Close();
     Session.reset();
 }

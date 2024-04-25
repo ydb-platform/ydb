@@ -137,9 +137,10 @@ ui32 TPartitionFamily::NextStep() {
 
 TString TPartitionFamily::GetPrefix() const {
     TStringBuilder sb;
-    sb << Consumer.GetPrefix() << " family " << Id << " status " << Status << " ";
+    sb << Consumer.GetPrefix() << "family " << Id << " status " << Status
+        << " partitions [" << JoinRange(", ", Partitions.begin(), Partitions.end()) << "] ";
     if (Session) {
-        sb << " session \"" << Session->Session << "\" sender " << Session->Sender;
+        sb << "session \"" << Session->Session << "\" sender " << Session->Sender << " ";
     }
     return sb;
 }
@@ -225,13 +226,15 @@ bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ct
     Session->Families.erase(this);
     Session = nullptr;
 
+    TargetStatus = ETargetStatus::Free;
+
     switch (targetStatus) {
         case ETargetStatus::Destroy:
             Destroy(ctx);
             return false;
 
         case ETargetStatus::Free:
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                     GetPrefix() << " is free.");
 
             Status = EStatus::Free;
@@ -291,7 +294,7 @@ void TPartitionFamily::StartReading(TSession& session, const TActorContext& ctx)
         return;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
             GetPrefix() << "start reading");
 
     Status = EStatus::Active;
@@ -494,7 +497,7 @@ void TPartitionFamily::UpdatePartitionMapping(const std::vector<ui32>& partition
 void TPartitionFamily::UpdateSpecialSessions() {
     bool hasChanges = false;
 
-    for (auto& [_, session] : Consumer.Session) {
+    for (auto& [_, session] : Consumer.Sessions) {
         if (session->WithGroups() && session->AllPartitionsReadable(Partitions) && session->AllPartitionsReadable(WantedPartitions)) {
             auto [_, inserted] = SpecialSessions.try_emplace(session->Pipe, session);
             if (inserted) {
@@ -527,9 +530,6 @@ std::unique_ptr<TEvPersQueue::TEvReleasePartition> TPartitionFamily::MakeEvRelea
     r.SetPath(TopicPath());
     r.SetGeneration(TabletGeneration());
     r.SetClientId(Session->ClientId);
-    //if (count) { TODO always 1 or 0
-    //    r.SetCount(1);
-    //}
     r.SetGroup(partitionId + 1);
     ActorIdToProto(Session->Pipe, r.MutablePipeClient());
 
@@ -749,10 +749,11 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
     }
 
     family->WantedPartitions.clear();
-    family->UpdateSpecialSessions();
 
     if (destroy) {
         DestroyFamily(family, ctx);
+    } else {
+        family->UpdateSpecialSessions();
     }
 
     return !newFamilies.empty();
@@ -822,7 +823,7 @@ void TConsumer::RegisterReadingSession(TSession* session, const TActorContext& c
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
             GetPrefix() << "register reading session " << session->DebugStr());
 
-    Session[session->Pipe] = session;
+    Sessions[session->Pipe] = session;
 
     if (session->WithGroups()) {
         for (auto& [_, family] : Families) {
@@ -847,12 +848,6 @@ std::vector<TPartitionFamily*> Snapshot(const std::unordered_map<size_t, const s
 }
 
 void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext& ctx) {
-    if (session->WithGroups()) {
-        for (auto& [_, family] : Families) {
-            family->SpecialSessions.erase(session->Pipe);
-        }
-    }
-
     for (auto* family : Snapshot(Families)) {
         if (session == family->Session) {
             if (family->Reset(ctx)) {
@@ -860,9 +855,11 @@ void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext&
                 FamiliesRequireBalancing.erase(family->Id);
             }
         }
+
+        family->SpecialSessions.erase(session->Pipe);
     }
 
-    Session.erase(session->Pipe);
+    Sessions.erase(session->Pipe);
 }
 
 bool TConsumer::Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx) {
@@ -1136,11 +1133,11 @@ size_t GetMaxFamilySize(const std::unordered_map<size_t, const std::unique_ptr<T
 
 void TConsumer::Balance(const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-            GetPrefix() << "balancing. Sessions=" << Session.size() << ", Families=" << Families.size()
+            GetPrefix() << "balancing. Sessions=" << Sessions.size() << ", Families=" << Families.size()
             << ", UnradableFamilies=" << UnreadableFamilies.size() << " [" << DebugStr(UnreadableFamilies)
             << "], RequireBalancing=" << FamiliesRequireBalancing.size() << " [" << DebugStr(FamiliesRequireBalancing) << "]");
 
-    if (Session.empty()) {
+    if (Sessions.empty()) {
         return;
     }
 
@@ -1156,7 +1153,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
         }
     }
 
-    TOrderedSessions commonSessions = OrderSessions(Session, [](auto* session) {
+    TOrderedSessions commonSessions = OrderSessions(Sessions, [](auto* session) {
         return !session->WithGroups();
     });
 
@@ -1300,21 +1297,14 @@ void TConsumer::Release(ui32 partitionId, const TActorContext& ctx) {
 // TSession
 //
 
-TSession::TSession(const TActorId& pipeClient)
-            : Pipe(pipeClient)
+TSession::TSession(const TActorId& pipe)
+            : Pipe(pipe)
             , ServerActors(0)
             , ActivePartitionCount(0)
             , InactivePartitionCount(0)
             , ReleasingPartitionCount(0)
             , ActiveFamilyCount(0)
             , ReleasingFamilyCount(0) {
-}
-
-void TSession::Init(const TString& clientId, const TString& session, const TActorId& sender, const std::vector<ui32>& partitions) {
-    ClientId = clientId;
-    Session = session;
-    Sender = sender;
-    Partitions.insert(partitions.begin(), partitions.end());
 }
 
 bool TSession::WithGroups() const { return !Partitions.empty(); }
@@ -1587,36 +1577,48 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActor
 void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
     auto it = Sessions.find(ev->Get()->ClientId);
 
+    if (it == Sessions.end()) {
+        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "pipe " << ev->Get()->ClientId << " disconnected but there aren't sessions exists.");
+        return;
+    }
+
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
             GetPrefix() << "pipe " << ev->Get()->ClientId << " disconnected; active server actors: "
             << (it != Sessions.end() ? it->second->ServerActors : -1));
 
-    if (it != Sessions.end()) {
-        auto& session = it->second;
-        if (--(session->ServerActors) > 0) {
-            return;
-        }
-        if (!session->Session.empty()) {
-            LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    GetPrefix() << "pipe " << ev->Get()->ClientId << " client "
-                    << session->ClientId << " disconnected session " << session->Session);
+    auto& session = it->second;
+    if (--(session->ServerActors) > 0) {
+        return;
+    }
 
-            auto cit = Consumers.find(session->ClientId);
-            if (cit != Consumers.end()) {
-                auto& consumer = cit->second;
-                consumer->UnregisterReadingSession(session.get(), ctx);
-                if (consumer->Session.empty()) {
-                    Consumers.erase(cit);
-                } else {
-                    consumer->Balance(ctx);
-                }
+    if (!session->Session.empty()) {
+        LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "pipe " << ev->Get()->ClientId << " client "
+                << session->ClientId << " disconnected session " << session->Session);
+
+        bool needBalance = false;
+        auto* consumer = GetConsumer(session->ClientId);
+        if (consumer) {
+            consumer->UnregisterReadingSession(session.get(), ctx);
+
+            if (consumer->Sessions.empty()) {
+                Consumers.erase(consumer->ConsumerName);
+            } else {
+                needBalance = true;;
             }
-        } else {
-            LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                    GetPrefix() << "pipe " << ev->Get()->ClientId << " disconnected no session");
-
-            Sessions.erase(it);
         }
+
+        Sessions.erase(it);
+
+        if (needBalance) {
+            consumer->Balance(ctx);
+        }
+    } else {
+        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "pipe " << ev->Get()->ClientId << " disconnected no session");
+
+        Sessions.erase(it);
     }
 }
 
@@ -1669,7 +1671,10 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
     }
 
     auto* session = jt->second.get();
-    session->Init(r.GetClientId(), r.GetSession(), ev->Sender, partitions);
+    session->ClientId = r.GetClientId();
+    session->Session = r.GetSession();
+    session->Sender = ev->Sender;
+    session->Partitions.insert(partitions.begin(), partitions.end());
     session->ClientNode = r.HasClientNode() ? r.GetClientNode() : "none";
     session->ProxyNodeId = ev->Sender.NodeId();
     session->CreateTimestamp = TAppData::TimeProvider->Now();
@@ -1724,7 +1729,7 @@ void TBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TAc
             }
         }
 
-        for (auto& [_, session] : consumer->Session) {
+        for (auto& [_, session] : consumer->Sessions) {
             auto si = response->Record.AddReadSessions();
             si->SetSession(session->Session);
 
@@ -1750,7 +1755,7 @@ bool TPartitionFamilyComparator::operator()(const TPartitionFamily* lhs, const T
     if (lhs->InactivePartitionCount != rhs->InactivePartitionCount) {
         return lhs->InactivePartitionCount < rhs->InactivePartitionCount;
     }
-    return (lhs->Id < rhs->Id);
+    return lhs->Id < rhs->Id;
 }
 
 bool SessionComparator::operator()(const TSession* lhs, const TSession* rhs) const {

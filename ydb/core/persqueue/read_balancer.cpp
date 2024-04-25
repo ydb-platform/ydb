@@ -518,6 +518,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             newPartitions.push_back(TPartInfo{p.GetPartition(), p.GetTabletId(), 0, partitionsInfo[p.GetPartition()].KeyRange});
 
             ++NumActiveParts;
+
+            // for back compatibility. Remove it after 24-3
+            newGroups.push_back({p.GetGroup(), p.GetPartition()});
         } else { //group is already defined
             partitionsInfo[p.GetPartition()] = it->second;
         }

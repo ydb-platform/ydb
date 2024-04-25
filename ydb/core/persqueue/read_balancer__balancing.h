@@ -180,7 +180,7 @@ struct TConsumer {
     // Mapping the IDs of the partitions to the families they belong to
     std::unordered_map<ui32, TPartitionFamily*> PartitionMapping;
     // All reading sessions in which the family is currently being read.
-    std::unordered_map<TActorId, TSession*> Session;
+    std::unordered_map<TActorId, TSession*> Sessions;
 
     // Families is not reading now.
     std::unordered_map<size_t, TPartitionFamily*> UnreadableFamilies;
@@ -238,13 +238,14 @@ private:
 };
 
 struct TSession {
-    TSession(const TActorId& pipeClient);
+    TSession(const TActorId& pipe);
+
+    const TActorId Pipe;
 
     // The consumer name
     TString ClientId;
     TString Session;
     TActorId Sender;
-    TActorId Pipe;
 
     TString ClientNode;
     ui32 ProxyNodeId;
@@ -269,8 +270,6 @@ struct TSession {
 
     // The partition families that are being read by this session.
     TOrderedPartitionFamilies Families;
-
-    void Init(const TString& clientId, const TString& session, const TActorId& sender, const std::vector<ui32>& partitions);
 
     // true if client connected to read from concret partitions
     bool WithGroups() const;

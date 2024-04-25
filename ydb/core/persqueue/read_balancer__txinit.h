@@ -80,7 +80,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
             }
             Self->PartitionsInfo.insert(partitionsInfo.rbegin(), partitionsInfo.rend());
 
-            Self->TotalGroups =Self->PartitionsInfo.size();
+            Self->TotalGroups = Self->PartitionsInfo.size();
 
             while (!tabletsRowset.EndOfSet()) { //found out tablets for partitions
                 ui64 tabletId = tabletsRowset.GetValue<Schema::Tablets::TabletId>();

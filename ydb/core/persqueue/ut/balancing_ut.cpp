@@ -55,11 +55,15 @@ Y_UNIT_TEST_SUITE(Balancing) {
             readSession2.WaitAndAssertPartitions({0, 1}, "The reading session should read partitions 0 and 1 because it clearly required them to be read.");
             readSession2.Run();
 
+            Sleep(TDuration::Seconds(1));
+
             auto p0 = readSession0.GetPartitions();
             auto p1 = readSession1.GetPartitions();
-            p0.insert(p1.begin(), p1.end());
-            auto p2 = readSession2.GetPartitions();
-            UNIT_ASSERT_VALUES_EQUAL_C(8, p0.size(), "Must read all partitions but " << p0);
+            auto pa = p0;
+            pa.insert(p1.begin(), p1.end());
+            UNIT_ASSERT_VALUES_EQUAL_C(4, p0.size(), "There should be an even distribution of partitions " << p0);
+            UNIT_ASSERT_VALUES_EQUAL_C(4, p1.size(), "There should be an even distribution of partitions " << p1);
+            UNIT_ASSERT_VALUES_EQUAL_C(8, pa.size(), "Must read all partitions but " << pa);
         }
 
         TTestReadSession readSession3("Session-3", client, Max<size_t>(), true, {0});
@@ -76,7 +80,7 @@ Y_UNIT_TEST_SUITE(Balancing) {
             readSession3.Run();
             readSession3.Close();
 
-            readSession2.WaitAndAssertPartitions({0, 1}, "The reading session should read partitions 0 and 1 because it clearly required them to be read.");
+            readSession2.WaitAndAssertPartitions({0, 1}, "The reading session should read partitions 0 and 1 because it clearly required them to be read. (after release Session-3)");
             readSession2.Run();
         }
 

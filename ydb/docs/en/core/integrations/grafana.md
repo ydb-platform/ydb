@@ -80,11 +80,11 @@ Time series visualization options are selectable if the query returns at least o
 
 #### Multi-line time series
 
-To create a multi-line time series, the query must return at least 3 fields in the following order:
+To create a multi-line time series, the query must return at least 3 fields:
 
-- field 1: `Date`, `Datetime` or `Timestamp` (for now, working with time is supported only in UTC timezone)
-- field 2, 3: metrics - at least two fields with `Int64`, `Int32`, `Int16`, `Int8`, `Uint64`, `Uint32`, `Uint16`, `Uint8`, `Double` or `Float` type
-- field 4+ (optional): the metric values
+- field with `Date`, `Datetime` or `Timestamp` type (for now, working with time is supported only in UTC timezone)
+- metric - field with `Int64`, `Int32`, `Int16`, `Int8`, `Uint64`, `Uint32`, `Uint16`, `Uint8`, `Double` or `Float` type
+- either metric or field with `String` or `Utf8` type - the value for splitting metrics into separate series. 
 
 For example:
 

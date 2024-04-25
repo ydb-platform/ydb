@@ -43,7 +43,7 @@ DECLARE_REFCOUNTED_CLASS(TBucket)
 struct TExecutionPool;
 
 // High 16 bits is thread index and 48 bits for thread pool ptr.
-YT_THREAD_LOCAL(TPackedPtr) ThreadCookie = 0;
+YT_DEFINE_THREAD_LOCAL(TPackedPtr, ThreadCookie, 0);
 
 static constexpr auto LogDurationThreshold = TDuration::Seconds(1);
 
@@ -636,7 +636,7 @@ public:
         // Callback keeps raw ptr to bucket to minimize bucket ref count.
         action.Callback = BIND(&TBucket::RunCallback, Unretained(bucket), std::move(callback), cpuInstant);
         action.BucketHolder = MakeStrong(bucket);
-        action.EnqueuedThreadCookie = ThreadCookie;
+        action.EnqueuedThreadCookie = ThreadCookie();
 
         InvokeQueue_.Enqueue(std::move(action));
 
@@ -1201,7 +1201,7 @@ protected:
 
     void OnStart() override
     {
-        ThreadCookie = TTaggedPtr(Queue_.Get(), static_cast<ui16>(Index_)).Pack();
+        ThreadCookie() = TTaggedPtr(Queue_.Get(), static_cast<ui16>(Index_)).Pack();
     }
 
     void StopPrologue() override

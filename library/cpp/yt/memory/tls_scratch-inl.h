@@ -11,14 +11,13 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-TMutableRange<T> GetTlsScratchBuffer(size_t size)
+YT_PREVENT_TLS_CACHING TMutableRange<T> GetTlsScratchBuffer(size_t size)
 {
     // This is a workround for std::vector<bool>.
     using TBoxed = std::array<T, 1>;
-    YT_THREAD_LOCAL(std::vector<TBoxed>) tlsVector;
-    auto& vector = GetTlsRef(tlsVector);
-    vector.reserve(size);
-    auto range = TMutableRange(reinterpret_cast<T*>(vector.data()), size);
+    thread_local std::vector<TBoxed> tlsVector;
+    tlsVector.reserve(size);
+    auto range = TMutableRange(reinterpret_cast<T*>(tlsVector.data()), size);
     std::fill(range.begin(), range.end(), T());
     return range;
 }

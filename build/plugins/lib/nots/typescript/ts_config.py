@@ -276,7 +276,7 @@ class TsConfig(object):
         return ts_glob(ts_glob_config, all_files)
 
     def get_out_dirs(self):
-        # type: () -> set[str]
+        # type: () -> list[str]
         output_dirs = [self.compiler_option("outDir"), self.compiler_option("declarationDir")]
 
-        return {d for d in output_dirs if d is not None}
+        return [d for d in output_dirs if d is not None]

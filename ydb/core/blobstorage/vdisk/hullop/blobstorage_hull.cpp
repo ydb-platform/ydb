@@ -2,6 +2,7 @@
 #include "blobstorage_hullactor.h"
 #include "hullop_delayedresp.h"
 #include "hullop_compactfreshappendix.h"
+#include <library/cpp/digest/sfh/sfh.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hulllogcutternotify.h>
 #include <ydb/core/blobstorage/base/vdisk_sync_common.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
@@ -513,11 +514,13 @@ namespace NKikimr {
 
     ///////////////// SYNC //////////////////////////////////////////////////////
     TLsnSeg THull::AllocateLsnForSyncDataCmd(const TString &data) {
+        NSyncLog::TFragmentReader fragment(data);
+
         // count number of elements
         ui32 counter = 0;
         auto count = [&counter] (const void *) { counter++; };
         // do job - count all elements
-        NSyncLog::TFragmentReader(data).ForEach(count, count, count, count);
+        fragment.ForEach(count, count, count, count);
 
         // allocate LsnSeg; we reserve a diapason of lsns since we put multiple records
         ui64 lsnAdvance = counter;
@@ -536,7 +539,7 @@ namespace NKikimr {
             curLsn++;
         };
         // do job - update blocks cache
-        NSyncLog::TFragmentReader(data).ForEach(otherHandler, blockHandler, otherHandler, blockHandlerV2);
+        fragment.ForEach(otherHandler, blockHandler, otherHandler, blockHandlerV2);
         // check that all records are applied
         Y_DEBUG_ABORT_UNLESS(curLsn == seg.Last + 1);
 

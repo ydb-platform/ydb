@@ -1,5 +1,7 @@
 #include "blobstorage_syncer_localwriter.h"
+#include <library/cpp/digest/sfh/sfh.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgwriter.h>
 
 namespace NKikimr {
 
@@ -184,6 +186,122 @@ namespace NKikimr {
     IActor *CreateLocalSyncDataExtractor(const TIntrusivePtr<TVDiskContext> &vctx, const TActorId &skeletonId,
         const TActorId &parentId, std::unique_ptr<TEvLocalSyncData> ev) {
         return new TLocalSyncDataExtractorActor(vctx, skeletonId, parentId, std::move(ev));
+    }
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    // TLocalSyncDataCutterActor -- actor extracts data from TEvLocalSyncData, cuts it into
+    //    smaller chunks and sends in multiple messages to Skeleton
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    class TLocalSyncDataCutterActor : public TActorBootstrapped<TLocalSyncDataCutterActor> {
+        TIntrusivePtr<TVDiskConfig> VConfig;
+        TIntrusivePtr<TVDiskContext> VCtx;
+        TActorId SkeletonId;
+        TActorId ParentId;
+        std::unique_ptr<TEvLocalSyncData> Ev;
+        std::vector<TString> Chunks;
+
+        ui32 ChunksInFlight = 0;
+        bool CompressChunks;
+        ui32 MaxChunksInFlight;
+        ui32 MaxChunksSize;
+
+    public:
+        void Bootstrap(const TActorContext &ctx) {
+            TInstant startTime = TAppData::TimeProvider->Now();
+            std::unique_ptr<NSyncLog::TNaiveFragmentWriter> fragmentWriter;
+
+            if (CompressChunks) {
+                fragmentWriter.reset(new NSyncLog::TLz4FragmentWriter);
+            } else {
+                fragmentWriter.reset(new NSyncLog::TNaiveFragmentWriter);
+            }
+
+            auto addChunk = [&]() {
+                if (fragmentWriter->GetSize()) { 
+                    TString chunk;
+                    fragmentWriter->Finish(&chunk);
+                    Chunks.emplace_back(std::move(chunk));
+                    fragmentWriter->Clear();
+                }
+            };
+
+            auto copy = [&] (const void* ptr) {
+                const NSyncLog::TRecordHdr* rec = (const NSyncLog::TRecordHdr*)((char*)ptr - sizeof(NSyncLog::TRecordHdr));
+                if (fragmentWriter->GetSize() + rec->GetSize() > MaxChunksSize) {
+                    addChunk();
+                }
+                fragmentWriter->Push(rec, rec->GetSize());
+            };
+
+            NSyncLog::TFragmentReader fragmentReader(Ev->Data);
+            fragmentReader.ForEach(copy, copy, copy, copy);
+
+            addChunk();
+
+            TInstant finishTime = TAppData::TimeProvider->Now();
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_SYNCER, VCtx->VDiskLogPrefix
+                    << "TLocalSyncDataCutterActor: VDiskId# " << Ev->VDiskID.ToString()
+                    << " dataSize# " << Ev->Data.size()
+                    << " duration# %s" << (finishTime - startTime));
+
+            Become(&TThis::StateFunc);
+        }
+
+        void Finish(const TActorContext& ctx, const NKikimrProto::EReplyStatus& status) {
+            ctx.Send(ParentId, new TEvLocalSyncDataResult(status, TAppData::TimeProvider->Now(), nullptr, nullptr));
+            PassAway();
+        }
+
+        void Handle(const TEvLocalSyncDataResult::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Get()->Status == NKikimrProto::OK) {
+                --ChunksInFlight;
+                if (Chunks.empty() && ChunksInFlight == 0) {
+                    Finish(ctx, NKikimrProto::OK);
+                } else {
+                    SendChunks(ctx);
+                }
+            } else {
+                Finish(ctx, ev->Get()->Status);
+            }
+        }
+
+        void SendChunks(const TActorContext& ctx) {
+            while (ChunksInFlight < MaxChunksInFlight && !Chunks.empty()) {
+                ctx.Send(SkeletonId, new TEvLocalSyncData(Ev->VDiskID, Ev->SyncState, std::move(Chunks.back())));
+                Chunks.pop_back();
+                ++ChunksInFlight;
+            }
+        }
+
+    public:
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::VDISK_LOCALSYNCDATA_CUTTER;
+        }
+
+        TLocalSyncDataCutterActor(
+                const TIntrusivePtr<TVDiskConfig>& vconfig,
+                const TIntrusivePtr<TVDiskContext>& vctx,
+                const TActorId& skeletonId,
+                const TActorId& parentId,
+                std::unique_ptr<TEvLocalSyncData> ev)
+            : VCtx(vctx)
+            , SkeletonId(skeletonId)
+            , ParentId(parentId)
+            , Ev(std::move(ev))
+            , CompressChunks(vconfig->MaxSyncLogChunksInFlight)
+            , MaxChunksInFlight(vconfig->MaxSyncLogChunksInFlight)
+            , MaxChunksSize(vconfig->MaxSyncLogChunkSize)
+        {}
+
+    STRICT_STFUNC(StateFunc, {
+        HFunc(TEvLocalSyncDataResult, Handle);
+    })
+
+    };
+
+    IActor* CreateLocalSyncDataCutter(const TIntrusivePtr<TVDiskConfig>& vconfig, const TIntrusivePtr<TVDiskContext>& vctx,
+        const TActorId& skeletonId, const TActorId& parentId, std::unique_ptr<TEvLocalSyncData> ev) {
+        return new TLocalSyncDataCutterActor(vconfig, vctx, skeletonId, parentId, std::move(ev));
     }
 
 

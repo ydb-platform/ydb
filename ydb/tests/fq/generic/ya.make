@@ -51,6 +51,7 @@ ENDIF()
 
 PEERDIR(
     ydb/tests/fq/generic/utils
+    ydb/tests/tools/datastreams_helpers
 
     library/python/testing/recipe
     library/python/testing/yatest_common
@@ -66,6 +67,7 @@ TEST_SRCS(
     test_clickhouse.py
     test_join.py
     test_postgresql.py
+    test_streaming_join.py
     test_ydb.py
 )
 

@@ -765,9 +765,15 @@ public:
             return *this;
         }
 
+        TLoadTableMetadataSettings& WithAuthInfo(bool enable) {
+            RequestAuthInfo_ = enable;
+            return *this;
+        }
+
         bool RequestStats_ = false;
         bool WithPrivateTables_ = false;
         bool WithExternalDatasources_ = false;
+        bool RequestAuthInfo_ = true;
     };
 
     class IKqpTableMetadataLoader : public std::enable_shared_from_this<IKqpTableMetadataLoader> {

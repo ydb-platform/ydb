@@ -542,7 +542,7 @@ The result will be liquibase synchronization in your project:
 
 ![_assets/liquibase-step-4.png](_assets/liquibase-step-4.png)
 
-## Connecting to {{ ydb-short-name }}
+## Connecting to {{ ydb-short-name }} {#connect-to-ydb}
 
 In the examples above, a Docker container was used, which didn't require any additional authentication settings.
 

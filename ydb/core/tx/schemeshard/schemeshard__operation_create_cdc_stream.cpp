@@ -753,7 +753,7 @@ ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& str
         return CreateReject(opId, checks.GetStatus(), checks.GetError());
     }
 
-    return {};
+    return nullptr;
 }
 
 ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPath& tablePath) {
@@ -771,10 +771,10 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
         .NotUnderOperation();
 
     if (!checks) {
-        return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+        return CreateReject(opId, checks.GetStatus(), checks.GetError());
     }
 
-    return {};
+    return nullptr;
 }
 
 } // anonymous

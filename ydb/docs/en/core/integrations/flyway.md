@@ -149,7 +149,7 @@ flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration -baseli
 
 {% note info %}
 
-It is important to note that all examples use a Docker container, which does not require any additional authentication parameters.
+All examples use a Docker container, which does not require any additional authentication parameters.
 
 You can see how to connect to {{ ydb-short-name }} in the [next section](./liquibase.md#connect-to-ydb).
 

@@ -173,11 +173,11 @@ void TBaseChangeSender::SendRecords() {
             break;
         }
 
+        processedAtLeastOne = true;
+
         if (PendingBody && PendingBody.begin()->Order <= it->first) {
             break;
         }
-
-        processedAtLeastOne = true;
 
         if (!it->second->IsBroadcast()) {
             const ui64 partitionId = Resolver->GetPartitionId(it->second);

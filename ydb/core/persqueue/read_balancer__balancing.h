@@ -272,7 +272,7 @@ struct TSession {
     size_t ReleasingFamilyCount;
 
     // The partition families that are being read by this session.
-    TOrderedPartitionFamilies Families;
+    std::unordered_map<size_t, TPartitionFamily*> Families;
 
     // true if client connected to read from concret partitions
     bool WithGroups() const;

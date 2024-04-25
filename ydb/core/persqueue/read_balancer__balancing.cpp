@@ -223,7 +223,7 @@ bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ct
         --Consumer.ActiveFamilyCount;
     }
 
-    Session->Families.erase(this);
+    Session->Families.erase(this->Id);
     Session = nullptr;
 
     TargetStatus = ETargetStatus::Free;
@@ -300,7 +300,7 @@ void TPartitionFamily::StartReading(TSession& session, const TActorContext& ctx)
     Status = EStatus::Active;
 
     Session = &session;
-    Session->Families.insert(this);
+    Session->Families.try_emplace(this->Id, this);
 
     Session->ActivePartitionCount += ActivePartitionCount;
     Session->InactivePartitionCount += InactivePartitionCount;
@@ -383,18 +383,8 @@ void TPartitionFamily::InactivatePartition(ui32 partitionId) {
 }
 
  void TPartitionFamily::ChangePartitionCounters(ssize_t active, ssize_t inactive) {
-    if (Session) {
-        // Reordering Session->Families
-        Session->Families.erase(this);
-    }
-
     ActivePartitionCount += active;
     InactivePartitionCount += inactive;
-
-    if (Session) {
-        // Reordering Session->Families
-        Session->Families.insert(this);
-    }
 
     if (IsActive()) {
         Session->ActivePartitionCount += active;
@@ -708,7 +698,7 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
                 f->LockedPartitions = Intercept(family->LockedPartitions, f->Partitions);
                 f->LastPipe = family->LastPipe;
                 if (f->Session) {
-                    f->Session->Families.insert(f);
+                    f->Session->Families.try_emplace(f->Id, f);
                 }
 
                 newFamilies.push_back(f);
@@ -1215,12 +1205,11 @@ void TConsumer::Balance(const TActorContext& ctx) {
         for (auto it = commonSessions.rbegin(); it != commonSessions.rend(); ++it) {
             auto* session = *it;
             auto targerFamilyCount = desiredFamilyCount + (allowPlusOne ? 1 : 0);
-            while (session->ActiveFamilyCount > targerFamilyCount) {
-                for (auto f = session->Families.begin(); f != session->Families.end(); ++f) {
-                    if ((*f)->IsActive()) {
-                        (*f)->Release(ctx);
-                        break;
-                    }
+            auto families = OrderFamilies(session->Families);
+            for (auto it = session->Families.begin(); it != session->Families.end() && session->ActiveFamilyCount > targerFamilyCount; ++it) {
+                auto* f = it->second;
+                if (f->IsActive()) {
+                    f->Release(ctx);
                 }
             }
 

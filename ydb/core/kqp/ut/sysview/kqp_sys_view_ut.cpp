@@ -420,9 +420,9 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         auto client = kikimr.GetTableClient();
 
         ui32 offset = kikimr.GetTestServer().GetRuntime()->GetNodeId(0);
-Sleep(TDuration::Seconds(5));
+
         auto it = client.StreamExecuteScanQuery(R"(
-            SELECT *
+            SELECT NodeId, Host
             FROM `/Root/.sys/nodes`;
         )").GetValueSync();
 
@@ -433,8 +433,6 @@ Sleep(TDuration::Seconds(5));
             [[%du];["::1"]];
             [[%du];["::1"]]
         ])", offset, offset + 1, offset + 2);
-
-Cerr << StreamResultToYson(it) << Endl; return;
 
         CompareYson(expected, StreamResultToYson(it));
     }

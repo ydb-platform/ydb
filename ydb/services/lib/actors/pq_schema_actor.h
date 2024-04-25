@@ -139,7 +139,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             navigateRequest->DatabaseName = CanonizePath(Database);
             navigateRequest->ResultSet.emplace_back(NSchemeCache::TSchemeCacheNavigate::TEntry{
                 .Path = NKikimr::SplitPath(GetTopicPath()),
-                .Access = CheckAccessWithUpdateRowPermission ? NACLib::UpdateRow : NACLib::DescribeSchema,
+                .Access = CheckAccessWithWriteTopicPermission ? NACLib::UpdateRow : NACLib::DescribeSchema,
                 .Operation = NSchemeCache::TSchemeCacheNavigate::OpList,
                 .ShowPrivatePath = showPrivate,
                 .SyncVersion = true,
@@ -250,7 +250,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
     protected:
         bool IsDead = false;
-        bool CheckAccessWithUpdateRowPermission = false;
+        bool CheckAccessWithWriteTopicPermission = false;
         const TString TopicPath;
         const TString Database;
     };

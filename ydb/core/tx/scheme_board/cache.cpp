@@ -296,11 +296,12 @@ namespace {
                         continue;
                     }
 
-                    if (!securityObject->CheckAccess(entry.Access, *Context->Request->UserToken)) {
+                    const ui32 access = GetAccess(entry);
+                    if (!securityObject->CheckAccess(access, *Context->Request->UserToken)) {
                         SBC_LOG_W("Access denied"
                             << ": self# " << this->SelfId()
                             << ", for# " << Context->Request->UserToken->GetUserSID()
-                            << ", access# " << NACLib::AccessRightsToString(entry.Access));
+                            << ", access# " << NACLib::AccessRightsToString(access));
 
                         SetErrorAndClear(
                             Context.Get(),

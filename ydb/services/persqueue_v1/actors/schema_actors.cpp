@@ -1311,7 +1311,7 @@ TDescribePartitionActor::TDescribePartitionActor(NKikimr::NGRpcService::IRequest
 
 void TDescribePartitionActor::Bootstrap(const NActors::TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "TDescribePartitionActor" << ctx.SelfID.ToString() << ": Bootstrap");
-    CheckAccessWithUpdateRowPermission = true;
+    CheckAccessWithWriteTopicPermission = true;
     TBase::Bootstrap(ctx);
     SendDescribeProposeRequest(ctx);
     Become(&TDescribePartitionActor::StateWork);
@@ -1322,7 +1322,7 @@ void TDescribePartitionActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         case TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType:
             if (NeedToRequestWithDescribeSchema(ev)) {
                 // We do not have the UpdateRow permission. Check if we're allowed to DescribeSchema.
-                CheckAccessWithUpdateRowPermission = false;
+                CheckAccessWithWriteTopicPermission = false;
                 SendDescribeProposeRequest(ActorContext());
                 break;
             }
@@ -1337,7 +1337,7 @@ void TDescribePartitionActor::StateWork(TAutoPtr<IEventHandle>& ev) {
 // Return true if we need to send a second request to SchemeCache with DescribeSchema permission,
 // because the first request checking the UpdateRow permission resulted in an AccessDenied error.
 bool TDescribePartitionActor::NeedToRequestWithDescribeSchema(TAutoPtr<IEventHandle>& ev) {
-    if (!CheckAccessWithUpdateRowPermission) {
+    if (!CheckAccessWithWriteTopicPermission) {
         // We've already sent a request with DescribeSchema, ev is a response to it.
         return false;
     }

@@ -107,7 +107,7 @@ Contents of `SQL` files:
       -- each table row (contains only
       -- non-repeating values). A table can have
       -- only one primary key. For every table
-      -- in YDB, the primary key is required.
+      -- in {{ ydb-short-name }}, the primary key is required.
   );
   ```
 
@@ -147,6 +147,14 @@ Set `baselineVersion = 3`, then run the following command:
 flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration -baselineVersion=3 baseline
 ```
 
+{% note info %}
+
+It is important to note that all examples use a Docker container, which does not require any additional authentication parameters.
+
+You can see how to connect to {{ ydb-short-name }} in the [next section](./liquibase.md#connect-to-ydb).
+
+{% endnote %}
+
 As a result, a table named `flyway_schema_history` will be created, and it will contain a `baseline` record:
 
 ![_assets/flyway-baseline-step-2.png](_assets/flyway-baseline-step-2.png)
@@ -155,7 +163,7 @@ As a result, a table named `flyway_schema_history` will be created, and it will 
 
 Command [migrate](https://documentation.red-gate.com/flyway/flyway-cli-and-api/usage/command-line/command-line-migrate) evolves the database schema to the latest version. Flyway will create the schema history table automatically if it doesn't exist.
 
-Let's add the migration of [data downloads](../yql-tutorial/fill_tables_with_data.md) to the previous example:
+Let's add the migration of data downloads to the previous example:
 
 ```
 db/migration:

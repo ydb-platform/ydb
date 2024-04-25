@@ -107,7 +107,7 @@ db/migration:
       -- each table row (contains only
       -- non-repeating values). A table can have
       -- only one primary key. For every table
-      -- in YDB, the primary key is required.
+      -- in {{ ydb-short-name }}, the primary key is required.
   );
   ```
 
@@ -147,6 +147,14 @@ CREATE TABLE episodes
 flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration -baselineVersion=3 baseline
 ```
 
+{% note info %}
+
+Важно отметить, что во всех примерах используется докер контейнер, для которого не требуется дополнительных параметров для аутентификации. 
+
+Как подключится к {{ ydb-short-name }} можно посмотреть в [следующем разделе](./liquibase.md#connect-to-ydb).
+
+{% endnote %}
+
 В результате будет создана таблица с именем `flyway_schema_history`, которая будет содержать запись `baseline`:
 
 ![_assets/flyway-baseline-step-2.png](_assets/flyway-baseline-step-2.png)
@@ -155,7 +163,7 @@ flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration -baseli
 
 Команда [migrate](https://documentation.red-gate.com/flyway/flyway-cli-and-api/usage/command-line/command-line-migrate) эволюционирует схему базы данных до последней версии. Если таблица истории схемы не была создана, то Flyway создаст ее автоматически.
 
-Добавим к предыдущему примеру миграцию [загрузки данных](../yql-tutorial/fill_tables_with_data.md):
+Добавим к предыдущему примеру миграцию загрузки данных:
 
 ```
 db/migration:

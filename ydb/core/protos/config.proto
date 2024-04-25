@@ -1129,6 +1129,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 1000 }];
+
+        optional uint64 ChangeRecordDebugPrint = 16 [(ControlOptions) = {
+            Description: "Enables debug printing of change records",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TTxLimitControls {

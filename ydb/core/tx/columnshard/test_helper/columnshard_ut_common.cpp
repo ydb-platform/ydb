@@ -1,7 +1,7 @@
 #include "columnshard_ut_common.h"
 
-#include "common/tests/shard_reader.h"
-#include "engines/reader/sys_view/chunks/chunks.h"
+#include <ydb/core/tx/columnshard/common/tests/shard_reader.h>
+#include <ydb/core/tx/columnshard/engines/reader/sys_view/portions/portions.h>
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
@@ -170,11 +170,11 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
     record.SetTxId(snap.GetPlanStep());
     record.SetScanId(scanId);
     // record.SetLocalPathId(0);
-    record.SetTablePath(NOlap::TIndexInfo::STORE_INDEX_STATS_TABLE);
+    record.SetTablePath(NOlap::TIndexInfo::STORE_INDEX_PORTION_STATS_TABLE);
 
     // Schema: pathId, kind, rows, bytes, rawBytes. PK: {pathId, kind}
     //record.SetSchemaVersion(0);
-    auto ydbSchema = NOlap::NReader::NSysView::NChunks::TStatsIterator::StatsSchema;
+    auto ydbSchema = NOlap::NReader::NSysView::NPortions::TStatsIterator::StatsSchema;
     for (const auto& col : ydbSchema.Columns) {
         record.AddColumnTags(col.second.Id);
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(col.second.PType, col.second.PTypeMod);
@@ -224,6 +224,11 @@ void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, con
     PlanCommit(runtime, sender, TTestTxConfig::TxTablet0, planStep, txIds);
 }
 
+void Wakeup(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId) {
+    auto wakeup = std::make_unique<TEvPrivate::TEvPeriodicWakeup>(true);
+    ForwardToTablet(runtime, shardId, sender, wakeup.release());
+}
+
 void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 planStep, const TSet<ui64>& txIds) {
     auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(planStep, 0, shardId);
     for (ui64 txId : txIds) {
@@ -243,6 +248,7 @@ void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64
         UNIT_ASSERT(txIds.contains(res.GetTxId()));
         UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
     }
+    Wakeup(runtime, sender, shardId);
 }
 
 TCell MakeTestCell(const TTypeInfo& typeInfo, ui32 value, std::vector<TString>& mem) {

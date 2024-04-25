@@ -70,6 +70,7 @@ EXCLUDED_TESTS = [
     'join/inmem_with_set_key_any',  # FAULT
     'join/join_comp_inmem',  # Peephole optimization failed for KQP transaction
     'join/nopushdown_filter_with_depends_on',  # Invalid YSON
+    'join/mapjoin_sharded',  # Test uses variables to set different pragma values for yt_local run in arcadia
 
     'limit/dynamic_limit',  # Missed callable: YtTableContent
     'limit/empty_read_after_limit',  # INTERNAL_ERROR

@@ -428,8 +428,11 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         AssertTableReads(result, "/Root/Join1_1", 1);
     }
 
-    Y_UNIT_TEST(LeftJoinWithNull) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(LeftJoinWithNull, StreamLookupJoin) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
+        auto settings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

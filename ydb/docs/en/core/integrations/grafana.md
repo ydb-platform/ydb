@@ -82,9 +82,9 @@ Time series visualization options are selectable if the query returns at least o
 
 To create a multi-line time series, the query must return at least 3 fields in the following order:
 
-- field 1: `Date`, `Datetime` or `Timestamp`
-- field 2: value to group by
-- field 3+: the metric values
+- field 1: `Date`, `Datetime` or `Timestamp` (for now, working with time is supported only in UTC timezone)
+- field 2, 3: metrics - at least two fields with `Int64`, `Int32`, `Int16`, `Int8`, `Uint64`, `Uint32`, `Uint16`, `Uint8`, `Double` or `Float` type
+- field 4+ (optional): the metric values
 
 For example:
 
@@ -129,14 +129,14 @@ WHERE $__timeFilter(`timeCol`)
 ```sql
 SELECT `timeCol`
 FROM `/database/endpoint/my-logs`
-WHERE $__timeFilter(`timeCol` + INTERVAL("PT24H"))
+WHERE $__timeFilter(`timeCol` + Interval("PT24H"))
 ```
 
 Macro                                        | Description                                                                                                                      | Output example                                                                                  |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `$__timeFilter(expr)`                | Replaced by a conditional that filters the data (using the provided column or expression) based on the time range of the panel in microseconds | `foo >= CAST(1636717526371000 AS TIMESTAMP) AND foo <=  CAST(1668253526371000 AS TIMESTAMP)' )` |
-| `$__fromTimestamp`                         | Replaced by the starting time of the range of the panel cast to Timestamp                                                      | `CAST(1636717526371000 AS TIMESTAMP)`                                                           |
-| `$__toTimestamp`                           | Replaced by the ending time of the range of the panel cast to Timestamp                                                        | `CAST(1636717526371000 AS TIMESTAMP)`                                                           |
+| `$__timeFilter(expr)`                | Replaced by a conditional that filters the data (using the provided column or expression) based on the time range of the panel in microseconds | `foo >= CAST(1636717526371000 AS Timestamp) AND foo <=  CAST(1668253526371000 AS Timestamp)' )` |
+| `$__fromTimestamp`                         | Replaced by the starting time of the range of the panel cast to Timestamp                                                      | `CAST(1636717526371000 AS Timestamp)`                                                           |
+| `$__toTimestamp`                           | Replaced by the ending time of the range of the panel cast to Timestamp                                                        | `CAST(1636717526371000 AS Timestamp)`                                                           |
 | `$__varFallback(condition, $templateVar)` | Replaced by the first parameter when the template variable in the second parameter is not provided.                              | `$__varFallback('foo', $bar)` `foo` if variable `bar` is not provided, or `$bar`'s value                                                               |
 
 ### Templates and variables

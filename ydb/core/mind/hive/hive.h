@@ -98,7 +98,7 @@ constexpr std::size_t EBalancerTypeSize = static_cast<std::size_t>(EBalancerType
 TString EBalancerTypeName(EBalancerType value);
 
 enum class EResourceToBalance {
-    Dominant,
+    ComputeResources,
     Counter,
     CPU,
     Memory,
@@ -288,7 +288,7 @@ struct TBalancerSettings {
     bool RecheckOnFinish = false;
     ui64 MaxInFlight = 1;
     const std::vector<TNodeId> FilterNodeIds = {};
-    EResourceToBalance ResourceToBalance = EResourceToBalance::Dominant;
+    EResourceToBalance ResourceToBalance = EResourceToBalance::ComputeResources;
     std::optional<TFullObjectId> FilterObjectId;
 };
 

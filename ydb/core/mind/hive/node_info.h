@@ -213,9 +213,9 @@ public:
     }
 
     double GetNodeUsageForTablet(const TTabletInfo& tablet) const;
-    double GetNodeUsage(EResourceToBalance resource = EResourceToBalance::Dominant) const;
+    double GetNodeUsage(EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
     double GetNodeUsage(const TResourceNormalizedValues& normValues,
-                        EResourceToBalance resource = EResourceToBalance::Dominant) const;
+                        EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
 
     ui64 GetTabletsRunningByType(TTabletTypes::EType tabletType) const;
 

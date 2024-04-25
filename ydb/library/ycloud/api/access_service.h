@@ -2,7 +2,7 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
 #include <ydb/public/api/client/yc_private/servicecontrol/v1/access_service.grpc.pb.h>
-#include <ydb/public/api/client/yc_private/servicecontrol/v1/access_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/accessservice/v2/access_service.grpc.pb.h>
 #include "events.h"
 
 namespace NCloud {

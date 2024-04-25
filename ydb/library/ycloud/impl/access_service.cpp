@@ -2,7 +2,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <library/cpp/json/json_value.h>
 #include <ydb/public/api/client/yc_private/servicecontrol/v1/access_service.grpc.pb.h>
-#include <ydb/public/api/client/yc_private/servicecontrol/v1/access_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/accessservice/v2/access_service.grpc.pb.h>
 #include "access_service.h"
 #include <ydb/library/grpc/actor_client/grpc_service_client.h>
 #include <ydb/library/grpc/actor_client/grpc_service_cache.h>

@@ -123,6 +123,7 @@ class DynamicConfigGenerator(object):
     def __cms_init_cmd(self, proto_file, domain_name):
         return " ".join(
             [
+                "strace",
                 self._binary_path,
                 "-s",
                 self.grpc_endpoint,

@@ -461,6 +461,9 @@ public:
             if (Tenant->IsExternalStatisticsAggregator) {
                 subdomain.SetExternalStatisticsAggregator(true);
             }
+            if (Tenant->IsExternalBackupControllerTablet) {
+                subdomain.SetExternalBackupControllerTablet(true);
+            }
         }
 
         if (SharedTenant) {
@@ -485,6 +488,9 @@ public:
             }
             if (Tenant->IsExternalStatisticsAggregator) {
                 subdomain.SetExternalStatisticsAggregator(true);
+            }
+            if (Tenant->IsExternalBackupControllerTablet) {
+                subdomain.SetExternalBackupControllerTablet(true);
             }
         }
         if (tablets) {
@@ -1196,6 +1202,7 @@ TTenantsManager::TTenant::TTenant(const TString &path,
     , IsExternalHive(false)
     , IsExternalSysViewProcessor(false)
     , IsExternalStatisticsAggregator(false)
+    , IsExternalBackupControllerTablet(false)
     , AreResourcesShared(false)
 {
 }

@@ -180,6 +180,8 @@
 #include <ydb/core/tx/conveyor/service/service.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 
+#include <ydb/core/backup/tablet.h>
+
 #include <ydb/services/bg_tasks/ds_table/executor.h>
 #include <ydb/services/bg_tasks/service.h>
 #include <ydb/services/ext_index/common/config.h>
@@ -1104,6 +1106,7 @@ void TLocalServiceInitializer::InitializeServices(
     addToLocalConfig(TTabletTypes::BlobDepot, &NBlobDepot::CreateBlobDepot, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::StatisticsAggregator, &NStat::CreateStatisticsAggregator, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::GraphShard, &NGraph::CreateGraphShard, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::BackupControllerTablet, &NBackup::CreateBackupControllerTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
 
     TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(Config.GetTenantPoolConfig(), localConfig);
     if (!tenantPoolConfig->IsEnabled && !tenantPoolConfig->StaticSlots.empty())

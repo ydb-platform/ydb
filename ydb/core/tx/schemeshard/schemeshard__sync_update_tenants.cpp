@@ -200,6 +200,14 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
             Y_ABORT_UNLESS(tenantGS == subdomain->GetTenantGraphShardID());
         }
 
+        if (record.HasTenantBackupControllerTablet()) {
+            TTabletId tenantSA = TTabletId(record.GetTenantBackupControllerTablet());
+            if (!subdomain->GetTenantBackupControllerTabletID()) {
+                addPrivateShard(tenantSA, ETabletType::BackupControllerTablet);
+            }
+            Y_ABORT_UNLESS(tenantSA == subdomain->GetTenantBackupControllerTabletID());
+        }
+
         if (record.HasUpdateTenantRootACL()) {
             // KIKIMR-10699: transfer tenants root ACL from GSS to the TSS
             // here TSS sees the ACL from GSS

@@ -1,0 +1,46 @@
+#pragma once
+#include "tablet_impl.h"
+
+namespace NKikimr::NBackup {
+
+class TBackupControllerTablet::TTxInit
+    : public TTxBase
+{
+    inline bool Load(NIceDb::TNiceDb& db) {
+        Y_UNUSED(db);
+        Self->Reset();
+        return true;
+    }
+
+    inline bool Load(NTable::TDatabase& toughDb) {
+        NIceDb::TNiceDb db(toughDb);
+        return Load(db);
+    }
+
+public:
+    explicit TTxInit(TSelf* self)
+        : TTxBase("TxInit", self)
+    {
+    }
+
+    TTxType GetTxType() const override {
+        return TXTYPE_INIT;
+    }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        Y_UNUSED(ctx);
+        // CLOG_D(ctx, "Execute");
+        return Load(txc.DB);
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        // CLOG_D(ctx, "Complete");
+        Self->SwitchToWork(ctx);
+    }
+}; // TTxInit
+
+void TBackupControllerTablet::RunTxInit(const TActorContext& ctx) {
+    Execute(new TTxInit(this), ctx);
+}
+
+}

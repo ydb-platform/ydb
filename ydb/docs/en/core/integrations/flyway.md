@@ -64,6 +64,12 @@ cd ..
 cd lib && curl -L -o flyway-ydb-dialect.jar https://repo.maven.apache.org/maven2/tech/ydb/dialects/flyway-ydb-dialect/1.0.0-RC0/flyway-ydb-dialect-1.0.0-RC0.jar
 ```
 
+{% note info %}
+
+[Flyway Desktop](https://documentation.red-gate.com/fd/flyway-desktop-138346953.html) is currently not supported.
+
+{% endnote %}
+
 ## Migration management using Flyway {#flyway-main-commands}
 
 ### baseline {#flyway-baseline}
@@ -133,6 +139,8 @@ CREATE TABLE episodes
 );
 ```
 
+{% endlist %}
+
 Set `baselineVersion = 3`, then run the following command:
 
 ```bash
@@ -147,7 +155,7 @@ As a result, a table named `flyway_schema_history` will be created, and it will 
 
 Command [migrate](https://documentation.red-gate.com/flyway/flyway-cli-and-api/usage/command-line/command-line-migrate) evolves the database schema to the latest version. Flyway will create the schema history table automatically if it doesn't exist.
 
-Let's add the migration of [data downloads](../yql/tutorial/fill_tables_with_data.md) to the previous example:
+Let's add the migration of [data downloads](../yql-tutorial/fill_tables_with_data.md) to the previous example:
 
 ```
 db/migration:

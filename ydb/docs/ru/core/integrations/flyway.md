@@ -64,6 +64,12 @@ cd ..
 cd lib && curl -L -o flyway-ydb-dialect.jar https://repo.maven.apache.org/maven2/tech/ydb/dialects/flyway-ydb-dialect/1.0.0-RC0/flyway-ydb-dialect-1.0.0-RC0.jar
 ```
 
+{% note info %}
+
+[Flyway Desktop](https://documentation.red-gate.com/fd/flyway-desktop-138346953.html) в настоящее время не поддерживается.
+
+{% endnote %}
+
 ## Управление миграциями с помощью Flyway {#flyway-main-commands}
 
 ### baseline {#flyway-baseline}
@@ -149,7 +155,7 @@ flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration -baseli
 
 Команда [migrate](https://documentation.red-gate.com/flyway/flyway-cli-and-api/usage/command-line/command-line-migrate) эволюционирует схему базы данных до последней версии. Если таблица истории схемы не была создана, то Flyway создаст ее автоматически.
 
-Добавим к предыдущему примеру миграцию [загрузки данных](../yql/tutorial/fill_tables_with_data.md):
+Добавим к предыдущему примеру миграцию [загрузки данных](../yql-tutorial/fill_tables_with_data.md):
 
 ```
 db/migration:
@@ -398,7 +404,7 @@ flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration repair
 
 {% note warning %}
 
-{{ ydb-short-name }} не имеет такую сущность как `schema`, команда `clean` удалит все таблицы в вашей базе данных.
+В отличие от других систем управления базами данных, {{ ydb-short-name }} не имеет такую сущность как `SCHEMA`. Таким образом, команда `clean` удалит все таблицы в вашей базе данных.
 
 {% endnote %}
 

@@ -58,11 +58,24 @@ TString ConvertToJoinAlgoString(EJoinAlgoType joinAlgo);
 //StreamLookupJoin is not a subject for CBO and not not included here
 static constexpr auto AllJoinAlgos = { EJoinAlgoType::MapJoin, EJoinAlgoType::GraceJoin, EJoinAlgoType::LookupJoin };
 
-TOptimizerStatistics ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
-    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinAlgoType joinAlgo, const IProviderContext& ctx);
+TOptimizerStatistics ComputeJoinStats(
+    const TOptimizerStatistics& leftStats, 
+    const TOptimizerStatistics& rightStats, 
+    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, 
+    EJoinAlgoType joinAlgo, 
+    ui32 joinKind,
+    const IProviderContext& ctx
+);
 
-TOptimizerStatistics ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
-    const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys, EJoinAlgoType joinAlgo, const IProviderContext& ctx);
+TOptimizerStatistics ComputeJoinStats(
+    const TOptimizerStatistics& leftStats, 
+    const TOptimizerStatistics& rightStats, 
+    const TVector<TString>& leftJoinKeys, 
+    const TVector<TString>& rightJoinKeys, 
+    EJoinAlgoType joinAlgo,
+    ui32 joinKind,
+    const IProviderContext& ctx
+);
 
 }
 

@@ -46,6 +46,8 @@ TString NYql::ConvertToJoinAlgoString(EJoinAlgoType joinAlgo) {
     Y_ENSURE(false, "Unknown join algo");
 }
 
+
+
 /**
  * Compute the cost and output cardinality of a join
  * 
@@ -53,37 +55,66 @@ TString NYql::ConvertToJoinAlgoString(EJoinAlgoType joinAlgo) {
  * 
  * The build is on the right side, so we make the build side a bit more expensive than the probe
 */
-
-TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
-    const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys, EJoinAlgoType joinAlgo, const IProviderContext& ctx) {
-
+TOptimizerStatistics NYql::ComputeJoinStats(
+    const TOptimizerStatistics& leftStats, 
+    const TOptimizerStatistics& rightStats, 
+    const TVector<TString>& leftJoinKeys, 
+    const TVector<TString>& rightJoinKeys, 
+    EJoinAlgoType joinAlgo, 
+    ui32 joinKind,
+    const IProviderContext& ctx
+) {
+    
     double newCard;
-    EStatisticsType outputType;
+    EStatisticsType outputType = NotDefined;
     bool leftKeyColumns = false;
     bool rightKeyColumns = false;
     double selectivity = 1.0;
 
 
     if (IsPKJoin(rightStats,rightJoinKeys)) {
-        newCard = leftStats.Nrows * rightStats.Selectivity;
-        selectivity = leftStats.Selectivity * rightStats.Selectivity;
-        leftKeyColumns = true;
-        if (leftStats.Type == EStatisticsType::BaseTable){
-            outputType = EStatisticsType::FilteredFactTable;
-        } else {
-            outputType = leftStats.Type;
+        switch (joinKind) {
+            case EJoinKind::InnerJoin:
+                newCard = leftStats.Nrows * rightStats.Selectivity; break;
+            case EJoinKind::LeftJoin:
+            case EJoinKind::LeftOnly:
+                newCard = leftStats.Nrows; break;
+            default: {
+                newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;
+                outputType = EStatisticsType::ManyManyJoin;
+            }
+        }
+
+        if (outputType == NotDefined) {
+            selectivity = leftStats.Selectivity * rightStats.Selectivity;
+
+            leftKeyColumns = true;
+            if (leftStats.Type == EStatisticsType::BaseTable){
+                outputType = EStatisticsType::FilteredFactTable;
+            } else {
+                outputType = leftStats.Type;
+            }
         }
     }
     else if (IsPKJoin(leftStats,leftJoinKeys)) {
-        newCard = rightStats.Nrows;
-        newCard = rightStats.Nrows * leftStats.Selectivity;
-        selectivity = leftStats.Selectivity * rightStats.Selectivity;
+        switch (joinKind) {
+            case EJoinKind::InnerJoin:
+                newCard = leftStats.Selectivity * rightStats.Nrows; break;
+            default: {
+                newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;
+                outputType = EStatisticsType::ManyManyJoin;
+            }
+        }
 
-        rightKeyColumns = true;
-        if (rightStats.Type == EStatisticsType::BaseTable){
-            outputType = EStatisticsType::FilteredFactTable;
-        } else {
-            outputType = rightStats.Type;
+        if (outputType == NotDefined) {
+            selectivity = leftStats.Selectivity * rightStats.Selectivity;
+
+            rightKeyColumns = true;
+            if (rightStats.Type == EStatisticsType::BaseTable) {
+                outputType = EStatisticsType::FilteredFactTable;
+            } else {
+                outputType = rightStats.Type;
+            }
         }
     }
     else {
@@ -105,8 +136,14 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
 }
 
 
-TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
-    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinAlgoType joinAlgo, const IProviderContext& ctx) {
+TOptimizerStatistics NYql::ComputeJoinStats(
+    const TOptimizerStatistics& leftStats, 
+    const TOptimizerStatistics& rightStats, 
+    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, 
+    EJoinAlgoType joinAlgo,
+    ui32 joinKind,
+    const IProviderContext& ctx
+) {
 
     TVector<TString> leftJoinKeys;
     TVector<TString> rightJoinKeys;
@@ -116,6 +153,5 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
         rightJoinKeys.emplace_back(c.second.AttributeName);
     }
 
-    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, ctx);
+    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, ctx);
 }
-

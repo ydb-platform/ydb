@@ -203,6 +203,7 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
             join->LeftJoinKeys, 
             join->RightJoinKeys, 
             EJoinAlgoType::GraceJoin, 
+            join->JoinType,
             ctx
         )
     );

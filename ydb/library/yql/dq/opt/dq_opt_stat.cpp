@@ -4,7 +4,7 @@
 #include <ydb/library/yql/core/yql_cost_function.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
-
+#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
 
 namespace NYql::NDq {
 
@@ -162,7 +162,7 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
     }
 
     typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(
-                                      ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, EJoinAlgoType::MapJoin, ctx)));
+                                      ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, EJoinAlgoType::MapJoin, ConvertToJoinKind(join.JoinKind().StringValue()), ctx)));
 }
 
 /**
@@ -194,7 +194,7 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
     }
 
     typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(
-                                      ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, EJoinAlgoType::GraceJoin, ctx)));
+                                      ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, EJoinAlgoType::GraceJoin, ConvertToJoinKind(join.JoinKind().StringValue()), ctx)));
 }
 
 /**

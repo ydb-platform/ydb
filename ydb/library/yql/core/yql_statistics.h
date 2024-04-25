@@ -8,6 +8,7 @@
 namespace NYql {
 
 enum EStatisticsType : ui32 {
+    NotDefined,
     BaseTable,
     FilteredFactTable,
     ManyManyJoin

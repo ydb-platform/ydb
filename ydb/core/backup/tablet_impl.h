@@ -53,7 +53,7 @@ public:
     void RunTxInit(const TActorContext& ctx);
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::REPLICATION_CONTROLLER_ACTOR; //FIXME
+        return NKikimrServices::TActivity::BACKUP_CONTROLLER_TABLET;
     }
 
     explicit TBackupControllerTablet(const TActorId& tablet, TTabletStorageInfo* info)

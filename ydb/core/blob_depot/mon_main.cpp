@@ -641,7 +641,7 @@ document.addEventListener("DOMContentLoaded", ready);
                 return issueError("incorrect 'sequence' parameter");
             } else if (seq == Sequence) {
                 const TMonotonic when = now + LongPollTimeout;
-                LongPolls.emplace_back(when, sender, cookie, seq);
+                LongPolls.emplace_back(TJsonHandler::TLongPoll{when, sender, cookie, seq});
                 if (!LongPollTimerPending) {
                     TActivationContext::Schedule(when, new IEventHandle(TimerEv, 0, SelfId, {}, nullptr, 0));
                     LongPollTimerPending = true;

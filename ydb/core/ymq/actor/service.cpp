@@ -685,6 +685,7 @@ void TSqsService::AnswerThrottled(TSqsEvents::TEvGetConfiguration::TPtr& ev) {
     RLOG_SQS_REQ_DEBUG(ev->Get()->RequestId, "Throttled because of too many requests for nonexistent queue [" << ev->Get()->QueueName << "] for user [" << ev->Get()->UserName << "] while getting configuration");
     auto answer = MakeHolder<TSqsEvents::TEvConfiguration>();
     answer->Throttled = true;
+    answer->SchemeCache = SchemeCache_;
     Send(ev->Sender, answer.Release());
 }
 

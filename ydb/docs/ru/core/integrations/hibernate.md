@@ -55,15 +55,34 @@ Hibernate - это фреймворк объектно-реляционного 
 
 Или в Java коде:
 
-```java
-import org.hibernate.cfg.AvailableSettings;
-import org.hibernate.cfg.Configuration;
+{% list tabs %}
 
-public static Configuration basedConfiguration() {
-    return new Configuration()
-            .setProperty(AvailableSettings.DIALECT, YdbDialect.class.getName());
-}
-```
+- Java
+
+  ```java
+  import org.hibernate.cfg.AvailableSettings;
+  import org.hibernate.cfg.Configuration;
+  
+  public static Configuration basedConfiguration() {
+      return new Configuration()
+              .setProperty(AvailableSettings.JAKARTA_JDBC_DRIVER, YdbDriver.class.getName())
+              .setProperty(AvailableSettings.DIALECT, YdbDialect.class.getName());
+  }
+  ```
+
+- Kotlin
+
+  ```kotlin
+  import org.hibernate.cfg.AvailableSettings
+  import org.hibernate.cfg.Configuration
+  
+  fun basedConfiguration(): Configuration = Configuration().apply {
+      setProperty(AvailableSettings.JAKARTA_JDBC_DRIVER, YdbDriver::class.name)
+      setProperty(AvailableSettings.DIALECT, YdbDialect::class.name)
+  }
+  ```
+
+{% endlist %}
 
 ## Использование {#using}
 
@@ -91,21 +110,48 @@ public static Configuration basedConfiguration() {
 
 Например, для класса `Group`: 
 
-```kotlin
-@Entity
-@Table(name = "Groups", indexes = [Index(name = "group_name_index", columnList = "GroupName")])
-data class Group(
-  @Id
-  @Column(name = "GroupId")
-  val id: Int,
+{% list tabs %}
 
-  @Column(name = "GroupName")
-  val name: String,
+- Java
 
-  @OneToMany(mappedBy = "group")
-  val students: List<Student>
-)
-```
+  ```java
+  @Getter
+  @Setter
+  @Entity
+  @Table(name = "Groups", indexes = @Index(name = "group_name_index", columnList = "GroupName"))
+  public class Group {
+  
+      @Id
+      @Column(name = "GroupId")
+      private int id;
+  
+      @Column(name = "GroupName")
+      private String name;
+  
+      @OneToMany(mappedBy = "group")
+      private List<Student> students;
+  }
+  ```
+
+- Kotlin
+
+  ```kotlin
+  @Entity
+  @Table(name = "Groups", indexes = [Index(name = "group_name_index", columnList = "GroupName")])
+  data class Group(
+      @Id
+      @Column(name = "GroupId")
+      val id: Int,
+      
+      @Column(name = "GroupName")
+      val name: String,
+    
+      @OneToMany(mappedBy = "group")
+      val students: List<Student>
+  )
+  ```
+
+{% endlist %}
 
 Будет сгенерирована следующая таблица `Groups` и вторичный индекс `group_name_index` к колонке `GroupName`:
 
@@ -123,10 +169,23 @@ ALTER TABLE Groups
 
 Если эволюционировать сущность Group путем добавления поля `deparment`:
 
-```kotlin
-@Column
-val department: String
-```
+{% list tabs %}
+
+- Java
+
+  ```java
+  @Column
+  private String department;
+  ```
+
+- Kotlin
+
+  ```kotlin
+  @Column
+  val department: String
+  ```
+
+{% endlist %}
 
 Hibernate при старте приложения обновит схему базы данных, если установлен режим `update`:
 
@@ -207,68 +266,145 @@ spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/databas
 
 Создадим простую сущность и репозиторий:
 
-```kotlin
-@Entity
-@Table(name = "employee")
-data class Employee(
-    @Id
-    val id: Long,
+{% list tabs %}
 
-    @Column(name = "full_name")
-    val fullName: String,
+- Java
 
-    @Column
-    val email: String,
+  ```java
+  @Data
+  @Entity
+  @Table(name = "employee")
+  public class Employee {
+      @Id
+      private long id;
+  
+      @Column(name = "full_name")
+      private String fullName;
+  
+      @Column
+      private String email;
+  
+      @Column(name = "hire_date")
+      private LocalDate hireDate;
+  
+      @Column
+      private java.math.BigDecimal salary;
+  
+      @Column(name = "is_active")
+      private boolean isActive;
+  
+      @Column
+      private String department;
+  
+      @Column
+      private int age;
+  }
+  
+  public interface EmployeeRepository implements CrudRepository<Employee, Long> {}
+  ```
 
-    @Column(name = "hire_date")
-    val hireDate: LocalDate,
+- Kotlin
 
-    @Column
-    val salary: java.math.BigDecimal,
+  ```kotlin
+  @Entity
+  @Table(name = "employee")
+  data class Employee(
+      @Id
+      val id: Long,
+  
+      @Column(name = "full_name")
+      val fullName: String,
+  
+      @Column
+      val email: String,
+  
+      @Column(name = "hire_date")
+      val hireDate: LocalDate,
+  
+      @Column
+      val salary: java.math.BigDecimal,
+  
+      @Column(name = "is_active")
+      val isActive: Boolean,
+  
+      @Column
+      val department: String,
+  
+      @Column
+      val age: Int,
+  )
+  
+  interface EmployeeRepository : CrudRepository<Employee, Long>
+  
+  fun EmployeeRepository.findByIdOrNull(id: Long): Employee? = this.findById(id).orElse(null)
+  ```
 
-    @Column(name = "is_active")
-    val isActive: Boolean,
-
-    @Column
-    val department: String,
-
-    @Column
-    val age: Int,
-)
-
-interface EmployeeRepository : CrudRepository<Employee, Long>
-
-fun EmployeeRepository.findByIdOrNull(id: Long): Employee? = this.findById(id).orElse(null)
-```
+{% endlist %}
 
 Пример использования:
 
-```kotlin
-val employee = Employee(
-    1,
-    "Example",
-    "example@bk.com",
-    LocalDate.parse("2023-12-20"),
-    BigDecimal("500000.000000000"),
-    true,
-    "YDB AppTeam",
-    23
-)
+{% list tabs %}
 
-/* The following SQL will be executed:
-INSERT INTO employee (age,department,email,full_name,hire_date,is_active,limit_date_password,salary,id) 
-VALUES (?,?,?,?,?,?,?,?,?) 
-*/
-employeeRepository.save(employee)
+- Java
 
-assertEquals(employee, employeeRepository.findByIdOrNull(employee.id))
+  ```java
+  Employee employee = new Employee(
+      1,
+      "Example",
+      "example@bk.com",
+      LocalDate.parse("2023-12-20"),
+      BigDecimal("500000.000000000"),
+      true,
+      "YDB AppTeam",
+      23
+  );
+  
+  /* The following SQL will be executed: 
+  INSERT INTO employee (age,department,email,full_name,hire_date,is_active,limit_date_password,salary,id) 
+  VALUES (?,?,?,?,?,?,?,?,?) 
+  */
+  employeeRepository.save(employee);
+  
+  assertEquals(employee, employeeRepository.findById(employee.getId()).get());
+  
+  /* The following SQL will be executed:
+  DELETE FROM employee WHERE id=?
+   */
+  employeeRepository.delete(employee);
+  
+  assertNull(employeeRepository.findById(employee.getId()).get());
+  ```
 
-/* The following SQL will be executed: 
-DELETE FROM employee WHERE id=?
- */
-employeeRepository.delete(employee)
+- Kotlin
 
-assertNull(employeeRepository.findByIdOrNull(employee.id))
-```
+  ```kotlin
+  val employee = Employee(
+      1,
+      "Example",
+      "example@bk.com",
+      LocalDate.parse("2023-12-20"),
+      BigDecimal("500000.000000000"),
+      true,
+      "YDB AppTeam",
+      23
+  )
+  
+  /* The following SQL will be executed: 
+  INSERT INTO employee (age,department,email,full_name,hire_date,is_active,limit_date_password,salary,id) 
+  VALUES (?,?,?,?,?,?,?,?,?) 
+  */
+  employeeRepository.save(employee)
+  
+  assertEquals(employee, employeeRepository.findByIdOrNull(employee.id))
+  
+  /* The following SQL will be executed:
+  DELETE FROM employee WHERE id=?
+   */
+  employeeRepository.delete(employee)
+  
+  assertNull(employeeRepository.findByIdOrNull(employee.id))
+  ```
+
+{% endlist %}
 
 Пример простого приложения Spring Data JPA можно найти по [ссылке](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-data-jpa).

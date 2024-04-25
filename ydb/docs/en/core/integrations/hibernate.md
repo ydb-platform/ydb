@@ -128,11 +128,6 @@ For example, for the `Group` class:
   
       @OneToMany(mappedBy = "group")
       private List<Student> students;
-  
-      @Override
-      public int hashCode() {
-          return id;
-      }
   }
   ```
   
@@ -274,7 +269,7 @@ Create a simple entity and repository:
 - Java
 
   ```java
-  @Date
+  @Data
   @Entity
   @Table(name = "employee")
   public class Employee {

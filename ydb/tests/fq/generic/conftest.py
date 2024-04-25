@@ -16,9 +16,10 @@ from utils.settings import Settings
 def settings() -> Settings:
     return Settings.from_env()
 
+
 @pytest.fixture
 def mvp_external_ydb_endpoint(request) -> str:
-    return request.param["endpoint"] if request is not None else None
+    return request.param["endpoint"] if request is not None and hasattr(request, "param") else None
 
 
 @pytest.fixture

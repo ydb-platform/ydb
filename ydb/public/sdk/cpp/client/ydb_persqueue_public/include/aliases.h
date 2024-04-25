@@ -25,8 +25,8 @@ using NTopic::MakeCountersNotNull;
 using NTopic::HasNullCounters;
 
 // errors
-using NTopic::GetRetryErrorClass;
-using NTopic::GetRetryErrorClassV2;
+// using NTopic::GetRetryErrorClass;
+// using NTopic::GetRetryErrorClassV2;
 
 // common events
 using NTopic::TWriteSessionMeta;

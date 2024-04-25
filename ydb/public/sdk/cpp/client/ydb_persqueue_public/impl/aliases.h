@@ -20,7 +20,7 @@ using NTopic::TEnableSelfContext;
 using NTopic::TContextOwner;
 
 // common
-using NTopic::GetRetryErrorClass;
+// using NTopic::GetRetryErrorClass;
 using NTopic::ISessionConnectionProcessorFactory;
 using NTopic::CreateConnectionProcessorFactory;
 using NTopic::TBaseSessionEventsQueue;

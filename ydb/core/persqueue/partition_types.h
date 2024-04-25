@@ -60,6 +60,7 @@ struct TSplitMessageGroupMsg {
     }
 };
 
+
 struct TMessage {
     std::variant<
         TWriteMsg,
@@ -68,7 +69,7 @@ struct TMessage {
         TDeregisterMessageGroupMsg,
         TSplitMessageGroupMsg
     > Body;
-
+    bool Replied = false;
     TDuration QueueTime;    // baseline for request and duration for response
     TInstant WriteTimeBaseline;
 

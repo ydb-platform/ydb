@@ -43,6 +43,7 @@ def get_fqdn():
     assert False, 'Failed to get FQDN'
 
 
+# GRPC_SERVER:DEBUG,TICKET_PARSER:WARN,KQP_COMPILE_ACTOR:DEBUG
 def get_additional_log_configs():
     log_configs = os.getenv('YDB_ADDITIONAL_LOG_CONFIGS', '')
     rt = {}
@@ -225,8 +226,8 @@ class KikimrConfigGenerator(object):
         self.__additional_log_configs.update(get_additional_log_configs())
         if pg_compatible_expirement:
             self.__additional_log_configs.update({
-                'PGWIRE': 'DEBUG',
-                'LOCAL_PGWIRE':'DEBUG',
+                'PGWIRE': LogLevels.from_string('DEBUG'),
+                'LOCAL_PGWIRE': LogLevels.from_string('DEBUG'),
             })
 
         self.dynamic_pdisk_size = dynamic_pdisk_size

@@ -172,7 +172,7 @@ private:
             return &*Index;
         }
         auto pageId = Part->IndexPages.GetFlat(GroupId);
-        auto page = Env->TryGetPage(Part, pageId);
+        auto page = Env->TryGetPage(Part, pageId, {});
         if (page) {
             Index = TIndex(*page);
             Y_VERIFY_DEBUG_S(EndRowId == Index->GetEndRowId(), "EndRowId mismatch " << EndRowId << " != " << Index->GetEndRowId() << " (group " << GroupId.Historic << "/" << GroupId.Index <<")");

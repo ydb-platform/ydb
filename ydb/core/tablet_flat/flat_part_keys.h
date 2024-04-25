@@ -1,4 +1,5 @@
 #pragma once
+#include "flat_page_data.h"
 #include "flat_part_iface.h"
 #include "flat_part_index_iter_iface.h"
 #include "flat_part_slice.h"
@@ -28,19 +29,19 @@ namespace NTable {
             Y_ABORT("IPages::Locate(TPart*, ...) shouldn't be used here");
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageId id, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override
         {
             Y_ABORT_UNLESS(part == Part, "Unsupported part");
             Y_ABORT_UNLESS(groupId.IsMain(), "Unsupported column group");
 
-            if (auto* extra = ExtraPages.FindPtr(id)) {
+            if (auto* extra = ExtraPages.FindPtr(pageId)) {
                 return extra;
-            } else if (auto* cached = Cache->Lookup(id)) {
+            } else if (auto* cached = Cache->Lookup(pageId)) {
                 // Save page in case it's evicted on the next iteration
-                ExtraPages[id] = *cached;
+                ExtraPages[pageId] = *cached;
                 return cached;
             } else {
-                NeedPages.insert(id);
+                NeedPages.insert(pageId);
                 return nullptr;
             }
         }
@@ -198,7 +199,7 @@ namespace NTable {
         {
             Y_ABORT_UNLESS(pageId != Max<TPageId>(), "Unexpected seek to an invalid page id");
             if (PageId != pageId) {
-                if (auto* data = Env->TryGetPage(Part, pageId)) {
+                if (auto* data = Env->TryGetPage(Part, pageId, {})) {
                     Y_ABORT_UNLESS(Page.Set(data), "Unexpected failure to load data page");
                     PageId = pageId;
                 } else {

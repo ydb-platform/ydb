@@ -419,7 +419,7 @@ int TClickBenchCommandInit::Run(TConfig& config) {
     TString notNull = "";
     if (StoreType == "column") {
         //partitionBy = "PARTITION BY HASH(CounterID)"; Not enough cardinality in CounterID column @sa KIKIMR-16478
-        partitionBy = "PARTITION BY HASH(EventTime)";
+        partitionBy = "PARTITION BY HASH(CounterID, EventDate, UserID, EventTime, WatchID)";
         storageType = "STORE = COLUMN,";
         notNull = "NOT NULL";
     } else if (StoreType != "row") {

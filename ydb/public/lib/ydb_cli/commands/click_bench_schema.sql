@@ -107,7 +107,7 @@ CREATE TABLE `{table}`
     URLHash Int64 {notnull},
     CLID Int32 {notnull},
 
-    PRIMARY KEY (EventTime, CounterID, EventDate, UserID, WatchID)
+    PRIMARY KEY (CounterID, EventDate, UserID, EventTime, WatchID)
 )
 {partition}
 WITH (

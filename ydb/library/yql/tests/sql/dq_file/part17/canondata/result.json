@@ -1029,6 +1029,28 @@
         }
     ],
     "test.test[hor_join-double_input-default.txt-Results]": [],
+    "test.test[in-in_nonliteral_tuple_ansi-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1937429/8922776cd7638b44d90c03cdd08ebd58640651e4/resource.tar.gz#test.test_in-in_nonliteral_tuple_ansi-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[in-in_nonliteral_tuple_ansi-default.txt-Debug]": [
+        {
+            "checksum": "8da125882da087671bde34cea753b57d",
+            "size": 641,
+            "uri": "https://{canondata_backend}/1937429/8922776cd7638b44d90c03cdd08ebd58640651e4/resource.tar.gz#test.test_in-in_nonliteral_tuple_ansi-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[in-in_nonliteral_tuple_ansi-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1937429/8922776cd7638b44d90c03cdd08ebd58640651e4/resource.tar.gz#test.test_in-in_nonliteral_tuple_ansi-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[in-in_nonliteral_tuple_ansi-default.txt-Results]": [],
     "test.test[in-in_tuple_table-default.txt-Analyze]": [
         {
             "checksum": "a0b44f6623d7dcc660093e0dc50e456b",

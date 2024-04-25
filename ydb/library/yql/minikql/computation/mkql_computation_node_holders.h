@@ -1041,7 +1041,7 @@ public:
         bool encoded;
         bool useIHash;
         GetDictionaryKeyTypes(type, KeyTypes, IsTuple, encoded, useIHash);
-        if (useIHash) {
+        if (useIHash || encoded) {
             if constexpr(SupportEqual) {
                 Equate = MakeEquateImpl(type);
             }

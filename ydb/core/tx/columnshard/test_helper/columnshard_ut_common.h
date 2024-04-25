@@ -1,9 +1,8 @@
 #pragma once
 
-#include "columnshard.h"
-#include "columnshard_impl.h"
-#include "blob_cache.h"
-#include "engines/scheme/statistics/max/operator.h"
+#include <ydb/core/tx/columnshard/blob_cache.h>
+#include <ydb/core/tx/columnshard/engines/scheme/statistics/max/operator.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
@@ -11,7 +10,15 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/services/metadata/abstract/fetcher.h>
+
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/tx/long_tx_service/public/types.h>
+
+namespace NKikimr::NOlap {
+struct TIndexInfo;
+}
 
 namespace NKikimr::NTxUT {
 
@@ -448,6 +455,8 @@ inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planSt
     ids.insert(txId);
     PlanCommit(runtime, sender, planStep, ids);
 }
+
+void Wakeup(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId);
 
 struct TTestBlobOptions {
     THashSet<TString> NullColumns;

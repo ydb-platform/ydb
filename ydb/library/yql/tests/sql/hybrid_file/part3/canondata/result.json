@@ -1231,6 +1231,20 @@
             "uri": "https://{canondata_backend}/1936842/11d23d4a39031af80d6dc470ce99f9427771e7d4/resource.tar.gz#test.test_in-in_noansi_list_dict-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[in-in_nonliteral_tuple_ansi-default.txt-Debug]": [
+        {
+            "checksum": "742bdcbc8da72a66ee950e081886fc9e",
+            "size": 640,
+            "uri": "https://{canondata_backend}/1597364/75cbdd585b0656f6fb0390e1698cb16d6290c17c/resource.tar.gz#test.test_in-in_nonliteral_tuple_ansi-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[in-in_nonliteral_tuple_ansi-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1597364/75cbdd585b0656f6fb0390e1698cb16d6290c17c/resource.tar.gz#test.test_in-in_nonliteral_tuple_ansi-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[in-in_sorted_by_tuple--Debug]": [
         {
             "checksum": "c48e68dd8b3ea04a57d9eff75bb2620c",

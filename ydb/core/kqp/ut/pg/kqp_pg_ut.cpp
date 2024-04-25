@@ -3743,6 +3743,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                     d varchar(20) DEFAULT 'foo'::varchar(2),
                     e int DEFAULT NULL,
                     f bit varying(5) DEFAULT '1001',
+                    g bigint DEFAULT 0 NOT NULL,
                     PRIMARY KEY(a)
                 );
             )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
@@ -3762,7 +3763,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
             CompareYson(R"(
-                [["1";"5";"7";"fo";#;"1001"]]
+                [["1";"5";"7";"fo";#;"1001";"0"]]
             )", FormatResultSetYson(result.GetResultSet(0)));
         }
     }

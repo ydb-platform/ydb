@@ -585,7 +585,6 @@ ui32 TConsumer::NextStep() {
 void TConsumer::RegisterPartition(ui32 partitionId, const TActorContext& ctx) {
     auto [_, inserted] = Partitions.try_emplace(partitionId, TPartition());
     if (inserted && IsReadable(partitionId)) {
-        // TODO to existed family?
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                 GetPrefix() << "register readable partition " << partitionId);
 
@@ -754,7 +753,8 @@ bool TConsumer::MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, cons
         std::swap(lhs, rhs);
     }
     if ((lhs->IsActive() || lhs->IsRelesing()) && rhs->IsFree()) {
-        lhs->AttachePartitions(rhs->Partitions, ctx); // TODO root partition
+        lhs->AttachePartitions(rhs->Partitions, ctx);
+        lhs->RootPartitions.insert(lhs->RootPartitions.end(), rhs->Partitions.begin(), rhs->Partitions.end());
 
         rhs->Partitions.clear();
         rhs->Destroy(ctx);
@@ -905,7 +905,7 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, const TActorContext& c
 
     auto* family = FindFamily(partitionId);
     if (!family) {
-        return false; // TODO is it correct?
+        return false;
     }
     family->InactivatePartition(partitionId);
 
@@ -970,13 +970,19 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
                 GetPrefix() << "Reading of the partition " << partitionId << " was started by " << ConsumerName << ". We stop reading from child partitions.");
 
         auto* family = FindFamily(partitionId);
-        if (family) {
-            family->ActivatePartition(partitionId);
+        if (!family) {
+            return;
         }
+
+        if (!family->IsLonely()) {
+            family->Release(ctx);
+            return;
+        }
+
+        family->ActivatePartition(partitionId);
 
         // We releasing all children's partitions because we don't start reading the partition from EndOffset
         GetPartitionGraph().Travers(partitionId, [&](ui32 partitionId) {
-            // TODO несколько партиции в одном family
             auto* partition = GetPartition(partitionId);
             auto* f = FindFamily(partitionId);
 
@@ -984,9 +990,7 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
                 if (partition && partition->Reset()) {
                     f->ActivatePartition(partitionId);
                 }
-                if (f != family) {
-                    DestroyFamily(f, ctx);
-                }
+                DestroyFamily(f, ctx);
             }
 
             return true;
@@ -1036,7 +1040,7 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
             ScheduleBalance(ctx);
         }
     } else if (!partition.IsInactive()) {
-        auto delay = std::min<size_t>(1ul << partition.Iteration, Balancer.GetLifetimeSeconds()); // TODO Учесть время закрытия партиции на запись
+        auto delay = std::min<size_t>(1ul << partition.Iteration, Balancer.GetLifetimeSeconds()); // TODO use split/merge time
 
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                     GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()

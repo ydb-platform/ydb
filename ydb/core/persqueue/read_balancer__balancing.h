@@ -147,6 +147,7 @@ private:
     std::pair<size_t, size_t> ClassifyPartitions(const TPartitions& partitions);
     void UpdatePartitionMapping(const std::vector<ui32>& partitions);
     void UpdateSpecialSessions();
+    void ChangePartitionCounters(ssize_t activeDiff, ssize_t inactiveDiff);
     void LockPartition(ui32 partitionId, const TActorContext& ctx);
     std::unique_ptr<TEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(ui32 partitionId) const;
     std::unique_ptr<TEvPersQueue::TEvLockPartition> MakeEvLockPartition(ui32 partitionId, ui32 step) const;

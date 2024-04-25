@@ -336,19 +336,7 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
     }
 
     auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(newPartitions);
-
-    if (Session) {
-        // Reordering Session->Families
-        Session->Families.erase(this);
-    }
-
-    ActivePartitionCount += activePartitionCount;
-    InactivePartitionCount += inactivePartitionCount;
-
-    if (Session) {
-        // Reordering Session->Families
-        Session->Families.insert(this);
-    }
+    ChangePartitionCounters(activePartitionCount, activePartitionCount);
 
     if (IsActive()) {
         if (!Session->AllPartitionsReadable(newPartitions)) {
@@ -357,9 +345,6 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
             Release(ctx);
             return;
         }
-
-        Session->ActivePartitionCount += activePartitionCount;
-        Session->InactivePartitionCount += inactivePartitionCount;
 
         for (auto partitionId : newPartitions) {
             LockPartition(partitionId, ctx);
@@ -387,46 +372,51 @@ void TPartitionFamily::ActivatePartition(ui32 partitionId) {
     ALOG_DEBUG(NKikimrServices::PERSQUEUE_READ_BALANCER,
             GetPrefix() << "activating partition " << partitionId);
 
-    ++ActivePartitionCount;
-    --InactivePartitionCount;
-
-    if (IsActive()) {
-        ++Session->ActivePartitionCount;
-        --Session->InactivePartitionCount;
-    }
+    ChangePartitionCounters(1, -1);
 }
 
 void TPartitionFamily::InactivatePartition(ui32 partitionId) {
     ALOG_DEBUG(NKikimrServices::PERSQUEUE_READ_BALANCER,
             GetPrefix() << "inactivating partition " << partitionId);
 
-    --ActivePartitionCount;
-    ++InactivePartitionCount;
-
-    if (IsActive()) {
-        --Session->ActivePartitionCount;
-        ++Session->InactivePartitionCount;
-    }
+    ChangePartitionCounters(-1, 1);
 }
 
+ void TPartitionFamily::ChangePartitionCounters(ssize_t active, ssize_t inactive) {
+    if (Session) {
+        // Reordering Session->Families
+        Session->Families.erase(this);
+    }
+
+    ActivePartitionCount += active;
+    InactivePartitionCount += inactive;
+
+    if (Session) {
+        // Reordering Session->Families
+        Session->Families.insert(this);
+    }
+
+    if (IsActive()) {
+        Session->ActivePartitionCount += active;
+        Session->InactivePartitionCount += inactive;
+    }
+ }
+
 void TPartitionFamily::Merge(TPartitionFamily* other) {
-        Partitions.insert(Partitions.end(), other->Partitions.begin(), other->Partitions.end());
-        UpdatePartitionMapping(other->Partitions);
-        other->Partitions.clear();
+    Partitions.insert(Partitions.end(), other->Partitions.begin(), other->Partitions.end());
+    UpdatePartitionMapping(other->Partitions);
+    other->Partitions.clear();
 
-        RootPartitions.insert(RootPartitions.end(), other->RootPartitions.begin(), other->RootPartitions.end());
-        other->RootPartitions.clear();
+    RootPartitions.insert(RootPartitions.end(), other->RootPartitions.begin(), other->RootPartitions.end());
+    other->RootPartitions.clear();
 
-        WantedPartitions.insert(other->WantedPartitions.begin(), other->WantedPartitions.end());
-        WantedPartitions.clear();
+    WantedPartitions.insert(other->WantedPartitions.begin(), other->WantedPartitions.end());
+    WantedPartitions.clear();
 
-        ActivePartitionCount += other->ActivePartitionCount;
-        other->ActivePartitionCount = 0;
+    ChangePartitionCounters(other->ActivePartitionCount, other->InactivePartitionCount);
+    other->ChangePartitionCounters(-other->ActivePartitionCount, -other->InactivePartitionCount);
 
-        InactivePartitionCount += other->InactivePartitionCount;
-        other->InactivePartitionCount = 0;
-
-        UpdateSpecialSessions();
+    UpdateSpecialSessions();
 }
 
 TString TPartitionFamily::DebugStr() const {
@@ -459,8 +449,7 @@ bool TPartitionFamily::PossibleForBalance(TSession* session) {
 
 void TPartitionFamily::ClassifyPartitions() {
     auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(Partitions);
-    ActivePartitionCount = activePartitionCount;
-    InactivePartitionCount = inactivePartitionCount;
+    ChangePartitionCounters(activePartitionCount, inactivePartitionCount);
 }
 
 template<typename TPartitions>
@@ -1157,6 +1146,8 @@ void TConsumer::Balance(const TActorContext& ctx) {
         return;
     }
 
+    auto startTime = TInstant::Now();
+
     // We try to balance the partitions by sessions that clearly want to read them, even if the distribution is not uniform.
     for (auto& [_, family] : Families) {
         if (family->Status != TPartitionFamily::EStatus::Active || family->SpecialSessions.empty()) {
@@ -1297,6 +1288,10 @@ void TConsumer::Balance(const TActorContext& ctx) {
             }
         }
     }
+
+    auto duration = TInstant::Now() - startTime;
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            GetPrefix() << "balancing duration: " << duration);
 }
 
 void TConsumer::Release(ui32 partitionId, const TActorContext& ctx) {

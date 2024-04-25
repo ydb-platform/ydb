@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(Balancing) {
         readSession0.Close();
     }
 
-/*     Y_UNIT_TEST(Many) {
+     Y_UNIT_TEST(Many) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2000);
 
@@ -132,14 +132,14 @@ Y_UNIT_TEST_SUITE(Balancing) {
             sessions.push_back(CreateClient());
         }
 
-        for (int i = 0 ; i < 500 ; ++i) {
+        for (int i = 0 ; i < 1000 ; ++i) {
             Cerr << ">>>>> " << TInstant::Now() << " Close session " << i << Endl << Flush;
 
             auto s = sessions.front();
             s->Close();
             sessions.pop_front();
 
-            Sleep(TDuration::MilliSeconds(250));
+            Sleep(TDuration::MilliSeconds(50));
 
             sessions.push_back(CreateClient());
         }
@@ -147,6 +147,6 @@ Y_UNIT_TEST_SUITE(Balancing) {
         Cerr << ">>>>> " << TInstant::Now() << " Finished" << Endl << Flush;
         Sleep(TDuration::Seconds(10));
     }
- */}
+ }
 
 } // namespace NKikimr

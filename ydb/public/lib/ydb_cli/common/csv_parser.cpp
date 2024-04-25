@@ -290,7 +290,7 @@ private:
     TValueBuilder Builder;
 };
 
-TStringBuf Consume( const TExceptionData& state, NCsvFormat::CsvSplitter& splitter) {
+TStringBuf Consume(const TExceptionData& state, NCsvFormat::CsvSplitter& splitter) {
     try {
         return splitter.Consume();
     } catch (std::exception& e) {

@@ -30,6 +30,9 @@ protected:
 
     virtual TConclusion<bool> DoPatchSchema(TOlapSchema& originalSchema) const override {
         TSimpleErrorCollector collector;
+        if (!AlterRequest.HasAlterSchema()) {
+            return false;
+        }
         TOlapSchemaUpdate schemaUpdate;
         if (!schemaUpdate.Parse(AlterRequest.GetAlterSchema(), collector)) {
             return TConclusionStatus::Fail(collector->GetErrorMessage());
@@ -38,7 +41,7 @@ protected:
         if (!originalSchema.Update(schemaUpdate, collector)) {
             return TConclusionStatus::Fail(collector->GetErrorMessage());
         }
-        return TConclusionStatus::Success();
+        return true;
     }
 
     virtual bool DoInitializeFromProto(IErrorCollector& /*errors*/) override {

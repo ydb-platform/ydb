@@ -342,10 +342,7 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
             return UnpackString(buf, 16);
         }
         case NUdf::EDataSlot::Decimal: {
-            const auto des = NYql::NDecimal::Deserialize(buf.data(), buf.size());
-            MKQL_ENSURE(!NYql::NDecimal::IsError(des.first), "Bad packed data: invalid decimal.");
-            buf.Skip(des.second);
-            return NUdf::TUnboxedValuePod(des.first);
+            return NUdf::TUnboxedValuePod(UnpackDecimal(buf));
         }
         default:
             ui32 size = 0;
@@ -669,8 +666,7 @@ void PackImpl(const TType* type, TBuf& buffer, const NUdf::TUnboxedValuePod& val
             break;
         }
         case NUdf::EDataSlot::Decimal: {
-            char buff[0x10U];
-            PackBlob(buff, NYql::NDecimal::Serialize(value.GetInt128(), buff), buffer);
+            PackDecimal(value.GetInt128(), buffer);
             break;
         }
         default: {

@@ -15,13 +15,13 @@ public:
     TKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
         const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
         IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory)
-        : QueryServiceConfig_(queryServiceConfig)
-        , MetadataProviderConfig_(metadataProviderConfig)
-        , FederatedQuerySetupFactory_(federatedQuerySetupFactory)
+        : QueryServiceConfig(queryServiceConfig)
+        , MetadataProviderConfig(metadataProviderConfig)
+        , FederatedQuerySetupFactory(federatedQuerySetupFactory)
     {}
 
     void Bootstrap(const TActorContext &ctx) {
-        FederatedQuerySetup_ = FederatedQuerySetupFactory_->Make(ctx.ActorSystem());
+        FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
         
         Become(&TKqpFinalizeScriptService::MainState);
     }
@@ -40,10 +40,10 @@ public:
     void Handle(TEvScriptFinalizeRequest::TPtr& ev) {
         TString executionId = ev->Get()->Description.ExecutionId;
 
-        if (!FinalizationRequestsQueue_.contains(executionId)) {
-            WaitingFinalizationExecutions_.push(executionId);
+        if (!FinalizationRequestsQueue.contains(executionId)) {
+            WaitingFinalizationExecutions.push(executionId);
         }
-        FinalizationRequestsQueue_[executionId].emplace_back(std::move(ev));
+        FinalizationRequestsQueue[executionId].emplace_back(std::move(ev));
 
         TryStartFinalizeRequest();
     }
@@ -60,14 +60,14 @@ public:
 
 private:
     void TryStartFinalizeRequest() {
-        if (FinalizationRequestsInFlight_ >= QueryServiceConfig_.GetFinalizeScriptServiceConfig().GetMaxInFlightFinalizationsCount() || WaitingFinalizationExecutions_.empty()) {
+        if (FinalizationRequestsInFlight >= QueryServiceConfig.GetFinalizeScriptServiceConfig().GetMaxInFlightFinalizationsCount() || WaitingFinalizationExecutions.empty()) {
             return;
         }
 
-        TString executionId = WaitingFinalizationExecutions_.front();
-        WaitingFinalizationExecutions_.pop();
+        TString executionId = WaitingFinalizationExecutions.front();
+        WaitingFinalizationExecutions.pop();
 
-        auto& queue = FinalizationRequestsQueue_[executionId];
+        auto& queue = FinalizationRequestsQueue[executionId];
         Y_ENSURE(!queue.empty());
 
         StartFinalizeRequest(std::move(queue.back()));
@@ -75,24 +75,24 @@ private:
     }
 
     void StartFinalizeRequest(TEvScriptFinalizeRequest::TPtr request) {
-        ++FinalizationRequestsInFlight_;
+        ++FinalizationRequestsInFlight;
 
         Register(CreateScriptFinalizerActor(
             std::move(request),
-            QueryServiceConfig_,
-            MetadataProviderConfig_,
-            FederatedQuerySetup_
+            QueryServiceConfig,
+            MetadataProviderConfig,
+            FederatedQuerySetup
         ));
     }
 
     void Handle(TEvScriptFinalizeResponse::TPtr& ev) {
-        --FinalizationRequestsInFlight_;
+        --FinalizationRequestsInFlight;
         TString executionId = ev->Get()->ExecutionId;
 
-        if (!FinalizationRequestsQueue_[executionId].empty()) {
-            WaitingFinalizationExecutions_.push(executionId);
+        if (!FinalizationRequestsQueue[executionId].empty()) {
+            WaitingFinalizationExecutions.push(executionId);
         } else {
-            FinalizationRequestsQueue_.erase(executionId);
+            FinalizationRequestsQueue.erase(executionId);
         }
         TryStartFinalizeRequest();
     }
@@ -122,15 +122,15 @@ private:
     }
 
 private:
-    const NKikimrConfig::TQueryServiceConfig QueryServiceConfig_;
-    const NKikimrConfig::TMetadataProviderConfig MetadataProviderConfig_;
+    const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    const NKikimrConfig::TMetadataProviderConfig MetadataProviderConfig;
 
-    IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory_;
-    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup_;
+    IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory;
+    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
-    ui32 FinalizationRequestsInFlight_ = 0;
-    std::queue<TString> WaitingFinalizationExecutions_;
-    std::unordered_map<TString, std::vector<TEvScriptFinalizeRequest::TPtr>> FinalizationRequestsQueue_;
+    ui32 FinalizationRequestsInFlight = 0;
+    std::queue<TString> WaitingFinalizationExecutions;
+    std::unordered_map<TString, std::vector<TEvScriptFinalizeRequest::TPtr>> FinalizationRequestsQueue;
 };
 
 }  // anonymous namespace

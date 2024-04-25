@@ -8,7 +8,6 @@
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/proto/result_set_meta.pb.h>
 #include <ydb/core/kqp/run_script_actor/kqp_run_script_actor.h>
-#include <ydb/core/tx/datashard/const.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/library/table_creator/table_creator.h>
@@ -2513,11 +2512,6 @@ public:
             NGRpcService::FillQueryStats(queryStats, *Request.QueryStats);
             NProtobufJson::Proto2Json(queryStats, statsJson, NProtobufJson::TProto2JsonConfig());
             serializedStats = NJson::WriteJson(statsJson);
-        }
-
-        if (Request.QueryAst && Request.QueryAst->size() > NDataShard::NLimits::MaxWriteValueSize) {
-            Request.QueryAst = std::nullopt;
-            Request.Issues.AddIssue(TStringBuilder() << "Query ast size is " << Request.QueryAst->size() << " bytes, that is larger than allowed limit " << NDataShard::NLimits::MaxWriteValueSize << " bytes, ast was dropped");
         }
 
         TMaybe<TString> ast;

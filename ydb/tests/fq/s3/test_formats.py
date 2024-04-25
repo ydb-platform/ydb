@@ -504,7 +504,6 @@ Pear,15,33'''
         client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = f'''
-            PRAGMA s3.UseBlocksSource="true";
             SELECT *
             FROM `{storage_connection_name}`.`{filename}`
             WITH (format=`{type_format}`, SCHEMA (

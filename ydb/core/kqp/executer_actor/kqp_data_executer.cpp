@@ -2394,6 +2394,10 @@ private:
         }
     }
 
+    void FillInternalSinksCommitSettings() {
+        
+    }
+
     void ExecuteTasks() {
         {
             auto lockTxId = Request.AcquireLocksTxId;
@@ -2404,6 +2408,8 @@ private:
         }
 
         LWTRACK(KqpDataExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, ComputeTasks.size(), DatashardTxs.size() + EvWriteTxs.size());
+
+        FillInternalSinksCommitSettings();
 
         for (auto& [shardId, tasks] : RemoteComputeTasks) {
             auto it = ShardIdToNodeId.find(shardId);

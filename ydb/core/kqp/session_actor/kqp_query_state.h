@@ -313,10 +313,10 @@ public:
             return true;
         }
 
-        if (HasSinkInTx(tx)) {
+        /*if (HasSinkInTx(tx)) {
             // At current time sinks require separate tnx with commit.
             return false;
-        }
+        }*/
 
         if (TxCtx->HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
             YQL_ENSURE(TxCtx->EnableImmediateEffects);
@@ -376,7 +376,7 @@ public:
 
         if (TxCtx->CanDeferEffects()) {
             // At current time sinks require separate tnx with commit.
-            while (tx && tx->GetHasEffects() && !HasSinkInTx(tx)) {
+            while (tx && tx->GetHasEffects()/* && !HasSinkInTx(tx)*/) {
                 QueryData->CreateKqpValueMap(tx);
                 bool success = TxCtx->AddDeferredEffect(tx, QueryData);
                 YQL_ENSURE(success);

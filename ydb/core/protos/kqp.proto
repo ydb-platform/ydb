@@ -717,14 +717,22 @@ message TEvKqpOutputActorResultInfo {
     repeated NKikimrDataEvents.TLock Locks = 1;
 }
 
+message TKqpTableSinkLocks {
+    repeated NKikimrDataEvents.TLock Locks = 1;
+    repeated uint64 SendingShards = 2;
+    repeated uint64 ReceivingShards = 3;
+}
+
 message TKqpTableSinkSettings {
     optional NKqpProto.TKqpPhyTableId Table = 3;
     repeated TKqpColumnMetadataProto KeyColumns = 4;
     repeated TKqpColumnMetadataProto Columns = 5;
     optional uint64 LockTxId = 6;
     optional uint64 LockNodeId = 7;
-    optional bool ImmediateTx = 8;
-    optional uint64 ShardIdHint = 9; // TODO: faster immediate write
+    optional bool PrepareTx = 8;
+    optional bool ImmediateTx = 9;
+    optional uint64 ShardIdHint = 10; // TODO: faster immediate write
+    optional TKqpTableSinkLocks Locks = 11;
 }
 
 message TKqpStreamLookupSettings {

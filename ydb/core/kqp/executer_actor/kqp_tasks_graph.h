@@ -91,7 +91,6 @@ struct TStageInfoMeta {
 struct TGraphMeta {
     IKqpGateway::TKqpSnapshot Snapshot;
     TMaybe<ui64> LockTxId;
-    bool ImmediateTx = false;
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;
     bool UseFollowers = false;
@@ -100,6 +99,9 @@ struct TGraphMeta {
     TString Database;
     NKikimrConfig::TTableServiceConfig::EChannelTransportVersion ChannelTransportVersion;
     TIntrusivePtr<NKikimr::NKqp::TUserRequestContext> UserRequestContext;
+    bool ImmediateTx = false;
+    bool PrepareInSinks = false;
+    TVector<NKikimrKqp::TKqpTableSinkLocks> LocksForSinks;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena;
@@ -120,6 +122,10 @@ struct TGraphMeta {
 
     void SetImmediateTx(bool immediateTx) {
         ImmediateTx = immediateTx;
+    }
+
+    void SetPrepareInSinks(bool prepareInSinks) {
+        PrepareInSinks = prepareInSinks;
     }
 };
 

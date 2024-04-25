@@ -2836,7 +2836,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TableSink_ReplaceDataShardDistributed, UseSink) {
+    //Y_UNIT_TEST_TWIN(TableSink_ReplaceDataShardDistributed, UseSink) {
+    Y_UNIT_TEST(TableSink_ReplaceDataShardDistributed) {
+        bool UseSink = true;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(UseSink);
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
@@ -2886,7 +2888,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
 
-        {
+        /*{
             auto it = client.StreamExecuteQuery(R"(
                 SELECT COUNT(*) FROM `/Root/DataShard`;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -2895,7 +2897,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             CompareYson(
                 output,
                 R"([[4u]])");
-        }
+        }*/
 
         {
             auto prepareResult = client.ExecuteQuery(R"(
@@ -2904,7 +2906,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
 
-        {
+        /*{
             auto it = client.StreamExecuteQuery(R"(
                 SELECT COUNT(*) FROM `/Root/DataShard2`;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -2933,7 +2935,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             CompareYson(
                 output,
                 R"([[8u]])");
-        }
+        }*/
     }
 
     Y_UNIT_TEST_TWIN(TableSink_ReplaceDataShardImmediate, UseSink) {

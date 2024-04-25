@@ -12,6 +12,7 @@ TEST_SRCS(
     test_slice_sample.py
 )
 
+TAG(ya:fat)
 SIZE(LARGE)
 
 DEPENDS(

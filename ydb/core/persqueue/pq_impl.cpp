@@ -4185,6 +4185,9 @@ void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
 TActorId TPersQueue::GetPartitionQuoter(const TPartitionId& partition) {
     if (!AppData()->PQConfig.GetQuotingConfig().GetEnableQuoting())
         return TActorId{};
+    if (partition.IsSupportivePartition()) {
+        return TActorId{};
+    }
 
     auto& quoterId = PartitionWriteQuoters[partition.OriginalPartitionId];
     if (!quoterId) {

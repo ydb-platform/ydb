@@ -1,4 +1,8 @@
+#pragma once
+
+#define INCLUDE_READ_SESSION_IMPL_H
 #include "read_session_impl.h"
+#undef INCLUDE_READ_SESSION_IMPL_H
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
 
@@ -119,10 +123,6 @@ void TPartitionStreamImpl<UseMigrationProtocol>::GetDataEventImpl(TIntrusivePtr<
                                                   compressedMessages,
                                                   accumulator);
 }
-
-// explicit instantation
-template class TPartitionStreamImpl<true>;
-template class TPartitionStreamImpl<false>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TRawPartitionStreamEventQueue
@@ -1768,10 +1768,6 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMappin
     return CommitInflight != 0;
 }
 
-// explicit instantation
-template class TSingleClusterReadSessionImpl<true>;
-template class TSingleClusterReadSessionImpl<false>;
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TReadSessionEventInfo
 
@@ -1805,10 +1801,6 @@ template<bool UseMigrationProtocol>
 bool TReadSessionEventInfo<UseMigrationProtocol>::IsDataEvent() const {
     return !IsEmpty() && PartitionStream->TopEvent().IsDataEvent();
 }
-
-// explicit instantation
-template struct TReadSessionEventInfo<true>;
-template struct TReadSessionEventInfo<false>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TReadSessionEventsQueue
@@ -2199,12 +2191,6 @@ void TReadSessionEventsQueue<UseMigrationProtocol>::ClearAllEvents() {
         }
     }
 }
-
-// explicit instantation
-template class TRawPartitionStreamEventQueue<true>;
-template class TRawPartitionStreamEventQueue<false>;
-template class TReadSessionEventsQueue<true>;
-template class TReadSessionEventsQueue<false>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TDataDecompressionInfo
@@ -2613,12 +2599,6 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
     }
 }
 
-// explicit instantation
-template class TDataDecompressionInfo<true>;
-template class TDataDecompressionInfo<false>;
-template class TDataDecompressionEvent<true>;
-template class TDataDecompressionEvent<false>;
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TUserRetrievedEventsInfoAccumulator
 
@@ -2638,10 +2618,6 @@ void TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>::OnUserRetrievedE
         parent->OnUserRetrievedEvent(counter.DecompressedSize, counter.MessagesCount);
     }
 }
-
-// explicit instantation
-template class TUserRetrievedEventsInfoAccumulator<true>;
-template class TUserRetrievedEventsInfoAccumulator<false>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TDeferredActions
@@ -2771,9 +2747,5 @@ void TDeferredActions<UseMigrationProtocol>::SignalWaiters() {
         w.Signal();
     }
 }
-
-// explicit instantation
-template class TDeferredActions<true>;
-template class TDeferredActions<false>;
 
 }  // namespace NYdb::NTopic

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "counters_logger.h"
-#include "read_session_impl.h"
+#include "read_session_impl.ipp"
 #include "topic_impl.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>

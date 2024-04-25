@@ -1,5 +1,9 @@
 #pragma once
 
+#ifndef INCLUDE_READ_SESSION_IMPL_H
+#error "Do not include this file directly. Use read_session_impl.ipp instead."
+#endif
+
 #include "common.h"
 #include "counters_logger.h"
 

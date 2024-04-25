@@ -7,7 +7,7 @@ SRCS(
     deferred_commit.cpp
     event_handlers.cpp
     read_session_event.cpp
-    read_session_impl.cpp
+    read_session_impl.ipp
     read_session.h
     read_session.cpp
     topic_impl.h

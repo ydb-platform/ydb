@@ -1,4 +1,4 @@
-#include "read_session_impl.h"
+#include "read_session_impl.ipp"
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/include/read_events.h>
 

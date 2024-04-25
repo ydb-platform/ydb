@@ -167,12 +167,15 @@ public:
 
     void RequireStats() { NeedsStats = true; }
     bool GetNeedsStats() const { return NeedsStats; }
+    void DisableAuthInfo() { NeedAuthInfo = false; }
+    bool GetNeedAuthInfo() const { return NeedAuthInfo; }
     ETableType GetTableType() const { return TableType; }
     void SetTableType(ETableType tableType) { TableType = tableType; }
 
 private:
     THashMap<TString, const TTypeAnnotationNode*> ColumnTypes;
     bool NeedsStats = false;
+    bool NeedAuthInfo = true;
     ETableType TableType;
 };
 

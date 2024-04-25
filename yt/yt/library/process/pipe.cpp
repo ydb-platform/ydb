@@ -70,6 +70,12 @@ IConnectionWriterPtr TNamedPipe::CreateAsyncWriter()
     return CreateOutputConnectionFromPath(Path_, TIODispatcher::Get()->GetPoller(), MakeStrong(this), Capacity_);
 }
 
+IConnectionWriterPtr TNamedPipe::CreateDeliveryFencedAsyncWriter()
+{
+    YT_VERIFY(!Path_.empty());
+    return CreateDeliveryFencedOutputConnectionFromPath(Path_, TIODispatcher::Get()->GetPoller(), MakeStrong(this), Capacity_);
+}
+
 TString TNamedPipe::GetPath() const
 {
     return Path_;

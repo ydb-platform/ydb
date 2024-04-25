@@ -66,13 +66,15 @@ TOptimizerStatistics NYql::ComputeJoinStats(
 ) {
     
     double newCard;
-    EStatisticsType outputType = NotDefined;
+    EStatisticsType outputType;
     bool leftKeyColumns = false;
     bool rightKeyColumns = false;
     double selectivity = 1.0;
 
 
     if (IsPKJoin(rightStats,rightJoinKeys)) {
+        bool outputTypeDefined = false;
+
         switch (joinKind) {
             case EJoinKind::InnerJoin:
             case EJoinKind::LeftSemi:
@@ -83,10 +85,11 @@ TOptimizerStatistics NYql::ComputeJoinStats(
             default: {
                 newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;
                 outputType = EStatisticsType::ManyManyJoin;
+                outputTypeDefined = true;
             }
         }
 
-        if (outputType == NotDefined) {
+        if (!outputTypeDefined) {
             selectivity = leftStats.Selectivity * rightStats.Selectivity;
 
             leftKeyColumns = true;
@@ -98,6 +101,8 @@ TOptimizerStatistics NYql::ComputeJoinStats(
         }
     }
     else if (IsPKJoin(leftStats,leftJoinKeys)) {
+        bool outputTypeDefined = false;
+        
         switch (joinKind) {
             case EJoinKind::InnerJoin:
             case EJoinKind::LeftSemi:
@@ -105,10 +110,11 @@ TOptimizerStatistics NYql::ComputeJoinStats(
             default: {
                 newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;
                 outputType = EStatisticsType::ManyManyJoin;
+                outputTypeDefined = true;
             }
         }
 
-        if (outputType == NotDefined) {
+        if (!outputTypeDefined) {
             selectivity = leftStats.Selectivity * rightStats.Selectivity;
 
             rightKeyColumns = true;

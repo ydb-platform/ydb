@@ -298,7 +298,7 @@ private:
 
     TMaybe<google::protobuf::Any> ExtraData() override {
         NKikimrKqp::TEvKqpOutputActorResultInfo resultInfo;
-        for (const auto& [shardID, shardInfo] : ShardsInfo.GetShards()) {
+        for (const auto& [_, shardInfo] : ShardsInfo.GetShards()) {
             if (const auto& lock = shardInfo.GetLock(); lock) {
                 resultInfo.AddLocks()->CopyFrom(*lock);
             }

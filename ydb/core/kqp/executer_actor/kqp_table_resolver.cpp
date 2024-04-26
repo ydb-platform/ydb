@@ -68,7 +68,7 @@ private:
         }
         LOG_D("Navigated key sets: " << results.size());
         for (auto& entry : results) {
-            auto iter = TableRequestIds.find(entry.TableId.PathId);
+            auto iter = TableRequestIds.find(entry.TableId);
             if (iter == TableRequestIds.end()) {
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
                     YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
@@ -76,7 +76,7 @@ private:
                 return;
             }
             TVector<TStageId> stageIds(std::move(iter->second));
-            TableRequestIds.erase(entry.TableId.PathId);
+            TableRequestIds.erase(entry.TableId);
             if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
                     YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
@@ -168,8 +168,8 @@ private:
 
                     stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, stageInfo.Meta.TableConstInfo, operation);
 
-                    if (stageInfo.Meta.TableKind == ETableKind::Olap && TableRequestIds.find(stageInfo.Meta.TableId.PathId) == TableRequestIds.end()) {
-                        TableRequestIds[stageInfo.Meta.TableId.PathId].emplace_back(pair.first);
+                    if (stageInfo.Meta.TableKind == ETableKind::Olap && TableRequestIds.find(stageInfo.Meta.TableId) == TableRequestIds.end()) {
+                        TableRequestIds[stageInfo.Meta.TableId].emplace_back(pair.first);
                         auto& entry = requestNavigate->ResultSet.emplace_back();
                         entry.TableId = stageInfo.Meta.TableId;
                         entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
@@ -257,7 +257,7 @@ private:
     const ui64 TxId;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TVector<IKqpGateway::TPhysicalTxData>& Transactions;
-    THashMap<TPathId, TVector<TStageId>> TableRequestIds;
+    THashMap<TTableId, TVector<TStageId>> TableRequestIds;
     bool NavigationFinished = false;
     bool ResolvingFinished = false;
 

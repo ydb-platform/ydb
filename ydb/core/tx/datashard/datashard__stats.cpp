@@ -14,7 +14,7 @@ namespace NDataShard {
 using namespace NResourceBroker;
 using namespace NTable;
 
-class TTableStatsCoroBuilder : public TActorCoroImpl, IPages {
+class TTableStatsCoroBuilder : public TActorCoroImpl, private IPages {
 private:
     using ECode = TDataShard::TEvPrivate::TEvTableStatsError::ECode;
 

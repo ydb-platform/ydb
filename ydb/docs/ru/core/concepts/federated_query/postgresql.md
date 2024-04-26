@@ -5,20 +5,20 @@
 Для работы с внешней базой данных PostgreSQL необходимо выполнить следующие шаги:
 1. Создать [секрет](../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
     ```sql
-    CREATE OBJECT postgresql_datasource_user_password (TYPE SECRET) WITH (value = "password");
+    CREATE OBJECT postgresql_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
-1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных в составе кластера PostgreSQL. При чтении по умолчанию используется [пространство имен](https://www.postgresql.org/docs/current/catalog-pg-namespace.html) `public`, но это значение можно изменить с помощью опционального параметра `SCHEMA`. Сетевое подключение выполняется по стандартному ([Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html)) по транспорту TCP (`PROTOCOL="NATIVE"`). При работе по защищенным TLS каналам связи используется системные сертификаты, расположенные на серверах {{ ydb-full-name}}. 
+1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных в составе кластера PostgreSQL. При чтении по умолчанию используется [пространство имен](https://www.postgresql.org/docs/current/catalog-pg-namespace.html) `public`, но это значение можно изменить с помощью опционального параметра `SCHEMA`. Сетевое подключение выполняется по стандартному ([Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html)) по транспорту TCP (`PROTOCOL="NATIVE"`). При работе по защищенным TLS каналам связи используется системные сертификаты, расположенные на серверах {{ ydb-full-name }}. 
     ```sql
     CREATE EXTERNAL DATA SOURCE postgresql_datasource WITH (
         SOURCE_TYPE="PostgreSQL",
-        LOCATION="postgresql_cluster:5432",
-        DATABASE_NAME="db",
+        LOCATION="<host>:<port>",
+        DATABASE_NAME="<database>",
         AUTH_METHOD="BASIC",
         LOGIN="user",
         PASSWORD_SECRET_NAME="postgresql_datasource_user_password",
         PROTOCOL="NATIVE",
         USE_TLS="TRUE",
-        SCHEMA="public"
+        SCHEMA="<schema>"
     );
     ```
 1. Для корректного выполнения запроса необходимо [развернуть коннектор](../../deploy/manual/deploy-ydb-federated-query.md) и обеспечить сетевой доступ с динамических узлов {{ ydb-full-name }} к целевому кластеру PostgreSQL.
@@ -28,12 +28,12 @@
 Для работы с PostgreSQL используется следующая форма SQL-запроса:
 
 ```sql
-SELECT * FROM postgresql_datasource.table_name
+SELECT * FROM postgresql_datasource.<table_name>
 ```
 
 где:
-- `postgresql_datasource` - идентификатор внешнего источника данных.
-- `table_name` - имя таблицы внутри внешнего источника данных.
+- `postgresql_datasource` - идентификатор внешнего источника данных;
+- `<table_name>` - имя таблицы внутри внешнего источника данных.
 
 ## Ограничения
 
@@ -65,11 +65,11 @@ SELECT * FROM postgresql_datasource.table_name
 |`float4`|`Float`||
 |`double precision`|`Double`||
 |`float8`|`Double`||
-|`date`|`Date`|Допустимый диапазон дат с 1970-01-01 и до 2105-12-31|
-|`timestamp`|`Timestamp`|Допустимый диапазон дат с 1970-01-01 00:00 и до 2105-12-31 23:59|
+|`date`|`Date`|Допустимый диапазон дат с 1970-01-01 и до 2105-12-31. При выходе значения за границы диапазона оно отображается как `NULL`.|
+|`timestamp`|`Timestamp`|Допустимый диапазон дат с 1970-01-01 00:00 и до 2105-12-31 23:59. При выходе значения за границы диапазона оно отображается как `NULL`.|
 |`bytea`|`String`||
-|`character`|`Utf8`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию, строка дополняется пробелами до требуемой длины|
-|`character varying`|`Utf8`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию|
-|`text`|`Utf8`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию|
+|`character`|`Utf8`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию, строка дополняется пробелами до требуемой длины.|
+|`character varying`|`Utf8`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию.|
+|`text`|`Utf8`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию.|
 
 Остальные типы данных не поддерживаются.

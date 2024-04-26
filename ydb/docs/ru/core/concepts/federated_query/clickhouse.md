@@ -11,10 +11,10 @@
     ```sql
     CREATE EXTERNAL DATA SOURCE clickhouse_datasource WITH (
         SOURCE_TYPE="ClickHouse", 
-        LOCATION="clickhouse_cluster:9440", 
-        DATABASE_NAME="db",
+        LOCATION="<host>:<port>", 
+        DATABASE_NAME="<database>",
         AUTH_METHOD="BASIC",
-        LOGIN="user",
+        LOGIN="<login>",
         PASSWORD_SECRET_NAME="clickhouse_datasource_user_password",
         PROTOCOL="NATIVE",
         USE_TLS="TRUE"
@@ -28,12 +28,12 @@
 Для работы с ClickHouse используется следующая форма SQL-запроса:
 
 ```sql
-SELECT * FROM clickhouse_datasource.table_name
+SELECT * FROM clickhouse_datasource.<table_name>
 ```
 
 где:
-- `clickhouse_datasource` - идентификатор внешнего источника данных.
-- `table_name` - имя таблицы внутри внешнего источника данных.
+- `clickhouse_datasource` - идентификатор внешнего источника данных;
+- `<table_name>` - имя таблицы внутри внешнего источника данных.
 
 ## Ограничения
 
@@ -61,10 +61,10 @@ SELECT * FROM clickhouse_datasource.table_name
 |`Float32`|`Float`||
 |`Float64`|`Double`||
 |`Date`|`Date`||
-|`Date32`|`Date`|Допустимый диапазон дат с 1970-01-01 00:00 и до 2105-12-31 23:59|
-|`DateTime`|`DateTime`|Допустимый диапазон дат с 1970-01-01 00:00 и до 2105-12-31 23:59|
-|`DateTime64`|`Timestamp`|Допустимый диапазон дат с 1970-01-01 00:00 и до 2105-12-31 23:59|
+|`Date32`|`Date`|Допустимый диапазон дат с 1970-01-01 и до 2105-12-31. При выходе значения за границы диапазона оно отображается как `NULL`.|
+|`DateTime`|`DateTime`|Допустимый диапазон значений времени с 1970-01-01 00:00:00 и до 2105-12-31 23:59:59. При выходе значения за границы диапазона оно отображается как `NULL`.|
+|`DateTime64`|`Timestamp`|Допустимый диапазон значений времени с 1970-01-01 00:00:00 и до 2105-12-31 23:59:59. При выходе значения за границы диапазона оно отображается как `NULL`.|
 |`String`|`String`||
-|`FixedString`|`String`|Нулевые байты `FixedString` переносятся в `String` без изменений|
+|`FixedString`|`String`|Нулевые байты `FixedString` переносятся в `String` без изменений.|
 
 Остальные типы данных не поддерживаются.

@@ -7,6 +7,7 @@ SRCS(
     database_monitoring.cpp
     monitoring_grpc_client_actor.cpp
     monitoring_rest_client_actor.cpp
+    monitoring_sysview_client_actor.cpp
     ydbcp_grpc_client_actor.cpp
 )
 

@@ -39,7 +39,7 @@ class Test(object):
         yatest_common.execute(
             [
                 yatest_common.binary_path('ydb/tests/tools/ydb_serializable/ydb_serializable'),
-                '--endpoint=localhost:%d' % self.cluster.nodes[1].grpc_port,
+                '--endpoint=%s:%d' % (self.cluster.nodes[1].host, self.cluster.nodes[1].grpc_port),
                 '--database=/Root',
                 '--output-path=%s' % yatest_common.output_path(),
                 '--iterations=25',

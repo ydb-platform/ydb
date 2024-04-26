@@ -152,6 +152,8 @@ message TStaticNameserviceConfig {
     repeated string AcceptUUID = 3;
     optional bool SuppressVersionCheck = 4;
     optional ENameserviceType Type = 5;
+    optional bool KeepSocket = 6 [default = true];
+    optional bool ForceTcp = 7 [default = false];
 }
 
 message TDynamicNameserviceConfig {

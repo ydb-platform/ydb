@@ -85,14 +85,8 @@ class Slice:
             if os.path.isfile(script_path):
                 cmd = ["bash", script_path]
                 logger.info("run cmd '%s'", cmd)
-                subprocess.check_call(["bash", "-c", "env"])
-                subprocess.check_call(["bash", "-c", "echo SHELLOPTS=$SHELLOPTS"])
-                subprocess.check_call(["echo", "START {}".format(script_path)])
-                subprocess.check_call(["cat", script_path])
-                subprocess.check_call(["echo", "END   {}".format(script_path)])
                 try:
-                    time.sleep(2)  # TODO: fix
-                    subprocess.check_call(cmd)
+                    subprocess.check_output(cmd, stderr=subprocess.STDOUT)
                 except subprocess.CalledProcessError as er:
                     raise CalledProcessError(er)
 

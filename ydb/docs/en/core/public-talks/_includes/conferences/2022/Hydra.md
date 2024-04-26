@@ -2,7 +2,7 @@
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
-In this talk we present an approach to asynchronous replication in {{ ydb-short-name }} that provides the following characteristics: changefeed from source database is sharded among multiple persistent queues, sharded changefeed is applied to the target database in a manner to guarantee target database consistency.
+In this talk, we present an approach to asynchronous replication in {{ ydb-short-name }} that provides the following characteristics: changefeed from the source database is sharded among multiple persistent queues, sharded changefeed is applied to the target database in a manner that guarantees the target database consistency.
 
 @[YouTube](https://www.youtube.com/watch?v=Ga2Eg2rbPPc)
 

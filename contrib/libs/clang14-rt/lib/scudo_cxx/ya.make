@@ -13,7 +13,7 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-OWNER(g:cpp-contrib)
+SUBSCRIBER(g:cpp-contrib)
 
 ADDINCL(
     contrib/libs/clang14-rt/lib

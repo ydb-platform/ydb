@@ -246,7 +246,6 @@ public:
     }
 };
 
-
 // fill sequence description with default values
 NKikimrSchemeOp::TSequenceDescription FillSequenceDescription(const NKikimrSchemeOp::TSequenceDescription& descr) {
     NKikimrSchemeOp::TSequenceDescription result = descr;

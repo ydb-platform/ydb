@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import logging
+import os
+import pytest
 import time
 
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
@@ -11,6 +13,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 class TestCpuQuota(TestYdsBase):
     @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_cpu_quota(self, kikimr, client):
         self.init_topics("cpu_quota")
 

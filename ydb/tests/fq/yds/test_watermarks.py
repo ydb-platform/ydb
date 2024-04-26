@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import os
+import pytest
 import time
 
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
@@ -25,6 +27,7 @@ def stop_yds_query(client, query_id):
 
 class TestWatermarks(TestYdsBase):
     @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_pq_watermarks(self, kikimr, client):
         client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
         self.init_topics("pq_test_pq_watermarks")
@@ -78,6 +81,7 @@ class TestWatermarks(TestYdsBase):
         stop_yds_query(client, query_id)
 
     @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_idle_watermarks(self, kikimr, client):
         client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
         self.init_topics("pq_test_idle_watermarks")

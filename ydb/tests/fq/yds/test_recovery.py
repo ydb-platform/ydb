@@ -63,7 +63,7 @@ class TestRecovery(TestYdsBase):
             list = []
             for node_index in self.kikimr.control_plane.kikimr_cluster.nodes:
                 wc = self.kikimr.control_plane.get_worker_count(node_index)
-                cc = self.control_plane.get_ca_count(node_index)
+                cc = self.kikimr.control_plane.get_ca_count(node_index)
                 wcs += wc
                 ccs += cc
                 list.append([node_index, wc, cc])

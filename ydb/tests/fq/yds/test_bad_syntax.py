@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+import os
 import pytest
 import time
 
@@ -27,6 +28,7 @@ class TestBadSyntax(TestYdsBase):
         [True, False],
         ids=["with_created_read_rules", "without_created_read_rules"]
     )
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_bad_syntax(self, kikimr, client, query_type, after_modify, with_read_rules):
         if with_read_rules and not after_modify:
             return

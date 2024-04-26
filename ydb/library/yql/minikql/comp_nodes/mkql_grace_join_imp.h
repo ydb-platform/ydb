@@ -114,7 +114,7 @@ struct TTableSpilledBucket {
         Update();
         if (NextVectorToProcess == ENextVectorToProcess::None) {
             NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
-            BucketState = EBucketState::Spilled;
+            BucketState = EBucketState::Spilling;
         }
         
         while (NextVectorToProcess != ENextVectorToProcess::None) {
@@ -176,6 +176,7 @@ struct TTableSpilledBucket {
     void ProcessBucketRestoration(TTableBucket& bucket) {
         if (NextVectorToProcess == ENextVectorToProcess::None) {
             NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
+            BucketState = EBucketState::Restoring;
         }
         while (NextVectorToProcess != ENextVectorToProcess::None) {
             if (HasRunningAsyncIoOperation()) return;
@@ -406,7 +407,16 @@ public:
 
         for (ui64 i = 0; i < NumberOfBuckets; ++i) {
             if (!TableSpilledBuckets[i].IsProcessingFinished() && !TableSpilledBuckets[i].HasRunningAsyncIoOperation()) {
-                TableSpilledBuckets[i].ProcessBucketSpilling(TableBuckets[i]);
+
+                // TODO move this ifs  into bucket
+                if (TableSpilledBuckets[i].BucketState == TTableSpilledBucket::EBucketState::Spilling) {
+                    TableSpilledBuckets[i].ProcessBucketSpilling(TableBuckets[i]);
+                }
+
+                if (TableSpilledBuckets[i].BucketState == TTableSpilledBucket::EBucketState::Restoring) {
+                    TableSpilledBuckets[i].ProcessBucketRestoration(TableBuckets[i]);
+                }
+                
             }
         }
 
@@ -417,10 +427,18 @@ public:
         return false;
     }
 
+    bool IsBucketInMemory(ui64 bucket) {
+        return TableSpilledBuckets[bucket].BucketState == TTableSpilledBucket::EBucketState::InMemory;
+    }
+
+    void StartLoadingBucket(ui64 bucket) {
+        TableSpilledBuckets[bucket].ProcessBucketRestoration(TableBuckets[bucket]);
+    }
+
     void FinalizeSpilling() {
         for (ui64 i = 0; i < NumberOfBuckets; ++i) {
-            assert(TableSpilledBuckets[i].IsProcessingFinished());
-            assert(!TableSpilledBuckets[i].HasRunningAsyncIoOperation());
+            MKQL_ENSURE(TableSpilledBuckets[i].IsProcessingFinished(), "Internal logic error");
+            MKQL_ENSURE(!TableSpilledBuckets[i].HasRunningAsyncIoOperation(), "Internal logic error");
             TableSpilledBuckets[i].ProcessBucketSpilling(TableBuckets[i]);
             TableSpilledBuckets[i].Finalize();
         }

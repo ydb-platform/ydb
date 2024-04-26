@@ -624,6 +624,8 @@ private:
     const std::unique_ptr<std::vector<NUdf::TUnboxedValue*>> JoinedTuple;
     const bool IsSelfJoin_;
     const bool SelfJoinSameKeys_;
+
+    ui64 NextBucketsToJoin = 0;
 };
 
 class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWrapper> {
@@ -866,20 +868,47 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                 }
 
                 if (resultLeft == EFetchResult::Finish ) {
-                    // RightPacker->TablePtr->FinalizeSpilling();
+                    RightPacker->TablePtr->FinalizeSpilling();
                     *HaveMoreLeftRows = false;
                 }
 
 
                 if (resultRight == EFetchResult::Finish ) {
-                    // RightPacker->TablePtr->FinalizeSpilling();
+                    RightPacker->TablePtr->FinalizeSpilling();
                     *HaveMoreRightRows = false;
+                }
+
+                if (resultRight == EFetchResult::Finish || resultLeft == EFetchResult::Finish) {
+                    leftBusy = LeftPacker->TablePtr->UpdateAndCheckIfBusy();
+                    rightBusy = RightPacker->TablePtr->UpdateAndCheckIfBusy();
+                    
+                    if (rightBusy || leftBusy) {
+                        return EFetchResult::Yield;
+                    } 
                 }
 
                 if ((resultLeft == EFetchResult::Yield && (!*HaveMoreRightRows || resultRight == EFetchResult::Yield)) ||
                     (resultRight == EFetchResult::Yield && !*HaveMoreLeftRows))
                 {
                     return EFetchResult::Yield;
+                }
+
+                if ((!*HaveMoreRightRows || !*HaveMoreLeftRows) && !*PartialJoinCompleted) {
+                    bool isLeftBucketInMemory = !LeftPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin);
+                    bool isRightBucketInMemory = !RightPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin);
+                    if (isLeftBucketInMemory) {
+                        LeftPacker->TablePtr->StartLoadingBucket(NextBucketsToJoin);
+                    }
+                    if (isRightBucketInMemory) {
+                        LeftPacker->TablePtr->StartLoadingBucket(NextBucketsToJoin);
+                    }
+
+                    leftBusy = LeftPacker->TablePtr->UpdateAndCheckIfBusy();
+                    rightBusy = RightPacker->TablePtr->UpdateAndCheckIfBusy();
+                
+                    if (rightBusy || leftBusy) {
+                        return EFetchResult::Yield;
+                    } 
                 }
 
                 if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {

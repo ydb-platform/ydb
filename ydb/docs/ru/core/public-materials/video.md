@@ -64,7 +64,11 @@
     {% include [Webinars](./_includes/webinars/2023/webinars.md) %}
 
   - 2022
+    
+    {% include [YaTalks](./_includes/conferences/2022/YaTalks.md) %}
 
-    {% include [HighLoad](./_includes/conferences/2022/HighLoad.md) %}
+    {% include [Hydra](./_includes/conferences/2022/Hydra.md) %}
+
+    {% include [Webinars](./_includes/webinars/2022/webinars.md) %}
 
 {% endlist %}

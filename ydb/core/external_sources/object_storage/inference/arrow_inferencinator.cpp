@@ -159,8 +159,10 @@ using ArrowFields = std::vector<ArrowField>;
 
 std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, const CsvConfig& config) {
     std::shared_ptr<arrow::csv::TableReader> reader;
+    auto fileSize = static_cast<int32_t>(file->GetSize().ValueOr(1 << 20));
+    fileSize = std::min(fileSize, 1 << 20);
     auto readerStatus = arrow::csv::TableReader::Make(
-        arrow::io::default_io_context(), std::move(file), arrow::csv::ReadOptions{.use_threads = false}, config.ParseOpts, config.ConvOpts
+        arrow::io::default_io_context(), std::move(file), arrow::csv::ReadOptions{.use_threads = false, .block_size = fileSize}, config.ParseOpts, config.ConvOpts
     )
     .Value(&reader);
 

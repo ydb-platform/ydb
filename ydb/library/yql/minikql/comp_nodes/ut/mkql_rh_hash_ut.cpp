@@ -264,7 +264,35 @@ Y_UNIT_TEST_SUITE(TMiniKQLRobinHoodHashTest) {
         }
 
         UNIT_ASSERT(h.empty());
-    }    
+    }
+
+    Y_UNIT_TEST(Power2Collisions) {
+        TRobinHoodHashSet<ui64> rh;
+        for (ui64 i = 0; i < 10000; ++i) {
+            auto k = i << 32;
+            bool isNew;
+            auto iter = rh.Insert(k, isNew);
+            UNIT_ASSERT_VALUES_EQUAL(rh.GetKey(iter), k);
+            if (isNew) {
+                rh.CheckGrow();
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(i + 1, rh.GetSize());
+        }
+
+        i32 maxDistance = 0;
+        for (auto it = rh.Begin(); it != rh.End(); rh.Advance(it)) {
+            if (!rh.IsValid(it)) {
+                continue;
+            }
+
+            auto distance = rh.GetPSL(it).Distance;
+            maxDistance = Max(maxDistance, distance);
+        }
+
+        Cerr << "maxDistance: " << maxDistance << "\n";
+        UNIT_ASSERT(maxDistance < 10);
+    }
 }
 
 }

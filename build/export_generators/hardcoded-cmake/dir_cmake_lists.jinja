@@ -1,4 +1,4 @@
-{% include prologue ignore missing %}
+{% include 'prologue.cmake' ignore missing %}
 {% include '[generator]/disclaimer.jinja' -%}
 
 {% for package in packages -%}
@@ -8,9 +8,11 @@ find_package({{ package[0] }} REQUIRED
         {%- endfor %}
     {%- endif %})
 {% endfor -%}
-{% for incl in includes -%}
+{% if includes is defined -%}
+{%     for incl in includes -%}
 include({{ incl }})
-{% endfor -%}
+{%     endfor -%}
+{% endif -%}
 {% for subdir in subdirs -%}
 add_subdirectory({{ subdir }})
 {% endfor -%}
@@ -21,15 +23,15 @@ add_subdirectory({{ subdir }})
 
 {% endfor -%}
 {% for target in targets %}
-{%- set macro = target.macro -%}
-    {%- set name = target.name -%}
-    {%- set is_interface = target.is_interface -%}
-    {%- set macro_args = target.macro_args -%}
-    {%- set properties = target.properties -%}
-    {%- set attributes = target.attributes -%}
-    {%- set target_dir_macros = target.target_dir_macros -%}
-    {%- set target_macros = target.target_macros -%}
-    {%- set dependencies = target.dependencies -%}
-    {%- include '[generator]/target_cmake_lists.jinja' %}{{"\n"}}
+{%-     set macro = target.macro -%}
+{%-     set name = target.name -%}
+{%-     set is_interface = target.is_interface -%}
+{%-     set macro_args = target.macro_args -%}
+{%-     set properties = target.properties -%}
+{%-     set attributes = target.attributes -%}
+{%-     set target_dir_macros = target.target_dir_macros -%}
+{%-     set target_macros = target.target_macros -%}
+{%-     set dependencies = target.dependencies -%}
+{%-     include '[generator]/target_cmake_lists.jinja' %}{{"\n"}}
 {%- endfor %}
-{% include epilogue ignore missing %}
+{% include 'epilogue.cmake' ignore missing %}

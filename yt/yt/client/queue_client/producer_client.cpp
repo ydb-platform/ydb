@@ -14,7 +14,7 @@ static const TTableSchemaPtr YTProducerTableSchema = New<TTableSchema>(std::vect
     TColumnSchema("queue_cluster", EValueType::String, ESortOrder::Ascending).SetRequired(true),
     TColumnSchema("queue_path", EValueType::String, ESortOrder::Ascending).SetRequired(true),
     TColumnSchema("session_id", EValueType::String, ESortOrder::Ascending).SetRequired(true),
-    TColumnSchema("sequence_number", EValueType::Uint64, ESortOrder::Ascending).SetRequired(true),
+    TColumnSchema("sequence_number", EValueType::Uint64).SetRequired(true),
     TColumnSchema("epoch", EValueType::Uint64).SetRequired(true),
     TColumnSchema("user_meta", EValueType::Any).SetRequired(false),
     TColumnSchema("system_meta", EValueType::Any).SetRequired(false),

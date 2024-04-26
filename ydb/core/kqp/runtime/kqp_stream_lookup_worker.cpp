@@ -817,6 +817,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
     const NYql::NDqProto::TTaskInput& inputDesc) {
 
     switch (settings.GetLookupStrategy()) {
+        case NKqpProto::EStreamLookupStrategy::UNSPECIFIED:  // for backward compatibility
         case NKqpProto::EStreamLookupStrategy::LOOKUP:
             return std::make_unique<TKqpLookupRows>(std::move(settings), typeEnv, holderFactory, inputDesc);
         case NKqpProto::EStreamLookupStrategy::JOIN:

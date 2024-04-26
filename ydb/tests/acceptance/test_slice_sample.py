@@ -1,4 +1,5 @@
 import os
+import sys
 
 from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import YdbdSlice
@@ -33,3 +34,19 @@ class Test(object):
                             "sample_table"
                         )
                     )
+
+    def test_serializable(self):
+        yatest_common.execute(
+            [
+                yatest_common.binary_path('ydb/tests/tools/ydb_serializable/ydb_serializable'),
+                '--endpoint=localhost:%d' % self.cluster.nodes[1].grpc_port,
+                '--database=/Root',
+                '--output-path=%s' % yatest_common.output_path(),
+                '--iterations=25',
+                '--processes=2'
+            ],
+            stderr=sys.stderr,
+            wait=True,
+            stdout=sys.stdout,
+        )
+

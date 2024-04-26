@@ -145,13 +145,13 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult GenFetchProcess(Value* cntToSkipPtrVal, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const override {
+    TGenerateResult GenFetchProcess(Value* statePtrVal, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto decr = BasicBlock::Create(context, "decr", ctx.Func);
         const auto end = BasicBlock::Create(context, "end", ctx.Func);
 
         const auto fetched = fetchGenerator(ctx, block);
-        const auto cntToSkipVal = GetterFor<ui64>(new LoadInst(IntegerType::getInt128Ty(context), cntToSkipPtrVal, "unboxed_state", block), context, block);
+        const auto cntToSkipVal = GetterFor<ui64>(new LoadInst(IntegerType::getInt128Ty(context), statePtrVal, "unboxed_state", block), context, block);
         const auto needSkipCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, cntToSkipVal, ConstantInt::get(cntToSkipVal->getType(), 0), "need_skip", block);
         const auto gotOneCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, fetched.first, ConstantInt::get(fetched.first->getType(), 1), "got_one", block);
         const auto willSkipCond = BinaryOperator::Create(Instruction::And, needSkipCond, gotOneCond, "will_skip", block);
@@ -159,7 +159,7 @@ public:
 
         block = decr;
         const auto cntToSkipNewVal = BinaryOperator::CreateSub(cntToSkipVal, ConstantInt::get(cntToSkipVal->getType(), 1), "decr", block);
-        new StoreInst(SetterFor<ui64>(cntToSkipNewVal, context, block), cntToSkipPtrVal, block);
+        new StoreInst(SetterFor<ui64>(cntToSkipNewVal, context, block), statePtrVal, block);
         BranchInst::Create(end, block);
 
         block = end;

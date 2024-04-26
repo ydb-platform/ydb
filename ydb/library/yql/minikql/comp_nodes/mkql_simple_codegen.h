@@ -62,7 +62,11 @@ public:
         , PtrTable(ptrTable) {}
 
 #ifndef MKQL_DISABLE_CODEGEN
-    virtual ICodegeneratorInlineWideNode::TGenerateResult GenFetchProcess(Value*, const TCodegenContext&, const TResultCodegenerator&, BasicBlock*&) const {
+    virtual ICodegeneratorInlineWideNode::TGenerateResult GenFetchProcess(Value* statePtrVal, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const {
+        Y_UNUSED(statePtrVal);
+        Y_UNUSED(ctx);
+        Y_UNUSED(fetchGenerator);
+        Y_UNUSED(block);
         return {nullptr, {}};
     }
 

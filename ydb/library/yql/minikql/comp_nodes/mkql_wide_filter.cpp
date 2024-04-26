@@ -258,6 +258,38 @@ public:
         return fetchRes;
     }
 
+#ifndef MKQL_DISABLE_CODEGEN
+    TBaseComputation::TGenerateResult GenFetchProcess(Value* statePtrVal, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const override {
+        auto& context = ctx.Codegen.GetContext();
+        auto check = BasicBlock::Create(context, "check", ctx.Func);
+        auto save = BasicBlock::Create(context, "save", ctx.Func);
+        auto pass = BasicBlock::Create(context, "pass", ctx.Func);
+        auto maybeResultVal = PHINode::Create(TMaybeFetchResult::LLVMType(context), 3, "maybe_res", pass);
+
+        auto [fetchResVal, fetchGetters] = fetchGenerator(ctx, block);
+        auto stateVal = new LoadInst(statePtrVal->getType()->getPointerElementType(), statePtrVal, "state", block);
+        auto needCheckCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, ConstantInt::get(stateVal->getType(), 1), stateVal, "need_check", block);
+        auto oneCond = CmpInst::Create(Instruction::ICmp, CmpInst::ICMP_EQ, ConstantInt::get(fetchResVal->getType(), static_cast<i32>(EFetchResult::One)), fetchResVal, "one", block);
+        auto willCheckCond = BinaryOperator::Create(Instruction::And, needCheckCond, oneCond, "will_check", block);
+        maybeResultVal->addIncoming(TMaybeFetchResult::LLVMFromFetchResult(fetchResVal, "fetch_res_ext", block), block);
+        BranchInst::Create(check, pass, willCheckCond, block);
+
+        block = check;
+        auto predicateCond = GenGetPredicate<false>(ctx, fetchGetters, block);
+        maybeResultVal->addIncoming(TMaybeFetchResult::None().LLVMConst(context), block);
+        BranchInst::Create(pass, save, predicateCond, block);
+
+        block = save;
+        new StoreInst(ConstantInt::get(stateVal->getType(), 1), statePtrVal, block);
+        maybeResultVal->addIncoming((Inclusive ? TMaybeFetchResult::None() : TMaybeFetchResult(EFetchResult::One)).LLVMConst(context), block);
+        BranchInst::Create(pass, block);
+
+        block = pass;
+        
+        return {maybeResultVal, std::move(fetchGetters)};
+    }
+#endif
+
 private:
     void RegisterDependencies() const final {
         if (const auto flow = this->FlowDependsOn(Flow)) {

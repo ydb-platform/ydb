@@ -70,7 +70,13 @@
 
   - 2021  
 
+    {% include [about_cloud](./_includes/conferences/2021/about_cloud.md) %}
+
     {% include [YaTalks](./_includes/conferences/2021/YaTalks.md) %}
+
+    {% include [DevOpsConf](./_includes/conferences/2021/DevOpsConf.md) %}
+
+    {% include [YaSubbotnik](./_includes/conferences/2021/YaSubbotnik.md) %}
 
 
 {% endlist %}

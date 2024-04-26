@@ -33,6 +33,7 @@ protected:
     bool NeedMeta_ = false;
     std::size_t RowsSelected_ = 0;
     TResponseEventPtr Response_;
+    std::vector<int16_t> ResponseFormat_;
 
     TPgwireKqpProxy(const TActorId owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, TRequestEventPtr&& ev)
         : Owner_(owner)
@@ -262,7 +263,7 @@ protected:
             FillMeta(resultSet, response.get());
             NeedMeta_ = false;
         }
-        FillResultSet(resultSet, response.get()->DataRows);
+        FillResultSet(resultSet, response.get()->DataRows, ResponseFormat_);
         response->CommandCompleted = false;
         response->ReadyForQuery = false;
 
@@ -463,6 +464,7 @@ public:
     }
 
     void Bootstrap() {
+        ResponseFormat_ = Portal_.BindData.ParametersFormat;
         auto event = ConvertQueryToRequest(Portal_.QueryData.Query);
         if (event) {
             for (unsigned int paramNum = 0; paramNum < Portal_.BindData.ParametersValue.size(); ++paramNum) {

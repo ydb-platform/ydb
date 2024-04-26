@@ -55,7 +55,8 @@
 
   - 2023
 
-    {% include [Hydra](./_includes/conferences/2022/Hydra.md) %}
+    {% include [JPoint](./_includes/conferences/2023/JPoint.md) %}
+
 
   - 2022  
 

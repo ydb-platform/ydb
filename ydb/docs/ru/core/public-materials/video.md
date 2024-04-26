@@ -65,10 +65,10 @@
 
   - 2022
     
-    {% include [YaTalks](./_includes/conferences/2022/YaTalks.md) %}
+    {% include [YaTalks](./_includes/conferences/2023/YaTalks.md) %}
 
-    {% include [Hydra](./_includes/conferences/2022/Hydra.md) %}
+    {% include [Webinars](./_includes/webinars/2023/webinars.md) %}
 
-    {% include [Webinars](./_includes/webinars/2022/webinars.md) %}
+  - 2021  
 
 {% endlist %}

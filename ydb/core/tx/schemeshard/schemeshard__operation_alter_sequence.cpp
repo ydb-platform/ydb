@@ -246,7 +246,7 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription
         errStr = Sprintf("MINVALUE (%ld) must be less than MAXVALUE (%ld)", minValue, maxValue);
         status = NKikimrScheme::StatusInvalidParameter;
         return std::nullopt;
-	}
+    }
 
     i64 startValue = result.GetStartValue();
     if (alter.HasStartValue()) {
@@ -257,12 +257,12 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription
         errStr = Sprintf("START value (%ld) cannot be greater than MAXVALUE (%ld)", startValue, maxValue);
         status = NKikimrScheme::StatusInvalidParameter;
         return std::nullopt;
-	}
+    }
     if (startValue < minValue) {
         errStr = Sprintf("START value (%ld) cannot be less than MINVALUE (%ld)",  startValue, minValue);
         status = NKikimrScheme::StatusInvalidParameter;
         return std::nullopt;
-	}
+    }
 
     i64 increment = result.GetIncrement();
     if (alter.HasIncrement()) {

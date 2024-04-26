@@ -548,7 +548,7 @@ liquibase changelog-sync --changelog-file=dbchangelog.xml
 
 ![_assets/liquibase-step-4.png](_assets/liquibase-step-4.png)
 
-## Подключение к {{ ydb-short-name }}
+## Подключение к {{ ydb-short-name }} {#connect-to-ydb}
 
 В вышеуказанных примерах мы использовали Docker контейнер, для которого не требовалось дополнительных параметров для аутентификации.
 

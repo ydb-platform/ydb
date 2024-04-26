@@ -7,6 +7,11 @@ namespace NKikimr {
 
 TString MakeData(ui32 dataSize);
 
+template<typename Int1 = ui32, typename Int2 = ui32>
+inline Int1 GenerateRandom(Int1 min, Int2 max) {
+    return min + RandomNumber(max - min);
+}
+
 class TInflightActor : public TActorBootstrapped<TInflightActor> {
 public:
     struct TSettings {

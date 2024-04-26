@@ -2,7 +2,7 @@
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
-Implementing a distributed database with strong consistency isn’t difficult; the challenge lies in ensuring speed and scalability. YDB excels in these aspects. In this talk, we’ll discuss YDB’s architecture and its high performance, present results of benchmarks, and compare YDB to top competitors.
+Implementing a distributed database with strong consistency isn’t difficult; ensuring speed and scalability is the challenge. YDB excels in these aspects. In this talk, we’ll discuss YDB’s architecture and high performance, present benchmark results, and compare YDB to top competitors.
 
 [{{ team.ivanov.name }}]({{ team.ivanov.profile }}) ({{ team.ivanov.position }}) discussed the architecture of YDB, demonstrated its high performance through benchmark results, and compared YDB with its competitors.
 

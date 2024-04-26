@@ -2,6 +2,7 @@
 #include "rewrite_io_utils.h"
 #include "yql_kikimr_provider_impl.h"
 
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
 
@@ -208,8 +209,10 @@ public:
             }
 
             const THashMap<TString, TString>* readAttrs = nullptr;
-            if (!table.Metadata && table.GetTableType() == ETableType::ExternalTable) {
-                readAttributes = GatherReadAttributes(*input, ctx);
+            if (!table.Metadata && clusterName != NKqp::DefaultKikimrPublicClusterName) {
+                if (!readAttributes) {
+                    readAttributes = GatherReadAttributes(*input, ctx);
+                }
                 readAttrs = readAttributes->FindPtr(std::make_pair(clusterName, tableName));
             }
 
@@ -711,6 +714,7 @@ public:
                                     .Category(ctx.NewAtom(node->Pos(), source->GetName()))
                                     .FreeArgs()
                                         .Add(readArgs[1]->ChildrenList()[1])
+                                        .Add(BuildExternalTableSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, source, tableDesc.Metadata->ExternalSource.TableContent))
                                     .Build()
                                     .Done().Ptr();
                     readArgs[2] = ctx.NewCallable(node->Pos(), "MrTableConcat", { readArgs[2] });

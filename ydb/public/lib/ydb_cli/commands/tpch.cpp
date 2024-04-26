@@ -250,7 +250,7 @@ int TTpchCommandInit::Run(TConfig& config) {
     TString notNull = "";
     TString createExternalDataSource;
     TString external;
-    TString partitioning = "AUTO_PARTITIONING_MIN_PARTITIONS_COUNT";
+    TString partitioning = ", AUTO_PARTITIONING_MIN_PARTITIONS_COUNT";
     TString primaryKey = ", PRIMARY KEY";
     if (StoreType == "column") {
         storageType = "STORE = COLUMN, --";

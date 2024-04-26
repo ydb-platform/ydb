@@ -2,7 +2,7 @@
 
 #include "yql_http_gateway.h"
 
-#include <curl/curl.h>
+#include <contrib/libs/curl/include/curl/curl.h>
 #include <unordered_set>
 
 namespace NYql {

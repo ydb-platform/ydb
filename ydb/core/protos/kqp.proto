@@ -617,6 +617,12 @@ message TResourceExchangeBoardData {
     optional NActorsProto.TActorId Publisher = 3;
 }
 
+enum EWorkloadType {
+    WORKLOAD_TYPE_UNDEFINED = 0;
+    WORKLOAD_TYPE_ANALYTICAL = 1;
+    WORKLOAD_TYPE_OPERATIONAL = 2;
+}
+
 message TKqpNodeResources {
     optional NActorsProto.TActorId ResourceManagerActorId = 2; // legacy
     optional uint32 AvailableComputeActors = 4; // legacy
@@ -643,6 +649,7 @@ message TKqpNodeResources {
     optional uint32 ExecutionUnits = 9;
 
     optional TKqpProxyNodeResources KqpProxyNodeResources = 10;
+    optional EWorkloadType WorkloadType = 11;
 }
 
 /// Scans

@@ -1,6 +1,8 @@
 package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
 
+import "ydb/core/protos/kqp.proto";
+
 message TTableServiceConfig {
     message TShardsScanningPolicy {
         optional uint32 AggregationGroupByLimit = 1 [default = 256];
@@ -42,6 +44,7 @@ message TTableServiceConfig {
         optional TInfoExchangerSettings InfoExchangerSettings = 19;
         optional uint64 KqpPatternCachePatternAccessTimesBeforeTryToCompile = 20 [default = 5];
         optional uint64 KqpPatternCacheCompiledCapacityBytes = 21 [default = 104857600]; // 100 MiB
+        optional NKikimrKqp.EWorkloadType WorkloadType = 22;
     }
 
     message TSpillingServiceConfig {

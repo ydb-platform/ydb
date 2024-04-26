@@ -316,9 +316,9 @@ private:
 };
 
 enum class EWorkload {
-    Hybrid /* "hybrid" */,
-    Analyitical /* "analytical" */,
-    Operational /* "operational" */,
+    Undefined = 0 /* "undefined" */,
+    Analytical = 1 /* "analytical" */,
+    Operational = 2 /* "operational" */,
 };
 
 } // namespace NKikimr::NConfig

@@ -15,6 +15,7 @@
 #include <ydb/core/protos/http_config.pb.h>
 #include <ydb/core/protos/local.pb.h>
 #include <ydb/core/protos/tablet.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/protos/tenant_pool.pb.h>
 #include <ydb/core/protos/compile_service_config.pb.h>
 #include <ydb/core/protos/cms.pb.h>
@@ -326,7 +327,7 @@ struct TCommonAppOptions {
     bool SysLogEnabled = false;
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
-    EWorkload Workload = EWorkload::Hybrid; 
+    EWorkload Workload = EWorkload::Undefined; 
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
@@ -637,12 +638,14 @@ struct TCommonAppOptions {
             switch (Workload) {
                 case EWorkload::Operational:
                     ApplyTabletDenyList(*appConfig.MutableDynamicNodeConfig(), { TTabletTypes::ColumnShard }, ConfigUpdateTracer);
+                    ApplyKqpResourceManager(*appConfig.MutableTableServiceConfig()->MutableResourceManager(), ConfigUpdateTracer);
                     break;
-                case EWorkload::Analyitical:
+                case EWorkload::Analytical:
                     ApplyTabletAllowList(*appConfig.MutableDynamicNodeConfig(), { TTabletTypes::ColumnShard }, ConfigUpdateTracer);
+                    ApplyKqpResourceManager(*appConfig.MutableTableServiceConfig()->MutableResourceManager(), ConfigUpdateTracer);
                     ApplyDontStartGrpcProxy(*appConfig.MutableGRpcConfig(), ConfigUpdateTracer);
                     break;
-                case EWorkload::Hybrid:
+                case EWorkload::Undefined:
                     // default, do nothing 
                     break;
             }
@@ -706,6 +709,11 @@ struct TCommonAppOptions {
     void ApplyDontStartGrpcProxy(NKikimrConfig::TGRpcConfig& config, IConfigUpdateTracer& configUpdateTracer) const {
         config.SetStartGRpcProxy(false);
         configUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+    }
+
+    void ApplyKqpResourceManager(NKikimrConfig::TTableServiceConfig_TResourceManager& config, IConfigUpdateTracer& configUpdateTracer) const {
+        config.SetWorkloadType(static_cast<NKikimrKqp::EWorkloadType>(Workload));
+        configUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::TableServiceConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
     }
 
     ui32 DeduceNodeId(const NKikimrConfig::TAppConfig& appConfig, IEnv& env) const {

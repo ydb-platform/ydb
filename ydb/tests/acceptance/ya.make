@@ -16,6 +16,7 @@ TAG(ya:fat)
 SIZE(LARGE)
 
 DEPENDS(
+    ydb/tests/tools/ydb_serializable
     ydb/apps/ydbd
 )
 

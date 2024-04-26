@@ -77,7 +77,6 @@ public:
         if (txState->ShardsInProgress.empty()) {
             NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-            context.OnComplete.ActivateTx(OperationId);
             return true;
         }
 

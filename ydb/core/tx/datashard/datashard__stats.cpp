@@ -421,7 +421,7 @@ void TDataShard::Handle(TEvPrivate::TEvTableStatsError::TPtr& ev, const TActorCo
     auto it = TableInfos.find(msg->TableId);
     if (it != TableInfos.end()) {
         it->second->StatsUpdateInProgress = false;
-        // if we got an error, a compaction should have happened so restart build stats anyway
+        // if we have got an error, a compaction should have happened so restart build stats anyway
         it->second->StatsNeedUpdate = true;
     }
 }

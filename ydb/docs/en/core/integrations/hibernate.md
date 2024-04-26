@@ -4,7 +4,7 @@
 
 This is a guide to using [Hibernate](https://hibernate.org/) with {{ ydb-short-name }}.
 
-Hibernate is an Object-Relational Mapping (ORM) framework for Java that facilitates the mapping of object-oriented models to SQL. Each database management system (DBMS) partially implements the SQL standard, interpreting certain constructs in its own way. This article describes the specifics of how {{ ydb-short-name }} integrates with Hibernate.
+Hibernate is an Object-Relational Mapping (ORM) framework for Java that facilitates the mapping of object-oriented models to SQL.
 
 ## Installation {#install-dialect}
 
@@ -200,7 +200,7 @@ ALTER TABLE Groups
 
 {% note warning %}
 
-Hibernate is not designed to manage database schemas. You can manage your database schema using [Liquibase](./liquibase.md) or Flyway.
+Hibernate is not designed to manage database schemas. You can manage your database schema using [Liquibase](./liquibase.md) or [Flyway](./flyway.md).
 
 {% endnote %}
 

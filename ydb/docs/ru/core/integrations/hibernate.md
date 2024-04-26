@@ -4,11 +4,9 @@
 
 Это руководство использования [Hibernate](https://hibernate.org/orm/) с {{ ydb-short-name }}. 
 
-Hibernate - это фреймворк объектно-реляционного отображения (ORM) для Java, облегчающий процесс маппинга объектно-ориентированных моделей. 
+Hibernate - это фреймворк объектно-реляционного отображения (ORM) для Java, облегчающий процесс отображения объектно-ориентированных моделей.
 
 ## Установка диалекта {{ ydb-short-name }} {#install-dialect}
-
-Чтобы воспользоваться диалектом {{ ydb-short-name }} требуются зависимости диалекта {{ ydb-short-name }} и [JDBC драйвера](https://github.com/ydb-platform/ydb-jdbc-driver):
 
 Примеры для различных систем сборки:
 
@@ -43,17 +41,17 @@ Hibernate - это фреймворк объектно-реляционного 
 
 {% endlist %}
 
-В случае использования Hibernate 5 версии нужен artifactId равный `hibernate-ydb-dialect-v5` для Maven или `implementation "tech.ydb.dialects:hibernate-ydb-dialect-v5:$version"` для Gradle.
+Если вы используете Hibernate версии 5, вам понадобится `<artifactId>hibernate-ydb-dialect-v5</artifactId>` для Maven или `implementation "tech.ydb.dialects:hibernate-ydb-dialect-v5:$version"` для Gradle вместо аналогичного пакета без `-v5` суффикса.
 
 ## Конфигурация диалекта {#configuration-dialect}
 
-После добавления зависимости в проект нужно явно указать ваш диалект. Сконфигурировать Hibernate c помощью [persistence.xml](https://docs.jboss.org/hibernate/orm/6.4/introduction/html_single/Hibernate_Introduction.html#configuration-jpa):
+Сконфигурируйте Hibernate для использования диалекта {{ ydb-short-name }}, обновив [persistence.xml](https://docs.jboss.org/hibernate/orm/6.4/introduction/html_single/Hibernate_Introduction.html#configuration-jpa) файл:
 
 ```xml
 <property name="hibernate.dialect">tech.ydb.hibernate.dialect.YdbDialect</property>
 ```
 
-Или в Java коде:
+Или, если вы используете программную настройку:
 
 {% list tabs %}
 
@@ -202,7 +200,7 @@ ALTER TABLE Groups
 
 {% note warning %}
 
-Hibernate не предназначен для управления схемами баз данных. Вы можете использовать [Liquibase](./liquibase.md) или Flyway для управления схемой базы данных.
+Hibernate не предназначен для управления схемами баз данных. Вы можете использовать [Liquibase](./liquibase.md) или [Flyway](./flyway.md) для управления схемой базы данных.
 
 {% endnote %}
 

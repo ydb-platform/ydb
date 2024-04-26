@@ -649,7 +649,7 @@ message TKqpNodeResources {
     optional uint32 ExecutionUnits = 9;
 
     optional TKqpProxyNodeResources KqpProxyNodeResources = 10;
-    optional EWorkloadType WorkloadType = 11;
+    optional EWorkloadType ServedWorkload = 11;
 }
 
 /// Scans

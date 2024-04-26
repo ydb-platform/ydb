@@ -96,14 +96,14 @@ TResourceBrokerConfig MakeResourceBrokerTestConfig() {
 
 NKikimrConfig::TTableServiceConfig::TResourceManager MakeKqpResourceManagerConfig(
         bool EnablePublishResourcesByExchanger = false,
-        NKikimrKqp::EWorkloadType workloadType = NKikimrKqp::WORKLOAD_TYPE_UNDEFINED) {
+        NKikimrKqp::EWorkloadType servedWorkload = NKikimrKqp::WORKLOAD_TYPE_UNDEFINED) {
     NKikimrConfig::TTableServiceConfig::TResourceManager config;
 
     config.SetComputeActorsCount(100);
     config.SetPublishStatisticsIntervalSec(0);
     config.SetQueryMemoryLimit(1000);
     config.SetEnablePublishResourcesByExchanger(EnablePublishResourcesByExchanger);
-    config.SetWorkloadType(workloadType);
+    config.SetServedWorkload(servedWorkload);
 
     auto* infoExchangerRetrySettings = config.MutableInfoExchangerSettings();
     auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
@@ -217,12 +217,12 @@ public:
     struct TCheckedResources {
         ui64 ScanQueryMemory = 0;
         ui32 ExecutionUnits = 0;
-        NKikimrKqp::EWorkloadType WorkloadType = NKikimrKqp::WORKLOAD_TYPE_UNDEFINED;
+        NKikimrKqp::EWorkloadType ServedWorkload = NKikimrKqp::WORKLOAD_TYPE_UNDEFINED;
 
         bool operator==(const TCheckedResources& other) const {
             return ScanQueryMemory == other.ScanQueryMemory &&
                 ExecutionUnits == other.ExecutionUnits &&
-                WorkloadType == other.WorkloadType;
+                ServedWorkload == other.ServedWorkload;
         }
     };
 

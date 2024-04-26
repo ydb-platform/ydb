@@ -731,7 +731,7 @@ public:
         : ResourceBrokerId(resourceBrokerId ? resourceBrokerId : MakeResourceBrokerID())
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
         , PublishResourcesByExchanger(config.GetEnablePublishResourcesByExchanger())
-        , WorkloadType(config.GetWorkloadType())
+        , ServedWorkload(config.GetServedWorkload())
     {
         ResourceManager = std::make_shared<TKqpResourceManager>(config, counters);
     }
@@ -1140,7 +1140,7 @@ private:
         NKikimrKqp::TKqpNodeResources payload;
         payload.SetNodeId(SelfId().NodeId());
         payload.SetTimestamp(now.Seconds());
-        payload.SetWorkloadType(WorkloadType);
+        payload.SetServedWorkload(ServedWorkload);
         if (KqpProxySharedResources) {
             if (SelfDataCenterId) {
                 auto* proxyNodeResources = payload.MutableKqpProxyNodeResources();
@@ -1221,7 +1221,7 @@ private:
 
     bool PublishResourcesByExchanger;
     std::optional<TString> SelfDataCenterId;
-    NKikimrKqp::EWorkloadType WorkloadType;
+    NKikimrKqp::EWorkloadType ServedWorkload;
 };
 
 } // namespace NRm
@@ -1229,11 +1229,9 @@ private:
 
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
     TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker,
-    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources,
-    NKikimrKqp::EWorkloadType workloadType)
+    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources)
 {
-    return new NRm::TKqpResourceManagerActor(config, counters, resourceBroker,
-        std::move(kqpProxySharedResources), workloadType);
+    return new NRm::TKqpResourceManagerActor(config, counters, resourceBroker, std::move(kqpProxySharedResources));
 }
 
 std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> _nodeId) {

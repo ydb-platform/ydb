@@ -712,7 +712,7 @@ struct TCommonAppOptions {
     }
 
     void ApplyKqpResourceManager(NKikimrConfig::TTableServiceConfig_TResourceManager& config, IConfigUpdateTracer& configUpdateTracer) const {
-        config.SetWorkloadType(static_cast<NKikimrKqp::EWorkloadType>(Workload));
+        config.SetServedWorkload(static_cast<NKikimrKqp::EWorkloadType>(Workload));
         configUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::TableServiceConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
     }
 

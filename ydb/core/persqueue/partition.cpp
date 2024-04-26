@@ -871,7 +871,7 @@ void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
     Y_ABORT_UNLESS(event.HasData());
     const NKikimrPQ::TDataTransaction& txBody = event.GetData();
 
-    if (!txBody.GetImmediate() || txBody.HasWriteId()) {
+    if (!txBody.GetImmediate()) {
         ReplyPropose(ctx,
                      event,
                      NKikimrPQ::TEvProposeTransactionResult::ABORTED);
@@ -892,7 +892,6 @@ void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
 
 void TPartition::Handle(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActorContext& ctx)
 {
-    Cerr << SelfId().ToString() << ": Got TEvProposePartitionConfig\n";
     PushBackDistrTx(ev->Release());
 
     ProcessTxsAndUserActs(ctx);
@@ -1060,15 +1059,12 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
     if (isPredicate) {
         auto insRes = TransactionsInflight.insert(std::make_pair(tx->Tx->TxId, tx));
         Y_ABORT_UNLESS(insRes.second);
-        Cerr << SelfId().ToString() << ": response CalcPredicate for Tx: " << tx->Tx->TxId << Endl;
         Send(Tablet, MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(tx->Tx->Step,
                                                                 tx->Tx->TxId,
                                                                 Partition,
                                                                 *tx->Predicate).Release());
     } else {
         auto insRes = TransactionsInflight.insert(std::make_pair(tx->ProposeConfig->TxId, tx));
-        auto msg = TStringBuilder() << SelfId().ToString() << ": response TEvProposePartitionConfigResult for Tx: " << tx->ProposeConfig->TxId << Endl;
-        Cerr << msg;
         Y_ABORT_UNLESS(insRes.second);
         Send(Tablet,
                 MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(tx->ProposeConfig->Step,
@@ -1725,6 +1721,7 @@ void TPartition::ProcessCommitQueue() {
 
         UserActionAndTxPendingCommit.pop_front();
     }
+    WriteInfosToTx.clear();
     TxAffectedClients.clear();
     TxAffectedSourcesIds.clear();
     Y_ABORT_UNLESS(UserActionAndTxPendingCommit.empty());
@@ -1934,7 +1931,43 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
     SendChangeConfigReply = false;
     return true;
 }
+/*
+Keep some commit-apply-hack-code for reference
+void TPartition::CommitWriteOperations(const TActorContext& ctx)
+{
+    if (!WriteInfoResponse) {
+        return;
+    }
 
+    for (auto i = WriteInfoResponse->BlobsFromHead.rbegin(); i != WriteInfoResponse->BlobsFromHead.rend(); ++i) {
+        auto& blob = *i;
+
+        TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
+            .SourceId = blob.SourceId,
+                .SeqNo = blob.SeqNo,
+                .PartNo = (ui16)(blob.PartData ? blob.PartData->PartNo : 0),
+                .TotalParts = (ui16)(blob.PartData ? blob.PartData->TotalParts : 1),
+                .TotalSize = (ui32)(blob.PartData ? blob.PartData->TotalSize : blob.UncompressedSize),
+                .CreateTimestamp = blob.CreateTimestamp.MilliSeconds(),
+                .ReceiveTimestamp = blob.CreateTimestamp.MilliSeconds(),
+                .DisableDeduplication = false,
+                .WriteTimestamp = blob.WriteTimestamp.MilliSeconds(),
+                .Data = blob.Data,
+                .UncompressedSize = blob.UncompressedSize,
+                .PartitionKey = blob.PartitionKey,
+                .ExplicitHashKey = blob.ExplicitHashKey,
+                .External = false,
+                .IgnoreQuotaDeadline = true,
+                .HeartbeatVersion = std::nullopt,
+        }, std::nullopt};
+        TMessage message(std::move(msg), ctx.Now() - TInstant::Zero());
+
+        UserActionAndTransactionEvents.emplace_front(std::move(message));
+    }
+
+    WriteInfoResponse = nullptr;
+}
+*/
 void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
 {
     const auto& ctx = ActorContext();
@@ -2355,11 +2388,128 @@ TPartition::EProcessResult TPartition::PreProcessUserAct(
 }
 
 void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
-    RemoveUserAct(act.ClientId);
+    const bool strictCommitOffset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.Strict);
+    const TString& user = act.ClientId;
+    const auto& ctx = ActorContext();
+    if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
+        switch (act.Type) {
+        case TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE:
+            break;
+        case TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE:
+            return;
+        default:
+            ScheduleReplyError(act.Cookie,
+                               NPersQueue::NErrorCode::WRONG_COOKIE,
+                               "request to deleted read rule");
+            return;
+        }
+    }
 
-    auto* userInfo = GetPendingUserIfExists(act.ClientId);
-    Y_ABORT_UNLESS(userInfo);
-    return EmulatePostProcessUserAct(act, *userInfo, ActorContext());
+    TUserInfoBase& userInfo = GetOrCreatePendingUser(user);
+
+    if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE) {
+        LOG_DEBUG_S(
+                ctx, NKikimrServices::PERSQUEUE,
+                "Topic '" << TopicName() << "' partition " << Partition
+                    << " user " << user << " drop request"
+        );
+
+        EmulatePostProcessUserAct(act, userInfo, ctx);
+
+        return;
+    }
+
+    if ( //this is retry of current request, answer ok
+            act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION
+            && act.SessionId == userInfo.Session
+            && act.Generation == userInfo.Generation
+            && act.Step == userInfo.Step
+    ) {
+        auto* ui = UsersInfoStorage->GetIfExists(userInfo.User);
+        auto ts = ui ? GetTime(*ui, userInfo.Offset) : std::make_pair<TInstant, TInstant>(TInstant::Zero(), TInstant::Zero());
+
+        userInfo.PipeClient = act.PipeClient;
+        ScheduleReplyGetClientOffsetOk(act.Cookie,
+                                       userInfo.Offset,
+                                       ts.first, ts.second);
+
+        return;
+    }
+
+    if (act.Type != TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION && act.Type != TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE
+            && !act.SessionId.empty() && userInfo.Session != act.SessionId //request to wrong session
+            && (act.Type != TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION || !userInfo.Session.empty()) //but allow DropSession request when session is already dropped - for idempotence
+            || (act.ClientId != CLIENTID_WITHOUT_CONSUMER && act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION && !userInfo.Session.empty()
+                 && (act.Generation < userInfo.Generation || act.Generation == userInfo.Generation && act.Step <= userInfo.Step))) { //old generation request
+        TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
+
+        ScheduleReplyError(act.Cookie,
+                           NPersQueue::NErrorCode::WRONG_COOKIE,
+                           TStringBuilder() << "set offset in already dead session " << act.SessionId << " actual is " << userInfo.Session);
+
+        return;
+    }
+
+    if (!act.SessionId.empty() && act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && (i64)act.Offset <= userInfo.Offset) { //this is stale request, answer ok for it
+        ScheduleReplyOk(act.Cookie);
+
+        return;
+    }
+
+    if (strictCommitOffset && act.Offset < StartOffset) {
+        // strict commit to past, reply error
+        TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
+        ScheduleReplyError(act.Cookie,
+                           NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST,
+                           TStringBuilder() << "set offset " <<  act.Offset << " to past for consumer " << act.ClientId << " actual start offset is " << StartOffset);
+
+        return;
+    }
+
+    //request in correct session - make it
+
+    ui64 offset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET ? act.Offset : userInfo.Offset);
+    ui64 readRuleGeneration = userInfo.ReadRuleGeneration;
+
+    if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE) {
+        readRuleGeneration = act.ReadRuleGeneration;
+        offset = 0;
+        LOG_DEBUG_S(
+                ctx, NKikimrServices::PERSQUEUE,
+                "Topic '" << TopicName() << "' partition " << Partition
+                    << " user " << act.ClientId << " reinit request with generation " << readRuleGeneration
+        );
+    }
+
+    Y_ABORT_UNLESS(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
+
+    if (offset > EndOffset) {
+        if (strictCommitOffset) {
+            TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
+            ScheduleReplyError(act.Cookie,
+                            NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE,
+                            TStringBuilder() << "strict commit can't set offset " <<  act.Offset << " to future, consumer " << act.ClientId << ", actual end offset is " << EndOffset);
+
+            return;
+        }
+        LOG_WARN_S(
+                ctx, NKikimrServices::PERSQUEUE,
+                "commit to future - topic " << TopicName() << " partition " << Partition
+                    << " client " << act.ClientId << " EndOffset " << EndOffset << " offset " << offset
+        );
+        act.Offset = EndOffset;
+/*
+        TODO:
+        TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
+        ReplyError(ctx, ev->Cookie, NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE,
+            TStringBuilder() << "can't commit to future. Offset " << offset << " EndOffset " << EndOffset);
+        userInfo.UserActrs.pop_front();
+        continue;
+*/
+    }
+
+    RemoveUserAct(act.ClientId);
+    return EmulatePostProcessUserAct(act, userInfo, ActorContext());
 }
 
 void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,

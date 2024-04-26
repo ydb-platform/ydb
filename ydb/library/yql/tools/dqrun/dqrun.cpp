@@ -643,7 +643,6 @@ int RunMain(int argc, const char* argv[])
         qStorage = MakeFileQStorage(qStorageDir);
         qContext = TQContext(qStorage->MakeReader(opId));
     } else if (res.Has("capture")) {
-        Y_ENSURE(opId);
         qStorage = MakeFileQStorage(qStorageDir);
         qContext = TQContext(qStorage->MakeWriter(opId));
     }
@@ -997,7 +996,10 @@ int RunMain(int argc, const char* argv[])
         program->SetQueryName(progFile);
     }
 
-    program->SetQContext(qContext);
+    if (qStorage) {
+        program->SetQContext(qContext);
+    }
+
     if (paramsFile) {
         TString parameters = TFileInput(paramsFile).ReadAll();
         program->SetParametersYson(parameters);

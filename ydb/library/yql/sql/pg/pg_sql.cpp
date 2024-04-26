@@ -3397,8 +3397,14 @@ public:
         case SVFOP_CURRENT_ROLE:
         case SVFOP_USER:
             return L(A("PgConst"), QA("postgres"), L(A("PgType"), QA("name")));
-        case SVFOP_CURRENT_CATALOG:
-            return L(A("PgConst"), QA("postgres"), L(A("PgType"), QA("name")));
+        case SVFOP_CURRENT_CATALOG: {
+            std::optional<TString> database;
+            if (Settings.GUCSettings) {
+                database = Settings.GUCSettings->Get("ydb_database");
+            }
+
+            return L(A("PgConst"), QA(database ? *database : "postgres"), L(A("PgType"), QA("name")));
+        }
         case SVFOP_CURRENT_SCHEMA: {
             std::optional<TString> searchPath;
             if (Settings.GUCSettings) {

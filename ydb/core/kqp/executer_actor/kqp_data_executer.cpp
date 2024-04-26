@@ -129,13 +129,15 @@ public:
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
         const TActorId& creator, TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
+        const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const TGUCSettings::TPtr& GUCSettings)
         : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, aggregation,
             maximalSecretsSnapshotWaitTime, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter, "DataExecuter", streamResult)
         , AsyncIoFactory(std::move(asyncIoFactory))
         , EnableOlapSink(enableOlapSink)
         , UseEvWrite(useEvWrite)
         , FederatedQuerySetup(federatedQuerySetup)
+        , GUCSettings(GUCSettings)
     {
         Target = creator;
 
@@ -2431,7 +2433,8 @@ private:
             .AllowSinglePartitionOpt = singlePartitionOptAllowed,
             .UserRequestContext = GetUserRequestContext(),
             .FederatedQuerySetup = FederatedQuerySetup,
-            .OutputChunkMaxSize = Request.OutputChunkMaxSize
+            .OutputChunkMaxSize = Request.OutputChunkMaxSize,
+            .GUCSettings = GUCSettings
         });
 
         auto err = Planner->PlanExecution();
@@ -2637,6 +2640,7 @@ private:
     bool EnableOlapSink = false;
     bool UseEvWrite = false;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    const TGUCSettings::TPtr GUCSettings;
 
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;
@@ -2681,11 +2685,11 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
     TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerRetriesConfig,
         std::move(asyncIoFactory), chanTransportVersion, aggregation, creator, maximalSecretsSnapshotWaitTime, userRequestContext,
-        enableOlapSink, useEvWrite, statementResultIndex, federatedQuerySetup);
+        enableOlapSink, useEvWrite, statementResultIndex, federatedQuerySetup, GUCSettings);
 }
 
 } // namespace NKqp

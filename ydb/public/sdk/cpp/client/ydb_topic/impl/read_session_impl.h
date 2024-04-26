@@ -209,6 +209,7 @@ public:
     TDataDecompressionInfo(
         TPartitionData<UseMigrationProtocol>&& msg,
         TCallbackContextPtr<UseMigrationProtocol> cbContext,
+        std::shared_ptr<TGRpcConnectionsImpl> connections,
         bool doDecompress,
         i64 serverBytesSize = 0 // to increment read request bytes size
     );
@@ -340,6 +341,7 @@ private:
     TMetadataPtrVector BatchesMeta;
     std::vector<TMessageMetaPtrVector> MessagesMeta;
     TCallbackContextPtr<UseMigrationProtocol> CbContext;
+    std::shared_ptr<TGRpcConnectionsImpl> Connections;
     bool DoDecompress;
     i64 ServerBytesSize = 0;
     std::atomic<i64> SourceDataNotProcessed = 0;
@@ -979,6 +981,7 @@ public:
         const TString& database,
         const TString& sessionId,
         const TString& clusterName,
+        std::shared_ptr<TGRpcConnectionsImpl> connections,
         const TLog& log,
         std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> connectionFactory,
         std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> eventsQueue,
@@ -991,6 +994,7 @@ public:
         , Database(database)
         , SessionId(sessionId)
         , ClusterName(clusterName)
+        , Connections(std::move(connections))
         , Log(log)
         , NextPartitionStreamId(partitionStreamIdStart)
         , PartitionStreamIdStep(partitionStreamIdStep)
@@ -1209,6 +1213,7 @@ private:
     const TString Database;
     const TString SessionId;
     const TString ClusterName;
+    std::shared_ptr<TGRpcConnectionsImpl> Connections;
     TLog Log;
     ui64 NextPartitionStreamId;
     ui64 PartitionStreamIdStep;

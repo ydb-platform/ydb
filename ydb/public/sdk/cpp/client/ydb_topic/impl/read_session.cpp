@@ -77,6 +77,7 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions<false>& deferred) 
         DbDriverState->Database,
         SessionId,
         "",
+        Connections,
         Log,
         Client->CreateReadSessionConnectionProcessorFactory(),
         EventsQueue,

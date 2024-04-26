@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
+#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/read_session.h>
 
@@ -502,6 +503,7 @@ public:
     // Members
     TReadSessionSettings Settings;
     TString ClusterName = "cluster";
+    THolder<NYdb::TDriver> Driver;
     TLog Log = CreateLogBackend("cerr");
     std::shared_ptr<TReadSessionEventsQueue> EventsQueue;
     std::shared_ptr<TFakeContext> FakeContext = std::make_shared<TFakeContext>();
@@ -592,6 +594,12 @@ TReadSessionImplTestSetup::TReadSessionImplTestSetup() {
     (*ProvidedCodecs)[ECodec::GZIP] = MakeHolder<NTopic::TGzipCodec>();
     (*ProvidedCodecs)[ECodec::LZOP] = MakeHolder<NTopic::TUnsupportedCodec>();
     (*ProvidedCodecs)[ECodec::ZSTD] = MakeHolder<NTopic::TZstdCodec>();
+
+    NYdb::TDriverConfig cfg;
+    cfg.SetEndpoint(TStringBuilder() << "localhost:2135");
+    cfg.SetDatabase("/Root");
+    cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+    Driver = MakeHolder<NYdb::TDriver>(cfg);
 }
 
 TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
@@ -607,6 +615,11 @@ TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
     Session = nullptr;
 
     ThreadPool->Stop();
+
+    if (Driver) {
+        Driver->Stop(true);
+        Driver = nullptr;
+    }
 }
 
 ::IExecutor::TPtr TReadSessionImplTestSetup::GetDefaultExecutor() {
@@ -631,6 +644,7 @@ TSingleClusterReadSessionImpl* TReadSessionImplTestSetup::GetSession() {
             "db",
             "sessionid",
             ClusterName,
+            CreateInternalInterface(*Driver),
             Log,
             MockProcessorFactory,
             GetEventsQueue(),
@@ -1913,8 +1927,15 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             batch->mutable_message_data()->Add();
         *messageData->mutable_data() = "*";
 
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "localhost:2135");
+        cfg.SetDatabase("/Root");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        auto driver = MakeHolder<NYdb::TDriver>(cfg);
+
         auto data = std::make_shared<NTopic::TDataDecompressionInfo<true>>(std::move(message),
                                                                    cbCtx,
+                                                                   CreateInternalInterface(*driver),
                                                                    false,
                                                                    0);
 
@@ -1945,5 +1966,9 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 #undef UNIT_ASSERT_DATA_EVENT
 
         cbCtx->Cancel();
+
+        driver->Stop(true);
+        driver = nullptr;
+
     }
 }

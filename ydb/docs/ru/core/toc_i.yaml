@@ -38,7 +38,7 @@ items:
 - name: Публичные материалы
   include:
     mode: link
-    path: public-talks/toc_p.yaml
+    path: public-materials/toc_p.yaml
 - name: Список изменений
   include:
     mode: link

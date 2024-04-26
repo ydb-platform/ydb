@@ -341,9 +341,9 @@ class DynamicConfigGenerator(object):
     def get_create_tenant_commands(self):
         tn_id = itertools.count(start=1)
         commands = []
-        commands.append("set +e")
         commands.append("shopt > /tmp/shopt")
         commands.append("set -o > /tmp/set")
+        commands.append("set +e")
         for domain in self._cluster_details.domains:
             for _ in domain.tenants:
                 commands.append(self.__cms_init_cmd('CreateTenant-%d.txt' % next(tn_id), domain.domain_name))

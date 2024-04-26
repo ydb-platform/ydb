@@ -2,7 +2,7 @@
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 
-This is a recording of a guest lecture in Belgrade University at the faculty of Mathematics. In this video we describe reasons why distributed sql databases were create. Illustrate a brief history of distributed sql development, which products have appeared first.
+This is a recording of a guest lecture in Belgrade University at the faculty of Mathematics. In this video, we describe the reasons why distributed SQL databases were created. Illustrate a brief history of Distributed SQL DBMS development, which products have appeared first.
 
 @[youtube](https://youtu.be/ZFl0F30qsPQ?si=BL7nskNU9BGiTgBe)
 

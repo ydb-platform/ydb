@@ -57,10 +57,14 @@
 
     {% include [JPoint](./_includes/conferences/2023/JPoint.md) %}
 
+    {% include [YaTalks](./_includes/conferences/2023/YaTalks.md) %}
+
 
   - 2022  
 
     {% include [Hydra](./_includes/conferences/2022/Hydra.md) %}
+
+    {% include [YaTalks](./_includes/conferences/2022/YaTalks.md) %}
 
 
 {% endlist %}

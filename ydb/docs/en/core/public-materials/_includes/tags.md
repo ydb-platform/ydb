@@ -1,7 +1,7 @@
 <style>
 .tags-shape {
   border-radius: 5px;
-  padding: 4px
+  padding: 4px;
 }
 
 .g-root_theme_light {

@@ -14,6 +14,7 @@ RECURSE(
     math
     pire
     protobuf
+    python
     re2
     roaring
     set

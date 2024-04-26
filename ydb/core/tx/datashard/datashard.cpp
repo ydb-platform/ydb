@@ -154,9 +154,11 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , MaxLockedWritesPerKey(1000, 0, 1000000)
     , EnableLeaderLeases(1, 0, 1)
     , MinLeaderLeaseDurationUs(250000, 1000, 5000000)
+    , ChangeRecordDebugPrint(0, 0, 1)
     , DataShardSysTables(InitDataShardSysTables(this))
     , ChangeSenderActivator(info->TabletID)
     , ChangeExchangeSplitter(this)
+    , ChangeRecordDebugSerializer(CreateChangeRecordDebugSerializer())
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
         ESimpleCounters_descriptor,
@@ -301,6 +303,8 @@ void TDataShard::IcbRegister() {
 
         appData->Icb->RegisterSharedControl(EnableLeaderLeases, "DataShardControls.EnableLeaderLeases");
         appData->Icb->RegisterSharedControl(MinLeaderLeaseDurationUs, "DataShardControls.MinLeaderLeaseDurationUs");
+
+        appData->Icb->RegisterSharedControl(ChangeRecordDebugPrint, "DataShardControls.ChangeRecordDebugPrint");
 
         IcbRegistered = true;
     }
@@ -760,7 +764,7 @@ ui64 TDataShard::GetNextChangeRecordLockOffset(ui64 lockId) {
 
 void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record) {
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "PersistChangeRecord"
-        << ": record: " << record
+        << ": record: " << (GetChangeRecordDebugPrint() ? ChangeRecordDebugSerializer->DebugString(record) : ToString(record))
         << ", at tablet: " << TabletID());
 
     ui64 lockId = record.GetLockId();

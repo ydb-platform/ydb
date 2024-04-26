@@ -58,10 +58,6 @@ class TestRecovery(TestYdsBase):
                 return node_index
         assert False, "No active graphs found"
 
-    def get_ca_count(self, node_index):
-        result = self.kikimr.compute_plane.get_sensors(node_index, "utils").find_sensor({"activity": "DQ_COMPUTE_ACTOR", "sensor": "ActorsAliveByActivity", "execpool": "User"})
-        return result if result is not None else 0
-
     def dump_workers(self, worker_count, ca_count, wait_time=yatest_common.plain_or_under_sanitizer(30, 150)):
         deadline = time.time() + wait_time
         while True:
@@ -70,7 +66,7 @@ class TestRecovery(TestYdsBase):
             list = []
             for node_index in self.kikimr.compute_plane.kikimr_cluster.nodes:
                 wc = self.kikimr.compute_plane.get_worker_count(node_index)
-                cc = self.get_ca_count(node_index)
+                cc = self.compute_plane.get_ca_count(node_index)
                 wcs += wc
                 ccs += cc
                 list.append([node_index, wc, cc])

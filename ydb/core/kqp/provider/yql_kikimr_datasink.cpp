@@ -127,6 +127,12 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleAlterSequence(NNodes::TKiAlterSequence node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
     TStatus HandleModifyPermissions(TKiModifyPermissions node, TExprContext& ctx) override {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
             << "ModifyPermissions is not yet implemented for intent determination transformer"));
@@ -515,7 +521,8 @@ public:
         }
 
         if (node.IsCallable(TKiCreateSequence::CallableName())
-            || node.IsCallable(TKiDropSequence::CallableName())) {
+            || node.IsCallable(TKiDropSequence::CallableName())
+            || node.IsCallable(TKiAlterSequence::CallableName())) {
             return true;
         }
 

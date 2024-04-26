@@ -53,7 +53,7 @@ public:
         }
 
         auto res = Inner_->LoadMetadata(imports, functions, ctx);
-        if (QContext_.CanWrite()) {
+        if (res && QContext_.CanWrite()) {
             // calculate hash for each function and store it
             for (const auto& f : functions) {
                 auto key = MakeKey(f);

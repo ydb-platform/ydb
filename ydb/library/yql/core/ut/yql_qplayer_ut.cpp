@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
 #include <ydb/library/yql/core/facade/yql_facade.h>
 #include <ydb/library/yql/core/qplayer/storage/memory/yql_qstorage_memory.h>
+#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -11,14 +12,21 @@
 
 using namespace NYql;
 
-bool RunProgram(const TString& sourceCode, const TQContext& qContext, bool isSql) {
+bool RunProgram(const TString& sourceCode, const TQContext& qContext, bool isSql, bool withUdfs) {
     auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
+    if (withUdfs) {
+        auto cloned = functionRegistry->Clone();
+        NKikimr::NMiniKQL::FillStaticModules(*cloned);
+        functionRegistry = cloned;
+    }
+
     auto yqlNativeServices = NFile::TYtFileServices::Make(functionRegistry.Get(), {}, {}, "");
     auto ytGateway = CreateYtFileGateway(yqlNativeServices);
 
     TVector<TDataProviderInitializer> dataProvidersInit;
     dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytGateway));
     TProgramFactory factory(true, functionRegistry.Get(), 0ULL, dataProvidersInit, "ut");
+    factory.SetUdfResolver(NCommon::CreateSimpleUdfResolver(functionRegistry.Get()));
 
     TProgramPtr program = factory.Create("-stdin-", sourceCode);
     program->SetQContext(qContext);
@@ -48,10 +56,10 @@ bool RunProgram(const TString& sourceCode, const TQContext& qContext, bool isSql
 void CheckProgram(const TString& sql, bool isSql = true) {
     auto qStorage = MakeMemoryQStorage();
     TQContext savingCtx(qStorage->MakeWriter("foo"));
-    UNIT_ASSERT(RunProgram(sql, savingCtx, isSql));
+    UNIT_ASSERT(RunProgram(sql, savingCtx, isSql, true));
     savingCtx.GetWriter()->Commit().GetValueSync();
     TQContext loadingCtx(qStorage->MakeReader("foo"));
-    UNIT_ASSERT(RunProgram("", loadingCtx, isSql));
+    UNIT_ASSERT(RunProgram("", loadingCtx, isSql, false));
 }
 
 Y_UNIT_TEST_SUITE(QPlayerTests) {
@@ -95,6 +103,11 @@ Y_UNIT_TEST_SUITE(QPlayerTests) {
 
     Y_UNIT_TEST(SimpleSql) {
         auto s = "select 1";
+        CheckProgram(s);
+    }
+
+    Y_UNIT_TEST(Udf) {
+        auto s = "select String::AsciiToUpper('a')";
         CheckProgram(s);
     }
 }

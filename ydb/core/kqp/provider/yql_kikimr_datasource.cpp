@@ -35,7 +35,7 @@ static Ydb::Type CreateYdbType(const NKikimr::NScheme::TTypeInfo& typeInfo, bool
     return ydbType;
 }
 
-TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NKikimr::NExternalSource::IExternalSource::TPtr& source, const TString& content) {
+TExprNode::TPtr BuildSchemaFromMetadata(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns) {
     TVector<std::pair<TString, const NYql::TTypeAnnotationNode*>> typedColumns;
     typedColumns.reserve(columns.size());
     for (const auto& [n, c] : columns) {
@@ -50,7 +50,12 @@ TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ct
     auto type = ctx.NewCallable(pos, "SqlTypeFromYson"sv, { schema });
     auto order = ctx.NewCallable(pos, "SqlColumnOrderFromYson"sv, { schema });
     auto userSchema = ctx.NewAtom(pos, "userschema"sv);
-    items.emplace_back(ctx.NewList(pos, {userSchema, type, order}));
+    return ctx.NewList(pos, {userSchema, type, order});
+}
+
+TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NKikimr::NExternalSource::IExternalSource::TPtr& source, const TString& content) {
+    TExprNode::TListType items;
+    items.emplace_back(BuildSchemaFromMetadata(pos, ctx, columns));
 
     for (const auto& [key, values]: source->GetParameters(content)) {
         TExprNode::TListType children = {ctx.NewAtom(pos, NormalizeName(key))};
@@ -120,6 +125,179 @@ namespace {
 
 using namespace NKikimr;
 using namespace NNodes;
+
+class IAstAttributesVisitor {
+public:
+    virtual ~IAstAttributesVisitor() = default;
+
+    virtual void VisitRead(TExprNode& read, TString cluster, TString tablePath) = 0;
+    virtual void ExitRead() = 0;
+
+    virtual void VisitAttribute(TString key, TString value) = 0;
+
+    virtual void VisitNonAttribute(TExprNode::TPtr node) = 0;
+};
+
+class TGatheringAttributesVisitor : public IAstAttributesVisitor {
+    void VisitRead(TExprNode&, TString cluster, TString tablePath) override {
+        CurrentSource = &*Result.try_emplace(std::make_pair(cluster, tablePath)).first;
+    };
+
+    void ExitRead() override {
+        CurrentSource = nullptr;
+    };
+
+    void VisitAttribute(TString key, TString value) override {
+        Y_ABORT_UNLESS(CurrentSource, "cannot write %s: %s", key.c_str(), value.c_str());
+        CurrentSource->second.try_emplace(key, value);
+    };
+
+    void VisitNonAttribute(TExprNode::TPtr) override {}
+
+public:
+    THashMap<std::pair<TString, TString>, THashMap<TString, TString>> Result;
+
+private:
+    decltype(Result)::pointer CurrentSource = nullptr;
+};
+
+class TAttributesReplacingVisitor : public IAstAttributesVisitor {
+public:
+    TAttributesReplacingVisitor(THashMap<TString, TString> attributesBeforeFilter,
+                                TStringBuf cluster, TStringBuf tablePath,
+                                TKikimrTableMetadataPtr metadata,
+                                TExprContext& ctx)
+        : GatheredAttributes{std::move(attributesBeforeFilter)}
+        , Cluster{cluster}, TablePath{tablePath}
+        , Ctx{ctx}
+        , Metadata{std::move(metadata)}
+    {}
+
+    void VisitRead(TExprNode& read, TString cluster, TString tablePath) override {
+        if (cluster == Cluster && tablePath == TablePath) {
+            Read = &read;
+        }
+    };
+
+    void ExitRead() override {
+        if (!Read) {
+            return;
+        }
+        if (!ReplacedUserchema && Metadata) {
+            Children.push_back(BuildSchemaFromMetadata(Read->Pos(), Ctx, Metadata->Columns));
+        }
+        Read->Child(4)->ChangeChildrenInplace(std::move(Children));
+        Read = nullptr;
+    };
+
+    void VisitAttribute(TString key, TString value) override {
+        if (!Read) {
+            return;
+        }
+        const bool gotNewAttributes = Metadata && !Metadata->Attributes.empty();
+
+        if (gotNewAttributes && GatheredAttributes.contains(key) && !Metadata->Attributes.contains(key)) {
+            return;
+        }
+        auto pos = Read->Pos();
+        auto attribute = Ctx.NewList(pos, {
+            Ctx.NewAtom(pos, key),
+            Ctx.NewAtom(pos, value)
+        });
+        Children.push_back(std::move(attribute));
+    };
+
+    void VisitNonAttribute(TExprNode::TPtr node) override {
+        if (!Read) {
+            return;
+        }
+        if (!Metadata || Metadata->Columns.empty()) {
+            Children.push_back(std::move(node));
+            return;
+        }
+
+        auto nodeChildren = node->Children();
+        if (!nodeChildren.empty() && nodeChildren[0]->IsAtom()) {
+            TCoAtom attrName{nodeChildren[0]};
+            if (attrName.StringValue().equal("userschema")) {
+                node = BuildSchemaFromMetadata(Read->Pos(), Ctx, Metadata->Columns);
+                ReplacedUserchema = true;
+            }
+        }
+        Children.push_back(std::move(node));
+    }
+
+private:
+    THashMap<TString, TString> GatheredAttributes;
+    TStringBuf Cluster;
+    TStringBuf TablePath;
+
+    TExprContext& Ctx;
+    TKikimrTableMetadataPtr Metadata;
+    TExprNode* Read = nullptr;
+    std::vector<TExprNode::TPtr> Children;
+    bool ReplacedUserchema = false;
+};
+
+std::optional<std::pair<TString, TString>> GetAsTextAttribute(const TExprNode& child) {
+    if (!child.IsList() || child.ChildrenSize() != 2) {
+        return std::nullopt;
+    }
+    if (!(child.Child(0)->IsAtom() && child.Child(1)->IsAtom())) {
+        return std::nullopt;
+    }
+
+    TCoAtom attrKey{child.Child(0)};
+    TCoAtom attrVal{child.Child(1)};
+
+    return std::make_optional(std::make_pair(attrKey.StringValue(), attrVal.StringValue()));
+}
+
+void TraverseReadAttributes(IAstAttributesVisitor& visitor, TExprNode& node, TExprContext& ctx);
+
+void ExtractReadAttributes(IAstAttributesVisitor& visitor, TExprNode& read, TExprContext& ctx) {
+    TraverseReadAttributes(visitor, *read.Child(0), ctx);
+
+    TKiDataSource source(read.ChildPtr(1));
+    TKikimrKey key{ctx};
+    if (!key.Extract(*read.Child(2))) {
+        return;
+    }
+    auto cluster = source.Cluster().StringValue();
+    auto tablePath = key.GetTablePath();
+
+    if (read.ChildrenSize() <= 4) {
+        return;
+    }
+    auto& astAttrs = *read.Child(4);
+    visitor.VisitRead(read, cluster, tablePath);
+    for (const auto& child : astAttrs.Children()) {
+        if (auto asAttribute = GetAsTextAttribute(*child)) {
+            visitor.VisitAttribute(asAttribute->first, asAttribute->second);
+        } else {
+            visitor.VisitNonAttribute(child);
+        }
+    }
+    visitor.ExitRead();
+}
+
+void TraverseReadAttributes(IAstAttributesVisitor& visitor, TExprNode& node, TExprContext& ctx) {
+    if (node.IsCallable(ReadName)) {
+        return ExtractReadAttributes(visitor, node, ctx);
+    }
+    if (node.IsCallable()) {
+        if (node.ChildrenSize() == 0) {
+            return;
+        }
+        return TraverseReadAttributes(visitor, *node.Child(0), ctx);
+    }
+}
+
+THashMap<std::pair<TString, TString>, THashMap<TString, TString>> GatherReadAttributes(TExprNode& node, TExprContext& ctx) {
+    TGatheringAttributesVisitor visitor;
+    TraverseReadAttributes(visitor, node, ctx);
+    return visitor.Result;
+}
 
 class TKiSourceIntentDeterminationTransformer: public TKiSourceVisitorTransformer {
 public:
@@ -224,11 +402,13 @@ public:
         size_t tablesCount = SessionCtx->Tables().GetTables().size();
         TVector<NThreading::TFuture<void>> futures;
         futures.reserve(tablesCount);
+        auto readAttributes = GatherReadAttributes(*input, ctx);
 
         for (auto& it : SessionCtx->Tables().GetTables()) {
             const TString& clusterName = it.first.first;
             const TString& tableName = it.first.second;
             TKikimrTableDescription& table = SessionCtx->Tables().GetTable(clusterName, tableName);
+            auto readAttrs = readAttributes.FindPtr(std::make_pair(clusterName, tableName));
 
             if (table.Metadata || table.GetTableType() != ETableType::Table) {
                 continue;
@@ -247,6 +427,8 @@ public:
                             .WithPrivateTables(IsInternalCall)
                             .WithExternalDatasources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
                             .WithAuthInfo(table.GetNeedAuthInfo())
+                            .WithExternalSourceFactory(ExternalSourceFactory)
+                            .WithReadAttributes(readAttrs ? std::move(*readAttrs) : THashMap<TString, TString>{})
             );
 
             futures.push_back(future.Apply([result, queryType]
@@ -327,18 +509,21 @@ public:
         output = input;
         YQL_ENSURE(AsyncFuture.HasValue());
 
+        auto gatheredAttributes = GatherReadAttributes(*input, ctx);
         for (auto& it : LoadResults) {
             const auto& table = it.first;
             IKikimrGateway::TTableMetadataResult& res = *it.second;
 
             if (res.Success()) {
                 res.ReportIssues(ctx.IssueManager);
-                TKikimrTableDescription* tableDesc;
+                TString cluster = it.first.first;
+                TString tablePath;
                 if (res.Metadata->Temporary) {
-                    tableDesc = &SessionCtx->Tables().GetTable(it.first.first, *res.Metadata->QueryName);
+                    tablePath = *res.Metadata->QueryName;
                 } else {
-                    tableDesc = &SessionCtx->Tables().GetTable(it.first.first, it.first.second);
+                    tablePath = it.first.second;
                 }
+                TKikimrTableDescription* tableDesc = &SessionCtx->Tables().GetTable(cluster, tablePath);
 
                 YQL_ENSURE(res.Metadata);
                 tableDesc->Metadata = res.Metadata;
@@ -355,6 +540,14 @@ public:
                 if (!tableDesc->Load(ctx, sysColumnsEnabled)) {
                     LoadResults.clear();
                     return TStatus::Error;
+                }
+
+                if (tableDesc->Metadata->Kind == EKikimrTableKind::External) {
+                    auto currentAttributes = gatheredAttributes.FindPtr(std::make_pair(cluster, tablePath));
+                    if (currentAttributes && !currentAttributes->empty()) {
+                        TAttributesReplacingVisitor replacer{*currentAttributes, cluster, tablePath, tableDesc->Metadata, ctx};
+                        TraverseReadAttributes(replacer, *input, ctx);
+                    }
                 }
 
                 if (!AddCluster(table, res, input, ctx)) {
@@ -384,6 +577,7 @@ public:
                 return TStatus::Error;
             }
         }
+        output = input;
 
         LoadResults.clear();
         return TStatus::Ok;
@@ -750,7 +944,6 @@ public:
                                                 .Add(ctx.NewCallable(node->Pos(), "MrTableConcat", {newKey}))
                                                 .Add(ctx.NewCallable(node->Pos(), "Void", {}))
                                                 .Add(BuildExternalTableSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, source, tableDesc.Metadata->ExternalSource.TableContent))
-
                                             .Build()
                                             .Done().Ptr();
                     auto retChildren = node->ChildrenList();

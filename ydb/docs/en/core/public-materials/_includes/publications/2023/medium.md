@@ -4,7 +4,7 @@
 
 Any production process that works with a database will require a schema migration sooner or later. The migration updates the database’s table structure from one version to the next. Schema migrations can be done manually by executing an `ALTER TABLE` query or by using specialized tools. One such tool is called goose. In this [article](https://blog.ydb.tech/migrations-in-ydb-using-goose-58137bc5c303) we see how goose provides schema management in a project and has supported YDB (a distributed open-source database) since v3.16.0.
 
-### About Prepared statements, server-side compiled query cache, or how to efficiently cache queries in YDB {#2023-pub-medium-cache-queries}
+### About prepared statements, server-side compiled query cache, or how to efficiently cache queries in YDB {#2023-pub-medium-cache-queries}
 
 ![How to efficiently cache queries in YDB](./_includes/cache-queries.webp =700x300)
 

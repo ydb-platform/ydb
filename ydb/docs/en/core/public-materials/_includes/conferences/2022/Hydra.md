@@ -1,4 +1,4 @@
-### Parallel Asynchronous Replication between YDB Database Instances {#2022-conf-hydra-parallel-async-rep}
+### Parallel asynchronous replication between YDB database instances {#2022-conf-hydra-parallel-async-rep}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 

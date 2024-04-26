@@ -35,10 +35,10 @@ items:
   include:
     mode: link
     path: downloads/toc_p.yaml
-- name: Public talks
+- name: Public materials
   include:
     mode: link
-    path: public-talks/toc_p.yaml
+    path: public-materials/toc_p.yaml
 - name: Changelog
   include:
     mode: link

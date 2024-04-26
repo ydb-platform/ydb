@@ -6,6 +6,7 @@
 
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/computation/mkql_spiller.h>
+#include <ydb/library/actors/util/rope.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -174,8 +175,10 @@ private:
         
     }
 
-    void AddDataToRope(T* data, size_t count) {
-        Buffer.Insert(Buffer.End(), TRope(TString(reinterpret_cast<const char*>(data), count * sizeof(T))));
+    void AddDataToRope(const T* data, size_t count) {
+        TRope tmp = TRope::Uninitialized(count * sizeof(T));
+        TRopeUtils::Memcpy(tmp.begin(), reinterpret_cast<const char*>(data), count * sizeof(T));
+        Buffer.Insert(Buffer.End(), std::move(tmp)); // TRope(TString(reinterpret_cast<const char*>(data), count * sizeof(T))));
     }
 
     void SaveNextPartOfVector() {

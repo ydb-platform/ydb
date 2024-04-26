@@ -147,9 +147,10 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
         stringVals.insert( stringVals.end(), IColumnsVals[NumberOfKeyIColumns + i].begin(), IColumnsVals[NumberOfKeyIColumns + i].end());
 
     }
-    /*if (TableBuckets[bucket].GetSize() > 5_MB) {
+    /* if (TableBuckets[bucket].GetSize() > 5_KB) {
         TableSpilledBuckets[bucket].ProcessBucketSpilling(TableBuckets[bucket]);
-    }*/
+    }*/ 
+    TableSpilledBuckets[bucket].ProcessBucketSpilling(TableBuckets[bucket]);
 }
 
 void TTable::ResetIterator() {

@@ -69,6 +69,9 @@ struct TTableBucket {
     std::set<ui32> AllRightMatchedIds; // All row ids of right join table which matching rows in left table. To process streaming join mode. 
     KeysHashTable AnyHashTable; // Hash table to process join only for unique keys (any join attribute)
 
+    size_t GetSize() const {
+        return KeyIntVals.size() * sizeof(ui64) + DataIntVals.size() * sizeof(ui64) + StringsValues.size() + StringsOffsets.size() * sizeof(ui32) + InterfaceValues.size() + InterfaceOffsets.size() + sizeof(ui32);
+    }
  };
 
 struct TTableSpilledBucket {

@@ -147,8 +147,9 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
         stringVals.insert( stringVals.end(), IColumnsVals[NumberOfKeyIColumns + i].begin(), IColumnsVals[NumberOfKeyIColumns + i].end());
 
     }
-
-    TableSpilledBuckets[bucket].ProcessBucketSpilling(TableBuckets[bucket]);
+    /*if (TableBuckets[bucket].GetSize() > 5_MB) {
+        TableSpilledBuckets[bucket].ProcessBucketSpilling(TableBuckets[bucket]);
+    }*/
 }
 
 void TTable::ResetIterator() {
@@ -1194,7 +1195,7 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
     // TODO change to bool IsSpilling enabled
     if (spillerFactory) {
         for (size_t i = 0; i < NumberOfBuckets; ++i) {
-            TableSpilledBuckets.emplace_back(SpillerFactory, 10_KB);
+            TableSpilledBuckets.emplace_back(SpillerFactory, 1_MB);
         }
     }
 

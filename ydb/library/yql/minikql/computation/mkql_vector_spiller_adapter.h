@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iostream>
+#include <format>
 #include <queue>
 
 #include <ydb/library/yql/minikql/defs.h>
@@ -71,6 +73,8 @@ public:
     void Update() {
         switch (State) {
             case EState::SpillingData:
+
+                // std::cerr << std::format("[MISHA] update!\n");
                 MKQL_ENSURE(WriteOperation.has_value(), "Internal logic error");
                 if (!WriteOperation->HasValue()) return;
 
@@ -164,7 +168,10 @@ private:
 
     void SaveBuffer() {
         State = EState::SpillingData;
+        // std::cerr << std::format("[MISHA] saving buffer. size: {}\n", Buffer.size());
         WriteOperation = Spiller->Put(std::move(Buffer));
+        // std::cerr << std::format("[MISHA] size after save: {}\n", Buffer.size());
+        
     }
 
     void AddDataToRope(T* data, size_t count) {
@@ -175,6 +182,8 @@ private:
         size_t maxFittingElemets = (SizeLimit - Buffer.size()) / sizeof(T);
         size_t remainingElementsInVector = CurrentVector.size() - NextVectorPositionToSave;
         size_t elementsToCopyFromVector = std::min(maxFittingElemets, remainingElementsInVector);
+
+        // std::cerr << std::format("[MISHA] save next part of vector. Elements in vector: {}, fitting elements: {}, buffersize: {}!\n", remainingElementsInVector, maxFittingElemets, Buffer.size());
 
         AddDataToRope(CurrentVector.data() + NextVectorPositionToSave, elementsToCopyFromVector);
 

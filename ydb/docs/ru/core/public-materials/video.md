@@ -53,18 +53,13 @@
 
 {% list tabs %}
 
-- 2023
+  - 2023
 
-  {% include [HighLoad](./_includes/conferences/2023/HighLoad.md) %}
+    {% include [HighLoad](./_includes/conferences/2023/HighLoad.md) %}
 
-  {% include [JPoint](./_includes/conferences/2023/JPoint.md) %}
+  - 2022  
 
-- 2022
-  
-  {% include [YaTalks](./_includes/conferences/2023/YaTalks.md) %}
+    {% include [Hydra](./_includes/conferences/2022/Hydra.md) %}
 
-  {% include [Webinars](./_includes/webinars/2023/webinars.md) %}
-
-- 2021  
 
 {% endlist %}

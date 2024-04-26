@@ -19,7 +19,6 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
-        //CLOG_D(ctx, "Execute");
 
         NIceDb::TNiceDb db(txc.DB);
         db.Materialize<Schema>();
@@ -28,7 +27,6 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        //CLOG_D(ctx, "Complete");
         Self->RunTxInit(ctx);
     }
 

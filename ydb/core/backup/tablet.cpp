@@ -1,7 +1,5 @@
 #include "tablet.h"
 #include "tablet_impl.h"
-#include "tx_init_schema.h"
-#include "tx_init.h"
 
 namespace NKikimr::NBackup {
 

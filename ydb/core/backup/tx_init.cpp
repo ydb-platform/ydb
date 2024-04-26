@@ -29,12 +29,10 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
-        // CLOG_D(ctx, "Execute");
         return Load(txc.DB);
     }
 
     void Complete(const TActorContext& ctx) override {
-        // CLOG_D(ctx, "Complete");
         Self->SwitchToWork(ctx);
     }
 }; // TTxInit

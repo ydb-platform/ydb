@@ -2,6 +2,8 @@ LIBRARY()
 
 SRCS(
     tablet.cpp
+    tx_init.cpp
+    tx_init_schema.cpp
 )
 
 PEERDIR(

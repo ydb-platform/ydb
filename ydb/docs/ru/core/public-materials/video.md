@@ -78,5 +78,13 @@
 
     {% include [YaSubbotnik](./_includes/conferences/2021/YaSubbotnik.md) %}
 
+  - 2020   
+
+    {% include [YandexScale](./_includes/conferences/2020/YandexScale.md) %}
+
+  - 2019   
+
+    {% include [YaTalks](./_includes/conferences/2019/YaTalks.md) %}
+
 
 {% endlist %}

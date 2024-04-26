@@ -2,7 +2,7 @@
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 
-{{ ydb-short-name }} is used as a mission-critical database for many Internet-scale services. YDB has been designed as a platform for various data storage and processing systems and aimed at solving a wide range of problems. [{{ team.bondar.name }}]({{ team.bondar.profile }}) ({{ team.bondar.position }}) spoke about the structure of {{ ydb-short-name }}, its main features, and benefits.
+{{ ydb-short-name }} is used as a mission-critical database for many Internet-scale services. YDB has been designed as a platform for various data storage and processing systems and is aimed at solving a wide range of problems. [{{ team.bondar.name }}]({{ team.bondar.profile }}) ({{ team.bondar.position }}) spoke about the structure of {{ ydb-short-name }}, its main features, and benefits.
 
 @[YouTube](https://www.youtube.com/watch?v=A0O7yr9_1Tg)
 

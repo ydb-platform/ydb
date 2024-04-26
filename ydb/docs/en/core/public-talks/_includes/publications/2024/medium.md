@@ -8,4 +8,4 @@ The [research](https://blog.ydb.tech/when-postgres-is-not-enough-performance-eva
 
 ![When Postgres is not enough](./_includes/java21.webp)
 
-In this [post](https://blog.ydb.tech/how-we-switched-to-java-21-virtual-threads-and-got-deadlock-in-tpc-c-for-postgresql-cca2fe08d70b), we present a case study on how we encountered a deadlock with virtual threads in TPC-C for PostgreSQL, even without the dining philosophers problem. This post might be useful for Java developers who are considering switching to virtual threads.
+In this [post](https://blog.ydb.tech/how-we-switched-to-java-21-virtual-threads-and-got-deadlock-in-tpc-c-for-postgresql-cca2fe08d70b), we present a case study on how we encountered a deadlock with virtual threads in TPC-C for PostgreSQL, even without the dining philosophers problem. This post might be helpful for Java developers who are considering switching to virtual threads.

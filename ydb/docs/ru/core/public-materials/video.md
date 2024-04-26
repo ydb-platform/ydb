@@ -98,5 +98,9 @@
 
     {% include [about_cloud](./_includes/conferences/2018/about_cloud.md) %}
 
+  - 2017 
+
+    {% include [Heisenbug](./_includes/conferences/2017/Heisenbug.md) %}  
+
 
 {% endlist %}

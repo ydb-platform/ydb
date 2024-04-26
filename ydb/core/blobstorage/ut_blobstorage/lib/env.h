@@ -85,6 +85,7 @@ struct TEnvironmentSetup {
                 hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
                 hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle)
                 hFunc(NConsole::TEvConsole::TEvConfigNotificationResponse, Handle)
+                hFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest, Handle)
             }
         }
 
@@ -107,6 +108,10 @@ struct TEnvironmentSetup {
 
         void Handle(NConsole::TEvConsole::TEvConfigNotificationResponse::TPtr& ev) {
             Forward(ev, EdgeId);
+        }
+
+        void Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest::TPtr& ev) {
+                Send(ev->Sender, MakeHolder<NConsole::TEvConsole::TEvRemoveConfigSubscriptionResponse>().Release());
         }
     };
 

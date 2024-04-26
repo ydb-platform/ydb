@@ -253,7 +253,7 @@ namespace NKikimr {
             }
         }
 
-        void Handle(TEvMinHugeBlobSize::TPtr ev) {
+        void Handle(TEvMinHugeBlobSizeUpdate::TPtr ev) {
             NextMinREALHugeBlobInBytes = ev->Get()->MinREALHugeBlobInBytes;
         }
 
@@ -616,7 +616,7 @@ namespace NKikimr {
             cFunc(TEvBlobStorage::EvCommenceRepl, StartReplication)
             hFunc(TEvReplInvoke, Handle)
             hFunc(TEvReplCheckProgress, ReplProgressWatchdog)
-            hFunc(TEvMinHugeBlobSize, Handle)
+            hFunc(TEvMinHugeBlobSizeUpdate, Handle)
         )
 
         void PassAway() override {
@@ -660,7 +660,7 @@ namespace NKikimr {
             cFunc(TEvBlobStorage::EvCommenceRepl, Ignore)
             hFunc(TEvReplInvoke, Handle)
             hFunc(TEvReplCheckProgress, ReplProgressWatchdog)
-            hFunc(TEvMinHugeBlobSize, Handle)
+            hFunc(TEvMinHugeBlobSizeUpdate, Handle)
         )
 
     public:

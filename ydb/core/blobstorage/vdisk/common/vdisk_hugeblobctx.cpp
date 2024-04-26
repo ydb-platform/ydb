@@ -18,7 +18,7 @@ namespace NKikimr {
 
     ui32 THugeSlotsMap::AlignByBlockSize(ui32 size) const {
         ui32 sizeInBlocks = size / AppendBlockSize;
-        Y_ABORT_UNLESS(sizeInBlocks,  "Blob size to align is smaller than a signle block. BlobSize# %" PRIu32, size);
+        Y_ABORT_UNLESS(sizeInBlocks,  "Blob size to align is smaller than a single block. BlobSize# %" PRIu32, size);
         return sizeInBlocks * AppendBlockSize;
     }
 

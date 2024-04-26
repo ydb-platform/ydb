@@ -177,12 +177,13 @@ namespace NKikimr {
 
         void Handle(const NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx) {
             auto& record = ev->Get()->Record;
+            ctx.Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
             if (!record.HasConfig() ) {
                 return;
             }
             if (const auto& config = record.GetConfig(); config.HasBlobStorageConfig() && config.GetBlobStorageConfig().HasVDiskPerformanceSettings()) {
                 for (auto &type : config.GetBlobStorageConfig().GetVDiskPerformanceSettings().GetVDiskTypes()) {
-                    if (!type.HasPDiskType() && Config->BaseInfo.DeviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
+                    if (!type.HasPDiskType() || Config->BaseInfo.DeviceType != PDiskTypeToPDiskType(type.GetPDiskType())) {
                         continue;
                     }
                     if (!type.HasMinHugeBlobSizeInBytes()) {
@@ -192,12 +193,11 @@ namespace NKikimr {
                         continue;
                     }
                     if (Config->RunRepl) {
-                        ctx.Send(Db->ReplID, new TEvMinHugeBlobSize(MinREALHugeBlobInBytes));
+                        ctx.Send(Db->ReplID, new TEvMinHugeBlobSizeUpdate(MinREALHugeBlobInBytes));
                     }
-                    ctx.Send(*SkeletonFrontIDPtr, new TEvMinHugeBlobSize(MinREALHugeBlobInBytes));
+                    ctx.Send(*SkeletonFrontIDPtr, new TEvMinHugeBlobSizeUpdate(MinREALHugeBlobInBytes));
                 }
             }
-            ctx.Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
         }
 
         bool ApplyHugeBlobSize(ui32 minHugeBlobInBytes) {
@@ -2394,6 +2394,13 @@ namespace NKikimr {
             if (Db->ReplID) {
                 TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, Db->ReplID, SelfId(), nullptr, 0));
             }
+        }
+        
+        void PassAway() override {
+            Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest(
+                SelfId()
+            ));
+            TActor::PassAway();
         }
 
         void ForwardToScrubActor(STFUNC_SIG) {

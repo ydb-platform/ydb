@@ -831,7 +831,7 @@ namespace NKikimr {
             }
         }
 
-        void Handle(TEvMinHugeBlobSize::TPtr &ev) {
+        void Handle(TEvMinHugeBlobSizeUpdate::TPtr &ev) {
             VCtx->UpdateCostModel(std::make_unique<TCostModel>(VCtx->CostModel->SeekTimeUs, VCtx->CostModel->ReadSpeedBps,
                 VCtx->CostModel->WriteSpeedBps, VCtx->CostModel->ReadBlockSize, VCtx->CostModel->WriteBlockSize,
                 ev->Get()->MinREALHugeBlobInBytes, VCtx->CostModel->GType));
@@ -2069,7 +2069,7 @@ namespace NKikimr {
             HFunc(TEvReportScrubStatus, Handle)
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
             fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
-            hFunc(TEvMinHugeBlobSize, Handle)
+            hFunc(TEvMinHugeBlobSizeUpdate, Handle)
         )
 
 #define HFuncStatus(TEvType, status, errorReason, now, wstatus) \

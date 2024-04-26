@@ -6,7 +6,7 @@ resources:
   script:
     - _assets/gtm.js
   style:
-    - _assets/speakers.css   
+    - _assets/tags.css   
 
 docs-viewer:
   project-name: ydb

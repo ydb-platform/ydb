@@ -1,20 +1,20 @@
 ## Overview { #overview }
- <span style="background-color:#EAD4D9; color: white; border-radius: 5px; padding: 4px"> Overview </span>
+ <span class = "overview-tag tags-shape tags-color-text"> Overview </span>
 
 ## Use cases { #use_cases }
- <span style="background-color:#F3E8DE; color: white; border-radius: 5px; padding: 4px"> Use cases </span>
+ <span class = "use_cases-tag tags-shape tags-color-text"> Use cases </span>
 
 ## Practice { #practice }
- <span style="background-color:#CDD3CB; color: white; border-radius: 5px; padding: 4px"> Practice </span>
+ <span class = "practice-tag tags-shape tags-color-text"> Practice </span>
 
 ## Database internals { #database_internals }
- <span style="background-color:#B4B4B8; color: white; border-radius: 5px; padding: 4px"> Database internals</span>
+ <span class = "database_internals-tag tags-shape tags-color-text"> Database internals</span>
 
 ## Releases { #releases }
- <span style="background-color:#DAE3C3; color: white; border-radius: 5px; padding: 4px"> Releases </span>
+ <span class = "releases-tag tags-shape tags-color-text"> Releases </span>
 
 ## Testing{ #testing }
- <span style="background-color:#B0D792; color: white; border-radius: 5px; padding: 4px"> Testing </span>
+ <span class = "testing-tag tags-shape tags-color-text"> Testing </span>
 
 
 

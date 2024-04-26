@@ -1,0 +1,44 @@
+.tags-shape {
+    border-radius: 5px;
+    padding: 4px;
+  }
+  
+  .g-root_theme_light {
+    .tags-color-text {
+      color: white;
+    }
+  
+    .overview-tag {
+      background-color:#EAD4D9;
+    }
+  
+    .use_cases-tag {
+      background-color:#F3E8DE;
+    }
+    .practice-tag {
+      background-color:#CDD3CB;
+    }
+  
+    .database_internals-tag {
+      background-color:#B4B4B8;
+    }
+  
+    .releases-tag {
+      background-color:#DAE3C3;
+    }
+  
+    .testing-tag {
+      background-color:#B0D792;
+    }
+  
+  }
+  
+  .g-root_theme_dark  {
+    .overview-tag {
+      background-color: #EAD4D9;
+      color: black;
+    }
+    .tags-color-text {
+      color: black;
+    }
+  }

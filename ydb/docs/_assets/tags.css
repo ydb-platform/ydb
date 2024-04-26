@@ -41,4 +41,28 @@
     .tags-color-text {
       color: black;
     }
+
+    .overview-tag {
+      background-color:#EAD4D9;
+    }
+  
+    .use_cases-tag {
+      background-color:#F3E8DE;
+    }
+    .practice-tag {
+      background-color:#CDD3CB;
+    }
+  
+    .database_internals-tag {
+      background-color:#B4B4B8;
+    }
+  
+    .releases-tag {
+      background-color:#DAE3C3;
+    }
+  
+    .testing-tag {
+      background-color:#B0D792;
+    }
+    
   }

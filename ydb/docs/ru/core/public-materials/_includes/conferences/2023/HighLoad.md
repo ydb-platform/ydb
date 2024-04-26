@@ -1,6 +1,6 @@
 ### Реализовать OLAP: как мы делали колоночное хранение в {{ ydb-short-name }} {#2023-conf-hl-olap}
 
-<div style="display:flex; flex-direction: row; justify-content: flex-start; flex-wrap: wrap; column-gap: 10px;">
+<div class = "multi-tags-container">
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 
@@ -46,9 +46,10 @@
 
 [Слайды](https://presentations.ydb.tech/2023/ru/highload/ydb_optimizations_for_arm/presentation.pdf)
 
+
 ### YDB Topic Service: как мы повышали производительность очереди сообщений {#2023-conf-hl-ydb-topic}
 
-<div style="display:flex; flex-direction: row; justify-content: flex-start; flex-wrap: wrap; column-gap: 10px;">
+<div class = "multi-tags-container">
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
@@ -64,6 +65,7 @@
 
 [Слайды](https://presentations.ydb.tech/2023/ru/highload/ydb_topic_service/presentation.pdf)
 
+
 ### Особенности шин данных для очень больших инсталляций на примере YDB Topics {#2023-conf-hl-data-bus}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
@@ -76,6 +78,7 @@
 
 [Слайды](https://presentations.ydb.tech/2023/ru/highload/ydb_topics_data_bus/presentation.pdf)
 
+
 ### Поиск по образцу на последовательностях строк в БД {#2023-conf-hl-search-inline}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
@@ -87,6 +90,7 @@
 Отдельная часть выступления посвящена отличиям в обработке аналитических запросов на табличках и обработке на потоках «живых» данных. Доклад будет интересен разработчикам БД, дата-аналитикам, а также всем, кто интересуется поиском по образцу на больших данных. 
 
 [Слайды](https://presentations.ydb.tech/2023/ru/highload/template_search_in_str_seq/presentation.pdf)
+
 
 ### Из pytest в Go. Тестовое окружение на фикстурах {#2023-conf-hl-pytest-go}
 

@@ -59,6 +59,8 @@
 
     {% include [YaTalks](./_includes/conferences/2023/YaTalks.md) %}
 
+    {% include [HighLoad](./_includes/conferences/2023/HighLoad.md) %}
+
 
   - 2022  
 

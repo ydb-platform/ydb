@@ -5,7 +5,7 @@
 Для работы с внешней базой данных ClickHouse необходимо выполнить следующие шаги:
 1. Создать [секрет](../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
     ```sql
-    CREATE OBJECT clickhouse_datasource_user_password (TYPE SECRET) WITH (value = "password");
+    CREATE OBJECT clickhouse_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
 1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий целевую базу данных внутри кластера ClickHouse.  Для соединения с ClickHouse можно использовать либо [нативный TCP-протокол](https://clickhouse.com/docs/ru/interfaces/tcp) (`PROTOCOL="NATIVE"`), либо [протокол HTTP](https://clickhouse.com/docs/ru/interfaces/http) (`PROTOCOL="HTTP"`).
     ```sql

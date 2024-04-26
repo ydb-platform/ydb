@@ -26,4 +26,4 @@ YQL is a SQL dialect with YDB specific strict types. This is great for performan
 
 ![YCSB performance series](./_includes/ycsb.webp ={{pub-cover-size}})
 
-It’s a challenge to implement a distributed database with strong consistency ensuring high speed and scalability. YDB excels in these aspects, and our customers can attest to this through their own experiences. Unfortunately, we have never presented any performance numbers to a wider audience. We recognize the value of this [information](https://blog.ydb.tech/ycsb-performance-series-ydb-cockroachdb-and-yugabytedb-f25c077a382b) and we are preparing more benchmark results to share.
+It’s a challenge to implement a distributed database with strong consistency, ensuring high speed and scalability. YDB excels in these aspects, and our customers can attest to this through their own experiences. Unfortunately, we have never presented any performance numbers to a broader audience. We recognize the value of this [information](https://blog.ydb.tech/ycsb-performance-series-ydb-cockroachdb-and-yugabytedb-f25c077a382b), and we are preparing more benchmark results to share.

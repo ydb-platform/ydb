@@ -68,7 +68,7 @@ private:
         }
         LOG_D("Navigated key sets: " << results.size());
         for (auto& entry : results) {
-            auto iter = TableRequestIds.find(entry.TableId);
+            auto iter = TableRequestIds.find(entry.TableId.PathId);
             if (iter == TableRequestIds.end()) {
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
                     YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
@@ -76,13 +76,14 @@ private:
                 return;
             }
             TVector<TStageId> stageIds(std::move(iter->second));
-            TableRequestIds.erase(entry.TableId);
+            TableRequestIds.erase(entry.TableId.PathId);
             if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
                     YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
                         << "Failed to resolve table " << entry.TableId << " keys: " << entry.Status << '.'));
                 return;
             }
+
             for (auto stageId : stageIds) {
                 TasksGraph.GetStageInfo(stageId).Meta.ColumnTableInfoPtr = entry.ColumnTableInfo;
             }
@@ -155,39 +156,41 @@ private:
 
         for (auto& pair : TasksGraph.GetStagesInfo()) {
             auto& stageInfo = pair.second;
+
             if (!stageInfo.Meta.ShardOperations.empty()) {
                 YQL_ENSURE(stageInfo.Meta.TableId);
-                YQL_ENSURE(stageInfo.Meta.ShardOperations.size() == 1);
-                auto operation = *stageInfo.Meta.ShardOperations.begin();
+                YQL_ENSURE(!stageInfo.Meta.ShardOperations.empty());
 
-                const auto& tableInfo = stageInfo.Meta.TableConstInfo;
-                Y_ENSURE(tableInfo);
-                stageInfo.Meta.TableKind = tableInfo->TableKind;
+                for (const auto& operation : stageInfo.Meta.ShardOperations) {
+                    const auto& tableInfo = stageInfo.Meta.TableConstInfo;
+                    Y_ENSURE(tableInfo);
+                    stageInfo.Meta.TableKind = tableInfo->TableKind;
 
-                stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, stageInfo.Meta.TableConstInfo, operation);
+                    stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, stageInfo.Meta.TableConstInfo, operation);
 
-                if (stageInfo.Meta.TableKind == ETableKind::Olap && TableRequestIds.find(stageInfo.Meta.TableId) == TableRequestIds.end()) {
-                    TableRequestIds[stageInfo.Meta.TableId].emplace_back(pair.first);
-                    auto& entry = requestNavigate->ResultSet.emplace_back();
-                    entry.TableId = stageInfo.Meta.TableId;
-                    entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
-                    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
-                }
+                    if (stageInfo.Meta.TableKind == ETableKind::Olap && TableRequestIds.find(stageInfo.Meta.TableId.PathId) == TableRequestIds.end()) {
+                        TableRequestIds[stageInfo.Meta.TableId.PathId].emplace_back(pair.first);
+                        auto& entry = requestNavigate->ResultSet.emplace_back();
+                        entry.TableId = stageInfo.Meta.TableId;
+                        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+                        entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
+                    }
 
-                auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));
-                entry.UserData = EncodeStageInfo(stageInfo);
-                switch (operation) {
-                    case TKeyDesc::ERowOperation::Read:
-                        entry.Access = NACLib::EAccessRights::SelectRow;
-                        break;
-                    case TKeyDesc::ERowOperation::Update:
-                        entry.Access = NACLib::EAccessRights::UpdateRow;
-                        break;
-                    case TKeyDesc::ERowOperation::Erase:
-                        entry.Access = NACLib::EAccessRights::EraseRow;
-                        break;
-                    default:
-                        YQL_ENSURE(false, "Unsupported row operation mode: " << (ui32)operation);
+                    auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));
+                    entry.UserData = EncodeStageInfo(stageInfo);
+                    switch (operation) {
+                        case TKeyDesc::ERowOperation::Read:
+                            entry.Access = NACLib::EAccessRights::SelectRow;
+                            break;
+                        case TKeyDesc::ERowOperation::Update:
+                            entry.Access = NACLib::EAccessRights::UpdateRow;
+                            break;
+                        case TKeyDesc::ERowOperation::Erase:
+                            entry.Access = NACLib::EAccessRights::EraseRow;
+                            break;
+                        default:
+                            YQL_ENSURE(false, "Unsupported row operation mode: " << (ui32)operation);
+                    }
                 }
             }
         }
@@ -254,7 +257,7 @@ private:
     const ui64 TxId;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TVector<IKqpGateway::TPhysicalTxData>& Transactions;
-    THashMap<TTableId, TVector<TStageId>> TableRequestIds;
+    THashMap<TPathId, TVector<TStageId>> TableRequestIds;
     bool NavigationFinished = false;
     bool ResolvingFinished = false;
 

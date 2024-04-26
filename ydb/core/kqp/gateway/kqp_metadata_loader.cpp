@@ -43,7 +43,6 @@ NavigateEntryResult CreateNavigateEntry(const TString& path,
         }
     }
     entry.Path = SplitPath(currentPath);
-
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
     entry.SyncVersion = true;
     entry.ShowPrivatePath = settings.WithPrivateTables_;

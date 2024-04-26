@@ -242,6 +242,15 @@ public:
                     addTable(source.GetReadRangesSource().GetTable());
                 }
             }
+
+            for (const auto& sink : stage.GetSinks()) {
+                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink) {
+                    YQL_ENSURE(sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                    NKikimrKqp::TKqpTableSinkSettings settings;
+                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                    addTable(settings.GetTable());
+                }
+            }
         }
 
         for (const auto& table : phyTx.GetTables()) {

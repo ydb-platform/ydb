@@ -126,6 +126,19 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
                 }
             }
 
+            for (auto& sink : stage.GetSinks()) {
+                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                    NKikimrKqp::TKqpTableSinkSettings settings;
+                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                    YQL_ENSURE(sink.GetOutputIndex() == 0);
+                    YQL_ENSURE(stage.SinksSize() == 1);
+                    meta.TableId = MakeTableId(settings.GetTable());
+                    meta.TablePath = settings.GetTable().GetPath();
+                    meta.ShardOperations.insert(TKeyDesc::ERowOperation::Update);
+                    meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
+                }
+            }
+
             bool stageAdded = tasksGraph.AddStageInfo(
                 TStageInfo(stageId, stage.InputsSize() + stage.SourcesSize(), stage.GetOutputsCount(), std::move(meta)));
             YQL_ENSURE(stageAdded);

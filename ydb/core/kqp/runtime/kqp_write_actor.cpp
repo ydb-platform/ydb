@@ -298,7 +298,7 @@ private:
 
     TMaybe<google::protobuf::Any> ExtraData() override {
         NKikimrKqp::TEvKqpOutputActorResultInfo resultInfo;
-        for (const auto& [_, shardInfo] : ShardsInfo.GetShards()) {
+        for (const auto& [shardID, shardInfo] : ShardsInfo.GetShards()) {
             if (const auto& lock = shardInfo.GetLock(); lock) {
                 resultInfo.AddLocks()->CopyFrom(*lock);
             }
@@ -645,9 +645,7 @@ private:
             {
                 Settings.GetTable().GetOwnerId(),
                 Settings.GetTable().GetTableId(),
-                SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable
-                    ? Settings.GetTable().GetVersion() + 1 // TODO: SchemeShard returns wrong version for columnshard.
-                    : Settings.GetTable().GetVersion()
+                Settings.GetTable().GetVersion()
             },
             Serializer->GetWriteColumnIds(),
             payloadIndex,

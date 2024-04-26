@@ -925,9 +925,9 @@
     ],
     "test.test[expr-struct_merge-default.txt-Debug]": [
         {
-            "checksum": "39b5b0c884b0a63fd3e97f5e185553ea",
-            "size": 811,
-            "uri": "https://{canondata_backend}/1936842/e15468da5c6a430935df259a2106604daa68ad66/resource.tar.gz#test.test_expr-struct_merge-default.txt-Debug_/opt.yql_patched"
+            "checksum": "ab77466270296597939428807f0af395",
+            "size": 866,
+            "uri": "https://{canondata_backend}/1942415/ecf45b8d311b13ba55e2de94295cabed9b642863/resource.tar.gz#test.test_expr-struct_merge-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[expr-struct_merge-default.txt-Plan]": [

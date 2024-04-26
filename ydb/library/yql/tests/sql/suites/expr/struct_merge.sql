@@ -7,7 +7,8 @@ $right = <|c: 1, d: 2, e: 3|>;
 SELECT
     StructUnion($left, $right),
     StructUnion($left, $right, $merge),
+    StructIntersection($left, $right),
     StructIntersection($left, $right, $merge),
-    StructDifference($left, $right, $merge),
-    StructSymmetricDifference($left, $right, $merge)
+    StructDifference($left, $right),
+    StructSymmetricDifference($left, $right)
 ;

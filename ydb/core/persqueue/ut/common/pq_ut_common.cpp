@@ -388,26 +388,6 @@ void WaitPartition(const TString &session, TTestContext& tc, ui32 partition, con
     }
 }
 
-void ReleasePartition(
-    TTestContext& tc,
-    ui32 partition,
-    const TString& sessionToRelease,
-    const TString& topic,
-    const TActorId& pipe) {
-    THolder<TEvPersQueue::TEvPartitionReleased> request;
-
-    request.Reset(new TEvPersQueue::TEvPartitionReleased);
-    auto& req = request->Record;
-    req.SetSession(sessionToRelease);
-    req.SetPartition(partition);
-    req.SetTopic(topic);
-    req.SetClientId("user");
-    ActorIdToProto(pipe, req.MutablePipeClient());
-
-    tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries(), pipe);
-}
-
-
 std::pair<TString, TActorId> CmdSetOwner(const ui32 partition, TTestContext& tc, const TString& owner, bool force) {
     return CmdSetOwner(tc.Runtime.Get(), tc.TabletId, tc.Edge, partition, owner, force);
 }

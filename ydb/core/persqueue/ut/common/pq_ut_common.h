@@ -9,7 +9,7 @@
 #include <ydb/core/protos/msgbus_kv.pb.h>
 
 
-const bool ENABLE_DETAILED_PQ_LOG = true;
+const bool ENABLE_DETAILED_PQ_LOG = false;
 const bool ENABLE_DETAILED_KV_LOG = false;
 
 namespace NKikimr::NPQ {
@@ -359,13 +359,6 @@ void WaitPartition(
     const TString& topic,
     const TActorId& pipe,
     bool ok = true);
-
-void ReleasePartition(
-    TTestContext& tc,
-    ui32 partition,
-    const TString& sessionToRelease,
-    const TString& topic,
-    const TActorId& pipe);
 
 void WriteData(
     const ui32 partition,

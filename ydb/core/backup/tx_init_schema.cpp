@@ -1,5 +1,3 @@
-#pragma once
-
 #include "tablet_impl.h"
 
 namespace NKikimr::NBackup {

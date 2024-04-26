@@ -781,13 +781,16 @@ bool TConsumer::MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, cons
 }
 
 void TConsumer::DestroyFamily(TPartitionFamily* family, const TActorContext& ctx) {
-    if (family->Status == TPartitionFamily::EStatus::Active) {
-        family->Release(ctx, TPartitionFamily::ETargetStatus::Destroy);
-    } else if (family->Status == TPartitionFamily::EStatus::Releasing) {
-        family->TargetStatus = TPartitionFamily::ETargetStatus::Destroy;
-    } else {
-        // Free
-        family->Reset(TPartitionFamily::ETargetStatus::Destroy, ctx);
+    switch(family->Status) {
+        case TPartitionFamily::EStatus::Active:
+            family->Release(ctx, TPartitionFamily::ETargetStatus::Destroy);
+            break;
+        case TPartitionFamily::EStatus::Releasing:
+            family->TargetStatus = TPartitionFamily::ETargetStatus::Destroy;
+            break;
+        case TPartitionFamily::EStatus::Free:
+            family->Reset(TPartitionFamily::ETargetStatus::Destroy, ctx);
+            break;
     }
 }
 
@@ -953,7 +956,6 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, const TActorContext& c
     }
 
     return !newPartitions.empty();
-
 }
 
 void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
@@ -1272,9 +1274,6 @@ void TConsumer::Balance(const TActorContext& ctx) {
             if (hasGoodestSession) {
                 family->Release(ctx);
                 it = FamiliesRequireBalancing.erase(it);
-
-                // We rebalance only one family at a time to avoid cyclical rebalancing.
-                break;
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                         GetPrefix() << "skip balancing " << family->DebugStr() << " because it is already being read by the best session.");

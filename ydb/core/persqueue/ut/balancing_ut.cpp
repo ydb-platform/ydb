@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(Balancing) {
     }
 
 /*
-     Y_UNIT_TEST(Many) {
+    Y_UNIT_TEST(BalanceManySession) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1000);
 

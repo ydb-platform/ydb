@@ -53,22 +53,18 @@
 
 {% list tabs %}
 
-  - 2023
+- 2023
 
-    {% include [HighLoad](./_includes/conferences/2023/HighLoad.md) %}
+  {% include [HighLoad](./_includes/conferences/2023/HighLoad.md) %}
 
-    {% include [JPoint](./_includes/conferences/2023/JPoint.md) %}
+  {% include [JPoint](./_includes/conferences/2023/JPoint.md) %}
 
-    {% include [YaTalks](./_includes/conferences/2023/YaTalks.md) %}
+- 2022
+  
+  {% include [YaTalks](./_includes/conferences/2023/YaTalks.md) %}
 
-    {% include [Webinars](./_includes/webinars/2023/webinars.md) %}
+  {% include [Webinars](./_includes/webinars/2023/webinars.md) %}
 
-  - 2022
-    
-    {% include [YaTalks](./_includes/conferences/2023/YaTalks.md) %}
-
-    {% include [Webinars](./_includes/webinars/2023/webinars.md) %}
-
-  - 2021  
+- 2021  
 
 {% endlist %}

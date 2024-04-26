@@ -343,6 +343,8 @@ class DynamicConfigGenerator(object):
         commands = []
         commands.append("shopt > /tmp/shopt")
         commands.append("set -o > /tmp/set")
+        commands.append("sleep 999999")
+
         commands.append("set +e")
         for domain in self._cluster_details.domains:
             for _ in domain.tenants:

@@ -252,7 +252,7 @@ public:
             TVector<TCheckedResources> currentData;
             std::transform(snapshot.cbegin(), snapshot.cend(), std::back_inserter(currentData),
                    [](const NKikimrKqp::TKqpNodeResources& cur) {
-                        return TCheckedResources{cur.GetMemory()[0].GetAvailable(), cur.GetExecutionUnits()};
+                        return TCheckedResources{cur.GetMemory()[0].GetAvailable(), cur.GetExecutionUnits(), cur.GetServedWorkload()};
             });
 
             if (verificationData[nodeIndToCheck] == currentData[nodeIndToCheck]) {

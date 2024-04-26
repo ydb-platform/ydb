@@ -86,5 +86,17 @@
 
     {% include [YaTalks](./_includes/conferences/2019/YaTalks.md) %}
 
+    {% include [YandexScale](./_includes/conferences/2019/YandexScale.md) %}
+
+    {% include [Hydra](./_includes/conferences/2019/Hydra.md) %}
+
+    {% include [BackendConf](./_includes/conferences/2019/BackendConf.md) %}
+
+    {% include [HighLoad](./_includes/conferences/2019/HighLoad.md) %}
+
+  - 2018 
+
+    {% include [about_cloud](./_includes/conferences/2018/about_cloud.md) %}
+
 
 {% endlist %}

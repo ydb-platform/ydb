@@ -14,7 +14,6 @@ from ydb.tests.library.harness import param_constants
 import ydb.tests.library.common.yatest_common as yatest_common
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
-from ydb.tests.tools.fq_runner.fq_client import StreamingDisposition
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.datastreams_helpers.control_plane import create_stream
@@ -416,8 +415,8 @@ class TestRecovery(TestYdsBase):
 
         session = kikimr.driver.table_client.session().create()
         checkpoint_table_prefix = "/local/CheckpointCoordinatorStorage_" + kikimr.uuid + '/states'
-        session.transaction().execute(f"DELETE FROM `{checkpoint_table_prefix}`",commit_tx=True)
-        
+        session.transaction().execute(f"DELETE FROM `{checkpoint_table_prefix}`", commit_tx=True)
+
         for node_index in kikimr.control_plane.kikimr_cluster.nodes:
             kikimr.control_plane.kikimr_cluster.nodes[node_index].start()
         for node_index in kikimr.control_plane.kikimr_cluster.nodes:

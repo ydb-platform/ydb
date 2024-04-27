@@ -300,12 +300,13 @@ private:
 bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&) {
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Execute")("details", Self->NormalizerController.DebugString());
-    return Changes->Apply(txc, Self->NormalizerController);
+    return Changes->ApplyOnExecute(txc, Self->NormalizerController);
 }
 
 void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Complete")("tablet_id", Self->TabletID())("event", "initialize_shard");
     AFL_VERIFY(!Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
+    Changes->ApplyOnComplete(Self->NormalizerController);
     Self->NormalizerController.GetNormalizer()->OnResultReady();
     if (Self->NormalizerController.GetNormalizer()->WaitResult()) {
         return;

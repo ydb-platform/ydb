@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     normalizer.cpp
     chunks.cpp
+    clean.cpp
 )
 
 PEERDIR(

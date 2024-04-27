@@ -22,7 +22,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(co
         return TConclusionStatus::Fail("Not ready");
     }
 
-    TTablesManager tablesManager(controller.GetStoragesManager(), 0);
+    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), 0);
     if (!tablesManager.InitFromDB(db)) {
         ACFL_ERROR("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");
@@ -49,7 +49,10 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(co
             auto currentSchema = schema.GetSchema(portion);
             AFL_VERIFY(portion.ValidSnapshotInfo())("details", portion.DebugString());
 
-            auto it = portions.find(portion.GetPortionId());
+            if (!columnsFilter.empty() && !columnsFilter.contains(loadContext.GetAddress().GetColumnId())) {
+                return;
+            }
+            auto it = portions.find(portion.GetPortionIdVerified());
             if (it == portions.end()) {
                 Y_ABORT_UNLESS(portion.Records.empty());
                 (*schemas)[portion.GetPortionId()] = currentSchema;
@@ -87,7 +90,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(co
 
     ui64 brokenPortioncCount = 0;
     for (auto&& [_, portionInfo] : portions) {
-        if (CheckPortion(*portionInfo)) {
+        if (CheckPortion(tablesManager,  *portionInfo)) {
             continue;
         }
         ++brokenPortioncCount;

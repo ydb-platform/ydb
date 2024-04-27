@@ -317,11 +317,17 @@ private:
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             .Build(false);
 
+        auto dqIntegrationPeephole = TTransformationPipeline(typesCtx);
+        for (auto* dqIntegration : GetUniqueIntegrations(*typesCtx)) {
+            dqIntegration->ConfigurePeepholePipeline(true, {}, &dqIntegrationPeephole);
+        }
+
         auto physicalPeepholeTransformer = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
             .Add(Log("PhysicalPeephole"), "LogPhysicalPeephole")
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
             .AddPostTypeAnnotation()
+            .Add(dqIntegrationPeephole.Build(), "DqIntegrationPeephole")
             .Add(
                 CreateKqpTxsPeepholeTransformer(
                     CreateTypeAnnotationTransformer(

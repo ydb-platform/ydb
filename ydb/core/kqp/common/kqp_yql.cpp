@@ -454,4 +454,21 @@ TString PrintKqpStageOnly(const TDqStageBase& stage, TExprContext& ctx) {
     return KqpExprToPrettyString(TExprBase(newStage), ctx);
 }
 
+std::unordered_set<IDqIntegration*> GetUniqueIntegrations(TTypeAnnotationContext& typesCtx) {
+    std::unordered_set<IDqIntegration*> uniqueIntegrations;
+    for (const auto& provider : typesCtx.DataSources) {
+        if (auto* dqIntegration = provider->GetDqIntegration()) {
+            uniqueIntegrations.emplace(dqIntegration);
+        }
+    }
+
+    for (const auto& provider : typesCtx.DataSinks) {
+        if (auto* dqIntegration = provider->GetDqIntegration()) {
+            uniqueIntegrations.emplace(dqIntegration);
+        }
+    }
+
+    return uniqueIntegrations;
+}
+
 } // namespace NYql

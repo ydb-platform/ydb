@@ -87,7 +87,9 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
     }
 
     if (executionOptions.HasResults()) {
-        runner.PrintScriptResults();
+        if (!runner.PrintScriptResults()) {
+            ythrow yexception() << "Failed to print script results";
+        }
     }
 
     Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Finalization of kqp runner..." << colors.Default() << Endl;
@@ -240,7 +242,7 @@ void RunMain(int argc, const char* argv[]) {
         .RequiredArgument("STR")
         .DefaultValue(planOutputFormat)
         .StoreResult(&planOutputFormat);
-    options.AddLongOption('R', "result-format", "Script query result format, one of { rows | full }")
+    options.AddLongOption('R', "result-format", "Script query result format, one of { rows | full-json | full-proto }")
         .Optional()
         .RequiredArgument("STR")
         .DefaultValue(resultOutputFormat)
@@ -325,7 +327,8 @@ void RunMain(int argc, const char* argv[]) {
 
     runnerOptions.ResultOutputFormat = GetCaseVariant<NKqpRun::TRunnerOptions::EResultOutputFormat>("result-format", resultOutputFormat, {
         {"rows", NKqpRun::TRunnerOptions::EResultOutputFormat::RowsJson},
-        {"full", NKqpRun::TRunnerOptions::EResultOutputFormat::FullJson}
+        {"full-json", NKqpRun::TRunnerOptions::EResultOutputFormat::FullJson},
+        {"full-proto", NKqpRun::TRunnerOptions::EResultOutputFormat::FullProto}
     });
 
     runnerOptions.PlanOutputFormat = GetCaseVariant<NYdb::NConsoleClient::EOutputFormat>("plan-format", planOutputFormat, {

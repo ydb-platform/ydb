@@ -91,6 +91,7 @@ struct TKiExploreTxResults {
     TVector<TExprBase> Sync;
     TVector<TKiQueryBlock> QueryBlocks;
     bool HasExecute;
+    bool HasErrors;
 
     THashSet<const TExprNode*> GetSyncSet() const {
         THashSet<const TExprNode*> syncSet;
@@ -280,10 +281,11 @@ struct TKiExploreTxResults {
     }
 
     TKiExploreTxResults()
-        : HasExecute(false) {}
+        : HasExecute(false)
+        , HasErrors(false) {}
 };
 
-bool IsDqRead(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& types, bool estimateReadSize = true) {
+bool IsDqRead(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& types, bool estimateReadSize, bool* hasErrors = nullptr) {
     if (node.Ref().ChildrenSize() <= 1) {
         return false;
     }
@@ -294,13 +296,21 @@ bool IsDqRead(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& 
         auto dataSourceProviderIt = types.DataSourceMap.find(dataSourceCategory);
         if (dataSourceProviderIt != types.DataSourceMap.end()) {
             if (auto* dqIntegration = dataSourceProviderIt->second->GetDqIntegration()) {
-                if (dqIntegration->CanRead(*node.Ptr(), ctx) &&
-                    (!estimateReadSize || dqIntegration->EstimateReadSize(
-                        TDqSettings::TDefault::DataSizePerJob,
-                        TDqSettings::TDefault::MaxTasksPerStage,
-                        {node.Raw()},
-                        ctx))) {
-                    return true;
+                try {
+                    if (dqIntegration->CanRead(*node.Ptr(), ctx) &&
+                        (!estimateReadSize || dqIntegration->EstimateReadSize(
+                            TDqSettings::TDefault::DataSizePerJob,
+                            TDqSettings::TDefault::MaxTasksPerStage,
+                            {node.Raw()},
+                            ctx))) {
+                        return true;
+                    }
+                } catch (const TFallbackError& error) {
+                    TString message = TStringBuilder() << "Cannot execute read through DQ integration. Cause: " << error.what();
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), message));
+                    if (hasErrors) {
+                        *hasErrors = true;
+                    }
                 }
             }
         }
@@ -388,7 +398,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         return result;
     }
 
-    if (IsDqRead(node, ctx, types)) {
+    if (IsDqRead(node, ctx, types, true, &txRes.HasErrors)) {
         txRes.Ops.insert(node.Raw());
         TExprNode::TPtr worldChild = node.Raw()->ChildPtr(0);
         return ExploreTx(TExprBase(worldChild), ctx, dataSink, txRes, tablesData, types);
@@ -849,8 +859,8 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TIntrusivePtr<TK
 
     TKiExploreTxResults txExplore;
     txExplore.ConcurrentResults = concurrentResults;
-    if (!ExploreTx(commit.World(), ctx, kiDataSink, txExplore, tablesData, types)) {
-        return node.Ptr();
+    if (!ExploreTx(commit.World(), ctx, kiDataSink, txExplore, tablesData, types) || txExplore.HasErrors) {
+        return txExplore.HasErrors ? nullptr : node.Ptr();
     }
 
     if (txExplore.HasExecute) {

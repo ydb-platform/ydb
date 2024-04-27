@@ -242,12 +242,15 @@ public:
         return maxDataSizePerJob;
     }
 
-    void AddInfo(TExprContext& ctx, const TString& message, bool skipIssues) {
+    void AddInfo(TExprContext& ctx, const TString& message, bool skipIssues, bool throwException = false) {
         if (!skipIssues) {
             YQL_CLOG(INFO, ProviderDq) << message;
             TIssue info("DQ cannot execute the query. Cause: " + message);
             info.Severity = TSeverityIds::S_INFO;
             ctx.IssueManager.RaiseIssue(info);
+        }
+        if (throwException) {
+            throw TFallbackError() << message;
         }
     }
 
@@ -293,7 +296,7 @@ public:
         } else if (auto maybeRead = TMaybeNode<TYtReadTable>(&node)) {
             auto cluster = maybeRead.Cast().DataSource().Cluster().StringValue();
             if (!State_->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
-                AddInfo(ctx, TStringBuilder() << "disabled for cluster " << cluster, skipIssues);
+                AddInfo(ctx, TStringBuilder() << "disabled for cluster " << cluster, skipIssues, State_->PassiveExecution);
                 return false;
             }
             const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false);
@@ -309,45 +312,45 @@ public:
                             }
                         }
                     }
-                    AddInfo(ctx, info, skipIssues);
+                    AddInfo(ctx, info, skipIssues, State_->PassiveExecution);
                     return false;
                 }
                 auto sampleSetting = GetSetting(section.Settings().Ref(), EYtSettingType::Sample);
                 if (sampleSetting && sampleSetting->Child(1)->Child(0)->Content() == "system") {
-                    AddInfo(ctx, "system sampling", skipIssues);
+                    AddInfo(ctx, "system sampling", skipIssues, State_->PassiveExecution);
                     return false;
                 }
                 for (auto path: section.Paths()) {
                     if (!path.Table().Maybe<TYtTable>()) {
-                        AddInfo(ctx, "non-table path", skipIssues);
+                        AddInfo(ctx, "non-table path", skipIssues, State_->PassiveExecution);
                         return false;
                     } else {
                         auto pathInfo = TYtPathInfo(path);
                         auto tableInfo = pathInfo.Table;
                         auto epoch = TEpochInfo::Parse(path.Table().Maybe<TYtTable>().CommitEpoch().Ref());
                         if (!tableInfo->Stat) {
-                            AddInfo(ctx, "table without statistics", skipIssues);
+                            AddInfo(ctx, "table without statistics", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (!tableInfo->RowSpec) {
-                            AddInfo(ctx, "table without row spec", skipIssues);
+                            AddInfo(ctx, "table without row spec", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (!tableInfo->Meta) {
-                            AddInfo(ctx, "table without meta", skipIssues);
+                            AddInfo(ctx, "table without meta", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (tableInfo->IsAnonymous) {
-                            AddInfo(ctx, "anonymous table", skipIssues);
+                            AddInfo(ctx, "anonymous table", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if ((!epoch.Empty() && *epoch.Get() > 0)) {
-                            AddInfo(ctx, "table with non-empty epoch", skipIssues);
+                            AddInfo(ctx, "table with non-empty epoch", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (NYql::HasSetting(tableInfo->Settings.Ref(), EYtSettingType::WithQB)) {
-                            AddInfo(ctx, "table with QB2 premapper", skipIssues);
+                            AddInfo(ctx, "table with QB2 premapper", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (pathInfo.Ranges && !canUseYtPartitioningApi) {
-                            AddInfo(ctx, "table with ranges", skipIssues);
+                            AddInfo(ctx, "table with ranges", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (tableInfo->Meta->IsDynamic && !canUseYtPartitioningApi) {
-                            AddInfo(ctx, "dynamic table", skipIssues);
+                            AddInfo(ctx, "dynamic table", skipIssues, State_->PassiveExecution);
                             return false;
                         }
 
@@ -356,7 +359,7 @@ public:
                 }
             }
             if (auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); chunksCount > maxChunks) {
-                AddInfo(ctx, "table with too many chunks", skipIssues);
+                AddInfo(ctx, "table with too many chunks", skipIssues, State_->PassiveExecution);
                 return false;
             }
             return true;

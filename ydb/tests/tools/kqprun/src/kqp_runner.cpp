@@ -119,14 +119,17 @@ public:
         return true;
     }
 
-    void PrintScriptResults() const {
+    bool PrintScriptResults() const {
         Cout << CoutColors_.Cyan() << "Writing script query results" << CoutColors_.Default() << Endl;
         for (size_t i = 0; i < ResultSets_.size(); ++i) {
             if (ResultSets_.size() > 1) {
                 *Options_.ResultOutput << CoutColors_.Cyan() << "Result set " << i + 1 << ":" << CoutColors_.Default() << Endl;
             }
-            PrintScriptResult(ResultSets_[i]);
+            if (!PrintScriptResult(ResultSets_[i])) {
+                return false;
+            }
         }
+        return true;
     }
 
 private:
@@ -207,7 +210,7 @@ private:
         printer.Print(plan);
     }
 
-    void PrintScriptResult(const Ydb::ResultSet& resultSet) const {
+    bool PrintScriptResult(const Ydb::ResultSet& resultSet) const {
         switch (Options_.ResultOutputFormat) {
         case TRunnerOptions::EResultOutputFormat::RowsJson: {
             NYdb::TResultSet result(resultSet);
@@ -215,15 +218,30 @@ private:
             while (parser.TryNextRow()) {
                 NJsonWriter::TBuf writer(NJsonWriter::HEM_UNSAFE, Options_.ResultOutput);
                 writer.SetWriteNanAsString(true);
-                NYdb::FormatResultRowJson(parser, result.GetColumnsMeta(), writer, NYdb::EBinaryStringEncoding::Unicode);
+                try {
+                    NYdb::FormatResultRowJson(parser, result.GetColumnsMeta(), writer, NYdb::EBinaryStringEncoding::Unicode);
+                } catch (...) {
+                    Cerr << CerrColors_.Red() << "Failed to convert query result rows to JSON, reason:\n" <<  CurrentExceptionMessage() << "\nTry to use --result-format full-proto" << CerrColors_.Default() << Endl;
+                    return false;
+                }
                 *Options_.ResultOutput << Endl;
             }
-            break;
+            return true;
         }
 
         case TRunnerOptions::EResultOutputFormat::FullJson:
             resultSet.PrintJSON(*Options_.ResultOutput);
-            break;
+            *Options_.ResultOutput << Endl;
+            return true;
+
+        case TRunnerOptions::EResultOutputFormat::FullProto:
+            TString resultSetString;
+            google::protobuf::TextFormat::Printer printer;
+            printer.SetSingleLineMode(false);
+            printer.SetUseUtf8StringEscaping(true);
+            printer.PrintToString(resultSet, &resultSetString);
+            *Options_.ResultOutput << resultSetString;
+            return true;
         }
     }
 
@@ -270,8 +288,8 @@ bool TKqpRunner::ForgetExecutionOperation() {
     return Impl_->ForgetExecutionOperation();
 }
 
-void TKqpRunner::PrintScriptResults() const {
-    Impl_->PrintScriptResults();
+bool TKqpRunner::PrintScriptResults() const {
+    return Impl_->PrintScriptResults();
 }
 
 }  // namespace NKqpRun

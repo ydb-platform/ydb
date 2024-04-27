@@ -42,7 +42,8 @@ class Test(object):
                 yatest_common.binary_path('ydb/tests/tools/ydb_serializable/ydb_serializable'),
                 '--endpoint=%s:%d' % (self.cluster.nodes[1].host, self.cluster.nodes[1].grpc_port),
                 '--database=%s' % self.cluster.db_path,
-                '--output-path=%s' % yatest_common.output_path(),
+                # '--output-path=%s' % yatest_common.output_path(),
+                '--output-path=%s' % "/tmp/ser",
                 '--iterations=25',
                 '--processes=2'
             ],

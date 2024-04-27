@@ -2364,7 +2364,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto& sequenceDescription = describeResult.GetPathDescription().GetSequenceDescription();
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetName(), "seq");
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMinValue(), 1);
-            UNIT_ASSERT(!sequenceDescription.HasMaxValue());
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMaxValue(), Max<i64>());
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetStartValue(), 10);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCache(), 3);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetIncrement(), 2);

@@ -851,6 +851,7 @@ namespace NSchemeShardUT_Private {
     // sequence
     GENERIC_HELPERS(CreateSequence, NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence, &NKikimrSchemeOp::TModifyScheme::MutableSequence)
     GENERIC_HELPERS(DropSequence, NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    GENERIC_HELPERS(AlterSequence, NKikimrSchemeOp::EOperationType::ESchemeOpAlterSequence, &NKikimrSchemeOp::TModifyScheme::MutableSequence)
     DROP_BY_PATH_ID_HELPERS(DropSequence, NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence)
 
     // replication

@@ -180,7 +180,6 @@ private:
             ctx.Send(ReplyTo, ev.Release());
 
             FinishTask(ctx);
-
             return Die(ctx);
         }
 
@@ -207,6 +206,8 @@ private:
         if (msg.Status != NKikimrProto::OK) {
             LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Stats build failed at datashard " << TabletId << ", for tableId " << TableId
                 << " requested pages but got " << msg.Status);
+            Send(ReplyTo, new TDataShard::TEvPrivate::TEvTableStatsError(TableId, TDataShard::TEvPrivate::TEvTableStatsError::ECode::FETCH_PAGE_FAILED));
+            FinishTask(ctx);
             return Die(ctx);
         }
         
@@ -412,6 +413,21 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
     }
 }
 
+void TDataShard::Handle(TEvPrivate::TEvTableStatsError::TPtr& ev, const TActorContext& ctx) {
+    Actors.erase(ev->Sender);
+
+    auto msg = ev->Get();
+
+    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Stats rebuilt error '" << msg->Message 
+        << "', code: " << ui32(msg->Code) << ", datashard " << TabletID() << ", tableId " << msg->TableId);
+
+    auto it = TableInfos.find(msg->TableId);
+    if (it != TableInfos.end()) {
+        it->second->StatsUpdateInProgress = false;
+        // if we have got an error, a compaction should have happened so restart build stats anyway
+        it->second->StatsNeedUpdate = true;
+    }
+}
 
 class TDataShard::TTxInitiateStatsUpdate : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:

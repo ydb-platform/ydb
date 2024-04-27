@@ -1,5 +1,4 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
-#include "datashard_ut_common_kqp.h"
 #include "ydb/core/tablet_flat/shared_sausagecache.h"
 
 namespace NKikimr {
@@ -342,6 +341,59 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         auto counters = MakeIntrusive<TSharedPageCacheCounters>(runtime.GetDynamicCounters());
         Cerr << "ActiveBytes = " << counters->ActiveBytes->Val() << " PassiveBytes = " << counters->PassiveBytes->Val() << Endl;
         UNIT_ASSERT_LE(counters->ActiveBytes->Val(), 800*1024); // one index
+    }
+
+    Y_UNIT_TEST(NoData) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        auto [shards, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3)");
+        
+        bool captured = false;
+        auto observer = runtime.AddObserver<NSharedCache::TEvResult>([&](NSharedCache::TEvResult::TPtr& event) {
+            IActor *actor = runtime.FindActor(event->Recipient);
+            
+            Cerr << "Got SchemeShard NSharedCache::TEvResult from " << event->Sender << " to " << event->Recipient << "(" << actor->GetActivityType() << ")"<< Endl;
+            
+            if (actor && actor->GetActivityType() == 288) {
+                auto& message = *event->Get();
+                event.Reset(static_cast<TEventHandle<NSharedCache::TEvResult> *>(
+                    new IEventHandle(event->Recipient, event->Sender, 
+                        new NSharedCache::TEvResult(message.Origin, message.Cookie, NKikimrProto::NODATA))));
+                captured = true;
+            }
+        });
+
+        CompactTable(runtime, shard1, tableId1, false);
+
+        for (int i = 0; i < 5 && !captured; ++i) {
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&]() { return captured; };
+            runtime.DispatchEvents(options, TDuration::Seconds(5));
+        }
+        observer.Remove();
+
+        {
+            Cerr << "Waiting stats.." << Endl;
+            auto stats = WaitTableStats(runtime, 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
+        }
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardStats)

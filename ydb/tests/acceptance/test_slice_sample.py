@@ -49,4 +49,3 @@ class Test(object):
             wait=True,
             stdout=sys.stdout,
         )
-

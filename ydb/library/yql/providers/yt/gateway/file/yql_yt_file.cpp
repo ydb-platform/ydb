@@ -587,7 +587,7 @@ public:
                     .Pos(options.Pos())).GetValue();
 
                 if (std::holds_alternative<TFileLinkPtr>(folderContent.ItemsOrFileLink)) {
-                    continue;
+                    Y_ENSURE(false, "File link result from file gateway GetFolder() is unexpected");
                 }
                 for (const auto& item: std::get<TVector<TFolderResult::TFolderItem>>(folderContent.ItemsOrFileLink)) {
                     if (item.Path == targetPath) {

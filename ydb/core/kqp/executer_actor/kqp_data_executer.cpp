@@ -1891,12 +1891,12 @@ private:
                         default:
                             YQL_ENSURE(false, "unknown source type");
                     }
-                } else if (StreamResult && stageInfo.Meta.IsOlap()) {
+                } else if (StreamResult && stageInfo.Meta.IsOlap() && stage.SinksSize() == 0) {
                     BuildScanTasksFromShards(stageInfo);
-                } else if (stageInfo.Meta.ShardOperations.empty()) {
-                    BuildComputeTasks(stageInfo, std::max<ui32>(ShardsOnNode.size(), ResourceSnapshot.size()));
                 } else if (stageInfo.Meta.IsSysView()) {
                     BuildSysViewScanTasks(stageInfo);
+                } else if (stageInfo.Meta.ShardOperations.empty() || stage.SinksSize() > 0) {
+                    BuildComputeTasks(stageInfo, std::max<ui32>(ShardsOnNode.size(), ResourceSnapshot.size()));
                 } else {
                     BuildDatashardTasks(stageInfo);
                 }

@@ -172,8 +172,12 @@ private:
 
         auto toUnregister = UnregisterQueue_.PopAll();
 
-        while (auto fiber = toUnregister.PopBack()) {
-            fiber->UnregisterAndDelete();
+        // NB: util intrusive list does not return
+        // nullptr in case of empty!
+        // We have to check ourselves that
+        // PopBack return is a valid one.
+        while (!toUnregister.Empty()) {
+            toUnregister.PopBack()->UnregisterAndDelete();
         }
 
         // NB: Around this line guard is released. We do not properly double check
@@ -187,18 +191,20 @@ private:
     {
         Cerr << "Debug print begin\n";
         Cerr << "---------------------------------------------------------------" << '\n';
-        for (auto* iter = Fibers_.Begin(); iter != Fibers_.End(); iter = iter->Next) {
-            auto* fiber = static_cast<TFiber*>(iter);
-            auto* regNode = static_cast<TIntrusiveNode<TFiber, NDetail::TFiberRegisterTag>*>(fiber);
-            auto* delNode = static_cast<TIntrusiveNode<TFiber, NDetail::TFiberUnregisterTag>*>(fiber);
+        for (auto& iter : Fibers_) {
+            auto* ptr = &iter;
+            auto* fiber = static_cast<TFiber*>(ptr);
+            auto* regNode = static_cast<TIntrusiveListItem<TFiber, NDetail::TFiberRegisterTag>*>(fiber);
+            auto* delNode = static_cast<TIntrusiveListItem<TFiber, NDetail::TFiberUnregisterTag>*>(fiber);
 
-            Cerr << Format("Fiber node at %v. Next is %v, Prev is %v", iter, iter->Next, iter->Prev) << '\n';
+            Cerr << Format("Fiber node at %v", iter) << '\n';
             Cerr << Format("Fiber address after cast is %v", fiber) << '\n';
-            Cerr << Format("Fiber registration queue status: Next: %v, Prev: %v", regNode->Next, regNode->Prev) << '\n';
+            Cerr << Format("Fiber registration queue status: Next: %v, Prev: %v", regNode->Next(), regNode->Prev()) << '\n';
             // NB: Reading deletion queue is data race. Don't do this under tsan.
-            Cerr << Format("Fiber deletion queue status: Next: %v, Prev: %v", delNode->Next, delNode->Prev) << '\n';
+            Cerr << Format("Fiber deletion queue status: Next: %v, Prev: %v", delNode->Next(), delNode->Prev()) << '\n';
             Cerr << "---------------------------------------------------------------" << '\n';
         }
+
         Cerr << "Debug print end\n";
     }
 };
@@ -349,7 +355,7 @@ void TFiber::ReadFibers(TFunctionView<void(TFiberList&)> callback)
 
 void TFiber::UnregisterAndDelete() noexcept
 {
-    YT_VERIFY(!static_cast<TUnregisterBase*>(this)->IsLinked());
+    YT_VERIFY(static_cast<TUnregisterBase*>(this)->Empty());
 
     static_cast<TRegisterBase*>(this)->Unlink();
     delete this;

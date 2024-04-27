@@ -272,7 +272,8 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpSplitMergeTablePartitions:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSplitMergeTablePartitions().GetTablePath()}));
+        // Different to other operations, SplitMergeTable holds absolute table path instead of a leaf name.
+        result.emplace_back(tx.GetSplitMergeTablePartitions().GetTablePath());
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackup:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackup().GetTableName()}));

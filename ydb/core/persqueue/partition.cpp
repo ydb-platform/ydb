@@ -2262,15 +2262,15 @@ void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
         userInfo.Offset = operation.GetEnd();
     }
 
+    ScheduleReplyPropose(tx,
+                         NKikimrPQ::TEvProposeTransactionResult::COMPLETE);
+
     if (WriteInfoResponse) {
         UserActionAndTransactionEvents.pop_front();
         --ImmediateTxCount;
     }
 
     CommitWriteOperations(ctx);
-
-    ScheduleReplyPropose(tx,
-                         NKikimrPQ::TEvProposeTransactionResult::COMPLETE);
 }
 
 TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo& act,

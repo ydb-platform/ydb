@@ -639,6 +639,14 @@ int RunMain(int argc, const char* argv[])
         return 1;
     }
 
+    if (res.Has("replay")) {
+        qStorage = MakeFileQStorage(qStorageDir);
+        qContext = TQContext(qStorage->MakeReader(opId));
+    } else if (res.Has("capture")) {
+        qStorage = MakeFileQStorage(qStorageDir);
+        qContext = TQContext(qStorage->MakeWriter(opId));
+    }
+
     if (res.Has("dq-host")) {
         dqHost = res.Get<TString>("dq-host");
     }
@@ -937,12 +945,15 @@ int RunMain(int argc, const char* argv[])
     TProgramFactory progFactory(emulateYt, funcRegistry.Get(), ctx.NextUniqueId, dataProvidersInit, "dqrun");
     progFactory.AddUserDataTable(std::move(dataTable));
     progFactory.SetModules(moduleResolver);
+    IUdfResolver::TPtr udfResolverImpl;
     if (udfResolver) {
-        progFactory.SetUdfResolver(NCommon::CreateOutProcUdfResolver(funcRegistry.Get(), storage,
-            udfResolver, {}, {}, udfResolverFilterSyscalls, {}));
+        udfResolverImpl = NCommon::CreateOutProcUdfResolver(funcRegistry.Get(), storage,
+            udfResolver, {}, {}, udfResolverFilterSyscalls, {});
     } else {
-        progFactory.SetUdfResolver(NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), storage, true));
+        udfResolverImpl = NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), storage, true);
     }
+
+    progFactory.SetUdfResolver(udfResolverImpl);
     progFactory.SetFileStorage(storage);
     progFactory.SetUrlPreprocessing(new TUrlPreprocessing(gatewaysConfig));
     progFactory.SetGatewaysConfig(&gatewaysConfig);
@@ -985,14 +996,7 @@ int RunMain(int argc, const char* argv[])
         program->SetQueryName(progFile);
     }
 
-    if (res.Has("replay")) {
-        qStorage = MakeFileQStorage(qStorageDir);
-        qContext = TQContext(qStorage->MakeReader(opId));
-        program->SetQContext(qContext);
-    } else if (res.Has("capture")) {
-        Y_ENSURE(opId);
-        qStorage = MakeFileQStorage(qStorageDir);
-        qContext = TQContext(qStorage->MakeWriter(opId));
+    if (qStorage) {
         program->SetQContext(qContext);
     }
 

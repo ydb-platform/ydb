@@ -1,4 +1,9 @@
 {
+    "test.test[BitIndexes]": [
+        {
+            "uri": "file://test.test_BitIndexes_/results.txt"
+        }
+    ],
     "test.test[CosineDistance]": [
         {
             "uri": "file://test.test_CosineDistance_/results.txt"

@@ -12,7 +12,8 @@ using namespace NYql;
 using namespace NYql::NUdf;
 
 enum EFormat : ui8 {
-    FloatVector = 1
+    FloatVector = 1,
+    BitVector = 10
 };
 
 static constexpr size_t HeaderLen = sizeof(ui8);
@@ -78,6 +79,63 @@ public:
     }
 };
 
+// Encode all positive floats as bit 1, negative floats as bit 0.
+// So 1024 float vector is serialized in 1024/8=128 bytes.
+// Place all bits in ui64. So, only array sizes divisible by 64 are supported.
+class TBitVectorSerializer {
+public:
+    static TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) {
+        auto serialize = [&x] (IOutputStream& outStream) {
+            ui64 accumulator = 0;
+            ui8 filledBits = 0;
+
+            EnumerateVector(x,  [&] (float element) { 
+                if (element > 0)
+                    accumulator |= 1ll << filledBits;
+
+                ++filledBits;
+                if (filledBits == 64) {
+                    outStream.Write(&accumulator, sizeof(ui64));
+                    accumulator = 0;
+                    filledBits = 0;
+                }
+            });
+
+            if (filledBits)
+                return false;
+
+            const EFormat format = EFormat::BitVector;
+            outStream.Write(&format, HeaderLen);
+            return true;
+        };
+
+        if (x.HasFastListLength()) {
+            auto str = valueBuilder->NewStringNotFilled(HeaderLen + x.GetListLength() / 8);
+            auto strRef = str.AsStringRef();
+            TMemoryOutput memoryOutput(strRef.Data(), strRef.Size());
+
+            if (!serialize(memoryOutput))
+                return {};
+            
+            return str;
+        } else {
+            TString str;
+            TStringOutput stringOutput(str);
+
+            if (!serialize(stringOutput))
+                return {};
+
+            return valueBuilder->NewString(str);
+        }
+    }
+
+    static const TArrayRef<const ui64> GetArray64(const TStringRef& str) {
+        const char* buf = str.Data();
+        const size_t len = (str.Size() - HeaderLen) / sizeof(ui64);
+
+        return MakeArrayRef(reinterpret_cast<const ui64*>(buf), len);
+    }
+};
 
 class TSerializerFacade {
 public:
@@ -85,6 +143,8 @@ public:
         switch (format) {
             case EFormat::FloatVector:
                 return TFloatVectorSerializer::Serialize(valueBuilder, x);
+            case EFormat::BitVector:
+                return TBitVectorSerializer::Serialize(valueBuilder, x);
             default:
                 return {};
         }
@@ -98,6 +158,8 @@ public:
         switch (format) {
             case EFormat::FloatVector:
                 return TFloatVectorSerializer::Deserialize(valueBuilder, str);
+            case EFormat::BitVector:
+                return {};
             default:
                 return {};
         }
@@ -111,6 +173,21 @@ public:
         switch (format) {
             case EFormat::FloatVector:
                 return TFloatVectorSerializer::GetArray(str);
+            case EFormat::BitVector:
+                return {};
+            default:
+                return {};
+        }
+    }
+
+    static const TArrayRef<const ui64> GetArray64(const TStringRef& str) {
+        if (str.Size() == 0)
+            return {};
+
+        const ui8 format = str.Data()[str.Size() - HeaderLen];
+        switch (format) {
+            case EFormat::BitVector:
+                return TBitVectorSerializer::GetArray64(str);
             default:
                 return {};
         }

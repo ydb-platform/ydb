@@ -18,7 +18,7 @@ class Test(object):
     @classmethod
     def teardown_class(cls):
         pass
-        cls.cluster.stop()
+        # cls.cluster.stop()
 
     def test_slice_sample(self):
         driver_config = ydb.DriverConfig(

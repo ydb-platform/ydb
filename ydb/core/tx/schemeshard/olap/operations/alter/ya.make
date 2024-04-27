@@ -1,15 +1,9 @@
 LIBRARY()
 
-SRCS(
-    abstract.cpp
-    standalone.cpp
-    in_store.cpp
-    converter.cpp
-)
-
 PEERDIR(
-    ydb/core/persqueue/events
-    ydb/core/protos
+    ydb/core/tx/schemeshard/olap/operations/alter/abstract
+    ydb/core/tx/schemeshard/olap/operations/alter/in_store
+    ydb/core/tx/schemeshard/olap/operations/alter/standalone
 )
 
 YQL_LAST_ABI_VERSION()

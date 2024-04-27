@@ -7,7 +7,7 @@ namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
 class TConverterModifyToAlter {
 private:
-    bool ParseFromDSRequest(const NKikimrSchemeOp::TTableDescription& dsDescription, NKikimrSchemeOp::TAlterColumnTable& olapDescription, IErrorCollector& errors) const {
+    TConclusionStatus ParseFromDSRequest(const NKikimrSchemeOp::TTableDescription& dsDescription, NKikimrSchemeOp::TAlterColumnTable& olapDescription) const {
         olapDescription.SetName(dsDescription.GetName());
 
         if (dsDescription.HasTTLSettings()) {
@@ -36,22 +36,24 @@ private:
         for (auto&& dsColumn : dsDescription.GetColumns()) {
             NKikimrSchemeOp::TAlterColumnTableSchema* alterSchema = olapDescription.MutableAlterSchema();
             NKikimrSchemeOp::TOlapColumnDescription* olapColumn = alterSchema->AddAddColumns();
-            if (!ParseFromDSRequest(dsColumn, *olapColumn, errors)) {
-                return false;
+            auto parse = ParseFromDSRequest(dsColumn, *olapColumn);
+            if (parse.IsFail()) {
+                return parse;
             }
         }
 
         for (auto&& dsColumn : dsDescription.GetDropColumns()) {
             NKikimrSchemeOp::TAlterColumnTableSchema* alterSchema = olapDescription.MutableAlterSchema();
             NKikimrSchemeOp::TOlapColumnDescription* olapColumn = alterSchema->AddDropColumns();
-            if (!ParseFromDSRequest(dsColumn, *olapColumn, errors)) {
-                return false;
+            auto parse = ParseFromDSRequest(dsColumn, *olapColumn);
+            if (parse.IsFail()) {
+                return parse;
             }
         }
-        return true;
+        return TConclusionStatus::Success();
     }
 
-    bool ParseFromDSRequest(const NKikimrSchemeOp::TColumnDescription& dsColumn, NKikimrSchemeOp::TOlapColumnDescription& olapColumn, IErrorCollector& errors) const {
+    TConclusionStatus ParseFromDSRequest(const NKikimrSchemeOp::TColumnDescription& dsColumn, NKikimrSchemeOp::TOlapColumnDescription& olapColumn) const {
         olapColumn.SetName(dsColumn.GetName());
         olapColumn.SetType(dsColumn.GetType());
         if (dsColumn.HasTypeId()) {
@@ -67,48 +69,42 @@ private:
             olapColumn.SetId(dsColumn.GetId());
         }
         if (dsColumn.HasDefaultFromSequence()) {
-            errors.AddError(NKikimrScheme::StatusInvalidParameter, "DefaultFromSequence not supported");
-            return false;
+            return TConclusionStatus::Fail("DefaultFromSequence not supported");
         }
         if (dsColumn.HasFamilyName() || dsColumn.HasFamily()) {
-            errors.AddError(NKikimrScheme::StatusInvalidParameter, "FamilyName and Family not supported");
-            return false;
+            return TConclusionStatus::Fail("FamilyName and Family not supported");
         }
-        return true;
+        return TConclusionStatus::Success();
     }
 public:
-    std::optional<NKikimrSchemeOp::TAlterColumnTable> Convert(const NKikimrSchemeOp::TModifyScheme& modify, IErrorCollector& errors) {
+    TConclusion<NKikimrSchemeOp::TAlterColumnTable> Convert(const NKikimrSchemeOp::TModifyScheme& modify) {
         NKikimrSchemeOp::TAlterColumnTable result;
         if (modify.HasAlterColumnTable()) {
             if (modify.GetOperationType() != NKikimrSchemeOp::ESchemeOpAlterColumnTable) {
-                errors.AddError(NKikimrScheme::StatusSchemeError, "Invalid operation type");
-                return std::nullopt;
+                return TConclusionStatus::Fail("Invalid operation type: " + NKikimrSchemeOp::EOperationType_Name(modify.GetOperationType()));
             }
             result = modify.GetAlterColumnTable();
         } else {
             // from DDL (not known table type)
             if (modify.GetOperationType() != NKikimrSchemeOp::ESchemeOpAlterTable) {
-                errors.AddError(NKikimrScheme::StatusSchemeError, "Invalid operation type");
-                return std::nullopt;
+                return TConclusionStatus::Fail("Invalid operation type");
             }
-            if (!ParseFromDSRequest(modify.GetAlterTable(), result, errors)) {
-                return std::nullopt;
+            auto parse = ParseFromDSRequest(modify.GetAlterTable(), result);
+            if (parse.IsFail()) {
+                return parse;
             }
         }
 
         if (!result.HasName()) {
-            errors.AddError(NKikimrScheme::StatusInvalidParameter, "No table name in Alter");
-            return std::nullopt;
+            return TConclusionStatus::Fail("No table name in Alter");
         }
 
         if (result.HasAlterSchemaPresetName()) {
-            errors.AddError(NKikimrScheme::StatusSchemeError, "Changing table schema is not supported");
-            return std::nullopt;
+            return TConclusionStatus::Fail("Changing table schema is not supported");
         }
 
         if (result.HasRESERVED_AlterTtlSettingsPresetName()) {
-            errors.AddError(NKikimrScheme::StatusSchemeError, "TTL presets are not supported");
-            return std::nullopt;
+            return TConclusionStatus::Fail("TTL presets are not supported");
         }
 
         return result;

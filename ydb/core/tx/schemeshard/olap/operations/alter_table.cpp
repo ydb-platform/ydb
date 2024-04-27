@@ -1,5 +1,6 @@
-#include "alter/abstract.h"
-#include "alter/converter.h"
+#include "alter/abstract/object.h"
+#include "alter/abstract/update.h"
+#include "alter/abstract/evolution.h"
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -16,9 +17,7 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterColumnTable TConfigureParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TAlterColumnTable TConfigureParts operationId#" << OperationId;
     }
 
 public:
@@ -45,15 +44,17 @@ public:
         TPath path = TPath::Init(pathId, context.SS);
         TString pathString = path.PathString();
 
-        auto tableInfo = context.SS->ColumnTables.TakeVerified(pathId);
+        auto tableInfo = context.SS->ColumnTables.GetVerifiedPtr(pathId);
+        std::shared_ptr<ISSEntityEvolution> evolution;
+        {
+            TEvolutionInitializationContext eContext(&context);
+            evolution = tableInfo->BuildEvolution(pathId, eContext).DetachResult();
+        }
         TColumnTableInfo::TPtr alterData = tableInfo->AlterData;
         Y_ABORT_UNLESS(alterData);
 
         TSimpleErrorCollector errors;
-        ITableInfoConstructor::TInitializationContext iContext(&context);
-        std::shared_ptr<ITableInfoConstructor> patcher = ITableInfoConstructor::Construct(tableInfo, iContext, errors);
-        AFL_VERIFY(patcher)("error", errors->GetErrorMessage());
-        AFL_VERIFY(patcher->Deserialize(*alterData->AlterBody, errors));
+        TEntityInitializationContext iContext(&context);
 
         txState->ClearShardsInProgress();
         NKikimrTxColumnShard::TSchemaTxBody tx;
@@ -61,24 +62,18 @@ public:
         context.SS->FillSeqNo(tx, seqNo);
 
         for (auto& shard : txState->Shards) {
-            TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
-            if (shard.TabletType == ETabletType::ColumnShard) {
-                auto txShard = patcher->GetShardTxBody(tableInfo, tx, (ui64)tabletId);
-                if (txShard.HasAlterTable()) {
-                    txShard.MutableAlterTable()->SetPathId(pathId.LocalPathId);
-                }
-                auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-                    patcher->GetShardTransactionKind(),
-                    context.SS->TabletID(),
-                    context.Ctx.SelfID,
-                    ui64(OperationId.GetTxId()),
-                    txShard.SerializeAsString(),
-                    context.SS->SelectProcessingParams(txState->TargetPathId));
+            const TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
+            AFL_VERIFY(shard.TabletType == ETabletType::ColumnShard);
+            auto txShard = evolution->GetShardTxBody(tx, (ui64)tabletId);
+            auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+                evolution->GetShardTransactionKind(),
+                context.SS->TabletID(),
+                context.Ctx.SelfID,
+                ui64(OperationId.GetTxId()),
+                txShard.SerializeAsString(),
+                context.SS->SelectProcessingParams(txState->TargetPathId));
 
-                context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
-            } else {
-                Y_ABORT("unexpected tablet type");
-            }
+            context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         DebugHint() << " ProgressState"
@@ -300,7 +295,7 @@ public:
             }
         }
 
-        auto tableInfo = context.SS->ColumnTables.TakeVerified(path.Base()->PathId);
+        auto tableInfo = context.SS->ColumnTables.GetVerifiedPtr(path.Base()->PathId);
 
         if (tableInfo->AlterVersion == 0) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Table is not created yet");
@@ -310,28 +305,38 @@ public:
             result->SetError(NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight");
             return result;
         }
-
         TProposeErrorCollector errors(*result);
-        ITableInfoConstructor::TInitializationContext iContext(&context);
-        std::shared_ptr<ITableInfoConstructor> patcher = ITableInfoConstructor::Construct(tableInfo, iContext, errors);
-        if (!patcher) {
-            return result;
-        }
+        std::shared_ptr<ISSEntity> originalEntity;
         {
-            auto alter = TConverterModifyToAlter().Convert(Transaction, errors);
-            if (!alter) {
+            TEntityInitializationContext iContext(&context);
+            auto conclusion = tableInfo->BuildEntity(path.Base()->PathId, iContext);
+            if (conclusion.IsFail()) {
+                errors.AddError(conclusion.GetErrorMessage());
                 return result;
             }
-            if (!patcher->Deserialize(*alter, errors)) {
-                return result;
-            }
+            originalEntity = conclusion.DetachResult();
         }
 
-        TColumnTableInfo::TPtr alterData = patcher->BuildTableInfo(tableInfo, errors);
-        if (!alterData) {
-            return result;
+        std::shared_ptr<ISSEntityUpdate> update;
+        {
+            TUpdateInitializationContext uContext(&context, &Transaction);
+            TConclusion<std::shared_ptr<ISSEntityUpdate>> conclusion = originalEntity->CreateUpdate(uContext, originalEntity);
+            if (conclusion.IsFail()) {
+                errors.AddError(conclusion.GetErrorMessage());
+                return result;
+            }
+            update = conclusion.DetachResult();
         }
-        tableInfo->AlterData = alterData;
+
+        std::shared_ptr<ISSEntityEvolution> evolution;
+        {
+            auto conclusion = update->BuildEvolution(update);
+            if (conclusion.IsFail()) {
+                errors.AddError(conclusion.GetErrorMessage());
+                return result;
+            }
+            evolution = conclusion.DetachResult();
+        }
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
@@ -360,13 +365,15 @@ public:
         path->PathState = TPathElement::EPathState::EPathStateAlter;
         context.SS->PersistLastTxId(db, path.Base());
 
-        ITableInfoConstructor::TStartSSContext startContext(&path, &context, &db);
-
-        if (!patcher->CustomStartToSS(tableInfo, startContext, errors)) {
-            return result;
+        {
+            TEvolutionStartContext startContext(&path, &context, &db);
+            auto status = evolution->StartEvolution(startContext);
+            if (status.IsFail()) {
+                errors.AddError(status.GetErrorMessage());
+                return result;
+            }
         }
 
-        context.SS->PersistColumnTableAlter(db, path->PathId, *alterData);
         context.SS->PersistTxState(db, OperationId);
 
         context.OnComplete.ActivateTx(OperationId);

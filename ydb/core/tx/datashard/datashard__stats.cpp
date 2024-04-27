@@ -407,6 +407,7 @@ void TDataShard::Handle(TEvPrivate::TEvTableStatsError::TPtr& ev, const TActorCo
     auto it = TableInfos.find(msg->TableId);
     if (it != TableInfos.end()) {
         it->second->StatsUpdateInProgress = false;
+        it->second->StatsNeedUpdate = true;
     }
 }
 

@@ -1,7 +1,8 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/common/executor.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/executor.h>
+
 #include <util/system/mutex.h>
 
 #include <vector>

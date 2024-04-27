@@ -6,6 +6,8 @@ namespace NYdb::NTopic {
 
 using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
+#define TOPIC_COUNTERS_HISTOGRAM_SETUP ::NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
+
 struct TWriterCounters : public TThrRefBase {
     using TSelf = TWriterCounters;
     using TPtr = TIntrusivePtr<TSelf>;
@@ -21,11 +23,9 @@ struct TWriterCounters : public TThrRefBase {
         BytesInflightTotal = counters->GetCounter("bytesInflightTotal", false);
         MessagesInflight = counters->GetCounter("messagesInflight", false);
 
-#define TOPIC_COUNTERS_HISTOGRAM_SETUP ::NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
         TotalBytesInflightUsageByTime = counters->GetHistogram("totalBytesInflightUsageByTime", TOPIC_COUNTERS_HISTOGRAM_SETUP);
         UncompressedBytesInflightUsageByTime = counters->GetHistogram("uncompressedBytesInflightUsageByTime", TOPIC_COUNTERS_HISTOGRAM_SETUP);
         CompressedBytesInflightUsageByTime = counters->GetHistogram("compressedBytesInflightUsageByTime", TOPIC_COUNTERS_HISTOGRAM_SETUP);
-#undef TOPIC_COUNTERS_HISTOGRAM_SETUP
     }
 
     TCounterPtr Errors;
@@ -70,11 +70,9 @@ struct TReaderCounters: public TThrRefBase {
         BytesInflightTotal = counters->GetCounter("bytesInflightTotal", false);
         MessagesInflight = counters->GetCounter("messagesInflight", false);
 
-#define TOPIC_COUNTERS_HISTOGRAM_SETUP ::NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
         TotalBytesInflightUsageByTime = counters->GetHistogram("totalBytesInflightUsageByTime", TOPIC_COUNTERS_HISTOGRAM_SETUP);
         UncompressedBytesInflightUsageByTime = counters->GetHistogram("uncompressedBytesInflightUsageByTime", TOPIC_COUNTERS_HISTOGRAM_SETUP);
         CompressedBytesInflightUsageByTime = counters->GetHistogram("compressedBytesInflightUsageByTime", TOPIC_COUNTERS_HISTOGRAM_SETUP);
-#undef TOPIC_COUNTERS_HISTOGRAM_SETUP
     }
 
     TCounterPtr Errors;
@@ -102,5 +100,73 @@ struct TReaderCounters: public TThrRefBase {
     //! Memory usage by compressed messages pending for decompression.
     ::NMonitoring::THistogramPtr CompressedBytesInflightUsageByTime;
 };
+
+inline void MakeCountersNotNull(TReaderCounters& counters) {
+    if (!counters.Errors) {
+        counters.Errors = MakeIntrusive<::NMonitoring::TCounterForPtr>(true);
+    }
+
+    if (!counters.CurrentSessionLifetimeMs) {
+        counters.CurrentSessionLifetimeMs = MakeIntrusive<::NMonitoring::TCounterForPtr>(false);
+    }
+
+    if (!counters.BytesRead) {
+        counters.BytesRead = MakeIntrusive<::NMonitoring::TCounterForPtr>(true);
+    }
+
+    if (!counters.MessagesRead) {
+        counters.MessagesRead = MakeIntrusive<::NMonitoring::TCounterForPtr>(true);
+    }
+
+    if (!counters.BytesReadCompressed) {
+        counters.BytesReadCompressed = MakeIntrusive<::NMonitoring::TCounterForPtr>(true);
+    }
+
+    if (!counters.BytesInflightUncompressed) {
+        counters.BytesInflightUncompressed = MakeIntrusive<::NMonitoring::TCounterForPtr>(false);
+    }
+
+    if (!counters.BytesInflightCompressed) {
+        counters.BytesInflightCompressed = MakeIntrusive<::NMonitoring::TCounterForPtr>(false);
+    }
+
+    if (!counters.BytesInflightTotal) {
+        counters.BytesInflightTotal = MakeIntrusive<::NMonitoring::TCounterForPtr>(false);
+    }
+
+    if (!counters.MessagesInflight) {
+        counters.MessagesInflight = MakeIntrusive<::NMonitoring::TCounterForPtr>(false);
+    }
+
+
+    if (!counters.TotalBytesInflightUsageByTime) {
+        counters.TotalBytesInflightUsageByTime = MakeIntrusive<::NMonitoring::THistogramCounter>(TOPIC_COUNTERS_HISTOGRAM_SETUP);
+    }
+
+    if (!counters.UncompressedBytesInflightUsageByTime) {
+        counters.UncompressedBytesInflightUsageByTime = MakeIntrusive<::NMonitoring::THistogramCounter>(TOPIC_COUNTERS_HISTOGRAM_SETUP);
+    }
+
+    if (!counters.CompressedBytesInflightUsageByTime) {
+        counters.CompressedBytesInflightUsageByTime = MakeIntrusive<::NMonitoring::THistogramCounter>(TOPIC_COUNTERS_HISTOGRAM_SETUP);
+    }
+}
+
+inline bool HasNullCounters(TReaderCounters& counters) {
+    return !counters.Errors
+        || !counters.CurrentSessionLifetimeMs
+        || !counters.BytesRead
+        || !counters.MessagesRead
+        || !counters.BytesReadCompressed
+        || !counters.BytesInflightUncompressed
+        || !counters.BytesInflightCompressed
+        || !counters.BytesInflightTotal
+        || !counters.MessagesInflight
+        || !counters.TotalBytesInflightUsageByTime
+        || !counters.UncompressedBytesInflightUsageByTime
+        || !counters.CompressedBytesInflightUsageByTime;
+}
+
+#undef TOPIC_COUNTERS_HISTOGRAM_SETUP
 
 }  // namespace NYdb::NTopic

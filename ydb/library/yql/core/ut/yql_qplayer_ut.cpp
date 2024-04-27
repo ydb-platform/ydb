@@ -151,4 +151,11 @@ Y_UNIT_TEST_SUITE(QPlayerTests) {
             CheckProgram(s, tables);
         });
     }
+
+    Y_UNIT_TEST(YtGetTableInfo) {
+        auto s = "select * from plato.Input";
+        WithTables([&](const auto& tables) {
+            CheckProgram(s, tables);
+        });
+    }
 }

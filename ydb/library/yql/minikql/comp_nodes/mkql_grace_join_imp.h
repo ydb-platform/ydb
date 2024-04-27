@@ -69,6 +69,9 @@ struct TTableBucket {
     std::set<ui32> AllRightMatchedIds; // All row ids of right join table which matching rows in left table. To process streaming join mode. 
     KeysHashTable AnyHashTable; // Hash table to process join only for unique keys (any join attribute)
 
+    ui64 StringValuesTotalSize = 0;
+    ui64 KeyIntValsTotalSize = 0;
+
     size_t GetSize() const {
         return KeyIntVals.size() * sizeof(ui64) + DataIntVals.size() * sizeof(ui64) + StringsValues.size() + StringsOffsets.size() * sizeof(ui32) + InterfaceValues.size() + InterfaceOffsets.size() + sizeof(ui32);
     }
@@ -118,8 +121,6 @@ struct TTableSpilledBucket {
         }
         
         while (NextVectorToProcess != ENextVectorToProcess::None) {
-            if (HasRunningAsyncIoOperation()) return;
-
             switch (NextVectorToProcess) {
                 case ENextVectorToProcess::KeyAndVals:
                     if (!StateUi64Adapter.IsAcceptingData()) return;
@@ -287,9 +288,6 @@ class TTable {
     ui64 NumberOfKeyStringColumns = 0; // String key columns go after key int columns
     ui64 NumberOfKeyIColumns = 0; // Number of interface - provided key columns
 
-    ui64 Offset = 0;
-
-
     ui64 NumberOfDataIntColumns = 0; //Number of integer data columns in the Table
     ui64 NumberOfDataStringColumns = 0; // Number of strings data columns in the Table
     ui64 NumberOfDataIColumns = 0; //  Number of interface - provided data columns
@@ -440,7 +438,9 @@ public:
 
     void FinalizeSpilling() {
         for (ui64 i = 0; i < NumberOfBuckets; ++i) {
-            MKQL_ENSURE(TableSpilledBuckets[i].IsProcessingFinished(), "Internal logic error");
+            if (!TableSpilledBuckets[i].IsProcessingFinished()) {
+                MKQL_ENSURE(TableSpilledBuckets[i].IsProcessingFinished(), "Internal logic error");
+            }
             MKQL_ENSURE(!TableSpilledBuckets[i].HasRunningAsyncIoOperation(), "Internal logic error");
             TableSpilledBuckets[i].ProcessBucketSpilling(TableBuckets[i]);
             TableSpilledBuckets[i].Finalize();

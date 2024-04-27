@@ -22,6 +22,7 @@
 
 #include <chrono>
 #include <limits>
+#include <format>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -868,7 +869,10 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                 }
 
                 if (resultLeft == EFetchResult::Finish ) {
+                    std::cerr << std::format("[MISHA] LEFT finished\n");
+                    if (LeftPacker->TablePtr->UpdateAndCheckIfBusy()) return EFetchResult::Yield;
                     LeftPacker->TablePtr->FinalizeSpilling();
+                    std::cerr << std::format("[MISHA] LEFT started finalizing\n");
                     *HaveMoreLeftRows = false;
 
                     if (LeftPacker->TablePtr->UpdateAndCheckIfBusy()) return EFetchResult::Yield;
@@ -876,7 +880,10 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
 
 
                 if (resultRight == EFetchResult::Finish ) {
+                    std::cerr << std::format("[MISHA] RIGHT finished\n");
+                    if (RightPacker->TablePtr->UpdateAndCheckIfBusy()) return EFetchResult::Yield;
                     RightPacker->TablePtr->FinalizeSpilling();
+                    std::cerr << std::format("[MISHA] RIGHT started finalizing\n");
                     *HaveMoreRightRows = false;
 
                     if (RightPacker->TablePtr->UpdateAndCheckIfBusy()) return EFetchResult::Yield;
@@ -894,9 +901,11 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     bool isRightBucketInMemory = !RightPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin);
                     if (isLeftBucketInMemory) {
                         LeftPacker->TablePtr->StartLoadingBucket(NextBucketsToJoin);
+                        std::cerr << std::format("[MISHA] LEFT started loading bucket {}\n", NextBucketsToJoin);
                     }
                     if (isRightBucketInMemory) {
                         RightPacker->TablePtr->StartLoadingBucket(NextBucketsToJoin);
+                        std::cerr << std::format("[MISHA] RIGHT started loading bucket {}\n", NextBucketsToJoin);
                     }
 
                     leftBusy = LeftPacker->TablePtr->UpdateAndCheckIfBusy();
@@ -923,6 +932,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                 }*/
 
                 if (!*HaveMoreRightRows && !*HaveMoreLeftRows && !*PartialJoinCompleted) {
+                    std::cerr << std::format("[MISHA] JOIN\n");
                     *PartialJoinCompleted = true;
                     LeftPacker->StartTime = std::chrono::system_clock::now();
                     RightPacker->StartTime = std::chrono::system_clock::now();

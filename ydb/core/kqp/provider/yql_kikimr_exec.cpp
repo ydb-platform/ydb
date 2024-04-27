@@ -301,7 +301,7 @@ namespace {
             } else if (name == "cycle") {
                 result.Cycle = value == "1" ? true : false;
             } else if (name == "increment") {
-                results.Increment = FromString<i64>(value);
+                result.Increment = FromString<i64>(value);
             }
         }
         return result;

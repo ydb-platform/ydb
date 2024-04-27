@@ -780,6 +780,7 @@ public:
             .Settings(settings.Other)
             .MissingOk<TCoAtom>()
                 .Value(missingOk)
+            .Build()
             .Done()
             .Ptr();
     }

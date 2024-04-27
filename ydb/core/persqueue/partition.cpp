@@ -2452,6 +2452,15 @@ void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
 */
     }
 
+    if (!IsActive() && act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && static_cast<i64>(EndOffset) == userInfo.Offset && offset < EndOffset) {
+        TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
+        ScheduleReplyError(act.Cookie,
+                           NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST,
+                           TStringBuilder() << "set offset " <<  act.Offset << " to past for consumer " << act.ClientId << " for inactive partition");
+
+        return;
+    }
+
     EmulatePostProcessUserAct(act, userInfo, ctx);
 }
 

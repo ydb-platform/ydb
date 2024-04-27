@@ -409,7 +409,7 @@ class TestRecovery(TestYdsBase):
         query_id = client.create_query("error_if_no_states", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.compute_plane.wait_zero_checkpoint(query_id)
-        kikimr.compute_plane.wait_completed_checkpoints(query_id, self.kikimr.compute_plane.get_completed_checkpoints(query_id) + 1)
+        kikimr.compute_plane.wait_completed_checkpoints(query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1)
 
         for node_index in kikimr.control_plane.kikimr_cluster.nodes:
             kikimr.control_plane.kikimr_cluster.nodes[node_index].stop()

@@ -287,7 +287,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
     CC_LOG_D("[" << checkpoint << "] Got TEvRestoreFromCheckpointResult; taskId: "<< record.GetTaskId()
                  << ", checkpoint: " << checkpoint
                  << ", status: " << statusName
-                 << ", issues: " << record.GetIssues());
+                 << ", issues: " << NYql::IssuesFromMessageAsString(record.GetIssues()));
 
     if (!PendingRestoreCheckpoint) {
         CC_LOG_E("[" << checkpoint << "] Got TEvRestoreFromCheckpointResult but has no PendingRestoreCheckpoint");
@@ -302,7 +302,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
     }
 
     if (status != NYql::NDqProto::TEvRestoreFromCheckpointResult_ERestoreStatus_OK) {
-        auto msg = TStringBuilder() << "Can't restore: " << statusName << ", " << record.GetIssues();
+        auto msg = TStringBuilder() << "Can't restore: " << statusName << ", " << NYql::IssuesFromMessageAsString(record.GetIssues());
         CC_LOG_E("[" << checkpoint << "] " << msg);
         ++*Metrics.RestoringError;
         NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnError(NYql::NDqProto::StatusIds::ABORTED, msg, {});

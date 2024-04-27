@@ -345,7 +345,6 @@ class DynamicConfigGenerator(object):
         commands.append("set -o > /tmp/set")
         commands.append("sleep 999999")
 
-        commands.append("set +e")
         for domain in self._cluster_details.domains:
             for _ in domain.tenants:
                 commands.append(self.__cms_init_cmd('CreateTenant-%d.txt' % next(tn_id), domain.domain_name))

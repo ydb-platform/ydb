@@ -714,7 +714,6 @@ public:
             const NCommon::TWriteSequenceSettings& settings, const TKikimrKey& key, TExprContext& ctx)
     {
         YQL_ENSURE(settings.Mode);
-        auto mode = settings.Mode.Cast();
         if (node->Child(3)->Content() != "Void") {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating sequence with data is not supported."));
             return nullptr;
@@ -758,6 +757,29 @@ public:
             .MissingOk<TCoAtom>()
                 .Value(missingOk)
             .Build()
+            .Done()
+            .Ptr();
+    }
+
+    static TExprNode::TPtr MakeAlterSequence(const TExprNode::TPtr& node,
+            const NCommon::TWriteSequenceSettings& settings, const TKikimrKey& key, TExprContext& ctx)
+    {
+        YQL_ENSURE(settings.Mode);
+        bool missingOk = (settings.Mode.Cast().Value() == "alter_if_exists");
+
+        if (node->Child(3)->Content() != "Void") {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Alter sequence with data is not supported."));
+            return nullptr;
+        }
+
+        return Build<TKiAlterSequence>(ctx, node->Pos())
+            .World(node->Child(0))
+            .DataSink(node->Child(1))
+            .Sequence().Build(key.GetPGObjectId())
+            .SequenceSettings(settings.SequenceSettings.Cast())
+            .Settings(settings.Other)
+            .MissingOk<TCoAtom>()
+                .Value(missingOk)
             .Done()
             .Ptr();
     }
@@ -1312,6 +1334,8 @@ public:
                         return MakeCreateSequence(node, settings, key, ctx);
                     } else if (mode == "drop" || mode == "drop_if_exists") {
                         return MakeDropSequence(node, settings, key, ctx);
+                    } else if (mode == "alter" || mode == "alter_if_exists") {
+                        return MakeAlterSequence(node, settings, key, ctx);
                     } else {
                         YQL_ENSURE(false, "unknown Sequence mode \"" << TString(mode) << "\"");
                     }
@@ -1549,6 +1573,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = callable.Maybe<TKiDropSequence>()) {
         return HandleDropSequence(node.Cast(), ctx);
+    }
+
+    if (auto node = callable.Maybe<TKiAlterSequence>()) {
+        return HandleAlterSequence(node.Cast(), ctx);
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "

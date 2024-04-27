@@ -485,12 +485,18 @@ public:
 
                 YQL_CLOG(DEBUG, ProviderS3) << " hasDirectories=" << hasDirectories << ", consumersCount=" << consumersCount;
 
+                ui64 readLimit = std::numeric_limits<ui64>::max();
+                if (srcDesc.MutableSettings()->find("sizeLimit") != srcDesc.MutableSettings()->cend()) {
+                    readLimit = FromString<ui64>(srcDesc.MutableSettings()->at("sizeLimit"));
+                }
+
                 auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(
                     NDq::CreateS3FileQueueActor(
                         0ul,
                         std::move(paths),
                         fileQueuePrefetchSize,
                         fileSizeLimit,
+                        readLimit,
                         useRuntimeListing,
                         consumersCount,
                         fileQueueBatchSizeLimit,

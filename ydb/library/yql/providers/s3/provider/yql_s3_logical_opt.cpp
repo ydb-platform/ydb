@@ -239,7 +239,9 @@ public:
                             fileSizeLimit = State_->Configuration->BlockFileSizeLimit;
                         } else if (formatName == "raw") {
                             const auto sizeLimitParam = dqSource.Input().Cast<TS3SourceSettings>().SizeLimit().Maybe<TCoAtom>();
-                            userSizeLimit = FromString<ui64>(sizeLimitParam.Cast().StringValue());
+                            if (sizeLimitParam.IsValid()) {
+                                userSizeLimit = FromString<ui64>(sizeLimitParam.Cast().StringValue());
+                            }
                         }
 
                         for (const TS3Path& batch : maybeS3SourceSettings.Cast().Paths()) {

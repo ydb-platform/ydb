@@ -388,6 +388,7 @@ public:
         TPathList paths,
         size_t prefetchSize,
         ui64 fileSizeLimit,
+        ui64 readLimit,
         bool useRuntimeListing,
         ui64 consumersCount,
         ui64 batchSizeLimit,
@@ -401,6 +402,7 @@ public:
         : TxId(std::move(txId))
         , PrefetchSize(prefetchSize)
         , FileSizeLimit(fileSizeLimit)
+        , ReadLimit(readLimit)
         , MaybeIssues(Nothing())
         , UseRuntimeListing(useRuntimeListing)
         , ConsumersCount(consumersCount)
@@ -510,7 +512,7 @@ public:
                 // skip 'directories'
                 continue;
             }
-            if (object.Size > FileSizeLimit) {
+            if (object.Size > std::min(FileSizeLimit, ReadLimit)) {
                 auto errorMessage = TStringBuilder()
                                     << "Size of object " << object.Path << " = "
                                     << object.Size
@@ -522,10 +524,10 @@ public:
             LOG_T("TS3FileQueueActor", "SaveRetrievedResults adding path: " << object.Path);
             TObjectPath objectPath;
             objectPath.SetPath(object.Path);
-            objectPath.SetSize(object.Size);
+            objectPath.SetSize(std::min(object.Size, ReadLimit));
             objectPath.SetPathIndex(CurrentDirectoryPathIndex);
             Objects.emplace_back(std::move(objectPath));
-            ObjectsTotalSize += object.Size;
+            ObjectsTotalSize += std::min(object.Size, ReadLimit);
         }
         return true;
     }
@@ -810,6 +812,7 @@ private:
 
     size_t PrefetchSize;
     ui64 FileSizeLimit;
+    ui64 ReadLimit;
     TMaybe<NS3Lister::IS3Lister::TPtr> MaybeLister = Nothing();
     TMaybe<NThreading::TFuture<NS3Lister::TListResult>> ListingFuture;
     size_t CurrentDirectoryPathIndex = 0;
@@ -914,6 +917,7 @@ public:
                 std::move(Paths),
                 ReadActorFactoryCfg.MaxInflight * 2,
                 FileSizeLimit,
+                SizeLimit,
                 false,
                 1,
                 FileQueueBatchSizeLimit,
@@ -2534,6 +2538,7 @@ public:
         ::NMonitoring::TDynamicCounterPtr counters,
         ::NMonitoring::TDynamicCounterPtr taskCounters,
         ui64 fileSizeLimit,
+        ui64 readLimit,
         std::optional<ui64> rowsLimitHint,
         IMemoryQuotaManager::TPtr memoryQuotaManager,
         bool useRuntimeListing,
@@ -2560,6 +2565,7 @@ public:
         , TaskCounters(std::move(taskCounters))
         , FileQueueActor(fileQueueActor)
         , FileSizeLimit(fileSizeLimit)
+        , ReadLimit(readLimit)
         , MemoryQuotaManager(memoryQuotaManager)
         , UseRuntimeListing(useRuntimeListing)
         , FileQueueBatchSizeLimit(fileQueueBatchSizeLimit)
@@ -2618,6 +2624,7 @@ public:
                 std::move(Paths),
                 ReadActorFactoryCfg.MaxInflight * 2,
                 FileSizeLimit,
+                ReadLimit,
                 false,
                 1,
                 FileQueueBatchSizeLimit,
@@ -3132,6 +3139,7 @@ private:
     std::set<NActors::TActorId> CoroActors;
     NActors::TActorId FileQueueActor;
     const ui64 FileSizeLimit;
+    const ui64 ReadLimit;
     bool Bootstrapped = false;
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
     bool UseRuntimeListing;
@@ -3291,6 +3299,7 @@ IActor* CreateS3FileQueueActor(
         TPathList paths,
         size_t prefetchSize,
         ui64 fileSizeLimit,
+        ui64 readLimit,
         bool useRuntimeListing,
         ui64 consumersCount,
         ui64 batchSizeLimit,
@@ -3306,6 +3315,7 @@ IActor* CreateS3FileQueueActor(
         paths,
         prefetchSize,
         fileSizeLimit,
+        readLimit,
         useRuntimeListing,
         consumersCount,
         batchSizeLimit,
@@ -3516,9 +3526,13 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
 #undef SET_FLAG
 #undef SUPPORTED_FLAGS
+        ui64 sizeLimit = std::numeric_limits<ui64>::max();
+        if (const auto it = settings.find("sizeLimit"); settings.cend() != it)
+            sizeLimit = FromString<ui64>(it->second);
+
         const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
-                                                  cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint, memoryQuotaManager,
+                                                  cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager,
                                                   params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta);
 
         return {actor, actor};

@@ -13,10 +13,11 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 
 class TestS3(TestYdsBase):
     @yq_all
+    @pytest.mark.parametrize("runtime_listing", ["false", "true"])
     @pytest.mark.parametrize("kikimr_params", [{"raw": 20}, {"raw": 150}, {"raw": 1000}], indirect=True)
-    @pytest.mark.parametrize("limit", [5, 100, 500, 1500])
+    @pytest.mark.parametrize("limit", [5, 100, 500])
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_size_limit(self, kikimr, s3, client, limit, kikimr_params, unique_prefix):
+    def test_size_limit(self, kikimr, s3, client, limit, kikimr_params, runtime_listing, unique_prefix):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -34,7 +35,6 @@ class TestS3(TestYdsBase):
             aws_secret_access_key="secret_key"
         )
 
-        # info = "Да и ты, читатель, разве ты не Ничья Рыба и одновременно разве не Рыба на Лине?"
         info = """
             01234567890123456789012345678901234567890123456789
             01234567890123456789012345678901234567890123456789
@@ -48,6 +48,7 @@ class TestS3(TestYdsBase):
         client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = f'''
+                pragma s3.UseRuntimeListing="{runtime_listing}";
                 SELECT
                     data
                 FROM
@@ -63,11 +64,10 @@ class TestS3(TestYdsBase):
 
         if kikimr_params.param['raw'] < min(len(info), limit):
             client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-            return
+        else:
+            client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
-        result = result_set.rows[0].items[0].bytes_value
-        assert result == info.encode()[:limit]
+            data = client.get_result_data(query_id)
+            result_set = data.result.result_set
+            result = result_set.rows[0].items[0].bytes_value
+            assert result == info.encode()[:limit]

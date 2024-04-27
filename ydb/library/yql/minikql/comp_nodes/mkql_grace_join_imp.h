@@ -171,6 +171,7 @@ struct TTableSpilledBucket {
             return;
         }
         first.insert(first.end(), second.begin(), second.end());
+        second.clear();
     }
 
     void ProcessBucketRestoration(TTableBucket& bucket) {
@@ -285,6 +286,8 @@ class TTable {
     ui64 NumberOfKeyIntColumns = 0; // Key int columns always first and padded to sizeof(ui64).
     ui64 NumberOfKeyStringColumns = 0; // String key columns go after key int columns
     ui64 NumberOfKeyIColumns = 0; // Number of interface - provided key columns
+
+    ui64 Offset = 0;
 
 
     ui64 NumberOfDataIntColumns = 0; //Number of integer data columns in the Table

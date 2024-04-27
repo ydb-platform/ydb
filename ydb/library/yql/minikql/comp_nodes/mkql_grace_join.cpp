@@ -571,7 +571,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
 class TGraceJoinState : public TComputationValue<TGraceJoinState> {
 using TBase = TComputationValue<TGraceJoinState>;
 public:
-    EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const;
+    EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output);
 
     TGraceJoinState(TMemoryUsageInfo* memInfo,
         IComputationWideFlowNode* flowLeft, IComputationWideFlowNode* flowRight,
@@ -764,7 +764,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         const bool IsSelfJoin_;
 };
 
-EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
 
 
             // Collecting data for join and perform join (batch or full)
@@ -829,7 +829,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
 
                 }
 
-                if (!*HaveMoreRightRows && !*HaveMoreLeftRows && JoinedTablePtr->IsEverythingJoined()) {
+                if (!*HaveMoreRightRows && !*HaveMoreLeftRows && NextBucketsToJoin == GraceJoin::NumberOfBuckets) {
                     *JoinCompleted = true;
                     break;
                 }
@@ -868,24 +868,20 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                 }
 
                 if (resultLeft == EFetchResult::Finish ) {
-                    RightPacker->TablePtr->FinalizeSpilling();
+                    LeftPacker->TablePtr->FinalizeSpilling();
                     *HaveMoreLeftRows = false;
+
+                    if (LeftPacker->TablePtr->UpdateAndCheckIfBusy()) return EFetchResult::Yield;
                 }
 
 
                 if (resultRight == EFetchResult::Finish ) {
                     RightPacker->TablePtr->FinalizeSpilling();
                     *HaveMoreRightRows = false;
+
+                    if (RightPacker->TablePtr->UpdateAndCheckIfBusy()) return EFetchResult::Yield;
                 }
 
-                if (resultRight == EFetchResult::Finish || resultLeft == EFetchResult::Finish) {
-                    leftBusy = LeftPacker->TablePtr->UpdateAndCheckIfBusy();
-                    rightBusy = RightPacker->TablePtr->UpdateAndCheckIfBusy();
-                    
-                    if (rightBusy || leftBusy) {
-                        return EFetchResult::Yield;
-                    } 
-                }
 
                 if ((resultLeft == EFetchResult::Yield && (!*HaveMoreRightRows || resultRight == EFetchResult::Yield)) ||
                     (resultRight == EFetchResult::Yield && !*HaveMoreLeftRows))
@@ -893,14 +889,14 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     return EFetchResult::Yield;
                 }
 
-                if ((!*HaveMoreRightRows || !*HaveMoreLeftRows) && !*PartialJoinCompleted) {
+                if ((!*HaveMoreRightRows && !*HaveMoreLeftRows) && !*PartialJoinCompleted) {
                     bool isLeftBucketInMemory = !LeftPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin);
                     bool isRightBucketInMemory = !RightPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin);
                     if (isLeftBucketInMemory) {
                         LeftPacker->TablePtr->StartLoadingBucket(NextBucketsToJoin);
                     }
                     if (isRightBucketInMemory) {
-                        LeftPacker->TablePtr->StartLoadingBucket(NextBucketsToJoin);
+                        RightPacker->TablePtr->StartLoadingBucket(NextBucketsToJoin);
                     }
 
                     leftBusy = LeftPacker->TablePtr->UpdateAndCheckIfBusy();
@@ -911,7 +907,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     } 
                 }
 
-                if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {
+                /*if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {
                     *PartialJoinCompleted = true;
                     JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                     JoinedTablePtr->ResetIterator();
@@ -924,7 +920,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                     JoinedTablePtr->ResetIterator();
 
-                }
+                }*/
 
                 if (!*HaveMoreRightRows && !*HaveMoreLeftRows && !*PartialJoinCompleted) {
                     *PartialJoinCompleted = true;
@@ -938,6 +934,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     JoinedTablePtr->ResetIterator();
                     LeftPacker->EndTime = std::chrono::system_clock::now();
                     RightPacker->EndTime = std::chrono::system_clock::now();
+                    ++NextBucketsToJoin;
 
                 }
 

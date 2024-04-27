@@ -4,6 +4,7 @@ SRCS(
     normalizer.cpp
     portion.cpp
     chunks.cpp
+    clean.cpp
 )
 
 PEERDIR(

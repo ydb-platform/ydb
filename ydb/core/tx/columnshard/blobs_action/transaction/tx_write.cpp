@@ -73,7 +73,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
         i->OnExecuteTxAfterWrite(*Self, blobManagerDb, true);
     }
     for (auto&& i : buffer.GetRemoveActions()) {
-        i->OnExecuteTxAfterRemoving(*Self, blobManagerDb, true);
+        i->OnExecuteTxAfterRemoving(blobManagerDb, true);
     }
     for (auto&& aggr : buffer.GetAggregations()) {
         const auto& writeMeta = aggr->GetWriteData()->GetWriteMeta();
@@ -123,7 +123,7 @@ void TTxWrite::Complete(const TActorContext& ctx) {
         i->OnCompleteTxAfterWrite(*Self, true);
     }
     for (auto&& i : buffer.GetRemoveActions()) {
-        i->OnCompleteTxAfterRemoving(*Self, true);
+        i->OnCompleteTxAfterRemoving(true);
     }
     AFL_VERIFY(buffer.GetAggregations().size() == Results.size());
     for (ui32 i = 0; i < buffer.GetAggregations().size(); ++i) {

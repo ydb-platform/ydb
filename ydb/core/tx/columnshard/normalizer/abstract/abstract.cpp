@@ -1,4 +1,6 @@
 #include "abstract.h"
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+
 
 namespace NKikimr::NOlap {
 
@@ -30,4 +32,9 @@ namespace NKikimr::NOlap {
         ++CurrentNormalizerIndex;
         return !IsNormalizationFinished();
     }
+
+    void TTrivialNormalizerTask::Start(const TNormalizationController& /* controller */, const TNormalizationContext& nCtx) {
+        TActorContext::AsActorContext().Send(nCtx.GetColumnshardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(Changes));
+    }
+
 }

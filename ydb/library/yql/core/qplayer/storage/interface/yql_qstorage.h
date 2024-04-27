@@ -101,6 +101,10 @@ public:
     TQContext(const TQContext&) = default;
     TQContext& operator=(const TQContext&) = default;
 
+    operator bool() const {
+        return CanRead() || CanWrite();
+    }
+
     bool CanRead() const {
         return Reader_ != nullptr;
     }

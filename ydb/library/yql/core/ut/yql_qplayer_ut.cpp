@@ -9,10 +9,42 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/user.h>
+#include <util/system/tempfile.h>
 
 using namespace NYql;
 
-bool RunProgram(const TString& sourceCode, const TQContext& qContext, bool isSql, bool withUdfs) {
+template <typename F>
+void WithTables(const F&& f) {
+    static const TStringBuf KSV_ATTRS =
+        "{\"_yql_row_spec\" = {\"Type\" = [\"StructType\";["
+        "[\"key\";[\"DataType\";\"String\"]];"
+        "[\"subkey\";[\"DataType\";\"String\"]];"
+        "[\"value\";[\"DataType\";\"String\"]]"
+        "]]}}"
+        ;
+
+    TTempFileHandle inputFile;
+    TTempFileHandle inputFileAttrs(inputFile.Name() + ".attr");
+
+    TStringBuf data =
+        "{\"key\"=\"075\";\"subkey\"=\".\";\"value\"=\"abc\"};\n"
+        "{\"key\"=\"800\";\"subkey\"=\".\";\"value\"=\"ddd\"};\n"
+        "{\"key\"=\"020\";\"subkey\"=\".\";\"value\"=\"q\"};\n"
+        "{\"key\"=\"150\";\"subkey\"=\".\";\"value\"=\"qzz\"};\n"sv
+        ;
+
+    inputFile.Write(data.data(), data.size());
+    inputFile.FlushData();
+    inputFileAttrs.Write(KSV_ATTRS.data(), KSV_ATTRS.size());
+    inputFileAttrs.FlushData();
+
+    THashMap<TString, TString> tables;
+    tables["yt.plato.Input"] = inputFile.Name();
+    f(tables);
+}
+
+bool RunProgram(bool optimizeOnly, const TString& sourceCode, const TQContext& qContext, bool isSql, bool withUdfs,
+    const THashMap<TString, TString>& tables) {
     auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
     if (withUdfs) {
         auto cloned = functionRegistry->Clone();
@@ -20,7 +52,7 @@ bool RunProgram(const TString& sourceCode, const TQContext& qContext, bool isSql
         functionRegistry = cloned;
     }
 
-    auto yqlNativeServices = NFile::TYtFileServices::Make(functionRegistry.Get(), {}, {}, "");
+    auto yqlNativeServices = NFile::TYtFileServices::Make(functionRegistry.Get(), tables, {}, "");
     auto ytGateway = CreateYtFileGateway(yqlNativeServices);
 
     TVector<TDataProviderInitializer> dataProvidersInit;
@@ -45,7 +77,9 @@ bool RunProgram(const TString& sourceCode, const TQContext& qContext, bool isSql
         return false;
     }
 
-    TProgram::TStatus status = program->Optimize(GetUsername());
+    TProgram::TStatus status = optimizeOnly ? 
+        program->Optimize(GetUsername()) :
+        program->Run(GetUsername());
     if (status == TProgram::TStatus::Error) {
         program->PrintErrorsTo(Cerr);
     }
@@ -53,13 +87,13 @@ bool RunProgram(const TString& sourceCode, const TQContext& qContext, bool isSql
     return status == TProgram::TStatus::Ok;
 }
 
-void CheckProgram(const TString& sql, bool isSql = true) {
+void CheckProgram(const TString& sql, const THashMap<TString, TString>& tables, bool isSql = true) {
     auto qStorage = MakeMemoryQStorage();
     TQContext savingCtx(qStorage->MakeWriter("foo"));
-    UNIT_ASSERT(RunProgram(sql, savingCtx, isSql, true));
+    UNIT_ASSERT(RunProgram(false, sql, savingCtx, isSql, true, tables));
     savingCtx.GetWriter()->Commit().GetValueSync();
     TQContext loadingCtx(qStorage->MakeReader("foo"));
-    UNIT_ASSERT(RunProgram("", loadingCtx, isSql, false));
+    UNIT_ASSERT(RunProgram(true, "", loadingCtx, isSql, false, tables));
 }
 
 Y_UNIT_TEST_SUITE(QPlayerTests) {
@@ -98,16 +132,23 @@ Y_UNIT_TEST_SUITE(QPlayerTests) {
 )
         )";
         
-        CheckProgram(s, false);
+        CheckProgram(s, {}, false);
     }
 
     Y_UNIT_TEST(SimpleSql) {
         auto s = "select 1";
-        CheckProgram(s);
+        CheckProgram(s, {});
     }
 
     Y_UNIT_TEST(Udf) {
         auto s = "select String::AsciiToUpper('a')";
-        CheckProgram(s);
+        CheckProgram(s, {});
+    }
+    
+    Y_UNIT_TEST(YtGetFolder) {
+        auto s = "select * from plato.folder('','_yql_row_spec')";
+        WithTables([&](const auto& tables) {
+            CheckProgram(s, tables);
+        });
     }
 }

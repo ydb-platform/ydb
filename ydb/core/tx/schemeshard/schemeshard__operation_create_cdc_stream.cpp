@@ -810,8 +810,8 @@ ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& str
             .NotResolved();
     }
 
-    if (!tx.GetRestrictedOperation()) {
-        checks.NotRestricted();
+    if (!tx.GetTemporary()) {
+        checks.NotTemporary();
     }
 
     if (checks) {
@@ -828,7 +828,7 @@ ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& str
     return nullptr;
 }
 
-ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPath& tablePath) {
+ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPath& tablePath, const TTxTransaction& tx) {
     const auto checks = tablePath.Check();
     checks
         .NotEmpty()
@@ -841,8 +841,9 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
         .IsCommonSensePath()
         .NotUnderDeleting()
         .NotUnderOperation();
-    if (!tx.GetRestrictedOperation()) {
-        checks.NotRestricted();
+
+    if (!tx.GetTemporary()) {
+        checks.NotTemporary();
     }
 
     if (!checks) {

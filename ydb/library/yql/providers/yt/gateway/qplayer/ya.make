@@ -11,6 +11,7 @@ PEERDIR(
     ydb/library/yql/core/file_storage
     library/cpp/yson/node
     library/cpp/random_provider
+    yt/cpp/mapreduce/interface
     contrib/libs/openssl
 )
 

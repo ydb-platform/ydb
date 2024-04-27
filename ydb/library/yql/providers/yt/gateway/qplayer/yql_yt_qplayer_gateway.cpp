@@ -2,15 +2,24 @@
 
 #include <ydb/library/yql/core/file_storage/storage.h>
 #include <library/cpp/yson/node/node_io.h>
+#include <library/cpp/yson/node/node_builder.h>
+#include <yt/cpp/mapreduce/interface/serialize.h>
 
 #include <util/stream/file.h>
 
 #include <openssl/sha.h>
 
+namespace NYT {
+    //TODO: use from header
+    void Deserialize(TReadRange& readRange, const TNode& node);
+}
+
 namespace NYql {
 
 namespace {
 
+const TString YtGateway_CanonizePaths = "YtGateway_CanonizePaths";
+const TString YtGateway_GetTableInfo = "YtGateway_GetTableInfo";
 const TString YtGateway_GetFolder = "YtGateway_GetFolder";
 
 TString MakeHash(const TString& str) {
@@ -55,16 +64,230 @@ public:
         return Inner_->Finalize(std::move(options));
     }
 
+    static TString MakeCanonizePathKey(const TCanonizeReq& req) {
+        auto node = NYT::TNode()
+            ("Cluster", req.Cluster())
+            ("Path", req.Path());
+
+        return MakeHash(NYT::NodeToCanonicalYsonString(node));
+    }
+
     NThreading::TFuture<TCanonizePathsResult> CanonizePaths(TCanonizePathsOptions&& options) final {
-        return Inner_->CanonizePaths(std::move(options));
+        if (QContext_.CanRead()) {
+            TCanonizePathsResult res;
+            res.SetSuccess();
+            for (const auto& req : options.Paths()) {
+                auto key = MakeCanonizePathKey(req);
+                auto item = QContext_.GetReader()->Get({YtGateway_CanonizePaths, key}).GetValueSync();
+                if (!item) {
+                    throw yexception() << "Missing replay data";
+                }
+
+                auto valueNode = NYT::NodeFromYsonString(item->Value);
+                TCanonizedPath p;
+                p.Path = valueNode["Path"].AsString();
+                if (valueNode.HasKey("Columns")) {
+                    p.Columns.ConstructInPlace();
+                    for (const auto& c : valueNode["Columns"].AsList()) {
+                        p.Columns->push_back(c.AsString());
+                    }
+                }
+
+                if (valueNode.HasKey("Ranges")) {
+                    p.Ranges.ConstructInPlace();
+                    for (const auto& r : valueNode["Ranges"].AsString()) {
+                        NYT::TReadRange range;
+                        NYT::Deserialize(range, r);
+                        p.Ranges->push_back(range);
+                    }
+                }
+
+                if (valueNode.HasKey("AdditionalAttributes")) {
+                    p.AdditionalAttributes = valueNode["AdditionalAttributes"].AsString();
+                }
+
+                res.Data.push_back(p);
+            }
+
+            return NThreading::MakeFuture<TCanonizePathsResult>(res);
+        }
+
+        auto optionsDup = options;
+        return Inner_->CanonizePaths(std::move(options))
+            .Subscribe([qContext = QContext_, optionsDup](const NThreading::TFuture<TCanonizePathsResult>& future) {
+                if (!qContext.CanWrite() || future.HasException()) {
+                    return;
+                }
+
+                const auto& res = future.GetValueSync();
+                if (!res.Success()) {
+                    return;
+                }
+
+                Y_ENSURE(res.Data.size() == optionsDup.Paths().size());
+                for (size_t i = 0; i < res.Data.size(); ++i) {
+                    auto key = MakeCanonizePathKey(optionsDup.Paths()[i]);
+                    auto valueNode = NYT::TNode();
+                    const auto& canon = res.Data[i];
+                    valueNode("Path", canon.Path);
+                    if (canon.Columns) {
+                        NYT::TNode columnsNode;
+                        for (const auto& c : *canon.Columns) {
+                            columnsNode.Add(NYT::TNode(c));
+                        }
+
+                        valueNode("Columns", columnsNode);
+                    }
+
+                    if (canon.Ranges) {
+                        NYT::TNode rangesNode;
+                        for (const auto& r : *canon.Ranges) {
+                            NYT::TNode rangeNode;
+                            NYT::TNodeBuilder builder(&rangeNode);
+                            NYT::Serialize(r, &builder);
+                            rangesNode.Add(rangeNode);
+                        }
+
+                        valueNode("Ranges", rangesNode);
+                    }
+
+                    if (canon.AdditionalAttributes) {
+                        valueNode("AdditionalAttributes", NYT::TNode(*canon.AdditionalAttributes));
+                    }
+
+                    auto value = NYT::NodeToYsonString(valueNode, NYT::NYson::EYsonFormat::Binary);
+                    qContext.GetWriter()->Put({YtGateway_CanonizePaths, key}, value).GetValueSync();
+                }
+            });
+    }
+
+    static TString MakeGetTableInfoKey(const TTableReq& req, ui32 epoch) {
+        auto tableNode = NYT::TNode()
+            ("Cluster", req.Cluster())
+            ("Table", req.Table());
+
+        if (req.InferSchemaRows() != 0) {
+            tableNode("InferSchemaRows", req.InferSchemaRows());
+        }
+
+        if (req.ForceInferSchema()) {
+            tableNode("ForceInferSchema", req.ForceInferSchema());
+        }
+
+        if (req.Anonymous()) {
+            tableNode("Anonymous", req.Anonymous());
+        }
+
+        if (req.IgnoreYamrDsv()) {
+            tableNode("IgnoreYamrDsv", req.IgnoreYamrDsv());
+        }
+
+        if (req.IgnoreWeakSchema()) {
+            tableNode("IgnoreWeakSchema", req.IgnoreWeakSchema());
+        }
+
+        auto node = NYT::TNode()
+            ("Table", tableNode)
+            ("Epoch", epoch);
+
+        return MakeHash(NYT::NodeToCanonicalYsonString(node));
     }
 
     NThreading::TFuture<TTableInfoResult> GetTableInfo(TGetTableInfoOptions&& options) final {
         if (QContext_.CanRead()) {
-            throw yexception() << "Can't replay GetTableInfo";
+            TTableInfoResult res;
+            res.SetSuccess();
+            for (const auto& req : options.Tables()) {
+                TTableInfoResult::TTableData data;
+                auto key = MakeGetTableInfoKey(req, options.Epoch());
+                auto item = QContext_.GetReader()->Get({YtGateway_GetTableInfo, key}).GetValueSync();
+                if (!item) {
+                    throw yexception() << "Missing replay data";
+                }
+
+                auto valueNode = NYT::NodeFromYsonString(item->Value);
+                data.Meta = MakeIntrusive<TYtTableMetaInfo>();
+                auto metaNode = valueNode["Meta"];
+
+                data.Meta->CanWrite = metaNode["CanWrite"].AsBool();
+                data.Meta->DoesExist = metaNode["DoesExist"].AsBool();
+                data.Meta->YqlCompatibleScheme = metaNode["YqlCompatibleScheme"].AsBool();
+                data.Meta->InferredScheme = metaNode["InferredScheme"].AsBool();
+                data.Meta->IsDynamic = metaNode["IsDynamic"].AsBool();
+                data.Meta->SqlView = metaNode["SqlView"].AsString();
+                data.Meta->SqlViewSyntaxVersion = metaNode["SqlViewSyntaxVersion"].AsUint64();
+                for (const auto& x : metaNode["Attrs"].AsMap()) {
+                    data.Meta->Attrs[x.first] = x.second.AsString();
+                }
+
+                data.Stat = MakeIntrusive<TYtTableStatInfo>();
+                auto statNode = valueNode["Stat"];
+                data.Stat->Id = statNode["Id"].AsString();
+                data.Stat->RecordsCount = statNode["RecordsCount"].AsUint64();
+                data.Stat->DataSize = statNode["DataSize"].AsUint64();
+                data.Stat->ChunkCount = statNode["ChunkCount"].AsUint64();
+                data.Stat->ModifyTime = statNode["ModifyTime"].AsUint64();
+                data.Stat->Revision = statNode["Revision"].AsUint64();
+                data.Stat->TableRevision = statNode["TableRevision"].AsUint64();
+
+                data.WriteLock = options.ReadOnly() ? false : valueNode["WriteLock"].AsBool();
+                res.Data.push_back(data);
+            }
+
+            return NThreading::MakeFuture<TTableInfoResult>(res);
         }
 
-        return Inner_->GetTableInfo(std::move(options));
+        auto optionsDup = options;
+        return Inner_->GetTableInfo(std::move(options))
+            .Subscribe([optionsDup, qContext = QContext_](const NThreading::TFuture<TTableInfoResult>& future) {
+                if (!qContext.CanWrite() || future.HasException()) {
+                    return;
+                }
+
+                const auto& res = future.GetValueSync();
+                if (!res.Success()) {
+                    return;
+                }
+
+                Y_ENSURE(res.Data.size() == optionsDup.Tables().size());
+                for (size_t i = 0; i < res.Data.size(); ++i) {
+                    const auto& req = optionsDup.Tables()[i];
+                    const auto& data = res.Data[i];
+                    auto key = MakeGetTableInfoKey(req, optionsDup.Epoch());
+
+                    auto attrsNode = NYT::TNode();
+                    for (const auto& a : data.Meta->Attrs)  {
+                        attrsNode(a.first, a.second);
+                    }
+
+                    auto metaNode = NYT::TNode()
+                        ("CanWrite",data.Meta->CanWrite)
+                        ("DoesExist",data.Meta->DoesExist)
+                        ("YqlCompatibleScheme",data.Meta->YqlCompatibleScheme)
+                        ("InferredScheme",data.Meta->InferredScheme)
+                        ("IsDynamic",data.Meta->IsDynamic)
+                        ("SqlView",data.Meta->SqlView)
+                        ("SqlViewSyntaxVersion",ui64(data.Meta->SqlViewSyntaxVersion))
+                        ("Attrs",attrsNode);
+
+                    auto statNode = NYT::TNode()
+                        ("Id",data.Stat->Id)
+                        ("RecordsCount",data.Stat->RecordsCount)
+                        ("DataSize",data.Stat->DataSize)
+                        ("ChunkCount",data.Stat->ChunkCount)
+                        ("ModifyTime",data.Stat->ModifyTime)
+                        ("Revision",data.Stat->Revision)
+                        ("TableRevision",data.Stat->TableRevision);
+
+                    auto valueNode = NYT::TNode()
+                        ("Meta", metaNode)
+                        ("Stat", statNode)
+                        ("WriteLock", data.WriteLock);
+
+                    auto value = NYT::NodeToYsonString(valueNode, NYT::NYson::EYsonFormat::Binary);
+                    qContext.GetWriter()->Put({YtGateway_GetTableInfo, key},value).GetValueSync();
+                }
+            });
     }
 
     NThreading::TFuture<TTableRangeResult> GetTableRange(TTableRangeOptions&& options) final {

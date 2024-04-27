@@ -988,11 +988,11 @@ int RunMain(int argc, const char* argv[])
     }
 
     if (res.Has("replay")) {
-        program = progFactory.Create("-replay-", "");
+        program = progFactory.Create("-replay-", "", opId);
     } else if (progFile == TStringBuf("-")) {
-        program = progFactory.Create("-stdin-", Cin.ReadAll());
+        program = progFactory.Create("-stdin-", Cin.ReadAll(), opId);
     } else {
-        program = progFactory.Create(TFile(progFile, RdOnly));
+        program = progFactory.Create(TFile(progFile, RdOnly), opId);
         program->SetQueryName(progFile);
     }
 

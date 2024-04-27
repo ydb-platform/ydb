@@ -317,8 +317,8 @@ TProgram::~TProgram() {
 void TProgram::SetQContext(const TQContext& qContext) {
     YQL_PROFILE_FUNC(TRACE);
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
-    YQL_ENSURE(!QContext_.CanRead() && !QContext_.CanWrite());
-    YQL_ENSURE(qContext.CanRead() || qContext.CanWrite());
+    YQL_ENSURE(!QContext_);
+    YQL_ENSURE(qContext);
     QContext_ = qContext;
     UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, qContext);
 }
@@ -1575,6 +1575,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         typeAnnotationContext->Diagnostics = true;
     }
     typeAnnotationContext->ArrowResolver = ArrowResolver_;
+    typeAnnotationContext->FileStorage = FileStorage_;
     typeAnnotationContext->HiddenMode = HiddenMode_;
 
     if (UdfIndex_ && UdfIndexPackageSet_) {
@@ -1597,7 +1598,8 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
             typeAnnotationContext,
             ProgressWriter_,
             OperationOptions_,
-            AbortHidden_
+            AbortHidden_,
+            QContext_
         );
         if (HiddenMode_ != EHiddenMode::Disable && !dp.SupportsHidden) {
             continue;

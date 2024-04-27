@@ -94,6 +94,7 @@ PEERDIR(
     ydb/library/yql/providers/yt/lib/skiff
     ydb/library/yql/providers/yt/lib/yson_helpers
     ydb/library/yql/providers/yt/opt
+    ydb/library/yql/providers/yt/gateway/qplayer
 )
 
 YQL_LAST_ABI_VERSION()

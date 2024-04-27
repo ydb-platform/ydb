@@ -341,9 +341,6 @@ class DynamicConfigGenerator(object):
     def get_create_tenant_commands(self):
         tn_id = itertools.count(start=1)
         commands = []
-        commands.append("shopt > /tmp/shopt")
-        commands.append("set -o > /tmp/set")
-        commands.append("sleep 999999")
 
         for domain in self._cluster_details.domains:
             for _ in domain.tenants:

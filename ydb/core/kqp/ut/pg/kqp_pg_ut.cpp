@@ -2507,7 +2507,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             const auto queryAlter = R"(
                 --!syntax_pg
-                ALTER SEQUENCE IF NOT EXISTS seq
+                ALTER SEQUENCE IF EXISTS seq
                     START WITH 20
                     INCREMENT BY 5
                     MAXVALUE 30
@@ -2539,7 +2539,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             const auto queryAlter = R"(
                 --!syntax_pg
-                ALTER SEQUENCE IF NOT EXISTS seq
+                ALTER SEQUENCE IF EXISTS seq
                     START WITH 31;
             )";
 

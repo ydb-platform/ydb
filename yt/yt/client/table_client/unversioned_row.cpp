@@ -707,7 +707,7 @@ void ValidateAnyValue(TStringBuf yson)
     ParseYsonStringBuffer(yson, EYsonType::Node, &validator);
 }
 
-bool ValidateSortedAnyValue(TStringBuf yson)
+bool CheckSortedAnyValue(TStringBuf yson)
 {
     TYsonAnyValidator validator;
     ParseYsonStringBuffer(yson, EYsonType::Node, &validator);
@@ -1071,11 +1071,11 @@ void ValidateValueType(
                     }
                     if (IsAnyOrComposite(value.Type)) {
                         if (columnSchema.SortOrder()) {
-                            bool canBeSorted = ValidateSortedAnyValue(value.AsStringBuf());
+                            bool canBeSorted = CheckSortedAnyValue(value.AsStringBuf());
                             if (!canBeSorted) {
                                 THROW_ERROR_EXCEPTION(
                                     NTableClient::EErrorCode::SchemaViolation,
-                                    "Cannot write value of type %Qlv, which contains a YSON map, into type any sorted column",
+                                    "Cannot write value of type %Qlv, which contains a YSON map, into sorted column of type any",
                                     value.Type);
                             }
                         } else if (validateAnyIsValidYson) {

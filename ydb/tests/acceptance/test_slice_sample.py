@@ -45,7 +45,7 @@ class Test(object):
                 # '--output-path=%s' % yatest_common.output_path(),
                 '--output-path=%s' % "/tmp/ser",
                 '--iterations=25',
-                '--processes=2'
+                '--processes=1'
             ],
             stderr=sys.stderr,
             wait=True,

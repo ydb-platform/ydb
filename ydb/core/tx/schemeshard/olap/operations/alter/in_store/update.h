@@ -31,11 +31,7 @@ public:
         InitializeDiff(*TargetInStoreTable->GetTableInfoVerified().AlterBody).Validate();
     }
 
-    void FillToShardTx(NKikimrTxColumnShard::TAlterTable& shardAlter, const std::shared_ptr<TInStoreTable>& target) const {
-        if (AlterTTL) {
-            *shardAlter.MutableTtlSettings() = target->GetTableTTLProto();
-        }
-    }
+    void FillToShardTx(NKikimrTxColumnShard::TAlterTable& shardAlter, const std::shared_ptr<TInStoreTable>& target) const;
 
     const TOlapTTLUpdate* GetAlterTTLOptional() const {
         return AlterTTL ? &*AlterTTL : nullptr;

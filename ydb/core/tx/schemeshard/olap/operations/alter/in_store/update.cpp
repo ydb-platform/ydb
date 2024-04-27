@@ -67,4 +67,28 @@ NKikimr::TConclusion<NKikimr::NSchemeShard::NOlap::NAlter::TOlapTTL> TInStoreSch
     return ttl;
 }
 
+void TInStoreSchemaUpdate::FillToShardTx(NKikimrTxColumnShard::TAlterTable& shardAlter, const std::shared_ptr<TInStoreTable>& target) const {
+    if (AlterTTL) {
+        *shardAlter.MutableTtlSettings() = target->GetTableTTLProto();
+    }
+    auto& alterBody = OriginalInStoreTable->GetTableInfoVerified();
+
+    AFL_VERIFY(alterBody.Description.HasSchemaPresetId());
+    const ui32 presetId = alterBody.Description.GetSchemaPresetId();
+    Y_ABORT_UNLESS(!!TargetInStoreTable->GetStoreInfo(),
+        "Unexpected schema preset without olap store");
+    Y_ABORT_UNLESS(TargetInStoreTable->GetStoreInfo()->SchemaPresets.contains(presetId),
+        "Failed to find schema preset %" PRIu32
+        " in an olap store",
+        presetId);
+    auto& preset = TargetInStoreTable->GetStoreInfo()->SchemaPresets.at(presetId);
+    size_t presetIndex = preset.GetProtoIndex();
+    *shardAlter.MutableSchemaPreset() =
+        TargetInStoreTable->GetStoreInfo()->GetDescription().GetSchemaPresets(presetIndex);
+
+    if (alterBody.Description.HasSchemaPresetVersionAdj()) {
+        shardAlter.SetSchemaPresetVersionAdj(alterBody.Description.GetSchemaPresetVersionAdj());
+    }
+}
+
 }

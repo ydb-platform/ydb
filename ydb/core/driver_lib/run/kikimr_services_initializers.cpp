@@ -1185,9 +1185,14 @@ void TBlobCacheInitializer::InitializeServices(
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> blobCacheGroup = tabletGroup->GetSubgroup("type", "BLOB_CACHE");
 
-    static const constexpr ui64 DEFAULT_CACHE_SIZE_BYTES = 1000ull << 20;
+    ui64 maxCacheSize = 1000ull << 20;
+    if (Config.HasBlobCacheConfig()) {
+        if (Config.GetBlobCacheConfig().HasMaxSizeBytes()) {
+            maxCacheSize = Config.GetBlobCacheConfig().GetMaxSizeBytes();
+        }
+    }
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NBlobCache::MakeBlobCacheServiceId(),
-        TActorSetupCmd(NBlobCache::CreateBlobCache(DEFAULT_CACHE_SIZE_BYTES, blobCacheGroup), TMailboxType::ReadAsFilled, appData->UserPoolId)));
+        TActorSetupCmd(NBlobCache::CreateBlobCache(maxCacheSize, blobCacheGroup), TMailboxType::ReadAsFilled, appData->UserPoolId)));
 }
 
 // TLoggerInitializer

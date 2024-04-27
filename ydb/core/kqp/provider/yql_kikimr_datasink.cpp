@@ -721,7 +721,7 @@ public:
 
         auto valueType = settings.ValueType.IsValid()
             ? settings.ValueType.Cast()
-            : Build<TCoAtom>(ctx, node->Pos()).Value("bigint").Done();
+            : Build<TCoAtom>(ctx, node->Pos()).Value("int8").Done();
 
         auto temporary = settings.Temporary.IsValid()
             ? settings.Temporary.Cast()

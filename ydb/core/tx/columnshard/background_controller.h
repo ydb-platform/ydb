@@ -17,6 +17,7 @@ private:
 
     bool ActiveCleanupPortions = false;
     bool ActiveCleanupTables = false;
+    bool ActiveCleanupInsertTable = false;
     YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
 public:
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
@@ -65,6 +66,18 @@ public:
     }
     bool IsCleanupTablesActive() const {
         return ActiveCleanupTables;
+    }
+
+    void StartCleanupInsertTable() {
+        Y_ABORT_UNLESS(!ActiveCleanupInsertTable);
+        ActiveCleanupInsertTable = true;
+    }
+    void FinishCleanupInsertTable() {
+        Y_ABORT_UNLESS(ActiveCleanupInsertTable);
+        ActiveCleanupInsertTable = false;
+    }
+    bool IsCleanupInsertTableActive() const {
+        return ActiveCleanupInsertTable;
     }
 };
 

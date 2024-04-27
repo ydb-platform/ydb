@@ -86,7 +86,7 @@ void TParallelFileInputState::Finish() {
 
 void TParallelFileInputState::CheckError() const {
     if (!InnerState_->Error.IsOK()) {
-        Cerr << "YT RPC Reader exception:\n";
+        Cerr << "YT RPC Reader exception:\n" << InnerState_->Error.GetMessage();
         InnerState_->Error.ThrowOnError();
     }
 }

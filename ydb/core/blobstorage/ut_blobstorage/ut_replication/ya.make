@@ -10,6 +10,7 @@ TAG(ya:fat)
 
 SRCS(
     replication.cpp
+    replication_huge.cpp
 )
 
 PEERDIR(

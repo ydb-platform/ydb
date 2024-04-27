@@ -503,6 +503,8 @@ public:
             return ParseIndexStmt(CAST_NODE(IndexStmt, node)) != nullptr;
         case T_CreateSeqStmt:
             return ParseCreateSeqStmt(CAST_NODE(CreateSeqStmt, node)) != nullptr;
+        case T_AlterSeqStmt:
+            return ParseAlterSeqStmt(CAST_NODE(AlterSeqStmt, node)) != nullptr;
         default:
             NodeNotImplemented(value, node);
             return false;
@@ -2808,6 +2810,78 @@ public:
         return State.Statements.back();
     }
 
+    [[nodiscard]]
+    TAstNode* ParseAlterSeqStmt(const AlterSeqStmt* value) {
+
+        if (value->missing_ok) {
+            AddError("alter if exists is not supported yet");
+            return nullptr;
+        }
+
+        std::vector<TAstNode*> options;
+
+        options.push_back(QL(QA("mode"), QA("alter")));
+
+        auto [sink, key] = ParseQualifiedPgObjectName(
+            value->sequence->catalogname,
+            value->sequence->schemaname,
+            value->sequence->relname,
+            "pgSequence"
+        );
+
+        if (!sink || !key) {
+            return nullptr;
+        }
+
+        for (int i = 0; i < ListLength(value->options); ++i) {
+            auto rawNode = ListNodeNth(value->options, i);
+
+            switch (NodeTag(rawNode)) {
+                case T_DefElem: {
+                    const auto* defElem = CAST_NODE(DefElem, rawNode);
+                    TString nameElem = defElem->defname;
+                    if (defElem->arg) {
+                        switch (NodeTag(defElem->arg))
+                        {
+                            case T_Integer:
+                                options.emplace_back(QL(QAX(nameElem), QA(ToString(intVal(defElem->arg)))));
+                                break;
+                            case T_Float:
+                                options.emplace_back(QL(QAX(nameElem), QA(strVal(defElem->arg))));
+                                break;
+                            case T_TypeName: {
+                                const auto* typeName = CAST_NODE_EXT(PG_TypeName, T_TypeName, defElem->arg);
+                                if (ListLength(typeName->names) > 0) {
+                                    options.emplace_back(QL(QAX(nameElem),
+                                        QAX(StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)))));
+                                    }
+                                break;
+                            }
+                            default:
+                                NodeNotImplemented(defElem->arg);
+                                return nullptr;
+                        }
+                    }
+                    break;
+                }
+                default:
+                    NodeNotImplemented(rawNode);
+                    return nullptr;
+            }
+        }
+
+        if (value->for_identity) {
+            options.push_back(QL(QA("for_identity")));
+        }
+
+        State.Statements.push_back(
+                L(A("let"), A("world"),
+                  L(A("Write!"), A("world"), sink, key, L(A("Void")),
+                    QVL(options.data(), options.size()))));
+
+        return State.Statements.back();
+    }
+
     TFromDesc ParseFromClause(const Node* node) {
         switch (NodeTag(node)) {
         case T_RangeVar:
@@ -3323,8 +3397,14 @@ public:
         case SVFOP_CURRENT_ROLE:
         case SVFOP_USER:
             return L(A("PgConst"), QA("postgres"), L(A("PgType"), QA("name")));
-        case SVFOP_CURRENT_CATALOG:
-            return L(A("PgConst"), QA("postgres"), L(A("PgType"), QA("name")));
+        case SVFOP_CURRENT_CATALOG: {
+            std::optional<TString> database;
+            if (Settings.GUCSettings) {
+                database = Settings.GUCSettings->Get("ydb_database");
+            }
+
+            return L(A("PgConst"), QA(database ? *database : "postgres"), L(A("PgType"), QA("name")));
+        }
         case SVFOP_CURRENT_SCHEMA: {
             std::optional<TString> searchPath;
             if (Settings.GUCSettings) {

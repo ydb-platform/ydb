@@ -525,6 +525,70 @@ TWriteTopicSettings ParseWriteTopicSettings(TExprList node, TExprContext& ctx) {
     return ret;
 }
 
+TWriteReplicationSettings ParseWriteReplicationSettings(TExprList node, TExprContext& ctx) {
+    TMaybeNode<TCoAtom> mode;
+    TVector<TCoReplicationTarget> targets;
+    TVector<TCoNameValueTuple> settings;
+    TVector<TCoNameValueTuple> other;
+
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "targets") {
+                YQL_ENSURE(tuple.Value().Maybe<TExprList>());
+                for (const auto& target : tuple.Value().Cast<TExprList>()) {
+                    auto builtTarget = Build<TCoReplicationTarget>(ctx, node.Pos());
+
+                    YQL_ENSURE(target.Maybe<TCoNameValueTupleList>());
+                    for (const auto& item : target.Cast<TCoNameValueTupleList>()) {
+                        auto itemName = item.Name().Value();
+                        if (itemName == "remote") {
+                            builtTarget.RemotePath(item.Value().Cast<TCoAtom>());
+                        } else if (itemName == "local") {
+                            builtTarget.LocalPath(item.Value().Cast<TCoAtom>());
+                        } else {
+                            YQL_ENSURE(false, "unknown target item");
+                        }
+                    }
+
+                    targets.push_back(builtTarget.Done());
+                }
+            } else if (name == "settings") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
+                for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
+                    settings.push_back(item);
+                }
+            } else {
+                other.push_back(tuple);
+            }
+        }
+    }
+
+    const auto& builtTargets = Build<TCoReplicationTargetList>(ctx, node.Pos())
+        .Add(targets)
+        .Done();
+
+    const auto& builtSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(settings)
+        .Done();
+
+    const auto& builtOther = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(other)
+        .Done();
+
+    TWriteReplicationSettings ret(builtOther);
+    ret.Mode = mode;
+    ret.Targets = builtTargets;
+    ret.ReplicationSettings = builtSettings;
+
+    return ret;
+}
+
 TWriteRoleSettings ParseWriteRoleSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;
     TVector<TCoAtom> roles;

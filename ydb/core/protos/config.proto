@@ -158,6 +158,8 @@ message TStaticNameserviceConfig {
     repeated string AcceptUUID = 3;
     optional bool SuppressVersionCheck = 4;
     optional ENameserviceType Type = 5;
+    optional bool KeepSocket = 6 [default = true];
+    optional bool ForceTcp = 7 [default = false];
 }
 
 message TDynamicNameserviceConfig {
@@ -997,6 +999,8 @@ message TQueryServiceConfig {
     optional uint64 ScriptResultSizeLimit = 4 [default = 0]; // 0 = infinity
     optional uint64 ScriptResultRowsLimit = 5 [default = 0]; // 0 = infinity
     repeated string HostnamePatterns = 13; // List of hostname regexps for external data sources; disabled if empty
+    optional string QueryArtifactsCompressionMethod = 17;
+    optional uint64 QueryArtifactsCompressionMinSize = 18 [default = 10485760]; // default = 10 MiB
 
     optional NYql.TS3GatewayConfig S3 = 6;
     optional NYql.TYtGatewayConfig Yt = 15;
@@ -1129,6 +1133,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 1000 }];
+
+        optional uint64 ChangeRecordDebugPrint = 16 [(ControlOptions) = {
+            Description: "Enables debug printing of change records",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TTxLimitControls {

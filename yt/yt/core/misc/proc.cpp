@@ -1616,7 +1616,7 @@ TFile MemfdCreate(const TString& name)
 const TString& GetLinuxKernelVersion()
 {
 #ifdef _linux_
-    static TString release = []() -> TString {
+    static TString release = [] () -> TString {
         utsname buf{};
         if (uname(&buf) != 0) {
             return "unknown";

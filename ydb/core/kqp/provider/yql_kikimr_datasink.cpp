@@ -97,6 +97,24 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleCreateReplication(TKiCreateReplication node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
+    TStatus HandleAlterReplication(TKiAlterReplication node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
+    TStatus HandleDropReplication(TKiDropReplication node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
     TStatus HandleCreateSequence(NNodes::TKiCreateSequence node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         Y_UNUSED(node);
@@ -193,7 +211,7 @@ private:
         auto tableType = settings.TableType.IsValid()
             ? GetTableTypeFromString(settings.TableType.Cast())
             : ETableType::Table; // v0, pg support
-        ctx->Tables().GetOrAddTable(TString(cluster), ctx->GetDatabase(), key.GetTablePath(), tableType);
+        ctx->Tables().GetOrAddTable(TString(cluster), ctx->GetDatabase(), key.GetTablePath(), tableType).DisableAuthInfo();
     }
 
     TStatus HandleWrite(TExprBase node, TExprContext& ctx) override {
@@ -313,6 +331,8 @@ private:
             case TKikimrKey::Type::Permission:
                 return TStatus::Ok;
             case TKikimrKey::Type::PGObject:
+                return TStatus::Ok;
+            case TKikimrKey::Type::Replication:
                 return TStatus::Ok;
         }
 
@@ -479,9 +499,17 @@ public:
             || node.IsCallable(TKiAlterTable::CallableName())) {
             return true;
         }
+
         if (node.IsCallable(TKiCreateTopic::CallableName())
             || node.IsCallable(TKiAlterTopic::CallableName())
             || node.IsCallable(TKiDropTopic::CallableName())
+        ) {
+            return true;
+        }
+
+        if (node.IsCallable(TKiCreateReplication::CallableName())
+            || node.IsCallable(TKiAlterReplication::CallableName())
+            || node.IsCallable(TKiDropReplication::CallableName())
         ) {
             return true;
         }
@@ -526,6 +554,114 @@ public:
     bool CollectDiagnostics(NYson::TYsonWriter& writer) override {
         Y_UNUSED(writer);
         return false;
+    }
+
+    bool IsEvaluatedDefaultNode(TExprNode::TPtr input) {
+        auto node = TExprBase(input);
+
+        if (node.Maybe<TCoNothing>()) {
+            return true;
+        }
+
+        if (input->IsCallable()
+            && input->Content() == "PgCast"
+            && input->ChildrenSize() >= 1
+            && TExprBase(input->Child(0)).Maybe<TCoNull>())
+        {
+            return true;
+        }
+
+        if (node.Maybe<TCoAtom>()) {
+            return true;
+        }
+
+        if (node.Maybe<TCoNull>()) {
+            return true;
+        }
+
+        if (auto maybeJust = node.Maybe<TCoJust>()) {
+            return IsEvaluatedDefaultNode(maybeJust.Cast().Input().Ptr());
+        }
+
+        if (node.Maybe<TCoPgConst>()) {
+            return true;
+        }
+
+        if (node.Maybe<TCoDataCtor>()) {
+            return true;
+        }
+
+        if (node.Maybe<TCoDataType>()) {
+            return true;
+        }
+
+        if (node.Maybe<TCoPgType>()) {
+            return true;
+        }
+
+        return false;
+    }
+
+    bool CanEvaluateDefaultValue(TExprNode::TPtr input) {
+        if (IsEvaluatedDefaultNode(input)) {
+            return true;
+        }
+
+        static const THashSet<TString> allowedNodes = {
+            "Concat", "Just", "Optional", "SafeCast", "AsList",
+            "+", "-", "*", "/", "%", "PgCast"};
+
+        if (input->IsCallable("PgCast") && input->Child(0)->IsCallable("PgConst")) {
+            return true;
+        }
+
+        if (input->IsCallable(allowedNodes)) {
+            for (size_t i = 0; i < input->ChildrenSize(); i++) {
+                auto callableInput = input->Child(i);
+                if (!CanEvaluateDefaultValue(callableInput)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    bool ShouldEvaluateDefaultValue(TExprNode::TPtr input) {
+        if (IsEvaluatedDefaultNode(input)) {
+            return false;
+        }
+
+        return CanEvaluateDefaultValue(input);
+    }
+
+    bool EvaluateDefaultValuesIfNeeded(TExprContext& ctx, TExprList columns) {
+        bool exprEvalNeeded = false;
+        for(auto item: columns) {
+            auto columnTuple = item.Cast<TExprList>();
+            if (columnTuple.Size() > 2) {
+                const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
+                for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
+                if (constraint.Name().Value() != "default")
+                    continue;
+
+                YQL_ENSURE(constraint.Value().IsValid());
+
+                if (ShouldEvaluateDefaultValue(constraint.Value().Cast().Ptr())) {
+                    auto evaluatedExpr = ctx.Builder(constraint.Value().Cast().Ptr()->Pos())
+                        .Callable("EvaluateExpr")
+                        .Add(0, constraint.Value().Cast().Ptr())
+                        .Seal()
+                        .Build();
+
+                        constraint.Ptr()->ChildRef(TCoNameValueTuple::idx_Value) = evaluatedExpr;
+                        exprEvalNeeded = true;
+                    }
+                }
+            }
+        }
+        return exprEvalNeeded;
     }
 
     static TExprNode::TPtr MakeKiDropTable(const TExprNode::TPtr& node, const NCommon::TWriteTableSettings& settings,
@@ -626,18 +762,28 @@ public:
             return true;
         }
 
-        if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource && tableDesc.Metadata->TableType == NYql::ETableType::Unknown) {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Attempt to write to external data source \"" << key.GetTablePath() << "\" without table. Please specify table to write to"));
-            return false;
-        }
-
         if (tableDesc.Metadata->ExternalSource.SourceType != ESourceType::ExternalDataSource && tableDesc.Metadata->ExternalSource.SourceType != ESourceType::ExternalTable) {
             YQL_CVLOG(NLog::ELevel::ERROR, NLog::EComponent::ProviderKikimr) << "Skip RewriteIO for external entity: unknown entity type: " << (int)tableDesc.Metadata->ExternalSource.SourceType;
             return true;
         }
 
         if (mode != "insert_abort") {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for external entities"));
+            if (mode == "drop" || mode == "drop_if_exists") {
+                TString dropHint;
+                if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource) {
+                    dropHint = "DROP EXTERNAL DATA SOURCE";
+                } else if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalTable) {
+                    dropHint = "DROP EXTERNAL TABLE";
+                }
+                ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Cannot drop external entity by using DROP TABLE" << (dropHint ?  ". Please use " : "") << dropHint));
+            } else {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for external entities"));
+            }
+            return false;
+        }
+
+        if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource && tableDesc.Metadata->TableType == NYql::ETableType::Unknown) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Attempt to write to external data source \"" << key.GetTablePath() << "\" without table. Please specify table to write to"));
             return false;
         }
 
@@ -902,39 +1048,7 @@ public:
                             .Build()
                         .Done();
 
-                    bool exprEvalNeeded = false;
-
-                    for(auto item: createTable.Cast<TKiCreateTable>().Columns()) {
-                        auto columnTuple = item.Cast<TExprList>();
-                        if (columnTuple.Size() > 2) {
-                            const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
-                            for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
-                                if (constraint.Name().Value() != "default")
-                                    continue;
-
-                                YQL_ENSURE(constraint.Value().IsValid());
-                                bool shouldEvaluate = (
-                                    constraint.Value().Cast().Ptr()->IsCallable() &&
-                                    (constraint.Value().Cast().Ptr()->Content() == "PgCast") &&
-                                    (constraint.Value().Cast().Ptr()->ChildrenSize() >= 1) &&
-                                    (constraint.Value().Cast().Ptr()->Child(0)->IsCallable()) &&
-                                    (constraint.Value().Cast().Ptr()->Child(0)->Content() == "PgConst")
-                                );
-
-                                if (shouldEvaluate) {
-                                    auto evaluatedExpr = ctx.Builder(constraint.Value().Cast().Ptr()->Pos())
-                                        .Callable("EvaluateExpr")
-                                        .Add(0, constraint.Value().Cast().Ptr())
-                                        .Seal()
-                                        .Build();
-
-                                    constraint.Ptr()->ChildRef(TCoNameValueTuple::idx_Value) = evaluatedExpr;
-                                    exprEvalNeeded = true;
-                                }
-                            }
-                        }
-                    }
-
+                    bool exprEvalNeeded = EvaluateDefaultValuesIfNeeded(ctx, createTable.Cast<TKiCreateTable>().Columns());
                     if (exprEvalNeeded) {
                         ctx.Step.Repeat(TExprStep::ExprEval);
                     }
@@ -951,15 +1065,27 @@ public:
 
                     YQL_ENSURE(settings.AlterActions);
                     YQL_ENSURE(!settings.AlterActions.Cast().Empty());
-
-                    return Build<TKiAlterTable>(ctx, node->Pos())
+                    auto alterTable = Build<TKiAlterTable>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
                         .Actions(settings.AlterActions.Cast())
                         .TableType(tableType)
-                        .Done()
-                        .Ptr();
+                        .Done();
+
+                    bool exprEvalNeeded = false;
+                    for (const auto& action : alterTable.Actions()) {
+                        auto name = action.Name().Value();
+                        if (name == "addColumns") {
+                            exprEvalNeeded |= EvaluateDefaultValuesIfNeeded(ctx, action.Value().Cast<TExprList>());
+                        }
+                    }
+
+                    if (exprEvalNeeded) {
+                        ctx.Step.Repeat(TExprStep::ExprEval);
+                    }
+
+                    return alterTable.Ptr();
 
                 } else if (mode == "drop" || mode == "drop_if_exists") {
                     return MakeKiDropTable(node, settings, key, ctx);
@@ -1185,6 +1311,48 @@ public:
                 } else {
                     YQL_ENSURE(false, "unknown PGObject with type: \"" << key.GetPGObjectType() << "\"");
                 }
+                break;
+            }
+
+            case TKikimrKey::Type::Replication: {
+                auto settings = NCommon::ParseWriteReplicationSettings(TExprList(node->Child(4)), ctx);
+                YQL_ENSURE(settings.Mode);
+                auto mode = settings.Mode.Cast();
+
+                if (mode == "create") {
+                    return Build<TKiCreateReplication>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Replication().Build(key.GetReplicationPath())
+                        .Targets(settings.Targets.Cast())
+                        .ReplicationSettings(settings.ReplicationSettings.Cast())
+                        .Settings(settings.Other)
+                        .Done()
+                        .Ptr();
+                } else if (mode == "alter") {
+                    return Build<TKiAlterReplication>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Replication().Build(key.GetReplicationPath())
+                        .ReplicationSettings(settings.ReplicationSettings.Cast())
+                        .Settings(settings.Other)
+                        .Done()
+                        .Ptr();
+                } else if (mode == "drop" || mode == "dropCascade") {
+                    return Build<TKiDropReplication>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Replication().Build(key.GetReplicationPath())
+                        .Cascade<TCoAtom>()
+                            .Value(mode == "dropCascade")
+                            .Build()
+                        .Done()
+                        .Ptr();
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Unknown operation type for replication"));
+                    return nullptr;
+                }
+                break;
             }
         }
 
@@ -1276,6 +1444,18 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
         return HandleDropTopic(node.Cast(), ctx);
     }
 
+    if (auto node = TMaybeNode<TKiCreateReplication>(input)) {
+        return HandleCreateReplication(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiAlterReplication>(input)) {
+        return HandleAlterReplication(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiDropReplication>(input)) {
+        return HandleDropReplication(node.Cast(), ctx);
+    }
+
     if (auto node = TMaybeNode<TKiUpsertObject>(input)) {
         return HandleUpsertObject(node.Cast(), ctx);
     }
@@ -1324,7 +1504,7 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
         return HandleDropGroup(node.Cast(), ctx);
     }
 
-    if(auto node = TMaybeNode<TPgDropObject>(input)) {
+    if (auto node = TMaybeNode<TPgDropObject>(input)) {
         return HandlePgDropObject(node.Cast(), ctx);
     }
 

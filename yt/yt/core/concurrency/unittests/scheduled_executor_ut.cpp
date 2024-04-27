@@ -31,7 +31,7 @@ TEST_W(TScheduledExecutorTest, Simple)
     const auto& interval = TDuration::MilliSeconds(200);
     std::atomic<int> count = {0};
 
-    auto callback = BIND([&] () {
+    auto callback = BIND([&] {
         CheckTimeSlotCorrectness(interval);
         ++count;
     });
@@ -54,7 +54,7 @@ TEST_W(TScheduledExecutorTest, SimpleScheduleOutOfBand)
 {
     std::atomic<int> count = {0};
 
-    auto callback = BIND([&] () {
+    auto callback = BIND([&] {
         ++count;
     });
 
@@ -84,7 +84,7 @@ TEST_W(TScheduledExecutorTest, ParallelStop)
     const auto& interval = TDuration::MilliSeconds(10);
     std::atomic<int> count = {0};
 
-    auto callback = BIND([&] () {
+    auto callback = BIND([&] {
         CheckTimeSlotCorrectness(interval);
         ++count;
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(500));
@@ -124,7 +124,7 @@ TEST_W(TScheduledExecutorTest, ParallelOnExecuted1)
     const auto& interval = TDuration::MilliSeconds(10);
     std::atomic<int> count = 0;
 
-    auto callback = BIND([&] () {
+    auto callback = BIND([&] {
         CheckTimeSlotCorrectness(interval);
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(500));
         ++count;
@@ -163,7 +163,7 @@ TEST_W(TScheduledExecutorTest, ParallelOnExecuted2)
     const auto& interval = TDuration::MilliSeconds(400);
     std::atomic<int> count = 0;
 
-    auto callback = BIND([&] () {
+    auto callback = BIND([&] {
         CheckTimeSlotCorrectness(interval);
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(100));
         ++count;
@@ -202,7 +202,7 @@ TEST_W(TScheduledExecutorTest, OnExecutedEventCanceled)
     const auto& interval = TDuration::MilliSeconds(50);
     std::atomic<int> count = 0;
 
-    auto callback = BIND([&] () {
+    auto callback = BIND([&] {
         CheckTimeSlotCorrectness(interval);
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(200));
         ++count;

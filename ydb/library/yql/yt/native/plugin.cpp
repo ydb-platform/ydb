@@ -516,12 +516,7 @@ public:
             yson.OnEndList();
         }
 
-        TString progress;
-        {
-            auto guard = WriterGuard(ProgressSpinLock);
-            progress = ActiveQueriesProgress_[queryId].ProgressMerger.ToYsonString();
-            ActiveQueriesProgress_.erase(queryId);
-        }
+        TString progress = ExtractQuery(queryId).value_or(TActiveQuery{}).ProgressMerger.ToYsonString();
 
         return {
             .YsonResult = result.Empty() ? std::nullopt : std::make_optional(result.Str()),
@@ -558,12 +553,12 @@ public:
         try {
             auto result = GuardedRun(queryId, user, token, queryText, settings, files, executeMode);
             if (result.YsonError) {
-                RemoveQuery(queryId);
+                ExtractQuery(queryId);
             }
 
             return result;
         } catch (const std::exception& ex) {
-            RemoveQuery(queryId);
+            ExtractQuery(queryId);
 
             return TQueryResult{
                 .YsonError = MessageToYtErrorYson(ex.what()),
@@ -637,12 +632,16 @@ private:
     THashMap<TQueryId, TActiveQuery> ActiveQueriesProgress_;
     TVector<NYql::TDataProviderInitializer> DataProvidersInit_;
 
-    void RemoveQuery(TQueryId queryId)
-    {
+    std::optional<TActiveQuery> ExtractQuery(TQueryId queryId) {
+        // NB: TProgram destructor must be called without locking.
+        std::optional<TActiveQuery> query;
         auto guard = WriterGuard(ProgressSpinLock);
-        if (ActiveQueriesProgress_.contains(queryId)) {
-            ActiveQueriesProgress_.erase(queryId);
+        auto it = ActiveQueriesProgress_.find(queryId);
+        if (it != ActiveQueriesProgress_.end()) {
+            query = std::move(it->second);
+            ActiveQueriesProgress_.erase(it);
         }
+        return query;
     }
 
     static TString PatchQueryAttributes(TYsonString configAttributes, TYsonString querySettings)

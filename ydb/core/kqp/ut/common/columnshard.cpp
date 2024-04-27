@@ -1,5 +1,6 @@
 #include "columnshard.h"
 #include <ydb/core/testlib/cs_helper.h>
+#include <ydb/core/base/tablet_pipecache.h>
 
 extern "C" {
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>

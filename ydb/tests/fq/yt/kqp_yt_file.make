@@ -20,9 +20,9 @@ DEPENDS(
 )
 
 DATA(
-    arcadia/ydb/library/yql/cfg/tests
     arcadia/ydb/library/yql/tests/sql
     arcadia/ydb/tests/fq/yt
+    arcadia/ydb/tests/fq/yt/cfg
 )
 
 PEERDIR(

@@ -131,7 +131,7 @@ public:
 
     EReady SeekLast() override {
         if (Y_UNLIKELY(GetEndRowId() == 0)) {
-            Y_DEBUG_ABORT_UNLESS(false, "TPart can't be empty");
+            Y_DEBUG_ABORT("TPart can't be empty");
             return Exhaust();
         }
         return Seek(GetEndRowId() - 1);
@@ -348,7 +348,7 @@ private:
             return true;
         }
 
-        auto page = Env->TryGetPage(Part, state.PageId);
+        auto page = Env->TryGetPage(Part, state.PageId, {});
         if (page) {
             state.Node.emplace(*page);
             return true;

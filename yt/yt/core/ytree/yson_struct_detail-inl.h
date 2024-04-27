@@ -315,7 +315,7 @@ void LoadFromCursor(
     try {
         parameter.clear();
         int index = 0;
-        cursor->ParseList([&](NYson::TYsonPullParserCursor* cursor) {
+        cursor->ParseList([&] (NYson::TYsonPullParserCursor* cursor) {
             LoadFromCursor(
                 parameter.emplace_back(),
                 cursor,

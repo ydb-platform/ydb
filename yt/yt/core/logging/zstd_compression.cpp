@@ -80,7 +80,7 @@ public:
     void Compress(const TBuffer& input, TBuffer& output) override
     {
         auto context = ZSTD_createCCtx();
-        auto contextGuard = Finally([&] () {
+        auto contextGuard = Finally([&] {
             ZSTD_freeCCtx(context);
         });
 

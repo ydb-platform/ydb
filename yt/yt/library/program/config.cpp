@@ -10,7 +10,7 @@ void THeapSizeLimit::Register(TRegistrar registrar)
 {
     registrar.Parameter("container_memory_ratio", &TThis::ContainerMemoryRatio)
         .Optional();
-    registrar.Parameter("is_hard", &TThis::IsHard)
+    registrar.Parameter("hard", &TThis::Hard)
         .Default(false);
 }
 
@@ -84,7 +84,7 @@ void TSingletonsConfig::Register(TRegistrar registrar)
     registrar.Parameter("solomon_exporter", &TThis::SolomonExporter)
         .DefaultNew();
     registrar.Parameter("logging", &TThis::Logging)
-        .DefaultCtor([] () { return NLogging::TLogManagerConfig::CreateDefault(); });
+        .DefaultCtor([] { return NLogging::TLogManagerConfig::CreateDefault(); });
     registrar.Parameter("jaeger", &TThis::Jaeger)
         .DefaultNew();
     registrar.Parameter("tracing_transport", &TThis::TracingTransport)

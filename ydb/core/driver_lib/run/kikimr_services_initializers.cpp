@@ -602,6 +602,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
         NDnsResolver::TOnDemandDnsResolverOptions resolverOptions;
         resolverOptions.MonCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "dns_resolver");
+        resolverOptions.ForceTcp = nsConfig.GetForceTcp();
+        resolverOptions.KeepSocket = nsConfig.GetKeepSocket();
         IActor *resolver = NDnsResolver::CreateOnDemandDnsResolver(resolverOptions);
 
         setup->LocalServices.emplace_back(
@@ -2148,7 +2150,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             TActorSetupCmd(proxy, TMailboxType::HTSwap, appData->UserPoolId)));
 
         // Create finalize script service
-        auto finalize = NKqp::CreateKqpFinalizeScriptService(Config.GetQueryServiceConfig().GetFinalizeScriptServiceConfig(), Config.GetMetadataProviderConfig(), federatedQuerySetupFactory);
+        auto finalize = NKqp::CreateKqpFinalizeScriptService(Config.GetQueryServiceConfig(), Config.GetMetadataProviderConfig(), federatedQuerySetupFactory);
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpFinalizeScriptServiceId(NodeId),
             TActorSetupCmd(finalize, TMailboxType::HTSwap, appData->UserPoolId)));

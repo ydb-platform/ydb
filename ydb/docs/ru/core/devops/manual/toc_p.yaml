@@ -11,6 +11,10 @@ items:
     path: ../../maintenance/manual/toc_p.yaml
 - name: Мониторинг
   href: monitoring.md
+- name: Логирование
+  href: logging.md
+- name: Резервное копирование и восстановление
+  href: backup-and-recovery.md
 - name: Обновление
   href: upgrade.md
 - name: Изменение конфигурации актор-системы
@@ -31,5 +35,3 @@ items:
     href: ../../maintenance/manual/cms.md
 - name: Системные таблицы
   href: system-views.md
-- name: Логирование
-  href: logging.md

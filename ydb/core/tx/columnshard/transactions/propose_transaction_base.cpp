@@ -6,8 +6,8 @@
 namespace NKikimr::NColumnShard {
 
     void TProposeTransactionBase::ProposeTransaction(const TTxController::TBasicTxInfo& txInfo, const TString& txBody, const TActorId source, const ui64 cookie, TTransactionContext& txc) {
-        auto txOperator = TTxController::ITransactionOperatior::TFactory::MakeHolder(txInfo.TxKind, TTxController::TTxInfo(txInfo.TxKind, txInfo.TxId));
-        if (!txOperator || !txOperator->Parse(txBody)) {
+        auto txOperator = TTxController::ITransactionOperator::TFactory::MakeHolder(txInfo.TxKind, TTxController::TTxInfo(txInfo.TxKind, txInfo.TxId));
+        if (!txOperator || !txOperator->Parse(*Self, txBody)) {
             TTxController::TProposeResult proposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Error processing commit TxId# " << txInfo.TxId
                                                     << (txOperator ? ". Parsing error " : ". Unknown operator for txKind"));
             OnProposeError(proposeResult, txInfo);
@@ -23,7 +23,7 @@ namespace NKikimr::NColumnShard {
             TTxController::TProposeResult proposeResult;
             OnProposeResult(proposeResult, *txInfoPtr);
         } else {
-            auto proposeResult = txOperator->Propose(*Self, txc, false);
+            auto proposeResult = txOperator->ExecuteOnPropose(*Self, txc);
             if (!!proposeResult) {
                 const auto fullTxInfo = txOperator->TxWithDeadline() ? Self->GetProgressTxController().RegisterTxWithDeadline(txInfo.TxId, txInfo.TxKind, txBody, source, cookie, txc)
                                                                 : Self->GetProgressTxController().RegisterTx(txInfo.TxId, txInfo.TxKind, txBody, source, cookie, txc);
@@ -34,4 +34,14 @@ namespace NKikimr::NColumnShard {
             }
         }
     }
+
+    void TProposeTransactionBase::CompleteTransaction(const ui64 txId, const TActorContext& ctx) {
+        auto txOperator = Self->GetProgressTxController().GetTxOperator(txId);
+        if (!txOperator) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot found txOperator in propose transaction base")("tx_id", txId);
+        } else {
+            txOperator->CompleteOnPropose(*Self, ctx);
+        }
+    }
+
 }

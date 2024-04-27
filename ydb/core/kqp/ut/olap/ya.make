@@ -29,6 +29,8 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/library/yql/sql/pg_dummy
     ydb/core/tx/columnshard/hooks/testing
+    ydb/core/tx/columnshard/test_helper
+    ydb/core/tx/columnshard
     ydb/core/kqp/ut/olap/helpers
     ydb/core/tx/datashard/ut_common
 )

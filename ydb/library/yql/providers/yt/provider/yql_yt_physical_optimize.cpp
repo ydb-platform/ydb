@@ -6061,6 +6061,7 @@ private:
                                 TCopyOrTrivialMapOpts()
                                     .SetTryKeepSortness(!NYql::HasSetting(section.Settings().Ref(), EYtSettingType::Unordered))
                                     .SetSectionUniq(section.Ref().GetConstraint<TDistinctConstraintNode>())
+                                    .SetConstraints(section.Ref().GetConstraintSet())
                                     .SetCombineChunks(true)
                                 );
 

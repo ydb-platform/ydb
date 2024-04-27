@@ -71,14 +71,14 @@ public:
         }
     };
 
-    class ITransactionOperatior {
+    class ITransactionOperator {
     protected:
         TTxInfo TxInfo;
     public:
-        using TPtr = std::shared_ptr<ITransactionOperatior>;
-        using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperatior, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
+        using TPtr = std::shared_ptr<ITransactionOperator>;
+        using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperator, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
 
-        ITransactionOperatior(const TTxInfo& txInfo)
+        ITransactionOperator(const TTxInfo& txInfo)
             : TxInfo(txInfo)
         {}
 
@@ -86,18 +86,22 @@ public:
             return TxInfo.TxId;
         }
 
-        virtual ~ITransactionOperatior() {}
+        virtual ~ITransactionOperator() {}
 
         virtual bool TxWithDeadline() const {
             return true;
         }
 
-        virtual bool Parse(const TString& data) = 0;
-        virtual TProposeResult Propose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, bool proposed) const = 0;
+        virtual bool Parse(TColumnShard& owner, const TString& data) = 0;
+        virtual TProposeResult ExecuteOnPropose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const = 0;
+        virtual bool CompleteOnPropose(TColumnShard& owner, const TActorContext& ctx) const = 0;
 
-        virtual bool Progress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) = 0;
-        virtual bool Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;
-        virtual bool Complete(TColumnShard& owner, const TActorContext& ctx) = 0;
+        virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+        virtual bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) = 0;
+
+        virtual bool ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+        virtual bool CompleteOnAbort(TColumnShard& owner, const TActorContext& ctx) = 0;
+
         virtual void RegisterSubscriber(const TActorId&) {
             AFL_VERIFY(false)("message", "Not implemented");
         };
@@ -112,7 +116,7 @@ private:
     std::set<TPlanQueueItem> PlanQueue;
     std::set<TPlanQueueItem> RunningQueue;
 
-    THashMap<ui64, ITransactionOperatior::TPtr> Operators;
+    THashMap<ui64, ITransactionOperator::TPtr> Operators;
 
 private:
     ui64 GetAllowedStep() const;
@@ -121,8 +125,8 @@ private:
 public:
     TTxController(TColumnShard& owner);
 
-    ITransactionOperatior::TPtr GetTxOperator(const ui64 txId);
-    ITransactionOperatior::TPtr GetVerifiedTxOperator(const ui64 txId);
+    ITransactionOperator::TPtr GetTxOperator(const ui64 txId);
+    ITransactionOperator::TPtr GetVerifiedTxOperator(const ui64 txId);
 
     ui64 GetMemoryUsage() const;
     bool HaveOutdatedTxs() const;
@@ -132,7 +136,8 @@ public:
     TTxInfo RegisterTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);
     TTxInfo RegisterTxWithDeadline(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);
 
-    bool CancelTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
+    bool ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
+    bool CompleteOnCancel(const ui64 txId, const TActorContext& ctx);
 
     std::optional<TTxInfo> StartPlannedTx();
     void FinishPlannedTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);

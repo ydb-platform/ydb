@@ -1011,6 +1011,18 @@ public:
         }
     }
 
+    TFuture<TGenericResult> CreateReplication(const TString&, const NYql::TCreateReplicationSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> AlterReplication(const TString&, const NYql::TAlterReplicationSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> DropReplication(const TString&, const NYql::TDropReplicationSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
     TFuture<TGenericResult> AlterColumnTable(const TString& cluster,
                                              const NYql::TAlterColumnTableSettings& settings) override {
         Y_UNUSED(cluster);

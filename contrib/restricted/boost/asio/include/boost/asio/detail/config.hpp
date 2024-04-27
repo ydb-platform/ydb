@@ -1487,4 +1487,11 @@
 # endif // defined(__clang__)
 #endif // !defined(BOOST_ASIO_HAS_CO_AWAIT)
 
+// Standard library support for snprintf.
+#if !defined(BOOST_ASIO_HAS_SNPRINTF)
+# if !defined(BOOST_ASIO_DISABLE_SNPRINTF)
+#     define BOOST_ASIO_HAS_SNPRINTF 1
+# endif // !defined(BOOST_ASIO_DISABLE_SNPRINTF)
+#endif // !defined(BOOST_ASIO_HAS_SNPRINTF)
+
 #endif // BOOST_ASIO_DETAIL_CONFIG_HPP

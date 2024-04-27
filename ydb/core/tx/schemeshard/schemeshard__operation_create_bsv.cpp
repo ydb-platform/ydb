@@ -109,11 +109,11 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
     context.SS->ChangeTxState(db, operationId, TTxState::CreateParts);
     context.OnComplete.ActivateTx(operationId);
 
-    context.SS->PersistPath(db, volumePath->PathId);
     if (!acl.empty()) {
         volumePath->ApplyACL(acl);
-        context.SS->PersistACL(db, volumePath);
     }
+    context.SS->PersistPath(db, volumePath->PathId);
+
     for (auto& shard : volume->Shards) {
         auto shardIdx = shard.first;
         const auto& part = shard.second;

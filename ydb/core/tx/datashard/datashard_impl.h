@@ -18,6 +18,7 @@
 #include "cdc_stream_scan.h"
 #include "change_exchange.h"
 #include "change_record.h"
+#include "change_record_cdc_serializer.h"
 #include "progress_queue.h"
 #include "read_iterator.h"
 #include "volatile_tx.h"
@@ -1667,6 +1668,11 @@ public:
         return value;
     }
 
+    bool GetChangeRecordDebugPrint() const {
+        ui64 value = ChangeRecordDebugPrint;
+        return value != 0;
+    }
+
     template <typename T>
     void ReleaseCache(T& tx) {
         ReleaseTxCache(tx.GetTxCacheUsage());
@@ -2671,6 +2677,8 @@ private:
     TControlWrapper EnableLeaderLeases;
     TControlWrapper MinLeaderLeaseDurationUs;
 
+    TControlWrapper ChangeRecordDebugPrint;
+
     // Set of InRS keys to remove from local DB.
     THashSet<TReadSetKey> InRSToRemove;
     TIntrusivePtr<TThrRefBase> DataShardSysTables;
@@ -2778,6 +2786,7 @@ private:
     ui32 ChangeQueueReservedCapacity = 0;
     TActorId OutChangeSender;
     bool OutChangeSenderSuspended = false;
+    THolder<IChangeRecordSerializer> ChangeRecordDebugSerializer;
 
     struct TUncommittedLockChangeRecords {
         TVector<IDataShardChangeCollector::TChange> Changes;

@@ -25,6 +25,7 @@ public:
 
         TDbWrapper db(txc.DB, nullptr);
         for (auto&& portion : Portions) {
+            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("message", "remove lost portion")("path_id", portion->GetPathId())("portion_id", portion->GetPortionId());
             portion->RemoveFromDatabase(db);
         }
         return true;

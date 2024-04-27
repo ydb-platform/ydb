@@ -1789,7 +1789,7 @@ message TAppConfig {
     optional bool AllowEditYamlInUi = 75;
     optional TS3ProxyResolverConfig S3ProxyResolverConfig = 76;
     optional TBackgroundCleaningConfig BackgroundCleaningConfig = 77;
-	optional TBlobCacheConfig BlobCacheConfig = 78;
+    optional TBlobCacheConfig BlobCacheConfig = 78;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

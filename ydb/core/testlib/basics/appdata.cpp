@@ -18,6 +18,7 @@ namespace NKikimr {
         Mine->IoContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
 
         Domains = new TDomainsInfo;
+        Icb = new TControlBoard;
     }
 
     NActors::TTestActorRuntime::TEgg TAppPrepare::Unwrap() noexcept
@@ -60,6 +61,8 @@ namespace NKikimr {
         app->S3ProxyResolverConfig = S3ProxyResolverConfig;
         app->GraphConfig = GraphConfig;
         app->FeatureFlags = FeatureFlags;
+        app->Icb.Reset(Icb);
+        app->InFlightLimiterRegistry.Reset(new NGRpcService::TInFlightLimiterRegistry(Icb));
 
         // This is a special setting active in test runtime only
         app->EnableMvccSnapshotWithLegacyDomainRoot = true;

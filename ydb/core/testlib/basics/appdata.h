@@ -104,6 +104,8 @@ namespace NKikimr {
         NKikimrConfig::TAwsCompatibilityConfig AwsCompatibilityConfig;
         NKikimrConfig::TS3ProxyResolverConfig S3ProxyResolverConfig;
         NKikimrConfig::TGraphConfig GraphConfig;
+        NKikimrConfig::TImmediateControlsConfig ImmediateControlsConfig;
+        TIntrusivePtr<TControlBoard> Icb;
 
     private:
         TAutoPtr<TMine> Mine;

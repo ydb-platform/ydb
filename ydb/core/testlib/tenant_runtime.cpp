@@ -820,6 +820,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
     TAppPrepare app;
 
     app.FeatureFlags = Extension.GetFeatureFlags();
+    app.ImmediateControlsConfig = Extension.GetImmediateControlsConfig();
     app.ClearDomainsAndHive();
 
     ui32 planResolution = 500;

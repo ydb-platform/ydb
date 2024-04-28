@@ -128,7 +128,8 @@ void TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp, RlMode>::RefreshToken(cons
 }
 
 template <ui32 TRpcId>
-void TRefreshTokenImpl<TRpcId>::ReplyUnauthenticated(const TString&) {
+void TRefreshTokenImpl<TRpcId>::ReplyUnauthenticated(const TString& msg) {
+    IssueManager_.RaiseIssue(NYql::TIssue(msg));
     RefreshTokenReplyUnauthenticated(From_, TActorId(), IssueManager_.GetIssues());
 }
 

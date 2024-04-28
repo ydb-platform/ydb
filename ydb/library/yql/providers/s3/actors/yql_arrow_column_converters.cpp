@@ -523,8 +523,6 @@ TColumnConverter BuildColumnConverter(const std::string& columnName, const std::
         return {};
     }
 
-    // YQL_ENSURE(arrow::compute::CanCast(*originalType, *targetType), "Mismatch type for field: " << columnName << ", expected: "
-        // << targetType->ToString() << ", got: " << originalType->ToString());
     if (Y_UNLIKELY(!arrow::compute::CanCast(*originalType, *targetType))) {
         throw parquet::ParquetException(
             TStringBuilder() << "Mismatch type for field: " << columnName <<

@@ -1,29 +1,3 @@
-Metadata-Version: 2.3
-Name: scramp
-Version: 1.4.5
-Summary: An implementation of the SCRAM protocol.
-Project-URL: Homepage, https://github.com/tlocke/scramp
-Author: The Contributors
-License: MIT No Attribution
-License-File: LICENSE
-Keywords: SASL,SCRAM,authentication
-Classifier: Development Status :: 5 - Production/Stable
-Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: MIT No Attribution License (MIT-0)
-Classifier: Operating System :: OS Independent
-Classifier: Programming Language :: Python
-Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.8
-Classifier: Programming Language :: Python :: 3.9
-Classifier: Programming Language :: Python :: 3.10
-Classifier: Programming Language :: Python :: 3.11
-Classifier: Programming Language :: Python :: Implementation
-Classifier: Programming Language :: Python :: Implementation :: CPython
-Classifier: Programming Language :: Python :: Implementation :: PyPy
-Requires-Python: >=3.8
-Requires-Dist: asn1crypto>=1.5.1
-Description-Content-Type: text/markdown
-
 # Scramp
 
 A Python implementation of the [SCRAM authentication protocol](

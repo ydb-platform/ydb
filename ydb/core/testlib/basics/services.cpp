@@ -341,6 +341,10 @@ namespace NPDisk {
             app.AddHive(0);
         }
 
+        while (app.Icb.size() < runtime.GetNodeCount()) {
+            app.Icb.emplace_back(new TControlBoard);
+        }
+
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
             SetupStateStorageGroups(runtime, nodeIndex);
             NKikimrProto::TKeyConfig keyConfig;

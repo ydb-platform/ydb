@@ -72,7 +72,7 @@ public:
         appData->IoContextFactory = IoContext.get();
 
         Runtime->SetLogBackend(IsLowVerbose ? CreateStderrBackend() : CreateNullBackend());
-        Runtime->Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}});
+        Runtime->Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}, {}});
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK, NLog::PRI_NOTICE);
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK_SYSLOG, NLog::PRI_NOTICE);
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK_TEST, NLog::PRI_DEBUG);

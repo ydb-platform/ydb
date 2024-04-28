@@ -1,5 +1,4 @@
 #include "blobstorage_syncer_localwriter.h"
-#include <library/cpp/digest/sfh/sfh.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgwriter.h>
 

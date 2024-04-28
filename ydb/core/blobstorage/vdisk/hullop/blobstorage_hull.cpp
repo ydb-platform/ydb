@@ -2,7 +2,6 @@
 #include "blobstorage_hullactor.h"
 #include "hullop_delayedresp.h"
 #include "hullop_compactfreshappendix.h"
-#include <library/cpp/digest/sfh/sfh.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hulllogcutternotify.h>
 #include <ydb/core/blobstorage/base/vdisk_sync_common.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>

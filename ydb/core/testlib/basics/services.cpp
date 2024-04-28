@@ -347,7 +347,7 @@ namespace NPDisk {
             if (const auto it = app.Keys.find(nodeIndex); it != app.Keys.end()) {
                 keyConfig = it->second;
             }
-            SetupIcb(runtime, nodeIndex, app.ImmediateControlsConfig, app.Icb);
+            SetupIcb(runtime, nodeIndex, app.ImmediateControlsConfig, app.Icb[nodeIndex]);
             SetupBSNodeWarden(runtime, nodeIndex, disk.MakeWardenConf(*app.Domains, keyConfig));
 
             SetupTabletResolver(runtime, nodeIndex);

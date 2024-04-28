@@ -343,7 +343,7 @@ TColumnConverter ArrowInt64AsYqlTimestamp(const std::shared_ptr<arrow::DataType>
 
 TColumnConverter ArrowUInt64AsYqlTimestamp(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, NDB::FormatSettings::TimestampFormat timestampFormat) {
     return [targetType, isOptional, multiplier=GetMultiplierForTimestamp(timestampFormat)](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional 
+        return isOptional
                 ? ArrowTypeAsYqlTimestamp<true, ui64>(targetType, value, multiplier)
                 : ArrowTypeAsYqlTimestamp<false, ui64>(targetType, value, multiplier);
     };
@@ -367,7 +367,7 @@ TColumnConverter ArrowUInt16AsYqlTimestamp(const std::shared_ptr<arrow::DataType
 
 TColumnConverter ArrowTimestampAsYqlTimestamp(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::TimeUnit::type timeUnit) {
     return [targetType, isOptional, multiplier=GetMultiplierForTimestamp(timeUnit)](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional 
+        return isOptional
                 ? ArrowTypeAsYqlTimestamp<true, i64>(targetType, value, multiplier)
                 : ArrowTypeAsYqlTimestamp<false, i64>(targetType, value, multiplier);
     };
@@ -378,7 +378,7 @@ TColumnConverter ArrowDate32AsYqlDate(const std::shared_ptr<arrow::DataType>& ta
         throw parquet::ParquetException(TStringBuilder() << "millisecond accuracy does not fit into the date");
     }
     return [targetType, isOptional](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional 
+        return isOptional
                 ? ArrowDate32AsYqlDate<true>(targetType, value)
                 : ArrowDate32AsYqlDate<false>(targetType, value);
     };
@@ -523,8 +523,14 @@ TColumnConverter BuildColumnConverter(const std::string& columnName, const std::
         return {};
     }
 
-    YQL_ENSURE(arrow::compute::CanCast(*originalType, *targetType), "Mismatch type for field: " << columnName << ", expected: "
-        << targetType->ToString() << ", got: " << originalType->ToString());
+    // YQL_ENSURE(arrow::compute::CanCast(*originalType, *targetType), "Mismatch type for field: " << columnName << ", expected: "
+        // << targetType->ToString() << ", got: " << originalType->ToString());
+    if (Y_UNLIKELY(!arrow::compute::CanCast(*originalType, *targetType))) {
+        throw parquet::ParquetException(
+            TStringBuilder() << "Mismatch type for field: " << columnName <<
+                ", expected: " << targetType->ToString() << ", got: " << originalType->ToString()
+        );
+    }
 
 
     return [targetType](const std::shared_ptr<arrow::Array>& value) {

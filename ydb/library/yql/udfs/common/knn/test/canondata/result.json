@@ -1,4 +1,9 @@
 {
+    "test.test[BitIndexesAlice]": [
+        {
+            "uri": "file://test.test_BitIndexesAlice_/results.txt"
+        }
+    ],
     "test.test[BitIndexes]": [
         {
             "uri": "file://test.test_BitIndexes_/results.txt"

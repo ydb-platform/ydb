@@ -1022,9 +1022,6 @@
             "checksum": "83bf749394c8035e5f04d3cf2e23c44c",
             "size": 9246,
             "uri": "https://{canondata_backend}/1784826/6c4ac0f02ea872d52d4b59ee9d0f2b2963fe6800/resource.tar.gz#test.test_expr-struct_merge-default.txt-Results_/results.txt"
-        },
-        {
-            "uri": "file://test.test_expr-struct_merge-default.txt-Results_/extracted"
         }
     ],
     "test.test[flatten_by-flatten_one_field--Debug]": [

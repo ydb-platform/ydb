@@ -1,5 +1,0 @@
-<tmp_path>/program.sql:<main>: Warning: Parse Sql
-
-    <tmp_path>/program.sql:<main>:3:11: Warning: Symbol $name is not used
-    	$merge = ($name, $l, $r) -> { return Coalesce($l, 0) + Coalesce($r, 0); };
-	          ^

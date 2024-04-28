@@ -980,9 +980,6 @@
             "checksum": "b4dd508a329723c74293d80f0278c705",
             "size": 505,
             "uri": "https://{canondata_backend}/1775059/79f40817d9be6347f8a0a937bdd3c46c326ab7d3/resource.tar.gz#test.test_expr-struct_merge-default.txt-Analyze_/plan.txt"
-        },
-        {
-            "uri": "file://test.test_expr-struct_merge-default.txt-Analyze_/extracted"
         }
     ],
     "test.test[expr-struct_merge-default.txt-Debug]": [
@@ -999,11 +996,7 @@
             "uri": "https://{canondata_backend}/1775059/79f40817d9be6347f8a0a937bdd3c46c326ab7d3/resource.tar.gz#test.test_expr-struct_merge-default.txt-Plan_/plan.txt"
         }
     ],
-    "test.test[expr-struct_merge-default.txt-Results]": [
-        {
-            "uri": "file://test.test_expr-struct_merge-default.txt-Results_/extracted"
-        }
-    ],
+    "test.test[expr-struct_merge-default.txt-Results]": [],
     "test.test[flatten_by-flatten_one_field--Analyze]": [
         {
             "checksum": "dfeb435c40cd1a0a98c74310e1507366",

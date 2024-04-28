@@ -19,7 +19,7 @@ public:
     TWriter(TFsPath& path)
         : Path_(path)
         , Storage_(MakeMemoryQStorage())
-        , Writer_(Storage_->MakeWriter(""))
+        , Writer_(Storage_->MakeWriter("", {}))
     {
     }
 
@@ -87,15 +87,17 @@ public:
         }
     }
 
-    IQWriterPtr MakeWriter(const TString& operationId) const final {
+    IQWriterPtr MakeWriter(const TString& operationId, const TQWriterSettings& settings) const final {
+        Y_UNUSED(settings);
         auto opPath = Folder_ / operationId;
         return std::make_shared<TWriter>(opPath);
     }
 
-    IQReaderPtr MakeReader(const TString& operationId) const final {
+    IQReaderPtr MakeReader(const TString& operationId, const TQReaderSettings& settings) const final {
+        Y_UNUSED(settings);
         auto memory = MakeMemoryQStorage();
         LoadFile(operationId, memory);
-        return memory->MakeReader("");
+        return memory->MakeReader("", {});
     }
 
     IQIteratorPtr MakeIterator(const TString& operationId, const TQIteratorSettings& settings) const {
@@ -111,7 +113,7 @@ private:
             return;
         }
 
-        auto writer = memory->MakeWriter("");
+        auto writer = memory->MakeWriter("", {});
         TFileInput indexFile(indexPath.GetPath());
         ui64 totalItems, loadedTotalBytes, loadedChecksum;
         indexFile.LoadOrFail(&totalItems, sizeof(totalItems));

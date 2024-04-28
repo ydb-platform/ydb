@@ -641,10 +641,10 @@ int RunMain(int argc, const char* argv[])
 
     if (res.Has("replay")) {
         qStorage = MakeFileQStorage(qStorageDir);
-        qContext = TQContext(qStorage->MakeReader(opId));
+        qContext = TQContext(qStorage->MakeReader(opId, {}));
     } else if (res.Has("capture")) {
         qStorage = MakeFileQStorage(qStorageDir);
-        qContext = TQContext(qStorage->MakeWriter(opId));
+        qContext = TQContext(qStorage->MakeWriter(opId, {}));
     }
 
     if (res.Has("dq-host")) {

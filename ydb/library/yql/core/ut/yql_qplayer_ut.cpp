@@ -43,16 +43,20 @@ void WithTables(const F&& f) {
     f(tables);
 }
 
-bool RunProgram(bool optimizeOnly, const TString& sourceCode, const TQContext& qContext, bool isSql, bool withUdfs,
-    const THashMap<TString, TString>& tables) {
+struct TRunSettings {
+    bool IsSql = true;
+    THashMap<TString, TString> Tables;
+};
+
+bool RunProgram(bool replay, const TString& query, const TQContext& qContext, const TRunSettings& runSettings) {
     auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
-    if (withUdfs) {
+    if (!replay) {
         auto cloned = functionRegistry->Clone();
         NKikimr::NMiniKQL::FillStaticModules(*cloned);
         functionRegistry = cloned;
     }
 
-    auto yqlNativeServices = NFile::TYtFileServices::Make(functionRegistry.Get(), tables, {}, "");
+    auto yqlNativeServices = NFile::TYtFileServices::Make(functionRegistry.Get(), runSettings.Tables, {}, "");
     auto ytGateway = CreateYtFileGateway(yqlNativeServices);
 
     TVector<TDataProviderInitializer> dataProvidersInit;
@@ -60,9 +64,9 @@ bool RunProgram(bool optimizeOnly, const TString& sourceCode, const TQContext& q
     TProgramFactory factory(true, functionRegistry.Get(), 0ULL, dataProvidersInit, "ut");
     factory.SetUdfResolver(NCommon::CreateSimpleUdfResolver(functionRegistry.Get()));
 
-    TProgramPtr program = factory.Create("-stdin-", sourceCode);
+    TProgramPtr program = factory.Create("-stdin-", query);
     program->SetQContext(qContext);
-    if (isSql) {
+    if (runSettings.IsSql) {
         if (!program->ParseSql()) {
             program->PrintErrorsTo(Cerr);
             return false;
@@ -77,7 +81,7 @@ bool RunProgram(bool optimizeOnly, const TString& sourceCode, const TQContext& q
         return false;
     }
 
-    TProgram::TStatus status = optimizeOnly ? 
+    TProgram::TStatus status = replay ? 
         program->Optimize(GetUsername()) :
         program->Run(GetUsername());
     if (status == TProgram::TStatus::Error) {
@@ -87,13 +91,13 @@ bool RunProgram(bool optimizeOnly, const TString& sourceCode, const TQContext& q
     return status == TProgram::TStatus::Ok;
 }
 
-void CheckProgram(const TString& sql, const THashMap<TString, TString>& tables, bool isSql = true) {
+void CheckProgram(const TString& query, const TRunSettings& runSettings) {
     auto qStorage = MakeMemoryQStorage();
-    TQContext savingCtx(qStorage->MakeWriter("foo"));
-    UNIT_ASSERT(RunProgram(false, sql, savingCtx, isSql, true, tables));
+    TQContext savingCtx(qStorage->MakeWriter("foo", {}));
+    UNIT_ASSERT(RunProgram(false, query, savingCtx, runSettings));
     savingCtx.GetWriter()->Commit().GetValueSync();
-    TQContext loadingCtx(qStorage->MakeReader("foo"));
-    UNIT_ASSERT(RunProgram(true, "", loadingCtx, isSql, false, tables));
+    TQContext loadingCtx(qStorage->MakeReader("foo", {}));
+    UNIT_ASSERT(RunProgram(true, "", loadingCtx, runSettings));
 }
 
 Y_UNIT_TEST_SUITE(QPlayerTests) {
@@ -132,30 +136,38 @@ Y_UNIT_TEST_SUITE(QPlayerTests) {
 )
         )";
         
-        CheckProgram(s, {}, false);
+        TRunSettings runSettings;
+        runSettings.IsSql = false;
+        CheckProgram(s, runSettings);
     }
 
     Y_UNIT_TEST(SimpleSql) {
         auto s = "select 1";
-        CheckProgram(s, {});
+        TRunSettings runSettings;
+        CheckProgram(s, runSettings);
     }
 
     Y_UNIT_TEST(Udf) {
         auto s = "select String::AsciiToUpper('a')";
-        CheckProgram(s, {});
+        TRunSettings runSettings;
+        CheckProgram(s, runSettings);
     }
     
     Y_UNIT_TEST(YtGetFolder) {
         auto s = "select * from plato.folder('','_yql_row_spec')";
         WithTables([&](const auto& tables) {
-            CheckProgram(s, tables);
+            TRunSettings runSettings;
+            runSettings.Tables = tables;
+            CheckProgram(s, runSettings);
         });
     }
 
     Y_UNIT_TEST(YtGetTableInfo) {
         auto s = "select * from plato.Input";
         WithTables([&](const auto& tables) {
-            CheckProgram(s, tables);
+            TRunSettings runSettings;
+            runSettings.Tables = tables;
+            CheckProgram(s, runSettings);
         });
     }
 }

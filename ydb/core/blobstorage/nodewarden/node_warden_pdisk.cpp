@@ -214,7 +214,7 @@ namespace NKikimr::NStorage {
 
         const ui64 cookie = NextConfigCookie++;
         SendToController(std::move(ev), cookie);
-        ConfigInFlight.emplace(cookie, [=](TEvBlobStorage::TEvControllerConfigResponse *ev) {
+        ConfigInFlight.emplace(cookie, [=, this](TEvBlobStorage::TEvControllerConfigResponse *ev) {
             if (auto node = PDiskRestartRequests.extract(requestCookie)) {
                 if (!ev || !ev->Record.GetResponse().GetSuccess()) {
                     OnUnableToRestartPDisk(node.mapped(), ev ? ev->Record.GetResponse().GetErrorDescription() : "BSC disconnected");
@@ -224,6 +224,11 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status) {
+        if (PDiskRestartInFlight.erase(pdiskId) == 0) {
+            // There was no restart in progress.
+            return;
+        }
+
         const TPDiskKey pdiskKey(LocalNodeId, pdiskId);
 
         const TVSlotId from(pdiskKey.NodeId, pdiskKey.PDiskId, 0);
@@ -236,7 +241,6 @@ namespace NKikimr::NStorage {
             for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
                 auto& [key, value] = *it;
 
-                PoisonLocalVDisk(value);
                 vdisks << (std::exchange(first, false) ? "" : ", ") << value.GetVDiskId().ToString();
                 if (const auto it = SlayInFlight.find(key); it != SlayInFlight.end()) {
                     const ui64 round = NextLocalPDiskInitOwnerRound();
@@ -276,6 +280,24 @@ namespace NKikimr::NStorage {
             StartLocalPDisk(pdisk);
             SendPDiskReport(pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::PD_RESTARTED);
             return;
+        }
+
+        const auto [_, inserted] = PDiskRestartInFlight.emplace(pdiskId);
+
+        if (!inserted) {
+            // Restart is already in progress.
+            return;
+        }
+
+        const TPDiskKey pdiskKey(LocalNodeId, pdiskId);
+
+        const TVSlotId from(pdiskKey.NodeId, pdiskKey.PDiskId, 0);
+        const TVSlotId to(pdiskKey.NodeId, pdiskKey.PDiskId, Max<ui32>());
+
+        for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
+            auto& [key, value] = *it;
+
+            PoisonLocalVDisk(value);
         }
 
         TIntrusivePtr<TPDiskConfig> pdiskConfig = CreatePDiskConfig(it->second.Record);

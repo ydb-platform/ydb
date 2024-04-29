@@ -333,6 +333,7 @@ void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Complete")("tablet_id", Self->TabletID())("event", "initialize_shard");
     AFL_VERIFY(!Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
     Changes->ApplyOnComplete(Self->NormalizerController);
+    Self->NormalizerController.GetNormalizer()->OnResultReady();
     if (Self->NormalizerController.GetNormalizer()->WaitResult()) {
         return;
     }
@@ -374,13 +375,12 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
         }
     }
 
-    if (!Self->NormalizerController.HasLastKnownVersion()) {
-        NIceDb::TNiceDb db(txc.DB);
-        ui64 lastVersion;
-        if (Schema::GetSpecialValue(db, Schema::EValueIds::LastNormalizerVersion, lastVersion)) {
-            Self->NormalizerController.SetLastKnownVersion(lastVersion);
-        }
-    }
+
+//    NIceDb::TNiceDb db(txc.DB);
+//    ui64 lastVersion;
+//    if (Schema::GetSpecialValue(db, Schema::EValueIds::LastNormalizerVersion, lastVersion)) {
+//        Self->NormalizerController.SetLastKnownVersion(lastVersion);
+//    }
 
     // Enable compression for the SmallBlobs table
     const auto* smallBlobsDefaultColumnFamily = txc.DB.GetScheme().DefaultFamilyFor(Schema::SmallBlobs::TableId);

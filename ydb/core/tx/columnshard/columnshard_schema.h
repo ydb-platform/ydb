@@ -524,7 +524,7 @@ struct Schema : NIceDb::Schema {
         return false;
     }
 
-     template <typename T>
+    template <typename T>
     static bool GetSpecialValueOpt(NIceDb::TNiceDb& db, EValueIds key, T& value) {
         using TSource = std::conditional_t<std::is_integral_v<T> || std::is_enum_v<T>, Value::Digit, Value::Bytes>;
 

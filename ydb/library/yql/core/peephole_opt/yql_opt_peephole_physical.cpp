@@ -8123,6 +8123,11 @@ TExprNode::TPtr DropAssume(const TExprNode::TPtr& node, TExprContext&) {
     return node->HeadPtr();
 }
 
+TExprNode::TPtr DropEmptyFrom(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content();
+    return ctx.NewCallable(node->Pos(), GetEmptyCollectionName(node->GetTypeAnn()), {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
+}
+
 TExprNode::TPtr OptimizeCoalesce(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto& input = node->Head(); input.IsCallable("If") && input.ChildrenSize() == 3U &&
         (input.Child(1U)->IsComplete() || input.Child(2U)->IsComplete())) {
@@ -8307,6 +8312,7 @@ struct TPeepHoleRules {
         {"AssumeUnique", &DropAssume},
         {"AssumeDistinct", &DropAssume},
         {"AssumeChopped", &DropAssume},
+        {"EmptyFrom", &DropEmptyFrom},
         {"Top", &OptimizeTopOrSort<false, true>},
         {"TopSort", &OptimizeTopOrSort<true, true>},
         {"Sort", &OptimizeTopOrSort<true, false>},

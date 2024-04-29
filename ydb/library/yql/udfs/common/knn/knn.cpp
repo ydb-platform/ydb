@@ -12,19 +12,9 @@ using namespace NYql;
 using namespace NYql::NUdf;
 
 
-SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TToBinaryString, char*(TAutoMap<TListType<float>>, TOptional<const char*>), 1) {
+SIMPLE_STRICT_UDF(TToBinaryString, char*(TAutoMap<TListType<float>>)) {
     const TUnboxedValuePod x = args[0];
-
-    EFormat format = EFormat::FloatVector;
-    if(args[1]) {
-        const TStringRef formatStr = args[1].AsStringRef();
-        if (formatStr == "float")
-            format = EFormat::FloatVector;
-        else if (formatStr == "bit")
-            format = EFormat::BitVector;
-        else
-            return {};
-    }
+    const EFormat format = EFormat::FloatVector; // will be taken from args in future
     
     return TSerializerFacade::Serialize(format, valueBuilder, x);
 }
@@ -76,6 +66,12 @@ SIMPLE_STRICT_UDF(TCosineDistance, TOptional<float>(TAutoMap<const char*>, TAuto
     return TUnboxedValuePod{1 - cosine};
 }
 
+SIMPLE_STRICT_UDF(TToBitString, char*(TAutoMap<TListType<float>>)) {
+    const TUnboxedValuePod x = args[0];
+    
+    return TBitVectorSerializer::Serialize(valueBuilder, x);
+}
+
 ui32 GetManhattenDistance(const TArrayRef<const ui64> vector1, const TArrayRef<const ui64> vector2) {
     Y_ABORT_UNLESS(vector1.size() == vector2.size());
 
@@ -89,8 +85,8 @@ ui32 GetManhattenDistance(const TArrayRef<const ui64> vector1, const TArrayRef<c
 SIMPLE_STRICT_UDF(TBitIndexes, TOptional<TListType<ui32>>(TAutoMap<const char*>, TAutoMap<const char*>)) {
     Y_UNUSED(valueBuilder);
 
-    const TArrayRef<const ui64> targetVector = TSerializerFacade::GetArray64(args[0].AsStringRef()); 
-    const TArrayRef<const ui64> storedVector = TSerializerFacade::GetArray64(args[1].AsStringRef()); 
+    const TArrayRef<const ui64> targetVector = TBitVectorSerializer::GetArray64(args[0].AsStringRef()); 
+    const TArrayRef<const ui64> storedVector = TBitVectorSerializer::GetArray64(args[1].AsStringRef()); 
 
     if (targetVector.empty() || storedVector.empty() || storedVector.size() % targetVector.size() != 0)
         return {};    
@@ -124,6 +120,7 @@ SIMPLE_MODULE(TKnnModule,
     TInnerProductSimilarity,
     TCosineSimilarity,
     TCosineDistance,
+    TToBitString,
     TBitIndexes
     )
 

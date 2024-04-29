@@ -12,8 +12,7 @@ using namespace NYql;
 using namespace NYql::NUdf;
 
 enum EFormat : ui8 {
-    FloatVector = 1,
-    BitVector = 10
+    FloatVector = 1
 };
 
 static constexpr size_t HeaderLen = sizeof(ui8);
@@ -104,13 +103,11 @@ public:
             if (filledBits)
                 return false;
 
-            const EFormat format = EFormat::BitVector;
-            outStream.Write(&format, HeaderLen);
             return true;
         };
 
         if (x.HasFastListLength()) {
-            auto str = valueBuilder->NewStringNotFilled(HeaderLen + x.GetListLength() / 8);
+            auto str = valueBuilder->NewStringNotFilled(x.GetListLength() / 8);
             auto strRef = str.AsStringRef();
             TMemoryOutput memoryOutput(strRef.Data(), strRef.Size());
 
@@ -131,7 +128,7 @@ public:
 
     static const TArrayRef<const ui64> GetArray64(const TStringRef& str) {
         const char* buf = str.Data();
-        const size_t len = (str.Size() - HeaderLen) / sizeof(ui64);
+        const size_t len = (str.Size()) / sizeof(ui64);
 
         return MakeArrayRef(reinterpret_cast<const ui64*>(buf), len);
     }
@@ -143,8 +140,6 @@ public:
         switch (format) {
             case EFormat::FloatVector:
                 return TFloatVectorSerializer::Serialize(valueBuilder, x);
-            case EFormat::BitVector:
-                return TBitVectorSerializer::Serialize(valueBuilder, x);
             default:
                 return {};
         }
@@ -158,8 +153,6 @@ public:
         switch (format) {
             case EFormat::FloatVector:
                 return TFloatVectorSerializer::Deserialize(valueBuilder, str);
-            case EFormat::BitVector:
-                return {};
             default:
                 return {};
         }
@@ -173,21 +166,6 @@ public:
         switch (format) {
             case EFormat::FloatVector:
                 return TFloatVectorSerializer::GetArray(str);
-            case EFormat::BitVector:
-                return {};
-            default:
-                return {};
-        }
-    }
-
-    static const TArrayRef<const ui64> GetArray64(const TStringRef& str) {
-        if (str.Size() == 0)
-            return {};
-
-        const ui8 format = str.Data()[str.Size() - HeaderLen];
-        switch (format) {
-            case EFormat::BitVector:
-                return TBitVectorSerializer::GetArray64(str);
             default:
                 return {};
         }

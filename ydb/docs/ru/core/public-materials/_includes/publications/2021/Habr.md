@@ -1,5 +1,7 @@
 ### Бессерверная альтернатива традиционным базам данных {#2021-smi-serverless}
 
+{% include notitle [overview_tag](../../tags.md#overview) %}
+
 ![Бессерверная альтернатива традиционным базам данных](./_includes/serverless.png ={{pub-cover-size}})
 
 Современная распределенная СУБД должна уметь поддерживать различные типы нагрузки, удовлетворяя запросы совершенно разных пользователей. СУБД {{ ydb-name }} позволяет не только хранить петабайты данных, поддерживать обработку миллионов запросов в секунду, но и предоставляет режим бессерверных вычислений. Эта платформа дает возможность обслуживать проекты с различными типами нагрузки: ключ-значение, традиционные веб-приложения на основе реляционной базы, а также документоориентированные базы данных.
@@ -12,11 +14,15 @@
 
 ### Погружение в Serverless. Рождение {{ ydb-name }} {#2021-smi-inner-serverless}
 
+{% include notitle [database_internals_tag](../../tags.md#database_internals) %}
+
 ![Погружение в Serverless](./_includes/inner-serverless.png ={{pub-cover-size}})
 
 Продолжение беседы с разработчиками экосистемы сервисов Serverless. В начале нашего путешествия Глеб Борисов описал ситуацию с Yandex Cloud Function, затем Данил Ошеров погрузил нас в мир протокола S3 и сервиса Object Storage. В этой [статье](https://habr.com/ru/post/552032/) [ {{ team.fomichev.name }} ]( {{ team.fomichev.profile }} ) ( {{ team.fomichev.position }} ) поделился подробностями о NewSQL.
 
 ### Мультиарендный подход Яндекса к построению инфраструктуры работы с данными {#2021-smi-multiarend}
+
+{% include notitle [overview_tag](../../tags.md#overview) %}
 
 @[YouTube](https://youtu.be/35Q2338ywEw)
 
@@ -25,6 +31,8 @@
 В [статье](https://habr.com/ru/company/yandex/blog/564854/) [ {{ team.fomichev.name }} ]( {{ team.fomichev.profile }} ) ( {{ team.fomichev.position }} ) рассказал о бессерверных решениях, которые еще до всеобщего хайпа стали популярны в Яндексе и по-прежнему используются для хранения и обработки данных.
 
 ### Готовим c serverless. Голосовой сервис записи к врачу и регистрации в поликлинике {#2021-smi-serverless-cook}
+
+{% include notitle [use_cases_tag](../../tags.md#use_cases) %}
 
 ![Готовим c serverless](./_includes/serverless-cook.png ={{pub-cover-size}})
 

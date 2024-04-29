@@ -2,6 +2,8 @@
 
 Публичные материалы о {{ ydb-short-name }} в СМИ.
 
+{% include [tags_list](./tags_list.md) %}
+
 {% list tabs %}
 
   - 2024

@@ -52,8 +52,7 @@ struct Schema : NIceDb::Schema {
         OperationTxIdsId,
         BackupIdsDeprecated,
         ExportSessionsId,
-        PortionsTableId,
-        NormalizerVersionId
+        PortionsTableId
     };
 
     enum class ETierTables: ui32 {
@@ -78,6 +77,7 @@ struct Schema : NIceDb::Schema {
         OwnerPath = 12,
         LastCompletedStep = 13,
         LastCompletedTxId = 14,
+        LastNormalizerVersion = 15,
     };
 
     enum class EInsertTableIds : ui8 {
@@ -465,14 +465,6 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, PortionId, SchemaVersion, XPlanStep, XTxId, Metadata>;
     };
 
-    struct NormalizerVersion: NIceDb::Schema::Table<NormalizerVersionId> {
-        struct FakeKey: Column<1, NScheme::NTypeIds::String> {};
-        struct LastKnownVersion: Column<2, NScheme::NTypeIds::String> {};
-
-        using TKey = TableKey<FakeKey>;
-        using TColumns = TableColumns<FakeKey, LastKnownVersion>;
-    };
-
     using TTables = SchemaTables<
         Value,
         TxInfo,
@@ -524,8 +516,23 @@ struct Schema : NIceDb::Schema {
 
         auto rowset = db.Table<Value>().Key((ui32)key).Select<TSource>();
         if (rowset.IsReady()) {
-            if (rowset.IsValid())
+            if (rowset.IsValid()) {
                 value = T{rowset.template GetValue<TSource>()};
+                return true;
+            }
+        }
+        return false;
+    }
+
+     template <typename T>
+    static bool GetSpecialValueOpt(NIceDb::TNiceDb& db, EValueIds key, T& value) {
+        using TSource = std::conditional_t<std::is_integral_v<T> || std::is_enum_v<T>, Value::Digit, Value::Bytes>;
+
+        auto rowset = db.Table<Value>().Key((ui32)key).Select<TSource>();
+        if (rowset.IsReady()) {
+            if (rowset.IsValid()) {
+                value = T{rowset.template GetValue<TSource>()};
+            }
             return true;
         }
         return false;

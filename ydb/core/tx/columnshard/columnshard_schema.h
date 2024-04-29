@@ -52,7 +52,8 @@ struct Schema : NIceDb::Schema {
         OperationTxIdsId,
         BackupIdsDeprecated,
         ExportSessionsId,
-        PortionsTableId
+        PortionsTableId,
+        NormalizerVersionId
     };
 
     enum class ETierTables: ui32 {
@@ -462,6 +463,14 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<PathId, PortionId>;
         using TColumns = TableColumns<PathId, PortionId, SchemaVersion, XPlanStep, XTxId, Metadata>;
+    };
+
+    struct NormalizerVersion: NIceDb::Schema::Table<NormalizerVersionId> {
+        struct FakeKey: Column<1, NScheme::NTypeIds::String> {};
+        struct LastKnownVersion: Column<2, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<FakeKey>;
+        using TColumns = TableColumns<FakeKey, LastKnownVersion>;
     };
 
     using TTables = SchemaTables<

@@ -6,7 +6,7 @@
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
-<div>
+</div>
 
 {{ ydb-short-name }} – это платформа, которая умеет обрабатывать большой поток быстрых транзакций (OLTP, Online Transaction Processing). Команда, в которой работает {{ team.novozhilova.name }} ({{ team.novozhilova.position }}) захотела научить YDB обрабатывать другой тип запросов — аналитические (OLAP, Online Analytical Processing). 
 

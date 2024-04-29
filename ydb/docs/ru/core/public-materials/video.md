@@ -59,9 +59,6 @@
 
     {% include [YaTalks](./_includes/conferences/2023/YaTalks.md) %}
 
-
-  - 2023 (HighLoad)  
-
     {% include [HighLoad_part_1](./_includes/conferences/2023/HighLoad_part_1.md) %}
 
     {% include [HighLoad_part_2](./_includes/conferences/2023/HighLoad_part_2.md) %}

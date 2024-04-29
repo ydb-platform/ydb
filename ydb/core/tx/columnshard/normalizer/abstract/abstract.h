@@ -47,7 +47,7 @@ namespace NKikimr::NOlap {
     };
 
 
-    enum class ENormalizersList {
+    enum class ENormalizersList : ui32 {
         Granules = 1,
         Chunks,
         PortionsMetadata,
@@ -123,7 +123,7 @@ namespace NKikimr::NOlap {
             }
 
             TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
-                if (controller.HasLastKnownVersion() && controller.GetLastKnownVersionUnsafe() >= (ui64) GetType()) {
+                if (controller.HasLastKnownVersion() && controller.GetLastKnownVersionUnsafe() >= (ui32) GetType()) {
                     return std::vector<INormalizerTask::TPtr>();
                 }
                 return DoInit(controller, txc);
@@ -144,7 +144,7 @@ namespace NKikimr::NOlap {
         ui64 CurrentNormalizerIndex = 0;
         std::vector<TNormalizerCounters> Counters;
         YDB_READONLY(ENormalizersList, LastRegisteredNormalizer, ENormalizersList::Granules);
-        YDB_OPT(ui64, LastKnownVersion);
+        YDB_OPT(ui32, LastKnownVersion);
 
     private:
         void RegisterNormalizer(INormalizerComponent::TPtr normalizer);

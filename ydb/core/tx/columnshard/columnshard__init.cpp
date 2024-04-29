@@ -65,16 +65,16 @@ bool TTxInit::Precharge(TTransactionContext& txc) {
     ready = ready & Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::IndexCounters>(db, txc.DB.GetScheme());
 
-    ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::CurrentSchemeShardId, Self->CurrentSchemeShardId);
-    ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastSchemaSeqNoGeneration, Self->LastSchemaSeqNo.Generation);
-    ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastSchemaSeqNoRound, Self->LastSchemaSeqNo.Round);
+    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::CurrentSchemeShardId, Self->CurrentSchemeShardId);
+    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastSchemaSeqNoGeneration, Self->LastSchemaSeqNo.Generation);
+    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastSchemaSeqNoRound, Self->LastSchemaSeqNo.Round);
     ready = ready && Schema::GetSpecialProtoValue(db, Schema::EValueIds::ProcessingParams, Self->ProcessingParams);
-    ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastWriteId, Self->LastWriteId);
-    ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastPlannedStep, Self->LastPlannedStep);
-    ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastPlannedTxId, Self->LastPlannedTxId);
-    ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo);
-    ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::OwnerPathId, Self->OwnerPathId);
-    ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::OwnerPath, Self->OwnerPath);
+    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastWriteId, Self->LastWriteId);
+    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastPlannedStep, Self->LastPlannedStep);
+    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastPlannedTxId, Self->LastPlannedTxId);
+    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo);
+    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::OwnerPathId, Self->OwnerPathId);
+    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::OwnerPath, Self->OwnerPath);
 
 
     {
@@ -227,10 +227,6 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
     LOG_S_DEBUG("TTxInit.Execute at tablet " << Self->TabletID());
 
-    NIceDb::TNiceDb db(txc.DB);
-    db.Table<Schema::NormalizerVersion>().Key("version").Update(
-                NIceDb::TUpdate<Schema::NormalizerVersion::LastKnownVersion>((ui64)Self->NormalizerController.GetLastRegisteredNormalizer()));
-
     try {
         SetDefaults();
         return ReadEverything(txc, ctx);
@@ -268,24 +264,6 @@ public:
 bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
     ACFL_INFO("step", "TTxUpdateSchema.Execute_Start")("details", Self->NormalizerController.DebugString());
-
-    if (!Self->NormalizerController.HasLastKnownVersion()) {
-        NIceDb::TNiceDb db(txc.DB);
-
-        auto rowset = db.Table<Schema::NormalizerVersion>().Prefix("version").Select();
-        if (!rowset.IsReady()) {
-            return false;
-        }
-
-        if (!rowset.EndOfSet()) {
-            NOlap::ENormalizersList lastKnownVersion;
-            const TString version = rowset.GetValue<Schema::NormalizerVersion::LastKnownVersion>();
-            if (!TryFromString(version, lastKnownVersion)) {
-                return false;
-            }
-            Self->NormalizerController->SetLastKnownVersion(lastKnownVersion);
-        }
-    }
 
     while (!Self->NormalizerController.IsNormalizationFinished()) {
         auto normalizer = Self->NormalizerController.GetNormalizer();
@@ -342,14 +320,19 @@ private:
 bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&) {
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Execute")("details", Self->NormalizerController.DebugString());
-    return Changes->ApplyOnExecute(txc, Self->NormalizerController);
+    if (!Changes->ApplyOnExecute(txc, Self->NormalizerController)) {
+        return false;
+    }
+
+    NIceDb::TNiceDb db(txc.DB);
+    Schema::SaveSpecialValue(db, Schema::EValueIds::LastNormalizerVersion, (ui64)Self->NormalizerController.GetNormalizer()->GetType());
+    return true;
 }
 
 void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Complete")("tablet_id", Self->TabletID())("event", "initialize_shard");
     AFL_VERIFY(!Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
     Changes->ApplyOnComplete(Self->NormalizerController);
-    Self->NormalizerController.GetNormalizer()->OnResultReady();
     if (Self->NormalizerController.GetNormalizer()->WaitResult()) {
         return;
     }
@@ -388,6 +371,14 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
         auto localBaseModifier = NYDBTest::TControllers::GetColumnShardController()->BuildLocalBaseModifier();
         if (localBaseModifier) {
             localBaseModifier->Apply(txc);
+        }
+    }
+
+    if (!Self->NormalizerController.HasLastKnownVersion()) {
+        NIceDb::TNiceDb db(txc.DB);
+        ui64 lastVersion;
+        if (Schema::GetSpecialValue(db, Schema::EValueIds::LastNormalizerVersion, lastVersion)) {
+            Self->NormalizerController.SetLastKnownVersion(lastVersion);
         }
     }
 

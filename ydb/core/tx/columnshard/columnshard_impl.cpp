@@ -41,12 +41,6 @@
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 
-
-#include <ydb/core/tx/columnshard/normalizer/granule/normalizer.h>
-#include <ydb/core/tx/columnshard/normalizer/portion/portion.h>
-#include <ydb/core/tx/columnshard/normalizer/portion/chunks.h>
-#include <ydb/core/tx/columnshard/normalizer/portion/clean.h>
-
 namespace NKikimr::NColumnShard {
 
 // NOTE: We really want to batch log records by default in columnshards!
@@ -96,11 +90,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
         ETxTypes_descriptor
     >());
     TabletCounters = TabletCountersPtr.get();
-
-    NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TGranulesNormalizer>());
-    NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TChunksNormalizer>(Info()));
-    NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TPortionsNormalizer>(Info()));
-    NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TCleanPortionsNormalizer>(Info()));
+    NormalizerController.InitNormalizers(Info());
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {

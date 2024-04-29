@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/library/conclusion/result.h>
+#include <library/cpp/object_factory/object_factory.h>
 
 namespace NKikimr::NOlap {
 
@@ -45,15 +46,25 @@ namespace NKikimr::NOlap {
         }
     };
 
+
+    enum class ENormalizersList {
+        Granules = 1,
+        Chunks,
+        PortionsMetadata,
+        PortionsCleaner,
+        TablesCleaner
+    };
+
     class TNormalizationContext {
         YDB_ACCESSOR_DEF(TActorId, ResourceSubscribeActor);
-        YDB_ACCESSOR_DEF(TActorId, ColumnshardActor);
+        YDB_ACCESSOR_DEF(TActorId, ShardActor);
         std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
     public:
         void SetResourcesGuard(std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> rg) {
             ResourcesGuard = rg;
         }
     };
+
 
     class TNormalizationController;
 
@@ -86,34 +97,57 @@ namespace NKikimr::NOlap {
         void Start(const TNormalizationController& /* controller */, const TNormalizationContext& /*nCtx*/) override;
     };
 
-    class INormalizerComponent {
+    class TNormalizationController {
     public:
+        class INormalizerComponent {
+        public:
+            using TPtr = std::shared_ptr<INormalizerComponent>;
+            using TFactory = NObjectFactory::TParametrizedObjectFactory<INormalizerComponent, ENormalizersList, TTabletStorageInfo*>;
+
+            virtual ~INormalizerComponent() {}
+
+            bool WaitResult() const {
+                return AtomicGet(ActiveTasksCount) > 0;
+            }
+
+            void OnResultReady() {
+                AFL_VERIFY(ActiveTasksCount > 0);
+                AtomicDecrement(ActiveTasksCount);
+            }
+
+            virtual ENormalizersList GetType() const = 0;
+
+            const TString& GetName() const {
+                static TString name = ToString(GetType());
+                return name;
+            }
+
+            TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+                if (controller.HasLastKnownVersion() && controller.GetLastKnownVersionUnsafe() >= (ui64) GetType()) {
+                    return std::vector<INormalizerTask::TPtr>();
+                }
+                return DoInit(controller, txc);
+            }
+
+        protected:
+            virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+
+            TAtomic ActiveTasksCount = 0;
+        };
         using TPtr = std::shared_ptr<INormalizerComponent>;
 
-        virtual ~INormalizerComponent() {}
-
-        bool WaitResult() const {
-            return AtomicGet(ActiveTasksCount) > 0;
-        }
-
-        void OnResultReady() {
-            AFL_VERIFY(ActiveTasksCount > 0);
-            AtomicDecrement(ActiveTasksCount);
-        }
-
-        virtual const TString& GetName() const = 0;
-        virtual TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
-    protected:
-        TAtomic ActiveTasksCount = 0;
-    };
-
-    class TNormalizationController {
+    private:
         std::shared_ptr<IStoragesManager> StoragesManager;
         NOlap::NResourceBroker::NSubscribe::TTaskContext TaskSubscription;
 
-        std::vector<NOlap::INormalizerComponent::TPtr> Normalizers;
+        std::vector<INormalizerComponent::TPtr> Normalizers;
         ui64 CurrentNormalizerIndex = 0;
         std::vector<TNormalizerCounters> Counters;
+        YDB_READONLY(ENormalizersList, LastRegisteredNormalizer, ENormalizersList::Granules);
+        YDB_OPT(ui64, LastKnownVersion);
+
+    private:
+        void RegisterNormalizer(INormalizerComponent::TPtr normalizer);
 
     public:
         TNormalizationController(std::shared_ptr<IStoragesManager> storagesManager, const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>& counters)
@@ -124,7 +158,14 @@ namespace NKikimr::NOlap {
             return TaskSubscription;
         }
 
-        void RegisterNormalizer(INormalizerComponent::TPtr normalizer);
+        void InitNormalizers(TTabletStorageInfo* info) {
+            auto normalizers = GetEnumAllValues<ENormalizersList>();
+            for (auto nType : normalizers) {
+                RegisterNormalizer(std::shared_ptr<INormalizerComponent>(INormalizerComponent::TFactory::Construct(nType, info)));
+                AFL_VERIFY(LastRegisteredNormalizer <= nType)("current", ToString(nType))("last", ToString(LastRegisteredNormalizer));
+                LastRegisteredNormalizer = nType;
+            }
+        }
 
         std::shared_ptr<IStoragesManager> GetStoragesManager() const {
             AFL_VERIFY(!!StoragesManager);

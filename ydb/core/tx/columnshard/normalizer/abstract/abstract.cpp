@@ -5,11 +5,12 @@
 namespace NKikimr::NOlap {
 
     void TNormalizationController::RegisterNormalizer(INormalizerComponent::TPtr normalizer) {
+        AFL_VERIFY(normalizer);
         Counters.emplace_back(normalizer->GetName());
         Normalizers.push_back(normalizer);
     }
 
-    const INormalizerComponent::TPtr& TNormalizationController::GetNormalizer() const {
+    const TNormalizationController::INormalizerComponent::TPtr& TNormalizationController::GetNormalizer() const {
         Y_ABORT_UNLESS(CurrentNormalizerIndex < Normalizers.size());
         return Normalizers[CurrentNormalizerIndex];
     }
@@ -19,7 +20,7 @@ namespace NKikimr::NOlap {
         return Counters[CurrentNormalizerIndex];
     }
 
-    bool TNormalizationController::IsNormalizationFinished() const {
+    bool TNormalizationController::TNormalizationController::IsNormalizationFinished() const {
         return CurrentNormalizerIndex >= Normalizers.size();
     }
 
@@ -34,7 +35,7 @@ namespace NKikimr::NOlap {
     }
 
     void TTrivialNormalizerTask::Start(const TNormalizationController& /* controller */, const TNormalizationContext& nCtx) {
-        TActorContext::AsActorContext().Send(nCtx.GetColumnshardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(Changes));
+        TActorContext::AsActorContext().Send(nCtx.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(Changes));
     }
 
 }

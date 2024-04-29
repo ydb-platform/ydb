@@ -20,6 +20,7 @@
 
 [Слайды](https://presentations.ydb.tech/2023/ru/highload/olap/presentation.pdf)
 
+
 ### database/sql: плохой, хороший и злой. Опыт разработки драйвера для распределенной СУБД YDB {#2023-conf-hl-database-sql}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
@@ -33,6 +34,7 @@
 Доклад будет интересен разработчикам и пользователям драйверов в стандарте `database/sql`, а также пользователям распределенной базы данных YDB, разрабатывающим свой код на языке Golang.
 
 [Слайды](https://presentations.ydb.tech/2023/ru/golang_conf/database_sql/presentation.pdf)
+
 
 ### YDB-оптимизации производительности под ARM {#2023-conf-hl-ydb-opt}
 

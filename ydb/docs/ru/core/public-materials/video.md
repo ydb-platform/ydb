@@ -59,7 +59,12 @@
 
     {% include [YaTalks](./_includes/conferences/2023/YaTalks.md) %}
 
+
+  - 2023 (HighLoad)  
+
     {% include [HighLoad_part_1](./_includes/conferences/2023/HighLoad_part_1.md) %}
+
+    {% include [HighLoad_part_2](./_includes/conferences/2023/HighLoad_part_2.md) %}
 
 
   - 2022  
@@ -69,6 +74,7 @@
     {% include [YaTalks](./_includes/conferences/2022/YaTalks.md) %}
 
     {% include [HighLoad](./_includes/conferences/2022/HighLoad.md) %}
+
 
   - 2021  
 
@@ -80,9 +86,11 @@
 
     {% include [YaSubbotnik](./_includes/conferences/2021/YaSubbotnik.md) %}
 
+
   - 2020   
 
     {% include [YandexScale](./_includes/conferences/2020/YandexScale.md) %}
+
 
   - 2019   
 
@@ -96,9 +104,11 @@
 
     {% include [HighLoad](./_includes/conferences/2019/HighLoad.md) %}
 
+
   - 2018 
 
     {% include [about_cloud](./_includes/conferences/2018/about_cloud.md) %}
+
 
   - 2017 
 

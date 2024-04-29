@@ -102,11 +102,13 @@ public:
     {
     }
 
-    IQReaderPtr MakeReader(const TString& operationId) const final {
+    IQReaderPtr MakeReader(const TString& operationId, const TQReaderSettings& settings) const final {
+        Y_UNUSED(settings);
         return std::make_shared<TReader>(GetOperation(operationId, false)->ReadMap);
     }
 
-    IQWriterPtr MakeWriter(const TString& operationId) const final {
+    IQWriterPtr MakeWriter(const TString& operationId, const TQWriterSettings& settings) const final {
+        Y_UNUSED(settings);
         return std::make_shared<TWriter>(GetOperation(operationId, true));
     }
 

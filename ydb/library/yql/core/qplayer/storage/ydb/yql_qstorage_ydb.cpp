@@ -40,11 +40,12 @@ void ProcessString(const TString& str, ui64& totalBytes, ui64& checksum) {
 
 class TWriter : public IQWriter {
 public:
-    TWriter(const TYdbQStorageSettings& settings, const TString& operationId)
+    TWriter(const TYdbQStorageSettings& settings, const TString& operationId, const TQWriterSettings& writerSettings)
         : Settings_(settings)
         , FullOperationId_(settings.OperationIdPrefix + operationId)
         , Storage_(MakeMemoryQStorage())
-        , Writer_(Storage_->MakeWriter(""))
+        , Writer_(Storage_->MakeWriter("", {}))
+        , WrittenAt_(writerSettings.WrittenAt.GetOrElse(Now()))
     {}
 
     NThreading::TFuture<void> Put(const TQItemKey& key, const TString& value) final {
@@ -59,7 +60,6 @@ public:
 
 private:
     void SaveTable(const IQIteratorPtr& iterator) {
-        auto writtenAt = Now();
         auto driver = MakeDriver(Settings_);
         NYdb::NTable::TTableClient tableClient(driver);
 
@@ -114,7 +114,7 @@ private:
             rows->AddListItem()
                 .BeginStruct()
                 .AddMember("operation_id").OptionalString(FullOperationId_)
-                .AddMember("written_at").OptionalTimestamp(writtenAt)
+                .AddMember("written_at").OptionalTimestamp(WrittenAt_)
                 .AddMember("item_index").OptionalUint32(totalItems - 1)
                 .AddMember("part").OptionalUint32(currentPart)
                 .AddMember("component").String(currentPart ? "" : currentItem.Key.Component)
@@ -141,7 +141,7 @@ private:
         paramsBuilder.AddParam("$total_items").Uint64(totalItems).Build();
         paramsBuilder.AddParam("$total_bytes").Uint64(totalBytes).Build();
         paramsBuilder.AddParam("$checksum").Uint64(checksum).Build();
-        paramsBuilder.AddParam("$written_at").Timestamp(writtenAt).Build();
+        paramsBuilder.AddParam("$written_at").Timestamp(WrittenAt_).Build();
 
         NYdb::NTable::TRetryOperationSettings writeRetrySettings;
         writeRetrySettings
@@ -207,6 +207,7 @@ private:
     const TString FullOperationId_;
     const IQStoragePtr Storage_;
     const IQWriterPtr Writer_;
+    const TInstant WrittenAt_;
 };
 
 class TStorage : public IQStorage {
@@ -216,14 +217,15 @@ public:
     {
     }
 
-    IQWriterPtr MakeWriter(const TString& operationId) const final {
-        return std::make_shared<TWriter>(Settings_, operationId);
+    IQWriterPtr MakeWriter(const TString& operationId, const TQWriterSettings& settings) const final {
+        return std::make_shared<TWriter>(Settings_, operationId, settings);
     }
 
-    IQReaderPtr MakeReader(const TString& operationId) const final {
+    IQReaderPtr MakeReader(const TString& operationId, const TQReaderSettings& settings) const final {
+        Y_UNUSED(settings);
         auto memory = MakeMemoryQStorage();
         LoadTable(operationId, memory);
-        return memory->MakeReader("");
+        return memory->MakeReader("", {});
     }
 
     IQIteratorPtr MakeIterator(const TString& operationId, const TQIteratorSettings& settings) const final {
@@ -324,7 +326,7 @@ private:
         }, readRetrySettings);
         ThrowOnError(rtResult);
 
-        auto writer = memory->MakeWriter("");
+        auto writer = memory->MakeWriter("", {});
         ui64 totalBytes = 0, totalItems = 0, checksum = 0;
         ui32 currentIndex = Max<ui32>(), currentPart = Max<ui32>();
         TQItemKey currentKey;

@@ -12,6 +12,7 @@ namespace NKikimr::NColumnShard {
 namespace NKikimr::NOlap {
 
 class TPortionsNormalizer : public TPortionsNormalizerBase {
+    static inline TFactory::TRegistrator<TPortionsNormalizer> Registrator = TFactory::TRegistrator<TPortionsNormalizer>(ENormalizersList::PortionsMetadata);
 public:
     class TNormalizerResult;
     class TTask;
@@ -21,13 +22,12 @@ public:
         : TPortionsNormalizerBase(info)
     {}
 
-    virtual const TString& GetName() const override {
-        const static TString name = "TPortionsNormalizer";
-        return name;
+    virtual ENormalizersList GetType() const override {
+        return ENormalizersList::PortionsMetadata;
     }
 
     virtual INormalizerTask::TPtr BuildTask(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const override;
-    virtual TConclusion<bool> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
+    virtual TConclusion<bool> DoInitImpl(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 
     virtual bool CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionInfo& portionInfo) const override;
 

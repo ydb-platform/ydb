@@ -6,17 +6,15 @@
 
 namespace NKikimr::NOlap {
 
-class TGranulesNormalizer: public TNormalizationController::INormalizerComponent {
+class TRemovedTablesNormalizer: public TNormalizationController::INormalizerComponent {
+    static inline INormalizerComponent::TFactory::TRegistrator<TRemovedTablesNormalizer> Registrator = INormalizerComponent::TFactory::TRegistrator<TRemovedTablesNormalizer>(ENormalizersList::TablesCleaner);
     class TNormalizerResult;
-
-    static inline INormalizerComponent::TFactory::TRegistrator<TGranulesNormalizer> Registrator = INormalizerComponent::TFactory::TRegistrator<TGranulesNormalizer>(ENormalizersList::Granules);
 public:
-    TGranulesNormalizer(TTabletStorageInfo* info) {
-        Y_UNUSED(info);
-    }
+    TRemovedTablesNormalizer(TTabletStorageInfo*)
+    {}
 
     virtual ENormalizersList GetType() const override {
-        return ENormalizersList::Granules;
+        return ENormalizersList::TablesCleaner;
     }
 
     virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;

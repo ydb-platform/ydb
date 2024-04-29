@@ -126,7 +126,7 @@ public:
 
 };
 
-TConclusion<std::vector<INormalizerTask::TPtr>> TGranulesNormalizer::Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+TConclusion<std::vector<INormalizerTask::TPtr>> TGranulesNormalizer::DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     auto changes = TNormalizerResult::Init(controller, txc);
     if (!changes) {
         return TConclusionStatus::Fail("Not ready");;

@@ -12,7 +12,7 @@ namespace NKikimr::NColumnShard {
 
 namespace NKikimr::NOlap {
 
-    class TChunksNormalizer : public INormalizerComponent {
+    class TChunksNormalizer : public TNormalizationController::INormalizerComponent {
     public:
         class TNormalizerResult;
 
@@ -83,17 +83,17 @@ namespace NKikimr::NOlap {
             }
         };
 
+        static inline INormalizerComponent::TFactory::TRegistrator<TChunksNormalizer> Registrator = INormalizerComponent::TFactory::TRegistrator<TChunksNormalizer>(ENormalizersList::Chunks);
     public:
         TChunksNormalizer(TTabletStorageInfo* info)
             : DsGroupSelector(info)
         {}
 
-        virtual const TString& GetName() const override {
-            const static TString name = "TChunksNormalizer";
-            return name;
+        virtual ENormalizersList GetType() const override {
+            return ENormalizersList::Chunks;
         }
 
-        virtual TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
+        virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 
     private:
         NColumnShard::TBlobGroupSelector DsGroupSelector;

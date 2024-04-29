@@ -51,7 +51,7 @@ public:
         for (auto&& blobId : Blobs) {
             removeAction->DeclareSelfRemove(blobId);
         }
-        TActorContext::AsActorContext().Send(nCtx.GetColumnshardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(std::make_shared<TBlobsRemovingResult>(removeAction, std::move(Portions))));
+        TActorContext::AsActorContext().Send(nCtx.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(std::make_shared<TBlobsRemovingResult>(removeAction, std::move(Portions))));
     }
 };
 
@@ -79,7 +79,7 @@ INormalizerTask::TPtr TCleanPortionsNormalizer::BuildTask(std::vector<std::share
     return std::make_shared<TBlobsRemovingTask>(std::move(blobIds), std::move(portions));
 }
 
- TConclusion<bool> TCleanPortionsNormalizer::DoInit(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext&) {
+ TConclusion<bool> TCleanPortionsNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext&) {
     return true;
 }
 

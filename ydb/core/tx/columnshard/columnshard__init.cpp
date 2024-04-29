@@ -76,6 +76,7 @@ bool TTxInit::Precharge(TTransactionContext& txc) {
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::OwnerPathId, Self->OwnerPathId);
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::OwnerPath, Self->OwnerPath);
 
+
     {
         ui64 lastCompletedStep = 0;
         ui64 lastCompletedTx = 0;
@@ -226,6 +227,10 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
     LOG_S_DEBUG("TTxInit.Execute at tablet " << Self->TabletID());
 
+    NIceDb::TNiceDb db(txc.DB);
+    db.Table<Schema::NormalizerVersion>().Key("version").Update(
+                NIceDb::TUpdate<Schema::NormalizerVersion::LastKnownVersion>((ui64)Self->NormalizerController.GetLastRegisteredNormalizer()));
+
     try {
         SetDefaults();
         return ReadEverything(txc, ctx);
@@ -264,6 +269,24 @@ bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
     ACFL_INFO("step", "TTxUpdateSchema.Execute_Start")("details", Self->NormalizerController.DebugString());
 
+    if (!Self->NormalizerController.HasLastKnownVersion()) {
+        NIceDb::TNiceDb db(txc.DB);
+
+        auto rowset = db.Table<Schema::NormalizerVersion>().Prefix("version").Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+
+        if (!rowset.EndOfSet()) {
+            NOlap::ENormalizersList lastKnownVersion;
+            const TString version = rowset.GetValue<Schema::NormalizerVersion::LastKnownVersion>();
+            if (!TryFromString(version, lastKnownVersion)) {
+                return false;
+            }
+            Self->NormalizerController->SetLastKnownVersion(lastKnownVersion);
+        }
+    }
+
     while (!Self->NormalizerController.IsNormalizationFinished()) {
         auto normalizer = Self->NormalizerController.GetNormalizer();
         auto result = normalizer->Init(Self->NormalizerController, txc);
@@ -292,7 +315,7 @@ void TTxUpdateSchema::Complete(const TActorContext& ctx) {
     }
 
     NOlap::TNormalizationContext nCtx;
-    nCtx.SetColumnshardActor(Self->SelfId());
+    nCtx.SetShardActor(Self->SelfId());
     nCtx.SetResourceSubscribeActor(Self->ResourceSubscribeActor);
 
     for (auto&& task : NormalizerTasks) {

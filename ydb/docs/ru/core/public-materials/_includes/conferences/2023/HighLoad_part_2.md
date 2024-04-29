@@ -6,7 +6,7 @@
 
 {% include notitle [testing_tag](../../tags.md#testing) %}
 
-<div>
+</div>
 
 5 лет назад Яндекс перешел с Kafka на собственную разработку поверх YDB. С тех пор Yandex Topic Service сильно подрос по нагрузке и вышел в Open Source. В этом докладе {{ team.zivaykin.name }} ({{ team.zivaykin.position }}) рассказывает про ускорение YDB Topic Service и приводит сравнение с конкурентами.
 

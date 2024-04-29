@@ -10,7 +10,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet_flat
     ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/core/arrow_kernels/registry
+    ydb/core/formats/arrow/kernels/registry
 )
 
 YQL_LAST_ABI_VERSION()

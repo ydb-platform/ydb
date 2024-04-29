@@ -1,6 +1,6 @@
 #include "registry.h"
 
-#include <ydb/library/yql/core/arrow_kernels/registry/registry.h>
+#include <ydb/core/formats/arrow/kernels/registry/registry.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <util/system/tls.h>

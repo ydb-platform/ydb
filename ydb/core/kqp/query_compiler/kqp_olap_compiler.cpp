@@ -2,8 +2,8 @@
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/ssa_runtime_version.h>
+#include <ydb/core/formats/arrow/kernels/request/request.h>
 
-#include <ydb/library/yql/core/arrow_kernels/request/request.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>

@@ -10,8 +10,8 @@ PEERDIR(
     ydb/core/formats
     ydb/core/kqp/common
     ydb/core/protos
+    ydb/core/formats/arrow/kernels/request
     ydb/library/mkql_proto
-    ydb/library/yql/core/arrow_kernels/request
     ydb/library/yql/dq/integration
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann

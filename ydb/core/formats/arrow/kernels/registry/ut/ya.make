@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/yql/core/arrow_kernels/registry)
+UNITTEST_FOR(ydb/core/formats/arrow/kernels/registry)
 
 PEERDIR(
 )
@@ -10,7 +10,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/core/arrow_kernels/request
+    ydb/core/formats/arrow/kernels/request
     ydb/library/yql/public/udf
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/sql/pg_dummy

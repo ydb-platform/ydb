@@ -72,29 +72,30 @@ SIMPLE_STRICT_UDF(TToBitString, char*(TAutoMap<TListType<float>>)) {
     return TBitVectorSerializer::Serialize(valueBuilder, x);
 }
 
-ui32 GetManhattenDistance(const TArrayRef<const ui64> vector1, const TArrayRef<const ui64> vector2) {
+ui16 GetManhattenDistance(const TArrayRef<const ui64> vector1, const TArrayRef<const ui64> vector2) {
     Y_ABORT_UNLESS(vector1.size() == vector2.size());
+    Y_ABORT_UNLESS(vector1.size() <= UINT16_MAX);
 
-    ui32 ret = 0;
+    ui16 ret = 0;
     for (size_t i = 0; i < vector1.size(); ++i) {
         ret += __builtin_popcountll(vector1[i] ^ vector2[i]);
     }
     return ret;
 }
 
-SIMPLE_STRICT_UDF(TBitIndexes, TOptional<TListType<ui32>>(TAutoMap<const char*>, TAutoMap<const char*>, ui32, ui64)) {
+SIMPLE_STRICT_UDF(TBitIndexes, TOptional<TListType<ui64>>(TAutoMap<const char*>, TAutoMap<const char*>, ui16, ui64)) {
     Y_UNUSED(valueBuilder);
 
     const TArrayRef<const ui64> targetVector = TBitVectorSerializer::GetArray64(args[0].AsStringRef()); 
     const TArrayRef<const ui64> storedVector = TBitVectorSerializer::GetArray64(args[1].AsStringRef()); 
-    const ui32 topK = args[2].Get<ui32>();
+    const ui16 topK = args[2].Get<ui16>();
     const ui64 seed = args[3].Get<ui64>();
 
     if (targetVector.empty() || storedVector.empty() || storedVector.size() % targetVector.size() != 0)
         return {};    
 
-    constexpr ui32 MAX_INDEXES = 100;
-    typedef std::pair<ui32, ui32> TSimilarityAndIndex;
+    constexpr ui16 MAX_INDEXES = 128;
+    typedef std::pair<ui16, ui16> TSimilarityAndIndex;
     TPriorityQueue<TSimilarityAndIndex, TStackVec<TSimilarityAndIndex, MAX_INDEXES + 1>> heap;
 
     // Add vector distances to priority queue
@@ -109,9 +110,9 @@ SIMPLE_STRICT_UDF(TBitIndexes, TOptional<TListType<ui32>>(TAutoMap<const char*>,
 
     // Return min elemens from priority queue
     TUnboxedValue* items = nullptr;
-    ui32 heapSize = heap.size();
+    ui64 heapSize = heap.size();
     auto res = valueBuilder->NewArray(heapSize, items);
-    for (ui32 i = 0; i < heapSize; ++i) {
+    for (ui64 i = 0; i < heapSize; ++i) {
         items[heapSize-i-1] = TUnboxedValuePod{heap.top().second + seed};
         heap.pop();
     }

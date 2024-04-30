@@ -80,13 +80,15 @@ public:
 
 // Encode all positive floats as bit 1, negative floats as bit 0.
 // So 1024 float vector is serialized in 1024/8=128 bytes.
-// Place all bits in ui64. So, only array sizes divisible by 64 are supported.
+// Place all bits in ui64. So, only vector sizes divisible by 64 are supported.
+// Max vector lenght is 32767.
 class TBitVectorSerializer {
 public:
     static TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) {
         auto serialize = [&x] (IOutputStream& outStream) {
             ui64 accumulator = 0;
             ui8 filledBits = 0;
+            ui64 lenght = 0;
 
             EnumerateVector(x,  [&] (float element) { 
                 if (element > 0)
@@ -95,12 +97,18 @@ public:
                 ++filledBits;
                 if (filledBits == 64) {
                     outStream.Write(&accumulator, sizeof(ui64));
+                    lenght++;
                     accumulator = 0;
                     filledBits = 0;
                 }
             });
 
+            // only vector sizes divisible by 64 are supported 
             if (filledBits)
+                return false;
+            
+            // max vector lenght is 32767
+            if (lenght > UINT16_MAX)
                 return false;
 
             return true;

@@ -12,5 +12,5 @@ $embedding_44444 = Cast([-0.05976557732,-1.121484399,1.001953125,1.35585928,0.64
 $stored_embeddings_str=Knn::ToBitString(ListExtend($target_embedding,$embedding_32112, $embedding_32695, $embedding_47018, $embedding_22222, $embedding_33333, $embedding_44444));
 select $stored_embeddings_str;
 
-$indexes_embeddings = Knn::BitIndexes($target_embedding_str, $stored_embeddings_str);
+$indexes_embeddings = Knn::BitIndexes($target_embedding_str, $stored_embeddings_str, 10, 0);
 select $indexes_embeddings;

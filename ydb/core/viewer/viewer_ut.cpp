@@ -1108,7 +1108,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     }
 
-    void JsonAutocompleteTest(HTTP_METHOD method, NJson::TJsonValue& value, TString prefix = "", TString database = "", TVector<TString> tables = {}, ui32 limit = 10) {
+    void JsonAutocompleteTest(HTTP_METHOD method, NJson::TJsonValue& value, TString prefix = "", TString database = "", TVector<TString> tables = {}, ui32 limit = 10, bool lowerCaseContentType = false) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -1148,7 +1148,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 {"prefix", prefix}
             };
             httpReq.PostContent = NJson::WriteJson(root);
-            httpReq.HttpHeaders.AddHeader("Content-Type", "application/json");
+            auto contType = lowerCaseContentType ? "content-type" : "Content-Type";
+            httpReq.HttpHeaders.AddHeader(contType, "application/json");
         }
         httpReq.CgiParameters.emplace("limit", ToString(limit));
         httpReq.CgiParameters.emplace("direct", "1");
@@ -1275,6 +1276,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
             "/Root/MyDatabase",
             "/Root/TestDatabase"
         });
+
+        JsonAutocompleteTest(HTTP_METHOD_POST, value, "/Root/Database", "", {}, 2, true);
+        VerifyJsonAutocompleteSuccess(value, {
+            "/Root/MyDatabase",
+            "/Root/TestDatabase"
+        });
+
     }
 
     Y_UNIT_TEST(JsonAutocompleteScheme) {

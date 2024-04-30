@@ -365,6 +365,22 @@ TSharedPageRef TPrivatePageCache::LookupShared(ui32 pageId, TInfo *info) {
     return { };
 }
 
+void TPrivatePageCache::CountNewTouches(TPinned &pinned, ui32 &pages, ui64 &memory) {
+    for (auto &page : Touches) {
+        auto &pinnedCollection = pinned[page.Info->Id];
+        
+        // would insert only if first seen
+        if (!pinnedCollection.contains(page.Id)) {
+            pages++;
+            // Note: it seems useless to count sticky pages in tx usage
+            // also we want to read index from Env
+            if (!page.Sticky) {
+                memory += page.Size;
+            }
+        }
+    }
+}
+
 void TPrivatePageCache::PinTouches(TPinned &pinned, ui32 &touchedPages, ui32 &pinnedPages, ui64 &pinnedMemory) {
     for (auto &page : Touches) {
         auto &pinnedCollection = pinned[page.Info->Id];
@@ -443,7 +459,7 @@ void TPrivatePageCache::UnpinPages(TPinned &pinned, size_t &unpinnedPages) {
     }
 }
 
-// todo: do we really need that groupping by page collection?
+// todo: do we really need that grouping by page collection?
 THashMap<TPrivatePageCache::TInfo*, TVector<ui32>> TPrivatePageCache::GetToLoad() const {
     THashMap<TPrivatePageCache::TInfo*, TVector<ui32>> result;
     for (auto &page : ToLoad) {
@@ -478,8 +494,8 @@ void TPrivatePageCache::UpdateSharedBody(TInfo *info, ui32 pageId, TSharedPageRe
     if (!page)
         return;
 
-    // Note: shared cache may accept a peinding page if it is used by multiple private caches
-    // (for expample, used by tablet and its follower)
+    // Note: shared cache may accept a pending page if it is used by multiple private caches
+    // (for example, used by tablet and its follower)
     if (Y_UNLIKELY(!page->SharedPending)) {
         return;
     }
@@ -503,8 +519,8 @@ void TPrivatePageCache::DropSharedBody(TInfo *info, ui32 pageId) {
     if (!page)
         return;
 
-    // Note: shared cache may drop a peinding page if it is used by multiple private caches
-    // (for expample, used by tablet and its follower)
+    // Note: shared cache may drop a pending page if it is used by multiple private caches
+    // (for example, used by tablet and its follower)
     if (Y_UNLIKELY(page->SharedPending)) {
         // Shared cache rejected our page so we should drop it too
         Stats.TotalSharedPending -= page->Size;

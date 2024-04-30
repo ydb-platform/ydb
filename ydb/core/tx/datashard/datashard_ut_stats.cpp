@@ -389,7 +389,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "Waiting stats.." << Endl;
-            auto stats = WaitTableStats(runtime, 1);
+            auto stats = WaitTableStats(runtime, shard1, 1, 3);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);

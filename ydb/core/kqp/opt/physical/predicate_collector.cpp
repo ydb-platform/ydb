@@ -290,6 +290,20 @@ void CollectChildrenPredicates(const TExprNode& opNode, TOLAPPredicateNode& pred
     }
 }
 
+
+bool ApplyCanBePushed(const TCoApply& apply, const TExprNode* ) {
+    const auto maybeUdf = apply.Arg(0).Maybe<TCoUdf>();
+    if (!maybeUdf) {
+        return false;
+    }
+
+    if (maybeUdf.Cast().MethodName() != "Json2.SqlExists") {
+        return false;
+    }
+
+    return true;
+}
+
 }
 
 void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
@@ -309,6 +323,8 @@ void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicate
         predicateTree.CanBePushed = ExistsCanBePushed(maybeExists.Cast(), lambdaArg);
     } else if (const auto maybeJsonExists = predicate.Maybe<TCoJsonExists>()) {
         predicateTree.CanBePushed = JsonExistsCanBePushed(maybeJsonExists.Cast(), lambdaArg);
+    } else if (const auto maybeApply = predicate.Maybe<TCoApply>()) {
+        predicateTree.CanBePushed = ApplyCanBePushed(maybeApply.Cast(), lambdaArg);
     } else {
         predicateTree.CanBePushed = false;
     }

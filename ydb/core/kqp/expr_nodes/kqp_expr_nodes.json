@@ -655,6 +655,15 @@
             ]
         },
         {
+            "Name": "TKqpOlapApply",
+            "Base": "TExprBase",
+            "Match": {"Type": "Callable", "Name": "KqpOlapApply"},
+            "Children": [
+                {"Index": 0, "Name": "Type", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"}
+            ]
+        },
+        {
             "Name": "TKqpOlapJsonExists",
             "Base": "TKqpOlapJsonOperationBase",
             "Match": {"Type": "Callable", "Name": "KqpOlapJsonExists"}

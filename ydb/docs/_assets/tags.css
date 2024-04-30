@@ -26,60 +26,56 @@
     }
   
     .overview-tag {
-      background-color:#EAD4D9;
+      background-color:#e8b4bf;
     }
   
     .use_cases-tag {
-      background-color:#F3E8DE;
+      background-color:#edc9a7;
     }
     .practice-tag {
-      background-color:#CDD3CB;
+      background-color:#97b38e;
     }
   
     .database_internals-tag {
-      background-color:#B4B4B8;
+      background-color:#98989c;
     }
   
     .releases-tag {
-      background-color:#DAE3C3;
+      background-color:#b3cc73;
     }
   
     .testing-tag {
-      background-color:#B0D792;
+      background-color:#83adda;
     }
   
   }
   
   .g-root_theme_dark  {
-    .overview-tag {
-      background-color: #EAD4D9;
-      color: black;
-    }
     .tags-color-text {
       color: black;
     }
 
     .overview-tag {
-      background-color:#EAD4D9;
+      background-color:#e8b4bf;
     }
   
     .use_cases-tag {
-      background-color:#F3E8DE;
+      background-color:#edc9a7;
     }
     .practice-tag {
-      background-color:#CDD3CB;
+      background-color:#97b38e;
     }
   
     .database_internals-tag {
-      background-color:#B4B4B8;
+      background-color:#98989c;
     }
   
     .releases-tag {
-      background-color:#DAE3C3;
+      background-color:#b3cc73;
     }
   
     .testing-tag {
-      background-color:#B0D792;
+      background-color:#83adda;
     }
     
   }

@@ -1,91 +1,152 @@
 #include "flat_stat_table.h"
 #include "flat_table_subset.h"
+#include "library/cpp/int128/int128.h"
 
 namespace NKikimr {
 namespace NTable {
 
 namespace {
-    using TGroupId = NPage::TGroupId;
-    using TFrames = NPage::TFrames;
-    using TBtreeIndexNode = NPage::TBtreeIndexNode;
-    using TChild = TBtreeIndexNode::TChild;
 
-    TChild GetPrevChild(const TPart* part, TGroupId groupId, TRowId rowId, IPages* env, bool& ready) {
-        auto& meta = part->IndexPages.GetBTree(groupId);
+using TGroupId = NPage::TGroupId;
+using TFrames = NPage::TFrames;
+using TBtreeIndexNode = NPage::TBtreeIndexNode;
+using TChild = TBtreeIndexNode::TChild;
 
-        if (rowId >= meta.RowCount) {
-            return meta;
+TChild GetPrevChild(const TPart* part, TGroupId groupId, TRowId rowId, IPages* env, bool& ready) {
+    auto& meta = part->IndexPages.GetBTree(groupId);
+
+    TPageId pageId = meta.PageId;
+    TChild result{0, 0, 0, 0, 0};
+
+    for (ui32 height = 0; height < meta.LevelCount; height++) {
+        auto page = env->TryGetPage(part, pageId, {});
+        if (!page) {
+            ready = false;
+            return result;
         }
-
-        TPageId pageId = meta.PageId;
-        TChild result{0, 0, 0, 0, 0};
-
-        for (ui32 height = 0; height < meta.LevelCount; height++) {
-            auto page = env->TryGetPage(part, pageId, {});
-            if (!page) {
-                ready = false;
-                return result;
-            }
-            auto node = TBtreeIndexNode(*page);
-            auto pos = node.Seek(rowId);
-            pageId = node.GetShortChild(pos).PageId;
-            if (pos) {
-                if (node.IsShortChildFormat()) {
-                    auto& child = node.GetShortChild(pos - 1);
-                    result = {child.PageId, child.RowCount, child.DataSize, 0, 0};
-                } else {
-                    result = node.GetChild(pos - 1);
-                }
-            }
-        }
-
-        return result;
-    }
-
-    void AddBlobsSize(const TPart* part, TChanneledDataSize& stats, const TFrames* frames, ELargeObj lob, TRowId beginRowId, TRowId endRowId) noexcept {
-        ui32 page = frames->Lower(beginRowId, 0, Max<ui32>());
-
-        while (auto &rel = frames->Relation(page)) {
-            if (rel.Row < endRowId) {
-                auto channel = part->GetPageChannel(lob, page);
-                stats.Add(rel.Size, channel);
-                ++page;
-            } else if (!rel.IsHead()) {
-                Y_ABORT("Got unaligned TFrames head record");
+        auto node = TBtreeIndexNode(*page);
+        auto pos = node.Seek(rowId);
+        pageId = node.GetShortChild(pos).PageId;
+        if (pos) {
+            if (node.IsShortChildFormat()) {
+                auto& child = node.GetShortChild(pos - 1);
+                result = {child.PageId, child.RowCount, child.DataSize, 0, 0};
             } else {
-                break;
+                result = node.GetChild(pos - 1);
             }
         }
     }
 
-    bool AddDataSize(const TPartView& part, TStats& stats, IPages* env) {
-        bool ready = true;
+    return result;
+}
 
-        if (!part.Slices || part.Slices->empty()) {
-            return true;
+TChild GetChild(const TPart* part, TGroupId groupId, TRowId rowId, IPages* env, bool& ready) {
+    auto& meta = part->IndexPages.GetBTree(groupId);
+
+    TPageId pageId = meta.PageId;
+    TChild result = meta;
+
+    for (ui32 height = 0; height < meta.LevelCount; height++) {
+        auto page = env->TryGetPage(part, pageId, {});
+        if (!page) {
+            ready = false;
+            return result;
         }
+        auto node = TBtreeIndexNode(*page);
+        auto pos = node.Seek(rowId);
+        pageId = node.GetShortChild(pos).PageId;
+        if (node.IsShortChildFormat()) {
+            auto& child = node.GetShortChild(pos);
+            result = {child.PageId, child.RowCount, child.DataSize, 0, 0};
+        } else {
+            result = node.GetChild(pos);
+        }
+    }
 
-        for (ui32 groupIndex : xrange(part->GroupsCount)) {
-            auto channel = part->GetGroupChannel(TGroupId(groupIndex));
-            for (const auto& slice : *part.Slices) {
-                auto beginChild = GetPrevChild(part.Part.Get(), {}, slice.BeginRowId(), env, ready);
-                auto endChild = GetPrevChild(part.Part.Get(), {}, slice.EndRowId(), env, ready);
-                if (ready) {
-                    stats.RowCount += endChild.RowCount - beginChild.RowCount;
-                    stats.DataSize.Add(endChild.DataSize - beginChild.DataSize, channel);
-                }
+    return result;
+}
 
-                if (part->Small) {
-                    AddBlobsSize(part.Part.Get(), stats.DataSize, part->Small.Get(), ELargeObj::Outer, slice.BeginRowId(), slice.EndRowId());
-                }
-                if (part->Large) {
-                    AddBlobsSize(part.Part.Get(), stats.DataSize, part->Large.Get(), ELargeObj::Extern, slice.BeginRowId(), slice.EndRowId());
-                }
+void AddBlobsSize(const TPart* part, TChanneledDataSize& stats, const TFrames* frames, ELargeObj lob, TRowId beginRowId, TRowId endRowId) noexcept {
+    ui32 page = frames->Lower(beginRowId, 0, Max<ui32>());
+
+    while (auto &rel = frames->Relation(page)) {
+        if (rel.Row < endRowId) {
+            auto channel = part->GetPageChannel(lob, page);
+            stats.Add(rel.Size, channel);
+            ++page;
+        } else if (!rel.IsHead()) {
+            Y_ABORT("Got unaligned TFrames head record");
+        } else {
+            break;
+        }
+    }
+}
+
+void AddSliceDataSize(TStats& stats, ui8 channel, const TChild& prevChild, const TChild& lastChild, TRowId beginRowId, TRowId endRowId) {
+    Y_DEBUG_ABORT_UNLESS(lastChild.DataSize > prevChild.DataSize);
+    Y_DEBUG_ABORT_UNLESS(lastChild.RowCount > prevChild.RowCount);
+
+    if (Y_LIKELY(lastChild.DataSize > prevChild.DataSize && lastChild.RowCount > prevChild.RowCount)) {
+        TRowId sliceRows = endRowId - beginRowId;
+        TRowId countedRows = lastChild.RowCount - prevChild.RowCount;
+        Y_DEBUG_ABORT_UNLESS(sliceRows <= countedRows);
+
+        if (sliceRows == countedRows) {
+            stats.DataSize.Add(lastChild.DataSize - prevChild.DataSize, channel);
+        } else {
+            ui128 countedDataSize = lastChild.DataSize - prevChild.DataSize;
+            ui64 sliceDataSize = static_cast<ui64>(countedDataSize  * sliceRows / countedRows);
+            stats.DataSize.Add(sliceDataSize, channel);
+        }
+    }
+}
+
+bool AddDataSize(const TPartView& part, TStats& stats, IPages* env) {
+    bool ready = true;
+
+    if (!part.Slices || part.Slices->empty()) {
+        return true;
+    }
+
+    { // main group
+        TGroupId groupId{};
+        auto channel = part->GetGroupChannel(groupId);
+        for (const auto& slice : *part.Slices) {
+            auto prevChild = GetPrevChild(part.Part.Get(), groupId, slice.BeginRowId(), env, ready);
+            auto lastChild = GetChild(part.Part.Get(), groupId, slice.EndRowId() - 1, env, ready);
+            if (!ready) {
+                continue;
+            }
+
+            stats.RowCount += slice.EndRowId() - slice.BeginRowId();
+            
+            AddSliceDataSize(stats, channel, prevChild, lastChild, slice.BeginRowId(), slice.EndRowId());
+
+            if (part->Small) {
+                AddBlobsSize(part.Part.Get(), stats.DataSize, part->Small.Get(), ELargeObj::Outer, slice.BeginRowId(), slice.EndRowId());
+            }
+            if (part->Large) {
+                AddBlobsSize(part.Part.Get(), stats.DataSize, part->Large.Get(), ELargeObj::Extern, slice.BeginRowId(), slice.EndRowId());
             }
         }
-
-        return ready;
     }
+
+    for (ui32 groupIndex : xrange<ui32>(1, part->GroupsCount)) {
+        TGroupId groupId{groupIndex};
+        auto channel = part->GetGroupChannel(groupId);
+        for (const auto& slice : *part.Slices) {
+            auto prevChild = GetPrevChild(part.Part.Get(), groupId, slice.BeginRowId(), env, ready);
+            auto lastChild = GetChild(part.Part.Get(), groupId, slice.EndRowId() - 1, env, ready);
+            if (!ready) {
+                continue;
+            }
+
+            AddSliceDataSize(stats, channel, prevChild, lastChild, slice.BeginRowId(), slice.EndRowId());
+        }
+    }
+
+    return ready;
+}
 
 }
 

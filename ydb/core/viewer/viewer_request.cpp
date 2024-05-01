@@ -83,5 +83,22 @@ IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr& request) {
     return nullptr;
 }
 
+bool IsPostContent(const NMon::TEvHttpInfo::TPtr& event) {
+    if (event->Get()->Request.GetMethod() == HTTP_METHOD_POST) {
+        const THttpHeaders& headers = event->Get()->Request.GetHeaders();
+
+        auto itContentType = FindIf(headers, [](const auto& header) {
+            return AsciiEqualsIgnoreCase(header.Name(),  "Content-Type");
+        });
+
+        if (itContentType != headers.end()) {
+            TStringBuf contentTypeHeader = itContentType->Value();
+            TStringBuf contentType = contentTypeHeader.NextTok(';');
+            return contentType == "application/json";
+        }
+    }
+    return false;
+}
+
 }
 }

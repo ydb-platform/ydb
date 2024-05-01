@@ -173,7 +173,6 @@ struct TPartitionWriterOpts {
     bool CheckState = false;
     bool AutoRegister = false;
     bool UseDeduplication = true;
-    bool ChargeExtraRu = false;
 
     TString SourceId;
     std::optional<ui32> ExpectedGeneration;
@@ -195,7 +194,6 @@ struct TPartitionWriterOpts {
     TPartitionWriterOpts& WithCheckState(bool value) { CheckState = value; return *this; }
     TPartitionWriterOpts& WithAutoRegister(bool value) { AutoRegister = value; return *this; }
     TPartitionWriterOpts& WithDeduplication(bool value) { UseDeduplication = value; return *this; }
-    TPartitionWriterOpts& WithChargeExtraRu(bool value) { ChargeExtraRu = value; return *this; }
     TPartitionWriterOpts& WithSourceId(const TString& value) { SourceId = value; return *this; }
     TPartitionWriterOpts& WithExpectedGeneration(ui32 value) { ExpectedGeneration = value; return *this; }
     TPartitionWriterOpts& WithExpectedGeneration(std::optional<ui32> value) { ExpectedGeneration = value; return *this; }

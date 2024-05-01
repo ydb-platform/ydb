@@ -127,7 +127,7 @@ private:
     void CleanTopics(const TActorContext& ctx);
     void CleanWriters(const TActorContext& ctx);
 
-    std::pair<ETopicStatus, TActorId> PartitionWriter(const TString& topicPath, ui32 partitionId, bool chargeExtraRu, const TActorContext& ctx);
+    std::pair<ETopicStatus, TActorId> PartitionWriter(const TString& topicPath, ui32 partitionId, const TActorContext& ctx);
 
     TString LogPrefix();
     void LogEvent(IEventHandle& ev);

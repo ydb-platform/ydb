@@ -242,7 +242,8 @@ size_t TKafkaProduceActor::EnqueueInitialization() {
 THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::TTopicProduceData::TPartitionProduceData& data,
                                                      const TString& topicName,
                                                      ui64 cookie,
-                                                     const TString& clientDC) {
+                                                     const TString& clientDC,
+                                                     bool chargeExtraRU) {
     auto ev = MakeHolder<TEvPartitionWriter::TEvWriteRequest>();
     auto& request = ev->Record;
 
@@ -254,6 +255,10 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
     partitionRequest->SetPartition(data.Index);
     // partitionRequest->SetCmdWriteOffset();
     partitionRequest->SetCookie(cookie);
+    if (chargeExtraRU) {
+        partitionRequest->SetChargeExtraRuCount(1);
+        chargeExtraRU = false;
+    }
 
     ui64 totalSize = 0;
 
@@ -324,8 +329,7 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
         const TString& topicPath = NormalizePath(Context->DatabasePath, *topicData.Name);
         for(const auto& partitionData : topicData.PartitionData) {
             const auto partitionId = partitionData.Index;
-            auto writer = PartitionWriter(topicPath, partitionId, chargeExtraRu, ctx);
-            chargeExtraRu = false;
+            auto writer = PartitionWriter(topicPath, partitionId, ctx);
             if (OK == writer.first) {
                 auto ownCookie = ++Cookie;
                 auto& cookieInfo = Cookies[ownCookie];
@@ -337,7 +341,8 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
                 pendingRequest->WaitAcceptingCookies.insert(ownCookie);
                 pendingRequest->WaitResultCookies.insert(ownCookie);
 
-                auto ev = Convert(partitionData, *topicData.Name, ownCookie, ClientDC);
+                auto ev = Convert(partitionData, *topicData.Name, ownCookie, ClientDC, chargeExtraRu);
+                chargeExtraRu = false;
 
                 Send(writer.second, std::move(ev));
             } else {
@@ -556,7 +561,7 @@ void TKafkaProduceActor::ProcessInitializationRequests(const TActorContext& ctx)
     ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(request.release()));
 }
 
-std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::PartitionWriter(const TString& topicPath, ui32 partitionId, bool chargeExtraRu, const TActorContext& ctx) {
+std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::PartitionWriter(const TString& topicPath, ui32 partitionId, const TActorContext& ctx) {
     auto it = Topics.find(topicPath);
     if (it == Topics.end()) {
         KAFKA_LOG_ERROR("Produce actor: Internal error: topic '" << topicPath << "' isn`t initialized");
@@ -585,8 +590,7 @@ std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::Partit
     opts.WithDeduplication(false)
         .WithSourceId(SourceId)
         .WithTopicPath(topicPath)
-        .WithCheckRequestUnits(topicInfo.MeteringMode, Context->RlContext)
-        .WithChargeExtraRu(chargeExtraRu);
+        .WithCheckRequestUnits(topicInfo.MeteringMode, Context->RlContext);
     auto* writerActor = CreatePartitionWriter(SelfId(), partition->TabletId, partitionId, opts);
 
     auto& writerInfo = partitionWriters[partitionId];

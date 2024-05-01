@@ -46,6 +46,7 @@ public:
     const TVector<NYdb::TColumn>& GetColumns() const {
         return Columns;
     }
+    bool IsExpected(const std::string_view expexted) const;
 };
 
 class TQueryBenchmarkResult {

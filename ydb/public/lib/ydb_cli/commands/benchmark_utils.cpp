@@ -6,6 +6,7 @@
 #include <util/folder/path.h>
 
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/string_utils/csv/csv.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
@@ -311,6 +312,113 @@ NJson::TJsonValue GetSensorValue(TStringBuf sensor, double value, ui32 queryId) 
     sensorValue.InsertValue("value", value);
     sensorValue.InsertValue("labels", GetQueryLabels(queryId));
     return sensorValue;
+}
+
+template <class T>
+bool CompareValueImpl(const T valResult, const TStringBuf vExpected) {
+    T valExpected;
+    if (!TryFromString<T>(vExpected, valExpected)) {
+        Cerr << "cannot parse expected as " << typeid(valResult).name() << "(" << vExpected << ")" << Endl;
+        return false;
+    }
+    return valResult == valExpected;
+}
+
+bool CompareValue(const NYdb::TValue& v, const TStringBuf vExpected) {
+    const auto& vp = v.GetProto();
+    if (vp.has_bool_value()) {
+        return CompareValueImpl<bool>(vp.bool_value(), vExpected);
+    }
+    if (vp.has_int32_value()) {
+        return CompareValueImpl<i32>(vp.int32_value(), vExpected);
+    }
+    if (vp.has_uint32_value()) {
+        return CompareValueImpl<ui32>(vp.uint32_value(), vExpected);
+    }
+    if (vp.has_int64_value()) {
+        return CompareValueImpl<i64>(vp.int64_value(), vExpected);
+    }
+    if (vp.has_uint64_value()) {
+        return CompareValueImpl<ui64>(vp.uint64_value(), vExpected);
+    }
+    if (vp.has_float_value()) {
+        return CompareValueImpl<float>(vp.float_value(), vExpected);
+    }
+    if (vp.has_double_value()) {
+        return CompareValueImpl<double>(vp.double_value(), vExpected);
+    }
+    if (vp.has_text_value()) {
+        return CompareValueImpl<TString>(TString(vp.text_value().data(), vp.text_value().size()), vExpected);
+    }
+    if (vp.has_null_flag_value()) {
+        return vExpected == "";
+    }
+    Cerr << "unexpected type for comparision: " << vp.DebugString() << Endl;
+    return false;
+}
+
+
+bool TQueryResultInfo::IsExpected(const std::string_view expexted) const {
+    if (expexted.empty()) {
+        return true;
+    }
+    const auto expectedLines = StringSplitter(expexted).Split('\n').SkipEmpty().ToList<TString>();
+    if (Result.size() + 1 != expectedLines.size()) {
+        Cerr << "has diff: incorrect lines count (" << Result.size() << " in result, but " << expectedLines.size() << " expected with header)" << Endl;
+        return false;
+    }
+
+    std::vector<ui32> columnIndexes;
+    {
+        const std::map<TString, ui32> columns = GetColumnsRemap();
+        auto copy = expectedLines.front();
+        NCsvFormat::CsvSplitter splitter(copy);
+        while (true) {
+            auto cName = splitter.Consume();
+            auto it = columns.find(TString(cName.data(), cName.size()));
+            if (it == columns.end()) {
+                columnIndexes.clear();
+                for (ui32 i = 0; i < columns.size(); ++i) {
+                    columnIndexes.emplace_back(i);
+                }
+                break;
+            } else {
+                columnIndexes.emplace_back(it->second);
+            }
+
+            if (!splitter.Step()) {
+                break;
+            }
+        }
+        if (columnIndexes.size() != columns.size()) {
+            Cerr << "there are unexpected columns in result" << Endl;
+            return false;
+        }
+    }
+
+    for (ui32 i = 0; i < Result.size(); ++i) {
+        TString copy = expectedLines[i + 1];
+        NCsvFormat::CsvSplitter splitter(copy);
+        bool isCorrectCurrent = true;
+        for (ui32 cIdx = 0; cIdx < columnIndexes.size(); ++cIdx) {
+            const NYdb::TValue& resultValue = Result[i][columnIndexes[cIdx]];
+            if (!isCorrectCurrent) {
+                Cerr << "has diff: no element in expectation" << Endl;
+                return false;
+            }
+            TStringBuf cItem = splitter.Consume();
+            if (!CompareValue(resultValue, cItem)) {
+                Cerr << "has diff: " << resultValue.GetProto().DebugString() << ";EXPECTED:" << cItem << Endl;
+                return false;
+            }
+            isCorrectCurrent = splitter.Step();
+        }
+        if (isCorrectCurrent) {
+            Cerr << "expected more items than have in result" << Endl;
+            return false;
+        }
+    }
+    return true;
 }
 
 } // NYdb::NConsoleClient::BenchmarkUtils

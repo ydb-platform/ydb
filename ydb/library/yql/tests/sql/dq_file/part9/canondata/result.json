@@ -87,6 +87,28 @@
         }
     ],
     "test.test[agg_phases-sum_opt-default.txt-Results]": [],
+    "test.test[aggr_factory-def_value_full_table-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1889210/1f0152f3c0f7d63c8452e9855872f2e930cd4c7e/resource.tar.gz#test.test_aggr_factory-def_value_full_table-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[aggr_factory-def_value_full_table-default.txt-Debug]": [
+        {
+            "checksum": "79a546e982f857db89b544335ea7a6b7",
+            "size": 1323,
+            "uri": "https://{canondata_backend}/1889210/1f0152f3c0f7d63c8452e9855872f2e930cd4c7e/resource.tar.gz#test.test_aggr_factory-def_value_full_table-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[aggr_factory-def_value_full_table-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1889210/1f0152f3c0f7d63c8452e9855872f2e930cd4c7e/resource.tar.gz#test.test_aggr_factory-def_value_full_table-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[aggr_factory-def_value_full_table-default.txt-Results]": [],
     "test.test[aggr_factory-max_by-default.txt-Analyze]": [
         {
             "checksum": "ca7f94de5d04fd68ac4b3dc3c6616091",

@@ -153,7 +153,7 @@
                                         "ListType";
                                         [
                                             "DataType";
-                                            "Uint32"
+                                            "Uint64"
                                         ]
                                     ]
                                 ]

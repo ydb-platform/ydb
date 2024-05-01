@@ -83,13 +83,14 @@ ui16 GetManhattenDistance(const TArrayRef<const ui64> vector1, const TArrayRef<c
     return ret;
 }
 
-SIMPLE_STRICT_UDF(TBitIndexes, TOptional<TListType<ui64>>(TAutoMap<const char*>, TAutoMap<const char*>, ui16, ui64)) {
+SIMPLE_STRICT_UDF(TBitIndexes, TOptional<TListType<ui64>>(TAutoMap<const char*>, TAutoMap<const char*>, ui16, ui16, ui64)) {
     Y_UNUSED(valueBuilder);
 
     const TArrayRef<const ui64> targetVector = TBitVectorSerializer::GetArray64(args[0].AsStringRef()); 
     const TArrayRef<const ui64> storedVector = TBitVectorSerializer::GetArray64(args[1].AsStringRef()); 
     const ui16 topK = args[2].Get<ui16>();
-    const ui64 seed = args[3].Get<ui64>();
+    const ui16 distanceThreshold = args[3].Get<ui16>();
+    const ui64 seed = args[4].Get<ui64>();
 
     if (targetVector.empty() || storedVector.empty() || storedVector.size() % targetVector.size() != 0)
         return {};    
@@ -103,6 +104,8 @@ SIMPLE_STRICT_UDF(TBitIndexes, TOptional<TListType<ui64>>(TAutoMap<const char*>,
     for (ui32 index = 0; index < totalVectors; ++index) {
         const TArrayRef<const ui64> nextVector = {storedVector.data() + index * targetVector.size(), targetVector.size()};
         ui32 distance = GetManhattenDistance(targetVector, nextVector);
+        if (distance > distanceThreshold)
+            continue;
         heap.push({distance, index});
         if (heap.size() == topK + 1)        
             heap.pop();

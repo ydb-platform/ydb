@@ -13,6 +13,6 @@ select $negative_and_positive_striped;
 
 --bit indexes
 $stored_vector = Knn::ToBitString(ListFromRange(-319.0f, 640.1f));
-$indexes = Knn::BitIndexes($positive, $stored_vector, 10, 0);
+$indexes = Knn::BitIndexes($positive, $stored_vector, 10, 1000, 0);
 select $indexes;
 

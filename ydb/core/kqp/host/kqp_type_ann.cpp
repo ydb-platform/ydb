@@ -1068,24 +1068,43 @@ TStatus AnnotateOlapFilter(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 2, ctx)) {
+    if (!EnsureArgsCount(*node, 3U, ctx)) {
         return TStatus::Error;
     }
 
-    if (!EnsureType(node->Head(), ctx)) {
+    const auto type = node->Child(TKqpOlapApply::idx_Type);
+    if (!EnsureType(*type, ctx)) {
         return TStatus::Error;
     }
 
-    const auto argType = node->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-    if (!EnsureStructType(node->Head().Pos(), *argType, ctx)) {
+    const auto argsType = type->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+    if (!EnsureStructType(type->Pos(), *argsType, ctx)) {
         return TStatus::Error;
+    }
+
+    const auto columns = node->Child(TKqpOlapApply::idx_Columns);
+    if (!EnsureTupleOfAtoms(*columns, ctx)) {
+        return TStatus::Error;
+    }
+
+    const auto structType = argsType->Cast<TStructExprType>();
+    TTypeAnnotationNode::TListType argsTypes(columns->ChildrenSize());
+    for (auto i = 0U; i < argsTypes.size(); ++i) {
+        if (const auto argType = structType->FindItemType(columns->Child(i)->Content()))
+            argsTypes[i] = argType;
+        else {
+            ctx.AddError(TIssue(ctx.GetPosition(columns->Child(i)->Pos()),
+                TStringBuilder() << "Missed column: " << columns->Child(i)->Content()
+            ));
+            return TStatus::Error;
+        }
     }
 
     if (!EnsureLambda(node->Tail(), ctx)) {
         return TStatus::Error;
     }
 
-    if (!UpdateLambdaAllArgumentsTypes(node->TailRef(), {argType}, ctx)) {
+    if (!UpdateLambdaAllArgumentsTypes(node->TailRef(), argsTypes, ctx)) {
         return TStatus::Error;
     }
 

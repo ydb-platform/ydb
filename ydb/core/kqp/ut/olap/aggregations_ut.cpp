@@ -1256,7 +1256,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 WHERE
                     JSON_EXISTS(jsonval, "$.col1") AND level = 1;
             )")
-#if SSA_RUNTIME_VERSION >= 3U
+#if SSA_RUNTIME_VERSION >= 5U
+            .AddExpectedPlanOptions("KqpOlapApply")
+#elif SSA_RUNTIME_VERSION >= 3U
             .AddExpectedPlanOptions("KqpOlapJsonExists")
 #else
             .AddExpectedPlanOptions("Udf")

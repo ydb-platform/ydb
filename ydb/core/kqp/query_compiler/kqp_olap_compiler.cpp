@@ -623,6 +623,26 @@ const TTypedColumn CompileExists(const TExprBase& arg, TKqpOlapCompileContext& c
     }
 }
 
+TTypedColumn CompileYqlKernelScalarApply(const TKqpOlapApply& apply, TKqpOlapCompileContext& ctx) {
+    std::vector<ui64> ids;
+    TTypeAnnotationNode::TListType argTypes;
+    ids.reserve(apply.Columns().Size());
+    argTypes.reserve(apply.Columns().Size());
+    for (const auto& member : apply.Columns()) {
+        const auto arg = GetOrCreateColumnIdAndType(member, ctx);
+        ids.emplace_back(arg.Id);
+        argTypes.emplace_back(arg.Type);
+    }
+
+    auto *const command = ctx.CreateAssignCmd();
+    auto *const function = command->MutableFunction();
+    const auto idx = ctx.GetKernelRequestBuilder().AddScalarApply(apply.Lambda().Ref(), argTypes, ctx.ExprCtx());
+    function->SetKernelIdx(idx);
+    function->SetFunctionType(TProgram::YQL_KERNEL);
+    std::for_each(ids.cbegin(), ids.cend(), [function] (ui64 id) { function->AddArguments()->SetId(id); });
+    return {command->GetColumn().GetId(), ctx.ExprCtx().MakeType<TBlockExprType>(apply.Lambda().Body().Ref().GetTypeAnn())};
+}
+
 TTypedColumn CompileYqlKernelUnaryOperation(const TKqpOlapFilterUnaryOp& operation, TKqpOlapCompileContext& ctx)
 {
     auto oper = operation.Operator().StringValue();
@@ -833,6 +853,8 @@ TTypedColumn GetOrCreateColumnIdAndType(const TExprBase& node, TKqpOlapCompileCo
         return BuildLogicalNot(maybeNot.Cast().Value(), ctx);
     } else if (const auto& maybeJsonValue = node.Maybe<TKqpOlapJsonValue>()) {
         return ConvertJsonValueToColumn(maybeJsonValue.Cast(), ctx);
+    } else if (const auto& maybeApply = node.Maybe<TKqpOlapApply>()) {
+        return CompileYqlKernelScalarApply(maybeApply.Cast(), ctx);
     }
 
     return {GetOrCreateColumnId(node, ctx), ctx.GetArgType(node)};
@@ -859,6 +881,10 @@ ui64 CompileComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOlapCompile
 }
 
 ui64 CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx) {
+    if (const auto maybeApply = condition.Maybe<TKqpOlapApply>()) {
+        return CompileYqlKernelScalarApply(maybeApply.Cast(), ctx).Id;
+    }
+
     if (const auto maybeCompare = condition.Maybe<TKqpOlapFilterUnaryOp>()) {
         return CompileYqlKernelUnaryOperation(maybeCompare.Cast(), ctx).Id;
     }

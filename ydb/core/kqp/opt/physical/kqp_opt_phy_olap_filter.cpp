@@ -164,12 +164,27 @@ TMaybeNode<TExprBase> YqlIfPushdown(const TCoIf& ifOp, const TExprNode& argument
     return NullNode;
 }
 
-TMaybeNode<TExprBase> YqlApplyPushdown(const TCoApply& apply, const TExprNode& argument, TExprContext& ctx) {
-    auto newArg = ctx.NewArgument(argument.Pos(), "row");
-    auto newArgs = ctx.NewArguments(argument.Pos(), {newArg});
+TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& argument, TExprContext& ctx) {
+    const auto members = FindNodes(apply.Ptr(), [&argument] (const TExprNode::TPtr& node) {
+        if (const auto maybeMember = TMaybeNode<TCoMember>(node))
+            return maybeMember.Cast().Struct().Raw() == &argument;
+        return false;
+    });
+
+    TNodeOnNodeOwnedMap replacements(members.size());
+    TExprNode::TListType columns, arguments;
+    columns.reserve(members.size());
+    arguments.reserve(members.size());
+    for (const auto& member : members) {
+        columns.emplace_back(member->TailPtr());
+        arguments.emplace_back(ctx.NewArgument(member->Pos(), columns.back()->Content()));
+        replacements.emplace(member.Get(), arguments.back());
+    }
+
     return Build<TKqpOlapApply>(ctx, apply.Pos())
         .Type(ExpandType(argument.Pos(), *argument.GetTypeAnn(), ctx))
-        .Lambda(ctx.NewLambda(apply.Pos(), std::move(newArgs), ctx.ReplaceNode(apply.Ptr(), argument, std::move(newArg))))
+        .Columns().Add(std::move(columns)).Build()
+        .Lambda(ctx.NewLambda(apply.Pos(), ctx.NewArguments(argument.Pos(), std::move(arguments)), ctx.ReplaceNodes(apply.Ptr(), replacements)))
         .Done();
 }
 
@@ -748,7 +763,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     auto value = optionaIf.Value();
 
     if constexpr (NSsa::RuntimeVersion >= 5U) { // TODO: Rework for pushdown any UDFs, not only Json: Re2 as example.
-        if (!FindNode(optionaIf.Ptr(), [](const TExprNode::TPtr& node) { return node->IsCallable({"JsonExists","JsonValue"}); })) {
+        if (!FindNode(optionaIf.Ptr(), [](const TExprNode::TPtr& node) { return node->IsCallable("JsonValue"); })) {
             TExprNode::TPtr afterPeephole;
             bool hasNonDeterministicFunctions;
             if (const auto status = PeepHoleOptimizeNode(optionaIf.Ptr(), afterPeephole, ctx, typesCtx, nullptr, hasNonDeterministicFunctions);

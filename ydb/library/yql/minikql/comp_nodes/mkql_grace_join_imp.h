@@ -77,8 +77,8 @@ struct TTableBucket {
     }
  };
 
-struct TTableSpilledBucket {
-    TTableSpilledBucket(std::shared_ptr<ISpillerFactory> spillerFactory, size_t sizeLimit)
+struct TTableBucketSpiller {
+    TTableBucketSpiller(std::shared_ptr<ISpillerFactory> spillerFactory, size_t sizeLimit)
         : StateUi64Adapter(spillerFactory->CreateSpiller(), sizeLimit)
         , StateUi32Adapter(spillerFactory->CreateSpiller(), sizeLimit)
         , StateCharAdapter(spillerFactory->CreateSpiller(), sizeLimit) {
@@ -90,78 +90,101 @@ struct TTableSpilledBucket {
 
 
     bool HasRunningAsyncIoOperation() const {
-        return StateUi64Adapter.HasRunningAsyncIoOperatrion()
-            || StateUi32Adapter.HasRunningAsyncIoOperatrion()
-            || StateCharAdapter.HasRunningAsyncIoOperatrion();
+        return StateUi64Adapter.HasRunningAsyncIoOperation()
+            || StateUi32Adapter.HasRunningAsyncIoOperation()
+            || StateCharAdapter.HasRunningAsyncIoOperation();
     }
 
     void Update() {
         StateUi64Adapter.Update();
         StateUi32Adapter.Update();
         StateCharAdapter.Update();
+
+        if (State == EState::Spilling) {
+            ProcessBucketSpilling();
+        } else if (State == EState::Restoring) {
+            ProcessBucketRestoration();
+        }
+        
     }
 
     void Finalize() {
         IsFinalizing = true;
     }
 
-    bool IsProcessingFinished() const {
-        return NextVectorToProcess == ENextVectorToProcess::None && !HasRunningAsyncIoOperation();
-    }
-
     bool HasMoreSpilledBuckets() const { 
         return SpilledBucketsCount > 0;
     }
 
-    void ProcessBucketSpilling(TTableBucket& bucket) {
-        Update();
-        if (NextVectorToProcess == ENextVectorToProcess::None) {
-            NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
-            BucketState = EBucketState::Spilling;
-        }
+    void SpillBucket(TTableBucket&& bucket) {
+        MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, "Internal logic error");
+        State = EState::Spilling;
         
+        CurrentBucket = std::move(bucket);
+        NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
+        
+        ProcessBucketSpilling();
+    }
+
+    void StartBucketRestoration() {
+        MKQL_ENSURE(State == EState::Restoring, "Internal logic error");
+        MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, "Internal logic error");
+
+        NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
+        ProcessBucketRestoration();
+    }
+
+    void ProcessBucketSpilling() {
         while (NextVectorToProcess != ENextVectorToProcess::None) {
             switch (NextVectorToProcess) {
                 case ENextVectorToProcess::KeyAndVals:
-                    if (!StateUi64Adapter.IsAcceptingData()) return;
-                    StateUi64Adapter.AddData(std::move(bucket.KeyIntVals));
+                    if (StateUi64Adapter.HasRunningAsyncIoOperation()) return;
+
+                    StateUi64Adapter.AddData(std::move(CurrentBucket.KeyIntVals));
                     NextVectorToProcess = ENextVectorToProcess::DataIntVals;
                     break;
                 case ENextVectorToProcess::DataIntVals:
-                    if (!StateUi64Adapter.IsAcceptingData()) return;
-                    StateUi64Adapter.AddData(std::move(bucket.DataIntVals));
+                    if (StateUi64Adapter.HasRunningAsyncIoOperation()) return;
+
+                    StateUi64Adapter.AddData(std::move(CurrentBucket.DataIntVals));
                     NextVectorToProcess = ENextVectorToProcess::StringsValues;
                     break;
                 case ENextVectorToProcess::StringsValues:
-                    if (!StateCharAdapter.IsAcceptingData()) return;
-                    StateCharAdapter.AddData(std::move(bucket.StringsValues));
+                    if (StateCharAdapter.HasRunningAsyncIoOperation()) return;
+
+                    StateCharAdapter.AddData(std::move(CurrentBucket.StringsValues));
                     NextVectorToProcess = ENextVectorToProcess::StringsOffsets;
                     break;
                 case ENextVectorToProcess::StringsOffsets:
-                    if (!StateUi32Adapter.IsAcceptingData()) return;
-                    StateUi32Adapter.AddData(std::move(bucket.StringsOffsets));
+                    if (StateUi32Adapter.HasRunningAsyncIoOperation()) return;
+
+                    StateUi32Adapter.AddData(std::move(CurrentBucket.StringsOffsets));
                     NextVectorToProcess = ENextVectorToProcess::InterfaceValues;
                     break;
                 case ENextVectorToProcess::InterfaceValues:
-                    if (!StateCharAdapter.IsAcceptingData()) return;
-                    StateCharAdapter.AddData(std::move(bucket.InterfaceValues));
+                    if (StateCharAdapter.HasRunningAsyncIoOperation()) return;
+
+                    StateCharAdapter.AddData(std::move(CurrentBucket.InterfaceValues));
                     NextVectorToProcess = ENextVectorToProcess::InterfaceOffsets;
                     break;
                 case ENextVectorToProcess::InterfaceOffsets:
-                    if (!StateUi32Adapter.IsAcceptingData()) return;
-                    StateUi32Adapter.AddData(std::move(bucket.InterfaceOffsets));
+                    if (StateUi32Adapter.HasRunningAsyncIoOperation()) return;
+
+                    StateUi32Adapter.AddData(std::move(CurrentBucket.InterfaceOffsets));
                     NextVectorToProcess = ENextVectorToProcess::None;
                     SpilledBucketsCount++;
 
-                    if (IsFinalizing) {
-                        StateUi64Adapter.Finalize();
-                        StateUi32Adapter.Finalize();
-                        StateCharAdapter.Finalize();
-                    }
                     break;
                 default:
                     return;
             }
+        }
+        if (!HasRunningAsyncIoOperation() && IsFinalizing) {
+            State = EState::Restoring;
+
+            StateUi64Adapter.Finalize();
+            StateUi32Adapter.Finalize();
+            StateCharAdapter.Finalize();
         }
     }
 
@@ -175,59 +198,73 @@ struct TTableSpilledBucket {
         second.clear();
     }
 
-    void ProcessBucketRestoration(TTableBucket& bucket) {
-        if (NextVectorToProcess == ENextVectorToProcess::None) {
-            NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
-            BucketState = EBucketState::Restoring;
-        }
+    void ProcessBucketRestoration() {
         while (NextVectorToProcess != ENextVectorToProcess::None) {
-            if (HasRunningAsyncIoOperation()) return;
-
             switch (NextVectorToProcess) {
                 case ENextVectorToProcess::KeyAndVals:
+                    if (StateUi64Adapter.HasRunningAsyncIoOperation()) return;
+
                     if (!StateUi64Adapter.IsDataReady()) {
                         StateUi64Adapter.RequestNextVector();
+                        if (StateUi64Adapter.HasRunningAsyncIoOperation()) return;
                     }
-                    AppendVector(bucket.KeyIntVals, StateUi64Adapter.ExtractVector());
+                    AppendVector(CurrentBucket.KeyIntVals, StateUi64Adapter.ExtractVector());
                     NextVectorToProcess = ENextVectorToProcess::DataIntVals;
                     break;
                 case ENextVectorToProcess::DataIntVals:
+                    if (StateUi64Adapter.HasRunningAsyncIoOperation()) return;
+
                     if (!StateUi64Adapter.IsDataReady()) {
                         StateUi64Adapter.RequestNextVector();
+                        if (StateUi64Adapter.HasRunningAsyncIoOperation()) return;
                     }
-                    AppendVector(bucket.DataIntVals, StateUi64Adapter.ExtractVector());
+                    AppendVector(CurrentBucket.DataIntVals, StateUi64Adapter.ExtractVector());
                     NextVectorToProcess = ENextVectorToProcess::StringsValues;
                     break;
                 case ENextVectorToProcess::StringsValues:
+                    if (StateCharAdapter.HasRunningAsyncIoOperation()) return;
+
                     if (!StateCharAdapter.IsDataReady()) {
                         StateCharAdapter.RequestNextVector();
+                        if (StateCharAdapter.HasRunningAsyncIoOperation()) return;
                     }
-                    AppendVector(bucket.StringsValues, StateCharAdapter.ExtractVector());
+                    AppendVector(CurrentBucket.StringsValues, StateCharAdapter.ExtractVector());
                     NextVectorToProcess = ENextVectorToProcess::StringsOffsets;
                     break;
                 case ENextVectorToProcess::StringsOffsets:
+                    if (StateUi32Adapter.HasRunningAsyncIoOperation()) return;
+
                     if (!StateUi32Adapter.IsDataReady()) {
                         StateUi32Adapter.RequestNextVector();
+                        if (StateUi32Adapter.HasRunningAsyncIoOperation()) return;
                     }
-                    AppendVector(bucket.StringsOffsets, StateUi32Adapter.ExtractVector());
+                    AppendVector(CurrentBucket.StringsOffsets, StateUi32Adapter.ExtractVector());
                     NextVectorToProcess = ENextVectorToProcess::InterfaceValues;
                     break;
                 case ENextVectorToProcess::InterfaceValues:
+                    if (StateCharAdapter.HasRunningAsyncIoOperation()) return;
+
                     if (!StateCharAdapter.IsDataReady()) {
                         StateCharAdapter.RequestNextVector();
+                        if (StateCharAdapter.HasRunningAsyncIoOperation()) return;
                     }
-                    AppendVector(bucket.InterfaceValues, StateCharAdapter.ExtractVector());
+                    AppendVector(CurrentBucket.InterfaceValues, StateCharAdapter.ExtractVector());
                     NextVectorToProcess = ENextVectorToProcess::InterfaceOffsets;
                     break;
                 case ENextVectorToProcess::InterfaceOffsets:
+                    if (StateUi32Adapter.HasRunningAsyncIoOperation()) return;
+
                     if (!StateUi32Adapter.IsDataReady()) {
                         StateUi32Adapter.RequestNextVector();
+                        if (StateUi32Adapter.HasRunningAsyncIoOperation()) return;
                     }
-                    AppendVector(bucket.InterfaceOffsets, StateUi32Adapter.ExtractVector());
-                    NextVectorToProcess = ENextVectorToProcess::None;
+                    AppendVector(CurrentBucket.InterfaceOffsets, StateUi32Adapter.ExtractVector());
                     SpilledBucketsCount--;
                     if (SpilledBucketsCount == 0) {
-                        BucketState = EBucketState::InMemory;
+                        NextVectorToProcess = ENextVectorToProcess::None;
+                        State = EState::InMemory;
+                    } else {
+                        NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
                     }
                     break;
                 default:
@@ -237,11 +274,16 @@ struct TTableSpilledBucket {
         }
     }
 
-    enum class EBucketState {
-        InMemory,
+    TTableBucket&& ExtractBucket() {
+        MKQL_ENSURE(State == EState::InMemory, "Internal logic error");
+        MKQL_ENSURE(SpilledBucketsCount == 0, "Internal logic error");
+        return std::move(CurrentBucket);
+    }
+
+    enum class EState {
         Spilling,
         Restoring,
-        Spilled
+        InMemory
     };
 
     enum class ENextVectorToProcess {
@@ -255,12 +297,14 @@ struct TTableSpilledBucket {
         None
     };
 
-    EBucketState BucketState = EBucketState::InMemory;
+    EState State = EState::InMemory;
     ENextVectorToProcess NextVectorToProcess = ENextVectorToProcess::None;
 
     ui64 SpilledBucketsCount = 0;
 
     bool IsFinalizing = false;
+
+    TTableBucket CurrentBucket;
 };
 
 
@@ -311,7 +355,7 @@ class TTable {
     // Table data is partitioned in buckets based on key value
     std::vector<TTableBucket> TableBuckets;
 
-    std::vector<TTableSpilledBucket> TableSpilledBuckets;
+    std::vector<TTableBucketSpiller> TableBucketsSpiller;
 
     // Temporary vector for tuples manipulation;
     std::vector<ui64> TempTuple;
@@ -403,47 +447,32 @@ public:
 
     bool UpdateAndCheckIfBusy() {
         for (ui64 i = 0; i < NumberOfBuckets; ++i) {
-            TableSpilledBuckets[i].Update();
+            TableBucketsSpiller[i].Update();
         }
 
         for (ui64 i = 0; i < NumberOfBuckets; ++i) {
-            if (!TableSpilledBuckets[i].IsProcessingFinished() && !TableSpilledBuckets[i].HasRunningAsyncIoOperation()) {
-
-                // TODO move this ifs  into bucket
-                if (TableSpilledBuckets[i].BucketState == TTableSpilledBucket::EBucketState::Spilling) {
-                    TableSpilledBuckets[i].ProcessBucketSpilling(TableBuckets[i]);
-                }
-
-                if (TableSpilledBuckets[i].BucketState == TTableSpilledBucket::EBucketState::Restoring) {
-                    TableSpilledBuckets[i].ProcessBucketRestoration(TableBuckets[i]);
-                }
-                
-            }
-        }
-
-        for (ui64 i = 0; i < NumberOfBuckets; ++i) {
-            if (TableSpilledBuckets[i].HasRunningAsyncIoOperation()) return true;
+            if (TableBucketsSpiller[i].HasRunningAsyncIoOperation()) return true;
         }
 
         return false;
     }
 
     bool IsBucketInMemory(ui64 bucket) {
-        return TableSpilledBuckets[bucket].BucketState == TTableSpilledBucket::EBucketState::InMemory;
+        return TableBucketsSpiller[bucket].State == TTableBucketSpiller::EState::InMemory;
     }
 
     void StartLoadingBucket(ui64 bucket) {
-        TableSpilledBuckets[bucket].ProcessBucketRestoration(TableBuckets[bucket]);
+        TableBucketsSpiller[bucket].StartBucketRestoration();
+    }
+
+    void ExtractBucket(ui64 bucket) {
+        TableBuckets[bucket] = std::move(TableBucketsSpiller[bucket].ExtractBucket());
     }
 
     void FinalizeSpilling() {
         for (ui64 i = 0; i < NumberOfBuckets; ++i) {
-            if (!TableSpilledBuckets[i].IsProcessingFinished()) {
-                MKQL_ENSURE(TableSpilledBuckets[i].IsProcessingFinished(), "Internal logic error");
-            }
-            MKQL_ENSURE(!TableSpilledBuckets[i].HasRunningAsyncIoOperation(), "Internal logic error");
-            TableSpilledBuckets[i].ProcessBucketSpilling(TableBuckets[i]);
-            TableSpilledBuckets[i].Finalize();
+            // TODO add current bucket
+            TableBucketsSpiller[i].Finalize();
         }
     }
 

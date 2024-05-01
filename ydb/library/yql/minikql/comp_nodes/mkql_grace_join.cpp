@@ -766,8 +766,6 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 };
 
 EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-
-
             // Collecting data for join and perform join (batch or full)
             while (!*JoinCompleted ) {
                 bool leftBusy = LeftPacker->TablePtr->UpdateAndCheckIfBusy();
@@ -806,9 +804,11 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                             }
                         }
 
+                        std::cerr << std::format("[MISHA] RETURN ONE\n");
                         return EFetchResult::One;
 
                     }
+                    std::cerr << std::format("[MISHA] JOIN FINISHED\n");
 
                     // Resets batch state for batch join
                     if (!*HaveMoreRightRows) {
@@ -868,7 +868,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     }
                 }
 
-                if (resultLeft == EFetchResult::Finish ) {
+                if (resultLeft == EFetchResult::Finish && *HaveMoreLeftRows) {
                     std::cerr << std::format("[MISHA] LEFT finished\n");
                     if (LeftPacker->TablePtr->UpdateAndCheckIfBusy()) return EFetchResult::Yield;
                     LeftPacker->TablePtr->FinalizeSpilling();
@@ -879,7 +879,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                 }
 
 
-                if (resultRight == EFetchResult::Finish ) {
+                if (resultRight == EFetchResult::Finish && *HaveMoreRightRows) {
                     std::cerr << std::format("[MISHA] RIGHT finished\n");
                     if (RightPacker->TablePtr->UpdateAndCheckIfBusy()) return EFetchResult::Yield;
                     RightPacker->TablePtr->FinalizeSpilling();
@@ -897,13 +897,13 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                 }
 
                 if ((!*HaveMoreRightRows && !*HaveMoreLeftRows) && !*PartialJoinCompleted) {
-                    bool isLeftBucketInMemory = !LeftPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin);
-                    bool isRightBucketInMemory = !RightPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin);
-                    if (isLeftBucketInMemory) {
+                    bool isLeftBucketInMemory = LeftPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin);
+                    bool isRightBucketInMemory = RightPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin);
+                    if (!isLeftBucketInMemory) {
                         LeftPacker->TablePtr->StartLoadingBucket(NextBucketsToJoin);
                         std::cerr << std::format("[MISHA] LEFT started loading bucket {}\n", NextBucketsToJoin);
                     }
-                    if (isRightBucketInMemory) {
+                    if (!isRightBucketInMemory) {
                         RightPacker->TablePtr->StartLoadingBucket(NextBucketsToJoin);
                         std::cerr << std::format("[MISHA] RIGHT started loading bucket {}\n", NextBucketsToJoin);
                     }
@@ -913,7 +913,12 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                 
                     if (rightBusy || leftBusy) {
                         return EFetchResult::Yield;
-                    } 
+                    }
+                    LeftPacker->TablePtr->ExtractBucket(NextBucketsToJoin);
+                    std::cerr << std::format("[MISHA] LEFT extract bucket {}\n", NextBucketsToJoin);
+
+                    RightPacker->TablePtr->ExtractBucket(NextBucketsToJoin);
+                    std::cerr << std::format("[MISHA] RIGHT extract bucket {}\n", NextBucketsToJoin);
                 }
 
                 /*if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {

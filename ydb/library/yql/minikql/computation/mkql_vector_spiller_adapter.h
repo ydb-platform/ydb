@@ -30,8 +30,8 @@ public:
     {
     }
 
-    bool HasRunningAsyncIoOperatrion() const {
-        return WriteOperation.has_value() || ReadOperation.has_value();
+    bool HasRunningAsyncIoOperation() const {
+        return ReadOperation.has_value() && !ReadOperation->HasValue() || WriteOperation.has_value() && !WriteOperation->HasValue();
     }
 
     ///Returns current stete of the adapter
@@ -41,19 +41,19 @@ public:
 
     ///Is adapter ready to spill next vector via AddData method.
     ///Returns false in case when there are async operations in progress.
-    bool IsAcceptingData() {
+    /* bool IsAcceptingData() {
         return State == EState::AcceptingData;
-    }
+    }*/
 
     ///When data is ready ExtractVector() is expected to be called.
     bool IsDataReady() {
         return State == EState::DataReady;
     }
 
-    ///Adapter is ready to accept requests for vectors.
+    /*///Adapter is ready to accept requests for vectors.
     bool IsAcceptingDataRequests() {
         return State == EState::AcceptingDataRequests;
-    }
+    }*/
 
     ///Adds new vector to storage. Will not launch real disk operation if case of small vectors
     ///(if inner buffer is not full).
@@ -61,8 +61,8 @@ public:
         MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
         MKQL_ENSURE(State == EState::AcceptingData, "Internal logic error");
 
-        CurrentVector = std::move(vec);
         StoredChunksElementsCount.push(vec.size());
+        CurrentVector = std::move(vec);
         NextVectorPositionToSave = 0;
 
         SaveNextPartOfVector();

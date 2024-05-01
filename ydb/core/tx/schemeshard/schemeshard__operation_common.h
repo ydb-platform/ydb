@@ -303,7 +303,7 @@ public:
             case ETabletType::StatisticsAggregator:
                 context.SS->TabletCounters->Simple()[COUNTER_STATISTICS_AGGREGATOR_COUNT].Add(1);
                 break;
-            case ETabletType::BackupControllerTablet:
+            case ETabletType::BackupController:
                 context.SS->TabletCounters->Simple()[COUNTER_BACKUP_CONTROLLER_TABLET_COUNT].Add(1);
                 break;
             default:

@@ -200,12 +200,12 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
             Y_ABORT_UNLESS(tenantGS == subdomain->GetTenantGraphShardID());
         }
 
-        if (record.HasTenantBackupControllerTablet()) {
-            TTabletId tenantSA = TTabletId(record.GetTenantBackupControllerTablet());
-            if (!subdomain->GetTenantBackupControllerTabletID()) {
-                addPrivateShard(tenantSA, ETabletType::BackupControllerTablet);
+        if (record.HasTenantBackupController()) {
+            TTabletId tenantSA = TTabletId(record.GetTenantBackupController());
+            if (!subdomain->GetTenantBackupControllerID()) {
+                addPrivateShard(tenantSA, ETabletType::BackupController);
             }
-            Y_ABORT_UNLESS(tenantSA == subdomain->GetTenantBackupControllerTabletID());
+            Y_ABORT_UNLESS(tenantSA == subdomain->GetTenantBackupControllerID());
         }
 
         if (record.HasUpdateTenantRootACL()) {

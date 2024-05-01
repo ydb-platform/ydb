@@ -67,7 +67,7 @@ private:
             modifySubDomain.SetExternalStatisticsAggregator(true);
         }
         if (Current.CreateBCT) {
-            modifySubDomain.SetExternalBackupControllerTablet(true);
+            modifySubDomain.SetExternalBackupController(true);
         }
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,

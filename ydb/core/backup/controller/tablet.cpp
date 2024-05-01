@@ -3,50 +3,50 @@
 
 namespace NKikimr::NBackup {
 
-TBackupControllerTablet::TBackupControllerTablet(const TActorId& tablet, TTabletStorageInfo* info)
+TBackupController::TBackupController(const TActorId& tablet, TTabletStorageInfo* info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
 {
     Y_UNUSED(tablet, info);
 }
 
-STFUNC(TBackupControllerTablet::StateInit) {
+STFUNC(TBackupController::StateInit) {
     StateInitImpl(ev, SelfId());
 }
 
-STFUNC(TBackupControllerTablet::StateWork) {
+STFUNC(TBackupController::StateWork) {
     HandleDefaultEvents(ev, SelfId());
 }
 
-void TBackupControllerTablet::OnDetach(const TActorContext& ctx) {
+void TBackupController::OnDetach(const TActorContext& ctx) {
     Die(ctx);
 }
 
-void TBackupControllerTablet::OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) {
+void TBackupController::OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ev);
     Die(ctx);
 }
 
-void TBackupControllerTablet::OnActivateExecutor(const TActorContext& ctx) {
+void TBackupController::OnActivateExecutor(const TActorContext& ctx) {
     RunTxInitSchema(ctx);
 }
 
-void TBackupControllerTablet::DefaultSignalTabletActive(const TActorContext& ctx) {
+void TBackupController::DefaultSignalTabletActive(const TActorContext& ctx) {
     Y_UNUSED(ctx);
 }
 
 
-void TBackupControllerTablet::SwitchToWork(const TActorContext& ctx) {
+void TBackupController::SwitchToWork(const TActorContext& ctx) {
     SignalTabletActive(ctx);
     Become(&TThis::StateWork);
 }
 
-void TBackupControllerTablet::Reset() {
+void TBackupController::Reset() {
 
 }
 
-IActor* CreateBackupControllerTablet(const TActorId& tablet, TTabletStorageInfo* info) {
-    return new TBackupControllerTablet(tablet, info);
+IActor* CreateBackupController(const TActorId& tablet, TTabletStorageInfo* info) {
+    return new TBackupController(tablet, info);
 }
 
 } // namespace NKikimr::NBackup

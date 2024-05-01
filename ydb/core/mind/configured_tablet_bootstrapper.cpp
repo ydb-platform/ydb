@@ -232,8 +232,8 @@ TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
     case TTabletTypes::StatisticsAggregator:
         createFunc = &NStat::CreateStatisticsAggregator;
         break;
-    case TTabletTypes::BackupControllerTablet:
-        createFunc = &NBackup::CreateBackupControllerTablet;
+    case TTabletTypes::BackupController:
+        createFunc = &NBackup::CreateBackupController;
         break;
     default:
         return nullptr;

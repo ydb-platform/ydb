@@ -2,11 +2,11 @@
 
 namespace NKikimr::NBackup {
 
-class TBackupControllerTablet::TTxInitSchema
+class TBackupController::TTxInitSchema
     : public TTxBase
 {
 public:
-    explicit TTxInitSchema(TBackupControllerTablet* self)
+    explicit TTxInitSchema(TBackupController* self)
         : TTxBase("TxInitSchema", self)
     {
     }
@@ -30,7 +30,7 @@ public:
 
 }; // TTxInitSchema
 
-void TBackupControllerTablet::RunTxInitSchema(const TActorContext& ctx) {
+void TBackupController::RunTxInitSchema(const TActorContext& ctx) {
     Execute(new TTxInitSchema(this), ctx);
 }
 

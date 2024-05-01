@@ -198,7 +198,7 @@ enum ESimpleCounters {
 
     COUNTER_IN_FLIGHT_OPS_TxCopySequence = 159            [(CounterOpts) = {Name: "InFlightOps/CopySequence"}];
 
-    COUNTER_BACKUP_CONTROLLER_TABLET_COUNT = 160 [(CounterOpts) = {Name: "BackupControllerTablets"}];
+    COUNTER_BACKUP_CONTROLLER_TABLET_COUNT = 160 [(CounterOpts) = {Name: "BackupControllers"}];
 }
 
 enum ECumulativeCounters {

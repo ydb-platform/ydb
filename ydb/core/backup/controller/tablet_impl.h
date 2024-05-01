@@ -13,7 +13,7 @@
 
 namespace NKikimr::NBackup {
 
-struct TBackupControllerTabletSchema : NIceDb::Schema {
+struct TBackupControllerSchema : NIceDb::Schema {
     struct BackupCollections : Table<1> {
         struct ID : Column<1, NScheme::NTypeIds::Uint32> {};
 
@@ -25,16 +25,16 @@ struct TBackupControllerTabletSchema : NIceDb::Schema {
     using TSettings = SchemaSettings<ExecutorLogBatching<true>, ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>>;
 };
 
-class TBackupControllerTablet
-    : public TActor<TBackupControllerTablet>
+class TBackupController
+    : public TActor<TBackupController>
     , public NTabletFlatExecutor::TTabletExecutedFlat
 {
 public:
     class TTxBase
-        : public NTabletFlatExecutor::TTransactionBase<TBackupControllerTablet>
+        : public NTabletFlatExecutor::TTransactionBase<TBackupController>
     {
     public:
-        TTxBase(const TString& name, TBackupControllerTablet* self)
+        TTxBase(const TString& name, TBackupController* self)
             : TTransactionBase(self)
             , LogPrefix(name)
         {
@@ -43,7 +43,7 @@ public:
     protected:
         const TString LogPrefix;
     };
-    using Schema = TBackupControllerTabletSchema;
+    using Schema = TBackupControllerSchema;
 
     // local transactions
     class TTxInitSchema;
@@ -57,7 +57,7 @@ public:
         return NKikimrServices::TActivity::BACKUP_CONTROLLER_TABLET;
     }
 
-    explicit TBackupControllerTablet(const TActorId& tablet, TTabletStorageInfo* info);
+    explicit TBackupController(const TActorId& tablet, TTabletStorageInfo* info);
 
     STFUNC(StateInit);
 

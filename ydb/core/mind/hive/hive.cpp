@@ -132,7 +132,7 @@ const std::unordered_map<TTabletTypes::EType, TString> TABLET_TYPE_SHORT_NAMES =
                                                                                   {TTabletTypes::GraphShard, "GS"},
                                                                                   {TTabletTypes::NodeBroker, "NB"},
                                                                                   {TTabletTypes::BlockStoreDiskRegistry, "BDR"},
-                                                                                  {TTabletTypes::BackupControllerTablet, "BCT"},
+                                                                                  {TTabletTypes::BackupController, "BCT"},
                                                                                  };
 
 const std::unordered_map<TString, TTabletTypes::EType> TABLET_TYPE_BY_SHORT_NAME = MakeReverseMap(TABLET_TYPE_SHORT_NAMES);

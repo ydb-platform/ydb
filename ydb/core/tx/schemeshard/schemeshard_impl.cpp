@@ -150,7 +150,7 @@ void TSchemeShard::InitializeTabletMigrations() {
             createSA = true;
         }
 
-        if (AppData()->FeatureFlags.GetEnableBackupService() && subdomain->GetTenantBackupControllerTabletID() == InvalidTabletId) {
+        if (AppData()->FeatureFlags.GetEnableBackupService() && subdomain->GetTenantBackupControllerID() == InvalidTabletId) {
             createBCT = true;
         }
 

@@ -529,7 +529,7 @@ public:
         bool IsExternalHive;
         bool IsExternalSysViewProcessor;
         bool IsExternalStatisticsAggregator;
-        bool IsExternalBackupControllerTablet;
+        bool IsExternalBackupController;
         bool AreResourcesShared;
         THashSet<TTenant::TPtr> HostedTenants;
 

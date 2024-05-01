@@ -3995,7 +3995,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             case ETabletType::GraphShard:
                 Self->TabletCounters->Simple()[COUNTER_GRAPHSHARD_COUNT].Add(1);
                 break;
-            case ETabletType::BackupControllerTablet:
+            case ETabletType::BackupController:
                 Self->TabletCounters->Simple()[COUNTER_BACKUP_CONTROLLER_TABLET_COUNT].Add(1);
                 break;
             default:

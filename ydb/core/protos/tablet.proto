@@ -49,7 +49,7 @@ message TTabletTypes {
         BlobDepot = 39;
         StatisticsAggregator = 40;
         GraphShard = 41;
-        BackupControllerTablet = 42;
+        BackupController = 42;
 
         // when adding a new tablet type and keeping parse compatibility with the old version
         // rename existing reserved item to desired one, and add new reserved item to

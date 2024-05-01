@@ -38,7 +38,7 @@ struct TParamsDelta {
     uint8_t AddExternalSysViewProcessor = 0;
     uint8_t AddExternalStatisticsAggregator = 0;
     uint8_t AddGraphShard = 0;
-    uint8_t AddBackupControllerTablet = 0;
+    uint8_t AddBackupController = 0;
     bool SharedTxSupportAdded = false;
     TVector<TStoragePool> StoragePoolsAdded;
     bool ServerlessComputeResourcesModeChanged = false;
@@ -206,18 +206,18 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
         }
     }
 
-    // BackupControllerTablet checks
-    uint8_t addBackupControllerTablet = 0;
-    if (input.GetExternalBackupControllerTablet()) {
-        const bool prev = bool(current->GetTenantBackupControllerTabletID());
-        const bool next = input.GetExternalBackupControllerTablet();
+    // BackupController checks
+    uint8_t addBackupController = 0;
+    if (input.GetExternalBackupController()) {
+        const bool prev = bool(current->GetTenantBackupControllerID());
+        const bool next = input.GetExternalBackupController();
         const bool changed = (prev != next);
 
         if (changed) {
             if (next == false) {
-                return paramError("BackupControllerTablet could only be added, not removed");
+                return paramError("BackupController could only be added, not removed");
             }
-            addBackupControllerTablet = 1;
+            addBackupController = 1;
         }
     }
 
@@ -324,7 +324,7 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
     delta->AddExternalSysViewProcessor = addExternalSysViewProcessor;
     delta->AddExternalStatisticsAggregator = addExternalStatisticsAggregator;
     delta->AddGraphShard = addGraphShard;
-    delta->AddBackupControllerTablet = addBackupControllerTablet;
+    delta->AddBackupController = addBackupController;
     delta->SharedTxSupportAdded = sharedTxSupportAdded;
     delta->StoragePoolsAdded = std::move(storagePoolsAdded);
     delta->ServerlessComputeResourcesModeChanged = serverlessComputeResourcesModeChanged;
@@ -910,7 +910,7 @@ public:
         ui64 tabletsToCreateOverLimit = delta.AddExternalSysViewProcessor
             + delta.AddExternalStatisticsAggregator
             + delta.AddGraphShard
-            + delta.AddBackupControllerTablet;
+            + delta.AddBackupController;
         ui64 tabletsToCreateTotal = tabletsToCreateUnderLimit + tabletsToCreateOverLimit;
 
         // Check path limits
@@ -989,7 +989,7 @@ public:
                 delta.AddExternalHive ||
                 delta.AddExternalStatisticsAggregator ||
                 delta.AddGraphShard ||
-                delta.AddBackupControllerTablet)
+                delta.AddBackupController)
             {
                 if (!context.SS->ResolveSubdomainsChannels(alter->GetStoragePools(), channelsBinding)) {
                     result->SetError(NKikimrScheme::StatusInvalidParameter, "failed to construct channels binding");
@@ -1022,8 +1022,8 @@ public:
             if (delta.AddGraphShard) {
                 AddShardsTo(txState, OperationId.GetTxId(), basenameId, 1, TTabletTypes::GraphShard, channelsBinding, context.SS);
             }
-            if (delta.AddBackupControllerTablet) {
-                AddShardsTo(txState, OperationId.GetTxId(), basenameId, 1, TTabletTypes::BackupControllerTablet, channelsBinding, context.SS);
+            if (delta.AddBackupController) {
+                AddShardsTo(txState, OperationId.GetTxId(), basenameId, 1, TTabletTypes::BackupController, channelsBinding, context.SS);
             }
             Y_ABORT_UNLESS(txState.Shards.size() == tabletsToCreateTotal);
         }

@@ -2,7 +2,7 @@
 
 namespace NKikimr::NBackup {
 
-class TBackupControllerTablet::TTxInit
+class TBackupController::TTxInit
     : public TTxBase
 {
     inline bool Load(NIceDb::TNiceDb& db) {
@@ -36,7 +36,7 @@ public:
     }
 }; // TTxInit
 
-void TBackupControllerTablet::RunTxInit(const TActorContext& ctx) {
+void TBackupController::RunTxInit(const TActorContext& ctx) {
     Execute(new TTxInit(this), ctx);
 }
 

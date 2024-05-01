@@ -7,6 +7,6 @@ namespace NKikimr::NBackup {
 
 using namespace NActors;
 
-IActor* CreateBackupControllerTablet(const TActorId& tablet, TTabletStorageInfo* info);
+IActor* CreateBackupController(const TActorId& tablet, TTabletStorageInfo* info);
 
 } // namespace NKikimr::NBackup

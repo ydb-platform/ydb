@@ -16,6 +16,10 @@
 
 #include <util/random/random.h>
 
+#ifndef NDEBUG
+    #include <yt/yt/core/misc/shutdown.h>
+#endif
+
 namespace NYT::NConcurrency {
 
 using namespace NProfiling;
@@ -154,23 +158,72 @@ public:
         GuardedProcessQueues();
     }
 
-    ~TFiberRegistry()
-    {
-        GuardedProcessQueues();
-    }
-
 private:
     TFiberStack<NDetail::TFiberRegisterTag> RegisterQueue_;
     TFiberStack<NDetail::TFiberUnregisterTag> UnregisterQueue_;
 
-    NThreading::TForkAwareSpinLock Lock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, Lock_);
     TFiber::TFiberList Fibers_;
 
-    void GuardedProcessQueues()
-    {
-        Fibers_.Append(RegisterQueue_.PopAll());
+// NB(arkady-e1ppa): This shutdown logic
+// is only here to prevent potential memory
+// leak caused by some fibers being stuck in
+// registry. We don't really care about them
+// cause realistically this is a "problem"
+// only during the shutdown which means that
+// process is going to be killed shortly after.
+// In debug we cleanup properly so that
+// there are no actual leaks.
+#ifndef NDEBUG
+    TShutdownCookie ShutdownCookie_;
 
+    void InitializeShutdownCookie()
+    {
+        ShutdownCookie_ = RegisterShutdownCallback(
+            "TFiberRegistry",
+            BIND([this] {
+                auto guard = Guard(Lock_);
+                while(GuardedProcessQueues());
+            }),
+            /*priority*/std::numeric_limits<int>::min());
+    }
+
+#endif
+
+    // Returns |false| iff both queues
+    // were observed empty.
+    bool GuardedProcessQueues()
+    {
+#ifndef NDEBUG
+        if (!ShutdownCookie_) {
+            InitializeShutdownCookie();
+        }
+#endif
+
+        // NB(arkady-e1ppa): One thread can quickly
+        // Register and then Unregister some fiber1.
+        // Another thread running the GuardedProcessQueues
+        // call has two options:
+        // 1) Read RegisterQueue and then UnregisterQueue
+        // 2) Inverse of (1)
+        // In case of (1) we might miss fiber1 registration
+        // event but still observe fiber1 unregistration event.
+        // In this case we would unlink fiber and delete it.
+        // Unlinking fiber which is still in RegisterQueue
+        // Is almost guaranteed to cause a segfault, so
+        // we cannot afford such scenario.
+        // In case of (2) we might miss fiber1 unregistration
+        // event but observe fiber1 registration event.
+        // This would not cause a leak since we
+        // clean up fibers during the shutdown anyway.
         auto toUnregister = UnregisterQueue_.PopAll();
+        auto toRegister = RegisterQueue_.PopAll();
+
+        if (toRegister.Empty() && toUnregister.Empty()) {
+            return false;
+        }
+
+        Fibers_.Append(std::move(toRegister));
 
         // NB: util intrusive list does not return
         // nullptr in case of empty!
@@ -185,6 +238,8 @@ private:
         // We are okay with this since we expect to have occasional calls of this method
         // which would unstuck most of the fibers. In dtor of this singleton we
         // release the last batch of stuck fibers.
+
+        return true;
     };
 
     void DebugPrint()
@@ -289,17 +344,21 @@ void TFiber::SetRunning()
 void TFiber::SetWaiting()
 {
     WaitingSince_.store(GetApproximateCpuInstant(), std::memory_order::release);
-    State_.store(EFiberState::Waiting, std::memory_order::release);
+
+    auto observed = State_.exchange(EFiberState::Waiting, std::memory_order::release);
+    YT_VERIFY(observed == EFiberState::Running);
 }
 
 void TFiber::SetFinished()
 {
-    State_.store(EFiberState::Finished);
+    auto observed = State_.exchange(EFiberState::Finished, std::memory_order::relaxed);
+    YT_VERIFY(observed == EFiberState::Running);
 }
 
 void TFiber::SetIdle()
 {
-    State_.store(EFiberState::Idle);
+    auto observed = State_.exchange(EFiberState::Idle, std::memory_order::relaxed);
+    YT_VERIFY(observed == EFiberState::Running);
     Clear();
 }
 
@@ -356,6 +415,7 @@ void TFiber::ReadFibers(TFunctionView<void(TFiberList&)> callback)
 void TFiber::UnregisterAndDelete() noexcept
 {
     YT_VERIFY(static_cast<TUnregisterBase*>(this)->Empty());
+    YT_VERIFY(!static_cast<TRegisterBase*>(this)->Empty());
 
     static_cast<TRegisterBase*>(this)->Unlink();
     delete this;

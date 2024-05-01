@@ -180,7 +180,7 @@
 #include <ydb/core/tx/conveyor/service/service.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 
-#include <ydb/core/backup/tablet.h>
+#include <ydb/core/backup/controller/tablet.h>
 
 #include <ydb/services/bg_tasks/ds_table/executor.h>
 #include <ydb/services/bg_tasks/service.h>

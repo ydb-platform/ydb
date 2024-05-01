@@ -57,47 +57,23 @@ public:
         return NKikimrServices::TActivity::BACKUP_CONTROLLER_TABLET;
     }
 
-    explicit TBackupControllerTablet(const TActorId& tablet, TTabletStorageInfo* info)
-        : TActor(&TThis::StateInit)
-        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-    {
-        Y_UNUSED(tablet, info);
-    }
+    explicit TBackupControllerTablet(const TActorId& tablet, TTabletStorageInfo* info);
 
-    STFUNC(StateInit) {
-        StateInitImpl(ev, SelfId());
-    }
+    STFUNC(StateInit);
 
-    STFUNC(StateWork) {
-        HandleDefaultEvents(ev, SelfId());
-    }
+    STFUNC(StateWork);
 
-    void OnDetach(const TActorContext& ctx) override {
-        Die(ctx);
-    }
+    void OnDetach(const TActorContext& ctx) override;
 
-    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) override {
-        Y_UNUSED(ev);
-        Die(ctx);
-    }
+    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) override;
 
-    void OnActivateExecutor(const TActorContext& ctx) override {
-        RunTxInitSchema(ctx);
-    }
+    void OnActivateExecutor(const TActorContext& ctx) override;
 
-    void DefaultSignalTabletActive(const TActorContext& ctx) override {
-        Y_UNUSED(ctx);
-    }
+    void DefaultSignalTabletActive(const TActorContext& ctx) override;
 
+    void SwitchToWork(const TActorContext& ctx);
 
-    void SwitchToWork(const TActorContext& ctx) {
-        SignalTabletActive(ctx);
-        Become(&TThis::StateWork);
-    }
-
-    void Reset() {
-
-    }
+    void Reset();
 };
 
 } // namespace NKikimr::NBackup

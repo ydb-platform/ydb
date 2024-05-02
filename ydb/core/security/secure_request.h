@@ -18,7 +18,7 @@ protected:
         TString Token;
 
         bool IsExists() const {
-            return !Token.empty() || !CertAuth.ClientCertificate.empty();
+            return (CertAuth.NeedAuthByCertificate && !CertAuth.ClientCertificate.empty()) || !Token.empty();
         }
     };
 

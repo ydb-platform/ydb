@@ -3,6 +3,10 @@
 
 namespace NYql {
 
-IQStoragePtr MakeFileQStorage(const TString& folder = {});
+struct TFileQStorageSettings {
+    bool BufferUntilCommit = true;
+};
+
+IQStoragePtr MakeFileQStorage(const TString& folder = {}, const TFileQStorageSettings& settings = {});
 
 };

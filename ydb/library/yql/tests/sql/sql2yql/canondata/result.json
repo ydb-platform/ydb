@@ -1301,6 +1301,20 @@
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_aggr_factory-count_if_/sql.yql"
         }
     ],
+    "test_sql2yql.test[aggr_factory-def_value_full_table]": [
+        {
+            "checksum": "f88c95f4903c32187fc381bda1336b46",
+            "size": 7322,
+            "uri": "https://{canondata_backend}/1942173/5547b75707e10619dbd7727d7d0f2404ab9b13ca/resource.tar.gz#test_sql2yql.test_aggr_factory-def_value_full_table_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[aggr_factory-def_value_with_keys]": [
+        {
+            "checksum": "ade829860b226398a4d468e42ad95d17",
+            "size": 7477,
+            "uri": "https://{canondata_backend}/1942173/5547b75707e10619dbd7727d7d0f2404ab9b13ca/resource.tar.gz#test_sql2yql.test_aggr_factory-def_value_with_keys_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[aggr_factory-every]": [
         {
             "checksum": "97b4c5b6747623995d6fd8bbbb47b325",
@@ -19723,6 +19737,20 @@
             "checksum": "bcbc90573d75b6467cd13d799948fe00",
             "size": 575,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_aggr_factory-count_if_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[aggr_factory-def_value_full_table]": [
+        {
+            "checksum": "7af8129a4f271ccba996be1e810dbed4",
+            "size": 1313,
+            "uri": "https://{canondata_backend}/1942173/5547b75707e10619dbd7727d7d0f2404ab9b13ca/resource.tar.gz#test_sql_format.test_aggr_factory-def_value_full_table_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[aggr_factory-def_value_with_keys]": [
+        {
+            "checksum": "a298cf11b7a5a217671ae761ec9eb406",
+            "size": 1338,
+            "uri": "https://{canondata_backend}/1942173/5547b75707e10619dbd7727d7d0f2404ab9b13ca/resource.tar.gz#test_sql_format.test_aggr_factory-def_value_with_keys_/formatted.sql"
         }
     ],
     "test_sql_format.test[aggr_factory-every]": [

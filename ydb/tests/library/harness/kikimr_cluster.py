@@ -290,7 +290,6 @@ class YdbdSlice(KiKiMRClusterInterface):
         self.hosts_names = self.cluster_details.hosts_names
         nodes = ydbd_slice.nodes.Nodes(self.hosts_names, dry_run=False, ssh_user=ssh_user)
 
-
         configurator = ydbd_slice.cluster_description.Configurator(
             self.cluster_details,
             out_dir="/tmp",
@@ -355,11 +354,9 @@ class YdbdSlice(KiKiMRClusterInterface):
     def start(self):
         self.__slice.slice_install()
         self._wait_for_start()
-
         return self
 
     def stop(self):
-
         self.__slice.slice_stop()
         return self
 

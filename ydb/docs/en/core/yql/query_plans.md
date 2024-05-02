@@ -11,7 +11,7 @@ Query execution stage.
 **UI representation**:
 ![stage](_assets/stage.png)
 
-Stage can contatin the following operation:
+A stage can contatin the following operations:
 
 #### TableFullScan
 Full table scan. It is important to keep in mind that the resource intensity of this operation is proportional to the size of the table, so it should be avoided whenever possible.

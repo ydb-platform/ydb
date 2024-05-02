@@ -131,6 +131,43 @@ Y_UNIT_TEST(UnalignedMmapUnalignedSize) {
     );
 }
 
+Y_UNIT_TEST(YellowZoneSwitchesCorrectly) {
+    TAlignedPagePool::ResetGlobalsUT();
+    TAlignedPagePoolImpl alloc(__LOCATION__);
+    auto FreeWithAlloc = [&](size_t size) {
+        alloc.OffloadFree(size);
+        // Yellow zone is only updated during allocs
+        alloc.OffloadAlloc(0);
+    };
+
+    alloc.SetLimit(100);
+
+    UNIT_ASSERT_VALUES_EQUAL(false, alloc.IsMemoryYellowZoneEnabled());
+
+    // Total allocated: 80
+    alloc.OffloadAlloc(80);
+    UNIT_ASSERT_VALUES_EQUAL(true, alloc.IsMemoryYellowZoneEnabled());
+
+    // Total allocated: 70
+    FreeWithAlloc(10);
+    UNIT_ASSERT_VALUES_EQUAL(true, alloc.IsMemoryYellowZoneEnabled());
+
+    // Total allocated: 50
+    FreeWithAlloc(20);
+    UNIT_ASSERT_VALUES_EQUAL(false, alloc.IsMemoryYellowZoneEnabled());
+
+    FreeWithAlloc(50);
+}
+
+Y_UNIT_TEST(YellowZoneZeroDivision) {
+    TAlignedPagePool::ResetGlobalsUT();
+    TAlignedPagePoolImpl alloc(__LOCATION__);
+
+    alloc.SetLimit(0);
+
+    UNIT_ASSERT_EQUAL(false, alloc.IsMemoryYellowZoneEnabled());
+}
+
 } // Y_UNIT_TEST_SUITE(TAlignedPagePoolTest)
 
 } // namespace NMiniKQL

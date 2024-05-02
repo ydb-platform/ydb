@@ -189,8 +189,6 @@ runs:
         ./ya --version
         
         echo "Tests are running..." | .github/scripts/tests/comment-pr.py
-        shopt > /tmp/shopt_a
-        set -o > /tmp/set_a
 
         ./ya test ${{ inputs.build_target }} "${params[@]}" \
           --stat --log-file "$LOG_DIR/ya_log.txt" --evlog-file "$LOG_DIR/ya_evlog.jsonl" -DCONSISTENT_DEBUG \

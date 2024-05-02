@@ -364,7 +364,7 @@ const NKikimrMiniKQL::TParams* TQueryData::GetParameterMiniKqlValue(const TStrin
 
     auto it = Params.find(name);
     if (it == Params.end()) {
-        with_lock(AllocState->Alloc) {
+        with_lock(*AllocState->Alloc) {
             const auto& [type, uv] = GetParameterUnboxedValue(name);
             NKikimrMiniKQL::TParams param;
             ExportTypeToProto(type, *param.MutableType());
@@ -386,7 +386,7 @@ const Ydb::TypedValue* TQueryData::GetParameterTypedValue(const TString& name) {
 
     auto it = ParamsProtobuf.find(name);
     if (it == ParamsProtobuf.end()) {
-        with_lock(AllocState->Alloc) {
+        with_lock(*AllocState->Alloc) {
             const auto& [type, uv] = GetParameterUnboxedValue(name);
 
             auto& tv = ParamsProtobuf[name];

@@ -40,6 +40,7 @@ SRCS(
     console_config.proto
     console_tenant.proto
     counters.proto
+    counters_backup.proto
     counters_blob_depot.proto
     counters_bs_controller.proto
     counters_cms.proto

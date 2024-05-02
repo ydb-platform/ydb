@@ -137,6 +137,7 @@ void TSchemeShard::InitializeTabletMigrations() {
 
         bool createSVP = false;
         bool createSA = false;
+        bool createBCT = false;
 
         if (subdomain->GetTenantSysViewProcessorID() == InvalidTabletId) {
             createSVP = true;
@@ -149,13 +150,17 @@ void TSchemeShard::InitializeTabletMigrations() {
             createSA = true;
         }
 
-        if (!createSVP && !createSA) {
+        if (AppData()->FeatureFlags.GetEnableBackupService() && subdomain->GetTenantBackupControllerID() == InvalidTabletId) {
+            createBCT = true;
+        }
+
+        if (!createSVP && !createSA && !createBCT) {
             continue;
         }
 
         auto workingDir = path.Parent().PathString();
         auto dbName = path.LeafName();
-        TMigrationInfo migration{workingDir, dbName, createSVP, createSA};
+        TMigrationInfo migration{workingDir, dbName, createSVP, createSA, createBCT};
         migrations.push(std::move(migration));
 
         LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -164,6 +169,7 @@ void TSchemeShard::InitializeTabletMigrations() {
             << ", db name: " << dbName
             << ", create SVP: " << createSVP
             << ", create SA: " << createSA
+            << ", create BCT: " << createBCT
             << ", at schemeshard: " << TabletID());
     }
 

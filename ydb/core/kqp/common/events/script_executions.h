@@ -294,6 +294,7 @@ struct TEvScriptFinalizeRequest : public NActors::TEventLocal<TEvScriptFinalizeR
         std::optional<TString> QueryPlan;
         std::optional<TString> QueryAst;
         std::optional<ui64> LeaseGeneration;
+        std::optional<TString> QueryAstCompressionMethod;
     };
 
     TEvScriptFinalizeRequest(EFinalizationStatus finalizationStatus, const TString& executionId, const TString& database,

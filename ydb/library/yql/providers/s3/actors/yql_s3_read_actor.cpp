@@ -1223,7 +1223,7 @@ private:
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         LOG_T("TS3ReadActor", "Handle undelivered FileQueue ");
         if (!FileQueueEvents.HandleUndelivered(ev)) {
-            TIssues issues{TIssue{TStringBuilder() << "FileQueue was lost"}};
+            TIssues issues{TIssue{"FileQueue was lost"}};
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR));
         }
     }
@@ -1942,7 +1942,7 @@ public:
         // init the 1st reader, get meta/rg count
         readers.resize(1);
         if (arrow::Status msg = builder.Open(std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit)); !msg.ok()) {
-            throw parquet::ParquetException(TStringBuilder() << msg.ToString());
+            throw parquet::ParquetException(msg.ToString());
         }
         THROW_ARROW_NOT_OK(builder.Build(&readers[0]));
         auto fileMetadata = readers[0]->parquet_reader()->metadata();
@@ -2110,7 +2110,7 @@ public:
         properties.set_pre_buffer(true);
         builder.properties(properties);
         if (arrow::Status msg = builder.Open(arrowFile); !msg.ok()) {
-            throw parquet::ParquetException(TStringBuilder() << msg.ToString());
+            throw parquet::ParquetException(msg.ToString());
         }
         THROW_ARROW_NOT_OK(builder.Build(&fileReader));
 

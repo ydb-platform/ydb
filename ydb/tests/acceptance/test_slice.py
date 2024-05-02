@@ -6,7 +6,7 @@ from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import YdbdSlice
 
 
-class SliceTest(object):
+class TestViaSlice(object):
     """
     Various tests which uses slice (e.g. host's cluster) for testing
     """
@@ -20,7 +20,7 @@ class SliceTest(object):
 
     @classmethod
     def teardown_class(cls):
-        # cls.cluster.stop()
+        cls.cluster.stop()
         pass
 
     def test_slice_sample(self):

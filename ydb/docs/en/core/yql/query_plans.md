@@ -114,7 +114,7 @@ Attribute | Description
 Offset | offset value
 
 #### Union
-Union the results of two or more subqueries into one set.
+Concatenate the results of two or more subqueries into a single row set.
 
 #### Iterator
 Iterates through a given set of rows, typically use a [precompute](#precompute) as an argument.

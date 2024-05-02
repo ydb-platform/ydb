@@ -22,7 +22,7 @@ public:
 
     bool ForgetExecutionOperation();
 
-    bool PrintScriptResults() const;
+    void PrintScriptResults() const;
 
 private:
     class TImpl;

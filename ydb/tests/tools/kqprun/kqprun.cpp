@@ -87,8 +87,10 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
     }
 
     if (executionOptions.HasResults()) {
-        if (!runner.PrintScriptResults()) {
-            ythrow yexception() << "Failed to print script results";
+        try {
+            runner.PrintScriptResults();
+        } catch (...) {
+            ythrow yexception() << "Failed to print script results, reason:\n" <<  CurrentExceptionMessage();
         }
     }
 

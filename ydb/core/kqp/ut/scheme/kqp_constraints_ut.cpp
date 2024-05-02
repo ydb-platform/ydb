@@ -941,6 +941,39 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             ]
         )");
 
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/AlterTableAddNotNullColumn` ADD COLUMN Value4 Int8 NOT NULL DEFAULT Int8("-24");
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+         fCompareTable(R"(
+            [
+                [[1u];["Old"];1;7;-24];[[2u];["New"];1;7;-24]
+            ]
+        )");
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/AlterTableAddNotNullColumn` ADD COLUMN Value5 Int8 NOT NULL DEFAULT -25;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+         fCompareTable(R"(
+            [
+                [[1u];["Old"];1;7;-24;-25];[[2u];["New"];1;7;-24;-25]
+            ]
+        )");
     }
 
     Y_UNIT_TEST(Utf8AndDefault) {

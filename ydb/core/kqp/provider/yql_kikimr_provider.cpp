@@ -579,6 +579,7 @@ void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
         case EDataSlot::Datetime:
             protoValue.SetUint32(FromString<ui32>(value));
             break;
+        case EDataSlot::Int8:
         case EDataSlot::Int32:
             protoValue.SetInt32(FromString<i32>(value));
             break;
@@ -712,6 +713,7 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
         case EDataSlot::Datetime:
             protoValue.set_uint32_value(FromString<ui32>(value));
             break;
+        case EDataSlot::Int8:
         case EDataSlot::Int32:
             protoValue.set_int32_value(FromString<i32>(value));
             break;

@@ -113,6 +113,14 @@ protected:
         TTokenRecordBase(const TTokenRecordBase&) = delete;
         TTokenRecordBase& operator =(const TTokenRecordBase&) = delete;
 
+        static constexpr const char* UnknownAuthType = "Unknown";
+        static constexpr const char* UnsupportedAuthType = "Unsupported";
+        static constexpr const char* BuiltinAuthType = "Builtin";
+        static constexpr const char* LoginAuthType = "Login";
+        static constexpr const char* AccessServiceAuthType = "AccessService";
+        static constexpr const char* ApiKeyAuthType = "ApiKey";
+        static constexpr const char* CertificateAuthType = "Certificate";
+
         TString Ticket;
         typename TDerived::ETokenType TokenType = TDerived::ETokenType::Unknown;
         NKikimr::TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature Signature;
@@ -192,19 +200,19 @@ protected:
         TString GetAuthType() const {
             switch (TokenType) {
                 case TDerived::ETokenType::Unknown:
-                    return "Unknown";
+                    return UnknownAuthType;
                 case TDerived::ETokenType::Unsupported:
-                    return "Unsupported";
+                    return UnsupportedAuthType;
                 case TDerived::ETokenType::Builtin:
-                    return "Builtin";
+                    return BuiltinAuthType;
                 case TDerived::ETokenType::Login:
-                    return "Login";
+                    return LoginAuthType;
                 case TDerived::ETokenType::AccessService:
-                    return "AccessService";
+                    return AccessServiceAuthType;
                 case TDerived::ETokenType::ApiKey:
-                    return "ApiKey";
+                    return ApiKeyAuthType;
                 case TDerived::ETokenType::Certificate:
-                    return "Certificate";
+                    return CertificateAuthType;
             }
         }
 
@@ -792,7 +800,7 @@ private:
         TStringBuf ticketType;
         if (ev->Get()->AuthInfo.IsCertificate) {
             ticket = ev->Get()->AuthInfo.Ticket;
-            ticketType = "Certificate";
+            ticketType = TDerived::TTokenRecord::CertificateAuthType;
         } else {
             CrackTicket(ev->Get()->AuthInfo.Ticket, ticket, ticketType);
         }

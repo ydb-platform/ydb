@@ -12200,6 +12200,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ListFlatten"] = &ListFlattenWrapper;
         Functions["ListUniq"] = &ListUniqWrapper;
         Functions["ListUniqStable"] = &ListUniqStableWrapper;
+        Functions["ListTop"] = &ListTopSortWrapper;
+        Functions["ListTopSort"] = &ListTopSortWrapper;
 
         Functions["ExpandMap"] = &ExpandMapWrapper;
         Functions["WideMap"] = &WideMapWrapper;

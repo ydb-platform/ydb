@@ -1415,6 +1415,36 @@ namespace {
         return OptListWrapperImpl<3U>(input, output, ctx, "Sort");
     }
 
+    IGraphTransformer::TStatus ListTopSortWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        TExprNode::TPtr outputPre = nullptr;
+        auto res = OptListWrapperImpl<2U, 3U>(input, outputPre, ctx, input->Content().Skip(4));
+        if (res != IGraphTransformer::TStatus::Repeat) {
+            return res;
+        }
+        TExprNode::TPtr sortLambda = nullptr;
+        if (outputPre->ChildrenSize() == 3) {
+            sortLambda = outputPre->ChildPtr(2);
+        } else {
+            sortLambda = ctx.Expr.Builder(input->Pos())
+                .Lambda()
+                    .Param("item")
+                    .Arg("item")
+                .Seal()
+            .Build();
+        }
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable(outputPre->Content())
+                .Add(0, outputPre->ChildPtr(0))
+                .Add(1, outputPre->ChildPtr(1))
+                .Callable(2, "Bool")
+                    .Atom(0, "true")
+                .Seal()
+                .Add(3, sortLambda)
+            .Seal()
+        .Build();
+        return res;
+    }
+
     IGraphTransformer::TStatus ListExtractWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         return OptListWrapperImpl<2U>(input, output, ctx, "OrderedExtract");
     }

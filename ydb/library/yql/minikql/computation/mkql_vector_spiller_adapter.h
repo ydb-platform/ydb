@@ -41,9 +41,9 @@ public:
 
     ///Is adapter ready to spill next vector via AddData method.
     ///Returns false in case when there are async operations in progress.
-    /* bool IsAcceptingData() {
+    bool IsAcceptingData() {
         return State == EState::AcceptingData;
-    }*/
+    }
 
     ///When data is ready ExtractVector() is expected to be called.
     bool IsDataReady() {
@@ -58,6 +58,9 @@ public:
     ///Adds new vector to storage. Will not launch real disk operation if case of small vectors
     ///(if inner buffer is not full).
     void AddData(std::vector<T, Alloc>&& vec) {
+        if (!CurrentVector.empty()) {
+            std::cerr << "NOT EMPTY\n";
+        }
         MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
         MKQL_ENSURE(State == EState::AcceptingData, "Internal logic error");
 

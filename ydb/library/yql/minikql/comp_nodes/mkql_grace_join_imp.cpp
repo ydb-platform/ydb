@@ -159,7 +159,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     offset += TempTuple.size();
     stringValuesTotalSize += finalStringsSize - initialStringsSize;
 
-    if (TableBuckets[bucket].GetSize() > 5_KB) {
+    if (TableBuckets[bucket].GetSize() > 5_MB) {
         TableBucketsSpiller[bucket].SpillBucket(std::move(TableBuckets[bucket]));
     }
 }

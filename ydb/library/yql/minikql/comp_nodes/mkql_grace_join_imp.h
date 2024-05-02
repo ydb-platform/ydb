@@ -138,37 +138,37 @@ struct TTableBucketSpiller {
         while (NextVectorToProcess != ENextVectorToProcess::None) {
             switch (NextVectorToProcess) {
                 case ENextVectorToProcess::KeyAndVals:
-                    if (StateUi64Adapter.HasRunningAsyncIoOperation()) return;
+                    if (StateUi64Adapter.HasRunningAsyncIoOperation() || !StateUi64Adapter.IsAcceptingData()) return;
 
                     StateUi64Adapter.AddData(std::move(CurrentBucket.KeyIntVals));
                     NextVectorToProcess = ENextVectorToProcess::DataIntVals;
                     break;
                 case ENextVectorToProcess::DataIntVals:
-                    if (StateUi64Adapter.HasRunningAsyncIoOperation()) return;
+                    if (StateUi64Adapter.HasRunningAsyncIoOperation() || !StateUi64Adapter.IsAcceptingData()) return;
 
                     StateUi64Adapter.AddData(std::move(CurrentBucket.DataIntVals));
                     NextVectorToProcess = ENextVectorToProcess::StringsValues;
                     break;
                 case ENextVectorToProcess::StringsValues:
-                    if (StateCharAdapter.HasRunningAsyncIoOperation()) return;
+                    if (StateCharAdapter.HasRunningAsyncIoOperation() || !StateCharAdapter.IsAcceptingData()) return;
 
                     StateCharAdapter.AddData(std::move(CurrentBucket.StringsValues));
                     NextVectorToProcess = ENextVectorToProcess::StringsOffsets;
                     break;
                 case ENextVectorToProcess::StringsOffsets:
-                    if (StateUi32Adapter.HasRunningAsyncIoOperation()) return;
+                    if (StateUi32Adapter.HasRunningAsyncIoOperation() || !StateUi32Adapter.IsAcceptingData()) return;
 
                     StateUi32Adapter.AddData(std::move(CurrentBucket.StringsOffsets));
                     NextVectorToProcess = ENextVectorToProcess::InterfaceValues;
                     break;
                 case ENextVectorToProcess::InterfaceValues:
-                    if (StateCharAdapter.HasRunningAsyncIoOperation()) return;
+                    if (StateCharAdapter.HasRunningAsyncIoOperation() || !StateCharAdapter.IsAcceptingData()) return;
 
                     StateCharAdapter.AddData(std::move(CurrentBucket.InterfaceValues));
                     NextVectorToProcess = ENextVectorToProcess::InterfaceOffsets;
                     break;
                 case ENextVectorToProcess::InterfaceOffsets:
-                    if (StateUi32Adapter.HasRunningAsyncIoOperation()) return;
+                    if (StateUi32Adapter.HasRunningAsyncIoOperation() || !StateUi32Adapter.IsAcceptingData()) return;
 
                     StateUi32Adapter.AddData(std::move(CurrentBucket.InterfaceOffsets));
                     NextVectorToProcess = ENextVectorToProcess::None;

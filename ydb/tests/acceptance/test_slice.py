@@ -16,6 +16,7 @@ class SliceTest(object):
             config_path=yatest_common.source_path(os.environ["YDB_CLUSTER_YAML"]),
             binary_path=yatest_common.binary_path(os.environ["YDB_DRIVER_BINARY"])
         )
+        
         cls.cluster.start()
 
     @classmethod

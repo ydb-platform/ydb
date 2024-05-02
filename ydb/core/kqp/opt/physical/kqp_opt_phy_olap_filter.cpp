@@ -281,7 +281,12 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
             }
         }
 
-        return YqlApplyPushdown(node, argument, ctx);
+
+        if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
+            return YqlApplyPushdown(node, argument, ctx);
+        } else {
+            return NullNode;
+        }
     };
 
     // Columns & values may be single element

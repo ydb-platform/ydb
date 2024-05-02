@@ -48,6 +48,7 @@ const TString FacadeComponent = "Facade";
 const TString SourceCodeLabel = "SourceCode";
 const TString GatewaysLabel = "Gateways";
 const TString ParametersLabel = "Parameters";
+const TString TranslationLabel = "Translation";
 
 class TUrlLoader : public IUrlLoader {
 public:
@@ -529,6 +530,34 @@ void TProgram::HandleSourceCode(TString& sourceCode) {
     }
 }
 
+void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
+    const NSQLTranslation::TTranslationSettings*& currentSettings)
+{
+    if (QContext_.CanWrite()) {
+        auto clusterMappingsNode = NYT::TNode();
+        for (const auto& c : currentSettings->ClusterMapping) {
+            clusterMappingsNode(c.first, c.second);
+        }
+
+        auto dataNode = NYT::TNode()
+            ("ClusterMapping", clusterMappingsNode);
+        auto data = NYT::NodeToYsonString(dataNode, NYT::NYson::EYsonFormat::Binary);
+        QContext_.GetWriter()->Put({FacadeComponent, TranslationLabel}, data).GetValueSync();
+    } else if (QContext_.CanRead()) {
+        auto loaded = QContext_.GetReader()->Get({FacadeComponent, TranslationLabel}).GetValueSync();
+        if (!loaded) {
+            return;
+        }
+
+        auto dataNode = NYT::NodeFromYsonString(loaded->Value);
+        for (const auto& c : dataNode["ClusterMapping"].AsMap()) {
+            loadedSettings.ClusterMapping[c.first] = c.second.AsString();
+        }
+    
+        currentSettings = &loadedSettings;
+    }
+}
+
 bool TProgram::ParseYql() {
     YQL_PROFILE_FUNC(TRACE);
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
@@ -560,7 +589,13 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     NYql::TWarningRules warningRules;
     auto sourceCode = SourceCode_;
     HandleSourceCode(sourceCode);
-    return FillParseResult(SqlToYql(sourceCode, settings, &warningRules), &warningRules);
+    const NSQLTranslation::TTranslationSettings* currentSettings = &settings;
+    NSQLTranslation::TTranslationSettings loadedSettings;
+    if (QContext_) {
+        HandleTranslationSettings(loadedSettings, currentSettings);
+    }
+
+    return FillParseResult(SqlToYql(sourceCode, *currentSettings, &warningRules), &warningRules);
 }
 
 bool TProgram::Compile(const TString& username, bool skipLibraries) {

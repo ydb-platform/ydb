@@ -5,6 +5,7 @@
 #include <ydb/library/yql/core/facade/yql_facade.h>
 #include <ydb/library/yql/core/qplayer/storage/memory/yql_qstorage_memory.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -73,7 +74,12 @@ bool RunProgram(bool replay, const TString& query, const TQContext& qContext, co
     }
 
     if (runSettings.IsSql) {
-        if (!program->ParseSql()) {
+        NSQLTranslation::TTranslationSettings settings;
+        if (!replay) {
+            settings.ClusterMapping["plato"] = TString(YtProviderName);
+        }
+
+        if (!program->ParseSql(settings)) {
             program->PrintErrorsTo(Cerr);
             return false;
         } 

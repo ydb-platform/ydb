@@ -4,6 +4,7 @@
 #include "dq_opt_conflict_rules_collector.h"
 
 #include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
+#include <ydb/library/yql/utils/log/log.h>
 
 #include <memory.h>
 
@@ -31,7 +32,7 @@ inline TVector<TString> GetConditionUsedRelationNames(const std::shared_ptr<TJoi
 }
 
 template <typename TNodeSet>
-TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
+typename TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
     const std::shared_ptr<TJoinOptimizerNode>& joinNode,
     const TNodeSet& conditionUsedRels,
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet>& subtreeNodes
@@ -80,7 +81,7 @@ void MakeJoinHypergraphRec(
     subtreeNodes[joinTree] = subtreeNodes[joinNode->LeftArg] | subtreeNodes[joinNode->RightArg];
 
     TNodeSet conditionUsedRels{};
-    conditionUsedRels = graph.GetNodesByRelNamesInSubtree(joinTree, GetConditionUsedRelationNames(joinNode));
+    conditionUsedRels = graph.GetNodesByRelNames(GetConditionUsedRelationNames(joinNode));
 
     graph.AddEdge(MakeHyperedge<TNodeSet>(joinNode, conditionUsedRels, subtreeNodes));
 }
@@ -92,6 +93,20 @@ TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
     TJoinHypergraph<TNodeSet> graph{};
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet> subtreeNodes{};
     MakeJoinHypergraphRec(graph, joinTree, subtreeNodes);
+
+    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+        YQL_CLOG(TRACE, CoreDq) << "Hypergraph build: ";
+        YQL_CLOG(TRACE, CoreDq) << graph.String();
+    }
+
+    TTransitiveClosureConstructor transitveClosure(graph);
+    transitveClosure.Construct();
+
+    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+        YQL_CLOG(TRACE, CoreDq) << "Hypergraph after transitive closure: ";
+        YQL_CLOG(TRACE, CoreDq) << graph.String();
+    }
+
     return graph;
 }
 

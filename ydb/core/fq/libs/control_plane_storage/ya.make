@@ -49,5 +49,4 @@ END()
 RECURSE(
     events
     internal
-    proto
 )

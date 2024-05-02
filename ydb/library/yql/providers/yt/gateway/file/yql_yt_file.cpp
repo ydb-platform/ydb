@@ -504,7 +504,7 @@ public:
                     const auto& value = compGraph->GetValue();
                     const auto it = value.GetListIterator();
                     for (NUdf::TUnboxedValue current; it.Next(current);) {
-                        res.Tables.push_back(TCanonizedPath{TString(current.AsStringRef()), Nothing(), {}});
+                        res.Tables.push_back(TCanonizedPath{TString(current.AsStringRef()), Nothing(), {}, Nothing()});
                     }
                 }
                 else {
@@ -512,7 +512,7 @@ public:
                         uniqueTables.begin(), uniqueTables.end(),
                         std::back_inserter(res.Tables),
                         [] (const TString& path) {
-                            return TCanonizedPath{path, Nothing(), {}};
+                            return TCanonizedPath{path, Nothing(), {}, Nothing()};
                         });
                 }
             }
@@ -587,7 +587,7 @@ public:
                     .Pos(options.Pos())).GetValue();
 
                 if (std::holds_alternative<TFileLinkPtr>(folderContent.ItemsOrFileLink)) {
-                    continue;
+                    Y_ENSURE(false, "File link result from file gateway GetFolder() is unexpected");
                 }
                 for (const auto& item: std::get<TVector<TFolderResult::TFolderItem>>(folderContent.ItemsOrFileLink)) {
                     if (item.Path == targetPath) {
@@ -612,7 +612,7 @@ public:
                 .Pos(options.Pos());
             const auto folderContent = GetFolder(TFolderOptions(std::move(folderOptions))).GetValue();
             if (std::holds_alternative<TFileLinkPtr>(folderContent.ItemsOrFileLink)) {
-                continue;
+                Y_ENSURE(false, "File link result from file gateway GetFolder() is unexpected");
             }
             for (const auto& item: std::get<TVector<TFolderResult::TFolderItem>>(folderContent.ItemsOrFileLink)) {
                 res.Items.push_back({item.Path, item.Type, NYT::NodeFromYsonString(item.Attributes)});

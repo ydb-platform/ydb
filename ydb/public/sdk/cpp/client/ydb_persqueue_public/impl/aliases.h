@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/codecs/codecs.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session_impl.ipp>
@@ -20,7 +20,7 @@ using NTopic::TEnableSelfContext;
 using NTopic::TContextOwner;
 
 // common
-using NTopic::GetRetryErrorClass;
+// using NTopic::GetRetryErrorClass;
 using NTopic::ISessionConnectionProcessorFactory;
 using NTopic::CreateConnectionProcessorFactory;
 using NTopic::TBaseSessionEventsQueue;

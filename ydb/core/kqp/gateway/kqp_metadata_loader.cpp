@@ -43,7 +43,6 @@ NavigateEntryResult CreateNavigateEntry(const TString& path,
         }
     }
     entry.Path = SplitPath(currentPath);
-
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
     entry.SyncVersion = true;
     entry.ShowPrivatePath = settings.WithPrivateTables_;
@@ -761,7 +760,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 switch (entry.Kind) {
                     case EKind::KindExternalDataSource: {
                         auto externalDataSourceMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, table);
-                        if (!externalDataSourceMetadata.Success()) {
+                        if (!externalDataSourceMetadata.Success() || !settings.RequestAuthInfo_) {
                             promise.SetValue(externalDataSourceMetadata);
                             return;
                         }

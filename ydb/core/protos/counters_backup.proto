@@ -1,0 +1,12 @@
+import "ydb/core/protos/counters.proto";
+
+package NKikimr.NBackup;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+option (TabletTypeName) = "BackupController";
+
+enum ETxTypes {
+    TXTYPE_INIT_SCHEMA = 0                                [(TxTypeOpts) = {Name: "TxInitSchema"}];
+    TXTYPE_INIT = 1                                       [(TxTypeOpts) = {Name: "TxInit"}];
+}

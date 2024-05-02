@@ -13,6 +13,8 @@ public:
 #ifdef _linux_
         int ar = sched_getaffinity(pid, sizeof(cpu_set_t), &Mask);
         Y_DEBUG_ABORT_UNLESS(ar == 0);
+#else
+        Y_UNUSED(pid);
 #endif
     }
 
@@ -34,6 +36,8 @@ public:
 #ifdef _linux_
         int ar = sched_setaffinity(pid, sizeof(cpu_set_t), &Mask);
         Y_DEBUG_ABORT_UNLESS(ar == 0);
+#else
+        Y_UNUSED(pid);
 #endif
     }
 

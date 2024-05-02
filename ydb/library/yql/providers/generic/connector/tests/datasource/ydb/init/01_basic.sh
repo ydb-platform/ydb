@@ -1,6 +1,8 @@
 #!/bin/bash
 
-/ydb -p tests-ydb-client yql -s '
+set -ex
+
+/ydb -p ${PROFILE} yql -s '
     CREATE TABLE column_selection_A_b_C_d_E_NATIVE (COL1 Int32, col2 Int32, PRIMARY KEY (COL1));
     COMMIT;
     INSERT INTO column_selection_A_b_C_d_E_NATIVE (COL1, col2) VALUES

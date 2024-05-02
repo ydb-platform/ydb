@@ -1,6 +1,7 @@
 import json
 import os
 import pytest
+import re
 import yatest.common
 
 from yql_utils import get_param as yql_get_param
@@ -225,3 +226,13 @@ def normalize_table(csv, fields_order=None):
         normalized += '\n' + ';'.join(normalized_cells)
 
     return normalized.strip()
+
+def replace_vars(sql_query, var_tag):
+    """
+    Sql can contain comment like /* yt_local_var: VAR_NAME=VAR_VALUE */
+    it will replace VAR_NAME with VAR_VALUE within sql query
+    """
+    vars = re.findall(r"\/\* {}: (.*)=(.*) \*\/".format(var_tag), sql_query)
+    for var_name, var_value in vars:
+        sql_query = re.sub(re.escape(var_name.strip()), var_value.strip(), sql_query)
+    return sql_query

@@ -467,6 +467,13 @@ private:
                     errorMessage = reader.status().ToString();
                     return false;
                 }
+                const auto& quoting = cvsSettings.quoting();
+                if (quoting.quote_char().length() > 1) {
+                    errorMessage = TStringBuilder() << "Wrong quote char '" << quoting.quote_char() << "'";
+                    return false;
+                }
+                const char qchar = quoting.quote_char().empty() ? '"' : quoting.quote_char().front();
+                reader->SetQuoting(!quoting.disabled(), qchar, !quoting.double_quote_disabled());
                 reader->SetSkipRows(skipRows);
 
                 if (!delimiter.empty()) {

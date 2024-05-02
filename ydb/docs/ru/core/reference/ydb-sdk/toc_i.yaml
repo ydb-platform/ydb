@@ -9,8 +9,6 @@ items:
     href: parameterized_queries.md
   - name: Работа с топиками
     href: topic.md
-  - name: Тестовое приложение
-    include: { mode: link, path: example/toc_p.yaml }
   - name: Обработка ошибок в API
     href: error_handling.md
   - name: gRPC API

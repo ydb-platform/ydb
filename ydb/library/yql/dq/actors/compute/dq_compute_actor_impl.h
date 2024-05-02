@@ -160,12 +160,12 @@ public:
 protected:
     TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask* task,
         IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         bool ownMemoryQuota = true, bool passExceptions = false,
         const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr,
         NWilson::TTraceId traceId = {},
-        TIntrusivePtr<NActors::TProtoArenaHolder> arena = nullptr)
+        TIntrusivePtr<NActors::TProtoArenaHolder> arena = nullptr,
+        const TGUCSettings::TPtr& GUCSettings = nullptr)
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(task, std::move(arena))
@@ -173,7 +173,6 @@ protected:
         , MemoryLimits(memoryLimits)
         , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0)
         , AsyncIoFactory(std::move(asyncIoFactory))
-        , FunctionRegistry(functionRegistry)
         , CheckpointingMode(GetTaskCheckpointingMode(Task))
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
         , WatermarksTracker(this->SelfId(), TxId, Task.GetId())
@@ -189,12 +188,11 @@ protected:
                     true,
                     false
         );
+        Alloc->SetGUCSettings(GUCSettings);
         InitMonCounters(taskCounters);
-        InitializeTask();
         if (ownMemoryQuota) {
             MemoryQuota = InitMemoryQuota();
         }
-        InitializeWatermarks();
     }
 
     void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
@@ -1090,11 +1088,6 @@ protected:
     }
 
     void HandleExecuteBase(TEvDqCompute::TEvNewCheckpointCoordinator::TPtr& ev) {
-        if (!InputTransformsMap.empty()) {
-            InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::UNEXPECTED, "Input transforms don't support checkpoints yet");
-            return;
-        }
-
         if (!Checkpoints) {
             Checkpoints = new TDqComputeActorCheckpoints(this->SelfId(), TxId, Task, this);
             Checkpoints->Init(this->SelfId(), this->RegisterWithSameMailbox(Checkpoints));
@@ -1472,7 +1465,7 @@ protected:
             : MemoryLimits.MkqlLightProgramMemoryLimit;
     }
 
-private:
+protected:
     void InitializeTask() {
         for (ui32 i = 0; i < Task.InputsSize(); ++i) {
             const auto& inputDesc = Task.GetInputs(i);
@@ -1543,8 +1536,11 @@ private:
         }
 
         RequestContext = MakeIntrusive<NYql::NDq::TRequestContext>(Task.GetRequestContext());
+
+        InitializeWatermarks();
     }
 
+private:
     void InitializeWatermarks() {
         for (const auto& [id, source] : SourcesMap) {
             if (source.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT) {
@@ -1856,7 +1852,6 @@ protected:
     TComputeMemoryLimits MemoryLimits;
     const bool CanAllocateExtraMemory = false;
     const IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     const NDqProto::ECheckpointingMode CheckpointingMode;
     TDqComputeActorChannels* Channels = nullptr;
     TDqComputeActorCheckpoints* Checkpoints = nullptr;

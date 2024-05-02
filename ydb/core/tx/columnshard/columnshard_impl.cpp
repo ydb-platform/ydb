@@ -43,8 +43,9 @@
 
 
 #include <ydb/core/tx/columnshard/normalizer/granule/normalizer.h>
-#include <ydb/core/tx/columnshard/normalizer/portion/min_max.h>
+#include <ydb/core/tx/columnshard/normalizer/portion/portion.h>
 #include <ydb/core/tx/columnshard/normalizer/portion/chunks.h>
+#include <ydb/core/tx/columnshard/normalizer/portion/clean.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -99,6 +100,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TGranulesNormalizer>());
     NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TChunksNormalizer>(Info()));
     NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TPortionsNormalizer>(Info()));
+    NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TCleanPortionsNormalizer>(Info()));
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -521,7 +523,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SendPeriodicStats();
 
     if (!TablesManager.HasPrimaryIndex()) {
-        LOG_S_NOTICE("Background activities cannot be started: no index at tablet " << TabletID());
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("problem", "Background activities cannot be started: no index at tablet");
         return;
     }
 //  !!!!!! MUST BE FIRST THROUGH DATA HAVE TO BE SAME IN SESSIONS AFTER TABLET RESTART
@@ -855,11 +857,16 @@ void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, co
 void TColumnShard::SetupCleanupInsertTable() {
     auto writeIdsToCleanup = InsertTable->OldWritesToAbort(AppData()->TimeProvider->Now());
 
+    if (BackgroundController.IsCleanupInsertTableActive()) {
+        ACFL_DEBUG("background", "cleanup_insert_table")("skip_reason", "in_progress");
+        return;
+    }
+
     if (!InsertTable->GetAborted().size() && !writeIdsToCleanup.size()) {
         return;
     }
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "cleanup_started")("aborted", InsertTable->GetAborted().size())("to_cleanup", writeIdsToCleanup.size());
-
+    BackgroundController.StartCleanupInsertTable();
     Execute(new TTxInsertTableCleanup(this, std::move(writeIdsToCleanup)), TActorContext::AsActorContext());
 }
 

@@ -5,7 +5,6 @@ OWNER(
 
 RECURSE(
     api
-    protos
     service
     shard
 )

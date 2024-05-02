@@ -743,7 +743,7 @@ public:
             hFunc(TKikimrEvents::TEvWakeup, Handle);
 
             default:
-                Y_DEBUG_ABORT_UNLESS(false, "unexpected event Type# 0x%08" PRIx32, type);
+                Y_DEBUG_ABORT("unexpected event Type# 0x%08" PRIx32, type);
         }
         if (!Done) {
             IssueStatusForExpiredDisks();

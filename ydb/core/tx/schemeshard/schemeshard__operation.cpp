@@ -1040,7 +1040,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxCreateSequence:
         return CreateNewSequence(NextPartId(), txState);
     case TTxState::ETxType::TxAlterSequence:
-        Y_ABORT("TODO: implement");
+        return CreateAlterSequence(NextPartId(), txState);
     case TTxState::ETxType::TxDropSequence:
         return CreateDropSequence(NextPartId(), txState);
     case TTxState::ETxType::TxCopySequence:
@@ -1058,7 +1058,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxCreateReplication:
         return CreateNewReplication(NextPartId(), txState);
     case TTxState::ETxType::TxAlterReplication:
-        Y_ABORT("TODO: implement");
+        return CreateAlterReplication(NextPartId(), txState);
     case TTxState::ETxType::TxDropReplication:
         return CreateDropReplication(NextPartId(), txState);
 
@@ -1223,7 +1223,7 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
         return CreateNewSequence(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSequence:
-        Y_ABORT("TODO: implement");
+        return CreateAlterSequence(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence:
         return CreateDropSequence(NextPartId(), tx);
 
@@ -1280,7 +1280,7 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication:
         return CreateNewReplication(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterReplication:
-        Y_ABORT("TODO: implement");
+        return CreateAlterReplication(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication:
         return CreateDropReplication(NextPartId(), tx);
 

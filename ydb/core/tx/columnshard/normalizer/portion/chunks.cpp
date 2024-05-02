@@ -15,7 +15,7 @@ public:
         : Chunks(std::move(chunks))
     {}
 
-    bool Apply(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
+    bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
 

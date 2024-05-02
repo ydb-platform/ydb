@@ -1,8 +1,7 @@
 #include "write_session_impl.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/trace_lazy.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/trace_lazy.h>
 
 #include <library/cpp/string_utils/url/url.h>
 
@@ -540,19 +539,20 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
         LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Start write session. Will connect to nodeId: " << PreferredPartitionLocation.Endpoint.NodeId);
 
         ++ConnectionGeneration;
-        auto subclient = Client;
-        connectionFactory = subclient->CreateWriteSessionConnectionProcessorFactory();
-        auto clientContext = subclient->CreateContext();
-        ConnectionFactory = connectionFactory;
-
-        ClientContext = std::move(clientContext);
-        ServerMessage = std::make_shared<TServerMessage>();
 
         if (!ClientContext) {
-            AbortImpl();
-            // Grpc and WriteSession is closing right now.
-            return;
+            ClientContext = Client->CreateContext();
+            if (!ClientContext) {
+                AbortImpl();
+                // Grpc and WriteSession is closing right now.
+                return;
+            }
         }
+
+        ServerMessage = std::make_shared<TServerMessage>();
+
+        connectionFactory = Client->CreateWriteSessionConnectionProcessorFactory();
+        ConnectionFactory = connectionFactory;
 
         connectContext = ClientContext->CreateContext();
         if (delay)
@@ -1269,19 +1269,22 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: try to update token");
 
-    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress || !SessionEstablished)
+    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress || !SessionEstablished) {
         return;
-    TClientMessage clientMessage;
-    auto* updateRequest = clientMessage.mutable_update_token_request();
+    }
+
     auto token = DbDriverState->CredentialsProvider->GetAuthInfo();
-    if (token == PrevToken)
+    if (token == PrevToken) {
         return;
-    UpdateTokenInProgress = true;
-    updateRequest->set_token(token);
-    PrevToken = token;
+    }
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: updating token");
 
+    UpdateTokenInProgress = true;
+    PrevToken = token;
+
+    TClientMessage clientMessage;
+    clientMessage.mutable_update_token_request()->set_token(token);
     Processor->Write(std::move(clientMessage));
 }
 

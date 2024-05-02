@@ -512,8 +512,14 @@ std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared
 }
 
 std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::Field>& field) {
+    AFL_VERIFY(field);
+    return MakeBuilder(field->type());
+}
+
+std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::DataType>& type) {
+    AFL_VERIFY(type);
     std::unique_ptr<arrow::ArrayBuilder> builder;
-    TStatusValidator::Validate(arrow::MakeBuilder(arrow::default_memory_pool(), field->type(), &builder));
+    TStatusValidator::Validate(arrow::MakeBuilder(arrow::default_memory_pool(), type, &builder));
     return std::move(builder);
 }
 

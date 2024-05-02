@@ -14,15 +14,22 @@
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
 #include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
+#include <ydb/library/yql/public/udf/udf_static_registry.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 
 
 struct TExecutionOptions {
+    enum class EClearExecutionCase {
+        Disabled,
+        GenericQuery,
+        YqlScript
+    };
+
     TString ScriptQuery;
     TString SchemeQuery;
 
-    bool ClearExecution = false;
     bool ForgetExecution = false;
+    EClearExecutionCase ClearExecution = EClearExecutionCase::Disabled;
     NKikimrKqp::EQueryAction ScriptQueryAction = NKikimrKqp::QUERY_ACTION_EXECUTE;
 
     TString TraceId = "kqprun";
@@ -48,7 +55,8 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
 
     if (executionOptions.ScriptQuery) {
         Cout << colors.Yellow() << "Executing script..." << colors.Default() << Endl;
-        if (!executionOptions.ClearExecution) {
+        switch (executionOptions.ClearExecution) {
+        case TExecutionOptions::EClearExecutionCase::Disabled:
             if (!runner.ExecuteScript(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << "Script execution failed";
             }
@@ -62,10 +70,19 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
                     ythrow yexception() << "Forget script execution operation failed";
                 }
             }
-        } else {
+            break;
+
+        case TExecutionOptions::EClearExecutionCase::GenericQuery:
             if (!runner.ExecuteQuery(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << "Query execution failed";
             }
+            break;
+
+        case TExecutionOptions::EClearExecutionCase::YqlScript:
+            if (!runner.ExecuteYqlScript(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
+                ythrow yexception() << "Yql script execution failed";
+            }
+            break;
         }
     }
 
@@ -98,7 +115,7 @@ void ReplaceTemplate(const TString& variableName, const TString& variableValue, 
 }
 
 
-TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistry(const TString& udfsDirectory, TVector<TString> udfsPaths) {
+TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistry(const TString& udfsDirectory, TVector<TString> udfsPaths, bool excludeLinkedUdfs) {
     if (!udfsDirectory.empty() || !udfsPaths.empty()) {
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
         Cout << colors.Yellow() << "Fetching udfs..." << colors.Default() << Endl;
@@ -106,7 +123,17 @@ TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistr
 
     NKikimr::NMiniKQL::FindUdfsInDir(udfsDirectory, &udfsPaths);
     auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, udfsPaths)->Clone();
-    NKikimr::NMiniKQL::FillStaticModules(*functionRegistry);
+
+    if (excludeLinkedUdfs) {
+        for (const auto& wrapper : NYql::NUdf::GetStaticUdfModuleWrapperList()) {
+            auto [name, ptr] = wrapper();
+            if (!functionRegistry->IsLoadedUdfModule(name)) {
+                functionRegistry->AddModule(TString(NKikimr::NMiniKQL::StaticModulePrefix) + name, name, std::move(ptr));
+            }
+        }
+    } else {
+        NKikimr::NMiniKQL::FillStaticModules(*functionRegistry);
+    }
 
     return functionRegistry;
 }
@@ -126,6 +153,7 @@ void RunMain(int argc, const char* argv[]) {
     TString appConfigFile = "./configuration/app_config.conf";
     std::vector<TString> tablesMappingList;
 
+    TString clearExecutionType = "disabled";
     TString traceOptType = "disabled";
     TString scriptQueryAction = "execute";
     TString planOutputFormat = "pretty";
@@ -135,6 +163,7 @@ void RunMain(int argc, const char* argv[]) {
 
     TVector<TString> udfsPaths;
     TString udfsDirectory;
+    bool excludeLinkedUdfs = false;
 
     NLastGetopt::TOpts options = NLastGetopt::TOpts::Default();
     options.AddLongOption('p', "script-query", "Script query to execute")
@@ -176,11 +205,11 @@ void RunMain(int argc, const char* argv[]) {
         .RequiredArgument("FILE")
         .StoreResult(&scriptQueryPlanFile);
 
-    options.AddLongOption('C', "clear-execution", "Execute script query without RunScriptActor in one query request")
+    options.AddLongOption('C', "clear-execution", "Execute script query without creating additional tables, one of { query | yql-script }")
         .Optional()
-        .NoArgument()
-        .DefaultValue(executionOptions.ClearExecution)
-        .SetFlag(&executionOptions.ClearExecution);
+        .RequiredArgument("STR")
+        .DefaultValue(clearExecutionType)
+        .StoreResult(&clearExecutionType);
     options.AddLongOption('F', "forget", "Forget script execution operation after fetching results, cannot be used with -C")
         .Optional()
         .NoArgument()
@@ -225,6 +254,11 @@ void RunMain(int argc, const char* argv[]) {
         .Optional()
         .RequiredArgument("PATH")
         .StoreResult(&udfsDirectory);
+    options.AddLongOption("exclude-linked-udfs", "Exclude linked udfs when same udf passed from -u or --udfs-dir")
+        .Optional()
+        .NoArgument()
+        .DefaultValue(excludeLinkedUdfs)
+        .SetFlag(&excludeLinkedUdfs);
 
     NLastGetopt::TOptsParseResult parsedOptions(&options, argc, argv);
 
@@ -244,6 +278,12 @@ void RunMain(int argc, const char* argv[]) {
     if (scriptQueryFile) {
         executionOptions.ScriptQuery = TFileInput(scriptQueryFile).ReadAll();
     }
+
+    executionOptions.ClearExecution =
+              (clearExecutionType == TStringBuf("query")) ? TExecutionOptions::EClearExecutionCase::GenericQuery
+            : (clearExecutionType == TStringBuf("yql-script")) ? TExecutionOptions::EClearExecutionCase::YqlScript
+            : (clearExecutionType == TStringBuf("disabled")) ? TExecutionOptions::EClearExecutionCase::Disabled
+            : TExecutionOptions::EClearExecutionCase::Disabled;
 
     executionOptions.ScriptQueryAction =
               (scriptQueryAction == TStringBuf("execute")) ? NKikimrKqp::QUERY_ACTION_EXECUTE
@@ -284,7 +324,7 @@ void RunMain(int argc, const char* argv[]) {
     }
 
     runnerOptions.YdbSettings.YqlToken = yqlToken;
-    runnerOptions.YdbSettings.FunctionRegistry = CreateFunctionRegistry(udfsDirectory, udfsPaths).Get();
+    runnerOptions.YdbSettings.FunctionRegistry = CreateFunctionRegistry(udfsDirectory, udfsPaths, excludeLinkedUdfs).Get();
 
     TString appConfigData = TFileInput(appConfigFile).ReadAll();
     if (!google::protobuf::TextFormat::ParseFromString(appConfigData, &runnerOptions.YdbSettings.AppConfig)) {

@@ -611,7 +611,7 @@ std::vector<TFormulaToken> TGenericFormulaImpl::Parse(
         ThrowError(formula, position, message, context);
     };
 
-    auto finishSubformula = [&] () {
+    auto finishSubformula = [&] {
         while (!stack.empty() && stack.back().Type != EFormulaTokenType::LeftBracket) {
             result.push_back(stack.back());
             stack.pop_back();

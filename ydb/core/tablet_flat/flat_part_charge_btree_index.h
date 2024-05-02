@@ -3,6 +3,7 @@
 #include "flat_table_part.h"
 #include "flat_part_iface.h"
 #include "flat_part_charge_iface.h"
+#include "flat_page_data.h"
 
 namespace NKikimr::NTable {
 
@@ -707,7 +708,7 @@ private:
         ui64 result = 0;
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
-            auto page = Env->TryGetPage(Part, pageId);
+            auto page = Env->TryGetPage(Part, pageId, {});
             if (!page) {
                 return result;
             }
@@ -727,7 +728,7 @@ private:
         ui64 result = meta.DataSize;
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
-            auto page = Env->TryGetPage(Part, pageId);
+            auto page = Env->TryGetPage(Part, pageId, {});
             if (!page) {
                 return result;
             }
@@ -750,7 +751,7 @@ private:
     }
 
     bool TryLoadNode(const TChildState& child, TVector<TNodeState>& level) const noexcept {
-        auto page = Env->TryGetPage(Part, child.PageId);
+        auto page = Env->TryGetPage(Part, child.PageId, {});
         if (!page) {
             return false;
         }

@@ -1305,7 +1305,7 @@ TTableSchemaPtr TTableSchema::ToModifiedSchema(ETableSchemaModification schemaMo
     }
 }
 
-TComparator TTableSchema::ToComparator(TCallback<TUUComparerSignature> CGComparator) const
+TComparator TTableSchema::ToComparator(TCallback<TUUComparerSignature> cgComparator) const
 {
     std::vector<ESortOrder> sortOrders;
     if (ColumnInfo_) {
@@ -1317,7 +1317,7 @@ TComparator TTableSchema::ToComparator(TCallback<TUUComparerSignature> CGCompara
         }
     }
 
-    return TComparator(std::move(sortOrders), std::move(CGComparator));
+    return TComparator(std::move(sortOrders), std::move(cgComparator));
 }
 
 void TTableSchema::Save(TStreamSaveContext& context) const

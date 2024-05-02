@@ -11,6 +11,7 @@ SRCS(
     yql_library_compiler_ut.cpp
     yql_opt_utils_ut.cpp
     yql_udf_index_ut.cpp
+    yql_qplayer_ut.cpp
 )
 
 PEERDIR(
@@ -19,6 +20,8 @@ PEERDIR(
     ydb/library/yql/core
     ydb/library/yql/core/facade
     ydb/library/yql/core/services
+    ydb/library/yql/core/qplayer/storage/memory
+    ydb/library/yql/providers/common/udf_resolve
     ydb/library/yql/public/udf
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/core/type_ann
@@ -33,6 +36,7 @@ PEERDIR(
     ydb/library/yql/minikql/comp_nodes/llvm14
     ydb/library/yql/minikql/invoke_builtins/llvm14
     ydb/library/yql/sql/pg
+    ydb/library/yql/udfs/common/string
 )
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)

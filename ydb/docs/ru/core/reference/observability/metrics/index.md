@@ -1,5 +1,11 @@
 # Справка по метрикам
 
+{% note info %}
+
+См. также [{#T}](grafana-dashboards.md).
+
+{% endnote %}
+
 ## Метрики использования ресурсов {#resources}
 
 Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
@@ -131,9 +137,9 @@
 
 Имя метрики<br/>Тип<br/>единицы измерения | Описание<br/>Метки
 ----- | -----
-`table.query.compilation.cache_evictions`<br/>`RATE`, штуки | Количество запросов, вытесненных из кэша [подготовленных запросов](../../../reference/ydb-sdk/example/index.md#param-queries) в определенный период времени.
-`table.query.compilation.cache_size_bytes`<br/>`IGAUGE`, байты | Размер кэша [подготовленных запросов](../../../reference/ydb-sdk/example/index.md#param-queries).
-`table.query.compilation.cached_query_count`<br/>`IGAUGE`, штуки |  Размер кэша [подготовленных запросов](../../../reference/ydb-sdk/example/index.md#param-queries).
+`table.query.compilation.cache_evictions`<br/>`RATE`, штуки | Количество запросов, вытесненных из кэша подготовленных запросов в определенный период времени.
+`table.query.compilation.cache_size_bytes`<br/>`IGAUGE`, байты | Размер кэша подготовленных запросов.
+`table.query.compilation.cached_query_count`<br/>`IGAUGE`, штуки |  Размер кэша подготовленных запросов.
 
 ## Метрики топиков {#topics}
 

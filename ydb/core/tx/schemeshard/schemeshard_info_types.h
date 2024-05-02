@@ -884,154 +884,6 @@ public:
     }
 };
 
-class TColumnTablesLayout;
-
-struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
-private:
-    TString Name;
-    ui64 NextSchemaPresetId = 1;
-    ui64 NextTtlSettingsPresetId = 1;
-    NKikimrSchemeOp::TColumnStorageConfig StorageConfig;
-    NKikimrSchemeOp::TColumnStoreDescription Description;
-    ui64 AlterVersion = 0;
-public:
-    using TPtr = TIntrusivePtr<TOlapStoreInfo>;
-
-    class ILayoutPolicy {
-    protected:
-        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const = 0;
-    public:
-        using TPtr = std::shared_ptr<ILayoutPolicy>;
-        virtual ~ILayoutPolicy() = default;
-        bool Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const;
-    };
-
-    class TMinimalTablesCountLayout: public ILayoutPolicy {
-    protected:
-        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const override;
-    };
-
-    class TIdentityGroupsLayout: public ILayoutPolicy {
-    protected:
-        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const override;
-    };
-
-    TPtr AlterData;
-
-    const NKikimrSchemeOp::TColumnStoreDescription& GetDescription() const {
-        return Description;
-    }
-
-    NKikimrSchemeOp::TColumnStoreSharding Sharding;
-    TMaybe<NKikimrSchemeOp::TAlterColumnStore> AlterBody;
-
-    TVector<TShardIdx> ColumnShards;
-
-    THashMap<ui32, TOlapStoreSchemaPreset> SchemaPresets;
-    THashMap<TString, ui32> SchemaPresetByName;
-
-    THashSet<TPathId> ColumnTables;
-    THashSet<TPathId> ColumnTablesUnderOperation;
-    TAggregatedStats Stats;
-
-    TOlapStoreInfo() = default;
-    TOlapStoreInfo(ui64 alterVersion,
-            NKikimrSchemeOp::TColumnStoreSharding&& sharding,
-            TMaybe<NKikimrSchemeOp::TAlterColumnStore>&& alterBody = Nothing());
-
-    static TOlapStoreInfo::TPtr BuildStoreWithAlter(const TOlapStoreInfo& initialStore, const NKikimrSchemeOp::TAlterColumnStore& alterBody);
-
-    const NKikimrSchemeOp::TColumnStorageConfig& GetStorageConfig() const {
-        return StorageConfig;
-    }
-
-    const TVector<TShardIdx>& GetColumnShards() const {
-        return ColumnShards;
-    }
-
-    ui64 GetAlterVersion() const {
-        return AlterVersion;
-    }
-
-    void ApplySharding(const TVector<TShardIdx>& shardsIndexes) {
-        Y_ABORT_UNLESS(ColumnShards.size() == shardsIndexes.size());
-        Sharding.ClearColumnShards();
-        for (ui64 i = 0; i < ColumnShards.size(); ++i) {
-            const auto& idx = shardsIndexes[i];
-            ColumnShards[i] = idx;
-            auto* shardInfoProto = Sharding.AddColumnShards();
-            shardInfoProto->SetOwnerId(idx.GetOwnerId());
-            shardInfoProto->SetLocalId(idx.GetLocalId().GetValue());
-        }
-    }
-    void SerializeDescription(NKikimrSchemeOp::TColumnStoreDescription& descriptionProto) const;
-    void ParseFromLocalDB(const NKikimrSchemeOp::TColumnStoreDescription& descriptionProto);
-    bool ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescription& descriptionProto, IErrorCollector& errors);
-    bool UpdatePreset(const TString& presetName, const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors);
-
-    const TAggregatedStats& GetStats() const {
-        return Stats;
-    }
-
-    ILayoutPolicy::TPtr GetTablesLayoutPolicy() const;
-
-    void UpdateShardStats(TShardIdx shardIdx, const TPartitionStats& newStats) {
-        Stats.Aggregated.PartCount = ColumnShards.size();
-        Stats.PartitionStats[shardIdx]; // insert if none
-        Stats.UpdateShardStats(shardIdx, newStats);
-    }
-};
-
-struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
-    using TPtr = TIntrusivePtr<TColumnTableInfo>;
-
-    ui64 AlterVersion = 0;
-    TPtr AlterData;
-
-    NKikimrSchemeOp::TColumnTableDescription Description;
-    NKikimrSchemeOp::TColumnTableSharding Sharding;
-    TMaybe<NKikimrSchemeOp::TColumnStoreSharding> StandaloneSharding;
-    TMaybe<NKikimrSchemeOp::TAlterColumnTable> AlterBody;
-
-    TMaybe<TPathId> OlapStorePathId; // PathId of the table store
-
-    TVector<ui64> ColumnShards; // Current list of column shards
-    TVector<TShardIdx> OwnedColumnShards;
-    TAggregatedStats Stats;
-
-    TColumnTableInfo() = default;
-    TColumnTableInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnTableDescription&& description,
-            NKikimrSchemeOp::TColumnTableSharding&& sharding,
-            TMaybe<NKikimrSchemeOp::TColumnStoreSharding>&& standaloneSharding,
-            TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody = Nothing());
-
-    void SetOlapStorePathId(const TPathId& pathId) {
-        OlapStorePathId = pathId;
-        Description.MutableColumnStorePathId()->SetOwnerId(pathId.OwnerId);
-        Description.MutableColumnStorePathId()->SetLocalId(pathId.LocalPathId);
-    }
-
-    static TColumnTableInfo::TPtr BuildTableWithAlter(const TColumnTableInfo& initialTable, const NKikimrSchemeOp::TAlterColumnTable& alterBody);
-
-    bool IsStandalone() const {
-        return !OwnedColumnShards.empty();
-    }
-
-    const TAggregatedStats& GetStats() const {
-        return Stats;
-    }
-
-    void UpdateShardStats(const TShardIdx shardIdx, const TPartitionStats& newStats) {
-        Stats.Aggregated.PartCount = ColumnShards.size();
-        Stats.PartitionStats[shardIdx]; // insert if none
-        Stats.UpdateShardStats(shardIdx, newStats);
-    }
-
-    void UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats) {
-        Stats.UpdateTableStats(pathId, newStats);
-    }
-};
-
 struct TTopicStats {
     TMessageSeqNo SeqNo;
 
@@ -1613,6 +1465,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
             return InvalidTabletId;
         }
         return TTabletId(ProcessingParams.GetStatisticsAggregator());
+    }
+
+    TTabletId GetTenantBackupControllerID() const {
+        if (!ProcessingParams.HasBackupController()) {
+            return InvalidTabletId;
+        }
+        return TTabletId(ProcessingParams.GetBackupController());
     }
 
     TTabletId GetTenantGraphShardID() const {

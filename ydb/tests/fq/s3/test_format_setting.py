@@ -21,6 +21,7 @@ import ydb.tests.library.common.yatest_common as yatest_common
 
 from google.protobuf import struct_pb2
 
+
 class TestS3(TestYdsBase):
     def create_bucket_and_upload_file(self, filename, s3, kikimr):
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_settings")
@@ -907,7 +908,6 @@ Pear;15;33'''
         assert data.result.result_set.rows[0].items[1].bytes_value == b"", str(data.result.result_set)
         assert data.result.result_set.rows[0].items[2].bytes_value == b"", str(data.result.result_set)
 
-
     @yq_all
     def test_parquet_converters_to_timestamp(self, kikimr, s3, client, unique_prefix):
         # timestamp[ms] -> Timestamp
@@ -924,7 +924,6 @@ Pear;15;33'''
         filename = 'test_parquet_converters_to_timestamp.parquet'
         pq.write_table(table, yatest_common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
-
 
         kikimr.control_plane.wait_bootstrap(1)
         storage_connection_name = unique_prefix + "hcpp"
@@ -973,10 +972,9 @@ Pear;15;33'''
         data = client.get_result_data(query_id, limit=50)
         assert len(data.result.result_set.rows) == 1, "invalid count rows"
 
-
         # timestamp[s] -> Timestamp
 
-       # 2024-04-02T12:01:00.000Z
+        # 2024-04-02T12:01:00.000Z
         data = [['apple'], [1712059260]]
 
         # Define the schema for the data
@@ -993,7 +991,6 @@ Pear;15;33'''
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
         data = client.get_result_data(query_id, limit=50)
         assert len(data.result.result_set.rows) == 1, "invalid count rows"
-
 
         # timestamp[ns] -> Timestamp
 
@@ -1430,7 +1427,6 @@ Pear;15;33'''
         pq.write_table(table, yatest_common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
-
         kikimr.control_plane.wait_bootstrap(1)
         storage_connection_name = unique_prefix + "hcpp"
         client.create_storage_connection(storage_connection_name, "fbucket")
@@ -1482,7 +1478,7 @@ Pear;15;33'''
 
         # timestamp[s] -> Timestamp
 
-       # 2024-04-02T12:01:00.000Z
+        # 2024-04-02T12:01:00.000Z
         data = [['apple'], [1712059260]]
 
         # Define the schema for the data

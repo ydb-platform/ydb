@@ -1,4 +1,6 @@
+#include <ydb/library/yql/core/pg_settings/guc_settings.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/interface.h>
+#include <ydb/library/yql/parser/pg_wrapper/memory_context.h>
 #include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
@@ -90,19 +92,6 @@ TVPtrHolder TVPtrHolder::Instance;
 
 // use 'false' for native format
 static __thread bool NeedCanonizeFp = false;
-
-struct TMainContext {
-    MemoryContextData Data;
-    MemoryContextData ErrorData;
-    MemoryContext PrevCurrentMemoryContext = nullptr;
-    MemoryContext PrevErrorContext = nullptr;
-    MemoryContext PrevCacheMemoryContext = nullptr;
-    RecordCacheState CurrentRecordCacheState = { NULL, NULL, NULL, 0, 0, INVALID_TUPLEDESC_IDENTIFIER };
-    RecordCacheState PrevRecordCacheState;
-    TimestampTz StartTimestamp;
-    pg_stack_base_t PrevStackBase;
-    TString LastError;
-};
 
 NUdf::TUnboxedValue CreatePgString(i32 typeLen, ui32 targetTypeId, TStringBuf data) {
     // typname => 'cstring', typlen => '-2'
@@ -286,6 +275,30 @@ private:
 
 class TPgTableContent : public TMutableComputationNode<TPgTableContent> {
     typedef TMutableComputationNode<TPgTableContent> TBaseComputation;
+private:
+    static NUdf::TUnboxedValuePod MakePgDatabaseDatnameColumn(ui32 index) {
+        std::string content;
+        switch (index) {
+            case 1: {
+                content = "template1";
+                break;
+            }
+            case 2: {
+                content = "template0";
+                break;
+            }
+            case 3: {
+                content = "postgres";
+                break;
+            }
+            case 4: {
+                Y_ENSURE(PGGetGUCSetting("ydb_database"));
+                content = *PGGetGUCSetting("ydb_database");
+                break;
+            }
+        }
+        return PointerDatumToPod((Datum)(MakeFixedString(content, NAMEDATALEN)));
+    }
 public:
     TPgTableContent(
         TComputationMutables& mutables,
@@ -317,8 +330,7 @@ public:
                     {"datdba", [](ui32) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
                     {"datistemplate", [](ui32 index) { return ScalarDatumToPod(BoolGetDatum(index < 3)); }},
                     {"datallowconn", [](ui32 index) { return ScalarDatumToPod(BoolGetDatum(index != 2)); }},
-                    {"datname", [](ui32 index) { return PointerDatumToPod((Datum)(MakeFixedString(
-                        index == 1 ? "template1" : (index == 2 ? "template0" : "postgres"), NAMEDATALEN))); }},
+                    {"datname", MakePgDatabaseDatnameColumn},
                     {"encoding", [](ui32) { return ScalarDatumToPod(Int32GetDatum(PG_UTF8)); }},
                     {"datcollate", [](ui32) { return PointerDatumToPod((Datum)(MakeFixedString("C", NAMEDATALEN))); }},
                     {"datctype", [](ui32) { return PointerDatumToPod((Datum)(MakeFixedString("C", NAMEDATALEN))); }},
@@ -386,18 +398,20 @@ public:
                 ApplyFillers(AllPgTablesFillers, Y_ARRAY_SIZE(AllPgTablesFillers), PgTablesFillers_);
             } else if (Table_ == "pg_roles") {
                 static const std::pair<const char*, TPgRolesFiller> AllPgRolesFillers[] = {
-                    {"rolname", []() { return PointerDatumToPod((Datum)MakeFixedString("postgres", NAMEDATALEN)); }},
-                    {"oid", []() { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
-                    {"rolbypassrls", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                    {"rolsuper", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                    {"rolinherit", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                    {"rolcreaterole", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                    {"rolcreatedb", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                    {"rolcanlogin", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                    {"rolreplication", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                    {"rolconnlimit", []() { return ScalarDatumToPod(Int32GetDatum(-1)); }},
-                    {"rolvaliduntil", []() { return NUdf::TUnboxedValuePod(); }},
-                    {"rolconfig", []() { return PointerDatumToPod(MakeArrayOfText({
+                    {"rolname", [](ui32 index) { 
+                        return PointerDatumToPod((Datum)MakeFixedString(index == 1 ? "postgres" : *PGGetGUCSetting("ydb_user"), NAMEDATALEN)); 
+                    }},
+                    {"oid", [](ui32) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                    {"rolbypassrls", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolsuper", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolinherit", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolcreaterole", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolcreatedb", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolcanlogin", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolreplication", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolconnlimit", [](ui32) { return ScalarDatumToPod(Int32GetDatum(-1)); }},
+                    {"rolvaliduntil", [](ui32) { return NUdf::TUnboxedValuePod(); }},
+                    {"rolconfig", [](ui32) { return PointerDatumToPod(MakeArrayOfText({
                         "search_path=public",
                         "default_transaction_isolation=serializable",
                         "standard_conforming_strings=on",
@@ -549,7 +563,8 @@ public:
                     rows.emplace_back(row);
                 });
             } else if (Table_ == "pg_database") {
-                for (ui32 index = 1; index <= 3; ++index) {
+                ui32 tableSize = PGGetGUCSetting("ydb_database") ? 4 : 3;
+                for (ui32 index = 1; index <= tableSize; ++index) {
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgDatabaseFillers_.size(), items);
                     for (ui32 i = 0; i < PgDatabaseFillers_.size(); ++i) {
@@ -739,16 +754,18 @@ public:
                     rows.emplace_back(row);
                 }
             } else if (Table_ == "pg_roles") {
-                NUdf::TUnboxedValue* items;
-                auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgRolesFillers_.size(), items);
-                for (ui32 i = 0; i < PgRolesFillers_.size(); ++i) {
-                    if (PgRolesFillers_[i]) {
-                        items[i] = PgRolesFillers_[i]();
+                for (ui32 index = 1; index <= 1; ++index) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgRolesFillers_.size(), items);
+                    for (ui32 i = 0; i < PgRolesFillers_.size(); ++i) {
+                        if (PgRolesFillers_[i]) {
+                            items[i] = PgRolesFillers_[i](index);
+                        }
                     }
-                }
 
-                sysFiller.Fill(items);
-                rows.emplace_back(row);
+                    sysFiller.Fill(items);
+                    rows.emplace_back(row);
+                }
             } else if (Table_ == "pg_stat_database") {
                 for (ui32 index = 0; index <= 1; ++index) {
                     NUdf::TUnboxedValue* items;
@@ -899,7 +916,7 @@ private:
     TVector<TPgNamespaceFiller> PgNamespaceFillers_;
     using TPgAmFiller = NUdf::TUnboxedValuePod(*)(const NPg::TAmDesc&);
     TVector<TPgAmFiller> PgAmFillers_;
-    using TPgRolesFiller = NUdf::TUnboxedValuePod(*)();
+    using TPgRolesFiller = NUdf::TUnboxedValuePod(*)(ui32 index);
     TVector<TPgRolesFiller> PgRolesFillers_;
     using TPgDatabaseStatFiller = NUdf::TUnboxedValuePod(*)(ui32 index);
     TVector<TPgDatabaseStatFiller> PgDatabaseStatFillers_;
@@ -3096,6 +3113,7 @@ TComputationNodeFactory GetPgFactory() {
                 const auto cluster = clusterData->AsValue().AsStringRef();
                 const auto table = tableData->AsValue().AsStringRef();
                 const auto returnType = callable.GetType()->GetReturnType();
+
                 return new TPgTableContent(ctx.Mutables, cluster, table, returnType);
             }
 
@@ -4796,6 +4814,9 @@ void PgAcquireThreadContext(void* ctx) {
         SetParallelStartTimestamps(main->StartTimestamp, main->StartTimestamp);
         main->PrevStackBase = set_stack_base();
         yql_error_report_active = true;
+        if (main->GUCSettings && main->GUCSettings->Get("ydb_database")) {
+            MyDatabaseId = 4;
+        }
     }
 }
 
@@ -4809,7 +4830,29 @@ void PgReleaseThreadContext(void* ctx) {
         LoadRecordCacheState(&main->PrevRecordCacheState);
         restore_stack_base(main->PrevStackBase);
         yql_error_report_active = false;
+        MyDatabaseId = 3;
     }
+}
+
+void PgSetGUCSettings(void* ctx, const TGUCSettings::TPtr& GUCSettings) {
+    if (ctx && GUCSettings) {
+        auto main = (TMainContext*)ctx;
+        main->GUCSettings = GUCSettings;
+        if (main->GUCSettings->Get("ydb_database")) {
+            MyDatabaseId = 4;
+        }
+    }
+    PgCreateSysCacheEntries(ctx);
+}
+
+std::optional<std::string> PGGetGUCSetting(const std::string& key) {
+    if (TlsAllocState) {
+        auto ctx = (TMainContext*)TlsAllocState->MainContext;
+        if (ctx && ctx->GUCSettings) {
+            return ctx->GUCSettings->Get(key);
+        }
+    }
+    return std::nullopt;
 }
 
 extern "C" void yql_prepare_error(const char* msg) {

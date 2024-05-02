@@ -118,7 +118,7 @@ def select_positive(
         generic_settings=test_case.generic_settings,
     )
 
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.output
 
     assert data_outs_equal(test_case.data_out, result.data_out_with_types), (
         test_case.data_out,
@@ -146,7 +146,7 @@ def select_missing_database(
         generic_settings=test_case.generic_settings,
     )
 
-    assert test_case.database.missing_database_msg() in result.stderr, result.stderr
+    assert test_case.database.missing_database_msg() in result.output, result.output
 
 
 def select_missing_table(
@@ -182,7 +182,7 @@ def select_missing_table(
         generic_settings=test_case.generic_settings,
     )
 
-    assert test_case.database.missing_table_msg() in result.stderr, result.stderr
+    assert test_case.database.missing_table_msg() in result.output, result.output
 
 
 def select_pg_schema(
@@ -213,7 +213,7 @@ def select_pg_schema(
         generic_settings=test_case.generic_settings,
     )
 
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.output
 
     assert data_outs_equal(test_case.data_out, result.data_out_with_types), (
         test_case.data_out,

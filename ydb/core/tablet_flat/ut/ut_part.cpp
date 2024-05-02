@@ -58,14 +58,14 @@ namespace {
     }
 
     struct TTouchEnv : public NTest::TTestEnv {
-        const TSharedData* TryGetPage(const TPart *part, TPageId id, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
         {
             if (PrechargePhase) {
-                Precharged[groupId].insert(id);
-                return NTest::TTestEnv::TryGetPage(part, id, groupId);
+                Precharged[groupId].insert(pageId);
+                return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
             } else {
-                Y_VERIFY_S(Precharged[groupId].count(id), "Requested page " << id << " should be precharged");
-                return NTest::TTestEnv::TryGetPage(part, id, groupId);
+                Y_VERIFY_S(Precharged[groupId].count(pageId), "Requested page " << pageId << " should be precharged");
+                return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
             }
         }
 
@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         const auto part = (*wrap).Eggs.Lone();
         UNIT_ASSERT_VALUES_EQUAL(IndexTools::GetEndRowId(*part), 2u);
         if (part->IndexPages.HasFlat()) {
-            const NPage::TCompare<NPage::TIndex::TRecord> cmp(part->Scheme->Groups[0].ColsKeyIdx, *(*lay).Keys);
+            const NPage::TCompare<NPage::TFlatIndex::TRecord> cmp(part->Scheme->Groups[0].ColsKeyIdx, *(*lay).Keys);
             UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatRecord(*part, 0), TRowTool(*lay).KeyCells(foo)), 0);
             UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatLastRecord(*part), TRowTool(*lay).KeyCells(bar)), 0);
         }
@@ -436,7 +436,7 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         { /*_  Ensure that the last key matches in the index */
             UNIT_ASSERT_VALUES_EQUAL(IndexTools::GetEndRowId(part), Mass0().Saved.Size());
-            const NPage::TCompare<NPage::TIndex::TRecord> cmp(part.Scheme->Groups[0].ColsKeyIdx, *Eggs0().Scheme->Keys);
+            const NPage::TCompare<NPage::TFlatIndex::TRecord> cmp(part.Scheme->Groups[0].ColsKeyIdx, *Eggs0().Scheme->Keys);
             auto lastKey = TRowTool(*Eggs0().Scheme).KeyCells(Mass0().Saved[Mass0().Saved.Size()-1]);
             if (part.IndexPages.HasFlat()) {
                 UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatLastRecord(part), lastKey), 0);
@@ -718,7 +718,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         const auto part = (*wrap).Eggs.Lone();
 
         if (part->IndexPages.HasFlat()) {
-            const NPage::TCompare<NPage::TIndex::TRecord> cmp(part->Scheme->Groups[0].ColsKeyIdx, *(*lay).Keys);
+            const NPage::TCompare<NPage::TFlatIndex::TRecord> cmp(part->Scheme->Groups[0].ColsKeyIdx, *(*lay).Keys);
             UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatRecord(*part, 0), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, prefix + "aaa"))), 0);
             UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatRecord(*part, 1), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, prefix + "b"))), 0);
             UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatRecord(*part, 2), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, nullptr))), 0);
@@ -790,7 +790,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         UNIT_ASSERT_GT(fullPart->IndexesRawSize, cutPart->IndexesRawSize);
         
         if (cutPart->IndexPages.HasFlat()) {
-            const NPage::TCompare<NPage::TIndex::TRecord> cmp(cutPart->Scheme->Groups[0].ColsKeyIdx, *(*lay).Keys);
+            const NPage::TCompare<NPage::TFlatIndex::TRecord> cmp(cutPart->Scheme->Groups[0].ColsKeyIdx, *(*lay).Keys);
             UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatRecord(*cutPart, 0), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, "aaa"))), 0);
             UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatRecord(*cutPart, 1), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, "b"))), 0);
             UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatRecord(*cutPart, 2), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, nullptr))), 0);

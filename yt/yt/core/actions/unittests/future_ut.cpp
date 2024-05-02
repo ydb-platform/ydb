@@ -1414,7 +1414,7 @@ TEST_F(TFutureTest, AsyncViaCanceledInvoker)
 {
     auto context = New<TCancelableContext>();
     auto invoker = context->CreateInvoker(GetSyncInvoker());
-    auto generator = BIND([] () {}).AsyncVia(invoker);
+    auto generator = BIND([] {}).AsyncVia(invoker);
     context->Cancel(TError("oops"));
     auto future = generator();
     auto error = future.Get();

@@ -10,6 +10,5 @@ class Result:
     data_out: Optional[yson.yson_types.YsonList]
     data_out_with_types: Optional[List]
     schema: Optional[Schema]
-    stdout: str
-    stderr: str
+    output: str
     returncode: int

@@ -182,12 +182,11 @@ class TAlterExternalDataSource : public TSubOperation {
         const auto& externalDataSourcePathId = externalDataSourcePath->PathId;
 
         context.SS->ExternalDataSources[externalDataSourcePathId] = externalDataSourceInfo;
-        context.SS->PersistPath(db, externalDataSourcePathId);
 
         if (!acl.empty()) {
             externalDataSourcePath->ApplyACL(acl);
-            context.SS->PersistACL(db, externalDataSourcePath);
         }
+        context.SS->PersistPath(db, externalDataSourcePathId);
 
         context.SS->PersistExternalDataSource(db,
                                               externalDataSourcePathId,

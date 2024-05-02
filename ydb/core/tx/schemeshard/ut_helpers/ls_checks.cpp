@@ -819,6 +819,42 @@ TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames) {
     };
 }
 
+TCheckFunc SequenceIncrement(i64 increment) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetIncrement(), increment);
+    };
+}
+
+TCheckFunc SequenceMaxValue(i64 maxValue) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetMaxValue(), maxValue);
+    };
+}
+
+TCheckFunc SequenceMinValue(i64 minValue) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetMinValue(), minValue);
+    };
+}
+
+TCheckFunc SequenceCycle(bool cycle) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetCycle(), cycle);
+    };
+}
+
+TCheckFunc SequenceStartValue(i64 startValue) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetStartValue(), startValue);
+    };
+}
+
+TCheckFunc SequenceCache(ui64 cache) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetCache(), cache);
+    };
+}
+
 TCheckFunc StreamMode(NKikimrSchemeOp::ECdcStreamMode mode) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetMode(), mode);
@@ -1058,6 +1094,14 @@ TCheckFunc ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::EReplicatio
         const auto& table = record.GetPathDescription().GetTable();
         UNIT_ASSERT(table.HasReplicationConfig());
         UNIT_ASSERT_EQUAL(table.GetReplicationConfig().GetMode(), mode);
+    };
+}
+
+TCheckFunc ReplicationState(NKikimrReplication::TReplicationState::StateCase state) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& replication = record.GetPathDescription().GetReplicationDescription();
+        UNIT_ASSERT(replication.HasState());
+        UNIT_ASSERT_EQUAL(replication.GetState().GetStateCase(), state);
     };
 }
 

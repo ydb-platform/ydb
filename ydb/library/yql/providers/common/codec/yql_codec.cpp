@@ -918,14 +918,13 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type, ui64 nativeYtTypeFlags,
                 if (nativeYtTypeFlags & NTCF_DECIMAL) {
                     auto const params = static_cast<TDataDecimalType*>(type)->GetParams();
                     if (params.first < 10) {
-                        i32 tmpRes = NYT::NDecimal::TDecimal::ParseBinary32(params.first, nextString);
-                        YQL_ENSURE(!NDecimal::IsError(tmpRes));
-                        NDecimal::TInt128 res = tmpRes;
+                        // The YQL format differs from the YT format in the inf/nan values. NDecimal::FromYtDecimal converts nan/inf
+                        NDecimal::TInt128 res = NDecimal::FromYtDecimal(NYT::NDecimal::TDecimal::ParseBinary32(params.first, nextString));
+                        YQL_ENSURE(!NDecimal::IsError(res));
                         return NUdf::TUnboxedValuePod(res);
                     } else if (params.first < 19) {
-                        i64 tmpRes = NYT::NDecimal::TDecimal::ParseBinary64(params.first, nextString);
-                        YQL_ENSURE(!NDecimal::IsError(tmpRes));
-                        NDecimal::TInt128 res = tmpRes;
+                        NDecimal::TInt128 res = NDecimal::FromYtDecimal(NYT::NDecimal::TDecimal::ParseBinary64(params.first, nextString));
+                        YQL_ENSURE(!NDecimal::IsError(res));
                         return NUdf::TUnboxedValuePod(res);
                     } else {
                         YQL_ENSURE(params.first < 36);
@@ -933,6 +932,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type, ui64 nativeYtTypeFlags,
                         NDecimal::TInt128 res;
                         static_assert(sizeof(NDecimal::TInt128) == sizeof(NYT::NDecimal::TDecimal::TValue128));
                         memcpy(&res, &tmpRes, sizeof(NDecimal::TInt128));
+                        res = NDecimal::FromYtDecimal(res);
                         YQL_ENSURE(!NDecimal::IsError(res));
                         return NUdf::TUnboxedValuePod(res);
                     }
@@ -1370,9 +1370,10 @@ TMaybe<NUdf::TUnboxedValue> ParseYsonValue(const THolderFactory& holderFactory,
             void ReturnBlock() override {
             }
 
-            bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex) override {
+            bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex, const std::exception_ptr& error) override {
                 Y_UNUSED(rangeIndex);
                 Y_UNUSED(rowIndex);
+                Y_UNUSED(error);
                 return false;
             }
 
@@ -2088,17 +2089,19 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, ui64 nativeYtType
                 const NDecimal::TInt128 data128 = value.GetInt128();
                 char tmpBuf[NYT::NDecimal::TDecimal::MaxBinarySize];
                 if (params.first < 10) {
-                    TStringBuf resBuf = NYT::NDecimal::TDecimal::WriteBinary32(params.first, static_cast<i32>(data128), tmpBuf, NYT::NDecimal::TDecimal::MaxBinarySize);
+                    // The YQL format differs from the YT format in the inf/nan values. NDecimal::FromYtDecimal converts nan/inf
+                    TStringBuf resBuf = NYT::NDecimal::TDecimal::WriteBinary32(params.first, NDecimal::ToYtDecimal<i32>(data128), tmpBuf, NYT::NDecimal::TDecimal::MaxBinarySize);
                     buf.WriteVarI32(resBuf.size());
                     buf.WriteMany(resBuf.data(), resBuf.size());
                 } else if (params.first < 19) {
-                    TStringBuf resBuf = NYT::NDecimal::TDecimal::WriteBinary64(params.first, static_cast<i64>(data128), tmpBuf, NYT::NDecimal::TDecimal::MaxBinarySize);
+                    TStringBuf resBuf = NYT::NDecimal::TDecimal::WriteBinary64(params.first, NDecimal::ToYtDecimal<i64>(data128), tmpBuf, NYT::NDecimal::TDecimal::MaxBinarySize);
                     buf.WriteVarI32(resBuf.size());
                     buf.WriteMany(resBuf.data(), resBuf.size());
                 } else {
                     YQL_ENSURE(params.first < 36);
                     NYT::NDecimal::TDecimal::TValue128 val;
-                    memcpy(&val, &data128, sizeof(val));
+                    auto data128Converted = NDecimal::ToYtDecimal<NDecimal::TInt128>(data128);
+                    memcpy(&val, &data128Converted, sizeof(val));
                     auto resBuf = NYT::NDecimal::TDecimal::WriteBinary128(params.first, val, tmpBuf, NYT::NDecimal::TDecimal::MaxBinarySize);
                     buf.WriteVarI32(resBuf.size());
                     buf.WriteMany(resBuf.data(), resBuf.size());

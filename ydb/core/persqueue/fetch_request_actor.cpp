@@ -433,6 +433,7 @@ public:
         read->SetTimeoutMs(0);
         read->SetBytes(Min<ui32>(maxBytes, FetchRequestBytesLeft));
         read->SetReadTimestampMs(readTimestampMs);
+        read->SetExternalOperation(true);
         NTabletPipe::SendData(ctx, jt->second.PipeClient, preq.Release());
     }
 
@@ -479,7 +480,7 @@ public:
         SetMeteringMode(it->second.PQInfo->Description.GetPQTabletConfig().GetMeteringMode());
 
         if (IsQuotaRequired()) {
-            PendingQuotaAmount = CalcRuConsumption(GetPayloadSize(record));
+            PendingQuotaAmount = 1 + CalcRuConsumption(GetPayloadSize(record));
             RequestDataQuota(PendingQuotaAmount, ctx);
         } else {
             ProceedFetchRequest(ctx);

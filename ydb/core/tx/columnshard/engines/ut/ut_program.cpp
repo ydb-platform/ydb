@@ -1,7 +1,7 @@
 #include <ydb/core/tx/columnshard/engines/index_info.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/resolver.h>
 
-#include <ydb/core/tx/columnshard/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/formats/arrow/converter.h>

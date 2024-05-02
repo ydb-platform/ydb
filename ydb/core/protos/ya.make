@@ -12,6 +12,7 @@ SRCS(
     alloc.proto
     auth.proto
     base.proto
+    backup.proto
     bind_channel_storage_pool.proto
     blob_depot.proto
     blob_depot_config.proto
@@ -39,6 +40,7 @@ SRCS(
     console_config.proto
     console_tenant.proto
     counters.proto
+    counters_backup.proto
     counters_blob_depot.proto
     counters_bs_controller.proto
     counters_cms.proto

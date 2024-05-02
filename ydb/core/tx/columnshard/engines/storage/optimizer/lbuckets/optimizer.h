@@ -581,15 +581,15 @@ public:
             return 0;
         }
 */
-
-        const ui64 count = BucketInfo.GetCount() + ((mainPortion && !isFinal) ? 1 : 0);
+        const bool isForce = NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Force;
+        const ui64 count = BucketInfo.GetCount() + ((mainPortion && (!isFinal || isForce)) ? 1 : 0);
         const ui64 recordsCount = BucketInfo.GetRecordsCount() + ((mainPortion && !isFinal) ? mainPortion->GetRecordsCount() : 0);
         const ui64 sumBytes = BucketInfo.GetBytes() + ((mainPortion && !isFinal) ? mainPortion->GetTotalBlobBytes() : 0);
         if (NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Disable) {
             return 0;
         }
         const ui64 weight = (10000000000.0 * count - sumBytes) * (isFinal ? 1 : 10);
-        if (NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Force) {
+        if (isForce) {
             return (count > 1) ? weight : 0;
         }
 
@@ -799,10 +799,14 @@ public:
             }
         } else {
             if (MainPortion) {
-                for (auto&& i : portions) {
-                    if (MainPortion->CrossPKWith(*i)) {
-                        portions.emplace_back(MainPortion);
-                        break;
+                if (portions.size() == 1) {
+                    portions.emplace_back(MainPortion);
+                } else {
+                    for (auto&& i : portions) {
+                        if (MainPortion->CrossPKWith(*i)) {
+                            portions.emplace_back(MainPortion);
+                            break;
+                        }
                     }
                 }
             }
@@ -811,7 +815,7 @@ public:
                 stopInstant = Others.GetFutureStartInstant();
             }
         }
-        AFL_VERIFY(portions.size() > 1);
+        AFL_VERIFY(portions.size() > 1)("size", portions.size());
         ui64 size = 0;
         for (auto&& i : portions) {
             size += i->GetTotalBlobBytes();

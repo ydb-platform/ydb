@@ -11,11 +11,11 @@ namespace {
     using namespace NTest;
 
     struct TTouchEnv : public NTest::TTestEnv {
-        const TSharedData* TryGetPage(const TPart *part, TPageId id, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
         {
-            UNIT_ASSERT_C(part->GetPageType(id) == EPage::Index || part->GetPageType(id) == EPage::BTreeIndex, "Shouldn't request non-index pages");
-            if (!Touched[groupId].insert(id).second) {
-                return NTest::TTestEnv::TryGetPage(part, id, groupId);
+            UNIT_ASSERT_C(part->GetPageType(pageId, groupId) == EPage::FlatIndex || part->GetPageType(pageId, groupId) == EPage::BTreeIndex, "Shouldn't request non-index pages");
+            if (!Touched[groupId].insert(pageId).second) {
+                return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
             }
             return nullptr;
         }

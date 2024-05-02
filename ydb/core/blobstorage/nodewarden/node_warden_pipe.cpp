@@ -52,7 +52,10 @@ void TNodeWarden::OnPipeError() {
             VDisksWithUnreportedMetrics.PushBack(&vdisk);
         }
     }
-    PDiskRestartRequests.clear();
+    for (const auto& [cookie, callback] : ConfigInFlight) {
+        callback(nullptr);
+    }
+    ConfigInFlight.clear();
     EstablishPipe();
 }
 

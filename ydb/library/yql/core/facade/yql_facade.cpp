@@ -22,6 +22,7 @@
 #include <ydb/library/yql/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
+#include <ydb/library/yql/core/qplayer/udf_resolver/yql_qplayer_udf_resolver.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/deprecated/split/split_iterator.h>
@@ -44,6 +45,8 @@ namespace {
 
 const size_t DEFAULT_AST_BUF_SIZE = 1024;
 const size_t DEFAULT_PLAN_BUF_SIZE = 1024;
+const TString FacadeComponent = "Facade";
+const TString SourceCodeLabel = "SourceCode";
 
 class TUrlLoader : public IUrlLoader {
 public:
@@ -311,6 +314,15 @@ TProgram::~TProgram() {
     }
 }
 
+void TProgram::SetQContext(const TQContext& qContext) {
+    YQL_PROFILE_FUNC(TRACE);
+    YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
+    YQL_ENSURE(!QContext_);
+    YQL_ENSURE(qContext);
+    QContext_ = qContext;
+    UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, qContext);
+}
+
 void TProgram::ConfigureYsonResultFormat(NYson::EYsonFormat format) {
     ResultFormat_ = format;
     OutputFormat_ = format;
@@ -468,12 +480,24 @@ void TProgram::AddUserDataTable(const TUserDataTable& userDataTable) {
     }
 }
 
+void TProgram::HandleSourceCode(TString& sourceCode) {
+    if (QContext_.CanWrite()) {
+        QContext_.GetWriter()->Put({FacadeComponent, SourceCodeLabel}, sourceCode).GetValueSync();
+    } else if (QContext_.CanRead()) {
+        auto loaded = QContext_.GetReader()->Get({FacadeComponent, SourceCodeLabel}).GetValueSync();
+        Y_ENSURE(loaded.Defined(), "No source code");
+        sourceCode = loaded->Value;
+    }
+}
+
 bool TProgram::ParseYql() {
     YQL_PROFILE_FUNC(TRACE);
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
     SourceSyntax_ = ESourceSyntax::Yql;
     SyntaxVersion_ = 1;
-    return FillParseResult(ParseAst(SourceCode_));
+    auto sourceCode = SourceCode_;
+    HandleSourceCode(sourceCode);
+    return FillParseResult(ParseAst(sourceCode));
 }
 
 bool TProgram::ParseSql() {
@@ -495,7 +519,9 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     SourceSyntax_ = ESourceSyntax::Sql;
     SyntaxVersion_ = settings.SyntaxVersion;
     NYql::TWarningRules warningRules;
-    return FillParseResult(SqlToYql(SourceCode_, settings, &warningRules), &warningRules);
+    auto sourceCode = SourceCode_;
+    HandleSourceCode(sourceCode);
+    return FillParseResult(SqlToYql(sourceCode, settings, &warningRules), &warningRules);
 }
 
 bool TProgram::Compile(const TString& username, bool skipLibraries) {
@@ -1549,6 +1575,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         typeAnnotationContext->Diagnostics = true;
     }
     typeAnnotationContext->ArrowResolver = ArrowResolver_;
+    typeAnnotationContext->FileStorage = FileStorage_;
     typeAnnotationContext->HiddenMode = HiddenMode_;
 
     if (UdfIndex_ && UdfIndexPackageSet_) {
@@ -1571,7 +1598,8 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
             typeAnnotationContext,
             ProgressWriter_,
             OperationOptions_,
-            AbortHidden_
+            AbortHidden_,
+            QContext_
         );
         if (HiddenMode_ != EHiddenMode::Disable && !dp.SupportsHidden) {
             continue;

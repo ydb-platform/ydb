@@ -246,10 +246,6 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
             return YqlIfPushdown(maybeIf.Cast(), argument, ctx);
         }
 
-        if (const auto maybeApply = node.Maybe<TCoApply>()) {
-            return YqlApplyPushdown(maybeApply.Cast(), argument, ctx);
-        }
-
         if constexpr (NKikimr::NSsa::RuntimeVersion >= 4U) {
             if (const auto maybeArithmetic = node.Maybe<TCoBinaryArithmetic>()) {
                 const auto arithmetic = maybeArithmetic.Cast();
@@ -285,7 +281,7 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
             }
         }
 
-        return NullNode;
+        return YqlApplyPushdown(node, argument, ctx);
     };
 
     // Columns & values may be single element
@@ -598,10 +594,6 @@ TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, const TExprNode& 
         return YqlIfPushdown(maybeIf.Cast(), argument, ctx);
     }
 
-    if (const auto maybeApply = predicate.Maybe<TCoApply>()) {
-        return YqlApplyPushdown(maybeApply.Cast(), argument, ctx);
-    }
-
     if (const auto maybeNot = predicate.Maybe<TCoNot>()) {
         const auto notNode = maybeNot.Cast();
         if constexpr (NSsa::RuntimeVersion >= 4U) {
@@ -614,61 +606,61 @@ TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, const TExprNode& 
         return pushedFilters;
     }
 
-    if (!predicate.Maybe<TCoAnd>() && !predicate.Maybe<TCoOr>() && !predicate.Maybe<TCoXor>()) {
-        return NullFilterOpsLevels;
-    }
+    if (predicate.Maybe<TCoAnd>() || predicate.Maybe<TCoOr>() || predicate.Maybe<TCoXor>()) {
+        TVector<TExprBase> firstLvlOps;
+        TVector<TExprBase> secondLvlOps;
+        firstLvlOps.reserve(predicate.Ptr()->ChildrenSize());
+        secondLvlOps.reserve(predicate.Ptr()->ChildrenSize());
 
-    TVector<TExprBase> firstLvlOps;
-    TVector<TExprBase> secondLvlOps;
-    firstLvlOps.reserve(predicate.Ptr()->ChildrenSize());
-    secondLvlOps.reserve(predicate.Ptr()->ChildrenSize());
+        for (auto& child: predicate.Ptr()->Children()) {
+            auto pushedChild = PredicatePushdown(TExprBase(child), argument, ctx, pos);
 
-    for (auto& child: predicate.Ptr()->Children()) {
-        auto pushedChild = PredicatePushdown(TExprBase(child), argument, ctx, pos);
+            if (!pushedChild.IsValid()) {
+                return NullFilterOpsLevels;
+            }
 
-        if (!pushedChild.IsValid()) {
-            return NullFilterOpsLevels;
+            if (pushedChild.FirstLevelOps.IsValid()) {
+                firstLvlOps.emplace_back(pushedChild.FirstLevelOps.Cast());
+            }
+            if (pushedChild.SecondLevelOps.IsValid()) {
+                secondLvlOps.emplace_back(pushedChild.SecondLevelOps.Cast());
+            }
         }
 
-        if (pushedChild.FirstLevelOps.IsValid()) {
-            firstLvlOps.emplace_back(pushedChild.FirstLevelOps.Cast());
+        if (predicate.Maybe<TCoAnd>()) {
+            auto firstLvl = NullNode;
+            if (!firstLvlOps.empty()) {
+                firstLvl = Build<TKqpOlapAnd>(ctx, pos)
+                    .Add(firstLvlOps)
+                    .Done();
+            }
+            auto secondLvl = NullNode;
+            if (!secondLvlOps.empty()) {
+                secondLvl = Build<TKqpOlapAnd>(ctx, pos)
+                    .Add(secondLvlOps)
+                    .Done();
+            }
+            return TFilterOpsLevels(firstLvl, secondLvl);
         }
-        if (pushedChild.SecondLevelOps.IsValid()) {
-            secondLvlOps.emplace_back(pushedChild.SecondLevelOps.Cast());
-        }
-    }
 
-    if (predicate.Maybe<TCoAnd>()) {
-        auto firstLvl = NullNode;
-        if (!firstLvlOps.empty()) {
-            firstLvl = Build<TKqpOlapAnd>(ctx, pos)
+        if (predicate.Maybe<TCoOr>()) {
+            auto ops = Build<TKqpOlapOr>(ctx, pos)
                 .Add(firstLvlOps)
-                .Done();
-        }
-        auto secondLvl = NullNode;
-        if (!secondLvlOps.empty()) {
-            secondLvl = Build<TKqpOlapAnd>(ctx, pos)
                 .Add(secondLvlOps)
                 .Done();
+            return TFilterOpsLevels(ops, NullNode);
         }
-        return TFilterOpsLevels(firstLvl, secondLvl);
-    }
 
-    if (predicate.Maybe<TCoOr>()) {
-        auto ops = Build<TKqpOlapOr>(ctx, pos)
+        Y_DEBUG_ABORT_UNLESS(predicate.Maybe<TCoXor>());
+
+        auto ops = Build<TKqpOlapXor>(ctx, pos)
             .Add(firstLvlOps)
             .Add(secondLvlOps)
             .Done();
         return TFilterOpsLevels(ops, NullNode);
     }
 
-    Y_DEBUG_ABORT_UNLESS(predicate.Maybe<TCoXor>());
-
-    auto ops = Build<TKqpOlapXor>(ctx, pos)
-        .Add(firstLvlOps)
-        .Add(secondLvlOps)
-        .Done();
-    return TFilterOpsLevels(ops, NullNode);
+    return YqlApplyPushdown(predicate, argument, ctx);
 }
 
 TOLAPPredicateNode WrapPredicates(const std::vector<TOLAPPredicateNode>& predicates, TExprContext& ctx, TPositionHandle pos) {
@@ -762,20 +754,18 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     auto predicate = optionaIf.Predicate();
     auto value = optionaIf.Value();
 
-    if constexpr (NSsa::RuntimeVersion >= 5U) { // TODO: Rework for pushdown any UDFs, not only Json: Re2 as example.
-        if (!FindNode(optionaIf.Ptr(), [](const TExprNode::TPtr& node) { return node->IsCallable("JsonValue"); })) {
-            TExprNode::TPtr afterPeephole;
-            bool hasNonDeterministicFunctions;
-            if (const auto status = PeepHoleOptimizeNode(optionaIf.Ptr(), afterPeephole, ctx, typesCtx, nullptr, hasNonDeterministicFunctions);
-                status != IGraphTransformer::TStatus::Ok) {
-                YQL_CLOG(ERROR, ProviderKqp) << "Peephole OLAP failed." << Endl << ctx.IssueManager.GetIssues().ToString();
-                return node;
-            }
-
-            const TCoIf simplified(std::move(afterPeephole));
-            predicate = simplified.Predicate();
-            value = simplified.ThenValue().Cast<TCoJust>().Input();
+    if constexpr (NSsa::RuntimeVersion >= 5U) {
+        TExprNode::TPtr afterPeephole;
+        bool hasNonDeterministicFunctions;
+        if (const auto status = PeepHoleOptimizeNode(optionaIf.Ptr(), afterPeephole, ctx, typesCtx, nullptr, hasNonDeterministicFunctions);
+            status != IGraphTransformer::TStatus::Ok) {
+            YQL_CLOG(ERROR, ProviderKqp) << "Peephole OLAP failed." << Endl << ctx.IssueManager.GetIssues().ToString();
+            return node;
         }
+
+        const TCoIf simplified(std::move(afterPeephole));
+        predicate = simplified.Predicate();
+        value = simplified.ThenValue().Cast<TCoJust>().Input();
     }
 
     TOLAPPredicateNode predicateTree;

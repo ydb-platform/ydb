@@ -6,7 +6,7 @@ from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import YdbdSlice
 
 
-class TestViaSlice(object):
+class TestWithSlice(object):
     """
     Various tests which uses slice (e.g. host's cluster) for testing
     """

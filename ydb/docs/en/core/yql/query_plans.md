@@ -58,7 +58,7 @@ Attribute | Description
 Table | table name
 
 #### Join
-Combine two data sources (subqueries or tables), join strategy is specified in the operation description.
+Combine two data sources (subqueries or tables) by keys. The join strategy is specified in the operation description.
 
 #### Filter
 Filtering rows, leaving only those for which the predicate returns true.

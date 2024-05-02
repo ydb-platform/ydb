@@ -1,12 +1,15 @@
 import os
 import sys
 
+import ydb
 from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import YdbdSlice
-import ydb
 
 
-class Test(object):
+class SliceTest(object):
+    """
+    Various tests which uses slice (e.g. host's cluster) for testing
+    """
     @classmethod
     def setup_class(cls):
         cls.cluster = YdbdSlice(
@@ -17,10 +20,12 @@ class Test(object):
 
     @classmethod
     def teardown_class(cls):
-        pass
-        # cls.cluster.stop()
+        cls.cluster.stop()
 
     def test_slice_sample(self):
+        """
+        Just a sample test to ensure that slice works correctly
+        """
         driver_config = ydb.DriverConfig(
             database=self.cluster.db_path,
             endpoint="%s:%s" % (
@@ -42,8 +47,7 @@ class Test(object):
                 yatest_common.binary_path('ydb/tests/tools/ydb_serializable/ydb_serializable'),
                 '--endpoint=%s:%d' % (self.cluster.nodes[1].host, self.cluster.nodes[1].grpc_port),
                 '--database=%s' % self.cluster.db_path,
-                # '--output-path=%s' % yatest_common.output_path(),
-                '--output-path=%s' % "/tmp/ser",
+                '--output-path=%s' % yatest_common.output_path(),
                 '--iterations=25',
                 '--processes=1'
             ],

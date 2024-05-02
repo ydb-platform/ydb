@@ -1,6 +1,6 @@
-# Query plans optimization
+# Query plan optimization
 
-Before executing a query, it is important to analyze its execution plan to detect and eliminate the reasons for possible excessive cluster resource consumption or abnormally high execution time. This article will discuss a specific example of query plan analysis.
+Before executing a query, it is essential to analyze its execution plan to detect and eliminate the reasons for possible excessive cluster resource consumption or abnormally high execution time. This article will discuss specific examples of query plan analysis.
 
 Let's consider the following query, which searches for series by name:
 

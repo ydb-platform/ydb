@@ -91,6 +91,7 @@ namespace NKikimr {
             VCtx->OutOfSpaceState.UpdateLocalUsedChunks(msg->UsedChunks);
             MonGroup.DskTotalBytes() = msg->TotalChunks * PDiskCtx->Dsk->ChunkSize;
             MonGroup.DskFreeBytes() = msg->FreeChunks * PDiskCtx->Dsk->ChunkSize;
+            MonGroup.DskUsedBytes() = msg->UsedChunks * PDiskCtx->Dsk->ChunkSize;
             if (msg->NumSlots > 0) {
                 ui32 timeAvailable = 1'000'000'000 / msg->NumSlots;
                 CostGroup.DiskTimeAvailableNs() = timeAvailable;

@@ -14,7 +14,7 @@ Schema of the `episodes` table:
 
 ![episodes](../_assets/episodes_scheme.png)
 
-Let's build a plan for this query, you can do this via UI or {{ ydb-short-name }} CLI:
+Let's build a plan for this query. You can do this via either UI or {{ ydb-short-name }} CLI:
 
 {% list tabs %}
 

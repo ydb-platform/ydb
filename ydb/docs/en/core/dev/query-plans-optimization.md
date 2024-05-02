@@ -42,7 +42,7 @@ Let's build a plan for this query. You can do this via either UI or {{ ydb-short
 
 - Embedded UI
 
-  You can also build a query plan via [Embedded UI](../reference/embedded-ui/ydb-monitoring.md). You need to navigate to the database page, go to `Query` section and click on `Explain`:
+  You can also build a query plan via [Embedded UI](../reference/embedded-ui/ydb-monitoring.md). You need to navigate to the database page, go to the `Query` section, type the query text, and click on `Explain`:
 
   ![explain_ui](../_assets/explain_ui.png)
 

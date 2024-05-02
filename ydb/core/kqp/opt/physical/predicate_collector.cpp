@@ -97,7 +97,7 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode* ) {
     }
 
     const auto applies = FindNodes(expr.Ptr(), [] (const TExprNode::TPtr& node) {
-        return node->IsCallable({"Apply", "NamedApply"}) && node->Head().IsCallable("Udf");
+        return node->IsCallable({"Apply", "NamedApply"}) && (node->Head().IsCallable("Udf") || (node->Head().IsCallable("AssumeStrict") && node->Head().Head().IsCallable("Udf") ));
     });
 
     if (applies.empty()) {
@@ -105,11 +105,20 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode* ) {
     }
 
     for (const auto& apply : applies) {
-        if (!apply->Head().Head().Content().starts_with("Json2.")) {
+        const auto& udf = SkipCallables(apply->Head(), {"AssumeStrict"});
+        const auto& udfName = udf.Head();
+        if (!(udfName.Content().starts_with("Json2.") || udfName.Content().starts_with("Re2."))) {
             return false;
         }
 
-        if (apply->Head().Head().IsAtom("Json2.CompilePath") && !apply->Tail().IsCallable("Utf8")) {
+        if (udfName.IsAtom("Json2.CompilePath") && !apply->Tail().IsCallable("Utf8")) {
+            return false;
+        }
+
+        // Pushdonw only SQL LIKE or ILIKE.
+        constexpr auto like = "Re2.PatternFromLike"sv;
+        if (udfName.Content().starts_with("Re2.") && !udfName.IsAtom({like, "Re2.Options"}) &&
+            !FindNode(udf.ChildPtr(1U), [like] (const TExprNode::TPtr& node) { return node->IsCallable("Udf") && node->Head().IsAtom(like); })) {
             return false;
         }
     }

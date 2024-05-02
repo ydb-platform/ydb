@@ -78,10 +78,10 @@ struct TTableBucket {
  };
 
 struct TTableBucketSpiller {
-    TTableBucketSpiller(std::shared_ptr<ISpillerFactory> spillerFactory, size_t sizeLimit)
-        : StateUi64Adapter(spillerFactory->CreateSpiller(), sizeLimit)
-        , StateUi32Adapter(spillerFactory->CreateSpiller(), sizeLimit)
-        , StateCharAdapter(spillerFactory->CreateSpiller(), sizeLimit) {
+    TTableBucketSpiller(ISpiller::TPtr spiller, size_t sizeLimit)
+        : StateUi64Adapter(spiller, sizeLimit)
+        , StateUi32Adapter(spiller, sizeLimit)
+        , StateCharAdapter(spiller, sizeLimit) {
     }
 
     TVectorSpillerAdapter<ui64, TMKQLAllocator<ui64>> StateUi64Adapter;

@@ -159,9 +159,9 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     offset += TempTuple.size();
     stringValuesTotalSize += finalStringsSize - initialStringsSize;
 
-    if (TableBuckets[bucket].GetSize() > 5_MB) {
-        TableBucketsSpiller[bucket].SpillBucket(std::move(TableBuckets[bucket]));
-    }
+    //if (TableBuckets[bucket].GetSize() > 5_MB) {
+    TableBucketsSpiller[bucket].SpillBucket(std::move(TableBuckets[bucket]));
+    //}
 }
 
 void TTable::ResetIterator() {
@@ -1205,7 +1205,7 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
     // TODO change to bool IsSpilling enabled
     if (spillerFactory) {
         for (size_t i = 0; i < NumberOfBuckets; ++i) {
-            TableBucketsSpiller.emplace_back(SpillerFactory, 1_MB);
+            TableBucketsSpiller.emplace_back(spillerFactory->CreateSpiller(), 1_MB);
         }
     }
 

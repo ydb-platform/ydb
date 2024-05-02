@@ -216,16 +216,17 @@ public:
         return RunKqpProxyRequest<NKikimr::NKqp::TEvGetScriptExecutionOperation, NKikimr::NKqp::TEvGetScriptExecutionOperationResponse>(std::move(event));
     }
 
-    NKikimr::NKqp::TEvKqp::TEvFetchScriptResultsResponse::TPtr FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId) const {
+    NKikimr::NKqp::TEvFetchScriptResultsResponse::TPtr FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId) const {
         TString executionId = *NKikimr::NKqp::ScriptExecutionIdFromOperation(operation);
 
         NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor();
         auto rowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit();
-        NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, Settings_.DomainName, executionId, resultSetId, 0, rowsLimit ? rowsLimit : std::numeric_limits<i64>::max());
+        auto sizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit();
+        NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, Settings_.DomainName, executionId, resultSetId, 0, rowsLimit, sizeLimit, TInstant::Max());
 
         GetRuntime()->Register(fetchActor);
 
-        return GetRuntime()->GrabEdgeEvent<NKikimr::NKqp::TEvKqp::TEvFetchScriptResultsResponse>(edgeActor);
+        return GetRuntime()->GrabEdgeEvent<NKikimr::NKqp::TEvFetchScriptResultsResponse>(edgeActor);
     }
 
     NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse::TPtr ForgetScriptExecutionOperationRequest(const TString& operation) const {
@@ -397,11 +398,11 @@ TRequestResult TYdbSetup::GetScriptExecutionOperationRequest(const TString& oper
 }
 
 TRequestResult TYdbSetup::FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId, Ydb::ResultSet& resultSet) const {
-    auto scriptExecutionResults = Impl_->FetchScriptExecutionResultsRequest(operation, resultSetId)->Get()->Record;
+    auto scriptExecutionResults = Impl_->FetchScriptExecutionResultsRequest(operation, resultSetId);
 
-    resultSet = scriptExecutionResults.GetResultSet();
+    resultSet = scriptExecutionResults->Get()->ResultSet;
 
-    return TRequestResult(scriptExecutionResults.GetStatus(), scriptExecutionResults.GetIssues());
+    return TRequestResult(scriptExecutionResults->Get()->Status, scriptExecutionResults->Get()->Issues);
 }
 
 TRequestResult TYdbSetup::ForgetScriptExecutionOperationRequest(const TString& operation) const {

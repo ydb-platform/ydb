@@ -24,7 +24,7 @@ ReadLimit | read rows limit
 Reverse | flag indicating the order in which the rows will be read, by default the order is forward (ascending), but if the flag is set to `true`, the reading order will be reversed (descending).
 
 #### TableRangeScan
-Reading a table based on a specific range of primary key.
+Reading a table by a specific primary key range.
 
 Attribute | Description
 --- | --- 

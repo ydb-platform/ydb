@@ -76,14 +76,14 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
 }
 
 TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const {
-    TString result(original.data(), original.size());
+    TString result(original);
 
     if (!QuerySettings.empty()) {
         result = JoinSeq("\n", QuerySettings) + "\n" + result;
     }
 
     std::vector<TStringBuf> lines;
-    for(auto& line : StringSplitter(result).Split('\n').SkipEmpty()) {
+    for (auto& line : StringSplitter(result).Split('\n').SkipEmpty()) {
         if (line.StartsWith("--")) {
             continue;
         }
@@ -94,8 +94,8 @@ TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const 
     return JoinSeq('\n', lines);
 }
 
-bool TWorkloadCommandBenchmark::NeedRun(const ui32 queryIdx) const {
-    if (QueriesToRun.size() && !QueriesToRun.contains(queryIdx)) {
+bool TWorkloadCommandBenchmark::NeedRun(ui32 queryIdx) const {
+    if (QueriesToRun && !QueriesToRun.contains(queryIdx)) {
         return false;
     }
     if (QueriesToSkip.contains(queryIdx)) {
@@ -237,7 +237,7 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
     if (MiniStatFileName) {
         TOFStream jStream{MiniStatFileName};
 
-        for(ui32 rowId = 0; rowId < IterationsCount; ++rowId) {
+        for (ui32 rowId = 0; rowId < IterationsCount; ++rowId) {
             ui32 colId = 0;
             for(auto [_, testInfo] : queryRuns) {
                 if (colId) {
@@ -266,14 +266,12 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
 
 int TWorkloadCommandBenchmark::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& /*config*/) {
     if (QueryExecuterType == "scan") {
-        const bool okay = RunBench(*TableClient, workloadGen);
-        return !okay;
-    } else if (QueryExecuterType == "generic") {
-        const bool okay = RunBench(*QueryClient, workloadGen);
-        return !okay;
-    } else {
-        ythrow yexception() << "Incorrect executer type. Available options: \"scan\", \"generic\"." << Endl;
+        return !RunBench(*TableClient, workloadGen);
     }
+    if (QueryExecuterType == "generic") {
+        return !RunBench(*QueryClient, workloadGen);
+    }
+    ythrow yexception() << "Incorrect executer type. Available options: \"scan\", \"generic\"." << Endl;
 }
 
 }

@@ -315,7 +315,7 @@ NJson::TJsonValue GetSensorValue(TStringBuf sensor, double value, ui32 queryId) 
 }
 
 template <class T>
-bool CompareValueImpl(const T valResult, const TStringBuf vExpected) {
+bool CompareValueImpl(const T& valResult, TStringBuf vExpected) {
     T valExpected;
     if (!TryFromString<T>(vExpected, valExpected)) {
         Cerr << "cannot parse expected as " << typeid(valResult).name() << "(" << vExpected << ")" << Endl;
@@ -324,7 +324,7 @@ bool CompareValueImpl(const T valResult, const TStringBuf vExpected) {
     return valResult == valExpected;
 }
 
-bool CompareValue(const NYdb::TValue& v, const TStringBuf vExpected) {
+bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected) {
     const auto& vp = v.GetProto();
     if (vp.has_bool_value()) {
         return CompareValueImpl<bool>(vp.bool_value(), vExpected);
@@ -358,11 +358,11 @@ bool CompareValue(const NYdb::TValue& v, const TStringBuf vExpected) {
 }
 
 
-bool TQueryResultInfo::IsExpected(const std::string_view expexted) const {
-    if (expexted.empty()) {
+bool TQueryResultInfo::IsExpected(std::string_view expected) const {
+    if (expected.empty()) {
         return true;
     }
-    const auto expectedLines = StringSplitter(expexted).Split('\n').SkipEmpty().ToList<TString>();
+    const auto expectedLines = StringSplitter(expected).Split('\n').SkipEmpty().ToList<TString>();
     if (Result.size() + 1 != expectedLines.size()) {
         Cerr << "has diff: incorrect lines count (" << Result.size() << " in result, but " << expectedLines.size() << " expected with header)" << Endl;
         return false;
@@ -382,9 +382,8 @@ bool TQueryResultInfo::IsExpected(const std::string_view expexted) const {
                     columnIndexes.emplace_back(i);
                 }
                 break;
-            } else {
-                columnIndexes.emplace_back(it->second);
             }
+            columnIndexes.emplace_back(it->second);
 
             if (!splitter.Step()) {
                 break;

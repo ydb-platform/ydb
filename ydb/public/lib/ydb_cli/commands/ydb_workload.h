@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/lib/ydb_cli/common/progress_bar.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/library/workload/workload_query_generator.h>
@@ -10,7 +11,6 @@
 #include <util/system/spinlock.h>
 
 #include <memory>
-#include <string>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -113,9 +113,13 @@ public:
 private:
     NTable::TSession GetSession();
     int DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) override;
-    TAsyncStatus SendDataPortion(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) const;
+    TStatus SendDataPortion(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) const;
+    bool ProcessDataGenerator(std::shared_ptr<NYdbWorkload::IBulkDataGenerator> dataGen, const TAtomic& stop) noexcept;
+
     ui32 UpsertThreadsCount = 128;
     bool Clear = false;
+    THolder<TProgressBar> Bar;
+    TAdaptiveLock Lock;
 };
 
 class TWorkloadCommandClean final: public TWorkloadCommandBase {

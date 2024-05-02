@@ -12,10 +12,10 @@
 #include <ydb/library/workload/workload_factory.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
-#include <ydb/public/lib/ydb_cli/common/progress_bar.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
+#include <library/cpp/threading/future/async.h>
 
 #include <util/random/random.h>
 #include <util/system/spinlock.h>
@@ -333,29 +333,6 @@ void TWorkloadCommand::PrintWindowStats(int windowIt) {
     }
 }
 
-namespace {
-    bool WaitBulk(const NYdb::TAsyncStatus& prevResult, TAtomic& errors, const std::string& table, TAdaptiveLock& lock) {
-        if (prevResult.Initialized()) {
-            try {
-                const auto& res = prevResult.GetValueSync();
-                if (!res.IsSuccess()) {
-                    auto g = Guard(lock);
-                    Cerr << "Bulk upset to " << table << " failed: " << res.GetIssues().ToString() << Endl;
-                    AtomicIncrement(errors);
-                    return false;
-                }
-            } catch (...) {
-                auto g = Guard(lock);
-                Cerr << "Bulk upset to " << table << " failed: " << CurrentExceptionMessage() << ", backtrace: ";
-                PrintBackTrace();
-                AtomicIncrement(errors);
-                return false;
-            }
-        }
-        return true;
-    }
-}
-
 TWorkloadCommandInit::TWorkloadCommandInit(const TString& key)
     : TWorkloadCommandBase("init", key, NYdbWorkload::TWorkloadParams::ECommandType::Init, "Create and initialize tables for workload")
 {}
@@ -488,51 +465,70 @@ int TWorkloadCommandInit::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadG
     }
 
     auto dataGeneratorList = workloadGen.GetBulkInitialData();
-    TAtomic errors = 0;
+    TAtomic stop = 0;
     for (auto dataGen : dataGeneratorList) {
-        TAdaptiveThreadPool pool;
-        pool.Start();
-        TAdaptiveLock lock;
+        TThreadPoolParams params;
+        params.SetCatching(false);
+        TThreadPool pool;
+        pool.Start(UpsertThreadsCount);
         const auto start = Now();
         Cout << "Fill table " << dataGen->GetName() << "..."  << Endl;
-        TProgressBar bar(dataGen->GetSize());
+        Bar = MakeHolder<TProgressBar>(dataGen->GetSize());
+        TVector<NThreading::TFuture<void>> sendings;
         for (ui32 t = 0; t < UpsertThreadsCount; ++t) {
-            auto sendFunc = [this, dataGen, &bar, &errors, &lock] () {
-                for (auto portions = dataGen->GenerateDataPortion(); !portions.empty() && !AtomicGet(errors); portions = dataGen->GenerateDataPortion()) {
-                    for (const auto& data: portions) {
-                        WaitBulk(SendDataPortion(data), errors, dataGen->GetName(), lock);
-                        with_lock(lock) {
-                            bar.AddProgress(data->Size);
-                        }
-                    }
+            sendings.push_back(NThreading::Async([this, dataGen, &stop] () {
+                if (!ProcessDataGenerator(dataGen, stop)) {
+                    AtomicSet(stop, 1);
                 }
-            };
-            pool.SafeAddFunc(sendFunc);
+            }, pool));
         }
-        pool.Stop();
-        Cout << "Fill table " << dataGen->GetName() << "..."  << (AtomicGet(errors) ? "Breaked" : "OK" ) << " (" << (Now() - start) << ")" << Endl;
+        NThreading::WaitAll(sendings).Wait();
+        const bool wasErrors = AtomicGet(stop);
+        Cout << "Fill table " << dataGen->GetName() << "..."  << (wasErrors ? "Breaked" : "OK" ) << " (" << (Now() - start) << ")" << Endl;
+        if (wasErrors) {
+            break;
+        }
     }
-    return AtomicGet(errors) ? EXIT_FAILURE : EXIT_SUCCESS;
+    return AtomicGet(stop) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
-TAsyncStatus TWorkloadCommandInit::SendDataPortion(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) const {
+TStatus TWorkloadCommandInit::SendDataPortion(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) const {
     if (auto* value = std::get_if<TValue>(&portion->Data)) {
-        return TableClient->BulkUpsert(portion->Table, std::move(*value))
-            .Apply([] (NThreading::TFuture<NTable::TBulkUpsertResult> f) {
-                return (TStatus&)f.GetValue();
-            });
-    } else if (auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TCsv>(&portion->Data)) {
-        return TableClient->RetryOperation<NTable::TBulkUpsertResult>([value, portion](NTable::TTableClient& client) {
+        return TableClient->BulkUpsert(portion->Table, std::move(*value)).GetValueSync();
+    }
+    if (auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TCsv>(&portion->Data)) {
+        return TableClient->RetryOperationSync([value, portion](NTable::TTableClient& client) {
             NTable::TBulkUpsertSettings settings;
             settings.FormatSettings(value->FormatString);
-            return client.BulkUpsert(portion->Table, NTable::EDataFormat::CSV, value->Data, TString(), settings);
+            return client.BulkUpsert(portion->Table, NTable::EDataFormat::CSV, value->Data, TString(), settings).GetValueSync();
         });
-    } else if (auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TArrow>(&portion->Data)) {
-        return TableClient->RetryOperation<NTable::TBulkUpsertResult>([value, portion](NTable::TTableClient& client) {
-            return client.BulkUpsert(portion->Table, NTable::EDataFormat::ApacheArrow, value->Data, value->Schema);
+    }
+    if (auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TArrow>(&portion->Data)) {
+        return TableClient->RetryOperationSync([value, portion](NTable::TTableClient& client) {
+            return client.BulkUpsert(portion->Table, NTable::EDataFormat::ApacheArrow, value->Data, value->Schema).GetValueSync();
         });
     }
     Y_FAIL_S("Invalid data portion");
+}
+
+bool TWorkloadCommandInit::ProcessDataGenerator(std::shared_ptr<NYdbWorkload::IBulkDataGenerator> dataGen, const TAtomic& stop) noexcept try {
+    for (auto portions = dataGen->GenerateDataPortion(); !portions.empty() && !AtomicGet(stop); portions = dataGen->GenerateDataPortion()) {
+        for (const auto& data: portions) {
+            const auto res = SendDataPortion(data);
+            auto g = Guard(Lock);
+            if (!res.IsSuccess()) {
+                Cerr << "Bulk upset to " << dataGen->GetName() << " failed: " << res.GetIssues().ToString() << Endl;
+                return false;
+            }
+            Bar->AddProgress(data->Size);
+        }
+    }
+    return true;
+} catch (...) {
+    auto g = Guard(Lock);
+    Cerr << "Fill table " << dataGen->GetName() << " failed: " << CurrentExceptionMessage() << ", backtrace: ";
+    PrintBackTrace();
+    return false;
 }
 
 TWorkloadCommandClean::TWorkloadCommandClean(const TString& key)

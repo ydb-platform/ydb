@@ -53,7 +53,7 @@ public:
     struct TDataPortion: public TAtomicRefCount<TDataPortion>, TMoveOnly {
         struct TCsv {
             TCsv(TString&& data, const TString& formatString = TString())
-                : Data(data)
+                : Data(std::move(data))
                 , FormatString(formatString)
             {}
             TString Data;
@@ -62,7 +62,7 @@ public:
 
         struct TArrow {
             TArrow(TString&& data, TString&& schema)
-                : Data(data)
+                : Data(std::move(data))
                 , Schema(schema)
             {}
             TString Data;
@@ -72,7 +72,7 @@ public:
         template<class T>
         TDataPortion(const TString& table, T&& data, ui64 size)
             : Table(table)
-            , Data(data)
+            , Data(std::move(data))
             , Size(size)
         {}
 

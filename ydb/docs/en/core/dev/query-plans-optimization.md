@@ -2,7 +2,7 @@
 
 Before executing a query, it is essential to analyze its execution plan to detect and eliminate the reasons for possible excessive cluster resource consumption or abnormally high execution time. This article will discuss specific examples of query plan analysis.
 
-Let's consider the following query, which searches for series by name:
+Let's consider the following query that searches for episodes by title:
 
 ``` sql
 SELECT season_id, episode_id 

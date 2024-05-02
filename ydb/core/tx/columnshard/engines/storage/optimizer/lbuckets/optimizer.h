@@ -827,6 +827,9 @@ public:
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("stop_instant", stopInstant)("size", size)("next", NextBorder ? NextBorder->DebugString() : "")
             ("count", portions.size())("info", Others.DebugString())("event", "start_optimization")("stop_point", stopPoint ? stopPoint->DebugString() : "");
         TSaverContext saverContext(storagesManager);
+        for (auto&& p : portions) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion", p->DebugString(true));
+        }
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portions, saverContext);
         if (MainPortion) {
             NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyStart().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);

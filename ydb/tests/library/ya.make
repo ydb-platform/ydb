@@ -83,6 +83,15 @@ IF (NOT PYTHON3)
     )
 ENDIF()
 
+IF (PYTHON3)
+    PEERDIR(
+        ydb/tools/ydbd_slice
+    )
+    PY_SRCS(
+        harness/ydbd_slice.py
+    )
+ENDIF()
+
 PEERDIR(
     contrib/python/PyHamcrest
     contrib/python/PyYAML
@@ -101,7 +110,6 @@ PEERDIR(
     ydb/public/api/protos
     ydb/tests/oss/canonical
     ydb/tests/oss/ydb_sdk_import
-    ydb/tools/ydbd_slice
 )
 
 END()

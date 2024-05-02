@@ -3,7 +3,7 @@ import sys
 
 import ydb
 from ydb.tests.library.common import yatest_common
-from ydb.tests.library.harness.kikimr_cluster import YdbdSlice
+from ydb.tests.library.harness.ydbd_slice import YdbdSlice
 
 
 class TestWithSlice(object):

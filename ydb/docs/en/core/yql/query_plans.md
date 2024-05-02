@@ -143,7 +143,7 @@ Sends the result of a single producer stage task to all consumer stage tasks.
 Implements 1-to-1 relationships between tasks of stages, the producer stage and consumer stage should have the same number of tasks.
 
 #### HashShuffle
-Sends the results of producer stage tasks to consumer stage tasks based on a certain rule for specified columns. The rule is defined in the code, but the list of columns is specified in connection.
+Sends the results of producer stage tasks to consumer stage tasks based on a certain rule for specified columns. The rule is defined in the code, but the list of columns is specified in the connection.
 
 ### ResultSet
 The query execution result.

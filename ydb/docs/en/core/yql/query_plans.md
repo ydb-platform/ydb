@@ -61,7 +61,7 @@ Table | table name
 Combine two data sources (subqueries or tables) by keys. The join strategy is specified in the operation description.
 
 #### Filter
-Filtering rows, leaving only those for which the predicate returns true.
+Filtering rows, keeping only those for which a predicate returns `true`.
 
 Attribute | Description
 --- | ---

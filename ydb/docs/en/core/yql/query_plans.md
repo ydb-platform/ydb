@@ -2,7 +2,7 @@
 
 To understand how a query will be executed, you can build and analyze its plan. The query plan structure in {{ ydb-short-name }} is represented as a graph, where each node contains information about operations and tables.
 
-Below, you can find information about node types, and an example of analyzing a specific query plan can be found [here](../dba/query-plans-optimization.md).
+Below, you can find information about node types, and an example of analyzing a specific query plan can be found [here](../dev/query-plans-optimization.md).
 
 ## Node types
 ### Stage
@@ -128,7 +128,7 @@ Data dependencies between stages.
 **UI representation**:
 ![connection](_assets/connection.png)
 
-Each stage is executed as a certain number of tasks. For example, a reading stage may be executed in N tasks, where N is the number of table shards. Method of transferring data between stages depends on the type of connection. You can find a description of different connections below.
+Each stage is executed as a certain number of tasks. For example, a reading stage may be executed in N tasks, where N is the number of table shards. The method of transferring data between stages depends on the type of connection. Below is a description of different connections.
 
 #### UnionAll
 Combines the results of all producer stage tasks and sends them as a single result to a single consumer stage task.

@@ -1049,48 +1049,64 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("/slice/db", "/slice/db26000"), 5);
     }
 
-    TVector<TString> SimilarWordsDictionary = { "/slice", "/slice/db", "/slice/db26000" };
-    TVector<TString> DifferentWordsDictionary = { "/orders", "/peoples", "/OrdinaryScheduleTables" };
+    Y_UNIT_TEST(FuzzySearcher)
+    {
+        TVector<TString> dictionary = { "/slice", "/slice/db", "/slice/db26000" };
 
-    void FuzzySearcherTest(TVector<TString>& dictionary, TString search, ui32 limit, TVector<TString> expectations) {
-        auto fuzzy = FuzzySearcher<TString>(dictionary);
-        auto result = fuzzy.Search(search, limit);
+        {
+            TVector<TString> expectations = { "/slice/db" };
+            auto fuzzy = FuzzySearcher<TString>(dictionary);
+            auto result = fuzzy.Search("/slice/db", 1);
 
-        UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
-        for (ui32 i = 0; i < expectations.size(); i++) {
-            UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
+            for (ui32 i = 0; i < expectations.size(); i++) {
+                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+            }
         }
-    }
 
-    Y_UNIT_TEST(FuzzySearcherLimit1OutOf4)
-    {
-        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db", 1, { "/slice/db" });
-    }
+        {
+            TVector<TString> expectations = { "/slice/db", "/slice" };
+            auto fuzzy = FuzzySearcher<TString>(dictionary);
+            auto result = fuzzy.Search("/slice/db", 2);
 
-    Y_UNIT_TEST(FuzzySearcherLimit2OutOf4)
-    {
-        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db", 2, { "/slice/db", "/slice/db26000" });
-    }
+            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
+            for (ui32 i = 0; i < expectations.size(); i++) {
+                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+            }
+        }
 
-    Y_UNIT_TEST(FuzzySearcherLimit3OutOf4)
-    {
-        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db", 3, { "/slice/db", "/slice/db26000", "/slice"});
-    }
+        {
+            TVector<TString> expectations = { "/slice/db", "/slice", "/slice/db26000"};
+            auto fuzzy = FuzzySearcher<TString>(dictionary);
+            auto result = fuzzy.Search("/slice/db", 3);
 
-    Y_UNIT_TEST(FuzzySearcherLimit4OutOf4)
-    {
-        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db", 4, { "/slice/db", "/slice/db26000", "/slice"});
-    }
+            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
+            for (ui32 i = 0; i < expectations.size(); i++) {
+                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+            }
+        }
 
-    Y_UNIT_TEST(FuzzySearcherLongWord)
-    {
-        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db26001", 10, { "/slice/db26000", "/slice/db", "/slice"});
-    }
+        {
+            TVector<TString> expectations = { "/slice/db", "/slice", "/slice/db26000" };
+            auto fuzzy = FuzzySearcher<TString>(dictionary);
+            auto result = fuzzy.Search("/slice/db", 4);
 
-    Y_UNIT_TEST(FuzzySearcherPriority)
-    {
-        FuzzySearcherTest(DifferentWordsDictionary, "/ord", 10, { "/orders", "/OrdinaryScheduleTables", "/peoples"});
-        FuzzySearcherTest(DifferentWordsDictionary, "Tables", 10, { "/OrdinaryScheduleTables", "/orders", "/peoples"});
+            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
+            for (ui32 i = 0; i < expectations.size(); i++) {
+                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+            }
+        }
+
+        {
+            TVector<TString> expectations = { "/slice/db26000", "/slice/db", "/slice" };
+            auto fuzzy = FuzzySearcher<TString>(dictionary);
+            auto result = fuzzy.Search("/slice/db26001");
+
+            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
+            for (ui32 i = 0; i < expectations.size(); i++) {
+                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+            }
+        }
     }
 
     void JsonAutocompleteTest(HTTP_METHOD method, NJson::TJsonValue& value, TString prefix = "", TString database = "", TVector<TString> tables = {}, ui32 limit = 10, bool lowerCaseContentType = false) {
@@ -1162,7 +1178,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
                     (*x)->Get()->Request->ErrorCount = 0;
                     for (auto& entry: (*x)->Get()->Request->ResultSet) {
-                        if (entry.Path.size() <= 2) {
+                        if (tables.size() > 0) {
                             const TPathId pathId(1, 1);
                             auto listNodeEntry = MakeIntrusive<TNavigate::TListNodeEntry>();
                             listNodeEntry->Children.reserve(3);
@@ -1179,6 +1195,34 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         }
                         entry.Status = TSchemeCacheNavigate::EStatus::Ok;
                     }
+                    break;
+                }
+                case TEvSchemeShard::EvDescribeSchemeResult: {
+                    Cerr << "iiiiiiiiiiiii EvDescribeSchemeResult 1" << Endl;
+                    auto *x = reinterpret_cast<TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                    auto record = (*x)->Get()->MutableRecord();
+                    record->SetStatus(NKikimrScheme::EStatus::StatusSuccess);
+                    auto pathDescription = record->MutablePathDescription();
+                    Cerr << "iiiiiiiiiiiii EvDescribeSchemeResult 2" << Endl;
+                    if (tables.size() > 0) {
+                        auto child = pathDescription->AddChildren();
+                        child->SetName("orders");
+                        child->SetPathType(NKikimrSchemeOp::EPathType::EPathTypeTable);
+                        child = pathDescription->AddChildren();
+                        child->SetName("clients");
+                        child->SetPathType(NKikimrSchemeOp::EPathType::EPathTypeTable);
+                        child = pathDescription->AddChildren();
+                        child->SetName("products");
+                        child->SetPathType(NKikimrSchemeOp::EPathType::EPathTypeTable);
+                    } else {
+                        auto column = pathDescription->MutableTable()->AddColumns();
+                        column->SetName("id");
+                        column = pathDescription->MutableTable()->AddColumns();
+                        column->SetName("name");
+                        column = pathDescription->MutableTable()->AddColumns();
+                        column->SetName("description");
+                    }
+                    Cerr << "iiiiiiiiiiiii EvDescribeSchemeResult 3" << Endl;
                     break;
                 }
             }

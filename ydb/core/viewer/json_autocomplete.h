@@ -13,6 +13,7 @@ namespace NKikimr {
 namespace NViewer {
 
 using namespace NActors;
+using NSchemeShard::TEvSchemeShard;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 class TJsonAutocomplete : public TViewerPipeClient<TJsonAutocomplete> {
@@ -23,8 +24,9 @@ class TJsonAutocomplete : public TViewerPipeClient<TJsonAutocomplete> {
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
 
-    TAutoPtr<TEvViewer::TEvViewerResponse> ProxyResult;
+    TAutoPtr<TEvViewer::TEvViewerResponse> ViewerProxyResult;
     TAutoPtr<NConsole::TEvConsole::TEvListTenantsResponse> ConsoleResult;
+    TVector<TAutoPtr<TEvSchemeShard::TEvDescribeSchemeResult>> TxProxyResult;
     TAutoPtr<TEvTxProxySchemeCache::TEvNavigateKeySetResult> CacheResult;
 
     struct TSchemaWordData {
@@ -151,24 +153,11 @@ public:
         return NViewer::IsPostContent(Event);
     }
 
-    TAutoPtr<NSchemeCache::TSchemeCacheNavigate> MakeSchemeCacheRequest() {
-        TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
-
-        for (TString& path: Paths) {
-            NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
-            entry.SyncVersion = false;
-            entry.Path = SplitPath(path);
-            request->ResultSet.emplace_back(entry);
-        }
-
-        return request;
-    }
-
     void Bootstrap() {
+        Cerr << "OOO Bootstrap " << Endl;
         if (ViewerRequest) {
             // handle proxied request
-            SendSchemeCacheRequest();
+            SendNavigateRequest();
         } else if (!Database) {
             // autocomplete database list via console request
             RequestConsoleListTenants();
@@ -179,7 +168,7 @@ public:
             }
             if (Requests == 0) {
                 // perform autocomplete without proxying
-                SendSchemeCacheRequest();
+                SendNavigateRequest();
             }
         }
 
@@ -191,7 +180,7 @@ public:
     void Undelivered(TEvents::TEvUndelivered::TPtr &ev) {
         if (!Direct && ev->Get()->SourceType == NViewer::TEvViewer::EvViewerRequest) {
             Direct = true;
-            SendSchemeCacheRequest(); // fallback
+            SendNavigateRequest(); // fallback
             RequestDone();
         }
     }
@@ -199,7 +188,7 @@ public:
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &) {
         if (!Direct) {
             Direct = true;
-            SendSchemeCacheRequest(); // fallback
+            SendNavigateRequest(); // fallback
             RequestDone();
         }
     }
@@ -212,15 +201,39 @@ public:
             }
         }
         if (TenantDynamicNodes.empty()) {
-            SendSchemeCacheRequest();
+            SendNavigateRequest();
         } else {
             SendDynamicNodeAutocompleteRequest();
         }
         RequestDone();
     }
 
-    void SendSchemeCacheRequest() {
-        SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(MakeSchemeCacheRequest()));
+    void SendNavigateRequest() {
+        for (TString& path: Paths) {
+            THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+            auto record = request->Record.MutableDescribePath();
+            record->SetPath(path);
+            record->MutableOptions()->SetBackupInfo(true);
+            record->MutableOptions()->SetShowPrivateTable(true);
+            record->MutableOptions()->SetReturnChildren(true);
+            record->MutableOptions()->SetReturnBoundaries(false);
+            record->MutableOptions()->SetReturnPartitionConfig(true);
+            record->MutableOptions()->SetReturnPartitionStats(false);
+            record->MutableOptions()->SetReturnPartitioningInfo(true);
+            request->Record.SetUserToken(Event->Get()->UserToken);
+            SendRequest(MakeTxProxyID(), request.Release());
+        }
+
+        TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+        for (TString& path: Paths) {
+            NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
+            entry.SyncVersion = false;
+            entry.Path = SplitPath(path);
+            request->ResultSet.emplace_back(entry);
+        }
+
+        SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
     }
 
     void SendDynamicNodeAutocompleteRequest() {
@@ -259,6 +272,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
+            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeConnected, Connected);
@@ -268,13 +282,13 @@ public:
         }
     }
 
-    void ParseProxyResult() {
-        if (ProxyResult == nullptr) {
-            Result.add_error("Failed to collect information from ProxyResult");
+    void ParseViewerProxyResult() {
+        if (ViewerProxyResult == nullptr) {
+            Result.add_error("Failed to collect information from ViewerProxyResult");
             return;
         }
-        if (ProxyResult->Record.HasAutocompleteResponse()) {
-            Result = ProxyResult->Record.GetAutocompleteResponse();
+        if (ViewerProxyResult->Record.HasAutocompleteResponse()) {
+            Result = ViewerProxyResult->Record.GetAutocompleteResponse();
         } else {
             Result.add_error("Proxying return empty response");
         }
@@ -294,8 +308,8 @@ public:
         }
     }
 
-    NKikimrViewer::EAutocompleteType ConvertType(TNavigate::EKind navigate) {
-        switch (navigate) {
+    NKikimrViewer::EAutocompleteType ConvertType(TNavigate::EKind type) {
+        switch (type) {
             case TNavigate::KindSubdomain:
                 return NKikimrViewer::sub_domain;
             case TNavigate::KindPath:
@@ -339,6 +353,53 @@ public:
         }
     }
 
+    NKikimrViewer::EAutocompleteType ConvertType(NKikimrSchemeOp::EPathType type) {
+        switch (type) {
+            case NKikimrSchemeOp::EPathType::EPathTypeInvalid:
+                return NKikimrViewer::unknown;
+            case NKikimrSchemeOp::EPathType::EPathTypeDir:
+                return NKikimrViewer::dir;
+            case NKikimrSchemeOp::EPathType::EPathTypeTable:
+                return NKikimrViewer::table;
+            case NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup:
+                return NKikimrViewer::pers_queue_group;
+            case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:
+                return NKikimrViewer::sub_domain;
+            case NKikimrSchemeOp::EPathType::EPathTypeRtmrVolume:
+                return NKikimrViewer::rtmr_volume;
+            case NKikimrSchemeOp::EPathType::EPathTypeBlockStoreVolume:
+                return NKikimrViewer::block_store_volume;
+            case NKikimrSchemeOp::EPathType::EPathTypeKesus:
+                return NKikimrViewer::kesus;
+            case NKikimrSchemeOp::EPathType::EPathTypeSolomonVolume :
+                return NKikimrViewer::solomon_volume;
+            case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
+                return NKikimrViewer::index;
+            case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
+                return NKikimrViewer::ext_sub_domain;
+            case NKikimrSchemeOp::EPathType::EPathTypeFileStore:
+                return NKikimrViewer::file_store;
+            case NKikimrSchemeOp::EPathType::EPathTypeColumnStore:
+                return NKikimrViewer::column_store;
+            case NKikimrSchemeOp::EPathType::EPathTypeColumnTable:
+                return NKikimrViewer::column_table;
+            case NKikimrSchemeOp::EPathType::EPathTypeCdcStream:
+                return NKikimrViewer::cdc_stream;
+            case NKikimrSchemeOp::EPathType::EPathTypeSequence:
+                return NKikimrViewer::sequence;
+            case NKikimrSchemeOp::EPathType::EPathTypeReplication:
+                return NKikimrViewer::replication;
+            case NKikimrSchemeOp::EPathType::EPathTypeBlobDepot:
+                return NKikimrViewer::blob_depot;
+            case NKikimrSchemeOp::EPathType::EPathTypeExternalTable:
+                return NKikimrViewer::external_table;
+            case NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource:
+                return NKikimrViewer::external_data_source;
+            case NKikimrSchemeOp::EPathType::EPathTypeView:
+                return NKikimrViewer::view;
+        }
+    }
+
     void ParseCacheResult() {
         if (CacheResult == nullptr) {
             Result.add_error("Failed to collect information from CacheResult");
@@ -372,6 +433,48 @@ public:
         }
     }
 
+    bool TryParseTxProxyResult() {
+        Cerr << "iiiiiiiiiiiii TryParseTxProxyResult 1" << Endl;
+        if (TxProxyResult.size() != Paths.size()) {
+            return false;
+        }
+        for (auto& result: TxProxyResult) {
+            if (result->GetRecord().GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
+                return false;
+            }
+        }
+        Cerr << "iiiiiiiiiiiii TryParseTxProxyResult 2" << Endl;
+        for (auto& result: TxProxyResult) {
+            auto& record = result->GetRecord();
+            auto& entry = record.GetPathDescription();
+
+            for (auto& child: entry.GetChildren()) {
+                Dictionary[child.GetName()] = TSchemaWordData(child.GetName(), ConvertType(child.GetPathType()), record.GetPath());
+            }
+            if (entry.HasTable()) {
+                auto& description = entry.GetTable();
+                for (const auto& column : description.GetColumns()) {
+                    Dictionary[column.GetName()] = TSchemaWordData(column.GetName(), NKikimrViewer::column, record.GetPath());
+                }
+                for (const auto& index : description.GetTableIndexes()) {
+                    Dictionary[index.GetName()] = TSchemaWordData(index.GetName(), NKikimrViewer::index, record.GetPath());
+                }
+                for (const auto& cdcStream : description.GetCdcStreams()) {
+                    Dictionary[cdcStream.GetName()] = TSchemaWordData(cdcStream.GetName(), NKikimrViewer::cdc_stream, record.GetPath());
+                }
+            }
+        }
+        Cerr << "iiiiiiiiiiiii TryParseTxProxyResult 3" << Endl;
+
+        return true;
+    }
+
+    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        Cerr << "aaaa TEvDescribeSchemeResult" << Endl;
+        TxProxyResult.emplace_back(ev->Release());
+        RequestDone();
+    }
+
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev) {
         CacheResult = ev->Release();
         RequestDone();
@@ -395,15 +498,18 @@ public:
     }
 
     void ReplyAndPassAway() {
-        if (ProxyResult) {
-            ParseProxyResult();
+        Cerr << "OOO ReplyAndPassAway " << Endl;
+        if (ViewerProxyResult) {
+            ParseViewerProxyResult();
         } else if (Database) {
-            ParseCacheResult();
+            if (!TryParseTxProxyResult()) {
+                ParseCacheResult();
+            }
         } else {
             ParseConsoleResult();
         }
 
-        if (!ProxyResult) {
+        if (!ViewerProxyResult) {
             Result.set_success(Result.error_size() == 0);
             if (Result.error_size() == 0) {
                 auto fuzzy = FuzzySearcher<TSchemaWordData>(Dictionary);
@@ -425,7 +531,7 @@ public:
     }
 
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
-        ProxyResult = ev.Release()->Release();
+        ViewerProxyResult = ev.Release()->Release();
         RequestDone();
     }
 

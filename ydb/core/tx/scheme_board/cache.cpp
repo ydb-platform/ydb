@@ -1603,6 +1603,36 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     }
                 }
+
+                // const auto& self = pathDesc.GetSelf();
+                // bool needSysFolder = false;
+                // const auto& domainsInfo = AppData()->DomainsInfo;
+                // if (self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeSubDomain ||
+                //     self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeColumnStore ||
+                //     self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeColumnTable)
+                // {
+                //     needSysFolder = true;
+                // } else if (self.GetPathId() == NSchemeShard::RootPathId) {
+                //     if (const auto& domain = domainsInfo->Domain; domain && domain->SchemeRoot == self.GetSchemeshardId()) {
+                //         needSysFolder = true;
+                //     }
+                // }
+
+                // if (needSysFolder) {
+                //     bool hasSysFolder = false;
+
+                //     const auto& children = pathDesc.GetChildren();
+                //     if (!children.empty()) {
+                //         auto size = children.size();
+                //         if (children[size - 1].GetName() == NSysView::SysPathName) {
+                //             hasSysFolder = true;
+                //         }
+                //     }
+
+                //     if (!hasSysFolder) {
+                //         ListNodeEntry->Children.emplace_back(TString(NSysView::SysPathName), TPathId(self.GetSchemeshardId(), InvalidLocalPathId), TNavigate::KindPath);
+                //     }
+                // }
             }
         }
 
@@ -1918,6 +1948,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 << ", entry# " << entry.ToString()
                 << ", props# " << props.ToString());
 
+            Cerr << "IIII FillEntry " << Endl;
             TKeyDesc& keyDesc = *entry.KeyDescription;
 
             if (props.IsSync && props.Partial) {
@@ -2172,13 +2203,16 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         TPathExtractor pathExtractor, TTabletIdExtractor tabletIdExtractor)
     {
         auto path = pathExtractor(entry);
+        Cerr << "IIII HandleEntry " << path << Endl;
         TCacheItem* cacheItem = Cache.FindPtr(path);
 
         if (!cacheItem) {
+            Cerr << "IIII !cacheItem " << Endl;
             const EPathType pathType = PathType(path);
             switch (pathType) {
             case EPathType::RegularPath:
             {
+                Cerr << "IIII RegularPath " << Endl;
                 const ui64 tabletId = tabletIdExtractor(entry);
                 if (tabletId == ui64(NSchemeShard::InvalidTabletId) || (tabletId >> 56) != 1) {
                     return SetRootUnknown(context.Get(), entry);
@@ -2212,11 +2246,13 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 break;
             }
             case EPathType::SysPath:
+                Cerr << "IIII SysPath " << Endl;
                 cacheItem = &Cache.Upsert(path, TCacheItem(this, TSubscriber(), true));
                 cacheItem->FillAsSysPath();
                 break;
             case EPathType::SysLocksV1:
             case EPathType::SysLocksV2:
+                Cerr << "IIII SysLocks " << Endl;
                 cacheItem = &Cache.Upsert(path, TCacheItem(this, TSubscriber(), true));
                 cacheItem->FillAsSysLocks(pathType == EPathType::SysLocksV2);
                 break;
@@ -2225,6 +2261,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         Cache.Promote(path);
 
+        Cerr << "IIII cacheItem->IsFilled() " << cacheItem->IsFilled() << Endl;
+        Cerr << "IIII !entry.SyncVersion " << !entry.SyncVersion << Endl;
         if (cacheItem->IsFilled() && !entry.SyncVersion) {
             cacheItem->FillEntry(context.Get(), entry);
         }

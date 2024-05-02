@@ -66,24 +66,25 @@ public:
         ExpandSubElements = FromStringWithDefault<ui32>(params.Get("subs"), ExpandSubElements);
         InitConfig(params);
 
-        if (params.Has("schemeshard_id")) {
-            THolder<TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>();
-            FillParams(&request->Record, params);
-            ui64 schemeShardId = FromStringWithDefault<ui64>(params.Get("schemeshard_id"));
-            SendRequestToPipe(ConnectTabletPipe(schemeShardId), request.Release());
-        } else {
-            THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
-            FillParams(request->Record.MutableDescribePath(), params);
-            request->Record.SetUserToken(Event->Get()->UserToken);
-            SendRequest(MakeTxProxyID(), request.Release());
-        }
-        ++Requests;
+        // if (params.Has("schemeshard_id")) {
+        //     THolder<TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>();
+        //     FillParams(&request->Record, params);
+        //     ui64 schemeShardId = FromStringWithDefault<ui64>(params.Get("schemeshard_id"));
+        //     SendRequestToPipe(ConnectTabletPipe(schemeShardId), request.Release());
+        // } else {
+        //     THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+        //     FillParams(request->Record.MutableDescribePath(), params);
+        //     request->Record.SetUserToken(Event->Get()->UserToken);
+        //     SendRequest(MakeTxProxyID(), request.Release());
+        // }
+        // ++Requests;
 
         if (params.Has("path")) {
             TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
             entry.SyncVersion = false;
+            entry.ShowPrivatePath = true;
             entry.Path = SplitPath(params.Get("path"));
             request->ResultSet.emplace_back(entry);
             SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
@@ -103,8 +104,10 @@ public:
     }
 
     void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        Cerr << "aaaa TEvDescribeSchemeResult" << Endl;
         SchemeShardResult = ev->Release();
         if (SchemeShardResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
+            Cerr << "aaaa TEvDescribeSchemeResult 1" << Endl;
             ReplyAndPassAway();
         } else {
             RequestDone("TEvDescribeSchemeResult");
@@ -112,6 +115,7 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev) {
+        Cerr << "aaaa TEvNavigateKeySetResult" << Endl;
         CacheResult = ev->Release();
         RequestDone("TEvNavigateKeySetResult");
     }
@@ -233,9 +237,13 @@ public:
     void ReplyAndPassAway() {
         TStringStream json;
         TString headers = Viewer->GetHTTPOKJSON(Event->Get());
+        Cerr << "iiiiiiiiii ReplyAndPassAway" << Endl;
+        // Cerr << "iiiiiiiiii SchemeShardResult->GetRecord().GetStatus() " << SchemeShardResult->GetRecord().GetStatus() << Endl;
         if (SchemeShardResult != nullptr && SchemeShardResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
+            Cerr << "iiiiiiiiii ReplyAndPassAway SchemeShardResult" << Endl;
             DescribeResult = GetSchemeShardDescribeSchemeInfo();
         } else if (CacheResult != nullptr) {
+            Cerr << "iiiiiiiiii ReplyAndPassAway CacheResult" << Endl;
             NSchemeCache::TSchemeCacheNavigate *navigate = CacheResult->Request.Get();
             Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
             if (navigate->ErrorCount == 0) {

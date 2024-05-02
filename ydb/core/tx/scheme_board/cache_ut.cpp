@@ -52,6 +52,7 @@ public:
     UNIT_TEST(RacyRecreateAndSync);
     UNIT_TEST(RacyCreateAndSync);
     UNIT_TEST(CheckAccess);
+    UNIT_TEST(Check1000);
     UNIT_TEST(CheckSystemViewAccess);
     UNIT_TEST(SystemView);
     UNIT_TEST(SysLocks);
@@ -72,6 +73,7 @@ public:
     void RacyRecreateAndSync();
     void RacyCreateAndSync();
     void CheckAccess();
+    void Check1000();
     void CheckSystemViewAccess();
     void SystemView();
     void SysLocks();
@@ -300,6 +302,21 @@ void TCacheTest::CheckAccess() {
     TestNavigateByTableId(entry.TableId, TNavigate::EStatus::Ok, "/Root/DirA", "user0@builtin");
 }
 
+void TCacheTest::Check1000() {
+    ui64 txId = 100;
+    TestCreateSubDomain(*Context, ++txId, "/Root", "Name: \"SubDomainA\"");
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
+    TestModifyACL(*Context, ++txId, "/Root", "SubDomainA", TString(), "user0@builtin");
+
+    auto entry = TestNavigate("/Root/SubDomainA",
+        TNavigate::EStatus::Ok, TString(), TNavigate::OpList, true, true, false);
+
+    auto tableId = entry.TableId;
+    //UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, "partition_stats");
+
+    //TestResolve(tableId, TResolve::EStatus::OkData);
+}
+
 void TCacheTest::CheckSystemViewAccess() {
     ui64 txId = 100;
     TestCreateSubDomain(*Context, ++txId, "/Root", "Name: \"SubDomainA\"");
@@ -393,6 +410,16 @@ TNavigate::TEntry TCacheTest::TestNavigateImpl(THolder<TNavigate> request, TNavi
     UNIT_ASSERT(!ev->Get()->Request->ResultSet.empty());
 
     const TNavigate::TEntry result = ev->Get()->Request->ResultSet[0];
+
+    Cerr << "iiiii 1 " <<  Endl;
+    if (result.ListNodeEntry) {
+        Cerr << "iiiii 11 " <<  Endl;
+        Cerr << "iiiii size() " << result.ListNodeEntry->Children.size() << Endl;
+        for (auto& child: result.ListNodeEntry->Children) {
+            Cerr << "iiiii child.Name " << child.Name << Endl;
+        }
+    }
+    Cerr << "iiiii 2 " <<  Endl;
     UNIT_ASSERT_VALUES_EQUAL(result.Status, expectedStatus);
     return result;
 }

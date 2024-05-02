@@ -154,7 +154,6 @@ public:
     }
 
     void Bootstrap() {
-        Cerr << "OOO Bootstrap " << Endl;
         if (ViewerRequest) {
             // handle proxied request
             SendNavigateRequest();
@@ -434,7 +433,6 @@ public:
     }
 
     bool TryParseTxProxyResult() {
-        Cerr << "iiiiiiiiiiiii TryParseTxProxyResult 1" << Endl;
         if (TxProxyResult.size() != Paths.size()) {
             return false;
         }
@@ -443,7 +441,6 @@ public:
                 return false;
             }
         }
-        Cerr << "iiiiiiiiiiiii TryParseTxProxyResult 2" << Endl;
         for (auto& result: TxProxyResult) {
             auto& record = result->GetRecord();
             auto& entry = record.GetPathDescription();
@@ -464,13 +461,11 @@ public:
                 }
             }
         }
-        Cerr << "iiiiiiiiiiiii TryParseTxProxyResult 3" << Endl;
 
         return true;
     }
 
     void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        Cerr << "aaaa TEvDescribeSchemeResult" << Endl;
         TxProxyResult.emplace_back(ev->Release());
         RequestDone();
     }
@@ -498,7 +493,6 @@ public:
     }
 
     void ReplyAndPassAway() {
-        Cerr << "OOO ReplyAndPassAway " << Endl;
         if (ViewerProxyResult) {
             ParseViewerProxyResult();
         } else if (Database) {

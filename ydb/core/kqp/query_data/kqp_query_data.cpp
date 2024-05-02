@@ -117,19 +117,17 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, TMaybe<ui64> rowsL
 
 TTxAllocatorState::TTxAllocatorState(const IFunctionRegistry* functionRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
-    : Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), functionRegistry->SupportsSizedAllocators())
-    , TypeEnv(Alloc)
+    : Alloc(std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), functionRegistry->SupportsSizedAllocators(), false))
+    , TypeEnv(*Alloc)
     , MemInfo("TQueryData")
-    , HolderFactory(Alloc.Ref(), MemInfo, functionRegistry)
+    , HolderFactory(Alloc->Ref(), MemInfo, functionRegistry)
 {
-    Alloc.Release();
     TimeProvider = timeProvider;
     RandomProvider = randomProvider;
 }
 
 TTxAllocatorState::~TTxAllocatorState()
 {
-    Alloc.Acquire();
 }
 
 std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> TTxAllocatorState::GetInternalBindingValue(

@@ -692,11 +692,11 @@ public:
         ui64 mkqlMaxLimit = phaseLimitsProto.GetComputeNodeMemoryLimitBytes();
         mkqlMaxLimit = mkqlMaxLimit ? mkqlMaxLimit : ui64(Settings.MkqlMaxMemoryLimit);
 
-        alloc->Alloc.SetLimit(mkqlInitialLimit);
-        alloc->Alloc.Ref().SetIncreaseMemoryLimitCallback([this, &alloc, mkqlMaxLimit](ui64 currentLimit, ui64 required) {
+        alloc->Alloc->SetLimit(mkqlInitialLimit);
+        alloc->Alloc->Ref().SetIncreaseMemoryLimitCallback([this, &alloc, mkqlMaxLimit](ui64 currentLimit, ui64 required) {
             if (required < mkqlMaxLimit) {
                 LOG_D("Increase memory limit from " << currentLimit << " to " << required);
-                alloc->Alloc.SetLimit(required);
+                alloc->Alloc->SetLimit(required);
             }
         });
 
@@ -2325,7 +2325,7 @@ private:
     TString BuildMemoryLimitExceptionMessage() const {
         if (QueryState && QueryState->TxCtx) {
             return TStringBuilder() << "Memory limit exception at " << CurrentStateFuncName()
-                << ", current limit is " << QueryState->TxCtx->TxAlloc->Alloc.GetLimit() << " bytes.";
+                << ", current limit is " << QueryState->TxCtx->TxAlloc->Alloc->GetLimit() << " bytes.";
         } else {
             return TStringBuilder() << "Memory limit exception at " << CurrentStateFuncName();
         }

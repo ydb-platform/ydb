@@ -1,12 +1,14 @@
 #pragma once
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/datashard/operation.h>
 
 namespace NKikimr::NColumnShard {
 
     class TEvWriteTransactionOperator : public TTxController::ITransactionOperator {
         using TBase = TTxController::ITransactionOperator;
         using TProposeResult = TTxController::TProposeResult;
+        using TInReadSets = TMap<std::pair<ui64, ui64>, TVector<NDataShard::TRSData>>;
         static inline auto Registrator = TFactory::TRegistrator<TEvWriteTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE);
     private:
         virtual TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override {
@@ -43,15 +45,16 @@ namespace NKikimr::NColumnShard {
                 return false;
             }
             LockId = commitTxBody.GetLockId();
+            if (commitTxBody.HasKqpLocks()) {
+                KqpLocks = commitTxBody.GetKqpLocks();
+            }
             return !!LockId;
         }
 
     public:
         using TBase::TBase;
 
-        virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
-            return owner.OperationsManager->CommitTransaction(owner, GetTxId(), txc, version);
-        }
+        virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override;
 
         virtual bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) override {
             auto result = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(owner.TabletID(), GetTxId());
@@ -67,7 +70,12 @@ namespace NKikimr::NColumnShard {
         }
 
     private:
+        void SubscribeNewLocks(TColumnShard& owner, const TActorContext& ctx);
+
+    private:
         ui64 LockId = 0;
+        std::optional<NKikimrDataEvents::TKqpLocks> KqpLocks;
+        TInReadSets InReadSets;
     };
 
 }

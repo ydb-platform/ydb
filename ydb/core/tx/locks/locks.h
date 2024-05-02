@@ -919,5 +919,35 @@ private:
     }
 };
 
+
+template <class TShard>
+class TLocksGuard : public TLocksUpdate {
+    TSysLocks& SysLocksTable;
+
+public:
+    TLocksGuard(TShard& shard, ILocksDb* db)
+        : SysLocksTable(shard.SysLocksTable())
+    {
+        SysLocksTable.SetupUpdate(this, db);
+    }
+
+    TLocksGuard(ui64 lockTxId, ui32 lockNodeId, TShard& shard, ILocksDb* db)
+        : SysLocksTable(shard.SysLocksTable())
+    {
+        LockTxId = lockTxId;
+        LockNodeId = lockNodeId;
+
+        SysLocksTable.SetupUpdate(this, db);
+    }
+
+    ~TLocksGuard() {
+        SysLocksTable.ResetUpdate();
+        SysLocksTable.SetCache(nullptr);
+        SysLocksTable.SetAccessLog(nullptr);
+    }
+};
+
+
+
 } // namespace NDataShard
 } // namespace NKikimr

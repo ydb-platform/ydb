@@ -216,37 +216,6 @@ bool NeedEraseLocks(NKikimrDataEvents::TKqpLocks::ELocksOp op) {
     }
 }
 
-bool NeedCommitLocks(NKikimrDataEvents::TKqpLocks::ELocksOp op) {
-    switch (op) {
-        case NKikimrDataEvents::TKqpLocks::Commit:
-            return true;
-
-        case NKikimrDataEvents::TKqpLocks::Rollback:
-        case NKikimrDataEvents::TKqpLocks::Unspecified:
-            return false;
-    }
-}
-
-TVector<TCell> MakeLockKey(const NKikimrDataEvents::TLock& lockProto) {
-    auto lockId = lockProto.GetLockId();
-    auto lockDatashard = lockProto.GetDataShard();
-    auto lockSchemeShard = lockProto.GetSchemeShard();
-    auto lockPathId = lockProto.GetPathId();
-
-    Y_ASSERT(TCell::CanInline(sizeof(lockId)));
-    Y_ASSERT(TCell::CanInline(sizeof(lockDatashard)));
-    Y_ASSERT(TCell::CanInline(sizeof(lockSchemeShard)));
-    Y_ASSERT(TCell::CanInline(sizeof(lockPathId)));
-
-    TVector<TCell> lockKey{
-        TCell(reinterpret_cast<const char*>(&lockId), sizeof(lockId)),
-        TCell(reinterpret_cast<const char*>(&lockDatashard), sizeof(lockDatashard)),
-        TCell(reinterpret_cast<const char*>(&lockSchemeShard), sizeof(lockSchemeShard)),
-        TCell(reinterpret_cast<const char*>(&lockPathId), sizeof(lockPathId))};
-
-    return lockKey;
-}
-
 // returns list of broken locks
 TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLocks& txLocks, TSysLocks& sysLocks, ui64 tabletId)
 {
@@ -409,6 +378,37 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
 }
 
 }  // anonymous namespace
+
+bool NeedCommitLocks(NKikimrDataEvents::TKqpLocks::ELocksOp op) {
+    switch (op) {
+        case NKikimrDataEvents::TKqpLocks::Commit:
+            return true;
+
+        case NKikimrDataEvents::TKqpLocks::Rollback:
+        case NKikimrDataEvents::TKqpLocks::Unspecified:
+            return false;
+    }
+}
+
+TVector<TCell> MakeLockKey(const NKikimrDataEvents::TLock& lockProto) {
+    auto lockId = lockProto.GetLockId();
+    auto lockDatashard = lockProto.GetDataShard();
+    auto lockSchemeShard = lockProto.GetSchemeShard();
+    auto lockPathId = lockProto.GetPathId();
+
+    Y_ASSERT(TCell::CanInline(sizeof(lockId)));
+    Y_ASSERT(TCell::CanInline(sizeof(lockDatashard)));
+    Y_ASSERT(TCell::CanInline(sizeof(lockSchemeShard)));
+    Y_ASSERT(TCell::CanInline(sizeof(lockPathId)));
+
+    TVector<TCell> lockKey{
+        TCell(reinterpret_cast<const char*>(&lockId), sizeof(lockId)),
+        TCell(reinterpret_cast<const char*>(&lockDatashard), sizeof(lockDatashard)),
+        TCell(reinterpret_cast<const char*>(&lockSchemeShard), sizeof(lockSchemeShard)),
+        TCell(reinterpret_cast<const char*>(&lockPathId), sizeof(lockPathId))};
+
+    return lockKey;
+}
 
 void KqpSetTxKeys(ui64 tabletId, ui64 taskId, const TUserTable* tableInfo, const NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta& meta, const NScheme::TTypeRegistry& typeRegistry, const TActorContext& ctx, TKeyValidator& keyValidator)
 {

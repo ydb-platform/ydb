@@ -16,6 +16,9 @@
 namespace NKikimr {
 namespace NDataShard {
 
+bool NeedCommitLocks(NKikimrDataEvents::TKqpLocks::ELocksOp op);
+TVector<TCell> MakeLockKey(const NKikimrDataEvents::TLock& lockProto);
+
 bool KqpValidateTransaction(const ::google::protobuf::RepeatedPtrField<::NYql::NDqProto::TDqTask> & tasks, bool isImmediate,
     ui64 txId, const TActorContext& ctx, bool& hasPersistentChannels);
 

@@ -583,6 +583,10 @@ public:
         return SharingSessionsManager;
     }
 
+    NDataShard::TSysLocks& SysLocksTable() {
+        return SysLocks;
+    }
+
     template <class T>
     const T& GetIndexAs() const {
         return TablesManager.GetPrimaryIndexAsVerified<T>();

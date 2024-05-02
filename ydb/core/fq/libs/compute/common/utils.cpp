@@ -1086,7 +1086,7 @@ struct TNoneStatProcessor : IPlanStatProcessor {
         return plan;
     }
 
-    TString GetPlanView(const TString& plan) override {
+    TString GetPlanVisualization(const TString& plan) override {
         return plan;
     }
 
@@ -1119,7 +1119,7 @@ struct TPlanStatProcessor : IPlanStatProcessor {
         return plan;
     }
 
-    TString GetPlanView(const TString& plan) override {
+    TString GetPlanVisualization(const TString& plan) override {
         return plan;
     }
 
@@ -1137,13 +1137,13 @@ struct TPlanStatProcessor : IPlanStatProcessor {
 };
 
 struct TFullStatProcessor : TPlanStatProcessor {
-    TString GetPlanView(const TString& plan) override {
+    TString GetPlanVisualization(const TString& plan) override {
         return CleanupPlanStats(plan);
     }
 };
 
 struct TCostStatProcessor : TPlanStatProcessor {
-    TString GetPlanView(const TString& plan) override {
+    TString GetPlanVisualization(const TString& plan) override {
         return SimplifiedPlan(plan);
     }
 };
@@ -1219,7 +1219,7 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
 
     auto planView = plan;
     try {
-        planView = Processor->GetPlanView(planView);
+        planView = Processor->GetPlanVisualization(planView);
     } catch(const NJson::TJsonException& ex) {
         Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error plan visualization: " << ex.what()));
     }

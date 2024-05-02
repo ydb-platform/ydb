@@ -98,4 +98,4 @@ Let's build the query plan using the secondary index `title_index`. Secondary in
 
 {% endlist %}
 
-The use of a secondary index allowed the query to be executed without fully scanning the main table. Instead of a `TableFullScan`, we received a `TablePointLookup` - reading the index table by key, and we no longer need to read the main table because of all necessary columns are contained in the index table.
+The secondary index allowed the query to be executed without fully scanning the main table. Instead of a `TableFullScan,` we received a `TablePointLookup`—reading the index table by key. We no longer need to read the main table because all necessary columns are contained in the index table.

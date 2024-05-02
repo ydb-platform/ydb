@@ -117,7 +117,7 @@ Offset | offset value
 Concatenate the results of two or more subqueries into a single row set.
 
 #### Iterator
-Iterates through a given set of rows, typically use a [precompute](#precompute) as an argument.
+Iterates through a given set of rows. Typically uses a [precompute](#precompute) as an argument.
 
 #### PartitionByKey
 Partitioning by key typically use a [precompute](#precompute).

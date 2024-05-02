@@ -86,11 +86,7 @@ private:
         resp.set_status(ev->Get()->Status);
         resp.set_result_set_index(static_cast<i64>(GetProtoRequest()->result_set_index()));
         if (ev->Get()->Issues) {
-            NYql::TIssue root;
-            for (const NYql::TIssue& issue : ev->Get()->Issues) {
-                root.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
-            }
-            NYql::IssueToMessage(root, resp.mutable_issues());
+            NYql::IssuesToMessage(ev->Get()->Issues, resp.mutable_issues());
         }
         if (ev->Get()->ResultSet) {
             resp.mutable_result_set()->Swap(&(*ev->Get()->ResultSet));

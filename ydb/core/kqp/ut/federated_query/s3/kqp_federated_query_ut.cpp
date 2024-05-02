@@ -1729,10 +1729,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
 
         // Validate query results
-        const size_t fetchLimit = std::min(1000ul, 10_MB / rowContent.size());
-
         TFetchScriptResultsSettings settings;
-        settings.RowsLimit(fetchLimit);
+        settings.RowsLimit(0);
         size_t rowsFetched = 0;
         while (true) {
             TFetchScriptResultsResult results = queryClient.FetchScriptResults(scriptExecutionOperation.Id(), 0, settings).ExtractValueSync();
@@ -1751,7 +1749,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             }
 
             settings.FetchToken(results.GetNextFetchToken());
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), fetchLimit);
         }
         UNIT_ASSERT_VALUES_EQUAL(rowsFetched, numberRows);
 

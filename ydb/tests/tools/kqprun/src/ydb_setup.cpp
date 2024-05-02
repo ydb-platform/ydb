@@ -400,7 +400,7 @@ TRequestResult TYdbSetup::GetScriptExecutionOperationRequest(const TString& oper
 TRequestResult TYdbSetup::FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId, Ydb::ResultSet& resultSet) const {
     auto scriptExecutionResults = Impl_->FetchScriptExecutionResultsRequest(operation, resultSetId);
 
-    resultSet = scriptExecutionResults->Get()->ResultSet;
+    resultSet = scriptExecutionResults->Get()->ResultSet.value_or(Ydb::ResultSet());
 
     return TRequestResult(scriptExecutionResults->Get()->Status, scriptExecutionResults->Get()->Issues);
 }

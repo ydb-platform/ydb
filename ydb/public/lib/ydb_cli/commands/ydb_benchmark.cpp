@@ -14,7 +14,7 @@ namespace NYdb::NConsoleClient {
 
 void TWorkloadCommandBenchmark::Config(TConfig& config) {
     TWorkloadCommandBase::Config(config);
-    config.Opts->AddLongOption("output", "Save queries output to file")
+    config.Opts->AddLongOption("output", "Path to file to save query output to.")
         .Optional()
         .RequiredArgument("FILE")
         .DefaultValue("results.out")
@@ -22,13 +22,13 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
     config.Opts->AddLongOption("iterations", "Iterations count")
         .DefaultValue(1)
         .StoreResult(&IterationsCount);
-    config.Opts->AddLongOption("json", "Json report file name")
+    config.Opts->AddLongOption("json", "Path to file to save json report to.\nJson report includes some metrics of queries, min and max time, stddev, etc. Has Salomon sensor format.")
         .DefaultValue("")
         .StoreResult(&JsonReportFileName);
     config.Opts->AddLongOption("ministat", "Ministat report file name")
         .DefaultValue("")
         .StoreResult(&MiniStatFileName);
-    config.Opts->AddLongOption("query-settings", "Query settings.")
+    config.Opts->AddLongOption("query-settings", "Query settings.\nEvery setting is a line that be added to queries begin. For multiple line use multiple query-settings.")
         .DefaultValue("")
         .AppendTo(&QuerySettings);
     auto fillTestCases = [](TStringBuf line, std::function<void(ui32)>&& op) {

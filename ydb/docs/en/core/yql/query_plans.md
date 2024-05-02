@@ -43,7 +43,7 @@ Table | table name
 ReadColumns | read columns list
 
 #### Upsert
-Updates or inserts multiple rows to a table based on a comparison by the primary key. For the existing rows, the values of the specified columns are updated, but the values of the other columns are preserved.
+Updates or inserts multiple rows to a table based on a comparison by the primary key. The values of the specified columns are updated for the existing rows, but the values of the other columns are preserved.
 
 Attribute | Description
 --- | ---

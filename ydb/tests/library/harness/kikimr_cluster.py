@@ -281,7 +281,6 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
 class YdbdSlice(KiKiMRClusterInterface):
     def __init__(self, config_path, binary_path=None):
         kikimr_bin = binary_path
-
         self.__yaml_config = load_yaml(config_path)
         self.__hosts = [host['name'] for host in self.__yaml_config.get('hosts')]
         ssh_user = "yc-user"

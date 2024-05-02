@@ -92,7 +92,7 @@ TopSortBy | columns used for sorting
 Limit | rows limit
 
 #### Top
-Returns first N elements that are less or equal to the N+1 element if the entire sequence were sorted.
+Returns the first N elements that are less or equal to the N+1 element if the entire sequence were sorted.
 
 Attribute | Description
 --- | ---

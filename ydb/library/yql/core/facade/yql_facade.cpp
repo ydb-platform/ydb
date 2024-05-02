@@ -20,7 +20,6 @@
 #include <ydb/library/yql/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
 #include <ydb/library/yql/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
 #include <ydb/library/yql/core/qplayer/udf_resolver/yql_qplayer_udf_resolver.h>
 
@@ -47,6 +46,9 @@ const size_t DEFAULT_AST_BUF_SIZE = 1024;
 const size_t DEFAULT_PLAN_BUF_SIZE = 1024;
 const TString FacadeComponent = "Facade";
 const TString SourceCodeLabel = "SourceCode";
+const TString GatewaysLabel = "Gateways";
+const TString ParametersLabel = "Parameters";
+const TString TranslationLabel = "Translation";
 
 class TUrlLoader : public IUrlLoader {
 public:
@@ -197,17 +199,19 @@ void TProgramFactory::SetUrlListerManager(IUrlListerManagerPtr urlListerManager)
 
 TProgramPtr TProgramFactory::Create(
         const TFile& file,
-        const TString& sessionId)
+        const TString& sessionId,
+        const TQContext& qContext)
 {
     TString sourceCode = TFileInput(file).ReadAll();
-    return Create(file.GetName(), sourceCode, sessionId);
+    return Create(file.GetName(), sourceCode, sessionId, EHiddenMode::Disable, qContext);
 }
 
 TProgramPtr TProgramFactory::Create(
         const TString& filename,
         const TString& sourceCode,
         const TString& sessionId,
-        EHiddenMode hiddenMode)
+        EHiddenMode hiddenMode,
+        const TQContext& qContext)
 {
     auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom && hiddenMode == EHiddenMode::Disable ?
         CreateDeterministicRandomProvider(1) : CreateDefaultRandomProvider();
@@ -224,7 +228,8 @@ TProgramPtr TProgramFactory::Create(
     return new TProgram(FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
         UserDataTable_, Credentials_, moduleResolver, urlListerManager,
         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
-        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode);
+        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
+        qContext);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -252,7 +257,8 @@ TProgram::TProgram(
         const TString& runner,
         bool enableRangeComputeFor,
         const IArrowResolver::TPtr& arrowResolver,
-        EHiddenMode hiddenMode
+        EHiddenMode hiddenMode,
+        const TQContext& qContext
     )
     : FunctionRegistry_(functionRegistry)
     , RandomProvider_(randomProvider)
@@ -282,6 +288,7 @@ TProgram::TProgram(
     , EnableRangeComputeFor_(enableRangeComputeFor)
     , ArrowResolver_(arrowResolver)
     , HiddenMode_(hiddenMode)
+    , QContext_(qContext)
 {
     if (SessionId_.empty()) {
         SessionId_ = CreateGuidAsString();
@@ -300,6 +307,44 @@ TProgram::TProgram(
 
     OperationOptions_.Runner = runner;
     UserDataStorage_->SetUrlPreprocessor(urlPreprocessing);
+
+    if (QContext_) {
+        UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, QContext_);
+        if (QContext_.CanRead()) {
+            auto item = QContext_.GetReader()->Get({FacadeComponent, GatewaysLabel}).GetValueSync();
+            if (item) {
+                YQL_ENSURE(LoadedGatewaysConfig_.ParseFromString(item->Value));
+                GatewaysConfig_ = &LoadedGatewaysConfig_;
+            }
+        } else if (QContext_.CanWrite() && GatewaysConfig_) {
+            TGatewaysConfig cleaned;
+            if (GatewaysConfig_->HasYt()) {
+                cleaned.MutableYt()->CopyFrom(GatewaysConfig_->GetYt());
+            }
+
+            if (GatewaysConfig_->HasFs()) {
+                cleaned.MutableFs()->CopyFrom(GatewaysConfig_->GetFs());
+            }
+
+            if (GatewaysConfig_->HasYqlCore()) {
+                cleaned.MutableYqlCore()->CopyFrom(GatewaysConfig_->GetYqlCore());
+            }
+
+            if (GatewaysConfig_->HasDq()) {
+                cleaned.MutableDq()->CopyFrom(GatewaysConfig_->GetDq());
+            }
+
+            auto data = cleaned.SerializeAsString();
+            QContext_.GetWriter()->Put({FacadeComponent, GatewaysLabel}, data).GetValueSync();
+        }
+
+        if (QContext_.CanRead()) {
+            auto item = QContext_.GetReader()->Get({FacadeComponent, ParametersLabel}).GetValueSync();
+            if (item) {
+                SetParametersYson(item->Value);
+            }
+        }
+    }
 }
 
 TProgram::~TProgram() {
@@ -312,15 +357,6 @@ TProgram::~TProgram() {
     } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;
     }
-}
-
-void TProgram::SetQContext(const TQContext& qContext) {
-    YQL_PROFILE_FUNC(TRACE);
-    YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
-    YQL_ENSURE(!QContext_);
-    YQL_ENSURE(qContext);
-    QContext_ = qContext;
-    UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, qContext);
 }
 
 void TProgram::ConfigureYsonResultFormat(NYson::EYsonFormat format) {
@@ -385,6 +421,10 @@ void TProgram::SetParametersYson(const TString& parameters) {
 
     if (UrlListerManager_) {
         UrlListerManager_->SetParameters(node);
+    }
+
+    if (QContext_.CanWrite()) {
+        QContext_.GetWriter()->Put({FacadeComponent, ParametersLabel}, parameters).GetValueSync();
     }
 }
 
@@ -490,6 +530,34 @@ void TProgram::HandleSourceCode(TString& sourceCode) {
     }
 }
 
+void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
+    const NSQLTranslation::TTranslationSettings*& currentSettings)
+{
+    if (QContext_.CanWrite()) {
+        auto clusterMappingsNode = NYT::TNode();
+        for (const auto& c : currentSettings->ClusterMapping) {
+            clusterMappingsNode(c.first, c.second);
+        }
+
+        auto dataNode = NYT::TNode()
+            ("ClusterMapping", clusterMappingsNode);
+        auto data = NYT::NodeToYsonString(dataNode, NYT::NYson::EYsonFormat::Binary);
+        QContext_.GetWriter()->Put({FacadeComponent, TranslationLabel}, data).GetValueSync();
+    } else if (QContext_.CanRead()) {
+        auto loaded = QContext_.GetReader()->Get({FacadeComponent, TranslationLabel}).GetValueSync();
+        if (!loaded) {
+            return;
+        }
+
+        auto dataNode = NYT::NodeFromYsonString(loaded->Value);
+        for (const auto& c : dataNode["ClusterMapping"].AsMap()) {
+            loadedSettings.ClusterMapping[c.first] = c.second.AsString();
+        }
+    
+        currentSettings = &loadedSettings;
+    }
+}
+
 bool TProgram::ParseYql() {
     YQL_PROFILE_FUNC(TRACE);
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
@@ -521,7 +589,13 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     NYql::TWarningRules warningRules;
     auto sourceCode = SourceCode_;
     HandleSourceCode(sourceCode);
-    return FillParseResult(SqlToYql(sourceCode, settings, &warningRules), &warningRules);
+    const NSQLTranslation::TTranslationSettings* currentSettings = &settings;
+    NSQLTranslation::TTranslationSettings loadedSettings;
+    if (QContext_) {
+        HandleTranslationSettings(loadedSettings, currentSettings);
+    }
+
+    return FillParseResult(SqlToYql(sourceCode, *currentSettings, &warningRules), &warningRules);
 }
 
 bool TProgram::Compile(const TString& username, bool skipLibraries) {

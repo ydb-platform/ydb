@@ -10,7 +10,7 @@ SELECT season_id, episode_id
   WHERE title = 'The Work Outing'
 ```
 
-Scheme of table `episodes`:
+Schema of the `episodes` table:
 
 ![episodes](../_assets/episodes_scheme.png)
 

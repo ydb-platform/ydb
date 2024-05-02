@@ -31,7 +31,7 @@ private:
     {}
 
 public:
-    bool Apply(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
+    bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
         ACFL_INFO("normalizer", "TGranulesNormalizer")("message", TStringBuilder() << "apply " << Chunks.size() << " chunks");
@@ -126,18 +126,6 @@ public:
 
 };
 
-class TGranulesNormalizerTask : public INormalizerTask {
-    INormalizerChanges::TPtr Changes;
-public:
-    TGranulesNormalizerTask(const INormalizerChanges::TPtr& changes)
-        : Changes(changes)
-    {}
-
-    void Start(const TNormalizationController& /* controller */, const TNormalizationContext& nCtx) override {
-        TActorContext::AsActorContext().Send(nCtx.GetColumnshardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(Changes));
-    }
-};
-
 TConclusion<std::vector<INormalizerTask::TPtr>> TGranulesNormalizer::Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     auto changes = TNormalizerResult::Init(controller, txc);
     if (!changes) {
@@ -145,7 +133,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TGranulesNormalizer::Init(const 
     }
     std::vector<INormalizerTask::TPtr> tasks;
     for (auto&& c : *changes) {
-        tasks.emplace_back(std::make_shared<TGranulesNormalizerTask>(c));
+        tasks.emplace_back(std::make_shared<TTrivialNormalizerTask>(c));
     }
     AtomicSet(ActiveTasksCount, tasks.size());
     return tasks;

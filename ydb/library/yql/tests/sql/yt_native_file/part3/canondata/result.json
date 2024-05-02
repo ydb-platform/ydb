@@ -1247,6 +1247,27 @@
             "uri": "https://{canondata_backend}/1903885/df64cdedb0510382ad3c412404939d20ce178ef2/resource.tar.gz#test.test_optimizers-length_over_merge_fs_multiusage--Results_/results.txt"
         }
     ],
+    "test.test[optimizers-yql-18300-flatmap-over-extend-default.txt-Debug]": [
+        {
+            "checksum": "81677b59c068f5d40b07c2c8461e7ae3",
+            "size": 2722,
+            "uri": "https://{canondata_backend}/1937027/537264f3de8510c36bc4257b5acfa7248b9490aa/resource.tar.gz#test.test_optimizers-yql-18300-flatmap-over-extend-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[optimizers-yql-18300-flatmap-over-extend-default.txt-Plan]": [
+        {
+            "checksum": "f45dbd4a231176f7cca485a2c6606455",
+            "size": 7606,
+            "uri": "https://{canondata_backend}/1937027/537264f3de8510c36bc4257b5acfa7248b9490aa/resource.tar.gz#test.test_optimizers-yql-18300-flatmap-over-extend-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[optimizers-yql-18300-flatmap-over-extend-default.txt-Results]": [
+        {
+            "checksum": "d03c1e7f6acce1480ba2d609a23614e7",
+            "size": 1195,
+            "uri": "https://{canondata_backend}/1937027/537264f3de8510c36bc4257b5acfa7248b9490aa/resource.tar.gz#test.test_optimizers-yql-18300-flatmap-over-extend-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[optimizers-yql-7324_duplicate_arg--Debug]": [
         {
             "checksum": "a63df9ce52f831bdff51b003923f35e1",

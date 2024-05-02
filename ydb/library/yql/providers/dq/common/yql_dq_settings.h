@@ -131,6 +131,7 @@ struct TDqSettings {
     NCommon::TConfSetting<bool, false> SplitStageOnDqReplicate;
 
     NCommon::TConfSetting<ui64, false> _MaxAttachmentsSize;
+    NCommon::TConfSetting<bool, false> DisableCheckpoints;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>
@@ -183,6 +184,7 @@ struct TDqSettings {
         SAVE_SETTING(ExportStats);
         SAVE_SETTING(TaskRunnerStats);
         SAVE_SETTING(SpillingEngine);
+        SAVE_SETTING(DisableCheckpoints);
 #undef SAVE_SETTING
     }
 

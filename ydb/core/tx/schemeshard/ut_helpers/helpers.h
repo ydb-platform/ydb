@@ -213,6 +213,7 @@ namespace NSchemeShardUT_Private {
     // sequence
     GENERIC_HELPERS(CreateSequence);
     GENERIC_HELPERS(DropSequence);
+    GENERIC_HELPERS(AlterSequence);
     DROP_BY_PATH_ID_HELPERS(DropSequence);
 
     // replication

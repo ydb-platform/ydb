@@ -127,6 +127,12 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleAlterSequence(NNodes::TKiAlterSequence node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
     TStatus HandleModifyPermissions(TKiModifyPermissions node, TExprContext& ctx) override {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
             << "ModifyPermissions is not yet implemented for intent determination transformer"));
@@ -515,7 +521,8 @@ public:
         }
 
         if (node.IsCallable(TKiCreateSequence::CallableName())
-            || node.IsCallable(TKiDropSequence::CallableName())) {
+            || node.IsCallable(TKiDropSequence::CallableName())
+            || node.IsCallable(TKiAlterSequence::CallableName())) {
             return true;
         }
 
@@ -554,6 +561,114 @@ public:
     bool CollectDiagnostics(NYson::TYsonWriter& writer) override {
         Y_UNUSED(writer);
         return false;
+    }
+
+    bool IsEvaluatedDefaultNode(TExprNode::TPtr input) {
+        auto node = TExprBase(input);
+
+        if (node.Maybe<TCoNothing>()) {
+            return true;
+        }
+
+        if (input->IsCallable()
+            && input->Content() == "PgCast"
+            && input->ChildrenSize() >= 1
+            && TExprBase(input->Child(0)).Maybe<TCoNull>())
+        {
+            return true;
+        }
+
+        if (node.Maybe<TCoAtom>()) {
+            return true;
+        }
+
+        if (node.Maybe<TCoNull>()) {
+            return true;
+        }
+
+        if (auto maybeJust = node.Maybe<TCoJust>()) {
+            return IsEvaluatedDefaultNode(maybeJust.Cast().Input().Ptr());
+        }
+
+        if (node.Maybe<TCoPgConst>()) {
+            return true;
+        }
+
+        if (node.Maybe<TCoDataCtor>()) {
+            return true;
+        }
+
+        if (node.Maybe<TCoDataType>()) {
+            return true;
+        }
+
+        if (node.Maybe<TCoPgType>()) {
+            return true;
+        }
+
+        return false;
+    }
+
+    bool CanEvaluateDefaultValue(TExprNode::TPtr input) {
+        if (IsEvaluatedDefaultNode(input)) {
+            return true;
+        }
+
+        static const THashSet<TString> allowedNodes = {
+            "Concat", "Just", "Optional", "SafeCast", "AsList",
+            "+", "-", "*", "/", "%", "PgCast"};
+
+        if (input->IsCallable("PgCast") && input->Child(0)->IsCallable("PgConst")) {
+            return true;
+        }
+
+        if (input->IsCallable(allowedNodes)) {
+            for (size_t i = 0; i < input->ChildrenSize(); i++) {
+                auto callableInput = input->Child(i);
+                if (!CanEvaluateDefaultValue(callableInput)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    bool ShouldEvaluateDefaultValue(TExprNode::TPtr input) {
+        if (IsEvaluatedDefaultNode(input)) {
+            return false;
+        }
+
+        return CanEvaluateDefaultValue(input);
+    }
+
+    bool EvaluateDefaultValuesIfNeeded(TExprContext& ctx, TExprList columns) {
+        bool exprEvalNeeded = false;
+        for(auto item: columns) {
+            auto columnTuple = item.Cast<TExprList>();
+            if (columnTuple.Size() > 2) {
+                const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
+                for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
+                if (constraint.Name().Value() != "default")
+                    continue;
+
+                YQL_ENSURE(constraint.Value().IsValid());
+
+                if (ShouldEvaluateDefaultValue(constraint.Value().Cast().Ptr())) {
+                    auto evaluatedExpr = ctx.Builder(constraint.Value().Cast().Ptr()->Pos())
+                        .Callable("EvaluateExpr")
+                        .Add(0, constraint.Value().Cast().Ptr())
+                        .Seal()
+                        .Build();
+
+                        constraint.Ptr()->ChildRef(TCoNameValueTuple::idx_Value) = evaluatedExpr;
+                        exprEvalNeeded = true;
+                    }
+                }
+            }
+        }
+        return exprEvalNeeded;
     }
 
     static TExprNode::TPtr MakeKiDropTable(const TExprNode::TPtr& node, const NCommon::TWriteTableSettings& settings,
@@ -599,7 +714,6 @@ public:
             const NCommon::TWriteSequenceSettings& settings, const TKikimrKey& key, TExprContext& ctx)
     {
         YQL_ENSURE(settings.Mode);
-        auto mode = settings.Mode.Cast();
         if (node->Child(3)->Content() != "Void") {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating sequence with data is not supported."));
             return nullptr;
@@ -607,7 +721,7 @@ public:
 
         auto valueType = settings.ValueType.IsValid()
             ? settings.ValueType.Cast()
-            : Build<TCoAtom>(ctx, node->Pos()).Value("bigint").Done();
+            : Build<TCoAtom>(ctx, node->Pos()).Value("int8").Done();
 
         auto temporary = settings.Temporary.IsValid()
             ? settings.Temporary.Cast()
@@ -639,6 +753,30 @@ public:
             .World(node->Child(0))
             .DataSink(node->Child(1))
             .Sequence().Build(key.GetPGObjectId())
+            .Settings(settings.Other)
+            .MissingOk<TCoAtom>()
+                .Value(missingOk)
+            .Build()
+            .Done()
+            .Ptr();
+    }
+
+    static TExprNode::TPtr MakeAlterSequence(const TExprNode::TPtr& node,
+            const NCommon::TWriteSequenceSettings& settings, const TKikimrKey& key, TExprContext& ctx)
+    {
+        YQL_ENSURE(settings.Mode);
+        bool missingOk = (settings.Mode.Cast().Value() == "alter_if_exists");
+
+        if (node->Child(3)->Content() != "Void") {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Alter sequence with data is not supported."));
+            return nullptr;
+        }
+
+        return Build<TKiAlterSequence>(ctx, node->Pos())
+            .World(node->Child(0))
+            .DataSink(node->Child(1))
+            .Sequence().Build(key.GetPGObjectId())
+            .SequenceSettings(settings.SequenceSettings.Cast())
             .Settings(settings.Other)
             .MissingOk<TCoAtom>()
                 .Value(missingOk)
@@ -940,39 +1078,7 @@ public:
                             .Build()
                         .Done();
 
-                    bool exprEvalNeeded = false;
-
-                    for(auto item: createTable.Cast<TKiCreateTable>().Columns()) {
-                        auto columnTuple = item.Cast<TExprList>();
-                        if (columnTuple.Size() > 2) {
-                            const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
-                            for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
-                                if (constraint.Name().Value() != "default")
-                                    continue;
-
-                                YQL_ENSURE(constraint.Value().IsValid());
-                                bool shouldEvaluate = (
-                                    constraint.Value().Cast().Ptr()->IsCallable() &&
-                                    (constraint.Value().Cast().Ptr()->Content() == "PgCast") &&
-                                    (constraint.Value().Cast().Ptr()->ChildrenSize() >= 1) &&
-                                    (constraint.Value().Cast().Ptr()->Child(0)->IsCallable()) &&
-                                    (constraint.Value().Cast().Ptr()->Child(0)->Content() == "PgConst")
-                                );
-
-                                if (shouldEvaluate) {
-                                    auto evaluatedExpr = ctx.Builder(constraint.Value().Cast().Ptr()->Pos())
-                                        .Callable("EvaluateExpr")
-                                        .Add(0, constraint.Value().Cast().Ptr())
-                                        .Seal()
-                                        .Build();
-
-                                    constraint.Ptr()->ChildRef(TCoNameValueTuple::idx_Value) = evaluatedExpr;
-                                    exprEvalNeeded = true;
-                                }
-                            }
-                        }
-                    }
-
+                    bool exprEvalNeeded = EvaluateDefaultValuesIfNeeded(ctx, createTable.Cast<TKiCreateTable>().Columns());
                     if (exprEvalNeeded) {
                         ctx.Step.Repeat(TExprStep::ExprEval);
                     }
@@ -989,15 +1095,27 @@ public:
 
                     YQL_ENSURE(settings.AlterActions);
                     YQL_ENSURE(!settings.AlterActions.Cast().Empty());
-
-                    return Build<TKiAlterTable>(ctx, node->Pos())
+                    auto alterTable = Build<TKiAlterTable>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
                         .Actions(settings.AlterActions.Cast())
                         .TableType(tableType)
-                        .Done()
-                        .Ptr();
+                        .Done();
+
+                    bool exprEvalNeeded = false;
+                    for (const auto& action : alterTable.Actions()) {
+                        auto name = action.Name().Value();
+                        if (name == "addColumns") {
+                            exprEvalNeeded |= EvaluateDefaultValuesIfNeeded(ctx, action.Value().Cast<TExprList>());
+                        }
+                    }
+
+                    if (exprEvalNeeded) {
+                        ctx.Step.Repeat(TExprStep::ExprEval);
+                    }
+
+                    return alterTable.Ptr();
 
                 } else if (mode == "drop" || mode == "drop_if_exists") {
                     return MakeKiDropTable(node, settings, key, ctx);
@@ -1217,6 +1335,8 @@ public:
                         return MakeCreateSequence(node, settings, key, ctx);
                     } else if (mode == "drop" || mode == "drop_if_exists") {
                         return MakeDropSequence(node, settings, key, ctx);
+                    } else if (mode == "alter" || mode == "alter_if_exists") {
+                        return MakeAlterSequence(node, settings, key, ctx);
                     } else {
                         YQL_ENSURE(false, "unknown Sequence mode \"" << TString(mode) << "\"");
                     }
@@ -1454,6 +1574,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = callable.Maybe<TKiDropSequence>()) {
         return HandleDropSequence(node.Cast(), ctx);
+    }
+
+    if (auto node = callable.Maybe<TKiAlterSequence>()) {
+        return HandleAlterSequence(node.Cast(), ctx);
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "

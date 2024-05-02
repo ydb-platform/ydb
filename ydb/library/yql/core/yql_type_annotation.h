@@ -261,6 +261,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     EBlockEngineMode BlockEngineMode = EBlockEngineMode::Disable;
     TMaybe<bool> PgEmitAggApply;
     IArrowResolver::TPtr ArrowResolver;
+    TFileStoragePtr FileStorage;
     ECostBasedOptimizerType CostBasedOptimizer = ECostBasedOptimizerType::Disable;
     bool MatchRecognize = false;
     EMatchRecognizeStreamingMode MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Force;

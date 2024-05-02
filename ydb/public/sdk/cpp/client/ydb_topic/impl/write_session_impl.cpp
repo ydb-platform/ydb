@@ -1,8 +1,7 @@
 #include "write_session_impl.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/trace_lazy.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/trace_lazy.h>
 
 #include <library/cpp/string_utils/url/url.h>
 
@@ -1270,19 +1269,22 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: try to update token");
 
-    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress || !SessionEstablished)
+    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress || !SessionEstablished) {
         return;
-    TClientMessage clientMessage;
-    auto* updateRequest = clientMessage.mutable_update_token_request();
+    }
+
     auto token = DbDriverState->CredentialsProvider->GetAuthInfo();
-    if (token == PrevToken)
+    if (token == PrevToken) {
         return;
-    UpdateTokenInProgress = true;
-    updateRequest->set_token(token);
-    PrevToken = token;
+    }
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: updating token");
 
+    UpdateTokenInProgress = true;
+    PrevToken = token;
+
+    TClientMessage clientMessage;
+    clientMessage.mutable_update_token_request()->set_token(token);
     Processor->Write(std::move(clientMessage));
 }
 

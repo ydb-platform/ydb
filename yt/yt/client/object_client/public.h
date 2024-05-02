@@ -409,8 +409,8 @@ bool operator <  (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
 
 class TObjectServiceProxy;
 
-struct TDirectObjectIdHash;
-struct TDirectVersionedObjectIdHash;
+struct TObjectIdEntropyHash;
+struct TVersionedObjectIdEntropyHash;
 
 ////////////////////////////////////////////////////////////////////////////////
 

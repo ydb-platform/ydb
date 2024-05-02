@@ -1,11 +1,10 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/aliases.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/write_session_impl.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/persqueue_impl.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
 #include <util/generic/buffer.h>
 

@@ -3992,6 +3992,20 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                       });
 
             if (!tupleElementsHaveSameType) {
+                if (!collection->IsList()) {
+                    TExprNodeList collectionItems;
+                    for (ui32 i = 0; i < tupleType->GetSize(); ++i) {
+                        collectionItems.push_back(ctx.Builder(collection->Pos())
+                            .Callable("Nth")
+                                .Add(0, collection)
+                                .Atom(1, i)
+                            .Seal()
+                            .Build()
+                        );
+                    }
+                    YQL_CLOG(DEBUG, Core) << "IN non-literal heterogeneous tuple";
+                    return ctx.ChangeChild(*node, TCoSqlIn::idx_Collection, ctx.NewList(collection->Pos(), std::move(collectionItems)));
+                }
                 YQL_CLOG(DEBUG, Core) << "IN heterogeneous tuple";
                 auto collections = DeduplicateAndSplitTupleCollectionByTypes(*collection, ctx);
                 YQL_ENSURE(collections.size() > 1);

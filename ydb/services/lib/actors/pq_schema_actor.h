@@ -128,49 +128,44 @@ namespace NKikimr::NGRpcProxy::V1 {
             return false;
         };
 
-
         void SendDescribeProposeRequest(const NActors::TActorContext& ctx, bool showPrivate) {
             auto navigateRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-            navigateRequest->DatabaseName = CanonizePath(Database);
-
-            NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-            entry.Path = NKikimr::SplitPath(GetTopicPath());
-            entry.SyncVersion = true;
-            entry.ShowPrivatePath = showPrivate;
-            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
-            navigateRequest->ResultSet.emplace_back(entry);
-
             if (!SetRequestToken(navigateRequest.get())) {
                 AddIssue(FillIssue("Unauthenticated access is forbidden, please provide credentials",
                                    Ydb::PersQueue::ErrorCode::ACCESS_DENIED));
                 return RespondWithCode(Ydb::StatusIds::UNAUTHORIZED);
             }
+
+            navigateRequest->DatabaseName = CanonizePath(Database);
+            navigateRequest->ResultSet.emplace_back(NSchemeCache::TSchemeCacheNavigate::TEntry{
+                .Path = NKikimr::SplitPath(GetTopicPath()),
+                .Access = CheckAccessWithWriteTopicPermission ? NACLib::UpdateRow : NACLib::DescribeSchema,
+                .Operation = NSchemeCache::TSchemeCacheNavigate::OpList,
+                .ShowPrivatePath = showPrivate,
+                .SyncVersion = true,
+            });
             if (!IsDead) {
                 ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release()));
             }
         }
 
         bool ReplyIfNotTopic(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
-            const auto& response = result->ResultSet.front();
-            const TString path  = JoinPath(response.Path);
-
-            if (ev->Get()->Request.Get()->ResultSet.size() != 1 ||
-                ev->Get()->Request.Get()->ResultSet.begin()->Kind !=
-                NSchemeCache::TSchemeCacheNavigate::KindTopic) {
-                AddIssue(FillIssue(TStringBuilder() << "path '" << path << "' is not a topic",
-                                   Ydb::PersQueue::ErrorCode::VALIDATION_ERROR));
-                RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);
-                return true;
+            auto const& entries = ev->Get()->Request.Get()->ResultSet;
+            Y_ABORT_UNLESS(entries.size() == 1);
+            auto const& entry = entries.front();
+            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindTopic) {
+                return false;
             }
-            return false;
+            AddIssue(FillIssue(TStringBuilder() << "path '" << JoinPath(entry.Path) << "' is not a topic",
+                               Ydb::PersQueue::ErrorCode::VALIDATION_ERROR));
+            RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);
+            return true;
         }
 
         void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
-            const auto& response = result->ResultSet.front();
+            auto const& entries = ev->Get()->Request.Get()->ResultSet;
+            Y_ABORT_UNLESS(entries.size() == 1);
+            const auto& response = entries.front();
             const TString path  = JoinPath(response.Path);
 
             switch (response.Status) {
@@ -245,7 +240,6 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-       
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
@@ -256,6 +250,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
     protected:
         bool IsDead = false;
+        bool CheckAccessWithWriteTopicPermission = false;
         const TString TopicPath;
         const TString Database;
     };
@@ -339,13 +334,13 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         bool SetRequestToken(NSchemeCache::TSchemeCacheNavigate* request) const override {
-            if (this->Request_->GetSerializedToken().empty()) {
-                return !(AppData()->PQConfig.GetRequireCredentialsInNewProtocol());
-            } else {
-                request->UserToken = new NACLib::TUserToken(this->Request_->GetSerializedToken());
+            if (auto const& token = this->Request_->GetSerializedToken()) {
+                request->UserToken = new NACLib::TUserToken(token);
                 return true;
             }
+            return !(AppData()->PQConfig.GetRequireCredentialsInNewProtocol());
         }
+
         bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) override {
             if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
                 if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {

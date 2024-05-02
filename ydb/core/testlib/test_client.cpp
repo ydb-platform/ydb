@@ -897,7 +897,7 @@ namespace Tests {
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
 
-            IActor* scriptFinalizeService = NKqp::CreateKqpFinalizeScriptService(Settings->AppConfig->GetQueryServiceConfig().GetFinalizeScriptServiceConfig(), Settings->AppConfig->GetMetadataProviderConfig(), federatedQuerySetupFactory);
+            IActor* scriptFinalizeService = NKqp::CreateKqpFinalizeScriptService(Settings->AppConfig->GetQueryServiceConfig(), Settings->AppConfig->GetMetadataProviderConfig(), federatedQuerySetupFactory);
             TActorId scriptFinalizeServiceId = Runtime->Register(scriptFinalizeService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpFinalizeScriptServiceId(Runtime->GetNodeId(nodeIdx)), scriptFinalizeServiceId, nodeIdx);
         }

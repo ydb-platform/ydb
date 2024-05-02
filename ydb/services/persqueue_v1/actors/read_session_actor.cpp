@@ -2337,12 +2337,11 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
 }
 
 
-//explicit instantation
+// explicit instantation
 template struct TFormedReadResponse<PersQueue::V1::MigrationStreamingReadServerMessage>;
 template struct TFormedReadResponse<Topic::StreamReadMessage::FromServer>;
 
-
-//explicit instantation
+// explicit instantation
 template class TReadSessionActor<true>;
 template class TReadSessionActor<false>;
 

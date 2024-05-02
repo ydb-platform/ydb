@@ -1,6 +1,11 @@
 #include "read_session.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
+#include <util/generic/guid.h>
 
 namespace NYdb::NTopic {
 
@@ -82,8 +87,7 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions<false>& deferred) 
         EventsQueue,
         context,
         1,
-        1,
-        Client->GetProvidedCodecs()
+        1
     );
 
     deferred.DeferStartSession(CbContext);

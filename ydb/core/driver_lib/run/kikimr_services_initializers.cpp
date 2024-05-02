@@ -602,6 +602,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
         NDnsResolver::TOnDemandDnsResolverOptions resolverOptions;
         resolverOptions.MonCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "dns_resolver");
+        resolverOptions.ForceTcp = nsConfig.GetForceTcp();
+        resolverOptions.KeepSocket = nsConfig.GetKeepSocket();
         IActor *resolver = NDnsResolver::CreateOnDemandDnsResolver(resolverOptions);
 
         setup->LocalServices.emplace_back(
@@ -1183,9 +1185,14 @@ void TBlobCacheInitializer::InitializeServices(
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> blobCacheGroup = tabletGroup->GetSubgroup("type", "BLOB_CACHE");
 
-    static const constexpr ui64 DEFAULT_CACHE_SIZE_BYTES = 1000ull << 20;
+    ui64 maxCacheSize = 1000ull << 20;
+    if (Config.HasBlobCacheConfig()) {
+        if (Config.GetBlobCacheConfig().HasMaxSizeBytes()) {
+            maxCacheSize = Config.GetBlobCacheConfig().GetMaxSizeBytes();
+        }
+    }
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NBlobCache::MakeBlobCacheServiceId(),
-        TActorSetupCmd(NBlobCache::CreateBlobCache(DEFAULT_CACHE_SIZE_BYTES, blobCacheGroup), TMailboxType::ReadAsFilled, appData->UserPoolId)));
+        TActorSetupCmd(NBlobCache::CreateBlobCache(maxCacheSize, blobCacheGroup), TMailboxType::ReadAsFilled, appData->UserPoolId)));
 }
 
 // TLoggerInitializer
@@ -2148,7 +2155,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             TActorSetupCmd(proxy, TMailboxType::HTSwap, appData->UserPoolId)));
 
         // Create finalize script service
-        auto finalize = NKqp::CreateKqpFinalizeScriptService(Config.GetQueryServiceConfig().GetFinalizeScriptServiceConfig(), Config.GetMetadataProviderConfig(), federatedQuerySetupFactory);
+        auto finalize = NKqp::CreateKqpFinalizeScriptService(Config.GetQueryServiceConfig(), Config.GetMetadataProviderConfig(), federatedQuerySetupFactory);
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpFinalizeScriptServiceId(NodeId),
             TActorSetupCmd(finalize, TMailboxType::HTSwap, appData->UserPoolId)));

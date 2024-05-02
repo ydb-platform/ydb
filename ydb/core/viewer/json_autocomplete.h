@@ -5,8 +5,9 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/viewer/json/json.h>
-#include "viewer.h"
+
 #include "query_autocomplete_helper.h"
+#include "viewer_request.h"
 
 namespace NKikimr {
 namespace NViewer {
@@ -139,17 +140,8 @@ public:
         }
     }
 
-    bool IsPostContent() {
-        if (Event->Get()->Request.GetMethod() == HTTP_METHOD_POST) {
-            const THttpHeaders& headers = Event->Get()->Request.GetHeaders();
-            auto itContentType = FindIf(headers, [](const auto& header) { return header.Name() == "Content-Type"; });
-            if (itContentType != headers.end()) {
-                TStringBuf contentTypeHeader = itContentType->Value();
-                TStringBuf contentType = contentTypeHeader.NextTok(';');
-                return contentType == "application/json";
-            }
-        }
-        return false;
+    bool IsPostContent() const {
+        return NViewer::IsPostContent(Event);
     }
 
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> MakeSchemeCacheRequest() {

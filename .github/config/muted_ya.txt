@@ -34,7 +34,7 @@ ydb/core/viewer/ut Viewer.TabletMerging
 ydb/core/viewer/ut Viewer.TabletMergingPacked
 ydb/library/actors/http/ut HttpProxy.TooLongHeader
 ydb/library/actors/http/ut sole*
-ydb/library/yql/providers/generic/connector/tests* *
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb* *
 ydb/public/lib/ydb_cli/topic/ut TTopicReaderTests.TestRun_ReadOneMessage
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut RetryPolicy.RetryWithBatching
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut RetryPolicy.TWriteSession_TestBrokenPolicy
@@ -53,7 +53,6 @@ ydb/services/keyvalue/ut KeyValueGRPCService.SimpleCopyUnexistedKey
 ydb/services/keyvalue/ut sole*
 ydb/services/persqueue_v1/ut TPersQueueTest.CheckACLForGrpcWrite
 ydb/services/persqueue_v1/ut TPersQueueTest.SetupLockSession
-ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffsetBadOffsets
 ydb/services/persqueue_v1/ut TPQCompatTest.BadTopics
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectRead*Cache*
 ydb/services/persqueue_v1/ut [3/10]*
@@ -66,7 +65,6 @@ ydb/services/ydb/ut YdbOlapStore.LogPagingAfter-NotNull
 ydb/services/ydb/ut YdbQueryService.TestCreateAndAttachSession
 ydb/services/ydb/ut YdbScripting.BasicV0
 ydb/services/ydb/ut YdbYqlClient.TestYqlSessionClosed
-ydb/tests/fq/generic *
 ydb/tests/fq/mem_alloc *
 ydb/tests/fq/multi_plane *
 ydb/tests/fq/plans test_stats_mode.py.TestStatsMode.test_mode[v1-STATS_MODE_FULL-client0]

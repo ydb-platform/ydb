@@ -14,6 +14,7 @@ OWNER(g:yql)
 SRCDIR(ydb/library/yql/minikql/computation)
 
 SRCS(
+    mkql_computation_node_holders_ut.cpp
     mkql_computation_node_pack_ut.cpp
     mkql_computation_node_list_ut.cpp
     mkql_computation_node_dict_ut.cpp

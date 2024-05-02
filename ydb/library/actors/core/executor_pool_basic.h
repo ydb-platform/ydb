@@ -219,7 +219,7 @@ namespace NActors {
                            i16 priority = 0,
                            bool hasOwnSharedThread = false,
                            TExecutorPoolJail *jail = nullptr);
-        explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer, TExecutorPoolJail *jail);
+        explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer, TExecutorPoolJail *jail=nullptr);
         ~TBasicExecutorPool();
 
         void Initialize(TWorkerContext& wctx) override;

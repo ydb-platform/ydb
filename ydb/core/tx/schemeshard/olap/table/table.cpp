@@ -1,4 +1,7 @@
 #include "table.h"
+#include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/object.h>
+#include <ydb/core/tx/schemeshard/olap/operations/alter/standalone/evolution.h>
+#include <ydb/core/tx/schemeshard/olap/operations/alter/in_store/evolution.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -19,6 +22,34 @@ TColumnTableInfo::TPtr TColumnTableInfo::BuildTableWithAlter(const TColumnTableI
     alterData->AlterBody.ConstructInPlace(alterBody);
     ++alterData->AlterVersion;
     return alterData;
+}
+
+TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntity>> TColumnTableInfo::BuildEntity(const TPathId& pathId, const NOlap::NAlter::TEntityInitializationContext& iContext) const {
+    std::shared_ptr<NOlap::NAlter::ISSEntity> result;
+    if (IsStandalone()) {
+        result = std::make_shared<NOlap::NAlter::TStandaloneTable>(pathId);
+    } else {
+        result = std::make_shared<NOlap::NAlter::TInStoreTable>(pathId);
+    }
+    auto initConclusion = result->Initialize(iContext);
+    if (initConclusion.IsFail()) {
+        return initConclusion;
+    }
+    return result;
+}
+
+TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntityEvolution>> TColumnTableInfo::BuildEvolution(const TPathId& pathId, const NOlap::NAlter::TEvolutionInitializationContext& iContext) const {
+    std::shared_ptr<NOlap::NAlter::ISSEntityEvolution> result;
+    if (IsStandalone()) {
+        result = std::make_shared<NOlap::NAlter::TStandaloneSchemaEvolution>(pathId);
+    } else {
+        result = std::make_shared<NOlap::NAlter::TInStoreSchemaEvolution>(pathId);
+    }
+    auto initConclusion = result->Initialize(iContext);
+    if (initConclusion.IsFail()) {
+        return initConclusion;
+    }
+    return result;
 }
 
 }

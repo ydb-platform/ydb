@@ -248,6 +248,7 @@ struct TDataProviderInfo {
 };
 
 using THiddenQueryAborter = std::function<void()>; // aborts hidden query, which is running within a separate TProgram
+class TQContext;
 using TDataProviderInitializer = std::function<TDataProviderInfo(
     const TString& userName,
     const TString& sessionId,
@@ -257,6 +258,7 @@ using TDataProviderInitializer = std::function<TDataProviderInfo(
     TIntrusivePtr<TTypeAnnotationContext> typeCtx,
     const TOperationProgressWriter& progressWriter,
     const TYqlOperationOptions& operationOptions,
-    THiddenQueryAborter hiddenAborter)>;
+    THiddenQueryAborter hiddenAborter,
+    const TQContext& qContext)>;
 
 } // namespace NYql

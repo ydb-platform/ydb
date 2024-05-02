@@ -89,6 +89,10 @@ namespace NDnsResolver {
         int Attempts = 2;
         // Optional list of custom dns servers (ip.v4[:port], ip::v6 or [ip::v6]:port format)
         TVector<TString> Servers;
+        // Keep soket open between dns requests
+        bool KeepSocket = true;
+        // Force tcp to perform dns requests
+        bool ForceTcp = false;
     };
 
     IActor* CreateSimpleDnsResolver(TSimpleDnsResolverOptions options = TSimpleDnsResolverOptions());

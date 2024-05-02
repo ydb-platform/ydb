@@ -498,9 +498,13 @@ private:
                 taskCtx.ComputeActorId = Register(computeActor);
                 info.MutableActorIds().emplace_back(taskCtx.ComputeActorId);
             } else {
+                std::shared_ptr<TGUCSettings> GUCSettings;
+                if (ev->Get()->Record.HasSerializedGUCSettings()) {
+                    GUCSettings = std::make_shared<TGUCSettings>(ev->Get()->Record.GetSerializedGUCSettings());
+                }
                 if (Y_LIKELY(!CaFactory)) {
                     computeActor = CreateKqpComputeActor(request.Executer, txId, &dqTask, AsyncIoFactory,
-                        runtimeSettings, memoryLimits, NWilson::TTraceId(ev->TraceId), ev->Get()->Arena, FederatedQuerySetup);
+                        runtimeSettings, memoryLimits, NWilson::TTraceId(ev->TraceId), ev->Get()->Arena, FederatedQuerySetup, GUCSettings);
                     taskCtx.ComputeActorId = Register(computeActor);
                 } else {
                     computeActor = CaFactory->CreateKqpComputeActor(request.Executer, txId, &dqTask,

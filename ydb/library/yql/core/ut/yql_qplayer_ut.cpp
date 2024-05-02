@@ -6,6 +6,8 @@
 #include <ydb/library/yql/core/qplayer/storage/memory/yql_qstorage_memory.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 
+#include <library/cpp/yson/node/node_io.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/user.h>
@@ -46,6 +48,7 @@ void WithTables(const F&& f) {
 struct TRunSettings {
     bool IsSql = true;
     THashMap<TString, TString> Tables;
+    TMaybe<TString> ParametersYson;
 };
 
 bool RunProgram(bool replay, const TString& query, const TQContext& qContext, const TRunSettings& runSettings) {
@@ -64,8 +67,11 @@ bool RunProgram(bool replay, const TString& query, const TQContext& qContext, co
     TProgramFactory factory(true, functionRegistry.Get(), 0ULL, dataProvidersInit, "ut");
     factory.SetUdfResolver(NCommon::CreateSimpleUdfResolver(functionRegistry.Get()));
 
-    TProgramPtr program = factory.Create("-stdin-", query);
-    program->SetQContext(qContext);
+    TProgramPtr program = factory.Create("-stdin-", query, "", EHiddenMode::Disable, qContext);
+    if (!replay && runSettings.ParametersYson) {
+        program->SetParametersYson(*runSettings.ParametersYson);
+    }
+
     if (runSettings.IsSql) {
         if (!program->ParseSql()) {
             program->PrintErrorsTo(Cerr);
@@ -169,5 +175,13 @@ Y_UNIT_TEST_SUITE(QPlayerTests) {
             runSettings.Tables = tables;
             CheckProgram(s, runSettings);
         });
+    }
+
+    Y_UNIT_TEST(Parameters) {
+        auto s = "declare $x as String; select $x";
+        TRunSettings runSettings;
+        runSettings.ParametersYson = NYT::NodeToYsonString(NYT::TNode()
+            ("$x", NYT::TNode()("Data", "value")));
+        CheckProgram(s, runSettings);
     }
 }

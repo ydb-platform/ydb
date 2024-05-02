@@ -16,6 +16,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/yson
+    library/cpp/yson/node
     ydb/library/yql/ast
     ydb/library/yql/core
     ydb/library/yql/core/facade

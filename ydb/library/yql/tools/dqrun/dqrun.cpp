@@ -1025,16 +1025,12 @@ int RunMain(int argc, const char* argv[])
     }
 
     if (res.Has("replay")) {
-        program = progFactory.Create("-replay-", "", opId);
+        program = progFactory.Create("-replay-", "", opId, EHiddenMode::Disable, qContext);
     } else if (progFile == TStringBuf("-")) {
-        program = progFactory.Create("-stdin-", Cin.ReadAll(), opId);
+        program = progFactory.Create("-stdin-", Cin.ReadAll(), opId, EHiddenMode::Disable, qContext);
     } else {
-        program = progFactory.Create(TFile(progFile, RdOnly), opId);
+        program = progFactory.Create(TFile(progFile, RdOnly), opId, qContext);
         program->SetQueryName(progFile);
-    }
-
-    if (qStorage) {
-        program->SetQContext(qContext);
     }
 
     if (paramsFile) {

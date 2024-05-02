@@ -11,6 +11,7 @@
 #include <ydb/library/yql/core/qplayer/storage/interface/yql_qstorage.h>
 #include <ydb/library/yql/providers/config/yql_config_provider.h>
 #include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/sql/sql.h>
 
@@ -31,7 +32,6 @@ namespace NMiniKQL {
 
 namespace NYql {
 
-class TGatewaysConfig;
 class TProgram;
 using TProgramPtr = TIntrusivePtr<TProgram>;
 class TProgramFactory;
@@ -64,13 +64,15 @@ public:
 
     TProgramPtr Create(
             const TFile& file,
-            const TString& sessionId = TString());
+            const TString& sessionId = TString(),
+            const TQContext& qContext = {});
 
     TProgramPtr Create(
             const TString& filename,
             const TString& sourceCode,
             const TString& sessionId = TString(),
-            EHiddenMode hiddenMode = EHiddenMode::Disable);
+            EHiddenMode hiddenMode = EHiddenMode::Disable,
+            const TQContext& qContext = {});
 
     void UnrepeatableRandom();
 private:
@@ -106,8 +108,6 @@ public:
 
 public:
     ~TProgram();
-
-    void SetQContext(const TQContext& qContext);
 
     void AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials);
     void ClearCredentials();
@@ -362,7 +362,8 @@ private:
         const TString& runner,
         bool enableRangeComputeFor,
         const IArrowResolver::TPtr& arrowResolver,
-        EHiddenMode hiddenMode);
+        EHiddenMode hiddenMode,
+        const TQContext& qContext);
 
     TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
     TTypeAnnotationContextPtr GetAnnotationContext() const;
@@ -390,6 +391,8 @@ private:
 private:
     std::optional<bool> CheckFallbackIssues(const TIssues& issues);
     void HandleSourceCode(TString& sourceCode);
+    void HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
+        const NSQLTranslation::TTranslationSettings*& currentSettings);
 
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
@@ -408,6 +411,7 @@ private:
     TUserDataTable SavedUserDataTable_;
     const TUserDataStorage::TPtr UserDataStorage_;
     const TGatewaysConfig* GatewaysConfig_;
+    TGatewaysConfig LoadedGatewaysConfig_;
     TString Filename_;
     TString SourceCode_;
     ESourceSyntax SourceSyntax_;

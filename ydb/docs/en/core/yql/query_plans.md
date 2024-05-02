@@ -2,7 +2,7 @@
 
 To understand how a query will be executed, you can build and analyze its plan. The query plan structure in {{ ydb-short-name }} is represented as a graph, where each node contains information about operations and tables.
 
-Below you can find information about node types, and an example of analyzing a specific query plan can be found [here](../dba/query-plans-optimization.md).
+Below, you can find information about node types, and an example of analyzing a specific query plan can be found [here](../dba/query-plans-optimization.md).
 
 ## Node types
 ### Stage

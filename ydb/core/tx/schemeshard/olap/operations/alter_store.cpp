@@ -367,7 +367,7 @@ public:
                 continue; // ignore tables that don't exist
             }
             auto tableInfo = context.SS->ColumnTables.at(pathId);
-            if (tableInfo->AlterData) {
+            if (tableInfo->IsInModification()) {
                 continue; // ignore tables that have some alter
             }
 

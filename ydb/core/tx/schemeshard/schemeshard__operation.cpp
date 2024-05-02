@@ -1140,7 +1140,7 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
         return CreateNewColumnTable(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable:
-        return CreateAlterColumnTable(NextPartId(), tx);
+        Y_ABORT("incorrect");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable:
         return CreateDropColumnTable(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
@@ -1316,7 +1316,7 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterView:
         Y_ABORT("TODO: implement");
     }
-
+    Y_ABORT("TODO: implement");
     Y_UNREACHABLE();
 }
 
@@ -1357,6 +1357,8 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return CreateDropCdcStream(NextPartId(), tx, context);
     case  NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable:
         return CreateConsistentMoveTable(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable:
+        return CreateConsistentAlterColumnTable(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
         return CreateConsistentAlterTable(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex:

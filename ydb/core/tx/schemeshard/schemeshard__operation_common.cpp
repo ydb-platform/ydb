@@ -96,8 +96,7 @@ bool CollectProposeTxResults(
 {
     auto ssId = context.SS->SelfTabletId();
 
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TEvProposeTransactionResult at tablet: " << ssId);
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TEvProposeTransactionResult at tablet: " << ssId);
 
     auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
     auto shardMinStep = TStepId(ev->Get()->Record.GetMinStep());

@@ -1,0 +1,37 @@
+package NKikimrSchemeshardOlap;
+import "ydb/core/protos/tx_columnshard.proto";
+import "ydb/core/protos/flat_scheme_op.proto";
+
+message TInStoreSchema {
+    optional NKikimrTxColumnShard.TAlterTable AlterToShard = 1;
+}
+
+message TStandaloneSchema {
+    optional NKikimrTxColumnShard.TAlterTable AlterToShard = 1;
+}
+
+message TInStoreNewShards {
+    optional NKikimrTxColumnShard.TCreateTable CreateToShard = 1;
+}
+
+message TInStoreShardsTransfer {
+    repeated uint64 FromShardIds = 1;
+    optional uint64 ToShardId = 2;
+}
+
+message TEntityEvolution {
+    optional string ClassName = 1;
+    repeated uint64 ShardIds = 2;
+
+    oneof Implementation {
+        TInStoreSchema InStoreSchema = 40;
+        TStandaloneSchema StandaloneSchema = 41;
+        TInStoreNewShards InStoreNewShards = 42;
+        TInStoreShardsTransfer InStoreShardsTransfer = 43;
+    }
+}
+
+message TEvolutions {
+    optional NKikimrSchemeOp.TModifyScheme AlterProtoOriginal = 1;
+    repeated TEntityEvolution Evolutions = 2;
+}

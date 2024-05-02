@@ -51,15 +51,11 @@ public:
     }
 };
 
-class TEvolutionStartContext {
+class TDBWriteContext {
 private:
-    const TPath* ObjectPath = nullptr;
     TOperationContext* SSOperationContext = nullptr;
     NIceDb::TNiceDb* DB;
 public:
-    const TPath* GetObjectPath() const {
-        return ObjectPath;
-    }
     NIceDb::TNiceDb* GetDB() const {
         return DB;
     }
@@ -67,14 +63,31 @@ public:
         return SSOperationContext;
     }
 
-    TEvolutionStartContext(const TPath* objectPath, TOperationContext* ssOperationContext, NIceDb::TNiceDb* db)
-        : ObjectPath(objectPath)
-        , SSOperationContext(ssOperationContext)
+    TDBWriteContext(TOperationContext* ssOperationContext, NIceDb::TNiceDb* db)
+        : SSOperationContext(ssOperationContext)
         , DB(db) {
         AFL_VERIFY(DB);
-        AFL_VERIFY(ObjectPath);
         AFL_VERIFY(SSOperationContext);
     }
 };
+
+class TEvolutionStartContext: public TDBWriteContext {
+private:
+    using TBase = TDBWriteContext;
+    const TPath* ObjectPath = nullptr;
+public:
+    const TPath* GetObjectPath() const {
+        return ObjectPath;
+    }
+
+    TEvolutionStartContext(const TPath* objectPath, TOperationContext* ssOperationContext, NIceDb::TNiceDb* db)
+        : TBase(ssOperationContext, db)
+        , ObjectPath(objectPath) {
+        AFL_VERIFY(ObjectPath);
+    }
+};
+
+using TEvolutionFinishContext = TEvolutionStartContext;
+using TStartUpdateContext = TEvolutionStartContext;
 
 }

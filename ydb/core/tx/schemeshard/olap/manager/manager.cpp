@@ -47,11 +47,7 @@ TColumnTableInfo::TPtr TTablesStorage::ExtractPtr(const TPathId& id) {
 }
 
 TTablesStorage::TTableExtractedGuard TTablesStorage::TakeVerified(const TPathId& id) {
-    return TTableExtractedGuard(*this, id, ExtractPtr(id), false);
-}
-
-TTablesStorage::TTableExtractedGuard TTablesStorage::TakeAlterVerified(const TPathId& id) {
-    return TTableExtractedGuard(*this, id, ExtractPtr(id), true);
+    return TTableExtractedGuard(*this, id, ExtractPtr(id));
 }
 
  TColumnTableInfo::TPtr TTablesStorage::GetVerifiedPtr(const TPathId& id) const {
@@ -113,14 +109,6 @@ TColumnTablesLayout TTablesStorage::GetTablesLayout(const std::vector<ui64>& tab
     }
     groups.resize(groups.size() - delta);
     return TColumnTablesLayout(std::move(groups));
-}
-
-void TTablesStorage::TTableExtractedGuard::UseAlterDataVerified() {
-    Y_ABORT_UNLESS(Object);
-    TColumnTableInfo::TPtr alterInfo = Object->AlterData;
-    Y_ABORT_UNLESS(alterInfo);
-    alterInfo->AlterBody.Clear();
-    Object = alterInfo;
 }
 
 std::unordered_set<TPathId> TTablesStorage::GetAllPathIds() const {

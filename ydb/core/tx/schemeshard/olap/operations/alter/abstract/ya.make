@@ -13,6 +13,8 @@ PEERDIR(
     ydb/library/accessor
     ydb/core/protos
     ydb/library/actors/wilson
+    ydb/core/tx/schemeshard/olap/operations/alter/protos
+
 )
 
 YQL_LAST_ABI_VERSION()

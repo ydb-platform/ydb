@@ -25,16 +25,6 @@ protected:
 public:
     bool Deserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) {
         Name = description.GetName();
-        if (description.HasRESERVED_TtlSettingsPresetName() || description.HasRESERVED_TtlSettingsPresetId()) {
-            errors.AddError("TTL presets are not supported");
-            return false;
-        }
-
-        if (description.HasRESERVED_TtlSettingsPresetName() || description.HasRESERVED_TtlSettingsPresetId()) {
-            errors.AddError("TTL presets are not supported");
-            return false;
-        }
-
         ShardsCount = std::max<ui32>(description.GetColumnShardCount(), 1);
 
         if (!DoDeserialize(description, errors)) {
@@ -259,9 +249,8 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPath path = TPath::Init(pathId, context.SS);
 
-        auto pendingInfo = context.SS->ColumnTables.TakeVerified(pathId);
-        Y_ABORT_UNLESS(pendingInfo->AlterData);
-        TColumnTableInfo::TPtr tableInfo = pendingInfo->AlterData;
+        auto pendingInfo = context.SS->ColumnTables.GetVerifiedPtr(pathId);
+        TColumnTableInfo::TPtr tableInfo = pendingInfo;
 
         txState->ClearShardsInProgress();
 
@@ -373,8 +362,7 @@ public:
                      << " at tablet: " << ssId
                      << ", stepId: " << step);
 
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateColumnTable);
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateColumnTable);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -384,7 +372,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        auto table = context.SS->ColumnTables.TakeAlterVerified(pathId);
+        auto table = context.SS->ColumnTables.TakeVerified(pathId);
         if (table->IsStandalone()) {
             table->SetColumnShards(TColumnTablesLayout::ShardIdxToTabletId(table->BuildOwnedColumnShardsVerified(), *context.SS));
         }
@@ -453,9 +441,7 @@ public:
     }
 
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateColumnTable);
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateColumnTable);
 
         auto shardId = TTabletId(ev->Get()->Record.GetOrigin());
         auto shardIdx = context.SS->MustGetShardIdx(shardId);
@@ -738,14 +724,11 @@ public:
                 context.SS->PersistShardTx(db, shardIdx, opTxId);
             }
 
-            auto pending = context.SS->ColumnTables.BuildNew(pathId);
-            pending->AlterData = tableInfo;
+            auto pending = context.SS->ColumnTables.BuildNew(pathId, tableInfo);
             pending->SetOlapStorePathId(olapStorePath->PathId);
-            tableInfo->SetOlapStorePathId(olapStorePath->PathId);
             storeInfo->ColumnTables.insert(pathId);
             storeInfo->ColumnTablesUnderOperation.insert(pathId);
             context.SS->PersistColumnTable(db, pathId, *pending);
-            context.SS->PersistColumnTableAlter(db, pathId, *tableInfo);
             context.SS->IncrementPathDbRefCount(pathId);
 
             if (parentPath.Base()->HasActiveChanges()) {
@@ -796,11 +779,9 @@ public:
             }
             Y_ABORT_UNLESS(txState.Shards.size() == shardsCount);
 
-            auto pending = context.SS->ColumnTables.BuildNew(pathId);
-            pending->AlterData = tableInfo;
+            auto pending = context.SS->ColumnTables.BuildNew(pathId, tableInfo);
 
             context.SS->PersistColumnTable(db, pathId, *pending);
-            context.SS->PersistColumnTableAlter(db, pathId, *tableInfo);
             context.SS->IncrementPathDbRefCount(pathId);
 
             if (parentPath.Base()->HasActiveChanges()) {

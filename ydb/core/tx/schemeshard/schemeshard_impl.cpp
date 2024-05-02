@@ -3388,43 +3388,15 @@ void TSchemeShard::PersistOlapStoreAlterRemove(NIceDb::TNiceDb& db, TPathId path
     PersistOlapStoreRemove(db, pathId, true);
 }
 
-void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo, bool isAlter)
+void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo) noexcept
 {
-    Y_ABORT_UNLESS(IsLocalId(pathId));
-
-    TString serialized;
-    TString serializedSharding;
-    Y_ABORT_UNLESS(tableInfo.Description.SerializeToString(&serialized));
-    Y_ABORT_UNLESS(tableInfo.Description.GetSharding().SerializeToString(&serializedSharding));
-
-    if (isAlter) {
-        db.Table<Schema::ColumnTablesAlters>().Key(pathId.LocalPathId).Update(
-            NIceDb::TUpdate<Schema::ColumnTablesAlters::AlterVersion>(tableInfo.AlterVersion),
-            NIceDb::TUpdate<Schema::ColumnTablesAlters::Description>(serialized),
-            NIceDb::TUpdate<Schema::ColumnTablesAlters::Sharding>(serializedSharding));
-        if (tableInfo.AlterBody) {
-            TString serializedAlterBody;
-            Y_ABORT_UNLESS(tableInfo.AlterBody->SerializeToString(&serializedAlterBody));
-            db.Table<Schema::ColumnTablesAlters>().Key(pathId.LocalPathId).Update(
-                NIceDb::TUpdate<Schema::ColumnTablesAlters::AlterBody>(serializedAlterBody));
-        }
-        if (tableInfo.StandaloneSharding) {
-            TString serializedOwnedShards;
-            Y_ABORT_UNLESS(tableInfo.StandaloneSharding->SerializeToString(&serializedOwnedShards));
-            db.Table<Schema::ColumnTablesAlters>().Key(pathId.LocalPathId).Update(
-                NIceDb::TUpdate<Schema::ColumnTablesAlters::StandaloneSharding>(serializedOwnedShards));
-        }
-    } else {
+    db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::ColumnTables::AlterVersion>(tableInfo.AlterVersion),
+        NIceDb::TUpdate<Schema::ColumnTables::Description>(tableInfo.Description.SerializeAsString()),
+        NIceDb::TUpdate<Schema::ColumnTables::Sharding>(tableInfo.Description.GetSharding().SerializeAsString()));
+    if (tableInfo.StandaloneSharding) {
         db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Update(
-            NIceDb::TUpdate<Schema::ColumnTables::AlterVersion>(tableInfo.AlterVersion),
-            NIceDb::TUpdate<Schema::ColumnTables::Description>(serialized),
-            NIceDb::TUpdate<Schema::ColumnTables::Sharding>(serializedSharding));
-        if (tableInfo.StandaloneSharding) {
-            TString serializedOwnedShards;
-            Y_ABORT_UNLESS(tableInfo.StandaloneSharding->SerializeToString(&serializedOwnedShards));
-            db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Update(
-                NIceDb::TUpdate<Schema::ColumnTables::StandaloneSharding>(serializedOwnedShards));
-        }
+            NIceDb::TUpdate<Schema::ColumnTables::StandaloneSharding>(tableInfo.StandaloneSharding->SerializeAsString()));
     }
 }
 
@@ -3437,7 +3409,7 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId)
     }
     auto& tableInfo = *tablePtr;
 
-    if (tableInfo.AlterData) {
+    if (tableInfo.IsInModification()) {
         PersistColumnTableAlterRemove(db, pathId);
     }
 
@@ -3454,8 +3426,19 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId)
     DecrementPathDbRefCount(pathId);
 }
 
-void TSchemeShard::PersistColumnTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo) {
-    PersistColumnTable(db, pathId, tableInfo, true);
+void TSchemeShard::PersistColumnTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo) noexcept {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    db.Table<Schema::ColumnTablesAlters>().Key(pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::ColumnTablesAlters::AlterVersion>(tableInfo.AlterVersion),
+        NIceDb::TUpdate<Schema::ColumnTablesAlters::Description>(tableInfo.Description.SerializeAsString()),
+        NIceDb::TUpdate<Schema::ColumnTablesAlters::Sharding>(tableInfo.Description.GetSharding().SerializeAsString()),
+        NIceDb::TUpdate<Schema::ColumnTablesAlters::AlterBody>(tableInfo.GetAlterBodyVerified().SerializeAsString()),
+        NIceDb::TUpdate<Schema::ColumnTablesAlters::Evolutions>(tableInfo.GetEvolutionsVerified().SerializeToProtoString())
+    );
+    if (tableInfo.StandaloneSharding) {
+        db.Table<Schema::ColumnTablesAlters>().Key(pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::ColumnTablesAlters::StandaloneSharding>(tableInfo.StandaloneSharding->SerializeAsString()));
+    }
 }
 
 void TSchemeShard::PersistColumnTableAlterRemove(NIceDb::TNiceDb& db, TPathId pathId) {

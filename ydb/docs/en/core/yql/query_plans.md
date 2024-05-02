@@ -84,7 +84,7 @@ Attribute | Description
 SortBy | columns used for sorting
 
 #### TopSort
-Sorting rows with specified limit.
+Partial rows sorting with a specified limit.
 
 Attribute | Description
 --- | ---

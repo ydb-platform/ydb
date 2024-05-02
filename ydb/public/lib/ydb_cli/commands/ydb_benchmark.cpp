@@ -22,13 +22,13 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
     config.Opts->AddLongOption("iterations", "Iterations count")
         .DefaultValue(1)
         .StoreResult(&IterationsCount);
-    config.Opts->AddLongOption("json", "Path to file to save json report to.\nJson report includes some metrics of queries, min and max time, stddev, etc. Has Salomon sensor format.")
+    config.Opts->AddLongOption("json", "Path to file to save json report to.\nJson report includes some metrics of queries, min and max time, stddev, etc. Has Solomon sensor format.")
         .DefaultValue("")
         .StoreResult(&JsonReportFileName);
     config.Opts->AddLongOption("ministat", "Ministat report file name")
         .DefaultValue("")
         .StoreResult(&MiniStatFileName);
-    config.Opts->AddLongOption("query-settings", "Query settings.\nEvery setting is a line that be added to queries begin. For multiple line use multiple query-settings.")
+    config.Opts->AddLongOption("query-settings", "Query settings.\nEvery setting is a line that will be added to the beginning of each query. For multiple settings lines use this option several times.")
         .DefaultValue("")
         .AppendTo(&QuerySettings);
     auto fillTestCases = [](TStringBuf line, std::function<void(ui32)>&& op) {

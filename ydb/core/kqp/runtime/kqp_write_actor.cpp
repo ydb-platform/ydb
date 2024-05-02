@@ -287,10 +287,15 @@ public:
             Settings.GetTable().GetOwnerId(),
             Settings.GetTable().GetTableId(),
             Settings.GetTable().GetVersion())
+        , FinalTx(
+            Settings.GetFinalTx())
         , ImmediateTx(
             Settings.GetImmediateTx())
+        , InconsistentTx(
+            Settings.GetInconsistentTx())
     {
         YQL_ENSURE(std::holds_alternative<ui64>(TxId));
+        YQL_ENSURE(!InconsistentTx || ImmediateTx);
         EgressStats.Level = args.StatsLevel;
     }
 
@@ -643,7 +648,7 @@ private:
 
     void SendBatchesToShards() {
         // TODO: avoid splitting in immediate tx (needs shardhint)
-        YQL_ENSURE(!ImmediateTx || ShardsInfo.GetShards().size() == 1);
+        // YQL_ENSURE(!ImmediateTx || ShardsInfo.GetShards().size() == 1);
 
         for (const size_t shardId : ShardsInfo.GetPendingShards()) {
             const auto& shard = ShardsInfo.GetShard(shardId);
@@ -672,7 +677,7 @@ private:
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
             NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         
-        if (ImmediateTx && Finished && shard.Size() == shard.GetBatchesInFlight()) {
+        if (ImmediateTx && FinalTx && Finished && shard.Size() == shard.GetBatchesInFlight()) {
             // Last immediate write (only for datashard)
             if (shard.GetLock()) {
                 // multi immediate evwrite
@@ -810,7 +815,9 @@ private:
 
     const NYql::NDq::TTxId TxId;
     const TTableId TableId;
+    const bool FinalTx;
     const bool ImmediateTx;
+    const bool InconsistentTx;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
     std::optional<NSchemeCache::TSchemeCacheRequest::TEntry> SchemeRequest;

@@ -2888,27 +2888,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
 
-        /*{
+        {
             auto it = client.StreamExecuteQuery(R"(
                 SELECT COUNT(*) FROM `/Root/DataShard`;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(
-                output,
-                R"([[4u]])");
-        }*/
-
-        {
-            auto prepareResult = client.ExecuteQuery(R"(
-                REPLACE INTO `/Root/DataShard2` SELECT * FROM `/Root/DataShard`;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
-        }
-
-        /*{
-            auto it = client.StreamExecuteQuery(R"(
-                SELECT COUNT(*) FROM `/Root/DataShard2`;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
@@ -2921,7 +2903,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/DataShard2` (Col1, Col2, Col3) VALUES
                     (11u, "test1", 10), (21u, "test2", 11), (2147483646u, "test3", 12), (2147483641u, NULL, 13);
-                SELECT COUNT(*) FROM `/Root/DataShard`;
+                REPLACE INTO `/Root/DataShard2` SELECT * FROM `/Root/DataShard`;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
@@ -2935,7 +2917,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             CompareYson(
                 output,
                 R"([[8u]])");
-        }*/
+        }
     }
 
     Y_UNIT_TEST_TWIN(TableSink_ReplaceDataShardImmediate, UseSink) {

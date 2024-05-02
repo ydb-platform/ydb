@@ -274,6 +274,7 @@ PEERDIR(
     ydb/library/login/protos
     ydb/library/protobuf_printer
     ydb/library/yql/minikql
+    ydb/library/yql/providers/common/proto
     ydb/services/bg_tasks
 )
 

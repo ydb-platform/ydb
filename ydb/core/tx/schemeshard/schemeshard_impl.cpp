@@ -15,6 +15,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <util/random/random.h>
 #include <util/system/byteorder.h>
 #include <util/system/unaligned_mem.h>
@@ -6869,7 +6870,10 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
 
     if (appConfig.HasQueryServiceConfig()) {
         const auto& hostnamePatterns = appConfig.GetQueryServiceConfig().GetHostnamePatterns();
-        ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()));
+        ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(
+            std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
+            appConfig.GetQueryServiceConfig().GetS3().GetGeneratorPathsLimit()
+        );
     }
 
     if (IsSchemeShardConfigured()) {

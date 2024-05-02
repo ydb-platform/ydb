@@ -33,7 +33,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templ
 RUN_ANTLR4(
     ${sql_grammar}
     -lib .
-    -fo ${antlr_output}
+    -o ${antlr_output}
     IN ${sql_grammar} ${antlr_templates}/Cpp/Cpp.stg
     OUT SQLv1Parser.cpp SQLv1Lexer.cpp SQLv1Parser.h SQLv1Lexer.h
     OUTPUT_INCLUDES

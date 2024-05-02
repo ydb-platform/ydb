@@ -21,7 +21,7 @@ ENDIF()
 RUN_ANTLR4(
     ${sql_grammar}
     -lib .
-    -fo ${antlr_output}
+    -o ${antlr_output}
     -Dlanguage=protobuf
     IN ${sql_grammar} ${antlr_templates}/Java/Java.stg
     OUT_NOAUTO SQLv1Parser.proto

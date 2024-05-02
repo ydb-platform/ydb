@@ -101,6 +101,7 @@ PEERDIR(
     ydb/public/api/protos
     ydb/tests/oss/canonical
     ydb/tests/oss/ydb_sdk_import
+    ydb/tools/ydbd_slice
 )
 
 END()

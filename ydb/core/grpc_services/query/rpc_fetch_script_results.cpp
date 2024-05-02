@@ -78,7 +78,7 @@ public:
 
 private:
     STRICT_STFUNC(StateFunc,
-        hFunc(NKqp::TEvKqp::TEvFetchScriptResultsResponse, Handle);
+        hFunc(NKqp::TEvFetchScriptResultsResponse, Handle);
     )
 
     void Handle(NKqp::TEvFetchScriptResultsResponse::TPtr& ev) {

@@ -120,7 +120,7 @@ Concatenate the results of two or more subqueries into a single row set.
 Iterates through a given set of rows. Typically uses a [precompute](#precompute) as an argument.
 
 #### PartitionByKey
-Partitioning by key typically use a [precompute](#precompute).
+Partitioning by key. Typically uses a [precompute](#precompute).
 
 ### Connection
 Data dependencies between stages.

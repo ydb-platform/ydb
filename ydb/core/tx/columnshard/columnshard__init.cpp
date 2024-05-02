@@ -100,53 +100,53 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     TBlobGroupSelector dsGroupSelector(Self->Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
     {
-        ACFL_INFO("step", "TInsertTable::Load_Start");
+        ACFL_DEBUG("step", "TInsertTable::Load_Start");
         TMemoryProfileGuard g("TTxInit/InsertTable");
         auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
         if (!localInsertTable->Load(dbTable, TAppData::TimeProvider->Now())) {
             ACFL_ERROR("step", "TInsertTable::Load_Fails");
             return false;
         }
-        ACFL_INFO("step", "TInsertTable::Load_Finish");
+        ACFL_DEBUG("step", "TInsertTable::Load_Finish");
         Self->InsertTable.swap(localInsertTable);
     }
 
     {
-        ACFL_INFO("step", "TTxController::Load_Start");
+        ACFL_DEBUG("step", "TTxController::Load_Start");
         TMemoryProfileGuard g("TTxInit/TTxController");
         auto localTxController = std::make_unique<TTxController>(*Self);
          if (!localTxController->Load(txc)) {
             ACFL_ERROR("step", "TTxController::Load_Fails");
             return false;
         }
-        ACFL_INFO("step", "TTxController::Load_Finish");
+        ACFL_DEBUG("step", "TTxController::Load_Finish");
         Self->ProgressTxController.swap(localTxController);
     }
 
     {
-        ACFL_INFO("step", "TOperationsManager::Load_Start");
+        ACFL_DEBUG("step", "TOperationsManager::Load_Start");
         TMemoryProfileGuard g("TTxInit/TOperationsManager");
         auto localOperationsManager = std::make_unique<TOperationsManager>();
          if (!localOperationsManager->Load(txc)) {
             ACFL_ERROR("step", "TOperationsManager::Load_Fails");
             return false;
         }
-        ACFL_INFO("step", "TOperationsManager::Load_Finish");
+        ACFL_DEBUG("step", "TOperationsManager::Load_Finish");
         Self->OperationsManager.swap(localOperationsManager);
     }
 
     {
-        ACFL_INFO("step", "TOperationsManager::Load_Start");
+        ACFL_DEBUG("step", "TStoragesManager::Load_Start");
         AFL_VERIFY(Self->StoragesManager);
         TMemoryProfileGuard g("TTxInit/NDataSharing::TStoragesManager");
         if (!Self->StoragesManager->LoadIdempotency(txc.DB)) {
             return false;
         }
-        ACFL_INFO("step", "TOperationsManager::Load_Finish");
+        ACFL_DEBUG("step", "TStoragesManager::Load_Finish");
     }
 
     {
-        ACFL_INFO("step", "TTablesManager::Load_Start");
+        ACFL_DEBUG("step", "TTablesManager::Load_Start");
         TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
         {
             TMemoryProfileGuard g("TTxInit/TTablesManager");
@@ -167,7 +167,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         Self->SetCounter(COUNTER_TABLES, Self->TablesManager.GetTables().size());
         Self->SetCounter(COUNTER_TABLE_PRESETS, Self->TablesManager.GetSchemaPresets().size());
         Self->SetCounter(COUNTER_TABLE_TTLS, Self->TablesManager.GetTtl().PathsCount());
-        ACFL_INFO("step", "TTablesManager::Load_Finish");
+        ACFL_DEBUG("step", "TTablesManager::Load_Finish");
     }
 
     {

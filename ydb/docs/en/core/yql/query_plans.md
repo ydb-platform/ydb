@@ -134,7 +134,7 @@ Each stage is executed as a certain number of tasks. For example, a reading stag
 Combines the results of all producer stage tasks and sends them as a single result to a single consumer stage task.
 
 #### Merge
-A special case of `UnionAll`, the results of the producer stage are sorted by a specified set of columns and merged result also is sorted.
+This is a special case of `UnionAll`. The results of the producer stage are sorted by a specified set of columns and merged into a result that is also sorted.
 
 #### Broadcast
 Sends the result of a single producer stage task to all consumer stage tasks.

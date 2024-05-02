@@ -5,7 +5,7 @@
 
 namespace NKikimr::NKqp {
 
-IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TFinalizeScriptServiceConfig& finalizeScriptServiceConfig,
+IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory);
 

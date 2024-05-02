@@ -153,6 +153,10 @@ private:
             return false;
         }
 
+        if (!status.Issues.Empty()) {
+            Cerr << CerrColors_.Red() << "Request finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
+        }
+
         PrintScriptPlan(ExecutionMeta_.Plan);
 
         return true;

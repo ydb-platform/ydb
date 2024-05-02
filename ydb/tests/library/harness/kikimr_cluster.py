@@ -332,7 +332,7 @@ class YdbdSlice(KiKiMRClusterInterface):
         with ydb.Driver(driver_config) as driver:
             with ydb.SessionPool(driver, size=1) as pool:
                 with pool.checkout() as session:
-                    retry_count = 40
+                    retry_count = 60
                     # wait for readiness
                     for _ in range(retry_count):
                         try:

@@ -647,8 +647,7 @@ private:
     }
 
     void SendBatchesToShards() {
-        // TODO: avoid splitting in immediate tx (needs shardhint)
-        // YQL_ENSURE(!ImmediateTx || ShardsInfo.GetShards().size() == 1);
+        YQL_ENSURE(!ImmediateTx || ShardsInfo.GetShards().size() == 1);
 
         for (const size_t shardId : ShardsInfo.GetPendingShards()) {
             const auto& shard = ShardsInfo.GetShard(shardId);

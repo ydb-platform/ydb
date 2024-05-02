@@ -190,6 +190,7 @@ bool CellsFromTuple(const Ydb::Type* tupleType,
 struct TFilter {
     TVector<ui32> ColumnIds;
     TSerializedCellVec FilterValues;
+    TVector<NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType> MatchTypes;
 };
 
 class TObjectStorageListingRequestGrpc : public TActorBootstrapped<TObjectStorageListingRequestGrpc> {
@@ -453,6 +454,12 @@ private:
             ContentsColumns.push_back(entry.Columns[columnByName[name]]);
         }
 
+        if (Request->has_filter() && Request->has_matching_filter()) {
+            ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
+                            "Either filter or matching_filter should be present", ctx);
+            return false;
+        }
+
         if (Request->has_filter()) {
             THashMap<TString, ui32> columnToRequestIndex;
 
@@ -489,6 +496,88 @@ private:
             const auto& values = filter.values();
 
             CellsFromTuple(&values.Gettype(), values.Getvalue(), typesRef, true, cells, err, owner);
+            
+            if (!err.empty()) {
+                ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Sprintf("Invalid filter: '%s'", err.data()), ctx);
+                return false;
+            }
+
+            Filter.FilterValues.Parse(TSerializedCellVec::Serialize(cells));
+        }
+
+        if (Request->has_matching_filter()) {
+            THashMap<TString, ui32> columnToRequestIndex;
+
+            for (size_t i = 0; i < ContentsColumns.size(); i++) {
+                columnToRequestIndex[ContentsColumns[i].Name] = i;
+            }
+
+            const auto filter = Request->matching_filter();
+
+            const auto& filterValue = filter.value();
+            const auto& filterType = filter.type().tuple_type().get_idx_elements(2);
+
+            if (filterValue.items_size() != 3) {
+                ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "Wrong matching_filter format", ctx);
+                return false;
+            }
+
+            const auto& columnNames = filterValue.get_idx_items(0);
+            const auto& matcherTypes = filterValue.get_idx_items(1);
+            const auto& columnValues = filterValue.get_idx_items(2);
+
+            TVector<NScheme::TTypeInfo> types;
+
+            for (int i = 0; i < columnNames.get_arr_items().size(); i++) {
+                const auto& colNameValue = columnNames.get_idx_items(i);
+                const auto& colName = colNameValue.text_value();
+
+                const auto& columnInfo = entry.Columns[columnByName[colName]];
+                const auto& type = columnInfo.PType;
+
+                types.push_back(type);
+
+                const auto [it, inserted] = columnToRequestIndex.try_emplace(colName, columnToRequestIndex.size());
+
+                if (inserted) {
+                    ContentsColumns.push_back(columnInfo);
+                }
+
+                Filter.ColumnIds.push_back(it->second);
+
+                ui32 matchType = matcherTypes.get_idx_items(i).uint32_value();
+
+                NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType dsMatchType;
+
+                switch (matchType) {
+                    case Ydb::ObjectStorage::ListingRequest_EMatchType::ListingRequest_EMatchType_EQUAL:
+                        dsMatchType = NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType::TObjectStorageListingFilter_EMatchType_EQUAL;
+                        break;
+                    case Ydb::ObjectStorage::ListingRequest_EMatchType::ListingRequest_EMatchType_NOT_EQUAL:
+                        dsMatchType = NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType::TObjectStorageListingFilter_EMatchType_NOT_EQUAL;
+                        break;
+                    case Ydb::ObjectStorage::ListingRequest_EMatchType::ListingRequest_EMatchType_CONTAINS:
+                        dsMatchType = NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType::TObjectStorageListingFilter_EMatchType_CONTAINS;
+                        break;
+                    case Ydb::ObjectStorage::ListingRequest_EMatchType::ListingRequest_EMatchType_NOT_CONTAINS:
+                        dsMatchType = NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType::TObjectStorageListingFilter_EMatchType_NOT_CONTAINS;
+                        break;
+                    default:
+                        ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Sprintf("Wrong matching_filter match type %" PRIu32, matchType), ctx);
+                        return false;
+                }
+
+                Filter.MatchTypes.push_back(dsMatchType);
+            }
+
+            TConstArrayRef<NScheme::TTypeInfo> typesRef(types.data(), types.size());
+
+            TVector<TCell> cells;
+            TVector<TString> owner;
+
+            TString err;
+
+            CellsFromTuple(&filterType, columnValues, typesRef, true, cells, err, owner);
             
             if (!err.empty()) {
                 ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Sprintf("Invalid filter: '%s'", err.data()), ctx);
@@ -674,6 +763,10 @@ private:
             }
 
             filter->set_values(Filter.FilterValues.GetBuffer());
+
+            for (const auto& matchType : Filter.MatchTypes) {
+                filter->add_matchtype(matchType);
+            }
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Sending request to shards " << shardId);

@@ -366,27 +366,57 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         request->set_max_keys(maxKeys);
 
         if (filter) {
-            auto* filterMsg = request->mutable_filter();
+            auto* filterMsg = request->mutable_matching_filter();
+
+            ui32 eq = (ui32) Ydb::ObjectStorage::ListingRequest_EMatchType_EQUAL;
 
             TString filter = R"(
                 type {
                     tuple_type {
                         elements {
-                            type_id: BOOL
+                            list_type {
+                                item {
+                                    type_id: STRING
+                                }
+                            }
+                        }
+                        elements {
+                            list_type {
+                                item {
+                                    type_id: UINT32
+                                }
+                            }
+                        }
+                        elements {
+                            tuple_type {
+                                elements {
+                                    type_id: BOOL
+                                }
+                            }
                         }
                     }
                 }
                 value {
                     items {
-                        bool_value: )" + ToString(true) + R"(
+                        items {
+                            text_value: "SomeBool"
+                        }
+                    }
+                    items {
+                        items {
+                            uint32_value: )" + ToString(eq) + R"(
+                        }
+                    }
+                    items {
+                        items {
+                            bool_value: )" + ToString(true) + R"(
+                        }
                     }
                 }
             )";
 
-            bool parseOk = ::google::protobuf::TextFormat::ParseFromString(filter, filterMsg->mutable_values());
+            bool parseOk = ::google::protobuf::TextFormat::ParseFromString(filter, filterMsg);
             UNIT_ASSERT(parseOk);
-            
-            filterMsg->add_columns("SomeBool");
         }
 
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(keyPrefix, request->mutable_key_prefix());

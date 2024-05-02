@@ -6,6 +6,22 @@
 
 using namespace NYql;
 
-Y_UNIT_TEST_SUITE(TQStorageFileTests) {
-    GENERATE_TESTS(MakeFileQStorage)
+IQStoragePtr MakeBufferedFileQStorage() {
+    TFileQStorageSettings settings;
+    settings.BufferUntilCommit = true;
+    return MakeFileQStorage({}, settings);
+}
+
+IQStoragePtr MakeUnbufferedFileQStorage() {
+    TFileQStorageSettings settings;
+    settings.BufferUntilCommit = false;
+    return MakeFileQStorage({}, settings);
+}
+
+Y_UNIT_TEST_SUITE(TQStorageBufferedFileTests) {
+    GENERATE_TESTS(MakeBufferedFileQStorage)
+}
+
+Y_UNIT_TEST_SUITE(TQStorageUnbufferedFileTests) {
+    GENERATE_TESTS(MakeUnbufferedFileQStorage)
 }

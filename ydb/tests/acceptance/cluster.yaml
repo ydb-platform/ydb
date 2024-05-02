@@ -1,4 +1,4 @@
-cluster_uuid: "ydb:ydb-acceptance"
+cluster_uuid: "ydb:ydb-slice"
 static_erasure: block-4-2
 static_pdisk_type: SSD
 cms:

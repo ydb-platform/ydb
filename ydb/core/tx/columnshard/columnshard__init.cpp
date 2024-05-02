@@ -80,8 +80,8 @@ bool TTxInit::Precharge(TTransactionContext& txc) {
     {
         ui64 lastCompletedStep = 0;
         ui64 lastCompletedTx = 0;
-        ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastCompletedStep, lastCompletedStep);
-        ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastCompletedTxId, lastCompletedTx);
+        ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCompletedStep, lastCompletedStep);
+        ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCompletedTxId, lastCompletedTx);
         Self->LastCompletedTx = NOlap::TSnapshot(lastCompletedStep, lastCompletedTx);
     }
 
@@ -136,11 +136,13 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     }
 
     {
+        ACFL_INFO("step", "TOperationsManager::Load_Start");
         AFL_VERIFY(Self->StoragesManager);
         TMemoryProfileGuard g("TTxInit/NDataSharing::TStoragesManager");
         if (!Self->StoragesManager->LoadIdempotency(txc.DB)) {
             return false;
         }
+        ACFL_INFO("step", "TOperationsManager::Load_Finish");
     }
 
     {

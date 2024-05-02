@@ -334,7 +334,7 @@ There are two ways:
   cd ./internal/lib/
   
   # you may need to sudo
-  # set an actual versions .jar files
+  # set actual versions of .jar files
   curl -L -o ydb-jdbc-driver.jar https://repo.maven.apache.org/maven2/tech/ydb/jdbc/ydb-jdbc-driver-shaded/2.0.7/ydb-jdbc-driver-shaded-2.0.7.jar
   curl -L -o liquibase-ydb-dialect.jar https://repo.maven.apache.org/maven2/tech/ydb/dialects/liquibase-ydb-dialect/1.0.0/liquibase-ydb-dialect-1.0.0.jar
   ```

@@ -22,6 +22,7 @@
 #include <ydb/library/yql/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
+#include <ydb/library/yql/core/qplayer/udf_resolver/yql_qplayer_udf_resolver.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/deprecated/split/split_iterator.h>
@@ -316,7 +317,10 @@ TProgram::~TProgram() {
 void TProgram::SetQContext(const TQContext& qContext) {
     YQL_PROFILE_FUNC(TRACE);
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
+    YQL_ENSURE(!QContext_);
+    YQL_ENSURE(qContext);
     QContext_ = qContext;
+    UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, qContext);
 }
 
 void TProgram::ConfigureYsonResultFormat(NYson::EYsonFormat format) {
@@ -1571,6 +1575,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         typeAnnotationContext->Diagnostics = true;
     }
     typeAnnotationContext->ArrowResolver = ArrowResolver_;
+    typeAnnotationContext->FileStorage = FileStorage_;
     typeAnnotationContext->HiddenMode = HiddenMode_;
 
     if (UdfIndex_ && UdfIndexPackageSet_) {
@@ -1593,7 +1598,8 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
             typeAnnotationContext,
             ProgressWriter_,
             OperationOptions_,
-            AbortHidden_
+            AbortHidden_,
+            QContext_
         );
         if (HiddenMode_ != EHiddenMode::Disable && !dp.SupportsHidden) {
             continue;

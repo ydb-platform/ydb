@@ -698,6 +698,17 @@ def on_ts_files(unit, *files):
 
 
 @_with_report_configure_error
+def on_ts_package_check_files(unit):
+    ts_files = unit.get("_TS_FILES_COPY_CMD")
+    if ts_files == "":
+        ymake.report_configure_error(
+            "\n"
+            "In the TS_PACKAGE module, you should define at least one file using the TS_FILES() macro.\n"
+            "Docs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PACKAGE#ts-files."
+        )
+
+
+@_with_report_configure_error
 def on_depends_on_mod(unit):
     if unit.get("_TS_TEST_DEPENDS_ON_BUILD"):
         for_mod_path = unit.get("TS_TEST_FOR_PATH")

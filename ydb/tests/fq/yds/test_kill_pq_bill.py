@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import json
+import os
+import pytest
 
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
@@ -10,6 +12,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 class TestKillPqBill(TestYdsBase):
     @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_do_not_bill_pq(self, kikimr, client):
         self.init_topics("no_pq_bill")
 

@@ -285,27 +285,33 @@ namespace {
         };
     }
 
+    TSequenceSettings ParseSequenceSettings(const TCoNameValueTupleList& sequenceSettings) {
+        TSequenceSettings result;
+        for (const auto& setting: sequenceSettings) {
+            auto name = setting.Name().Value();
+            auto value = TString(setting.Value().template Cast<TCoAtom>().Value());
+            if (name == "start") {
+                result.StartValue = FromString<i64>(value);
+            } else if (name == "maxvalue") {
+                result.MaxValue = FromString<i64>(value);
+            } else if (name == "minvalue") {
+                result.MinValue = FromString<i64>(value);
+            } else if (name == "cache") {
+                result.Cache = FromString<ui64>(value);
+            } else if (name == "cycle") {
+                result.Cycle = value == "1" ? true : false;
+            } else if (name == "increment") {
+                result.Increment = FromString<i64>(value);
+            }
+        }
+        return result;
+    }
+
     TCreateSequenceSettings ParseCreateSequenceSettings(TKiCreateSequence createSequence) {
         TCreateSequenceSettings createSequenceSettings;
         createSequenceSettings.Name = TString(createSequence.Sequence());
         createSequenceSettings.Temporary = TString(createSequence.Temporary()) == "true" ? true : false;
-        for (const auto& setting: createSequence.SequenceSettings()) {
-            auto name = setting.Name().Value();
-            auto value = TString(setting.Value().template Cast<TCoAtom>().Value());
-            if (name == "start") {
-                createSequenceSettings.SequenceSettings.StartValue = FromString<i64>(value);
-            } else if (name == "maxvalue") {
-                createSequenceSettings.SequenceSettings.MaxValue = FromString<i64>(value);
-            } else if (name == "minvalue") {
-                createSequenceSettings.SequenceSettings.MinValue = FromString<i64>(value);
-            } else if (name == "cache") {
-                createSequenceSettings.SequenceSettings.Cache = FromString<ui64>(value);
-            } else if (name == "cycle") {
-                createSequenceSettings.SequenceSettings.Cycle = value == "1" ? true : false;
-            } else if (name == "increment") {
-                createSequenceSettings.SequenceSettings.Increment = FromString<i64>(value);
-            }
-        }
+        createSequenceSettings.SequenceSettings = ParseSequenceSettings(createSequence.SequenceSettings());
 
         return createSequenceSettings;
     }
@@ -314,6 +320,14 @@ namespace {
         return TDropSequenceSettings{
             .Name = TString(dropSequence.Sequence())
         };
+    }
+
+    TAlterSequenceSettings ParseAlterSequenceSettings(TKiAlterSequence alterSequence) {
+        TAlterSequenceSettings alterSequenceSettings;
+        alterSequenceSettings.Name = TString(alterSequence.Sequence());
+        alterSequenceSettings.SequenceSettings = ParseSequenceSettings(alterSequence.SequenceSettings());
+
+        return alterSequenceSettings;
     }
 
     [[nodiscard]] TString AddConsumerToTopicRequest(
@@ -1720,6 +1734,26 @@ public:
                 auto resultNode = ctx.NewWorld(input->Pos());
                 return resultNode;
             }, "Executing DROP SEQUENCE");
+        }
+
+        if (auto maybeAlterSequence = TMaybeNode<TKiAlterSequence>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeAlterSequence.Cast().DataSink().Cluster());
+            TAlterSequenceSettings alterSequenceSettings = ParseAlterSequenceSettings(maybeAlterSequence.Cast());
+            bool missingOk = (maybeAlterSequence.MissingOk().Cast().Value() == "1");
+
+            auto future = Gateway->AlterSequence(cluster, alterSequenceSettings, missingOk);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing CREATE SEQUENCE");
         }
 
         if (auto maybeAlter = TMaybeNode<TKiAlterTopic>(input)) {

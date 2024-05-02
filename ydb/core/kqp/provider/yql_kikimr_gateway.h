@@ -678,6 +678,11 @@ struct TDropSequenceSettings {
     TString Name;
 };
 
+struct TAlterSequenceSettings {
+    TString Name;
+    TSequenceSettings SequenceSettings;
+};
+
 struct TAlterExternalTableSettings {
     TString ExternalTable;
 };
@@ -936,6 +941,8 @@ public:
         const TCreateSequenceSettings& settings, bool existingOk) = 0;
     virtual NThreading::TFuture<TGenericResult> DropSequence(const TString& cluster,
         const TDropSequenceSettings& settings, bool missingOk) = 0;
+    virtual NThreading::TFuture<TGenericResult> AlterSequence(const TString& cluster,
+        const TAlterSequenceSettings& settings, bool missingOk) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateColumnTable(
         TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false) = 0;

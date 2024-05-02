@@ -109,6 +109,7 @@ public:
         return Tables.contains(id);
     }
     TTableReadGuard GetVerified(const TPathId& id) const;
+    TColumnTableInfo::TPtr GetVerifiedPtr(const TPathId& id) const;
     TTableReadGuard at(const TPathId& id) const {
         return TTableReadGuard(Tables.at(id));
     }

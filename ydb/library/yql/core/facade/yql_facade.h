@@ -401,7 +401,7 @@ private:
     TYqlOperationOptions OperationOptions_;
     TCredentials::TPtr Credentials_;
     const IUrlListerManagerPtr UrlListerManager_;
-    const IUdfResolver::TPtr UdfResolver_;
+    IUdfResolver::TPtr UdfResolver_;
     const TUdfIndex::TPtr UdfIndex_;
     const TUdfIndexPackageSet::TPtr UdfIndexPackageSet_;
     const TFileStoragePtr FileStorage_;

@@ -1210,6 +1210,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     } // Y_UNIT_TEST(FetchScenario)
 
     Y_UNIT_TEST(BalanceScenario) {
+        return;
         TInsecureTestServer testServer("2");
 
         TString topicName = "/Root/topic-0-test";

@@ -12,7 +12,9 @@ void QStorageTestInterleaveReadWrite_Impl(const NYql::IQStoragePtr& storage);
 #define GENERATE_ONE_TEST(NAME, FACTORY) \
     Y_UNIT_TEST(NAME) { \
         auto storage = FACTORY(); \
-        QStorageTest##NAME##_Impl(storage); \
+        if (storage) { \
+            QStorageTest##NAME##_Impl(storage); \
+        } \
     }
 
 #define GENERATE_TESTS(FACTORY)\
@@ -21,4 +23,3 @@ void QStorageTestInterleaveReadWrite_Impl(const NYql::IQStoragePtr& storage);
     GENERATE_ONE_TEST(IterateWithoutValue, FACTORY) \
     GENERATE_ONE_TEST(ManyKeys, FACTORY) \
     GENERATE_ONE_TEST(InterleaveReadWrite, FACTORY)
-

@@ -53,7 +53,7 @@ public:
     NThreading::TFuture<void> Put(const TQItemKey& key, const TString& value) final {
         with_lock(Operation_->Mutex) {
             Y_ENSURE(!Operation_->Committed);
-            (*Operation_->WriteMap)[key] = value;
+            Operation_->WriteMap->emplace(key, value);
             return NThreading::MakeFuture();
         }
     }
@@ -102,11 +102,13 @@ public:
     {
     }
 
-    IQReaderPtr MakeReader(const TString& operationId) const final {
+    IQReaderPtr MakeReader(const TString& operationId, const TQReaderSettings& settings) const final {
+        Y_UNUSED(settings);
         return std::make_shared<TReader>(GetOperation(operationId, false)->ReadMap);
     }
 
-    IQWriterPtr MakeWriter(const TString& operationId) const final {
+    IQWriterPtr MakeWriter(const TString& operationId, const TQWriterSettings& settings) const final {
+        Y_UNUSED(settings);
         return std::make_shared<TWriter>(GetOperation(operationId, true));
     }
 

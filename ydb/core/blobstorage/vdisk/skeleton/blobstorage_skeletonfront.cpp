@@ -41,12 +41,12 @@ namespace NKikimr {
     TEvFrontRecoveryStatus::TEvFrontRecoveryStatus(EPhase phase,
             NKikimrProto::EReplyStatus status,
             const TIntrusivePtr<TPDiskParams> &dsk,
-            std::shared_ptr<THugeBlobCtx> hugeBlobCtx,
+            ui32 minREALHugeBlobInBytes,
             TVDiskIncarnationGuid vdiskIncarnationGuid)
         : Phase(phase)
         , Status(status)
         , Dsk(dsk)
-        , HugeBlobCtx(std::move(hugeBlobCtx))
+        , MinREALHugeBlobInBytes(minREALHugeBlobInBytes)
         , VDiskIncarnationGuid(vdiskIncarnationGuid)
     {}
 
@@ -819,7 +819,7 @@ namespace NKikimr {
                         TBlobStorageGroupType type = (GInfo ? GInfo->Type : TErasureType::ErasureNone);
                         VCtx->UpdateCostModel(std::make_unique<TCostModel>(msg->Dsk->SeekTimeUs, msg->Dsk->ReadSpeedBps,
                             msg->Dsk->WriteSpeedBps, msg->Dsk->ReadBlockSize, msg->Dsk->WriteBlockSize,
-                            msg->HugeBlobCtx->MinREALHugeBlobInBytes, type));
+                            msg->MinREALHugeBlobInBytes, type));
                         break;
                     }
                     case TEvFrontRecoveryStatus::SyncGuidRecoveryDone:
@@ -829,6 +829,12 @@ namespace NKikimr {
                     default: Y_ABORT("Unexpected case");
                 }
             }
+        }
+
+        void Handle(TEvMinHugeBlobSizeUpdate::TPtr &ev) {
+            VCtx->UpdateCostModel(std::make_unique<TCostModel>(VCtx->CostModel->SeekTimeUs, VCtx->CostModel->ReadSpeedBps,
+                VCtx->CostModel->WriteSpeedBps, VCtx->CostModel->ReadBlockSize, VCtx->CostModel->WriteBlockSize,
+                ev->Get()->MinREALHugeBlobInBytes, VCtx->CostModel->GType));
         }
 
         static NKikimrWhiteboard::EFlag ToLightSignal(NKikimrWhiteboard::EVDiskState st) {
@@ -2063,6 +2069,7 @@ namespace NKikimr {
             HFunc(TEvReportScrubStatus, Handle)
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
             fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
+            hFunc(TEvMinHugeBlobSizeUpdate, Handle)
         )
 
 #define HFuncStatus(TEvType, status, errorReason, now, wstatus) \

@@ -140,7 +140,7 @@ This is a special case of `UnionAll`. The results of the producer stage are sort
 Sends the result of a single producer stage task to all consumer stage tasks.
 
 #### Map
-Implements 1-to-1 relationships between tasks of stages, the producer stage and consumer stage should have the same number of tasks.
+Implements 1-to-1 relationships between tasks of stages, the producer and consumer stages should have the same number of tasks.
 
 #### HashShuffle
 Sends the results of producer stage tasks to consumer stage tasks based on a certain rule for specified columns. The rule is defined in the code, but the list of columns is specified in the connection.

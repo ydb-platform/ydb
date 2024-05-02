@@ -35,7 +35,7 @@ ReadLimit | read rows limit
 Reverse | flag indicating the order in which the rows will be read, by default the order is forward (ascending), but if the flag is set to `true`, the reading order will be reversed (descending).
 
 #### TablePointLookup
-Reading a table based on specific values of the primary key. Note that for this operation all components of the primary key should be specified, reading by key prefix is performed as a `TableRangeScan`.
+Reading a table by specific primary key values. Note that for this operation, all components of the primary key should be specified. Reading by a key prefix is performed as a `TableRangeScan` operation.
 
 Attribute | Description
 --- | ---

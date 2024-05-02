@@ -14,7 +14,7 @@ Query execution stage.
 A stage can contatin the following operations:
 
 #### TableFullScan
-Full table scan. It is important to keep in mind that the resource intensity of this operation is proportional to the size of the table, so it should be avoided whenever possible.
+Full table scan. This operation's resource consumption is proportional to the table size, so it should be avoided whenever possible.
 
 Attribute | Description 
 --- | --- 

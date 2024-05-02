@@ -99,9 +99,6 @@ struct TGraphMeta {
     TString Database;
     NKikimrConfig::TTableServiceConfig::EChannelTransportVersion ChannelTransportVersion;
     TIntrusivePtr<NKikimr::NKqp::TUserRequestContext> UserRequestContext;
-    bool ImmediateTx = false;
-    bool PrepareInSinks = false;
-    TVector<NKikimrKqp::TKqpTableSinkLocks> LocksForSinks;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena;
@@ -118,14 +115,6 @@ struct TGraphMeta {
 
     void SetLockTxId(TMaybe<ui64> lockTxId) {
         LockTxId = lockTxId;
-    }
-
-    void SetImmediateTx(bool immediateTx) {
-        ImmediateTx = immediateTx;
-    }
-
-    void SetPrepareInSinks(bool prepareInSinks) {
-        PrepareInSinks = prepareInSinks;
     }
 };
 

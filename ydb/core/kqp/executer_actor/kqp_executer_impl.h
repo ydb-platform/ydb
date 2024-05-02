@@ -841,19 +841,13 @@ protected:
         }
     }
 
-    struct TReadWriteCounts {
-        std::optional<size_t> ReadPartitionsCount = std::nullopt;
-        size_t SinksCount = 0;
-    };
-
-    TReadWriteCounts BuildSysViewScanTasks(TStageInfo& stageInfo) {
+    void BuildSysViewScanTasks(TStageInfo& stageInfo) {
         Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.IsSysView());
 
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         const auto& tableInfo = stageInfo.Meta.TableConstInfo;
         const auto& keyTypes = tableInfo->KeyColumnTypes;
-        size_t sinksCount = 0;
 
         for (auto& op : stage.GetTableOps()) {
             Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
@@ -891,15 +885,10 @@ protected:
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
 
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-            sinksCount += BuildSinks(stage, task);
+            BuildSinks(stage, task);
 
             LOG_D("Stage " << stageInfo.Id << " create sysview scan task: " << task.Id);
         }
-
-        return TReadWriteCounts{
-            .ReadPartitionsCount = 0,
-            .SinksCount = sinksCount,
-        };
     }
 
     void BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) {
@@ -941,7 +930,7 @@ protected:
         }
     }
 
-    size_t BuildSinks(const NKqpProto::TKqpPhyStage& stage, TKqpTasksGraph::TTaskType& task) {
+    void BuildSinks(const NKqpProto::TKqpPhyStage& stage, TKqpTasksGraph::TTaskType& task) {
         if (stage.SinksSize() > 0) {
             YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
             const auto& sink = stage.GetSinks(0);
@@ -954,12 +943,10 @@ protected:
             } else {
                 YQL_ENSURE(false, "unknown sink type");
             }
-            return 1;
         }
-        return 0;
     }
 
-    TReadWriteCounts BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
+    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
         const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         YQL_ENSURE(stage.GetSources(0).HasExternalSource());
@@ -1019,15 +1006,9 @@ protected:
         }
 
         // finish building
-        size_t sinksCount = 0;
         for (auto taskId : tasksIds) {
-            sinksCount += BuildSinks(stage, TasksGraph.GetTask(taskId));
+            BuildSinks(stage, TasksGraph.GetTask(taskId));
         }
-
-        return TReadWriteCounts{
-            .ReadPartitionsCount = 0,
-            .SinksCount = sinksCount,
-        };
     }
 
     TVector<TVector<const TShardKeyRanges*>> DistributeShardsToTasks(TVector<const TShardKeyRanges*> shardsRanges, const size_t tasksCount, const TVector<NScheme::TTypeInfo>& keyTypes) {
@@ -1058,7 +1039,7 @@ protected:
         return result;
     }
 
-    TReadWriteCounts BuildScanTasksFromSource(TStageInfo& stageInfo, const bool shardsResolved, const bool limitTasksPerNode) {
+    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, const bool shardsResolved, const bool limitTasksPerNode) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, ui64> assignedShardsCount;
 
@@ -1242,10 +1223,9 @@ protected:
             }
         };
 
-        size_t sinksCount = 0;
         auto buildSinks = [&]() {
             for (const ui64 taskId : createdTasksIds) {
-                sinksCount += BuildSinks(stage, TasksGraph.GetTask(taskId));
+                BuildSinks(stage, TasksGraph.GetTask(taskId));
             }
         };
 
@@ -1269,15 +1249,9 @@ protected:
                 addPartiton(startShard, {}, shardInfo, source.GetSequentialInFlightShards());
                 fillRangesForTasks();
                 buildSinks();
-                return TReadWriteCounts {
-                    .ReadPartitionsCount = std::nullopt,
-                    .SinksCount = sinksCount,
-                };
+                return Nothing();
             } else {
-                return TReadWriteCounts {
-                    .ReadPartitionsCount = 0,
-                    .SinksCount = 0,
-                };
+                return 0;
             }
         } else {
             for (auto& [shardId, shardInfo] : partitions) {
@@ -1285,10 +1259,7 @@ protected:
             }
             fillRangesForTasks();
             buildSinks();
-            return TReadWriteCounts {
-                .ReadPartitionsCount = partitions.size(),
-                .SinksCount = sinksCount,
-            };
+            return partitions.size();
         }
     }
 
@@ -1303,9 +1274,8 @@ protected:
         }
     }
 
-    TReadWriteCounts BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount) {
+    void BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount) {
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-        YQL_ENSURE(stage.SourcesSize() == 0);
 
         ui32 partitionsCount = 1;
         ui32 inputTasks = 0;
@@ -1359,20 +1329,14 @@ protected:
             partitionsCount = std::max(partitionsCount, GetMaxTasksAggregation(stageInfo, inputTasks, nodesCount));
         }
 
-        size_t sinksCount = 0;
         for (ui32 i = 0; i < partitionsCount; ++i) {
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
             task.Meta.ExecuterId = SelfId();
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-            sinksCount += BuildSinks(stage, task);
+            BuildSinks(stage, task);
             LOG_D("Stage " << stageInfo.Id << " create compute task: " << task.Id);
         }
-
-        return TReadWriteCounts {
-            .ReadPartitionsCount = 0,
-            .SinksCount = sinksCount,
-        };
     }
 
     void FillReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, bool reverse, bool sorted) const
@@ -1541,7 +1505,7 @@ protected:
         }
     }
 
-    TReadWriteCounts BuildScanTasksFromShards(TStageInfo& stageInfo) {
+    void BuildScanTasksFromShards(TStageInfo& stageInfo) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, std::vector<TShardInfoWithId>> nodeShards;
         THashMap<ui64, ui64> assignedShardsCount;
@@ -1550,7 +1514,6 @@ protected:
         const auto& tableInfo = stageInfo.Meta.TableConstInfo;
         const auto& keyTypes = tableInfo->KeyColumnTypes;
         ui32 metaId = 0;
-        size_t sinksCount = 0;
         for (auto& op : stage.GetTableOps()) {
             Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
@@ -1597,7 +1560,7 @@ protected:
                         auto& task = TasksGraph.GetTask(taskIdx);
                         task.Meta.SetEnableShardsSequentialScan(readSettings.Sorted);
                         PrepareScanMetaForUsage(task.Meta, keyTypes);
-                        sinksCount += BuildSinks(stage, task);
+                        BuildSinks(stage, task);
                     }
                 }
 
@@ -1626,17 +1589,13 @@ protected:
                         task.Meta.Type = TTaskMeta::TTaskType::Scan;
                         task.SetMetaId(metaGlueingId);
                         FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-                        sinksCount += BuildSinks(stage, task);
+                        BuildSinks(stage, task);
                     }
                 }
             }
         }
 
         LOG_D("Stage " << stageInfo.Id << " will be executed on " << nodeTasks.size() << " nodes.");
-        return TReadWriteCounts{
-            .ReadPartitionsCount = std::nullopt,
-            .SinksCount = sinksCount,
-        };
     }
 
     void PrepareScanMetaForUsage(TTaskMeta& meta, const TVector<NScheme::TTypeInfo>& keyTypes) const {

@@ -1494,7 +1494,6 @@ private:
                 case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                 case NKqpProto::TKqpPhyTableOperation::kReadRange:
                 case NKqpProto::TKqpPhyTableOperation::kLookup: {
-                    YQL_ENSURE(false);
                     bool isFullScan = false;
                     auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv(), isFullScan);
                     auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
@@ -1837,7 +1836,6 @@ private:
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
         size_t sourceScanPartitionsCount = 0;
-        size_t sinksCount = 0;
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
@@ -1881,9 +1879,8 @@ private:
                             if (auto partitionsCount = BuildScanTasksFromSource(
                                     stageInfo,
                                     /* shardsResolved */ StreamResult,
-                                    /* limitTasksPerNode */ StreamResult); partitionsCount.ReadPartitionsCount) {
-                                sourceScanPartitionsCount += *partitionsCount.ReadPartitionsCount;
-                                sinksCount += partitionsCount.SinksCount;
+                                    /* limitTasksPerNode */ StreamResult)) {
+                                sourceScanPartitionsCount += *partitionsCount;
                             } else {
                                 UnknownAffectedShardCount = true;
                             }
@@ -1895,13 +1892,12 @@ private:
                             YQL_ENSURE(false, "unknown source type");
                     }
                 } else if (StreamResult && stageInfo.Meta.IsOlap() && stage.SinksSize() == 0) {
-                    sinksCount += BuildScanTasksFromShards(stageInfo).SinksCount;
+                    BuildScanTasksFromShards(stageInfo);
                 } else if (stageInfo.Meta.IsSysView()) {
-                    sinksCount += BuildSysViewScanTasks(stageInfo).SinksCount;
+                    BuildSysViewScanTasks(stageInfo);
                 } else if (stageInfo.Meta.ShardOperations.empty() || stage.SinksSize() > 0) {
-                    sinksCount += BuildComputeTasks(stageInfo, std::max<ui32>(ShardsOnNode.size(), ResourceSnapshot.size())).SinksCount;
+                    BuildComputeTasks(stageInfo, std::max<ui32>(ShardsOnNode.size(), ResourceSnapshot.size()));
                 } else {
-                    YQL_ENSURE(!UseEvWrite);
                     BuildDatashardTasks(stageInfo);
                 }
 
@@ -1987,11 +1983,11 @@ private:
         TTopicTabletTxs topicTxs;
         TDatashardTxs datashardTxs;
         TEvWriteTxs evWriteTxs;
-        BuildTxs(datashardTasks, datashardTxs, evWriteTxs, topicTxs);
+        BuildDatashardTxs(datashardTasks, datashardTxs, evWriteTxs, topicTxs);
         YQL_ENSURE(evWriteTxs.empty() || datashardTxs.empty());
 
         // Single-shard datashard transactions are always immediate
-        ImmediateTx = (datashardTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount + sinksCount) <= 1
+        ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) == 1
                     && !UnknownAffectedShardCount
                     && evWriteTxs.empty()
                     && !HasOlapTable;
@@ -2020,8 +2016,6 @@ private:
             YQL_ENSURE(!VolatileTx);
             ImmediateTx = true;
         }
-
-        TasksGraph.GetMeta().SetImmediateTx(ImmediateTx);
 
         ComputeTasks = std::move(computeTasks);
         TopicTxs = std::move(topicTxs);
@@ -2195,7 +2189,7 @@ private:
         }
     }
 
-    void BuildTxs(
+    void BuildDatashardTxs(
             THashMap<ui64, TVector<NDqProto::TDqTask*>>& datashardTasks,
             TDatashardTxs& datashardTxs,
             TEvWriteTxs& evWriteTxs,
@@ -2394,10 +2388,6 @@ private:
         }
     }
 
-    void FillInternalSinksCommitSettings() {
-        
-    }
-
     void ExecuteTasks() {
         {
             auto lockTxId = Request.AcquireLocksTxId;
@@ -2408,8 +2398,6 @@ private:
         }
 
         LWTRACK(KqpDataExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, ComputeTasks.size(), DatashardTxs.size() + EvWriteTxs.size());
-
-        FillInternalSinksCommitSettings();
 
         for (auto& [shardId, tasks] : RemoteComputeTasks) {
             auto it = ShardIdToNodeId.find(shardId);

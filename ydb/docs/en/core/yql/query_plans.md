@@ -157,4 +157,4 @@ Materialized intermediate result.
 **UI representation**:
 ![precompute](_assets/precompute.png)
 
-Stages that depend on precomputes should be executed after the precompute have been completed.
+Stages that depend on precomputes should be executed after the precompute has been completed.

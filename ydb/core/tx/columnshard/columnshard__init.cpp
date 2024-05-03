@@ -328,7 +328,7 @@ bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&)
 
     if (Self->NormalizerController.GetNormalizer()->GetActiveTasksCount() == 1) {
         NIceDb::TNiceDb db(txc.DB);
-        Self->NormalizerController.UpdateControllerSate(db);
+        Self->NormalizerController.UpdateControllerState(db);
     }
     return true;
 }

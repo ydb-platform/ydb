@@ -494,4 +494,22 @@ _99_9 99.9
 
 )");
     }
+
+    Y_UNIT_TEST(ShouldNotFailOnMetricWithoutSensorLabel) {
+        auto result = EncodeToString([](IMetricEncoder* e) {
+            e->OnStreamBegin();
+            e->OnStreamEnd();
+            {
+                e->OnMetricBegin(EMetricType::GAUGE);
+                {
+                    e->OnLabelsBegin();
+                    e->OnLabel("name", "cpuUsage");
+                    e->OnLabelsEnd();
+                }
+                e->OnInt64(TInstant::Zero(), 0);
+                e->OnMetricEnd();
+            }
+        });
+        UNIT_ASSERT_STRINGS_EQUAL(result, "\n");
+    }
 }

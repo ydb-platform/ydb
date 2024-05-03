@@ -2410,7 +2410,7 @@ private:
 
         const bool singlePartitionOptAllowed = !HasOlapTable && !UnknownAffectedShardCount && !HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty();
         const bool useDataQueryPool = !(HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty());
-        const bool localComputeTasks = !((HasExternalSources || HasOlapTable || HasDatashardSourceScan) && DatashardTxs.empty());
+        const bool localComputeTasks = !DatashardTxs.empty();
 
         Planner = CreateKqpPlanner({
             .TasksGraph = TasksGraph,

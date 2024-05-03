@@ -156,6 +156,8 @@ message TEvNodeConfigInvokeOnRoot {
         bool ConvertToDonor = 3; // convert the current disk to donor?
         bool IgnoreGroupFailModelChecks = 4;
         bool IgnoreDegradedGroupsChecks = 5;
+        bool IgnoreVSlotQuotaCheck = 6;
+        bool IsSelfHealReasonDecommit = 7;
     }
 
     // Regenerate configuration so the slain VDisk is no more reported as DESTROY one in the list.

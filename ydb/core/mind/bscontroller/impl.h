@@ -2370,6 +2370,8 @@ public:
     static void SerializeGroupInfo(NKikimrBlobStorage::TGroupInfo *group, const TGroupInfo& groupInfo,
         const TString& storagePoolName, const TMaybe<TKikimrScopeId>& scopeId);
 
+    void SerializeSettings(NKikimrBlobStorage::TUpdateSettings *settings);
+
     static NKikimrBlobStorage::TGroupStatus::E DeriveStatus(const TBlobStorageGroupInfo::TTopology *topology,
         const TBlobStorageGroupInfo::TGroupVDisks& failed);
 };

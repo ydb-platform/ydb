@@ -676,6 +676,7 @@ message TBaseConfig {
     repeated TGroup Group = 3;
     repeated TNode Node = 4;
     repeated TDevice Device = 5;
+    TUpdateSettings Settings = 6;
 }
 
 message TMoveCommand {

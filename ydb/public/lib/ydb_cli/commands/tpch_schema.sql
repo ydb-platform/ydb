@@ -1,6 +1,6 @@
 {createExternal}
 
-CREATE {external} TABLE `{path}customer` (
+CREATE {external} TABLE `{path}/customer` (
     c_acctbal Double {notnull}, -- it should be Decimal(12, 2)
     c_address Utf8 {notnull},
     c_comment Utf8 {notnull},
@@ -11,12 +11,12 @@ CREATE {external} TABLE `{path}customer` (
     c_phone Utf8 {notnull}
     {primary_key} (c_custkey)
 )
-{partition_customer}
-WITH ({store}"{s3_prefix}/customer/"
+{partition_by}(c_custkey)
+WITH ({store}"{s3_prefix}/customer/",
 {partitioning} = 64
 );
 
-CREATE {external} TABLE `{path}lineitem` (
+CREATE {external} TABLE `{path}/lineitem` (
     l_comment Utf8 {notnull},
     l_commitdate Date {notnull},
     l_discount Double {notnull}, -- it should be Decimal(12, 2)
@@ -35,24 +35,25 @@ CREATE {external} TABLE `{path}lineitem` (
     l_tax Double {notnull} -- it should be Decimal(12, 2)
     {primary_key} (l_orderkey, l_linenumber)
 )
-{partition_lineitem}
-WITH ({store}"{s3_prefix}/lineitem/"
+{partition_by}(l_orderkey)
+WITH ({store}"{s3_prefix}/lineitem/",
 {partitioning} = 64
 );
 
-CREATE {external} TABLE `{path}nation` (
+CREATE {external} TABLE `{path}/nation` (
     n_comment Utf8 {notnull},
     n_name Utf8 {notnull},
     n_nationkey Int32 {notnull}, -- Identifier
     n_regionkey Int32 {notnull} -- FK to R_REGIONKEY
     {primary_key}(n_nationkey)
 )
-{partition_nation}
-WITH ({store}"{s3_prefix}/nation/"
+{partition_by}(n_nationkey)
+
+WITH ({store}"{s3_prefix}/nation/",
 {partitioning} = 1
 );
 
-CREATE {external} TABLE `{path}orders` (
+CREATE {external} TABLE `{path}/orders` (
     o_clerk Utf8 {notnull},
     o_comment Utf8 {notnull},
     o_custkey Int64 {notnull}, -- FK to C_CUSTKEY
@@ -64,12 +65,12 @@ CREATE {external} TABLE `{path}orders` (
     o_totalprice Double {notnull} -- it should be Decimal(12, 2)
     {primary_key} (o_orderkey)
 )
-{partition_orders}
-WITH ({store}"{s3_prefix}/orders/"
+{partition_by}(o_orderkey)
+WITH ({store}"{s3_prefix}/orders/",
 {partitioning} = 64
 );
 
-CREATE {external} TABLE `{path}part` (
+CREATE {external} TABLE `{path}/part` (
     p_brand Utf8 {notnull},
     p_comment Utf8 {notnull},
     p_container Utf8 {notnull},
@@ -81,12 +82,12 @@ CREATE {external} TABLE `{path}part` (
     p_type Utf8 {notnull}
     {primary_key}(p_partkey)
 )
-{partition_part}
-WITH ({store}"{s3_prefix}/part/"
+{partition_by}(p_partkey)
+WITH ({store}"{s3_prefix}/part/",
 {partitioning} = 64
 );
 
-CREATE {external} TABLE `{path}partsupp` (
+CREATE {external} TABLE `{path}/partsupp` (
     ps_availqty Int32 {notnull},
     ps_comment Utf8 {notnull},
     ps_partkey Int64 {notnull}, -- FK to P_PARTKEY
@@ -94,23 +95,23 @@ CREATE {external} TABLE `{path}partsupp` (
     ps_supplycost Double {notnull} -- it should be Decimal(12, 2)
     {primary_key}(ps_partkey, ps_suppkey)
 )
-{partition_partsupp}
-WITH ({store}"{s3_prefix}/partsupp/"
+{partition_by}(ps_partkey)
+WITH ({store}"{s3_prefix}/partsupp/",
 {partitioning} = 64
 );
 
-CREATE {external} TABLE `{path}region` (
+CREATE {external} TABLE `{path}/region` (
     r_comment Utf8 {notnull},
     r_name Utf8 {notnull},
     r_regionkey Int32 {notnull} -- Identifier
     {primary_key}(r_regionkey)
 )
-{partition_region}
-WITH ({store}"{s3_prefix}/region/"
+{partition_by}(r_regionkey)
+WITH ({store}"{s3_prefix}/region/",
 {partitioning} = 1
 );
 
-CREATE {external} TABLE `{path}supplier` (
+CREATE {external} TABLE `{path}/supplier` (
     s_acctbal Double {notnull}, -- it should be Decimal(12, 2)
     s_address Utf8 {notnull},
     s_comment Utf8 {notnull},
@@ -120,7 +121,7 @@ CREATE {external} TABLE `{path}supplier` (
     s_suppkey Int64 {notnull} -- Identifier
     {primary_key}(s_suppkey)
 )
-{partition_supplier}
-WITH ({store}"{s3_prefix}/supplier/"
+{partition_by}(s_suppkey)
+WITH ({store}"{s3_prefix}/supplier/",
 {partitioning} = 64
 );

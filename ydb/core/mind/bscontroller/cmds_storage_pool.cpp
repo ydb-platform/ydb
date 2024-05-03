@@ -525,6 +525,8 @@ namespace NKikimr::NBsController {
         });
 
         if (!virtualGroupsOnly) {
+            const TMonotonic mono = TActivationContext::Monotonic();
+
             // apply static group
             for (const auto& [pdiskId, pdisk] : StaticPDisks) {
                 if (PDisks.Find(pdiskId)) {
@@ -564,11 +566,11 @@ namespace NKikimr::NBsController {
                     x->MutableVDiskMetrics()->ClearVDiskId();
                 }
                 x->SetStatus(NKikimrBlobStorage::EVDiskStatus_Name(vslot.VDiskStatus));
+                x->SetReady(vslot.ReadySince <= mono);
             }
             if (const auto& s = Self.StorageConfig; s.HasBlobStorageConfig()) {
                 if (const auto& bsConfig = s.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
                     const auto& ss = bsConfig.GetServiceSet();
-                    const TMonotonic mono = TActivationContext::Monotonic();
                     for (const auto& group : ss.GetGroups()) {
                         auto *x = pb->AddGroup();
                         x->SetGroupId(group.GetGroupID());

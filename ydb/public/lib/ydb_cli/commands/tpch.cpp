@@ -238,23 +238,9 @@ void TTpchCommandInit::Config(TConfig& config) {
 
 void TTpchCommandInit::SetPartitionByCols(TString& createSql) {
     if (StoreType == "column") {
-        SubstGlobal(createSql, "{partition_customer}", "PARTITION BY HASH(c_custkey)");
-        SubstGlobal(createSql, "{partition_lineitem}", "PARTITION BY HASH(l_orderkey)");
-        SubstGlobal(createSql, "{partition_nation}", "PARTITION BY HASH(n_nationkey)");
-        SubstGlobal(createSql, "{partition_orders}", "PARTITION BY HASH(o_orderkey)");
-        SubstGlobal(createSql, "{partition_part}", "PARTITION BY HASH(p_partkey)");
-        SubstGlobal(createSql, "{partition_partsupp}", "PARTITION BY HASH(ps_partkey)");
-        SubstGlobal(createSql, "{partition_region}", "PARTITION BY HASH(r_regionkey)");
-        SubstGlobal(createSql, "{partition_supplier}", "PARTITION BY HASH(s_suppkey)");
+        SubstGlobal(createSql, "{partition_by}", "PARTITION BY HASH");
     } else {
-        SubstGlobal(createSql, "{partition_customer}", "");
-        SubstGlobal(createSql, "{partition_lineitem}", "");
-        SubstGlobal(createSql, "{partition_nation}", "");
-        SubstGlobal(createSql, "{partition_orders}", "");
-        SubstGlobal(createSql, "{partition_part}", "");
-        SubstGlobal(createSql, "{partition_partsupp}", "");
-        SubstGlobal(createSql, "{partition_region}", "");
-        SubstGlobal(createSql, "{partition_supplier}", "");
+        SubstGlobal(createSql, "{partition_by}", "--");
     }
 }
 

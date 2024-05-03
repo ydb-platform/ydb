@@ -548,6 +548,49 @@ struct TSysCache {
         cacheItem->PgThreadContextLookup = std::move(threadContextLookup);
     }
 
+    static HeapTuple MakePgRolesHeapTuple(ui32 oid, const char* rolname) {
+        TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_authid);
+        FillAttr(tupleDesc, Anum_pg_authid_oid, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolname, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolsuper, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolinherit, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolcreaterole, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolcreatedb, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolcanlogin, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolreplication, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolbypassrls, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolconnlimit, INT4OID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolpassword, TEXTOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolvaliduntil, TIMESTAMPTZOID);
+        Datum values[Natts_pg_authid];
+        bool nulls[Natts_pg_authid];
+        Zero(values);
+        std::fill_n(nulls, Natts_pg_authid, true);
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_oid, (Datum)oid);
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolname, (Datum)MakeFixedString(rolname, NAMEDATALEN));
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolsuper, BoolGetDatum(true));
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolinherit, BoolGetDatum(true));
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolcreaterole, BoolGetDatum(true));
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolcreatedb, BoolGetDatum(true));
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolcanlogin, BoolGetDatum(true));
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolreplication, BoolGetDatum(true));
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolbypassrls, BoolGetDatum(true));
+        FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolconnlimit, Int32GetDatum(-1));
+        HeapTuple h = heap_form_tuple(tupleDesc, values, nulls);
+        auto row = (Form_pg_authid) GETSTRUCT(h);
+        Y_ENSURE(row->oid == oid);
+        Y_ENSURE(strcmp(NameStr(row->rolname), rolname) == 0);
+        Y_ENSURE(row->rolsuper);
+        Y_ENSURE(row->rolinherit);
+        Y_ENSURE(row->rolcreaterole);
+        Y_ENSURE(row->rolcreatedb);
+        Y_ENSURE(row->rolcanlogin);
+        Y_ENSURE(row->rolreplication);
+        Y_ENSURE(row->rolbypassrls);
+        Y_ENSURE(row->rolconnlimit == -1);
+        return h;
+    }
+
     void InitializeAuthId() {
         TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_authid);
         FillAttr(tupleDesc, Anum_pg_authid_oid, OIDOID);
@@ -566,40 +609,19 @@ struct TSysCache {
         auto& lookupMap = cacheItem->LookupMap;
 
         auto key = THeapTupleKey(1, 0, 0, 0);
+        lookupMap.emplace(key, MakePgRolesHeapTuple(1, "postgres"));
 
-        //do the same in next PR
-        // auto userName = *NKikimr::NMiniKQL::PGGetGUCSetting("ydb_user");
-        for (ui32 oid = 1; oid <= 1; ++oid) {
-            const char* rolname = "postgres";
-            // const char* rolname = oid == 1 ? "postgres" : userName.c_str();
-            Datum values[Natts_pg_authid];
-            bool nulls[Natts_pg_authid];
-            Zero(values);
-            std::fill_n(nulls, Natts_pg_authid, true);
-            FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_oid, (Datum)oid);
-            FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolname, (Datum)MakeFixedString(rolname, NAMEDATALEN));
-            FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolsuper, BoolGetDatum(true));
-            FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolinherit, BoolGetDatum(true));
-            FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolcreaterole, BoolGetDatum(true));
-            FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolcreatedb, BoolGetDatum(true));
-            FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolcanlogin, BoolGetDatum(true));
-            FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolreplication, BoolGetDatum(true));
-            FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolbypassrls, BoolGetDatum(true));
-            FillDatum(Natts_pg_authid, values, nulls, Anum_pg_authid_rolconnlimit, Int32GetDatum(-1));
-            HeapTuple h = heap_form_tuple(tupleDesc, values, nulls);
-            auto row = (Form_pg_authid) GETSTRUCT(h);
-            Y_ENSURE(row->oid == oid);
-            Y_ENSURE(strcmp(NameStr(row->rolname), rolname) == 0);
-            Y_ENSURE(row->rolsuper);
-            Y_ENSURE(row->rolinherit);
-            Y_ENSURE(row->rolcreaterole);
-            Y_ENSURE(row->rolcreatedb);
-            Y_ENSURE(row->rolcanlogin);
-            Y_ENSURE(row->rolreplication);
-            Y_ENSURE(row->rolbypassrls);
-            Y_ENSURE(row->rolconnlimit == -1);
-            lookupMap.emplace(key, h);
-        }
+        auto threadContextLookup = [&] (const THeapTupleKey& key) -> std::optional<HeapTuple> {
+            if (std::get<0>(key) == 2 && NKikimr::NMiniKQL::TlsAllocState) {
+                auto ctx = (TMainContext*)NKikimr::NMiniKQL::TlsAllocState->MainContext;
+                if (ctx && ctx->CurrentUserName) {
+                    return ctx->CurrentUserName;
+                }
+            }
+            return std::nullopt;
+        };
+
+        cacheItem->PgThreadContextLookup = std::move(threadContextLookup);
     }
 
     void InitializeNameNamespaces() {
@@ -672,8 +694,13 @@ namespace NMiniKQL {
 
 void PgCreateSysCacheEntries(void* ctx) {
     auto main = (TMainContext*)ctx;
-    if (main->GUCSettings && main->GUCSettings->Get("ydb_database")) {
-        main->CurrentDatabaseName = NYql::TSysCache::MakePgDatabaseHeapTuple(4, main->GUCSettings->Get("ydb_database")->c_str());
+    if (main->GUCSettings) {
+        if (main->GUCSettings->Get("ydb_database")) {
+            main->CurrentDatabaseName = NYql::TSysCache::MakePgDatabaseHeapTuple(4, main->GUCSettings->Get("ydb_database")->c_str());
+        }
+        if (main->GUCSettings->Get("ydb_user")) {
+            main->CurrentUserName = NYql::TSysCache::MakePgRolesHeapTuple(2, main->GUCSettings->Get("ydb_user")->c_str());
+        }
     }
 }
 

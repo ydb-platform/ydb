@@ -5,6 +5,10 @@
 #include <ydb/library/yql/core/facade/yql_facade.h>
 #include <ydb/library/yql/core/qplayer/storage/memory/yql_qstorage_memory.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/core/file_storage/file_storage.h>
+
+#include <library/cpp/yson/node/node_io.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -46,6 +50,20 @@ void WithTables(const F&& f) {
 struct TRunSettings {
     bool IsSql = true;
     THashMap<TString, TString> Tables;
+    TMaybe<TString> ParametersYson;
+    THashMap<TString, TString> StaticFiles, DynamicFiles;
+};
+
+TUserDataTable MakeUserTables(const THashMap<TString, TString>& map) {
+    TUserDataTable userDataTable;
+    for (const auto& f : map) {
+        TUserDataBlock block;
+        block.Type = EUserDataType::RAW_INLINE_DATA;
+        block.Data = f.second;
+        userDataTable[TUserDataKey::File(GetDefaultFilePrefix() + f.first)] = block;
+    }
+
+    return userDataTable;
 };
 
 bool RunProgram(bool replay, const TString& query, const TQContext& qContext, const TRunSettings& runSettings) {
@@ -64,10 +82,33 @@ bool RunProgram(bool replay, const TString& query, const TQContext& qContext, co
     TProgramFactory factory(true, functionRegistry.Get(), 0ULL, dataProvidersInit, "ut");
     factory.SetUdfResolver(NCommon::CreateSimpleUdfResolver(functionRegistry.Get()));
 
-    TProgramPtr program = factory.Create("-stdin-", query);
-    program->SetQContext(qContext);
+    if (!replay && (!runSettings.StaticFiles.empty() || !runSettings.DynamicFiles.empty())) {
+        TFileStorageConfig fsConfig;
+        LoadFsConfigFromResource("fs.conf", fsConfig);
+        auto storage = WithAsync(CreateFileStorage(fsConfig));
+        factory.SetFileStorage(storage);
+    }
+
+    if (!replay && !runSettings.StaticFiles.empty()) {
+        factory.AddUserDataTable(MakeUserTables(runSettings.StaticFiles));
+    }
+
+    TProgramPtr program = factory.Create("-stdin-", query, "", EHiddenMode::Disable, qContext);
+    if (!replay && runSettings.ParametersYson) {
+        program->SetParametersYson(*runSettings.ParametersYson);
+    }
+
+    if (!replay && !runSettings.DynamicFiles.empty()) {
+        program->AddUserDataTable(MakeUserTables(runSettings.DynamicFiles));
+    }
+
     if (runSettings.IsSql) {
-        if (!program->ParseSql()) {
+        NSQLTranslation::TTranslationSettings settings;
+        if (!replay) {
+            settings.ClusterMapping["plato"] = TString(YtProviderName);
+        }
+
+        if (!program->ParseSql(settings)) {
             program->PrintErrorsTo(Cerr);
             return false;
         } 
@@ -169,5 +210,21 @@ Y_UNIT_TEST_SUITE(QPlayerTests) {
             runSettings.Tables = tables;
             CheckProgram(s, runSettings);
         });
+    }
+
+    Y_UNIT_TEST(Parameters) {
+        auto s = "declare $x as String; select $x";
+        TRunSettings runSettings;
+        runSettings.ParametersYson = NYT::NodeToYsonString(NYT::TNode()
+            ("$x", NYT::TNode()("Data", "value")));
+        CheckProgram(s, runSettings);
+    }
+
+    Y_UNIT_TEST(Files) {
+        auto s = "select FileContent('a'), FileContent('b')";
+        TRunSettings runSettings;
+        runSettings.StaticFiles["a"] = "1";
+        runSettings.DynamicFiles["b"] = "2";
+        CheckProgram(s, runSettings);
     }
 }

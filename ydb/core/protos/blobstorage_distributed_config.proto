@@ -154,6 +154,8 @@ message TEvNodeConfigInvokeOnRoot {
         NKikimrBlobStorage.TVDiskID VDiskId = 1; // which one to reassign
         optional NKikimrBlobStorage.TPDiskId PDiskId = 2; // where to put it (optional)
         bool ConvertToDonor = 3; // convert the current disk to donor?
+        bool IgnoreGroupFailModelChecks = 4;
+        bool IgnoreDegradedGroupsChecks = 5;
     }
 
     // Regenerate configuration so the slain VDisk is no more reported as DESTROY one in the list.
